@@ -8,6 +8,7 @@
 BONNIE_FILESIZE=${BONNIE_FILESIZE:=500M}
 BONNIE_CHUNKSIZE=${BONNIE_CHUNKSIZE:=1K}
 
+[ -z "$here" ] && here=`pwd`
 . $here/common.bonnie
 
 # 
@@ -28,11 +29,22 @@ filter_stderr()
 # 
 filter_stdout()
 {
-	tr -s ',' | sed -e 's/^,//' -e 's/,$//'
+	perl -ne '
+		chomp;
+		s/,+/,/g; s/^,//; s/,$//;
+		@values = split /,/;
+		printf "%9s", shift @values;
+		for ($i = 0; $i <= $#values; $i++) {
+			if ($i % 2) { printf ",%4s%%", $values[$i] }
+			else        { printf ",%10s", $values[$i] }
+		}
+		printf "\n";
+	'
 }
 
 if [ $# -gt 0 ]; then
-	echo "size:chnk,writeK/s,wCPU,rewriteK/s,rwCPU,readK/s,rCPU,seek/s,sCPU"
+	printf "%9s,%10s,%5s,%10s,%5s,%10s,%5s,%10s,%5s\n" size:chnk \
+		writeK/s wCPU rewriteK/s rwCPU readK/s rCPU seek/s sCPU
 	exit 0
 fi
 run_bonnie -n 0 -s $BONNIE_FILESIZE:$BONNIE_CHUNKSIZE

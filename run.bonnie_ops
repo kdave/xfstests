@@ -15,6 +15,7 @@ BONNIE_NDIRS=${BONNIE_NDIRS:=1}
 BONNIE_KFILES=${BONNIE_KFILES:=8}
 BONNIE_FILETYPE=${BONNIE_FILETYPE:=regular}
 
+[ -z "$here" ] && here=`pwd`
 . $here/common.bonnie
 
 # 
@@ -37,11 +38,22 @@ filter_stderr()
 # 
 filter_stdout()
 {
-	tr -d '+' | tr -d \' | tr -s ',' | sed -e 's/^,//' -e 's/,$//'
+	perl -ne '
+		chomp;
+		s/\+*//g; s/,+/,/g; s/^,//; s/,$//;
+		@values = split /,/;
+		printf "%9s", 1024 * shift @values;
+		for ($i = 0; $i <= $#values; $i++) {
+			if ($i % 2) { printf ",%4s%%", $values[$i] }
+			else        { printf ",%10s", $values[$i] }
+		}
+		printf "\n";
+	'
 }
 
 if [ $# -gt 0 ]; then
-	echo Kfiles/dirs,seqCR/s,scCPU,seqRM/s,srCPU,rndmCR/s,rcCPU,rndmRM/s,rrCPU
+	printf "%9s,%10s,%5s,%10s,%5s,%10s,%5s,%10s,%5s\n" files \
+		seqCR/s scCPU seqRM/s srCPU randCR/s rcCPU randRM/s rrCPU
 	exit 0
 fi
 
