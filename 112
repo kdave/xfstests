@@ -1,10 +1,10 @@
 #! /bin/sh
-# FS QA Test No. 075
+# FS QA Test No. 112
 #
-# fsx (non-AIO variant)
+# fsx (AIO variant, based on 075)
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -80,15 +80,6 @@ _do_test()
     echo "fsx.$_n : $_filter_param"
     echo "-----------------------------------------------"
 
-    if [ "$FSTYP" = "nfs" ]
-    then
-	if [ "$_n" = "1" -o "$_n" = "3" ]
-	then
-	    # HACK: nfs don't handle preallocation (-x) so just skip this test
-	    return
-	fi
-    fi
-
     # This cd and use of -P gets full debug on $here (not TEST_DEV)
     cd $out
     if ! $here/ltp/fsx $_param -P $here $seq.$_n >/dev/null
@@ -136,8 +127,11 @@ _process_args()
 
 
 # real QA test starts here
-_supported_fs xfs udf nfs
-_supported_os IRIX Linux
+_supported_fs xfs
+_supported_os Linux
+
+[ -x $here/ltp/aio-stress ] || \
+	_notrun "fsx not built with AIO for this platform"
 
 size10=`expr 10 \* 1024 \* 1024`	# 10 megabytes
 filelen=$size10
@@ -165,11 +159,12 @@ _check_test_fs
 # -P: save .fsxlog and .fsxgood files in dirpath (default ./)
 # -S seed: for random # generator (default 1) 0 gets timestamp
 # -x: pre-allocate file space, exercising unwritten extents
+# -A: use the AIO system calls
 
-_do_test 0 "-d -N $numops1 -S 0"
-_do_test 1 "-d -N $numops1 -S 0 -x"
-_do_test 2 "-d -N $numops2 -l $filelen -S 0"
-_do_test 3 "-d -N $numops2 -l $filelen -S 0 -x"
+_do_test 0 "-A -d -N $numops1 -S 0"
+_do_test 1 "-A -d -N $numops1 -S 0 -x"
+_do_test 2 "-A -d -N $numops2 -l $filelen -S 0"
+_do_test 3 "-A -d -N $numops2 -l $filelen -S 0 -x"
 
 rm -f $seq.*.fsx{good,log}
 exit 0
