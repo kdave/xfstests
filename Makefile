@@ -43,7 +43,7 @@ LSRCFILES = configure configure.in
 LDIRT = *.bad *.new *.core *.full *.raw core a.out *.bak \
 	check.log check.time config.* conftest*
 
-SUBDIRS = include src misc man
+SUBDIRS = include src
 
 default: $(CONFIGURE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
