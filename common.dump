@@ -762,6 +762,25 @@ _ls_filter()
   | sed -e 's/total [0-9][0-9]*/total TOTAL/'
 }
 
+#
+# Filtering of Irix character hwgraph device names
+# e.g.
+# chardev: /hw/node/xtalk/15/pci/0/scsi_ctlr/0/target/1/lun/0/disk/partition/4/char
+# blkdev:  /dev/dsk/dks0d1s4
+#
+_filter_devchar()
+{
+    $AWK_PROG '
+	/\/hw\/node/ {
+	    sub(/\/hw.*scsi_ctlr\//,"/dev/dsk/dks")  # blah blah /dev/dsk/dks0/target/1/....
+	    sub(/\/target\//,"d")                    # blah blah /dev/dsk/dks0d1/lun/0/disk.....
+	    sub(/\/lun.*partition\//,"s")            # blah blah /dev/dsk/dks0d1s4/char
+	    sub(/\/char/,"")			     # blah blah /dev/dsk/dks0d1s4
+	}
+	{ print }
+    '
+}    
+
 
 # 
 # Filter out the non-deterministic dump msgs from
@@ -769,6 +788,7 @@ _ls_filter()
 #
 _dump_filter_main()
 {
+  _filter_devchar |\
   sed \
       -e "s/`hostname`/HOSTNAME/"			\
       -e "s#$SCRATCH_DEV#SCRATCH_DEV#"			\
@@ -1360,6 +1380,7 @@ _check_quota_file()
 {
    _check_quota 'xfsdump_quotas' 'xfsdump_quotas_group'
 }
+
 
 # make sure this script returns success
 /bin/true
