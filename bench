@@ -110,12 +110,15 @@ _run_benchmark()
                             || _fail "            !!! couldn't chown benchdir"
 
         cd $SCRATCH_MNT/bench
-        seq=`perl -e 'printf "results.%s.%03d\n", '$bench, $pass`
+        seq=`perl -e 'printf "results.%s.%03d\n", '$bench', '$pass`
+        rm -f $seq $tmp.out
 
-        _log "        *** bench [src/runas -u $uid -g $gid run.$bench]"
-        $here/src/runas -u $uid -g $gid $here/run.$bench \
-                            | _fix_malloc | tee $seq | _logp
+        _log "        *** bench [$seq]"
+        $here/src/runas -u $uid -g $gid $here/run.$bench > $tmp.out
+	[ $? -eq 0 ]        || _fail "            !!! $bench pass $pass failed"
+
         cd $here
+        _fix_malloc < $tmp.out | tee $seq | _logp
 
         _log "        *** unmounting scratch device"
         umount $SCRATCH_DEV 2>&1 | _logp \
@@ -159,8 +162,8 @@ for bench in $benches
 do 
     echo "" >$FULL
     echo "" >$LOG
-    _log "*** benchmark started (passes=$passes, benchmark=$bench)"
-    _log "***     (`date`)"
+    _log "*** benchmark started [passes=$passes, benchmark=$bench]"
+    _log "*** (`date`)"
     _log "        *** unmounting scratch device"
     umount $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL
 
