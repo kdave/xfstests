@@ -140,6 +140,9 @@ hasxfsquota(int type, int q, char *device)
 	fs_quota_stat_t	qstat;
 	int		qcmd;
 
+	if (q == 0)
+		return (access("/proc/fs/xfs/xqm", F_OK) < 0);
+
 	memset(&qstat, 0, sizeof(fs_quota_stat_t));
 	qcmd = QCMD(Q_XGETQSTAT, type);
 	if (quotactl(qcmd, device, 0, (caddr_t)&qstat) < 0) {
@@ -147,8 +150,6 @@ hasxfsquota(int type, int q, char *device)
 			perror("quotactl");
 		return (1);
 	}
-	else if (q == 0)
-		return (0);
 	else if (q == XFS_QUOTA_UDQ_ENFD && qstat.qs_flags & XFS_QUOTA_UDQ_ENFD)
 		return (0);
 	else if (q == XFS_QUOTA_GDQ_ENFD && qstat.qs_flags & XFS_QUOTA_GDQ_ENFD)
