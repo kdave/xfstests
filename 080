@@ -1,5 +1,10 @@
-# 
-# Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
+#! /bin/sh
+# XFS QA Test No. 080
+#
+# rwtest (iogen|doio)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -28,33 +33,39 @@
 # For further information regarding this notice, see: 
 # 
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
 #
+# creator
+owner=nathans@sgi.com
 
-TOPDIR = ..
-include $(TOPDIR)/include/builddefs
+seq=`basename $0`
+echo "QA output created by $seq"
 
-TARGETS = doio fsstress fsx growfiles iogen
-CFILES = $(TARGETS:=.c)
-HFILES = doio.h
-LDIRT = $(TARGETS)
-LCFLAGS =
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
-default: $(TARGETS)
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
 
-include $(BUILDRULES)
-LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
+quiet=-q
+clean=-c
 
-doio: doio.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST)
+export here
+cd $TEST_DIR
+echo
 
-fsstress: fsstress.c $(LIBATTR) $(LIBTEST)
-	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)
+# real QA test starts here
 
-fsx: fsx.c
-	$(LINKTEST) $(LDLIBS)
+$here/ltp/rwtest.sh $quiet $clean -i 2000 -f direct,buffered,sync
+status=$?
+[ $status -ne 0 ] && exit
+echo Completed rwtest pass 1 successfully.
 
-growfiles: growfiles.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+#$here/ltp/rwtest.sh $quiet $clean -Dv -i 1000 -n 10 -f direct,buffered,sync
+#[ $status -ne 0 ] && exit
+#echo Completed rwtest pass 2 successfully.
 
-iogen: iogen.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST)
+exit
