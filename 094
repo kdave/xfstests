@@ -1,0 +1,115 @@
+#! /bin/sh
+# FS QA Test No. 094
+#
+# Exercising the inheritable realtime inode bit.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+_require_realtime
+_require_scratch
+_require_xfs_io
+
+_filter_scratch()
+{
+	    sed -e "s,$SCRATCH_MNT,SCRATCH_MNT,g"
+}
+
+_create_scratch()
+{
+	echo "*** mkfs"
+	if ! _scratch_mkfs_xfs >$tmp.out 2>&1
+	then
+		cat $tmp.out
+		echo "failed to mkfs $SCRATCH_DEV"
+		exit 1
+	fi
+
+	echo "*** mount"
+	if ! _scratch_mount
+	then
+		echo "failed to mount $SCRATCH_DEV"
+		exit 1
+	fi
+}
+
+_create_scratch
+mkdir $SCRATCH_MNT/testdir
+
+# set inode attribute, create files below and check they're marked realtime
+# unset inode attribute, create files below and check they're not realtime
+
+echo "*** create directory with rtinherit"
+xfs_io -r -c 'chattr +R' $SCRATCH_MNT/testdir
+xfs_io -r -c 'lsattr'    $SCRATCH_MNT/testdir | _filter_scratch
+
+echo "*** create child with inherited realtime"
+touch $SCRATCH_MNT/testdir/realtime
+xfs_io -r -c 'lsattr'    $SCRATCH_MNT/testdir/realtime | _filter_scratch
+
+echo "*** remove rtinherit from directory"
+xfs_io -r -c 'chattr -R' $SCRATCH_MNT/testdir
+xfs_io -r -c 'lsattr'    $SCRATCH_MNT/testdir | _filter_scratch
+
+echo "*** create child without inherited realtime"
+touch $SCRATCH_MNT/testdir/non-realtime
+xfs_io -r -c 'lsattr'    $SCRATCH_MNT/testdir/non-realtime | _filter_scratch
+
+echo "*** done"
+
+# success, all done
+status=0
+exit
