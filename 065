@@ -1,0 +1,201 @@
+#! /bin/sh
+# XFS QA Test No. 065
+# $Id: 1.1 $
+#
+# Testing incremental dumps and cumulative restores with
+# "adding, deleting, renaming, linking, and unlinking files and 
+#  directories".
+# Do different operations for each level.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@sagan.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dump
+
+
+_ls_size_filter()
+{
+    #
+    # Print size ($5) and fname ($9).
+    # The size is significant since we add to the file as part
+    # of a file change for the incremental.
+    #
+    # Filter out the housekeeping files of xfsrestore
+    #
+    $AWK_PROG 'NF == 9 { print $5, $9; next }
+               NF == 1 { print }' |\
+    sed -e 's/.*dumpdir/dumpdir/' |\
+    egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree' 
+}
+
+# real QA test starts here
+
+#
+# adding      - touch/echo, mkdir
+# deleting    - rm, rmdir
+# renaming    - mv
+# linking     - ln
+# unlinking   - rm
+# files and directories
+#
+
+_wipe_fs
+mkdir -p $dump_dir ||\
+    _error "cannot mkdir \"$dump_dir\""
+cd $dump_dir
+
+echo "Do the incremental dumps"
+i=0
+num_dumps=8 # do some extra to ensure nothing changes
+while [ $i -le $num_dumps ]; do
+    cd $dump_dir
+    case $i in
+	0)
+	    # adding
+	    echo 'add0' >addedfile0
+	    echo 'add1' >addedfile1
+	    echo 'add2' >addedfile2
+	    echo 'add3' >addedfile3
+	    mkdir addeddir1
+	    mkdir addeddir2
+	    mkdir addeddir3
+	    mkdir addeddir4
+	    echo 'add4' >addeddir3/addedfile4
+	    echo 'add5' >addeddir4/addedfile5
+	    ;;
+	1)
+	    # deleting
+	    rm addedfile2 
+	    rmdir addeddir2 
+	    rm -rf addeddir3
+	    ;;
+	2) 
+	    # renaming
+	    mv addedfile1 addedfile2 # rename to previous existing file
+	    mv addeddir4/addedfile5 addeddir4/addedfile4
+	    mv addeddir4 addeddir6
+	    mv addeddir1 addeddir2 # rename to previous existing dir
+	    ;;
+	3)
+	    # linking
+	    ln addedfile0 linkfile0 
+	    ln addedfile0 linkfile0_1  # have a 2nd link to file
+	    ln addedfile2 linkfile2
+	    ln addeddir6/addedfile4 linkfile64
+	    ;;
+	4)
+	    # unlinking
+	    rm linkfile0  # remove a link
+	    rm addedfile2 # remove original link
+	    rm linkfile64  # remove link
+	    rm addeddir6/addedfile4 # remove last link
+	    ;;
+	5)  # link first - then onto 6)
+	    rm -rf *
+	    echo 'add6' >addedfile6
+	    ln addedfile6 linkfile6_1 
+	    ln addedfile6 linkfile6_2 
+	    ln addedfile6 linkfile6_3 
+	    ;;
+	6)  # then move the inode that the links point to
+      	    mv addedfile6 addedfile6_mv 
+	    rm linkfile6_1
+	    rm linkfile6_2
+	    rm linkfile6_3
+	    ln addedfile6_mv linkfile6_mv_1
+	    ln addedfile6_mv linkfile6_mv_2 
+	    ln addedfile6_mv linkfile6_mv_3 
+	    ;;
+    esac
+    cd $here
+    sleep 2
+    _stable_fs
+
+    echo "Listing of what files we have at level $i:"
+    ls -lRF $dump_dir | _ls_size_filter | tee $tmp.ls.$i
+
+    dump_file=$tmp.df.level$i
+    _do_dump_file -l $i
+    i=`expr $i + 1`	
+done
+
+echo "Look at what files are contained in the inc. dump"
+i=0
+while [ $i -le $num_dumps ]; do
+    echo ""
+    echo "restoring from df.level$i"
+    dump_file=$tmp.df.level$i
+    _do_restore_toc
+    i=`expr $i + 1`	
+done
+
+echo "Do the cumulative restores"
+i=0
+while [ $i -le $num_dumps ]; do
+    dump_file=$tmp.df.level$i
+    echo ""
+    echo "restoring from df.level$i"
+    _do_restore_file_cum -l $i
+    echo "ls -lRF restore_dir"
+    ls -lRF $restore_dir/dumpdir | _ls_size_filter |\
+    _check_quota_file | tee $tmp.restorals.$i
+    i=`expr $i + 1`	
+done
+
+echo ""
+echo "Do the ls comparison"
+i=0
+while [ $i -le $num_dumps ]; do
+    echo "Comparing ls of FS with restored FS at level $i"
+    diff -s $tmp.ls.$i $tmp.restorals.$i | sed "s#$tmp#TMP#g"
+    echo ""
+    i=`expr $i + 1`	
+done
+
+
+# success, all done
+status=0
+exit
