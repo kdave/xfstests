@@ -1,4 +1,4 @@
-##/bin/sh
+#/bin/sh
 
 #
 # Functions useful for xfsdump/xfsrestore tests
@@ -64,6 +64,7 @@ media_label="stress_tape_media"
 session_label="stress_$seq"
 
 nobody=4 # define this uid/gid as a number
+do_quota_check=true # do quota check if quotas enabled
 
 _need_to_be_root
 
@@ -293,7 +294,6 @@ _create_dumpdir_stress()
     echo "Creating directory system to dump using src/fsstress."
 
     _wipe_fs
-    _setup_seq_out
 
     _param="-f link=10 -f creat=10 -f mkdir=10 -f truncate=5 -f symlink=10"
     _count=200
@@ -481,7 +481,6 @@ _do_create_dumpdir_fill()
 _create_dumpdir_fill()
 {
     _wipe_fs
-    _setup_seq_out
     _mk_fillconfig1
     _do_create_dumpdir_fill
     _stable_fs
@@ -490,7 +489,6 @@ _create_dumpdir_fill()
 _create_dumpdir_fill2()
 {
     _wipe_fs
-    _setup_seq_out
     _mk_fillconfig2
     _do_create_dumpdir_fill
     _stable_fs
@@ -499,7 +497,6 @@ _create_dumpdir_fill2()
 _create_dumpdir_fill_perm()
 {
     _wipe_fs
-    _setup_seq_out
     _mk_fillconfig_perm
     _do_create_dumpdir_fill
     _stable_fs
@@ -613,7 +610,6 @@ End-of-File
 _create_dumpdir_symlinks()
 {
     _wipe_fs
-    _setup_seq_out
     _mk_symlink_config
     _do_create_dump_symlinks
     _stable_fs
@@ -635,7 +631,7 @@ _ls_filter()
 # Filter out the non-deterministic dump msgs from
 # xfsdump and xfsrestore
 #
-_dump_filter()
+_dump_filter_main()
 {
   sed \
       -e "s/`hostname`/HOSTNAME/"   \
@@ -649,19 +645,29 @@ _dump_filter()
       -e 's/dump begun .*/dump begun DATE/'    \
       -e 's/[0-9][0-9]* seconds/SECS seconds/' \
       -e 's/ino [0-9][0-9]*/ino INO/' \
-      -e '/: dump size/s/[1-9][0-9]*/NUM/'     \
-      -e '/dump size:/s/[1-9][0-9]*/NUM/'      \
-      -e '/media file size/s/[1-9][0-9]*/NUM/' \
-      -e '/mfile size:[	 ]*/s/[1-9][0-9]*/NUM/' \
+      -e '/: dump size/s/[0-9][0-9]*/NUM/'     \
+      -e '/dump size:/s/[0-9][0-9]*/NUM/'      \
+      -e '/media file size/s/[0-9][0-9]*/NUM/' \
+      -e '/mfile size:[	 ]*/s/[0-9][0-9]*/NUM/' \
       -e '/\/dev\/tty/d' \
       -e '/inventory session uuid/d' \
       -e 's#/var/lib/xfsdump#/var/xfsdump#' \
 
 }
 
+_dump_filter()
+{
+  if $do_quota_check
+  then
+      _dump_filter_main | _check_quota_dumprestore
+  else
+      _dump_filter_main
+  fi
+}
+
 _invutil_filter()
 {
-  _dump_filter \
+  _dump_filter_main \
   | sed \
 	-e 's/UUID[ 	]*:[ 	][0-9a-f-]*/UUID		:	ID/' \
 	-e 's/TIME OF DUMP[ 	]*:.*/TIME OF DUMP	:	TIME/' \
@@ -688,7 +694,7 @@ _parse_args()
 {
     OPTIND=0
     dump_args=""
-    while getopts "f:FL:o" c $*
+    while getopts "f:FL:oqQ" c $*
     do
         case $c
         in
@@ -705,6 +711,12 @@ _parse_args()
             ;;
 	F)
 	    dump_args="$dump_args -F"
+            ;;
+	q)
+	    do_quota_check=true
+            ;;
+	Q)
+	    do_quota_check=false
             ;;
 	\?)
             _error "invalid argument"
@@ -926,7 +938,7 @@ _diff_compare_sub()
 _diff_compare()
 {
     echo "Comparing dump directory with restore directory"
-    diff -rs $SCRATCH_MNT $restore_dir | _dir_filter
+    diff -rs $SCRATCH_MNT $restore_dir | _dir_filter | _check_quota_diff
 }
 
 #
@@ -934,7 +946,7 @@ _diff_compare()
 #
 _dump_inventory()
 {
-    xfsdump $_dump_debug -I | tee -a $seq.full | _dump_filter 
+    xfsdump $_dump_debug -I | tee -a $seq.full | _dump_filter_main
 }
 
 #
@@ -947,6 +959,89 @@ _do_invutil()
     echo "xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT \"$middate\" $*" >$seq.full
     xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT "$middate" $* \
     | tee -a $seq.full | _invutil_filter
+}
+
+#
+# Look for:
+# xfsdump: saving user quota information for: SCRATCH_MNT
+# xfsdump: saving group quota information for: SCRATCH_MNT
+# xfsrestore: user quota information written to ...'
+# xfsrestore: group quota information written to ...'
+#
+_check_quota_dumprestore()
+{
+    uquota=0
+    gquota=0 
+    src/feature -U $SCRATCH_DEV && uquota=1
+    src/feature -G $SCRATCH_DEV && gquota=1
+
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v full=$seq.full '
+	/user quota information/ {
+			print "Found user quota:", $0 >>full
+			found_uquota = 1
+			if (!uquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+	/group quota information/ {
+			print "Found group quota:", $0 >>full
+			found_gquota = 1
+			if (!gquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+			{ print }
+	END {
+		if (uquota && !found_uquota) {
+		    print "Missing saving/restoring uquota msg"
+		}
+		if (gquota && !found_gquota) {
+		    print "Missing saving/restoring gquota msg"
+		}
+	}
+    '
+}
+
+#
+# Look for:
+# Only in RESTORE_DIR: xfsdump_quotas
+# Only in RESTORE_DIR: xfsdump_quotas_group
+#
+
+_check_quota_diff()
+{
+    uquota=0
+    gquota=0 
+    src/feature -U $SCRATCH_DEV && uquota=1
+    src/feature -G $SCRATCH_DEV && gquota=1
+
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota '
+	/Only in RESTORE_DIR: xfsdump_quotas_group/ {
+			found_gquota = 1
+			if (!gquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+	/Only in RESTORE_DIR: xfsdump_quotas/ {
+			found_uquota = 1
+			if (!uquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+			{ print }
+	END {
+		if (uquota && !found_uquota) {
+		    print "Missing xfsdump_quotas msg"
+		}
+		if (gquota && !found_gquota) {
+		    print "Missing xfsdump_quotas_group msg"
+		}
+	}
+    '
 }
 
 # make sure this script returns success
