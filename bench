@@ -1,7 +1,7 @@
 #!/bin/sh
 # 
 # Wrapper for automating benchmarking runs.
-# Usage:   bench [passes] [uid] [gid] [script]
+# Usage:   bench [passes] [user] [group] [script]
 # 
 # ..where passes is the number of times to run each script; uid/gid
 # gives credentials to use when running the script; and script is a
@@ -67,8 +67,8 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 ROOT="."
-LOG="$ROOT/soak.log"
-FULL="$ROOT/soak.full"
+LOG="$ROOT/bench.log"
+FULL="$ROOT/bench.full"
 
 _log()
 {
@@ -93,10 +93,12 @@ _fail()
 _run_benchmark()
 {
     pass=1
+    uid=`id -u $user`
+    gid=`id -g $group`
     
     while [ $pass -le $passes -o $passes -lt 0 ]
     do
-        _log "        *** clean scratch device [starting pass $pass]"
+        _log "        *** clean scratch device [$bench starting, pass $pass]"
         mkfs_xfs -f $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL \
                         || _fail "            !!! failed to mkfs SCRATCH_DEV"
 
@@ -106,14 +108,14 @@ _run_benchmark()
         
         _log "        *** mkdir"
         mkdir $SCRATCH_MNT/bench \
-                            || _fail "            !!! couldn't mkdir bench dir"
+                            || _fail "            !!! couldn't mkdir benchdir"
         chown -R $user.$group $SCRATCH_MNT/bench \
-                            || _fail "            !!! couldn't chown bench dir"
+                            || _fail "            !!! couldn't chown benchdir"
         cd $SCRATCH_MNT/bench
 
-        _log "        *** bench"
-        $here/src/runas -u $user -g $group $here/run.$bench > $FULL
-        [ $? -eq 0 ]        || _fail "            !!! non-zero $bench exit code"
+        _log "        *** bench [src/runas -u $uid -g $gid run.$bench]"
+        $here/src/runas -u $uid -g $gid $here/run.$bench | _logp
+        [ $? -eq 0 ]        || _fail "            !!! non-zero $bench status"
         cd $here
 
         _log "        *** unmounting scratch device"
@@ -134,23 +136,26 @@ _require_scratch
 passes=-1
 user=root
 group=root
-benches=`echo run.*`
+benches=`echo run.* | sed -e 's/run\.//g'`
 
 [ $# -gt 0 ] && passes=$1
-[ $# -gt 1 ] && user=$3
-[ $# -gt 2 ] && group=$4
-[ $# -gt 3 ] && benches=$2
+[ $# -gt 1 ] && user=$2
+[ $# -gt 2 ] && group=$3
+[ $# -gt 3 ] && benches=$4
 
-for bench in "$benches"
+[ -z "$benches" -o "$benches" = "*" ] && _fail "no benchmark scripts found"
+
+for bench in $benches
 do 
     echo "" >$FULL
     echo "" >$LOG
     _log "*** benchmark started (passes=$passes, benchmark=$bench)"
     _log "***     (`date`)"
     _log "        *** unmounting scratch device"
-    umount $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL
-    
-    _run_benchmark  # $passes $bench $user $group
+    umount $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL
+
+    _run_benchmark |  _fix_malloc
 
     _log "*** done $bench"
 done
+status=0

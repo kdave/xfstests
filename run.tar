@@ -13,9 +13,9 @@ barf()
 
 new_tar()
 {
-	source="/bin /sbin /lib /dev"
-	if [ ! -f $1 ]; then
-		tar cf $1 $source || barf "tar c failed"
+	source="bin sbin lib"
+	if [ ! -f $TARFILE ]; then
+		( cd / && tar cf $TARFILE $source ) || barf "tar c failed"
 	fi
 }
 
@@ -23,7 +23,9 @@ run_tar()
 {
 	# %U=user %S=system %E=elapsed
 	mkdir ./tar || exit 1
-	/usr/bin/time -f '%U,%S,%E' tar xf $1 ./tar || exit 1
+	cd tar
+	/usr/bin/time -f '%U,%S,%E' tar xf $TARFILE || exit 1
+	cd ..
 	rm -fr ./tar || exit 1
 }
 
@@ -31,5 +33,5 @@ if [ $# -gt 0 ]; then
 	echo "user,system,elapsed"
 	exit 0
 fi
-new_tar $TARFILE
-run_tar $TARFILE
+new_tar
+run_tar
