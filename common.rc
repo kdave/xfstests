@@ -648,9 +648,8 @@ USE_REMOUNT=0
 
 _check_xfs_filesystem()
 {
-    if [ $# -ne 1 -a $# -ne 2 ]
-    then
-	echo "Usage: _check_fs device [logdevice]" 1>&2
+    if [ $# -ne 1 -a $# -ne 2 -a $# -ne 3 ]; then
+	echo "Usage: _check_fs device [logdevice [rtdevice]]" 1>&2
 	exit 1
     fi
     
@@ -658,6 +657,11 @@ _check_xfs_filesystem()
     if [ $# -eq 2 -a "$2" != "" ]; then
        	extra_log_options="-l$2"
         extra_mount_options="-ologdev=$2"
+    fi
+    if [ $# -eq 3 -a "$3" != "" ]; then
+       	extra_rt_options="-r$3"
+       	extra_log_options="-l$2"
+        extra_mount_options="-ologdev=$2 -ortdev=$3"
     fi
 
     [ "$FSTYP" != xfs ] && return 0
@@ -709,7 +713,7 @@ _check_xfs_filesystem()
     fi
     # repair doesn't scale massively at this stage, optionally skip it for now
     [ "$USE_BIG_LOOPFS" = yes ] || \
-    $XFS_REPAIR_PROG -n $extra_log_options $device >$tmp.repair 2>&1
+    $XFS_REPAIR_PROG -n $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
@@ -780,8 +784,11 @@ _check_test_fs()
     TEST_LOG=""
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
         TEST_LOG="$TEST_LOGDEV"
+    TEST_RT=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ] && \
+        TEST_RT="$TEST_RTDEV"
 
-    _check_xfs_filesystem $TEST_DEV $TEST_LOG
+    _check_xfs_filesystem $TEST_DEV $TEST_LOG $TEST_RT
 }
 
 _check_scratch_fs()
@@ -791,8 +798,11 @@ _check_scratch_fs()
 	SCRATCH_LOG=""
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 	    SCRATCH_LOG="$SCRATCH_LOGDEV"
+	SCRATCH_RT=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+	    SCRATCH_RT="$SCRATCH_RTDEV"
 
-	_check_xfs_filesystem $SCRATCH_DEV $SCRATCH_LOG
+	_check_xfs_filesystem $SCRATCH_DEV $SCRATCH_LOG $SCRATCH_RT
 	;;
     udf)
 	_check_udf_filesystem $SCRATCH_DEV $udf_fsize
