@@ -207,7 +207,27 @@ _update_workarea()
 	cvs -z3 update -d
     fi
 }
-	    
+
+_test_mkfs_xfs()
+{
+    TEST_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ] && \
+        TEST_OPTIONS="$TEST_OPTIONS -rrtdev=$TEST_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
+        TEST_OPTIONS="$TEST_OPTIONS -llogdev=$TEST_LOGDEV"
+    _sudo /sbin/mkfs.xfs -f $TEST_OPTIONS $MKFS_OPTIONS $* $TEST_DEV
+}
+
+_test_mount()
+{
+    TEST_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ] && \
+        TEST_OPTIONS="$TEST_OPTIONS -ortdev=$TEST_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
+        TEST_OPTIONS="$TEST_OPTIONS -ologdev=$TEST_LOGDEV"
+    _sudo mount -t xfs $TEST_OPTIONS $* $TEST_DEV $TEST_DIR
+}
+
 
 _log "*** linux-xfs QA (`date`)"
 
@@ -461,12 +481,12 @@ do
 	    
 	    _log "	    *** clean TEST_DEV"
 	    
-	    _sudo mkfs -t xfs -f $MKFS_OPTIONS $TEST_DEV 2>&1 \
+	    _test_mkfs_xfs 2>&1 \
 			|| _fail "	    !!! failed to mkfs TEST_DEV"
 	    
 	    _log "	    *** mounting TEST_DEV"
 	    
-	    _sudo mount -t xfs $TEST_DEV $TEST_DIR 2>&1 \
+	    _test_mount 2>&1 \
 			|| _fail "	    !!! failed to mount"
 				    
 	    new_state="run"
