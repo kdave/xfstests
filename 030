@@ -1,0 +1,99 @@
+#! /bin/sh
+# XFS QA Test No. 030
+# $Id: 1.3 $
+#
+# exercise xfs_repair repairing broken filesystems
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.repair
+
+# nuke the superblock, AGI, AGF, AGFL; then try repair the damage
+# 
+_check_ag()
+{
+	for structure in 'sb 0' 'agf 0' 'agi 0' 'agfl 0'
+	do
+		echo "Corrupting $structure - setting bits to $1"
+		_check_repair $1 "$structure"
+	done
+}
+
+# real QA test starts here
+_require_scratch
+
+# first we need to ensure there are no bogus secondary
+# superblocks between the primary and first secondary
+# superblock (hanging around from earlier tests)...
+# 
+size="-d size=100m"
+mkfs -t xfs -f $size $SCRATCH_DEV >/dev/null 2>&1
+if [ $? -ne 0 ]		# probably don't have a big enough scratch
+then
+	size=""
+	src/devzero -v -1 $SCRATCH_DEV >/dev/null
+else
+	clear=""
+	eval `xfs_db -r -c "sb 1" -c stack $SCRATCH_DEV | perl -ne '
+		if (/byte offset (\d+), length (\d+)/) {
+			print "clear=", $1 / 512, "\n"; exit
+		}'`
+	[ -z "$clear" ] && echo "Cannot calculate length to clear"
+	src/devzero -v -1 -n "$clear" $SCRATCH_DEV >/dev/null
+fi
+
+# now kick off the real repair test...
+# 
+mkfs -t xfs -f $size $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+source $tmp.mkfs
+_check_ag 0
+_check_ag -1
+
+
+# success, all done
+status=0
+exit

@@ -1,0 +1,174 @@
+#! /bin/sh
+# XFS QA Test No. 042
+# $Id: 042,v 1.2 2000/09/27 00:24:22 ajag Exp ajag $
+#
+# fsr.xfs QA tests
+# create a large fragmented file and check that fsr.xfs doesn't corrupt
+# it or the other contents of the filesystem
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+set +x
+# creator
+owner=ajag@melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    umount $SCRATCH_MNT
+    rm -f $tmp.*
+}
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+_require_scratch
+
+_cull_files()
+{
+    perl -e "\$manifest=\"$tmp.manifest\";" -e '
+	open MANIFEST, $manifest;
+	@in = <MANIFEST>;
+	close MANIFEST;
+	open MANIFEST, ">$manifest";
+	for ($i = 0; $i < @in; $i++) {
+	    if (($i+1) % 2 == 0) {
+		# remove every second file
+		chomp($s = $in[$i]);
+		if (unlink($s) != 1) {
+		    print "_cull_files: could not delete \"$s\"\n";
+		    exit(1);
+		}
+	    }
+	    else {
+		print MANIFEST $in[$i];
+	    }
+	}
+	close MANIFEST;'
+}
+
+_do()
+{
+    if [ $# -ne 1 ]; then echo "Usage: _do \"cmd\"" 1>&2 ; exit 1; fi
+    echo "*** $1" >>$seq.full
+    eval "$1 >>$seq.full 2>&1"
+}
+
+
+# create a large contiguous file using dd
+# use fill2fs to fill the filesystem up with 4k sized files
+# fill any remaining space using dd
+# delete every second 4k file - remaining free space should be fragmented
+# use fill2 to generate a very large file - run it until it fails producing a truncated file
+# delete the dd-generated file
+# run fsr.xfs on the filesystem
+# check checksums for remaining files
+
+# create 3 minimum sized (16Mb) allocation groups
+# xfs_repair is going to need three to verify the superblock
+rm -f $seq.full
+echo -n "Make a 48 megabyte filesystem on SCRATCH_DEV and mount... "
+_do "mkfs -t xfs -d size=48m,agcount=3 -l internal -f $SCRATCH_DEV"
+_do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+echo "done"
+echo -n "Reserve 16 1Mb unfragmented regions... "
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+do
+    _do "dd if=/dev/zero of=$SCRATCH_MNT/hole$i bs=4096 count=256"
+    _do "dd if=/dev/zero of=$SCRATCH_MNT/space$i bs=4096 count=1"
+    _do "xfs_bmap $SCRATCH_MNT/hole$i"
+done
+echo "done" 
+echo -n "Fill filesystem with 4k files, generate manifest... "
+_do "(src/fill2fs --verbose --dir=$SCRATCH_MNT/fill --seed=0 --filesize=4096 --stddev=0 --list=$tmp.manifest)"
+echo "done"
+echo -n "Use up any further available space using dd... "
+_do "dd if=/dev/zero of=$SCRATCH_MNT/pad bs=4096"
+echo "done"
+echo -n "Delete every second file... "
+if ! _do "_cull_files"; then
+    echo "fail"
+    echo "Could not cull files. Test failed see $seq.full"
+    status=1; exit
+fi
+echo "done"
+echo -n "Create one very large file... "
+_do "src/fill2 -d nbytes=16000000,file=$SCRATCH_MNT/fragmented"
+echo "done"
+_do "xfs_bmap $SCRATCH_MNT/fragmented"
+_do "(sum $SCRATCH_MNT/fragmented >$tmp.sum1)"
+echo -n "Remove other files... "
+_do "rm -rf $SCRATCH_MNT/{pad,hole*}"
+echo "done"
+
+# flush everything
+_do "umount $SCRATCH_MNT"
+_do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+
+echo -n "Run fsr.xfs on filesystem... "
+_do "fsr.xfs -v $SCRATCH_DEV"
+echo "done"
+_do "xfs_bmap $SCRATCH_MNT/fragmented"
+
+echo -n "Check 4k files... "
+if ! _do "src/fill2fs_check $tmp.manifest"; then
+    echo "fail"
+    echo "4k file is corrupt/missing after fsr. Test failed see $seq.full"
+    status=1; exit
+fi
+echo "done"
+echo -n "Check large file... "
+_do "(sum $SCRATCH_MNT/fragmented >$tmp.sum2)"
+if ! diff $tmp.sum1 $tmp.sum2; then
+    echo "fail"
+    echo "File is corrupt/missing after fsr. Test failed see $seq.full"
+    status=1; exit
+fi
+echo "done"
+
+echo -n "Checking filesystem... "
+_check_fs $SCRATCH_DEV
+echo "done"
+# success, all done
+echo "fsr.xfs tests passed."
+status=0 ; exit

@@ -1,0 +1,104 @@
+#! /bin/sh
+#
+# XFS QA Test No. 003
+# $Id: 1.1 $
+#
+# exercise xfs_db bug #784078
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+tmp=/tmp/$$
+here=`pwd`
+status=0	# success is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+_need_to_be_root
+
+# real QA test starts here
+
+PATH=".:$PATH"
+
+[ -f core ] && rm -f core
+[ -f core ] && echo "Warning: can't nuke existing core file!"
+
+test_done()
+{
+        sts=$?
+        [ -f core ] && echo "FAILED - core file"
+        [ ! -f core -a $sts != 0 ] && echo "FAILED - non-zero exit status"
+        rm -f core
+}
+
+# real QA test starts here
+
+echo "=== TEST 1 ==="
+xfs_db -r -c 'pop' -c 'type sb' $TEST_DEV
+test_done
+
+echo "=== TEST 2 ==="
+xfs_db -r -c 'push sb' $TEST_DEV
+test_done
+
+echo "=== TEST 3 ==="
+xfs_db -r -c 'pop' -c 'push sb' $TEST_DEV
+test_done
+
+echo "=== TEST 4 ==="
+xfs_db -r -c 'type sb' -c 'print' $TEST_DEV
+test_done
+
+echo "=== TEST 5 ==="
+xfs_db -r -c 'inode 128' -c 'push' -c 'type' $TEST_DEV >$tmp.out 2>&1
+test_done
+if ! grep -q "current type is \"inode\"" $tmp.out
+then
+	cat $tmp.out
+fi
+
+echo "=== TEST 6 ==="
+xfs_db -r -c 'sb' -c 'a' $TEST_DEV >$tmp.out 2>&1 # don't care about output
+test_done
+
+echo "=== TEST 7 ==="
+xfs_db -r -c 'ring' $TEST_DEV
+test_done

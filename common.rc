@@ -1,0 +1,529 @@
+##/bin/sh
+
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+# we need common.config
+if ! . ./common.config
+then
+    echo "$iam: failed to source common.config"
+    exit 1
+fi
+
+# awk
+AWK_PROG=gawk
+
+# ps
+PS_HAVE_BSD=false
+PS_ALL_FLAGS=-efw
+
+# host os
+PLATFORM=linux
+
+# extra parameters for fsstress
+FSSTRESS_AVOID="-f resvsp=0 -f unresvsp=0"
+
+export AWK_PROG PS_HAVE_BSD PS_ALL_FLAGS PLATFORM
+
+# we override mount so we can specify mount options
+
+mount()
+{
+    case "$*"
+    in
+        *remount*)
+            /bin/mount $*
+            ;;
+        *ext2*)
+            /bin/mount $*
+            ;;
+        *xfs*)
+            /bin/mount $* $MOUNT_OPTIONS
+            ;;
+        *)
+            /bin/mount $*
+            ;;
+    esac
+}
+
+#
+
+_get_pids_by_name()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _get_pids_by_name process-name" 1>&2
+	exit 1
+    fi
+
+    # Algorithm ... all ps(1) variants have a time of the form MM:SS or
+    # HH:MM:SS before the psargs field, use this as the search anchor.
+    #
+    # Matches with $1 (process-name) occur if the first psarg is $1
+    # or ends in /$1 ... the matching uses sed's regular expressions,
+    # so passing a regex into $1 will work.
+
+    ps $PS_ALL_FLAGS \
+    | sed -n \
+	-e 's/$/ /' \
+	-e 's/[ 	][ 	]*/ /g' \
+	-e 's/^ //' \
+	-e 's/^[^ ]* //' \
+	-e "/[0-9]:[0-9][0-9]  *[^ ]*\/$1 /s/ .*//p" \
+	-e "/[0-9]:[0-9][0-9]  *$1 /s/ .*//p"
+}
+
+# fqdn for localhost
+#
+_get_fqdn()
+{
+    host=`hostname`
+    nslookup $host | $AWK_PROG '{ if ($1 == "Name:") print $2 }'
+}
+
+# fix malloc libs output
+#
+_fix_malloc()
+{
+    # filter out the Electric Fence notice
+    perl -e '
+        while (<>) {
+            if (defined $o && /^\s+Electric Fence/) {
+                chomp($o);
+                print "$o";
+                undef $o;
+                next;
+            }
+            print $o if (defined $o);
+
+            $o=$_;
+        }
+        print $o if (defined $o);
+    '
+}
+
+# check if run as root
+#
+_need_to_be_root()
+{
+    id=`id | sed -e 's/(.*//' -e 's/.*=//'`
+    if [ "$id" -ne 0 ]
+    then
+	echo "Arrgh ... you need to be root (not uid=$id) to run this test"
+	exit 1
+    fi
+}
+
+
+#
+# _df_device : get an IRIX style df line for a given device 
+#
+#       - returns "" if not mounted
+#       - returns fs type in field two (ala IRIX)
+#       - joins line together if split by fancy df formatting
+#       - strips header etc
+#
+
+_df_device()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _df_device device" 1>&2
+	exit 1
+    fi
+    
+    df -T 2>/dev/null | $AWK_PROG -v what=$1 '
+        match($1,what) && NF==1 { 
+            v=$1
+            getline
+            print v, $0
+            exit
+        }
+        match($1,what) {
+            print
+            exit
+        }
+    '
+}
+
+#
+# _df_dir : get an IRIX style df line for device where a directory resides
+#
+#       - returns fs type in field two (ala IRIX)
+#       - joins line together if split by fancy df formatting
+#       - strips header etc
+#
+
+_df_dir()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _df_dir device" 1>&2
+	exit 1
+    fi
+    
+    df -T $1 2>/dev/null | $AWK_PROG -v what=$1 '
+        NR == 2 && NF==1 { 
+            v=$1
+            getline 
+            print v, $0;
+            exit 0
+        }
+        NR == 2 {
+            print;
+            exit 0
+        }
+        {}
+    '
+    # otherwise, nada
+}
+
+# return percentage used disk space for mounted device
+
+_used()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _used device" 1>&2
+	exit 1
+    fi
+    
+    _df_device $1 | $AWK_PROG '{ sub("%", "") ; print $6 }'
+}
+
+# return the FS type of a mounted device
+#
+_fs_type()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _fs_type device" 1>&2
+	exit 1
+    fi
+    
+    _df_device $1 | $AWK_PROG '{ print $2 }'
+}
+
+# return the FS mount options of a mounted device
+#
+_fs_options()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _fs_options device" 1>&2
+	exit 1
+    fi
+    
+    $AWK_PROG -v dev=$1 '
+        match($1,dev) { print $4 }
+    ' </proc/mounts
+    
+}
+
+# returns device number if a file is a block device
+#
+_is_block_dev()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _is_block_dev dev" 1>&2
+	exit 1
+    fi
+    
+    [ -b $1 ] && src/lstat64 $1 | $AWK_PROG '/Device type:/ { print $9 }'
+}
+
+# bail out, setting up .notrun file
+# 
+_notrun()
+{
+    echo "$*" >$seq.notrun
+    status=0
+    exit
+}
+
+# just plain bail out
+# 
+_fail()
+{
+    echo "$*" | tee -a $seq.full
+    echo "(see $seq.full for details)"
+    status=1
+    exit 1
+}
+
+# this test needs a scratch partition - check we're ok & unmount it
+# 
+_require_scratch()
+{
+
+    if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
+    then
+        _notrun "this test requires a valid \$SCRATCH_DEV"
+    fi
+    
+    if [ "`_is_block_dev $SCRATCH_DEV`" = "`_is_block_dev $TEST_DEV`" ]
+    then
+        _notrun "this test requires a valid \$SCRATCH_DEV"
+    fi
+    
+    # mounted?
+    if mount | grep -q $SCRATCH_DEV
+    then 
+        # if it's mounted, make sure its on $SCRATCH_MNT
+        if ! mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
+        then 
+            echo "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
+            exit 1
+        fi
+        
+        # and then unmount it
+    
+        if ! umount $SCRATCH_DEV
+        then
+            echo "failed to unmount $SCRATCH_DEV"
+            exit 1
+        fi
+    fi
+    
+    # should be ok now
+
+}
+
+# this test needs a logdev 
+# 
+_require_logdev()
+{
+    if [ -z "$SCRATCH_LOGDEV" -o ! -b "$SCRATCH_LOGDEV" ]
+    then
+        _notrun "This test requires a valid \$SCRATCH_LOGDEV" 
+    fi
+}
+
+# this test requires loopback device support
+# 
+_require_loop()
+{
+    if grep loop /proc/devices >/dev/null 2>&1
+    then
+	:
+    else
+	_notrun "This test requires loopback device support"
+    fi
+}
+
+
+# check that a FS is mounted as XFS. if so, return mount point
+#
+_xfs_mounted()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _xfs_mounted device" 1>&2
+	exit 1
+    fi
+    
+    device=$1
+    
+    if mount | grep $device | $AWK_PROG '
+        /type xfs/  { print $3 ; exit 0 }
+        END         { exit 1 }
+    '
+    then
+        echo "_xfs_mounted: $device is not a mounted XFS FS"
+        exit 1
+    fi
+}
+
+# remount a FS to a new mode (ro or rw)
+#
+
+_remount()
+{
+    if [ $# -ne 2 ]
+    then
+	echo "Usage: _remount device ro/rw" 1>&2
+	exit 1
+    fi
+    device=$1
+    mode=$2
+    
+    if ! mount -o remount,$mode $device
+    then
+        echo "_remount: failed to remount filesystem on $device as $mode"
+        exit 1
+    fi
+    
+    # we might like to check here later
+    #options=`_fs_options $device`
+
+}
+
+# run xfs_check on a FS. 
+#
+# if the filesystem is mounted, it's either remounted ro before being
+# checked or it's unmounted and then remounted
+#
+
+USE_REMOUNT=0
+
+_check_fs()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _check_fs device" 1>&2
+	exit 1
+    fi
+    
+    device=$1
+    type=`_fs_type $device`
+    ok=1
+    
+    if [ "$type" = "xfs" ]
+    then
+        # mounted... 
+        
+        if [ $USE_REMOUNT -eq 0 ]
+        then
+            mountpoint=`_xfs_mounted $device`
+            umount $device
+        else
+            _remount $device ro
+        fi
+    fi
+
+    xfs_logprint -t $device 2>&1 | tee $tmp.fs_check | grep -q "<CLEAN>"
+    if [ $? -ne 0 ]
+    then
+        echo "_check_fs: filesystem on $device has dirty log (see $seq.full)"
+        
+        echo "_check_fs: filesystem on $device has dirty log"   >>$seq.full
+        echo "*** xfs_logprint -t output ***"                   >>$seq.full
+        cat $tmp.fs_check                                       >>$seq.full
+        echo "*** end xfs_logprint output"                      >>$seq.full
+        
+        ok=0
+    fi
+        
+    
+    xfs_check $device 2>&1 | _fix_malloc >$tmp.fs_check 
+    if [ -s $tmp.fs_check ]
+    then
+        echo "_check_fs: filesystem on $device is inconsistent (c) (see $seq.full)"
+        
+        echo "_check_fs: filesystem on $device is inconsistent" >>$seq.full
+        echo "*** xfs_check output ***"                         >>$seq.full
+        cat $tmp.fs_check                                       >>$seq.full
+        echo "*** end xfs_check output"                         >>$seq.full
+        
+        ok=0
+    fi
+    
+    if ! xfs_repair -n $device >$tmp.fs_check 2>&1
+    then
+        echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
+        
+        echo "_check_fs: filesystem on $device is inconsistent" >>$seq.full
+        echo "*** xfs_repair -n output ***"                     >>$seq.full
+        cat $tmp.fs_check | _fix_malloc                         >>$seq.full
+        echo "*** end xfs_repair output"                        >>$seq.full
+        
+        ok=0
+    fi
+    rm -f $tmp.fs_check
+    
+    if [ $ok -eq 0 ]
+    then
+        echo "*** mount output ***"                             >>$seq.full
+        mount                                                   >>$seq.full
+        echo "*** end mount output"                             >>$seq.full
+    fi
+    
+    if [ "$type" = "xfs" ]
+    then
+        # mounted... 
+        if [ $USE_REMOUNT -eq 0 ]
+        then
+            if ! mount -t xfs $device $mountpoint
+            then
+                echo "!!! failed to remount $device on $mountpoint"
+                ok=0
+            fi
+        else
+            _remount $device rw
+        fi
+    fi
+    
+    [ $ok -eq 0 ] && exit 1
+    
+}
+
+################################################################################
+
+[ -d /usr/bsd ] && PATH=$PATH:/usr/bsd
+[ -d /usr/freeware/bin ] && PATH=$PATH:/usr/freeware/bin
+
+if [ "$iam" != new ]
+then
+
+    # make some further configuration checks here
+    
+    if [ "$TEST_DEV" = ""  ]
+    then
+        echo "common.rc: Error: \$TEST_DEV is not set"
+        exit 1
+    fi
+    
+    if [ "`_fs_type $TEST_DEV`" != "xfs" ]
+    then
+        echo "common.rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED XFS filesystem"
+        df -T $TEST_DEV
+        exit 1
+    fi
+
+fi
+
+# check for some required biunaries on our $PATH
+#
+for exec in mkfs.xfs xfs_logprint xfs_check xfs_repair xfs_db
+do
+    if which $exec >/dev/null 2>&1 
+    then
+	:
+    else
+	echo "common.rc: cannot find $exec on \$PATH=$PATH"
+	exit 1
+    fi
+done
+
+# make sure this script returns success
+/bin/true

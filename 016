@@ -1,0 +1,206 @@
+#! /bin/sh
+# XFS QA Test No. 016
+# $Id: 1.1 $
+#
+# test end of log overwrite bug #796141
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+#
+# pv 796141
+#
+# create a new FS, mostly fill the log. Then wrap the log back to the
+# start bit by bit to force wiping of stale blocks near the end of the
+# log. Check the block after the log ends to check for corruption
+#
+# assumptions : 
+#    - given we're only touching a single inode, the block after the
+#      log which is in the middle ag should never be touched.
+#      if it changes, we assume the log is writing over it
+#
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    echo "*** unmount"
+    umount $SCRATCH_MNT 2>/dev/null
+}
+
+_block_filter()
+{
+    sed -e 's/[0-9][0-9]*\.\.[0-9][0-9]*/BLOCKRANGE/g'
+}
+
+_init()
+{
+    echo "*** reset partition"
+    $here/src/devzero -b 2048 -n 50 -v 198 $SCRATCH_DEV
+    echo "*** mkfs"
+    if ! mkfs -t xfs -f -d size=50m -l size=512b $SCRATCH_DEV >$tmp.out 2>&1
+    then
+	cat $tmp.out
+        echo "failed to mkfs $SCRATCH_DEV"
+        exit 1
+    fi
+}
+
+_log_traffic()
+{
+    count=$1
+    echo "*** generate log traffic"
+    
+    out=$SCRATCH_MNT/$$.tmp
+    
+    echo "   *** mount"
+    if ! mount $SCRATCH_DEV $SCRATCH_MNT -t xfs
+    then
+        echo "failed to mount $SCRATCH_DEV"
+        exit 1
+    fi
+
+    # having quota enabled means extra log traffic - evil!
+    $here/src/feature -u $SCRATCH_DEV && _notrun "User quota are enabled"
+    $here/src/feature -g $SCRATCH_DEV && _notrun "Group quota are enabled"
+ 
+    echo "   *** fiddle"
+    while [ $count -ge 0 ]
+    do
+        touch $out 
+        rm $out
+        let "count = count - 1"
+    done
+    
+    echo "   *** unmount"
+    if ! umount $SCRATCH_DEV
+    then
+        echo "failed to unmount $SCRATCH_DEV"
+        exit 1
+    fi
+}
+
+_log_size()
+{
+    xfs_logprint -tb $SCRATCH_DEV | $AWK_PROG '
+        /log device/ {  print $7}
+    '
+}
+
+_log_head()
+{
+    xfs_logprint -tb $SCRATCH_DEV | $AWK_PROG '
+        /head:/ { print $5 }
+    '
+}
+
+_after_log()
+{
+    xfs_db -r $1 -c "sb" -c "print" | $AWK_PROG '
+        /logstart/  { logstart = $3 }
+        /logblocks/ { logblocks = $3 }
+        END {
+            print logstart + logblocks
+        }
+    '
+}
+
+_check_corrupt()
+{
+    f="c6c6c6c6"
+    echo "*** check for corruption"
+    echo "expect $f..." >>$seq.full
+    xfs_db -r $1 -c "fsblock $2" -c "print" | head | tee -a $seq.full | \
+        grep -q -v "$f $f $f $f $f $f $f $f" && \
+            _fail "!!! block $2 corrupted!"
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+rm -f $seq.full
+
+_require_scratch
+_init
+
+block=`_after_log $SCRATCH_DEV`
+echo "fsblock after log = $block"               >>$seq.full
+_check_corrupt $SCRATCH_DEV $block
+
+size=`_log_size`
+echo "log size = $size BB"                      >>$seq.full
+head=`_log_head`
+echo "log position = $head"                     >>$seq.full
+
+[ $size -eq 4096 ] || \
+    _fail "!!! unexpected log size $size"
+[ $head -eq 2 ] || \
+    _fail "!!! unexpected initial log position $head"
+
+echo "    lots of traffic"                      >>$seq.full
+_log_traffic 850
+head=`_log_head`
+echo "log position = $head"                     >>$seq.full
+
+[ $head -gt 3850 -a $head -lt 4050 ] || \
+    _fail "!!! unexpected log position $head"
+
+for c in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+do
+    echo "   little traffic"            >>$seq.full
+    _log_traffic 2
+    head=`_log_head`
+    echo "log position = $head"         >>$seq.full
+    _check_corrupt $SCRATCH_DEV $block
+done
+
+[ $head -lt 1000 ] || \
+    _fail "!!! unexpected log position $head"
+
+
+# happy exit
+rm $seq.full
+status=0
+exit 0

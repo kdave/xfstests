@@ -1,0 +1,152 @@
+#!/bin/sh
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+tmp=/tmp/$$
+seq=soak
+status=1	# failure is the default!
+
+_cleanup()
+{
+    echo "        *** umount"
+    umount $SCRATCH_DEV >/dev/null 2>&1
+}
+
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+ROOT="."
+LOG="$ROOT/soak.log"
+FULL="$ROOT/soak.full"
+
+_log()
+{
+    echo "$*" 1>&2
+    echo "$*" >>$LOG
+    echo "$*" >>$FULL
+}
+
+_logp()
+{
+    tee -a $FULL
+}
+
+_fail()
+{
+    _log "$*"
+    status=1
+    exit 1
+}
+
+_require_scratch
+
+passes=-1
+stress=100000
+proc=1
+
+if [ $# -gt 0 ]
+then
+    passes=$1
+    if [ $# -gt 1 ]
+    then
+        stress=$2
+        if [ $# -gt 2 ]
+        then
+            proc=$3
+        fi
+    fi
+fi
+
+echo "" >$FULL
+echo "" >$LOG
+_log "*** soak test started (passes=$passes, stress=$stress, proc=$proc)"
+_log "***     (`date`)"
+
+
+_log "    *** init"
+_log "        *** unmounting scratch device"
+
+umount $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL
+
+_log "        *** clean scratch device"
+
+mkfs -t xfs -f $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL \
+                        || _fail "            !!! failed to mkfs SCRATCH_DEV"
+
+pass=1
+
+while [ $pass -le $passes -o $passes -lt 0 ]
+do
+    _log "    *** pass $pass (`date`)"
+    
+    _log "        *** check"
+    _check_fs $SCRATCH_DEV
+    
+    _log "        *** mounting scratch device"
+
+    if ! mount -t xfs $SCRATCH_DEV $SCRATCH_MNT 2>&1 | _logp
+    then
+        _fail "            !!! failed to mount"
+    fi
+                        
+    if [ $pass != 1 ]
+    then
+        _log "        *** cleanup"
+        rm -rf $SCRATCH_MNT/soak_test \
+                        || _fail "            !!! couldn't delete old dir"
+
+        _log "        *** check"
+        _check_fs $SCRATCH_DEV
+    fi
+
+    _log "        *** mkdir"
+    mkdir $SCRATCH_MNT/soak_test \
+                        || _fail "            !!! couldn't delete old dir"
+    
+    _log "        *** stress"
+    src/fsstress -d $SCRATCH_MNT/soak_test -p $proc -n $stress $FSSTRESS_AVOID 2>&1 | \
+        _fix_malloc >>$FULL
+
+    _log "        *** unmounting scratch device"
+
+    umount $SCRATCH_DEV 2>&1 | _logp \
+                            || _fail "            !!! failed to umount"
+    
+    let "pass = pass + 1"
+done
+

@@ -1,0 +1,98 @@
+#! /bin/sh
+# XFS QA Test No. 008
+# $Id: 1.1 $
+#
+# randholes test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "rm -f $tmp.*; _cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    rm -rf $TEST_DIR/randholes.$$.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_do_test()
+{
+    _n="$1"
+    _holes="$2"
+    _param="$3"
+    
+    out=$TEST_DIR/randholes.$$.$_n
+    echo ""
+    echo "randholes.$_n : $_param"
+    echo "------------------------------------------"
+    if $here/src/randholes $_param $out >$tmp.out
+    then
+        # quick check - how many holes did we get?
+        count=`xfs_bmap $out | egrep -c ': hole'`
+        # blocks can end up adjacent, therefore number of holes varies
+        _within_tolerance "holes" $count $_holes 10% -v
+    else
+        echo "    randholes returned $? - see $seq.out.full"
+        echo "--------------------------------------"       >>$here/$seq.out.full
+        echo "$_n - output from randholes:"                 >>$here/$seq.out.full
+        echo "--------------------------------------"       >>$here/$seq.out.full
+        cat $tmp.out                                        >>$here/$seq.out.full
+        echo "--------------------------------------"       >>$here/$seq.out.full
+        echo "$_n - output from bmap:"                      >>$here/$seq.out.full
+        echo "--------------------------------------"       >>$here/$seq.out.full
+        xfs_bmap -vvv $out                                  >>$here/$seq.out.full
+        status=1
+    fi
+}
+
+# real QA test starts here
+
+rm -f $here/$seq.out.full
+
+_do_test 1 50 "-l 5000000 -c 50 -b 4096"
+_do_test 2 100 "-l 10000000 -c 100 -b 4096"
+_do_test 3 100 "-l 10000000 -c 100 -b 512"   # test partial pages
+
+# success, all done
+exit

@@ -1,0 +1,868 @@
+##/bin/sh
+
+#
+# Functions useful for xfsdump/xfsrestore tests
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+# --- initializations ---
+rm -f $seq.full
+
+if [ -n "$DEBUGDUMP" ]; then
+  _dump_debug=-v5
+  _restore_debug=-v5
+  _invutil_debug=-d
+fi
+ 
+# Use dump/restore out of workareas
+PATH="../dump/dump:../dump/restore:../dump/invutil:$PATH"
+export PATH
+
+# status returned for not run tests
+NOTRUNSTS=2
+
+# name those directories
+dump_dir=$SCRATCH_MNT/dump.$$
+dump_file=$tmp.dumpfile
+dump_sdir=dump.$$
+restore_dir=$SCRATCH_MNT/restore.$$
+restore_sdir=restore.$$
+
+dumptape=$TAPE_DEV
+media_label="stress_tape_media"
+session_label="stress_$seq"
+
+nobody=4 # define this uid/gid as a number
+
+_need_to_be_root
+
+# install our cleaner
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# start inventory from a known base - move it aside for test
+if [ -d /var/xfsdump/inventory ]; then
+    if [ -d /var/xfsdump/inventory.$seq ]; then    
+	rm -rf /var/xfsdump/inventory.$seq
+    fi
+    mv /var/xfsdump/inventory /var/xfsdump/inventory.$seq
+fi
+
+
+#
+# do a remote/local mt
+#
+_mt()
+{
+    op=$1
+    if _isrmt; then  
+	# REMOTE
+	_rmthost=`echo $dumptape | awk -F: '{print $1}'`
+	_rmtdev=`echo $dumptape | awk -F: '{print $2}'`
+	rsh -n $_rmthost "mt -t $_rmtdev $op"
+	# Would have used src/testrmt but get
+        # permission denied from linux to linux for erase !?! 
+    else
+	#LOCAL
+	mt -t $dumptape $op
+    fi
+}
+
+_check_onl()
+{
+    _limit=10
+    i=0
+    while [ $i -lt $_limit ]; do  
+        echo "Checking online..." >>$seq.full
+	if _mt status >$tmp.status 2>&1; then
+	    break; 
+	else
+	    sleep 2 
+	fi
+	i=`expr $i + 1`
+    done
+
+
+    if [ $i -eq $_limit ]; then
+	echo "ERROR: mt -f $dumptape failed"
+	cat $tmp.status
+
+	echo "mt -f $dumptape failed" >$seq.notrun 
+	status=$NOTRUNSTS
+	exit
+    fi 
+
+
+    if egrep -i 'onl|ready' $tmp.status | grep -iv 'not ready' >/dev/null; then
+	:
+    else
+	echo "ERROR: $dumptape is not online"
+	cat $tmp.status
+
+	echo "dumptape, $dumptape, is not online" >$seq.notrun 
+	status=$NOTRUNSTS
+	exit
+    fi
+}
+
+_wait_tape()
+{
+    echo "Wait for tape, $dumptape, ..." >>$seq.full
+
+    i=0
+    while [ $i -lt 20 ]; do  
+        echo "Checking status..." >>$seq.full
+	if _mt status 2>&1 | tee -a $seq.full | egrep -i "onl|ready" >/dev/null; then
+	    break; 
+	else
+	    sleep 2 
+	fi
+	i=`expr $i + 1`
+    done
+}
+
+#
+# Keep trying so we know we really have rewound
+#
+_rewind()
+{
+    echo "Initiate rewind..." >>$seq.full
+    _wait_tape
+    _mt rewind >/dev/null
+    _wait_tape
+}
+
+#
+# Do a custom erase because: 
+# (i) some machines don't support it
+# (ii) some machines take forever to do it
+#
+_erase_soft()
+{
+    echo "Erasing tape" | tee -a $seq.full
+    _rewind
+    _mt weof 3
+#   src/testrmt -f $dumptape write
+    _rewind
+}
+
+_erase_hard()
+{
+    echo "Erasing tape" | tee -a $seq.full
+    _mt erase
+}
+
+_isrmt()
+{
+    echo $dumptape | grep ':' >/dev/null
+}
+
+#
+# Get tape ready
+#
+_set_variable()
+{
+    if _isrmt; then
+	:
+    else
+	# LOCAL
+	echo "Put scsi tape driver into variable block size mode"
+	mt -f $dumptape setblk 0
+    fi	
+}
+
+_require_tape()
+{
+    if [ $# -eq 0 ]; then
+	dumptape=$TAPE_DEV
+    else
+	dumptape=$1
+    fi
+
+    if [ -z "$dumptape" ]; then
+        echo "This test requires a dump tape - none was specified"
+	echo "No dump tape specified" >$seq.notrun 
+	status=$NOTRUNSTS
+	exit
+    fi
+
+    _check_onl
+    _set_variable
+}
+
+_error()
+{
+    echo "Error: $*" | tee -a $seq.full
+    echo "(see $seq.full for details)"
+    status=1
+    exit
+}
+
+_wipe_fs()
+{
+    _require_scratch
+
+    mkfs -t xfs -f $SCRATCH_DEV >>$seq.full  ||\
+	_error "mkfs failed"
+      
+    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
+	_error "mount failed"
+}
+
+# 
+# Cleanup created dirs and files
+# Called by trap
+#
+_cleanup()
+{
+    cd $here
+    rm -f $tmp.*
+
+    if [ -n "$DEBUGDUMP" ]; then
+        # save it for inspection
+	tar -zcvf $seq.inventory.tgz /var/xfsdump/inventory
+	ls -lR /var/xfsdump/inventory >$seq.inventory.ls
+    fi
+
+    # put inventory dir back
+    if [ -d /var/xfsdump/inventory.$seq ]; then
+        rm -rf /var/xfsdump/inventory # get rid of new one
+	mv /var/xfsdump/inventory.$seq /var/xfsdump/inventory
+    fi
+
+    if [ $status -ne $NOTRUNSTS ]; then
+	# Sleep added to stop _check_fs from complaining that the
+	# scratch_dev is still busy
+	sleep 10
+
+	_check_fs $SCRATCH_DEV
+    fi
+}
+
+_stable_fs()
+{
+#    umount $SCRATCH_MNT >/dev/null 
+#    mount $SCRATCH_MNT >/dev/null
+    sync; sync; sleep 15
+}
+
+#
+# Run stress/src/fsstress to create a mixture of 
+# files,dirs,links,symlinks
+#
+# Pinched from stress/013.
+#
+_create_dumpdir_stress()
+{
+    echo "Creating directory system to dump using src/fsstress."
+
+    _wipe_fs
+
+    _param="-f link=10 -f creat=10 -f mkdir=10 -f truncate=5 -f symlink=10"
+    _count=200
+    rm -rf $dump_dir
+    if ! mkdir $dump_dir; then
+        echo "    failed to mkdir $dump_dir"
+        status=1
+        exit
+    fi
+    echo ""
+    echo "-----------------------------------------------"
+    echo "fsstress : $_param"
+    echo "-----------------------------------------------"
+    if ! $here/src/fsstress $_param $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
+    then
+        echo "    fsstress (count=$_count) returned $? - see $seq.full"
+        
+        echo "--------------------------------------"       >>$here/$seq.full
+        echo "output from fsstress:"                        >>$here/$seq.full
+        echo "--------------------------------------"       >>$here/$seq.full
+        cat $tmp.out                                        >>$here/$seq.full
+        status=1
+    fi
+
+    _stable_fs
+}
+
+_mk_fillconfig1()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size in bytes	owner	group
+#
+small		10	$nobody	$nobody
+big		102400	daemon	sys
+sub/small	10	bin	bin
+sub/big		102400	$nobody	sys
+#
+sub/a		1	$nobody	$nobody
+sub/b		2	$nobody	$nobody
+sub/c		4	$nobody	$nobody
+sub/d		8	$nobody	$nobody
+sub/e		16	$nobody	$nobody
+sub/f		32	$nobody	$nobody
+sub/g		64	$nobody	$nobody
+sub/h		128	$nobody	$nobody
+sub/i		256	$nobody	$nobody
+sub/j		512	$nobody	$nobody
+sub/k		1024	$nobody	$nobody
+sub/l		2048	$nobody	$nobody
+sub/m		4096	$nobody	$nobody
+sub/n		8192	$nobody	$nobody
+#
+sub/a00		100	$nobody	$nobody
+sub/b00		200	$nobody	$nobody
+sub/c00		400	$nobody	$nobody
+sub/d00		800	$nobody	$nobody
+sub/e00		1600	$nobody	$nobody
+sub/f00		3200	$nobody	$nobody
+sub/g00		6400	$nobody	$nobody
+sub/h00		12800	$nobody	$nobody
+sub/i00		25600	$nobody	$nobody
+sub/j00		51200	$nobody	$nobody
+sub/k00		102400	$nobody	$nobody
+sub/l00		204800	$nobody	$nobody
+sub/m00		409600	$nobody	$nobody
+sub/n00		819200	$nobody	$nobody
+#
+sub/a000	1000	$nobody	$nobody
+sub/e000	16000	$nobody	$nobody
+sub/h000	128000	$nobody	$nobody
+sub/k000	1024000	$nobody	$nobody
+End-of-File
+}
+
+_mk_fillconfig2()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size in bytes
+#
+smalll		10	$nobody	$nobody
+biggg		102400	$nobody	$nobody
+sub/smalll	10	$nobody	$nobody
+sub/biggg	102400	$nobody	$nobody
+End-of-File
+}
+
+#
+# Create a bunch of directories/files of different sizes
+# filled with data.
+#
+# Pinched from stress/001.
+#
+_do_create_dumpdir_fill()
+{
+    echo "Creating directory system to dump using src/fill."
+
+    if mkdir -p $dump_dir
+    then
+	:
+    else
+	echo "Error: cannot mkdir \"$dump_dir\""
+	exit 1
+    fi
+    cd $dump_dir
+
+    $verbose && echo -n "Setup "
+    sed -e '/^#/d' $tmp.config \
+    | while read file nbytes owner group perms
+    do
+	dir=`dirname $file`
+	if [ "$dir" != "." ]
+	then
+	    if [ ! -d $dir ]
+	    then
+		if mkdir $dir
+		then
+		    :
+		else
+		    $verbose && echo
+		    echo "Error: cannot mkdir \"$dir\""
+		    exit 1
+		fi
+	    fi
+	fi
+	rm -f $file
+	if $here/src/fill $file $file $nbytes
+	then
+	    :
+	else
+	    $verbose && echo
+	    echo "Error: cannot create \"$file\""
+	    exit 1
+	fi
+	if [ -n "$owner" -a -n "$group" ]; then
+	    chown $owner.$group $file
+	fi
+	if [ -n "$perms" ]; then
+	    chmod $perms $file
+	fi
+	$verbose && echo -n "."
+    done
+    $verbose && echo
+
+    cd $here
+}
+
+
+_create_dumpdir_fill()
+{
+    _wipe_fs
+    _mk_fillconfig1
+    _do_create_dumpdir_fill
+    _stable_fs
+}	
+
+_create_dumpdir_fill2()
+{
+    _wipe_fs
+    _mk_fillconfig2
+    _do_create_dumpdir_fill
+    _stable_fs
+}	
+
+
+
+#
+# Append a subset of the fill'ed files
+# So we can see if just these get dumped on an incremental
+#
+_append_dumpdir_fill()
+{
+    cd $dump_dir
+    cat <<End-of-File >$tmp.config
+# pathname
+#
+small	
+sub/big	
+#
+sub/a
+sub/c
+sub/e
+End-of-File
+    sed -e '/^#/d' $tmp.config \
+    | while read file
+    do
+        echo 'Extra text' >>$file
+    done
+
+    cd $here
+}
+
+_do_create_dump_symlinks()
+{
+    echo "Creating directory system of symlinks to dump."
+
+    if mkdir -p $dump_dir
+    then
+	:
+    else
+	echo "Error: cannot mkdir \"$dump_dir\""
+	exit 1
+    fi
+    cd $dump_dir
+
+    $verbose && echo -n "Setup "
+    sed -e '/^#/d' $tmp.config \
+    | while read file nbytes owner group owner2 group2 perms perms2
+    do
+	dir=`dirname $file`
+	if [ "$dir" != "." ]
+	then
+	    if [ ! -d $dir ]
+	    then
+		if mkdir $dir
+		then
+		    :
+		else
+		    $verbose && echo
+		    echo "Error: cannot mkdir \"$dir\""
+		    exit 1
+		fi
+	    fi
+	fi
+	rm -f $file
+	touch $file
+
+	# Do chmod on symlink using umask.
+	# This won't do the right thing as it subtracts permissions.
+	# However, I don't care, as long as I get some different perms
+	# for testing.
+	if [ -n "$perms2" ]; then
+	    omask=`umask`
+	    umask $perms2
+	fi
+	ln -s $file $file-link
+	if [ -n "$perms2" ]; then
+	    umask $omask	
+	fi
+
+	if [ -n "$owner" -a -n "$group" ]; then
+	    chown $owner.$group $file
+	fi
+	if [ -n "$owner" -a -n "$group" ]; then
+	    chown -h $owner.$group $file-link
+	fi
+	if [ -n "$perms" ]; then
+	    chmod $perms $file
+	fi
+	$verbose && echo -n "."
+    done
+    $verbose && echo
+
+    cd $here
+}
+
+_mk_symlink_config()
+{
+    cat <<End-of-File >$tmp.config
+# path	size	owner1	group1	owner2	group2	perm1	perm2 
+#
+a	0	$nobody	$nobody	daemon	sys	124	421
+b	0	daemon	sys	bin	bin	347	743
+sub/a	0	bin	bin	$nobody	sys	777	777
+sub/b	0	$nobody	sys	$nobody	$nobody	367	763
+End-of-File
+}
+
+_create_dumpdir_symlinks()
+{
+    _wipe_fs
+    _mk_symlink_config
+    _do_create_dump_symlinks
+    _stable_fs
+}	
+
+#
+# Filter for ls
+# Filter out dates on symlinks
+#
+_ls_filter()
+{
+  $AWK_PROG '/^l/ { date = $8; sub(date,"DATE"); print}
+        {print}' \
+  | sed -e 's/total [0-9][0-9]*/total TOTAL/'
+}
+
+
+# 
+# Filter out the non-deterministic dump msgs from
+# xfsdump and xfsrestore
+#
+_dump_filter()
+{
+  sed \
+      -e "s/`hostname`/HOSTNAME/"   \
+      -e "s#$SCRATCH_DEV#SCRATCH_DEV#"    \
+      -e "s#$dumptape#TAPE_DEV#"    \
+      -e "s#$SCRATCH_MNT#SCRATCH_MNT#"    \
+      -e "s#$dump_file#DUMP_FILE#"  \
+      -e 's/id:[ 	]*[0-9a-f-]*/id: ID/'  \
+      -e 's/time:[ 	].*/time: TIME/'       \
+      -e 's/date:[ 	].*/date: DATE/'       \
+      -e 's/dump begun .*/dump begun DATE/'    \
+      -e 's/[0-9][0-9]* seconds/SECS seconds/' \
+      -e '/: dump size/s/[1-9][0-9]*/NUM/'     \
+      -e '/dump size:/s/[1-9][0-9]*/NUM/'      \
+      -e '/media file size/s/[1-9][0-9]*/NUM/' \
+      -e '/\/dev\/tty/d' \
+      -e '/inventory session uuid/d' \
+
+}
+
+_invutil_filter()
+{
+  _dump_filter \
+  | sed \
+	-e 's/UUID[ 	]*:[ 	][0-9a-f-]*/UUID		:	ID/' \
+	-e 's/TIME OF DUMP[ 	]*:.*/TIME OF DUMP	:	TIME/' \
+        -e 's/HOSTNAME:SCRATCH_MNT.*/HOSTNAME:SCRATCH_MNT/' \
+        -e 's#inventory/[0-9a-f-]*#inventory/UUID#' \
+
+}
+
+_dir_filter()
+{
+  sed \
+    -e "s#$dump_file#DUMP_FILE#"      \
+    -e "s#$SCRATCH_DEV#SCRATCH_DEV#"        \
+    -e "s#$dumptape#TAPE_DEV#"         \
+    -e "s#$dump_dir#DUMP_DIR#g"       \
+    -e "s#$restore_dir#RESTORE_DIR#g" \
+    -e "s#$SCRATCH_MNT#SCRATCH_MNT#g"       \
+    -e "s#$dump_sdir#DUMP_SUBDIR#g"   \
+    -e "s#$restore_sdir#RESTORE_SUBDIR#g" \
+
+}
+
+_parse_args()
+{
+    OPTIND=0
+    dump_args=""
+    while getopts "f:FL:o" c $*
+    do
+        case $c
+        in
+        f)
+            [ -z "$OPTARG" ] && _error "missing argument for -f"
+	    dumptape=$OPTARG	
+            ;;
+        L)
+            [ -z "$OPTARG" ] && _error "missing argument for -L"
+	    session_label=$OPTARG	
+            ;;
+	o)
+	    dump_args="$dump_args -o"
+            ;;
+	F)
+	    dump_args="$dump_args -F"
+            ;;
+	\?)
+            _error "invalid argument"
+            ;;
+        esac
+    done
+}
+
+
+#
+# Dump a subdir
+#
+_do_dump_sub()
+{
+    _parse_args $*
+
+    echo "Dumping to tape..."
+    opts="$_dump_debug$dump_args -s $dump_sdir -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Do full level 0 dump
+#
+_do_dump()
+{
+    _parse_args $*
+
+    echo "Dumping to tape..."
+    opts="$_dump_debug$dump_args -l0 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+
+#
+# Do full dump with -m
+#
+_do_dump_min()
+{
+    _parse_args $*
+
+    echo "Dumping to tape..."
+    onemeg=1048576
+    opts="$_dump_debug$dump_args -m -b $onemeg -l0 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Do level 1 incremental dump
+#
+_do_dump_incremental()
+{
+    _parse_args $*
+
+    echo "Dumping incrementally to tape..."
+    opts="$_dump_debug$dump_args -l1 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Do full dump to file
+#
+_do_dump_file()
+{
+    _parse_args $*
+
+    echo "Dumping to file..."
+    opts="$_dump_debug$dump_args -f $dump_file -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+
+_prepare_restore_dir()
+{
+    rm -rf $restore_dir
+    if ! mkdir $restore_dir; then
+	echo "    failed to mkdir $restore_dir"
+	status=1
+	exit
+    fi
+}
+
+
+#
+# Get tape ready and restore dir
+#
+_prepare_restore()
+{
+    _prepare_restore_dir
+
+    echo "Rewinding tape"
+    _rewind
+}
+
+#
+# Restore the tape into $restore_dir
+#
+_do_restore()
+{
+    _parse_args $*
+    _prepare_restore
+
+
+    echo "Restoring from tape..."
+    opts="$_restore_debug$dump_args -f $dumptape  -L $session_label $restore_dir"
+    echo "xfsrestore $opts" | _dir_filter  
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Restore the tape into $restore_dir using -m
+#
+_do_restore_min()
+{
+    _parse_args $*
+    _prepare_restore
+
+    echo "Restoring from tape..."
+    onemeg=1048576
+    opts="$_restore_debug$dump_args -m -b $onemeg -f $dumptape  -L $session_label $restore_dir"
+    echo "xfsrestore $opts" | _dir_filter  
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Restore the tape from a dump file
+#
+_do_restore_file()
+{
+    _parse_args $*
+    _prepare_restore_dir
+
+    echo "Restoring from file..."
+    opts="$_restore_debug$dumpargs -f $dump_file  -L $session_label $restore_dir"
+    echo "xfsrestore $opts" | _dir_filter  
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Do xfsdump piped into xfsrestore - xfsdump | xfsrestore
+#
+# Use -s as we want to dump and restore to the same xfs partition
+#
+_do_dump_restore()
+{
+    _parse_args $*
+    _prepare_restore_dir
+    echo "xfsdump|xfsrestore ..."
+    restore_opts="$_restore_debug - $restore_dir"
+    dump_opts="$_dump_debug$dump_args -s $dump_sdir - $SCRATCH_MNT"
+    echo "xfsdump $dump_opts | xfsrestore $restore_opts" | _dir_filter  
+    xfsdump $dump_opts 2>$tmp.dump.mlog | xfsrestore $restore_opts 2>&1 | tee -a $seq.full | _dump_filter
+    _dump_filter <$tmp.dump.mlog
+}
+
+#
+# Compare dumped subdirectory with restored dir
+# using ls -lR.
+# Thus no contents are compared but permissions, sizes,
+# owners, etc... are.
+#
+_ls_compare_sub()
+{
+    #
+    # verify we got back what we dumped
+    #
+    echo "Comparing listing of dump directory with restore directory"
+    ls -lR $dump_dir | tee -a $seq.full | _ls_filter >$tmp.dump_dir
+    ls -lR $restore_dir/$dump_sdir | tee -a $seq.full | _ls_filter \
+    | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
+
+    diff -cs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
+}
+
+
+#
+# Compare using recursive diff the files of the dumped
+# subdirectory.
+# This one will compare the contents.
+#
+_diff_compare_sub()
+{
+    echo "Comparing dump directory with restore directory"
+    diff -rs $dump_dir $restore_dir/$dump_sdir | _dir_filter
+}
+
+#
+# Compare using recursive diff the files of the dumped
+# filesystem
+#
+_diff_compare()
+{
+    echo "Comparing dump directory with restore directory"
+    diff -rs $SCRATCH_MNT $restore_dir | _dir_filter
+}
+
+#
+# Check out the dump inventory
+#
+_dump_inventory()
+{
+    xfsdump $_dump_debug -I | tee -a $seq.full | _dump_filter 
+}
+
+#
+# Do the xfsinvutil cmd with debug and filters
+# Need to set variable: "$middate" to the invutil date 
+#
+_do_invutil()
+{
+    host=`hostname`
+    echo "xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT \"$middate\" $*" >$seq.full
+    xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT "$middate" $* \
+    | tee -a $seq.full | _invutil_filter
+}
+
+# make sure this script returns success
+/bin/true

@@ -1,0 +1,197 @@
+#! /bin/sh
+# XFS QA Test No. 009
+# $Id: 1.1 $
+#
+# alloc test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    echo "*** unmount"
+    umount $SCRATCH_MNT
+}
+
+_block_filter()
+{
+   sed -e 's/[0-9][0-9]*\.\.[0-9][0-9]*/BLOCKRANGE/g'
+}
+
+_init()
+{
+    echo "*** mkfs"
+    if ! mkfs -t xfs -f $SCRATCH_DEV >$tmp.out 2>&1
+    then
+	cat $tmp.out
+        echo "failed to mkfs $SCRATCH_DEV"
+        exit 1
+    fi
+
+    echo "*** mount"
+    if ! mount $SCRATCH_DEV $SCRATCH_MNT -t xfs
+    then
+        echo "failed to mount $SCRATCH_DEV"
+        exit 1
+    fi
+}
+
+_filesize()
+{
+    ls -l $1 | $AWK_PROG '{print "filesize = " $5}'
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+_require_scratch
+
+_init
+out=$SCRATCH_MNT/$$.tmp
+
+# since we're using a clean FS here, we make some assumptions
+# about availability of contiguous blocks
+
+# also interesting to note is that ALLOC == FREE. seriously.
+# the _length is ignored_ in irix. the file is allocated up
+# to the specified offset, and zero filled if previously
+# unallocated. the file is truncated at the specified point.
+
+echo "*** test 1 - reservations cleared on O_TRUNC"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+r 0 1000b
+m
+EOF
+_filesize $out
+
+cat <<EOF | src/alloc -n -b 4096 -f $out -t | _block_filter
+m
+EOF
+_filesize $out
+
+echo "*** test 2 - reserve & filesize"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+r 0 1000b
+EOF
+
+_filesize $out
+
+echo "*** test 3 - alloc & filesize"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+a 1000b
+EOF
+
+_filesize $out
+
+echo "*** test 4 - allocations cleared on O_TRUNC"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+a 1000b
+EOF
+_filesize $out
+
+cat <<EOF | src/alloc -n -b 4096 -f $out -t | _block_filter
+m
+EOF
+_filesize $out
+
+echo "*** test 5 - reserve / unreserve"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+r 0 100b
+u 100b 500b
+m
+u 900b 200b
+m
+EOF
+
+echo "*** test 6 - reserve adjacent"
+rm -f $out
+cat <<EOF | src/alloc -t -n -b 4096 -f $out | _block_filter
+r 0 100b
+r 100b 100b
+m
+EOF
+
+echo "*** test 7 - alloc"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+a 1000b
+m
+a 2000b
+m
+EOF
+
+_filesize $out
+
+echo "*** test 8 - alloc & truncate"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+a 1000b
+m
+t 500b
+m
+EOF
+
+_filesize $out
+
+echo "*** test 9 - reserve & truncate"
+rm -f $out
+cat <<EOF | src/alloc -n -b 4096 -f $out | _block_filter
+r 0 1000b
+m
+t 500b
+m
+EOF
+
+_filesize $out
+
+
+status=0
+exit

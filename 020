@@ -1,0 +1,206 @@
+#! /bin/sh
+# XFS QA Test No. 020
+# $Id: 1.1 $
+#
+# extended attributes
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "rm -f $tmp.* $testfile; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_filter()
+{
+    sed "s#$TEST_DIR[^ :]*#<TESTFILE>#g; 
+            s#$tmp[^ :]*#<TMPFILE>#g;
+            s#/proc[^ :]*#<PROCFILE>#g" $1
+}
+
+_attr()
+{
+    xfs_attr $* 2>$tmp.err >$tmp.out
+    exit=$?
+    _filter $tmp.out
+    _filter $tmp.err 1>&2
+    return $exit
+}
+
+_attr_list()
+{
+    file=$1
+    
+    echo "   *** print attributes"
+    if ! _attr -l $file >$tmp.raw
+    then
+        echo "      !!! error return"
+        return 1
+    fi
+    
+    $AWK_PROG -v file=$file '
+        {
+            print substr($2,2,length($2)-2)
+            count++
+        }
+        END { 
+            exit count 
+        }
+        ' <$tmp.raw >$tmp.list
+        
+    echo "      *** $? attribute(s)"
+    for l in `cat $tmp.list`
+    do
+        if ! _attr -g $l $file >$tmp.raw
+        then
+            echo "         *** $l"
+            echo "         !!! error return"
+            return 1
+        fi
+        $AWK_PROG '
+            NR==1 {
+                print "         *** field: " substr($2,2,length($2)-2) \
+                      " length: " $5
+                next
+            }
+            {
+                print "            ::: " $0
+            }
+        ' <$tmp.raw
+        
+    done
+}
+
+
+# real QA test starts here
+
+testfile=$TEST_DIR/attribute_$$
+
+echo "*** list non-existant file"
+_attr_list $testfile
+
+echo "*** list non-xfs file (in /proc)"
+_attr_list /proc/devices
+
+echo "*** list empty file"
+touch $testfile
+_attr_list $testfile
+
+echo "*** query non-existant attribute"
+_attr -g "nonexistant" $testfile 2>&1
+
+echo "*** one attribute"
+echo "fish" | _attr -s fish $testfile
+_attr_list $testfile
+
+echo "*** replace attribute"
+echo "fish3" | _attr -s fish $testfile
+_attr_list $testfile
+
+echo "*** add attribute"
+echo "fish2" | _attr -s snrub $testfile
+_attr_list $testfile
+
+echo "*** remove attribute"
+_attr -r fish $testfile
+_attr_list $testfile
+
+echo "*** add lots of attributes"
+v=0
+while [ $v -lt 1000 ]
+do
+    echo "value_$v" | xfs_attr -s "attribute_$v" $testfile >/dev/null
+    if [ $? -ne 0 ]
+    then
+        echo "!!! failed to add \"attribute_$v\""
+        exit 1
+    fi
+    
+    let "v = v + 1"
+done
+
+echo "*** check"
+# don't print it all out...
+xfs_attr -l $testfile \
+    | $AWK_PROG '{ l++ } END {print "   *** " l " attribute(s)" }'
+
+echo "*** remove lots of attributes"
+v=0
+while [ $v -lt 1000 ]
+do
+    if ! xfs_attr -r "attribute_$v" $testfile >/dev/null
+    then
+        echo "!!! failed to add \"attribute_$v\""
+        exit 1
+    fi
+    
+    let "v = v + 1"
+done
+
+_attr_list $testfile
+
+echo "*** really long value"
+dd if=/dev/zero bs=1024 count=100 2>/dev/null \
+    | _attr -s "long_attr" $testfile >/dev/null
+    
+_attr -g "long_attr" $testfile | tail -n +2 | od -t x1
+_attr -r "long_attr" $testfile >/dev/null
+
+
+echo "*** set/get/remove really long names (expect failure)"
+short="XXXXXXXXXX"
+long="$short$short$short$short$short$short$short$short$short$short"
+vlong="$long$long$long"
+
+_attr -s $vlong -V fish $testfile 2>&1 >/dev/null
+_attr -g $vlong $testfile 2>&1 >/dev/null
+_attr -r $vlong $testfile 2>&1 >/dev/null
+
+echo "*** check final"
+
+_attr_list $testfile
+
+echo "*** delete"
+rm -f $testfile
+
+exit

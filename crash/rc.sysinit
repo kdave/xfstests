@@ -1,0 +1,74 @@
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+#
+# http://www.sgi.com
+#
+# For further information regarding this notice, see:
+#
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+# xfscrash - control the XFS crash tests
+#
+
+# this is an example of what to add to rc.sysinit on a redhat linux
+# system to get the ro-root/ramdisk system up and running
+
+if [ -f /initrd.active ]
+then
+	echo "*** MAKE RAMDISK ***"
+	dd if=/dev/zero of=/dev/ram0 bs=1024k count=4
+	mkfs -i 1024 /dev/ram0 4096
+	echo "*** MOUNT RAMDISK ***"
+	mount -n -w /dev/ram0 /mnt
+	echo "*** INIT RAMDISK ***"
+	cp -a /initrd_init/* /mnt
+	rm -f /mnt/00_INITRD_REAL
+	touch /mnt/00_INITRD_RAMDISK
+	umount -n /mnt
+	echo "*** REMOUNT RAMDISK ***"
+	mount -n /dev/ram0 /initrd
+
+	echo "*** FIX MTAB ***"
+	>/etc/mtab
+	rm -f /etc/mtab~ /etc/mtab~~
+	mount -f -o ro /
+	mount -f -o rw /dev/ram0 /initrd
+else
+        # old code
+        
+	# Remount the root filesystem read-write.
+	action "Remounting root filesystem in read-write mode" mount -n -o remount,rw /
+
+	# Clear mtab
+	>/etc/mtab
+
+	# Remove stale backups
+	rm -f /etc/mtab~ /etc/mtab~~
+
+	# Enter root and /proc into mtab.
+	mount -f /
+	mount -f /proc
+
+fi

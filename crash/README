@@ -1,0 +1,151 @@
+############
+# xfscrash #  crash testing setup for XFS
+############
+
+*** disclaimers ***
+
+    work-in-progress, buyer-beware, your-mileage-may-vary, this-is-a-hack
+
+*** what xfscrash does ***
+
+    xfscrash allows realistic testing of XFS log recovery and XFS check/repair
+    by generating log activity on an XFS partition, then rebooting the machine
+    at a random point. When the machine comes back up, xfscrash is restarted
+    and then tests either the log recovery or xfs_repair on the dirtied
+    filesystem. All going well the process continues.
+
+*** getting ready for crash testing ***
+
+    Most filesystems (ext2 included) can't withstand having the machine
+    they're running on rebooted while they're active. So the crash test
+    machine needs to have all filesystems other than the test FS mounted
+    read-only so they won't get trashed when the machine reboots.
+
+*** mouting FSes read-only ***
+
+    Following is a recipe for making a redhat linux (6.2) machine with a single
+    ext2 FS mounted on root able to be booted read-only. Your Mileage May
+    Vary - don't try this on an important machine.
+
+    The idea is to move anything that needs to be r/w into the /initrd_init
+    directory, replacing the moved directories with links to the moved ones.
+    That way the /initrd_init directory may be copied to a ramdisk, and
+    mounted over /initrd on the root FS which never gets remounted r/w.
+
+        # go to single user
+        init 1
+
+        # make a mount point for the ramdisk
+        mkdir /initrd
+
+        # link across to the /initrd_init directory for when 
+        # the ramdisk isn't mounted
+        ln -s /initrd_init/dev .
+        ln -s /initrd_init/etc .
+        ln -s /initrd_init/proc .
+        ln -s /initrd_init/sbin .
+        ln -s /initrd_init/tmp .
+        ln -s /initrd_init/var .
+
+        # make the /initrd_init directory
+        mkdir /initrd_init
+        cd /initrd_init
+
+
+        # move /dev
+        mv /dev .
+        ln -s /dev /initrd/dev
+
+        # move /etc
+        mv /etc .
+        ln -s /etc /initrd/etc
+
+        # make proc mount
+        mkdir proc 
+
+        # move /tmp
+        mkdir tmp
+        rm -rf /tmp
+        ln -s /tmp /initrd/tmp
+
+        # link /sbin 
+        ln -s /sbin .
+
+        # setup a tree for parts of /var
+        mkdir var var/cache var/lock var/lock/console var/lock/subsys
+        mkdir var/log var/preserve var/run 
+
+        touch /var/run/utmp /var/log/utmp /var/log/wtmp 
+
+        # move parts of /var
+        rm -rf /var/cache /var/lock /var/log /var/preserve /var/run
+        ln -s /initrd/var/cache /var/cache
+        ln -s /initrd/var/lock /var/lock
+        ln -s /initrd/var/log /var/log
+        ln -s /initrd/var/preserve /var/preserve
+        ln -s /initrd/var/run /var/run
+
+        # make a mount for /var/shm
+        mkdir var/shm 
+        ln -s /var/shm /initrd/var/shm
+
+        # move /var/spool
+        mkdir var/spool
+        mkdir var/spool/mail var/spool/anacron var/spool/at var/spool/lpd
+        mkdir var/spool/rwho var/spool/mqueue var/spool/cron
+        rm -rf /var/spool
+        ln -s /var/spool /initrd/var/spool
+
+        # move /var/tmp
+        mkdir var/tmp
+        rm -rf /var/tmp
+        ln -s /var/tmp /initrd/var/tmp
+
+        # trim /dev - too many inodes here - remove anything you don't need
+        # (small ramdisk has a small number of inodes)
+        rm -rf /initrd/dev/<....>   
+
+    All going well, all the directories you've made should link through
+    /initrd and into /initrd_init, and the machine should come back up
+    if you restart it.
+
+    You want to keep the contents of /initrd_init to a minimum because
+    this stuff has to fit into the ramdisk.
+
+*** getting the ramdisk going ***
+
+    See the rc.sysinit file for some details of what to do to get the
+    ro-root/ramdisk up and running.
+
+    Once everything is going, the root FS should never be remounted to
+    r/w on boot and should be in r/o mode when the machine comes up.
+    
+    All going well, any open files have been redirected through the
+    symlinks onto the ramdisk, so you should be able to remount the
+    root FS to r/w and then remount it back to r/o.
+    
+    Since there's no r/w filesystems mounted, it should be ok to 
+    reboot the machine with 'reboot -fn' and everything should come
+    back without dirty filesystems and without having to fsck.
+    
+*** starting xfscrash ***
+
+    The simplest way to restart xfscrash on reboot is to start it
+    in the background from rc.local. The script logs to /dev/tty1,
+    /dev/console & a logfile by default, so the output should be
+    easy to find.
+    
+    Link the xfscrash directory off an NFS mounted FS so you can make
+    changes while the machine is rebooting and so you can touch the
+    'stop' and 'start' control files.
+
+    To configure the system, change the parameters in the configuration
+    section of the 'xfscrash' script.
+    
+    To start the system, touch the 'start' control file and then either
+    reboot or manually run the 'xfscrash' script.
+    
+    To stop the system, touch the 'stop' control file and wait for the
+    next cycle to start when the control file will be checked and
+    the test terminated.
+

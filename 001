@@ -1,0 +1,314 @@
+#! /bin/sh
+#
+# XFS QA Test No. 001
+# $Id: 1.1 $
+#
+# Random file copier to produce chains of identical files so the head
+# and the tail cna be diff'd at then end of each iteration.
+#
+# Exercises creat, write and unlink for a variety of directory sizes, and
+# checks for data corruption.
+#
+# run [config]
+#
+# config has one line per file with filename and byte size, else use
+# the default one below.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=kenmcd@bruce.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+tmp=/tmp/$$
+here=`pwd`
+status=1
+done_cleanup=false
+trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# real QA test starts here
+
+verbose=true
+
+if [ $# -eq 0 ]
+then
+    # use the default config
+    #
+    cat <<End-of-File >$tmp.config
+# pathname	size in bytes
+#
+small		10
+big		102400
+sub/small	10
+sub/big		102400
+#
+sub/a		1
+sub/b		2
+sub/c		4
+sub/d		8
+sub/e		16
+sub/f		32
+sub/g		64
+sub/h		128
+sub/i		256
+sub/j		512
+sub/k		1024
+sub/l		2048
+sub/m		4096
+sub/n		8192
+#
+sub/a00		100
+sub/b00		200
+sub/c00		400
+sub/d00		800
+sub/e00		1600
+sub/f00		3200
+sub/g00		6400
+sub/h00		12800
+sub/i00		25600
+sub/j00		51200
+sub/k00		102400
+sub/l00		204800
+sub/m00		409600
+sub/n00		819200
+#
+sub/a000	1000
+sub/e000	16000
+sub/h000	128000
+sub/k000	1024000
+End-of-File
+elif [ $# -eq 1 ]
+then
+    if [ -f $1 ]
+    then
+	cp $1 $tmp.config
+    else
+	echo "Error: cannot open config \"$1\""
+	exit 1
+    fi
+else
+    echo "Usage: run [config]"
+    exit 1
+fi
+
+ncopy=200		# number of file copies in the chain step
+
+_setup()
+{
+    if mkdir -p $TEST_DIR/$$
+    then
+	:
+    else
+	echo "Error: cannot mkdir \"$TEST_DIR/$$\""
+	exit 1
+    fi
+    cd $TEST_DIR/$$
+
+    $verbose && echo -n "setup "
+    sed -e '/^#/d' $tmp.config \
+    | while read file nbytes
+    do
+	dir=`dirname $file`
+	if [ "$dir" != "." ]
+	then
+	    if [ ! -d $dir ]
+	    then
+		if mkdir $dir
+		then
+		    :
+		else
+		    $verbose && echo
+		    echo "Error: cannot mkdir \"$dir\""
+		    exit 1
+		fi
+	    fi
+	fi
+	rm -f $file
+	if $here/src/fill $file $file $nbytes
+	then
+	    :
+	else
+	    $verbose && echo
+	    echo "Error: cannot create \"$file\""
+	    exit 1
+	fi
+	$verbose && echo -n "."
+    done
+    $verbose && echo
+}
+
+_mark_iteration()
+{
+    $verbose && echo -n "mark_iteration "
+    sed -e '/^#/d' $tmp.config \
+    | while read file nbytes
+    do
+	if [ ! -f $file ]
+	then
+	    $verbose && echo
+	    echo "Error: $file vanished!"
+	    touch $tmp.bad
+	    continue
+	fi
+	sed -e "s/ [0-9][0-9]* / $1 /" <$file >$file.tmp
+	mv $file.tmp $file
+	$verbose && echo -n "."
+    done
+    $verbose && echo
+}
+
+# for each file, make a number of copies forming a chain like foo.0,
+# foo.1, foo.2, ... foo.N
+#
+# files are chosen at random, so the lengths of the chains are different
+#
+# then rename foo.N to foo.last and remove all of the other files in
+# the chain
+#
+_chain()
+{
+    $AWK_PROG <$tmp.config '
+BEGIN	{ nfile = 0 }
+/^\#/	{ next }
+	{ file[nfile] = $1
+	  link[nfile] = 0
+	  nfile++
+	}
+END	{ srand('$iter')
+	  for (i=0; i < '$ncopy'; i++) {
+	    # choose a file at random, and add one copy to that chain
+	    j = -1
+	    while (j < 0 || j >= nfile)
+		j = int(rand() * nfile)
+	    if (link[j] == 0) {
+		printf "if [ ! -f %s ]; then echo \"%s missing!\"; exit; fi\n",file[j],file[j]
+		printf "if [ -f %s.0 ]; then echo \"%s.0 already present!\"; exit; fi\n",file[j],file[j]
+		printf "cp %s %s.0\n",file[j],file[j]
+	    }
+	    else {
+		printf "if [ ! -f %s.%d ]; then echo \"%s.%d missing!\"; exit; fi\n",file[j],link[j]-1,file[j],link[j]-1
+		printf "if [ -f %s.%d ]; then echo \"%s.%d already present!\"; exit; fi\n",file[j],link[j],file[j],link[j]
+		printf "cp %s.%d %s.%d\n",file[j],link[j]-1,file[j],link[j]
+	    }
+	    link[j]++
+	  }
+	  # close all the chains, and remove all of the files except
+	  # the head of the chain
+	  for (j=0; j<nfile; j++) {
+	    if (link[j] > 0)
+		printf "mv %s.%d %s.last\n",file[j],link[j]-1,file[j]
+	    for (i=0; i<link[j]-1; i++) {
+		printf "rm -f %s.%d\n",file[j],i
+	    }
+	  }
+	}' \
+	| sh
+}
+
+_check()
+{
+    rm -f $tmp.bad
+    $verbose && echo -n "check "
+    sed -e '/^#/d' $tmp.config \
+    | while read file nbytes
+    do
+	if [ ! -f $file ]
+	then
+	    $verbose && echo
+	    echo "Error: $file vanished!"
+	    touch $tmp.bad
+	    continue
+	fi
+	if [ -f $file.last ]
+	then
+	    if cmp $file $file.last >/dev/null 2>&1
+	    then
+		$verbose && echo -n "."
+	    else
+		$verbose && echo
+		echo "Error: corruption for $file ..."
+		diff -c $file $file.last
+		touch $tmp.bad
+	    fi
+	else
+	    $verbose && echo -n "."
+	fi
+    done
+    $verbose && echo
+}
+
+_cleanup()
+{
+    # cleanup
+    #
+    if $done_cleanup
+    then
+	:
+    elif [ $status -eq 0 ]
+    then
+	$verbose && echo "cleanup"
+	cd /
+	rm -rf $TEST_DIR/$$
+	done_cleanup=true
+    fi
+}
+
+status=0
+_cleanup
+status=1
+done_cleanup=false
+
+_setup
+
+# do the test
+#
+for iter in 1 2 3 4 5
+do
+    echo -n "iter $iter chain ... "
+    _chain
+    _check
+    if [ -f $tmp.bad ]
+    then
+	echo "Fatal error: test abandoned without changes"
+	exit 1
+    fi
+done
+
+status=0
+exit

@@ -1,0 +1,279 @@
+#!/bin/sh
+
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+#
+# Control script for QA
+#
+# $Header: /build2/depot/linux/pcp/dev/qa/RCS/check,v 2.32 1999/10/18 06:58:20 kenmcd Exp $
+#
+
+tmp=/tmp/$$
+status=0
+needwrap=true
+try=0
+n_bad=0
+bad=""
+notrun=""
+interrupt=true
+
+# generic initialization
+iam=check
+if ! . ./common.rc
+then
+    echo "check: failed to source common.rc"
+    exit 1
+fi
+
+if [ $UID -ne 0 ]
+then
+    echo "check: QA must be run as root"
+    exit 1
+fi
+
+_wallclock()
+{
+    date "+%H %M %S" | $AWK_PROG '{ print $1*3600 + $2*60 + $3 }'
+}
+
+_timestamp()
+{
+    now=`date "+%D-%T"` 
+    echo -n " [$now]"
+}
+
+_wrapup()
+{
+    # for hangcheck ...
+    # remove files that were used by hangcheck
+    #
+    [ -f /tmp/check.pid ] && rm -rf /tmp/check.pid
+    [ -f /tmp/check.sts ] && rm -rf /tmp/check.sts
+
+    if $showme
+    then
+	:
+    elif $needwrap
+    then
+	if [ -f check.time -a -f $tmp.time ]
+	then
+	    cat check.time $tmp.time \
+	    | $AWK_PROG '
+	{ t[$1] = $2 }
+END	{ if (NR > 0) {
+	    for (i in t) print i " " t[i]
+	  }
+	}' \
+	    | sort -n >$tmp.out
+	    mv $tmp.out check.time
+	fi
+
+	if [ -f $tmp.expunged ]
+	then
+	    notrun=`wc -l <$tmp.expunged | sed -e 's/  *//g'`
+	    try=`expr $try - $notrun`
+	    list=`echo "$list" | sed -f $tmp.expunged`
+	fi
+
+	echo "" >>check.log
+	date >>check.log
+	echo $list | fmt | sed -e 's/^/    /' >>check.log
+	$interrupt && echo "Interrupted!" >>check.log
+        
+	if [ ! -z "$notrun" ]
+	then
+	    echo "Not run:$notrun"
+	    echo "Not run:$notrun" >>check.log
+	fi
+        if [ ! -z "$n_bad" -a $n_bad != 0 ]
+	then
+	    echo "Failures:$bad"
+	    echo "Failed $n_bad of $try tests"
+	    echo "Failures:$bad" | fmt >>check.log
+	    echo "Failed $n_bad of $try tests" >>check.log
+	else
+	    echo "Passed all $try tests"
+	    echo "Passed all $try tests" >>check.log
+	fi
+	needwrap=false
+    fi
+
+    rm -f $tmp.*
+}
+
+trap "_wrapup; exit \$status" 0 1 2 3 15
+
+# for hangcheck ...
+# Save pid of check in a well known place, so that hangcheck can be sure it
+# has the right pid (getting the pid from ps output is not reliable enough).
+#
+rm -rf /tmp/check.pid
+echo $$ >/tmp/check.pid
+
+# for hangcheck ...
+# Save the status of check in a well known place, so that hangcheck can be
+# sure to know where check is up to (getting test number from ps output is
+# not reliable enough since the trace stuff has been introduced).
+#
+rm -rf /tmp/check.sts
+echo "preamble" >/tmp/check.sts
+
+# don't leave old full output behind on a clean run
+rm -f check.full
+
+# by default don't output timestamps
+timestamp=false
+
+. ./common
+
+[ -f check.time ] || touch check.time
+
+if [ ! -z "$MOUNT_OPTIONS" ]
+then
+    echo "check: \$MOUNT_OPTIONS specifed - \"$MOUNT_OPTIONS\""
+    umount $TEST_DEV
+    # call the overridden mount - make sure the FS starts as
+    # the same as we'll set it later.
+    if ! mount -t xfs $TEST_DEV $TEST_DIR >$tmp.err 2>&1
+    then
+	echo "our mount ..."
+	cat $tmp.err
+        # call the normal mount
+	echo "normal mount ..."
+        /bin/mount -t xfs $TEST_DEV $TEST_DIR
+        echo "check: failed to mount \$TEST_DEV using specified mount options"
+        exit 1
+    fi
+fi
+
+seq="check"
+_check_fs $TEST_DEV
+
+for seq in $list
+do
+    err=false
+    echo -n "$seq"
+    if $showme
+    then
+	echo
+	continue
+    elif [ -f expunged ] && $expunge && egrep "^$seq([ 	]|\$)" expunged >/dev/null
+    then
+	echo " - expunged"
+	rm -f $seq.out.bad
+	echo "/^$seq\$/d" >>$tmp.expunged
+    elif [ ! -f $seq ]
+    then
+	echo " - no such test?"
+	echo "/^$seq\$/d" >>$tmp.expunged
+    else
+	# really going to try and run this one
+	#
+	rm -f $seq.out.bad
+	lasttime=`sed -n -e "/^$seq /s/.* //p" <check.time`
+	[ "X$lasttime" != X ] && echo -n " ${lasttime}s ..."
+	rm -f core $seq.notrun
+
+	# for hangcheck ...
+	echo "$seq" >/tmp/check.sts
+
+	start=`_wallclock`
+	$timestamp && _timestamp
+	sh $seq >$tmp.rawout 2>&1
+	sts=$?
+	$timestamp && _timestamp
+	stop=`_wallclock`
+
+	_fix_malloc <$tmp.rawout >$tmp.out
+	rm -f $tmp.rawout
+
+	if [ -f core ]
+	then
+	    echo -n " [dumped core]"
+	    mv core $seq.core
+	    err=true
+	fi
+
+	if [ -f $seq.notrun ]
+	then
+	    echo -n " [not run] "
+	    cat $seq.notrun
+	    notrun="$notrun $seq"
+	else
+	    if [ $sts -ne 0 ]
+	    then
+		echo -n " [failed, exit status $sts]"
+		err=true
+	    fi
+	    if [ ! -f $seq.out ]
+	    then
+		echo " - no qualified output"
+		err=true
+	    else
+		if diff $seq.out $tmp.out >/dev/null 2>&1
+		then
+		    echo ""
+		    if $err
+		    then
+			:
+		    else
+			echo "$seq `expr $stop - $start`" >>$tmp.time
+		    fi
+		else
+		    echo " - output mismatch (see $seq.out.bad)"
+		    mv $tmp.out $seq.out.bad
+		    $diff $seq.out $seq.out.bad
+		    err=true
+		fi
+	    fi
+	fi
+
+    fi
+
+    # come here for each test, except when $showme is true
+    #
+    if $err
+    then
+	bad="$bad $seq"
+	n_bad=`expr $n_bad + 1`
+	quick=false
+    fi
+    [ -f $seq.notrun ] || try=`expr $try + 1`
+    
+    seq="after_$seq"
+    _check_fs $TEST_DEV
+    
+done
+
+interrupt=false
+status=`expr $n_bad`
+exit

@@ -1,0 +1,367 @@
+#!/usr/bin/perl -w
+#
+
+#
+#  Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#  
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#  
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  
+#  Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+#  Mountain View, CA  94043, or:
+#  
+#  http://www.sgi.com 
+#  
+#  For further information regarding this notice, see: 
+#  
+#  http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+#
+ 
+#
+# fill2fs:
+#   Fill a filesystem, or write a specified number of bits.
+#   Script runs deterministically given a seed for the random number
+#   generator. Will generate the same set of directories and files,
+#   with the only source of variation the precise point at which the
+#   filesystem fills up. When used with XFS filesystems, and when 
+#   the filesize is small, XFS pre-allocation may cause the filesystem
+#   to "fill up" before the actual disk space is gone. Using this
+#   script repeatedly, with a delay between invocations, to account
+#   for extent flushing, will allow more of the filesystem to be filled.
+#
+#   All generated files are checksummed and this sum is stored in the
+#   filename (files are named: <sequence number>.<checksum>.data.
+#   Normally script is invoked using the --list option, which causes all
+#   data files to be written to standard output (--list=-) or a file
+#   (--list=filename). This list can be fed into fill2fs_check, which
+#   recomputes the checksums and flags any errors.
+#
+#   The --stddev=0 forces all files to be precisely --filesize bytes in
+#   length, some other value (--stddev=val) produces filesizes with a 
+#   normal distribution with standard deviation val. If not specified
+#   most file sizes are set to lie within 30% of the requested file size.
+#
+#   fill2fs is not guaranteed to write the requested number of bytes, or
+#   fill the filesystem completely. However, it and fill2 are both very
+#   careful about establishing when write operations fail. When the 
+#   --verbose option is used the number of bytes "actually written"
+#   is guaranteed to be the number of bytes on disk.
+#
+#   $Id$
+#
+
+use Getopt::Long;
+use File::Basename;
+
+chomp($os = `uname`);
+
+#
+# fsinfo: get filesystem info put it into the global namespace, assigns:
+#	$dev, $type, $blocks, $used, $avail, $cap, $mnt, $mnt_options
+#	$fsblocks, $fsblocksize, $agblocks, $agcount, $imax_pct, $logblocks
+#	$logstart, $internal
+#
+# if $verbose is set then output fs info to STDERR
+#
+
+sub fsinfo {
+  my($file) = $_[0];
+
+  # filesystem space and mount point
+  
+  $cmd = "df" if ($os =~ /IRIX/);
+  $cmd = "df -P -T --block-size=512" if ($os =~ /Linux/);
+  chomp($_ = `$cmd $file | tail -1`);
+  $n = ($dev, $type, $blocks, $used, $avail, $cap, $mnt) = split(/ +/);
+  die("df failed") if ($n != 7);
+
+  if ($fscheck && $type ne "xfs") {
+    die("Error: $progname: filesystem is not xfs")
+  }
+
+  # how was this filesystem mounted
+  $_ = `grep $dev /etc/mtab`;
+  @mtab = split(/ +/);
+  $mnt_options = $mtab[3];
+
+  # xfs_db: read only, use the default superblock, print everything
+  die("Error: $progname: can't read device: \"$dev\"\n") if (! -r $dev);
+  $_=`xfs_db -r -c sb -c p $dev`;
+  # multiline matching ^$ refers to individual lines...
+  /^dblocks = (\d+)$/m;		$fsblocks=$1;
+  /^blocksize = (\d+)$/m;	$fsblocksize=$1;
+  /^agblocks = (\d+)$/m;	$agblocks=$1;
+  /^agcount = (\d+)$/m;		$agcount=$1;
+  /^imax_pct = (\d+)$/m;	$imax_pct=$1;
+  /^logblocks = (\d+)$/m;	$logblocks=$1;
+  /^logstart = (\d+)$/m;	$logstart=$1;
+  $internal = $logstart > 0 ? " (internal)" : "";
+
+  $verbose && print STDERR <<"EOF"
+Filesystem information:
+  type=$type; device=$dev
+  mount point=$mnt; mount options=$mnt_options
+  percent full=$cap; size (512 byte blocks)=$blocks; used=$used; avail=$avail
+  total filesystem size (fs blocks)=$fsblocks; fs block size=$fsblocksize; imax_pct=$imax_pct
+  agcount=$agcount; agblocks=$agblocks; logblocks=$logblocks; logstart=$logstart$internal
+EOF
+}
+
+
+# returns numbers with a normal distribution
+sub normal {
+  my($mean) = $_[0];
+  my($stddev) = $_[1];
+
+  $x = -6.0;
+  for ($i = 0; $i < 12; $i++) {
+    $x += rand;
+  }
+
+  $x = $mean + $stddev * $x;
+  return $x;
+}
+
+#
+# determine script location and find fill2
+#
+
+chomp($cwd = `pwd`);
+chomp($_ = `which fill2 2>&1 | head -1`);
+if (-x $_) {
+  # look in the path
+  $fill2 = fill2;
+}
+else {
+  # in the same directory - get absolute path
+  chomp($dirname = dirname $0);
+  if ($dirname =~ m!^/.*!) {
+    $fill2 = $dirname . "/fill2";
+  }
+  else {
+    # relative
+    $fill2 = $cwd . "/" . $dirname . "/fill2";
+  }    
+  if (! -x $fill2) {
+    die("Error: $progname: can't find fill2, tried \"$fill2\"\n");
+  }
+}
+
+#
+# process/check args
+#
+
+$progname=$0;
+GetOptions("bytes=f" => \$bytes,
+	   "dir=s" => \$root,
+	   "filesize=i" => \$filesize,
+	   "force!" => \$force,
+	   "help!" => \$help,
+	   "list=s" => \$list,
+	   "fscheck!" => \$fscheck,
+	   "percent=f" => \$percentage,
+	   "seed=i" => \$seed,
+	   "stddev=i" => \$stddev,
+	   "verbose!" => \$verbose);
+
+
+# check/remove output directory, get filesystem info
+if (defined $help
+    || (! defined $root && @ARGV != 1)
+    || (defined $root && @ARGV == 1))
+{
+  # newline at end of die message suppresses line number
+  print STDERR <<"EOF";
+Usage: $progname [options] root_dir
+Options:
+  --bytes=num       total number of bytes to write
+  --dir=name        where to write files
+  --filesize=num    set all files to num bytes in size
+  --force           overwrite any existing files
+  --help            print this help message
+  --list=filename   store created files to filename (- for stdout)
+  --percent=num     percentage of filesystem to fill
+  --seed=num        seed for random number generator
+  --stddev          set file size standard deviation
+  --verbose         verbose output
+EOF
+  exit(1) unless defined $help;
+  # otherwise...
+  exit(0);
+    
+}
+
+
+#
+# lots of boring argument checking
+#
+
+# root directory and filesystem info
+$root = $ARGV[0] if (@ARGV == 1);
+if (-e $root) {
+  if (! $force) {
+    die("Error: $progname: \"$root\" already exists\n");
+  }
+  else {
+    $verbose && print STDERR "Removing \"$root\"... ";
+    system("rm -rf $root");
+    $verbose && print STDERR "done\n";
+  }
+}
+chomp($root_dir = dirname $root);
+fsinfo $root_dir;
+
+# $list can be "-" for stdout, perl open ">-" opens stdout
+open LIST, ">$list" if (defined $list);
+
+# how many bytes should we write
+if (defined $bytes && defined $percentage) {
+  die("Error: $progname: can't specify --bytes and --percent\n");
+}
+# check percentage
+if (defined $percentage && ($percentage < 0 || $percentage > 100)) {
+  die("Error: $progname: invalid percentage\n");
+}
+if (! defined $bytes && ! defined $percentage) {
+  $bytes = $avail * 512;
+  $verbose && print STDERR <<"EOF";
+Neither --bytes nor --percent specified: filling filesystem ($bytes bytes)
+EOF
+}
+elsif (! defined $bytes) {
+  $bytes = int($blocks * 512 * $percentage / 100.0);
+}
+if (($bytes > $blocks * 512) || (! $force && $bytes > $avail * 512))
+{
+  die("Error: $progname: not enough free disk space, disk is $cap full\n");
+}
+
+
+
+#
+# To get fix sized files set stddev to 0. The default is to make most files
+# within 30% of the requested filesize (or 4k if filesize is not specified).
+# Set the standard deviation to be half of the required percentage: ~95% of
+# samples lie within 2 standard deviations of the mean.
+#
+
+$filesize = 4096 if (! defined $filesize);
+die("Error: $progname: --filesize must be >= 1 byte") if ($filesize < 1);
+$stddev = 0.5 * 0.3 * $filesize if (! defined $stddev);
+$seed = time ^ $$ if (! defined $seed);
+srand $seed;
+umask 0000;
+mkdir $root, 0777;
+chdir $root;
+$total = 0;
+$files = 0;
+$dirs = 0;
+$d = 0;
+
+#
+# fill filesystem
+#
+
+$verbose && print STDERR "Writing $bytes bytes (seed is $seed)... ";
+while ($total < $bytes) {
+  $r = rand(3.0);
+
+  if (($d == 0 && $r < 0.5) || ($d > 0 && $r >= 0.0 && $r < 2.4)) {
+    # create a new data file
+    $n = sprintf("%04d", $names[$d]++);
+    if ($stddev == 0) {
+      $size = $filesize;
+    }
+    else {
+      $size = int(normal($filesize, $stddev));
+    }
+    $left = $bytes - $total;
+    $size = 0 if ($size < 0);
+    $size = $left if ($size > $left);
+
+    # fill2 will fail if the filesystem is full - not an error!
+    $cmd = "$fill2 -d nbytes=$size,linelength=72,seed=$n -b 4k $n";
+    $cmd .= " > /dev/null 2>&1" if (! $verbose);
+    if (system($cmd) != 0) {
+      if ($verbose) {
+	warn("can't create a file - assuming filesystem is full\n");
+      }
+      if (-e $n && unlink($n) != 1) {
+	warn("couldn't delete \"$n\"");
+      }
+      last;
+    }
+    $_ = `sum $n`;
+    ($sum) = split(/ +/);
+    $name = "$n.$sum.data";
+    $cmd = "mv $n $name";	# perl rename failed earlier than using mv
+    $cmd .= " > /dev/null 2>&1" if (! $verbose);
+    if (system($cmd) != 0) {
+      if ($verbose) {
+	warn("can't rename a file - assuming filesystem is full\n");
+      }
+      if (-e $name && unlink($name) != 1) {
+	warn("couldn't delete \"$name\"");
+      }
+      last;
+    }
+    if (defined $list) {
+      chomp($_ = `pwd`);
+      printf LIST ("%s/%s\n", $_, $name);
+    }
+    $total += $size;
+    $files++;
+  }
+  # note that if d==0 create directories more frequently than files
+  elsif (($d == 0 && $r >= 0.5) || ($d > 0 && $r >= 2.4 && $r < 2.7)) {
+    # create a new directory and descend
+    $name = sprintf("%04d.d", $names[$d]++);
+    if (! mkdir($name, 0777)) {
+      warn("can't make a directory - assuming filesystem is full\n");
+      last;
+    }
+    chdir($name) or die();
+    $d++;
+    $dirs++;
+  }
+  elsif ($r >= 2.7 && $r < 3.0) {
+    # pop up to the parent directory same probability as descend
+    die("Error: $progname: panic: shouldn't be here!") if ($d == 0);
+    chdir("..") or die();
+    $d--;
+  }
+}
+# make sure we return to the original working directory
+chdir($cwd) or die();
+$verbose && print STDERR "done\n";
+$verbose && print STDERR "$total bytes (in $files files and $dirs directories) were actually written\n";
+close LIST;
+exit(0) if ($total = $bytes);
+exit(1) if ($total == 0);
+exit(2) if ($total > 0 && $total < $bytes);
+
+# - to sum all generated data:
+#   find /home/fill/ -name \*data | xargs ls -al | awk '{total = total + $5; } END { printf("total = %d bytes\n", total); }'
+# - to find any files not of the required size
+#   find . -name \*data -a \! -size 4096c
+# - count new files
+#   find ./fill -name \*.data | wc
+# - count new directories
+#   find ./fill -name \*.d | wc

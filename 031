@@ -1,0 +1,133 @@
+#! /bin/sh
+# XFS QA Test No. 031
+# $Id: 1.1 $
+#
+# exercise xfs_repair - ensure repeated use doesn't corrupt
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+rm -f $seq.full
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_check_repair()
+{
+	xfs_repair $SCRATCH_DEV >$tmp.0 2>&1
+	for i in 1 2 3 4
+	do
+		echo "Repairing, iteration $i" | tee -a $seq.full
+		xfs_repair $SCRATCH_DEV 2>&1 | tee -a $seq.full >$tmp.$i
+		diff $tmp.0 $tmp.$i
+		# echo all interesting stuff...
+		perl -ne '
+			s/(rebuilding directory inode) (\d+)/\1 INO/g;
+			/^\S+/ && print;
+		' $tmp.$i
+	done
+	echo
+}
+
+# prototype file to create various directory forms
+_create_proto()
+{
+	total=$1
+	count=0
+
+	cat >$tmp.proto <<EOF
+DUMMY1
+0 0
+: root directory
+d--777 3 1
+lost+found d--755 3 1
+$
+EOF
+
+	while [ $count -lt $total ]
+	do
+		count=`expr $count + 1`
+		cat >>$tmp.proto <<EOF
+${count}_of_${total}_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ---755 3 1 /bin/true
+EOF
+	done
+	echo '$' >>$tmp.proto
+}
+
+# real QA test starts here
+# 
+_require_scratch
+
+MKFSV1="-t xfs -f -p $tmp.proto -n version=1 $SCRATCH_DEV"
+MKFSV2="-t xfs -f -p $tmp.proto -n version=2 $SCRATCH_DEV"
+
+# sanity test - default + one root directory entry
+_create_proto 0
+echo "=== version 1, one entry"
+mkfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+echo "=== version 2, one entry (shortform)"
+mkfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+
+# block-form root directory & repeat
+_create_proto 20
+echo "=== version 1, twenty entries"
+mkfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+echo "=== version 2, twenty entries (block form)"
+mkfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+
+# leaf-form root directory & repeat
+_create_proto 1000
+echo "=== version 1, thousand entries"
+mkfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+echo "=== version 2, thousand entries (leaf form)"
+mkfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_check_repair
+
+# success, all done
+status=0
+exit

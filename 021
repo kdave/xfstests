@@ -1,0 +1,126 @@
+#! /bin/sh
+# XFS QA Test No. 021
+# $Id: 1.1 $
+#
+# xfs_db type attr test (pv 797508 linux-xfs & IRIX)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_cleanup()
+{
+    echo "*** unmount"
+    umount $SCRATCH_MNT 2>/dev/null
+    rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_s()
+{
+    echo $2 | xfs_attr -s $1 $testfile >/dev/null
+}
+
+_attr()
+{
+    xfs_attr $* 2>$tmp.err >$tmp.out
+    exit=$?
+    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.out
+    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.err 1>&2
+    return $exit
+}
+
+# real QA test starts here
+
+_require_scratch
+
+
+echo "*** mkfs"
+
+rm -f $seq.full
+umount $SCRATCH_DEV >/dev/null 2>&1
+
+mkfs -t xfs -f $SCRATCH_DEV >/dev/null \
+    || _fail "mkfs failed"
+  
+echo "*** mount FS"
+mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >/dev/null \
+    || _fail "mount failed"
+    
+testfile=$SCRATCH_MNT/testfile
+echo "*** make test file 1"
+
+touch $testfile.1
+echo "v1" | _attr -s "a1" $testfile.1 >/dev/null
+echo "v2--" | _attr -s "a2--" $testfile.1 >/dev/null
+_attr -l $testfile.1
+inum_1=`ls -li $testfile.1 | $AWK_PROG '{ print $1 }'`
+
+echo "*** make test file 2"
+
+touch $testfile.2
+echo "value_1" | _attr -s "a1" $testfile.2 >/dev/null
+echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
+
+(echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
+    | _attr -s "a3" $testfile.2 >/dev/null
+    
+_attr -l $testfile.2
+inum_2=`ls -li $testfile.2 | $AWK_PROG '{ print $1 }'`
+    
+echo "*** unmount FS"
+umount $SCRATCH_DEV >>$seq.full 2>&1 \
+    || _fail "umount failed"
+    
+echo "*** dump attributes (1)"
+
+xfs_db -r -c "inode $inum_1" -c "print a.sfattr" $SCRATCH_DEV
+
+echo "*** dump attributes (2)"
+
+xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c "print" $SCRATCH_DEV
+    
+echo "*** done"
+rm $seq.full
+exit

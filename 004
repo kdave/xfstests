@@ -1,0 +1,139 @@
+#! /bin/sh
+# XFS QA Test No. 004
+# $Id: 1.1 $
+#
+# exercise xfs_db bug #789674 and other freesp functionality
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0
+
+_cleanup()
+{
+	umount $SCRATCH_MNT
+	rm -f $tmp.*
+	exit $status
+}
+trap "_cleanup" 0 1 2 3 15
+
+_populate_scratch()
+{
+	mkfs -t xfs -f $SCRATCH_DEV >/dev/null 2>&1
+	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+	dd if=/dev/zero of=$SCRATCH_MNT/foo count=200 bs=4096 >/dev/null 2>&1 &
+	dd if=/dev/zero of=$SCRATCH_MNT/goo count=400 bs=4096 >/dev/null 2>&1 &
+	dd if=/dev/zero of=$SCRATCH_MNT/moo count=800 bs=4096 >/dev/null 2>&1 &
+	wait
+	umount $SCRATCH_MNT			# flush everything
+	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT	# and then remount
+}
+
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_need_to_be_root
+_require_scratch
+
+# real QA test starts here
+rm -f $seq.full
+
+_populate_scratch
+
+eval `df -P -T --block-size=512 $SCRATCH_MNT 2>&1 \
+	| $AWK_PROG 'END { printf "blocks=%u used=%u avail=%u\n", $3, $4, $5 }'`
+echo "df gave: blocks=$blocks used=$used avail=$avail" >>$seq.full
+
+blksize=`xfs_db -r -c sb -c p $SCRATCH_DEV |grep blocksize |sed -e 's/.*= *//'`
+if [ -z "$blksize" ]
+then
+	echo "Arrgh ... cannot determine blocksize for $fs, xfs_db reports"
+	xfs_db -r -c sb -c p $SCRATCH_DEV
+	status=1
+	continue
+fi
+echo "blocksize from xfs_db is '$blksize'" >>$seq.full
+
+xfs_db -r -c "freesp -s" $SCRATCH_DEV >$tmp.xfs_db
+echo "xfs_db for $SCRATCH_DEV" >>$seq.full
+cat $tmp.xfs_db >>$seq.full
+
+# check the 'blocks' field from freesp command is OK
+perl -ne '
+	    BEGIN	{ $avail ='$avail' * 512;
+			  $answer="(no xfs_db free blocks line?)" }
+	    /free blocks (\d+)$/	|| next;
+	    $freesp = $1 * '$blksize';
+	    if ($freesp == $avail)	{ $answer = "yes"; }
+	    else			{ $answer = "no ($freesp != $avail)"; }
+	    END	{ print "$answer\n" }
+	' <$tmp.xfs_db >$tmp.ans
+ans="`cat $tmp.ans`"
+echo "Checking blocks column same as df: $ans"
+if [ "$ans" != yes ]
+then
+	echo "Error: $SCRATCH_DEV: freesp mismatch: $ans"
+	echo "xfs_db output ..."
+	cat $tmp.xfs_db
+	status=1
+fi
+
+# check the 'pct' field from freesp command is good
+perl -ne '
+	    BEGIN	{ $percent = 0; }
+	    /free/	&& next;	# skip over free extent size number
+	    if (/\s+(\d+\.\d+)$/) {
+		$percent += $1;
+	    }
+	    END	{ $percent += 0.5; print int($percent), "\n" }	# round up
+' <$tmp.xfs_db >$tmp.ans
+ans="`cat $tmp.ans`"
+echo "Checking percent column yields 100: $ans"
+if [ "$ans" != 100 ]
+then
+	echo "Error: $SCRATCH_DEV: pct mismatch: $ans (expected 100)"
+	echo "xfs_db output ..."
+	cat $tmp.xfs_db
+	status=1
+fi
+
+exit

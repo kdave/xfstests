@@ -1,0 +1,95 @@
+QA output created by 051
+
+=== Test minimal ACE ===
+Setup file
+-rwxrw-r-- 1001 1002 file1
+
+--- Test get and set of ACL ---
+file1 []
+Expect to FAIL
+chacl: "u::r--,g::rwx,o:rw-" is an invalid ACL specification.
+Expect to PASS
+file1 [u::r--,g::rwx,o::rw-]
+
+--- Test sync of ACL with std permissions ---
+-r--rwxrw- 1001 1002 file1
+-rw-rwxrw- 1001 1002 file1
+file1 [u::rw-,g::rwx,o::rw-]
+
+--- Test owner permissions ---
+file1 [u::r-x,g::---,o::---]
+Expect to PASS
+Test was executed
+Expect to FAIL
+sh: ./file1: Permission denied
+
+--- Test group permissions ---
+file1 [u::---,g::r-x,o::---]
+Expect to FAIL - acl1 is owner
+sh: ./file1: Permission denied
+Expect to PASS - acl2 matches group
+Test was executed
+Expect to PASS - acl2 matches sup group
+Test was executed
+Expect to FAIL - acl3 is not in group
+sh: ./file1: Permission denied
+
+--- Test other permissions ---
+file1 [u::---,g::---,o::r-x]
+Expect to FAIL - acl1 is owner
+sh: ./file1: Permission denied
+Expect to FAIL - acl2 is in group
+sh: ./file1: Permission denied
+Expect to FAIL - acl2 is in sup. group
+sh: ./file1: Permission denied
+Expect to PASS - acl3 is not owner or in group
+Test was executed
+
+=== Test Extended ACLs ===
+
+--- Test adding a USER ACE ---
+Expect to FAIL as no MASK provided
+chacl: error setting access acl on "file1": Invalid argument
+Ensure that ACL has not been changed
+file1 [u::---,g::---,o::r-x]
+Expect to PASS - USER ACE matches user
+file1 [u::---,g::---,o::---,u:1002:r-x,m::rwx]
+Test was executed
+Expect to FAIL - USER ACE does not match user
+sh: ./file1: Permission denied
+
+--- Test adding a GROUP ACE ---
+Expect to FAIL as no MASK provided
+chacl: error setting access acl on "file1": Invalid argument
+Ensure that ACL has not been changed
+file1 [u::---,g::---,o::---,u:1002:r-x,m::rwx]
+file1 [u::---,g::---,o::---,g:1002:r-x,m::rwx]
+Expect to PASS - GROUP ACE matches group
+Test was executed
+Expect to PASS - GROUP ACE matches sup group
+Test was executed
+Expect to FAIL - GROUP ACE does not match group
+sh: ./file1: Permission denied
+
+--- Test MASK ---
+file1 [u::---,g::---,o::---,g:1002:r-x,m::-wx]
+Expect to FAIL as MASK prohibits execution
+./file1: ./file1: Permission denied
+Expect to FAIL as MASK prohibits execution
+./file1: ./file1: Permission denied
+Expect to PASS as MASK allows execution
+Test was executed
+
+--- Test ACE priority ---
+Expect to FAIL as should match on owner
+sh: ./file1: Permission denied
+Expect to PASS as should match on user
+Test was executed
+
+=== Test can read ACLs without access permissions ===
+./file1 [o::---,g::---,u::---]
+
+=== Test Default ACLs ===
+./acldir [u::rwx,g::rwx,o::rwx/u::r-x,g::r--,o::---]
+-r--r----- 0 0 file2
+./file2 [u::r--,g::r--,o::---]

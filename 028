@@ -1,0 +1,90 @@
+#! /bin/sh
+# XFS QA Test No. 028
+# $Id: 1.1 $
+#
+# To test out xfsinvutil
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@sherman.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.dump
+
+# real QA test starts here
+
+# wipe test dir clean first
+# so dump can be real quick
+_wipe_fs
+
+#
+# Create 5 dumps
+# and on the 3rd dump note the date
+# which we'll use to prune against using xfsinvutil
+#
+i=0
+while [ $i -lt 5 ]; do
+    _do_dump_file -L "session.$i"
+    if [ $i -eq 2 ]; then
+       sleep 1
+       middate=`date '+%m/%d/%Y %T'`
+    fi
+    rm $dump_file
+    sleep 2
+    i=`expr $i + 1`
+done
+
+echo "middate = $middate" >>$seq.full
+
+#
+# Now do the xfsinvutil and
+# look and the inventory before and after
+# to see if it did the job
+#
+_dump_inventory
+_do_invutil -n
+_dump_inventory
+
+
+# success, all done
+exit

@@ -1,0 +1,171 @@
+#! /bin/sh
+# XFS QA Test No. 041
+# $Id: 1.1 $
+#
+# external log uuid/format tests
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+_require_logdev
+
+_filter_logprint()
+{
+	perl -ne '
+	    s/data device: ([\w|\/]+)/data device: DDEV/;
+	    s/log device: ([\w|\/]+) daddr: (\d+) length: (\d+)/log device: LDEV daddr: XXX length: XXX/;
+	    s/log file: "([\w|\/]+)" daddr: (\d+) length: (\d+)/log device: LDEV daddr: XXX length: XXX/;
+	    s/uuid: ([abcdef\d-]+)\s+format: (.+)/uuid: UUID format: FORMAT/;
+	    s/skipped (\w+) zeroed blocks/skipped XXX zeroed blocks/;
+	    print;
+	'
+}
+
+_check_mount()
+{
+    echo "    *** mount (expect success)"
+    if ! mount -t xfs -o logdev=$SCRATCH_LOGDEV $SCRATCH_DEV $SCRATCH_MNT
+    then
+        echo "        !!! mount failed (expecting success)"
+        status=1
+        exit
+    fi
+
+    echo "    *** umount"
+    if ! umount $SCRATCH_DEV
+    then
+        echo "        !!! umount failed (expecting success)"
+        status=1
+        exit
+    fi
+}
+
+_check_no_mount()
+{
+    echo "    *** mount (expect failure)"
+    if mount -t xfs -o logdev=$SCRATCH_LOGDEV $SCRATCH_DEV $SCRATCH_MNT >$tmp.err 2>&1
+    then
+        cat $tmp.err
+        echo "        !!! mount succeeded (expecting failure)"
+        status=1
+        exit
+    fi
+}
+
+_check_require_logdev()
+{
+    echo "    *** mount without logdev (expect failure)"
+    if mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >$tmp.err 2>&1
+    then
+        cat $tmp.err
+        echo "        !!! mount succeeded (expecting failure)"
+        status=1
+        exit
+    fi
+}
+
+
+
+# real QA test starts here
+# 
+_require_scratch
+
+echo -e -n "\n\r*** XFS QA 044 - expect mount failure messages\n\r\n\r" >/dev/console
+
+echo "*** mkfs"
+mkfs -t xfs -f -l logdev=$SCRATCH_LOGDEV,size=4096b $SCRATCH_DEV | _filter_mkfs 2>/dev/null
+_check_mount
+_check_require_logdev
+
+echo "*** set uuid"
+xfs_db -x $SCRATCH_DEV -l $SCRATCH_LOGDEV -c "uuid 02020202-0202-0202-0202-020202020202" \
+    || _unexpected
+_check_mount
+
+echo "*** zero log"
+$here/src/loggen -z 100 >$SCRATCH_LOGDEV
+_check_mount
+
+echo "*** write clean log"
+$here/src/loggen -u 2 -f 1 -m 1 -z 100 >$SCRATCH_LOGDEV
+_check_mount
+
+echo "*** write clean log (different format)"
+$here/src/loggen -u 2 -f 99 -m 1 -z 100 >$SCRATCH_LOGDEV
+_check_mount
+
+echo "*** write clean log (different uuid)"
+$here/src/loggen -u 7 -m 1 -z 100 >$SCRATCH_LOGDEV
+_check_no_mount
+
+echo "*** write clean log (different uuid & format)"
+$here/src/loggen -u 7 -f 99 -m 1 -z 100 >$SCRATCH_LOGDEV
+_check_no_mount
+
+echo "*** write dirty log"
+$here/src/loggen -u 2 -e 1 -z 100 >$SCRATCH_LOGDEV
+_check_mount
+
+echo "*** write dirty log (different format)"
+$here/src/loggen -u 2 -f 99 -e 1 -z 100 >$SCRATCH_LOGDEV
+_check_no_mount
+
+echo "*** write dirty log (irix style)"
+$here/src/loggen -u 0 -f 0 -e 1 -z 100 >$SCRATCH_LOGDEV
+_check_no_mount
+
+echo "*** write large dirty log"
+$here/src/loggen -u 2 -e 16000 -z 100 >$SCRATCH_LOGDEV
+_check_mount
+
+echo -e -n "\n\r*** XFS QA 044 - done\n\r\n\r" >/dev/console
+
+status=0
+# if error
+exit

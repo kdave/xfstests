@@ -1,0 +1,103 @@
+##/bin/sh
+
+#
+# Functions useful for xfs_repair tests
+# 
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+_zero_position()
+{
+	value=$1
+	struct="$2"
+
+	# set values for off/len variables provided by db
+	eval `xfs_db -r -c "$struct" -c stack $SCRATCH_DEV | perl -ne '
+		if (/byte offset (\d+), length (\d+)/) {
+			print "offset=$1\nlength=$2\n"; exit
+		}'`
+	if [ -z "$offset" -o -z "$length" ]; then
+		echo "cannot calculate offset ($offset) or length ($length)"
+		exit
+	fi
+	length=`expr $length / 512`
+	src/devzero -v $value -b 1 -n $length -o $offset $SCRATCH_DEV
+}
+
+_filter_repair()
+{
+	perl -ne '
+# for sb
+/- agno = / && next;	# remove each AG line (variable number)
+s/(pointer to) (\d+)/\1 INO/;
+s/(sb root inode value) (\d+)/\1 INO/;
+s/(realtime bitmap inode) (\d+)/\1 INO/;
+s/(realtime summary inode) (\d+)/\1 INO/;
+s/(inconsistent with calculated value) (\d+)/\1 INO/;
+s/\.+(found)/\1/g;	# remove "searching" output
+# for agf + agi
+s/(bad length -{0,1}\d+ for ag. 0, should be) (\d+)/\1 LENGTH/;
+s/(bad length # -{0,1}\d+ for ag. 0, should be) (\d+)/\1 LENGTH/;
+s/(bad agbno) (\d+)/\1 AGBNO/g;
+s/(max =) (\d+)/\1 MAX/g;
+# for root inos
+s/(on inode) (\d+)/\1 INO/g;
+s/(imap claims a free inode) (\d+)/\1 INO/;
+s/(cleared root inode) (\d+)/\1 INO/;
+s/(resetting inode) (\d+)/\1 INO/;
+s/(disconnected dir inode) (\d+)/\1 INO/;
+	print;'
+}
+
+_filter_dd()
+{
+	fgrep -v records	# lose records in/out lines
+}
+
+# do some controlled corrupting & ensure repair recovers us
+# 
+_check_repair()
+{
+	value=$1
+	structure="$2"
+	_zero_position $value "$structure"
+	xfs_repair $SCRATCH_DEV 2>&1 | _filter_repair
+	# some basic sanity checks...
+	_check_fs $SCRATCH_DEV
+	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT              #mount
+	dd if=/bin/sh of=$SCRATCH_MNT/sh 2>&1 |_filter_dd   #open,write
+	dd if=$SCRATCH_MNT/sh of=/dev/null 2>&1 |_filter_dd #read
+	rm -f $SCRATCH_MNT/sh                               #unlink
+	umount $SCRATCH_MNT                                 #umount
+}
+
+# make sure this script returns success
+/bin/true

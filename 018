@@ -1,0 +1,143 @@
+#! /bin/sh
+# XFS QA Test No. 018
+# $Id: 1.1 $
+#
+# xfs_logprint test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dxm@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_cleanup()
+{
+    echo "*** unmount"
+    umount $SCRATCH_MNT 2>/dev/null
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_full()
+{
+    echo ""            >>$seq.full      
+    echo "*** $* ***"  >>$seq.full
+    echo ""            >>$seq.full
+}
+
+_clean_log()
+{
+    _full "clean_log : xfs_logprint"
+    xfs_logprint -t $1                     | tee -a $seq.full \
+        | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
+}
+
+_filter_logprint()
+{
+    sed '
+        s/data device: 0x[0-9a-f][0-9a-f]*/data device: <DEVICE>/;
+        s/log device: 0x[0-9a-f][0-9a-f]*/log device: <DEVICE>/;
+        s/daddr: [0-9][0-9]*/daddr: <DADDR>/;
+        s/length: [0-9][0-9]*/length: <LENGTH>/;
+        s/length: [0-9][0-9]*/length: <LENGTH>/;
+        s/^cycle num overwrites: .*$/cycle num overwrites: <TIDS>/;
+        s/tid: [0-9a-f][0-9a-f]*/tid: <TID>/;
+        s/tid:0x[0-9a-f][0-9a-f]*/tid:<TID>/;
+        s/q:0x[0-9a-f][0-9a-f]*/q:<Q>/;
+        s/a:0x[0-9a-f][0-9a-f]*/a:<A>/g;
+        s/blkno:0x[0-9a-f][0-9a-f]*/blkno:<BLKNO>/g;
+        s/blkno: [0-9][0-9]* (0x[0-9a-f]*)/blkno: <BLKNO> (<BLKNO>)/g;
+        s/blkno: [0-9][0-9]*/blkno: <BLKNO>/g;
+        s/boff: [0-9][0-9]*/boff: <BOFF>/g;
+        s/len: *[0-9][0-9]*/len:<LEN>/g;
+        s/skipped [0-9][0-9]* zeroed blocks/skipped <COUNT> zeroed blocks/;
+        s/atime:[0-9a-fx]*  *mtime:[0-9a-fx]*  *ctime:[0-9a-fx]*/atime:<TIME>  mtime:<TIME>  ctime:<TIME>/;
+        s/atime 0x[0-9a-f]* mtime 0x[0-9a-f]* ctime 0x[0-9a-f]*/atime <TIME>  mtime <TIME>  ctime <TIME>/;
+        s/block [0-9][0-9]*/block <BLOCK>/;
+        s/icount: *[0-9][0-9]*  *ifree: *[0-9][0-9]*  *fdblks: *[0-9][0-9]*  *frext: *[0-9][0-9]*/icount:<COUNT> ifree:<FREE> fdblks:<BLOCKS> frext:<COUNT>/;
+        s/1st: *[0-9][0-9]*  *last: *[0-9][0-9]*  *cnt: *[0-9][0-9]*  *freeblks: *[0-9][0-9]*  *longest: *[0-9][0-9]*/1st:<NUM> last:<NUM> cnt:<COUNT> freeblks:<COUNT> longest:<NUM>/;
+        s/^uuid: *[0-9a-f-][0-9a-f-]* *format: *.*$/uuid: <UUID> format: <FORMAT>/;
+    '
+
+}
+
+_check_log()
+{
+    _clean_log $SCRATCH_DEV
+    echo "### xfs_logprint output ###"
+    xfs_logprint $SCRATCH_DEV 2>&1 | _filter_logprint
+    echo "### xfs_logprint -t -i -s 0 output ###"
+    xfs_logprint -t -i -s 0 $SCRATCH_DEV 2>&1 | _filter_logprint
+    echo "### xfs_logprint -t -b -s 0 output ###"
+    xfs_logprint -t -b -s 0 $SCRATCH_DEV 2>&1 | _filter_logprint
+}
+
+# real QA test starts here
+
+_require_scratch
+
+echo "*** init FS"
+
+rm -f $seq.full
+umount $SCRATCH_DEV >/dev/null 2>&1
+
+_full "mkfs"
+mkfs -t xfs -f $SCRATCH_DEV                 >>$seq.full 2>&1 \
+    || _fail "mkfs failed"
+_full " mount"
+mount -t xfs $SCRATCH_DEV $SCRATCH_MNT      >>$seq.full 2>&1 \
+    || _fail "mount failed"
+    
+# generate some log traffic - but not too much - life gets a little
+# more complicated if the log wraps around. This traffic is
+# pretty much arbitary, but could probably be made better than this.
+
+touch $SCRATCH_MNT/{0,1,2,3,4,5,6,7,8,9}{0,1,2,3,4,5,6,7,8,9}
+    
+_full "umount"
+umount $SCRATCH_DEV >>$seq.full 2>&1 \
+    || _fail "umount failed"
+
+_check_log
+
+rm $seq.full
+exit

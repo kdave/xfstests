@@ -1,0 +1,552 @@
+#!/bin/sh
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+#
+# http://www.sgi.com
+#
+# For further information regarding this notice, see:
+#
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+# xfscrash - control the XFS crash tests
+#
+
+  #######################
+### configuration stuff ########################################################
+  #######################
+
+# remount, repair or corrupt
+MODE=remount
+# where to find xfscrash
+XFSCRASH=/xfscrash
+# put log files here
+LOG=$XFSCRASH
+# put output to these places
+OUTPUT="$LOG/xfscrash.log /dev/tty1 /dev/console"
+# awk...
+AWK_PROG=gawk
+# clear FS if >= this percent full at start of run. 100 is a good
+# number - only used on corrupt test so far
+FULL_LIMIT=80
+  
+case `hostname -s`
+in
+    leesa)
+        # mount test partition here
+        TEST_MNT=/mnt/arch0
+        # build test partition here
+        TEST_DEV=/dev/hda6
+        # backup test partition to here (or empty)
+        BACKUP_DEV=/dev/hda8
+        # backup block size for dd
+        BACKUP_BS=1024k
+        # base stress time
+        STRESS_TIME=60
+        # stress random time
+        STRESS_RANDOM=60
+	;;
+    lumpy)
+        # mount test partition here
+        TEST_MNT=/mnt/scratch_0
+        # build test partition here
+        TEST_DEV=/dev/sdc5
+        # backup test partition to here (or empty)
+        BACKUP_DEV=  ;#/dev/sdc6
+        # backup block size for dd
+        BACKUP_BS=10240k
+        # base stress time
+        STRESS_TIME=360
+        # stress random time
+        STRESS_RANDOM=360
+	;;
+    *)
+        echo "!!! no configuration data for host `hostname -s`"
+        exit 1
+        ;;
+esac
+
+# avoid stress
+
+AVOID="-f resvsp=0 -f unresvsp=0"
+
+# DIY stress command
+STRESS="/usr/local/bin/fsstress -d $TEST_MNT/stress -n 10000000 -p 1 $AVOID"
+#STRESS="/usr/local/bin/randholes -l 10000000 -c 100000 -b 512 $TEST_MNT/stress/holes"
+
+# stress command for the corrupt test
+CORRUPT_STRESS="/usr/local/bin/fsstress -d $TEST_MNT/stress -n 10000 -p 1 $AVOID"
+
+###########################################################################
+
+reboot=-1
+
+_log()
+{
+    tee -a $OUTPUT > /dev/null
+}
+
+_echo()
+{
+    echo "$*" | _log
+}
+
+_mount()
+{
+    _echo "   *** Mounting $TEST_DEV on $TEST_MNT"
+    if ! mount -t xfs $TEST_DEV $TEST_MNT
+    then
+        _echo "   !!! unable to mount"
+        exit 1
+    fi
+}
+
+_unmount()
+{
+    _echo "   *** Unmounting $TEST_DEV"
+    if ! umount $TEST_DEV &> /dev/null
+    then
+        _echo "   !!! unable to unmount"
+        exit 1
+    fi
+}
+
+_check()
+{
+    expect=$1
+    fail=0
+    
+    if [ $expect -eq 0 ]
+    then
+        _echo "   *** Checking FS (expecting clean fs)"
+    else
+        _echo "   *** Checking FS (expecting dirty fs)"
+    fi
+    
+    
+    if [ $expect -eq 0 ]
+    then
+        _echo "      *** xfs_check ($LOG/check_clean.out)"   
+        xfs_check $TEST_DEV &> $LOG/check_clean.out || fail=1
+        [ -s /tmp/xfs_check_clean.out ] && fail=1
+    else
+        _echo "      *** xfs_check ($LOG/check_dirty.out)"   
+        xfs_check $TEST_DEV &> $LOG/check_dirty.out || fail=1
+    fi
+    
+    if [ $fail -eq 0 -a $expect -eq 0 ]
+    then
+        _echo "      *** xfs_repair -n ($LOG/repair_clean.out)"   
+        xfs_repair -n $TEST_DEV &> $LOG/repair_clean.out || fail=1
+    fi
+    
+    if [ $fail -eq 0 ]
+    then
+        _echo "         *** FS checks ok"
+    else
+        if [ $expect -eq 0 ]
+        then
+            _echo "         !!! FS check failed - inconsistent FS"
+            _echo "         !!! (see $LOG/*.out for details)"
+            exit 1
+        else
+            _echo "         *** inconsistent fs (as expected)"
+        fi
+    fi
+}
+
+_check_core()
+{        
+    if [ -e core ]
+    then
+        _echo "   !!! core file found!"
+        exit 1
+    fi
+}
+
+_repair()
+{
+    rm -f core
+    _echo "   *** repair"
+    _echo "      *** repair pass 1 (RO)"
+    xfs_repair -n $TEST_DEV &> $LOG/repair_1.out \
+        && _echo "         !!! no errors found (eh?)" \
+        || _echo "         *** errors found (expected)"
+        
+    _check_core
+        
+    _echo "      *** repair pass 2 (RW)"
+    
+    if xfs_repair $TEST_DEV &> $LOG/repair_2.out
+    then
+        _echo "         *** FS checks ok (now)"
+    else
+        _echo "         !!! xfs_repair returned error code"
+        _echo "         !!! (see $LOG/repair_*.out for details)"
+        exit 1
+    fi
+        
+    _check_core
+        
+    _echo "      *** repair pass 3 (RO)"
+    if xfs_repair -n $TEST_DEV &> $LOG/repair_3.out
+    then
+        _echo "         *** FS checks ok"
+    else
+        _echo "         !!! errors found after repair (unexpected)"
+        _echo "         !!! (see $LOG/repair_*.out for details)"
+        exit 1
+    fi
+
+    _check_core
+}
+
+_cleanup()
+{
+    rm -f $XFSCRASH/counter $XFSCRASH/start $XFSCRASH/stop $XFSCRASH/active 
+    
+    if [ $reboot != -1 ]
+    then
+        kill $reboot
+    fi
+    
+}
+
+_random()
+{
+    od -tu -N 4 /dev/random | gawk -v v=$1 'NR==1 { print $2 % v }'
+}
+
+_backup()
+{
+    if [ $count -ne 1 -a "$BACKUP_DEV" != "" ]
+    then
+        _echo "   *** Backing up $TEST_DEV to $BACKUP_DEV"
+        if ! dd if=$TEST_DEV of=$BACKUP_DEV bs=$BACKUP_BS &> $LOG/dd.out
+        then
+            _echo "   !!! unable to backup fs"
+            _echo "   !!! (see $LOG/dd.out)"
+            exit 1
+        fi
+    else
+        _echo "   *** skipping back up step"
+    fi
+}
+
+_logprint()
+{
+    _echo "   *** dumping log to $LOG/logprint.out"
+    rm -f core
+    xfs_logprint $TEST_DEV &> $LOG/logprint.out
+    if [ -e core ]
+    then
+        _echo "      !!! xfs_logprint dumped core"
+        echo "" >> $LOG/logprint.out
+        echo "*** CORE DUMPED ***" >> $LOG/logprint.out
+        echo "" >> $LOG/logprint.out
+    fi
+    
+    _echo "   *** dumping log (-t -i) to $LOG/logprint_inode.out"
+    
+    rm -f core
+    xfs_logprint -t -i $TEST_DEV &> $LOG/logprint_inode.out
+    if [ -e core ]
+    then
+        _echo "      !!! xfs_logprint dumped core"
+        echo "" >> $LOG/logprint_inode.out
+        echo "*** CORE DUMPED ***" >> $LOG/logprint_inode.out
+        echo "" >> $LOG/logprint_inode.out
+    fi
+    
+    _echo "   *** dumping log (-t -b) to $LOG/logprint_buf.out"
+    
+    rm -f core
+    xfs_logprint -t -b $TEST_DEV &> $LOG/logprint_buf.out
+    if [ -e core ]
+    then
+        _echo "      !!! xfs_logprint dumped core"
+        echo "" >> $LOG/logprint_buf.out
+        echo "*** CORE DUMPED ***" >> $LOG/logprint_buf.out
+        echo "" >> $LOG/logprint_buf.out
+    fi
+}
+#
+# _df_device : get an IRIX style df line for a given device 
+#
+#       - returns "" if not mounted
+#       - returns fs type in field two (ala IRIX)
+#       - joins line together if split by fancy df formatting
+#       - strips header etc
+#
+
+_df_device()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _df_device device" >&2
+	exit 1
+    fi
+    
+    df -T 2> /dev/null | $AWK_PROG -v what=$1 '
+        match($1,what) && NF==1 { 
+            v=$1
+            getline
+            print v, $0
+            exit
+        }
+        match($1,what) {
+            print
+            exit
+        }
+    '
+}
+
+#
+# _df_dir : get an IRIX style df line for device where a directory resides
+#
+#       - returns fs type in field two (ala IRIX)
+#       - joins line together if split by fancy df formatting
+#       - strips header etc
+#
+
+_df_dir()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _df_dir device" >&2
+	exit 1
+    fi
+    
+    df -T $1 2> /dev/null | $AWK_PROG -v what=$1 '
+        NR == 2 && NF==1 { 
+            v=$1
+            getline 
+            print v, $0;
+            exit 0
+        }
+        NR == 2 {
+            print;
+            exit 0
+        }
+        {}
+    '
+    # otherwise, nada
+}
+
+# return percentage used disk space for mounted device
+
+_used()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _used device" >&2
+	exit 1
+    fi
+    
+    _df_device $1 | $AWK_PROG '{ sub("%", "") ; print $6 }'
+}
+
+_check_free()
+{
+     used=`_used $TEST_DEV`
+
+     if [ $used -ge $FULL_LIMIT ]    
+     then
+         _echo "      *** $used % used on $TEST_DEV - deleting files"
+         rm -rf $TEST_MNT/stress
+     fi
+}       
+
+# loop, stressing, unounting and checking
+# no (expected) rebooting...
+_corrupt()
+{
+    count=0
+    
+    # don't want to restart if we reboot...
+    _cleanup
+    
+    while true
+    do
+
+        if [ -e $XFSCRASH/stop ]
+        then
+            _echo "### XFS Crash stopped "
+            exit 0
+        fi
+
+        _echo "*** run $count"
+        let "count = count + 1"
+        
+        _check 0
+        _mount
+        
+        _check_free
+        
+        $CORRUPT_STRESS | _log
+        
+        _unmount        
+    done
+}
+
+###########################################################################
+    
+_echo ""
+_echo ""
+echo "XFSCRASH [output to $OUTPUT]"
+_echo ""
+
+if [ "$1" = "start" ]
+then
+    touch $XFSCRASH/start
+fi
+
+if [ "$1" = "stop" ]
+then
+    touch $XFSCRASH/stop
+fi
+
+
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+
+if [ -e $XFSCRASH/stop ]
+then
+    _echo "### XFS Crash stopped "
+    exit 0
+fi
+
+if [ -e $XFSCRASH/start ]
+then
+    _echo "### XFS Crash started "
+    _cleanup
+    rm -f $LOG/*.out $LOG/*.log core
+    
+    touch $XFSCRASH/active
+
+    _echo "   *** Building fresh XFS FS"
+    umount $TEST_DEV &> /dev/null
+    if ! mkfs -t xfs -f $TEST_DEV &> $LOG/mkfs.out
+    then
+        _echo "   !!! unable to mkfs"
+        _echo "   !!! (see $LOG/mkfs.out)"
+        exit 1
+    fi
+fi
+
+if [ ! -e $XFSCRASH/active ]
+then
+    _echo "### XFS Crash inactive "
+    exit 0
+fi
+
+
+if [ -r $XFSCRASH/counter ]
+then
+    count=`cat $XFSCRASH/counter`
+else
+    count=0
+fi
+_echo "### Crash test run $count (mode=$MODE, log=$LOG/{*.out,*.log})"
+
+let "count = count +1"
+echo $count > $XFSCRASH/counter
+
+# real test starts here
+
+_echo "   *** Checking for R/O root"
+if ! mount | grep "on / type" | grep -q "(ro)"
+then
+    _echo "   !!! root not mounted readonly"
+    exit 1
+fi
+
+_echo "   *** Loading XFS modules"
+if ! modprobe xfs
+then
+    _echo "   !!! unable to modprobe xfs"
+    exit 1
+fi
+
+_echo "   *** Unmounting $TEST_DEV"
+umount $TEST_DEV &> /dev/null
+
+_logprint
+if [ $MODE != "corrupt" ]
+then
+    _backup
+fi
+
+case $MODE
+in
+    remount)
+        _check 1 # expect errors
+        _mount
+        _unmount
+	;;
+    repair)
+        _repair
+	;;
+    corrupt)
+        _corrupt
+        exit 0
+        ;;
+    *)
+	_echo "xfscrash: MODE must be remount or repair"
+	exit 1
+	;;
+esac
+
+_check 0 # don't expect errors
+_mount
+
+_echo "   *** Cleaning XFS FS"
+if ! rm -rf $TEST_MNT/stress $TEST_MNT/lost+found &> $LOG/clean.out
+then
+    _echo "   !!! unable to clean XFS FS"
+    _echo "   !!! (see $LOG/clean.out)"
+    exit 1
+fi
+
+_echo "   *** Making stress directory"
+if ! mkdir $TEST_MNT/stress
+then
+    _echo "   !!! unable to mkdir stress"
+    exit 1
+fi
+
+let "bang = STRESS_TIME + `_random $STRESS_RANDOM`"
+
+_echo "   *** Preparing random reboot (in $bang seconds)"
+(
+    sleep $bang
+    _echo "      *** BANG ****"
+    reboot -fn
+) &
+reboot=$!
+
+_echo "   *** Causing stress & waiting for the inevitable"
+$STRESS | _log
+
+exit 0
