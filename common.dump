@@ -71,12 +71,12 @@ _need_to_be_root
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # start inventory from a known base - move it aside for test
-if [ -d /var/xfsdump/inventory ]; then
-    if [ -d /var/xfsdump/inventory.$seq ]; then    
-	rm -rf /var/xfsdump/inventory.$seq
+for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
+    if [ -d $dir ]; then
+	[ -d $dir.$seq ] && rm -rf $dir.$seq
+	mv $dir $dir.$seq
     fi
-    mv /var/xfsdump/inventory /var/xfsdump/inventory.$seq
-fi
+done
 
 
 #
@@ -250,16 +250,20 @@ _cleanup()
     rm -f $tmp.*
 
     if [ -n "$DEBUGDUMP" ]; then
-        # save it for inspection
-	tar -zcvf $seq.inventory.tgz /var/xfsdump/inventory
-	ls -lR /var/xfsdump/inventory >$seq.inventory.ls
+	# save it for inspection
+	for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
+	    [ -d $dir ] || continue
+	    tar -zcvf $seq.inventory.tgz $dir
+	    ls -lR $dir >$seq.inventory.ls
+	done
     fi
 
     # put inventory dir back
-    if [ -d /var/xfsdump/inventory.$seq ]; then
-	rm -rf /var/xfsdump/inventory # get rid of new one
-	mv /var/xfsdump/inventory.$seq /var/xfsdump/inventory
-    fi
+    for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
+	[ -d $dir.$seq ] || continue
+	rm -rf $dir		# get rid of new one
+	mv $dir.$seq $dir
+    done
 
     if [ $status -ne $NOTRUNSTS ]; then
 	# Sleep added to stop _check_fs from complaining that the
@@ -651,6 +655,7 @@ _dump_filter()
       -e '/mfile size:[	 ]*/s/[1-9][0-9]*/NUM/' \
       -e '/\/dev\/tty/d' \
       -e '/inventory session uuid/d' \
+      -e 's#/var/lib/xfsdump#/var/xfsdump#' \
 
 }
 
