@@ -1,0 +1,211 @@
+#!/usr/bin/perl -w
+
+#
+#  Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#  
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#  
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  
+#  Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+#  Mountain View, CA  94043, or:
+#  
+#  http://www.sgi.com 
+#  
+#  For further information regarding this notice, see: 
+#  
+#  http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+#
+# use db to try to traverse the entire filesystem starting at the root
+#
+#                                                       dxm 5/10/00
+
+my $device;
+my $rootino;
+my $agcount;
+my $versionnum;
+my $dir_version;
+my @dir_inodes;
+my @bmap_blocks;
+my @block_inodes;
+my $mode;
+
+sub db($)
+{
+    my ($args)=@_;
+    my ($ret);
+    
+    $ret=`xfs_db -r $args $device 2> /dev/null`;
+    die "ERROR executing xfs_db -r $args $device" if ($?);
+    
+    return $ret;
+}
+
+sub fmt($)
+{
+    my ($text)=@_;
+    my $c=0;
+    print "        ";
+    foreach (split("\n",$text)) {
+        s/^core\.//;
+        
+        if ($c+length($_) >= 70) {
+            $c=0;
+            print ",\n        ";
+        }
+        if ($c) {
+            print ", ";
+            $c+=2;
+        }
+        print "$_";
+        $c+=length($_)+2;
+    }
+    print "\n";
+}
+
+sub inode($)
+{
+    my ($num)=@_;
+    my ($t);
+    
+    @dir_inodes=();
+    
+    $t=db("-c \"inode $num\" -c \"print\"");
+    print "    *** Inode $num\n";
+    fmt($t);
+    
+    ($mode)= $t=~ /^core.mode = (\d+)$/m;
+    
+    if ($t=~ /a\.bmx/m) {
+        bmap("inode $num","attr");
+        foreach (@bmap_blocks) {
+            attr_block($_);
+        }
+    }
+    if (eval "$mode & 040000") {
+        if ( $t=~ /sfdir/m) {
+            while ($t=~ /inumber(?:\.i[48])? = (\d+)$/mg) {
+                push(@dir_inodes,$1);
+            }
+        }
+        if ( $t=~ /u\.bmx/m) {
+            bmap("inode $num","dir");
+            foreach (@bmap_blocks) {
+                dir_block($_);
+                push(@dir_inodes,@block_inodes);
+            }
+        }
+    } else {
+        bmap("inode $num","file") if ( $t=~ /u\.bmx/m);
+    }
+}
+
+sub bmap($$)
+{
+    my ($cmd,$type)=@_;
+    my ($t);
+    
+    @bmap_blocks=();
+    
+    $flag=($type eq "attr")?"-a":"";
+    
+    $t=db("-c \"$cmd\" -c \"bmap $flag\"");
+    print "    *** bmap $type $cmd\n";
+    fmt($t);
+    
+    if ($type eq "dir" || $type eq "attr") {
+        while ($t=~ /startblock (\d+) \(.+\) count (\d+)/mg) {
+            for ($b=$1;$b<$1+$2;$b++) {
+                push(@bmap_blocks,$b);
+            }
+        }
+    }
+}
+
+sub dir_block($)
+{
+    my ($num)=@_;
+    my ($t);
+    
+    @block_inodes=();
+    
+    $type=($dir_version==2)?"dir2":"dir";
+    
+    $t=db("-c \"fsblock $num\" -c \"type $type\" -c \"print\"");
+    print "    *** $type block $num\n";
+    # need to drop . and ..
+    ($self)= $t=~ /\[(\d+)\].name = \"\.\"/m;
+    ($parent)= $t=~ /\[(\d+)\].name = \"\.\.\"/m;
+    fmt($t);
+    
+    
+    while ($t=~ /\[(\d+)\].inumber = (\d+)/mg) {
+        next if (defined $self && $1 == $self);
+        next if (defined $parent && $1 == $parent);
+        push(@block_inodes, $2);
+    }
+}
+
+sub attr_block($)
+{
+    my ($num)=@_;
+    my ($t);
+    
+    $t=db("-c \"fsblock $num\" -c \"type attr\" -c \"print\"");
+    print "    *** attr block $num\n";
+
+    fmt($t);
+}
+
+sub sb($)
+{
+    my ($num)=@_;
+    my ($t);
+    
+    $t=db("-c \"sb $num\" -c \"print\"");
+    print "    *** SB $num\n";
+    fmt($t);
+    
+    ($rootino)= $t=~ /^rootino = (\d+)$/m;
+    ($agcount)= $t=~ /^agcount = (\d+)$/m;
+    ($versionnum)= $t=~ /^versionnum = (0x[\da-f]+)$/m;
+    $dir_version = (eval "$versionnum & 0x2000")?2:1;
+}
+
+die "Usage: $0 <XFS device>\n" unless (@ARGV == 1);
+
+$device=shift @ARGV;
+die "can't read $device\n" unless (-r $device);
+die "$device is not a block device\n" unless (-b _);
+
+chomp($HOST = `hostname -s`);
+
+print "*** db-walk host $HOST device $device\n";
+
+sb(0);
+for ($ag=1;$ag<$agcount;$ag++) {
+    sb($ag);
+}
+
+@inodes=($rootino);
+while ($_ = shift @inodes) {
+    inode($_);
+    push(@inodes,@dir_inodes);
+}

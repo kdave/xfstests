@@ -1,0 +1,537 @@
+#!/bin/sh
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+# automatic qa system. 31/08/00 dxm@sgi.com
+
+_log()
+{
+    echo "$*" >&2
+    echo "$*" >> $LOG
+}
+
+_fail()
+{
+    if [ "$started" = "1" ] 
+    then
+        echo "auto-qa stopped" | wall
+        started=0
+    fi
+
+    _log "$*"
+    
+    # send special email if a cron'd qa run fails
+    case $state
+    in
+        cron*)
+            mail -s "xfs qa status report" $ADMINEMAIL \
+                < $LOG 2>&1
+	;;
+    esac
+
+    status=1
+    exit 1
+}
+
+# configuration (you could tune this)
+
+EXTRA="-xfs-qa"
+VERSION="2.4.0"
+BOOT="/boot"
+SOAK_PASSES="-1"
+SOAK_STRESS="10000"
+SOAK_PROC="3"
+
+# this should be constant
+
+ROOT="$HOME/qa"
+HOST=`hostname -s`
+export WORKAREA="$ROOT/linux-xfs"
+
+export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
+STATE=$ROOT/qa.state
+QADIR="$WORKAREA/cmd/xfs/stress"
+SUDO="su -c"
+IMAGE="$BOOT/vmlinuz-$VERSION$EXTRA"
+SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
+CONFIG="$ROOT/$HOST-$VERSION$EXTRA.config"
+MODULES="/lib/modules/$VERSION$EXTRA"
+SELF="$ROOT/auto-qa"
+SELF_UPDATE="cmd/xfs/tools/auto-qa"
+COMMON_CONFIG="$WORKAREA/cmd/xfs/stress/common.config"
+SH="/bin/sh"
+LOG="$ROOT/qa.log"
+
+# need to add auto-qa hosts here
+
+case $HOST
+in
+    fuzzy)
+        EMAIL="dxm@larry"
+        ADMINEMAIL="dxm@larry"
+        MODULAR=1
+        ;;
+    bruce)
+        EMAIL="dxm@larry"
+        ADMINEMAIL="dxm@larry"
+        MODULAR=1
+        ;;
+    sagan)
+        EMAIL="dxm@larry"
+        ADMINEMAIL="dxm@larry"
+        MODULAR=0
+        ;;
+    troppo)
+	EMAIL="nathans@larry"
+	ADMINEMAIL="nathans@larry"
+	MODULAR=0
+	;;
+    *)
+        _fail "auto-qa: no configuration information for host '$HOST'"
+        ;;
+esac
+
+# do some cleanup on exit
+
+_cleanup()
+{
+    umount $SCRATCH_DEV &> /dev/null
+    umount $TEST_DEV &> /dev/null
+    if [ "$started" = 1 ]
+    then
+        echo "auto-qa stopped" | wall
+        started=0
+    fi
+}
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# clean exit
+
+_success()
+{
+    status=0
+    exit 0
+}
+
+_get_state()
+{
+    state=`cat $STATE`
+}
+
+_set_state()
+{
+    echo $1 > $STATE
+    _get_state
+}
+
+_change_state()
+{
+    new=$1
+    
+    case $state
+    in
+        *-*)
+            case $new
+            in
+                *-*)
+                    _set_state $new
+                    ;;
+                *)
+                    _set_state `echo $state | sed "s/-.*$/-$new/"`
+                    ;;
+            esac
+            ;;
+        *)
+            _set_state $new
+            ;;
+    esac
+}
+
+_sudo()
+{
+    $ROOT/su -c "$*" < /dev/null ;# HACK - we need a hacked su at the mo
+}
+
+_restart()
+{
+    exec $ROOT/su -c "shutdown -r 2 \"auto-qa rebooting\" &" < /dev/null
+}
+
+_log "*** linux-xfs QA (`date`)"
+
+_get_state
+
+# check preconditions for starting state
+case $1
+in
+    cron-init)
+        case $state
+        in
+            *done)
+                ;;
+            *)
+                _fail "    !!! cron-init while not in \"*done\" state"
+                ;;
+        esac
+        ;;
+    cron-restarted)
+        # we don't auto restart after reboot, but cron the restart
+        # to happen a bit later - it's much easier and safer that way
+        if [ $state != "cron-restarted" ]
+        then
+            _fail "    !!! cron-restarted while not in \"cron-restarted\" state"
+        fi
+        ;;
+esac
+
+if [ "$1" != "" ]
+then
+    _set_state $1
+fi
+
+[ $UID -eq 0 ]          && _fail "    !!! QA most be run as a normal user"
+[ -d $ROOT ]            || _fail "    !!! QA root \"$ROOT\" not found"
+[ -d $WORKAREA ]        || _fail "    !!! QA workarea \"$WORKAREA\" not found"
+[ -r $CONFIG ]          || _fail "    !!! Can't read config file $CONFIG"
+. $COMMON_CONFIG 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
+
+cd $ROOT
+
+started=1
+echo "auto-qa started" | wall
+
+while true
+do
+    _get_state
+
+    _log "    *** state $state start (`date`)"
+    _log "        (user=$USER, host=$HOST)"
+    new_state=""
+
+    case $state
+    in
+        *init)
+            echo "" > $ROOT/qa.log
+            echo "" > $ROOT/qa.full
+            _log "******************************************"
+            _log "QA init (`date`)"
+            _log "******************************************"
+
+            _change_state "inited"
+            exec $SH -c "cd $WORKAREA ; p_tupdate $SELF_UPDATE ; chmod +x $SELF_UPDATE ; exec $SELF"
+            ;;
+            
+        *inited)
+            _log "        *** QA initialized"
+            new_state="update"
+            ;;
+        
+        *update)
+            _log "        *** p_tupdate"
+            cd $WORKAREA 
+            p_tupdate 2>&1 \
+                                    || _fail "            !!! p_tupdate failed"
+
+            _log "        *** p_check/p_purge"
+            cd $WORKAREA 
+            p_check -s | p_purge -yiu 2>&1 \
+                                    || _fail "            !!! p_check/p_purge failed"
+
+            _log "        *** non-trunk files"
+            cd $WORKAREA 
+            p_list -c 2>&1 \
+                                    || _fail "            !!! p_list failed"
+
+            new_state="clean"
+            ;;
+            
+        *clean)
+            # we need to configure or else we might fail to clean stress/src
+            _log "        *** configure for clean"
+            cd $WORKAREA/cmd/xfs
+            make configure 2>&1 \
+                                    || _fail "            !!! configure for clean failed"
+                                    
+            _log "        *** clean stress/src"
+            cd $WORKAREA/cmd/xfs/stress/src
+            make clobber 2>&1 \
+                                    || _fail "            !!! clean stress/src failed"
+
+            _log "        *** clean xfs tools"
+            cd $WORKAREA/cmd/xfs
+            make realclean 2>&1 \
+                                    || _fail "            !!! clean tools failed"
+
+            _log "        *** clean quota tools"
+            cd $WORKAREA/cmd/quota
+            ( rm -f configure ; autoconf ; sh configure ; make clean ) 2>&1 \
+                                    || _fail "            !!! clean quota failed"
+
+            _log "        *** clean qa"
+            cd $WORKAREA/cmd/xfs/stress
+            rm -f *.full *.bad *.log *.time *.core core 2>&1 \
+                                    || _fail "            !!! clean qa failed"
+
+            _log "        *** clean linux"
+            cd $WORKAREA/linux
+            make mrproper 2>&1 \
+                                    || _fail "            !!! clean linux failed"
+
+            _log "        *** install configuration file"
+            cp -f $CONFIG $WORKAREA/linux/.config 2>&1 \
+                                    || _fail "            !!! failed to install config"
+            
+            _log "        *** remove version file"
+            rm -f include/linux/version.h 2>&1 \
+                                    || _fail "            !!! failed to clean version"
+
+            new_state="reconfig"
+            ;;
+            
+        *reconfig)
+        
+            _log "        *** reconfig kernel"
+            
+            _change_state "clean" ;# if this fails, we'd better start from scratch
+            
+            cd $WORKAREA/linux
+            # we want to use default options for any new config options.
+            echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" | \
+                make EXTRAVERSION=$EXTRA oldconfig 2>&1 \
+                                    || _fail "            !!! reconfig oldconfig failed"
+            make EXTRAVERSION=$EXTRA dep 2>&1 \
+                                    || _fail "            !!! reconfig dep failed"
+
+            new_state="build"
+            ;;
+            
+        *build)
+            _log "        *** build kernel"
+            
+            _change_state "clean" ;# if this fails, we'd better start from scratch
+            
+            cd $WORKAREA/linux
+            make -j2 EXTRAVERSION=$EXTRA bzImage 2>&1 \
+                                    || _fail "            !!! build bzImage failed"
+            make -j2 EXTRAVERSION=$EXTRA modules 2>&1 \
+                                    || _fail "            !!! build modules failed"
+                                    
+            _log "        *** build tools"
+            cd $WORKAREA/cmd/xfs
+            
+            # use e-fence - but this will only take effect on configure
+            export MALLOCLIB=/usr/lib/libefence.a
+            make configure 2>&1 \
+                                    || _fail "            !!! configure tools failed"
+            make default 2>&1 \
+                                    || _fail "            !!! build tools failed"
+
+            _log "        *** build quota tools"
+            cd $WORKAREA/cmd/quota
+            
+            # use e-fence - but this will only take effect on configure
+            export MALLOCLIB=/usr/lib/libefence.a
+            ( rm -f configure ; autoconf ; sh configure ; make all ) 2>&1 \
+                                    || _fail "            !!! build quota failed"
+
+            _log "        *** build stress/src"
+            cd $WORKAREA/cmd/xfs/stress/src
+            
+            make default 2>&1 \
+                                    || _fail "            !!! build stress/src failed"
+
+            new_state="install"
+            ;;
+            
+        *install)
+            _log "        *** blat old modules"
+            
+            _sudo rm -rf $MODULES
+            
+            _log "        *** install kernel"
+            cd $WORKAREA/linux
+            _sudo cp -f $WORKAREA/linux/arch/i386/boot/bzImage $IMAGE 2>&1 \
+                                    || _fail "            !!! install kernel failed"
+            _sudo cp -f $WORKAREA/linux/System.map $SYSTEMMAP 2>&1 \
+                                    || _fail "            !!! install kernel failed"
+            _sudo make EXTRAVERSION=$EXTRA modules_install 2>&1 \
+                                    || _fail "            !!! install modules failed"
+
+            _log "        *** install xfs tools"
+            cd $WORKAREA/cmd/xfs
+            _sudo make install 2>&1 \
+                                    || _fail "            !!! install tools failed"
+
+            _log "        *** install quota tools"
+            cd $WORKAREA/cmd/quota
+            _sudo make install 2>&1 \
+                                    || _fail "            !!! install quota failed"
+
+            _log "        *** reinit lilo"
+            _sudo /sbin/lilo 2>&1 \
+                                    || _fail "            !!! reinit lilo failed"
+            new_state="restart"
+            ;;
+            
+        *restart)
+            _log "            *** select qa kernel"
+            _sudo /sbin/lilo -R linux-xfs-qa 2>&1 \
+                                    || _fail "            !!! lilo failed"
+            
+            _log "            *** prepare to restart"
+            _change_state "restarted"
+            
+            _log "            *** restarting"
+
+	    _restart # doesn't return
+            ;;
+            
+        *restarted)
+            _log "            *** QA reentered after restart"
+            
+            new_state="check"
+            ;;
+          
+        *check)
+            uname=`uname -ar`
+            _log "            *** uname $uname"
+            _log "            *** user tools"
+            ls -l /sbin/*xfs* /usr/sbin/*xfs* 2>&1
+            _log "            *** kernel"
+            ls -l /boot/*$EXTRA*  2>&1
+            _log "            *** kernel modules"
+            ls -l /lib/modules/$VERSION$EXTRA/kernel/fs/pagebuf/* \
+                  /lib/modules/$VERSION$EXTRA/kernel/fs/xfs/*     \
+                  /lib/modules/$VERSION$EXTRA/kernel/fs/xfs/support/* 
+            
+            if [ $MODULAR -eq 0 ]
+            then
+                new_state="reset"
+            else
+                new_state="probe"
+            fi
+            ;;
+            
+        *probe)
+            _log "            *** modules dependencies"
+            
+            _sudo depmod -a  2>&1 \
+                                    || _fail "            !!! failed to depmod -a" 
+            
+            _log "            *** unmounting XFS mounts"
+            
+            _sudo umount -a -t xfs 2>&1
+            
+            _log "            *** removing modules"
+            
+            for m in xfsidbg xfs pagebuf kdbm_pg kdbm_vm
+            do
+                _sudo rmmod $m 2> /dev/null
+            done
+            
+            _log "            *** installing modules"
+
+	    _sudo modprobe xfs 2>&1 \
+                                    || _fail "            !!! failed to modprobe xfs"
+
+            new_state="reset"
+            ;;
+            
+        *reset)
+            
+            _log "            *** unmounting TEST_DEV"
+            
+            _sudo umount $TEST_DEV 2>&1
+            
+            _log "            *** unmounting SCRATCH_DEV"
+            
+            _sudo umount $SCRATCH_DEV 2>&1
+            
+            _log "            *** clean TEST_DEV"
+            
+            _sudo mkfs -t xfs -f $TEST_DEV 2>&1 \
+                                    || _fail "            !!! failed to mkfs TEST_DEV"
+            
+            _log "            *** mounting TEST_DEV"
+            
+            _sudo mount -t xfs $TEST_DEV $TEST_DIR 2>&1 \
+                                    || _fail "            !!! failed to mount"
+                                    
+            new_state="run"
+            ;;
+            
+            
+        soak-run)
+            cd $QADIR
+            
+            _log "            *** run soak test"
+            _sudo ./soak $SOAK_PASSES $SOAK_STRESS $SOAK_PROC\
+                                    || _fail "            !!! failed to run soak test"
+
+            new_state="done"
+            ;;
+            
+        *run)
+            cd $QADIR
+            
+            _log "            *** run tests"
+            _sudo ./check -l -g auto 2>&1 | tee $ROOT/qa.out
+            
+            _log ""
+            _log "            *** send status mail"
+            mail -s "xfs qa status report" $EMAIL < $ROOT/qa.out 2>&1
+        
+            new_state="done"
+            ;;
+            
+        *done)
+            _log "*** QA run complete"
+
+            _success
+            ;;
+            
+        *nothing)
+            new_state="done"
+            _log "    *** do nothing"
+            ;;
+            
+        *)
+            _fail "           !!! unknown state $state"
+            ;;
+    esac
+
+    _log "    *** state $state done (`date`)"
+    [ "$new_state" = "" ] && _fail "    !!! no new state set"
+    _change_state $new_state
+    
+done

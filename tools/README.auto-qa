@@ -1,0 +1,71 @@
+Quick guide to auto-qa                                      dxm 04/10/2000
+______________________                                      ______________
+
+
+	- pick/create a user to run auto-qa and check they 
+            can use ptools to check out of the tree
+	- add your host to cmd/xfs/stress/common.config
+	- add your host to cmd/xfs/tools/auto-qa
+		check both these files in
+	- make a directory "$HOME/qa"
+	- make a workarea "$HOME/qa/linux-xfs" for linux-xfs
+		(easiest to copy one from elsewhere)
+	- cd $HOME/qa ; ln -s linux-xfs/cmd/xfs/tools/auto-qa .
+		(auto-qa must be a link into it's own source tree
+		so it can update itself)
+	- copy an appropriate .config file to
+ 		$HOME/qa/$HOSTNAME-2.4.0-xfs-qa.config
+	- You'll need a hacked version of 'su' in $HOME/qa that
+                lets your user su to root/root without a password
+                (if you want to run from cron, it mustn't require
+                /dev/tty). Warning - this is a massive security
+                hole.
+	- chown root.root $HOME/qa/su
+	- chmod 6755 $HOME/qa/su
+	- add the soon to be kernel to /etc/lilo.conf
+
+		image=/boot/vmlinuz-2.4.0-xfs-qa
+        		label=linux-xfs-qa
+        		append = "console=ttyS0,38400n8"
+		
+	- $HOME/qa/auto-qa init
+
+At this point, the script should update the workarea, clean it,
+rebuild it, install it and reboot.
+
+Then run
+
+	- $HOME/qa/auto-qa restarted
+
+And the tests should happen... and all pass, of course.
+
+To get it going automagically:
+
+	- add some lines to the appropriate user's crontab:
+
+		0 4 * * *       $HOME/qa/auto-qa cron-init
+		30 4 * * *      $HOME/qa/auto-qa cron-restarted
+
+Notes:
+	- if MODULAR=1 in auto-qa XFS and pagebuf are expected to
+                be modules. if MODULAR=0 they should be built into
+                the kernel
+	- the test device is cleaned at the start of the QA run
+		(to stop nightly QA being stuffed up if someone
+		leaves the device inconsistant etc)
+	- I'm using a hacked su because PCP sudo won't set the
+		gid properly, and normal linux su won't run
+		without a tty even if PAM is pissed-off.
+	- The QA is restarted after reboot by a second cron entry
+		to avoid the test being able to get itself into
+		some stupid loop and so that it's always started
+		by the appropriate user. You might have to make
+		the second cron run later if your build takes ages.
+	- Point the email addresses somewhere appropriate
+	- When run in "cron-init" or "init" states, the script
+		will p_tupdate itself and restart. If you start
+		with an empty source tree, you'll need to check
+		out the cmd/xfs/tools/auto-qa script before it'll
+		work (duh).
+
+good luck.

@@ -1,0 +1,81 @@
+#!/bin/sh -x
+# 
+# Simple script which does the following:
+#	o  Generates a src tarball from a WORKAREA
+#	o  Copies it over to ~/test and unpacks it
+#	o  Generates a src tarball from src tarball
+#	o  Compares the build status' ... reports problems
+#	o  removes ~/test
+# 
+
+tmpdir="$HOME/test"
+
+if [ -z "$WORKAREA" ]
+then
+	echo "WORKAREA is not set -- aborting."
+	exit 1
+fi
+
+if [ -d $tmpdir ]
+then
+	echo "$tmpdir exists already -- aborting."
+	exit 1
+else
+	mkdir $tmpdir
+	if [ ! -d $tmpdir ]
+	then
+		echo "Cannot create $tmpdir -- aborting."
+		exit 1
+	fi
+fi
+
+# 
+# Pleasantries are now out of the way, lets proceed.
+# NB: If something goes wrong we'll leave the unpacked
+# source alone for consumption by a human.
+# 
+
+_cleanup()
+{
+	if [ $status -eq 0 ]
+	then
+		rm -fr $tmpdir
+	else
+		echo "Problem?  -- leaving $tmpdir for inspection"
+	fi
+}
+
+_buildme()
+{
+	cd $1
+
+	if ./Makepkgs
+	then
+		:
+	else
+		echo Makepkgs thinks theres a problem in $1
+		exit 1
+	fi
+
+	if [ ! -f build/xfs-cmds-*.src.tar.gz ]
+	then
+		echo Makepkgs failed to create build/xfs-cmds-*.src.tar.gz
+		exit 1
+	fi
+}
+
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# first, build from the WORKAREA
+_buildme $WORKAREA/cmd/xfs
+
+cp $WORKAREA/cmd/xfs/build/xfs-cmds-*.src.tar.gz $tmpdir
+cd $tmpdir
+tar xzf xfs-cmds-*.src.tar.gz
+rm xfs-cmds-*.src.tar.gz	# must delete for _buildme "cd" to work
+
+# now, cross check the src build
+_buildme $tmpdir/xfs-cmds-*
+
+status=0

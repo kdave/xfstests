@@ -1,0 +1,99 @@
+#!/usr/sbin/perl
+
+sub setup()
+{
+    $PATH="$PATH:/usr/local/bin/ptools:/sbin:/usr/sbin";
+    $DISPLAY="clouds:0";
+    
+    if ("$HOST" eq "bruce") {
+        $TOOLS="/home/dxm/isms/slinx-xfs/cmd/xfs/tools";
+        $SCRATCH_DEV="/dev/sdf1";
+        $SCRATCH_MNT="/mnt/xfs3";
+        $MKFS="/sbin/mkfs -t xfs -f";
+        $SUDO="/home/dxm/su -c";
+        $MOUNT="/bin/mount -t xfs";
+        $UMOUNT="/bin/umount";
+        $MKFS_EXTRA="-f";
+    } elsif ("$HOST" eq "whack") {
+        $TOOLS="/hosts/snort/build1/people/dxm/isms/slinx-xfs/cmd/xfs/tools";
+        $SCRATCH_DEV="/dev/dsk/20000080e5114459/lun2s0/c2p1";
+        $SCRATCH_MNT="/lun2";
+        $MKFS="/sbin/mkfs";
+        $SUDO="su root -c";
+        $MOUNT="/sbin/mount -t xfs";
+        $UMOUNT="/sbin/umount";
+        $MKFS_EXTRA="";
+    } else {
+        die "unconfigured host \"$HOST\"\n"
+    }
+}
+
+sub run_no_check(@)
+{
+    system(@_);
+}
+
+sub run(@)
+{
+    system(@_)  == 0
+        || die "ERROR \"" . join(" ",@_) . "\" returned error\n";
+}
+
+sub run_expect_fail(@)
+{
+    system(@_)  == 0
+        && die "ERROR \"" . join(" ",@_) . "\" returned non-error\n";
+}
+
+sub umount_no_check()
+{
+    run_no_check("umount $SCRATCH_DEV");
+}
+
+sub umount()
+{
+    run("umount $SCRATCH_DEV");
+}
+
+sub mount($)
+{
+    my ($ops)=@_;
+    run("mount -t xfs $ops $SCRATCH_DEV $SCRATCH_MNT");
+}
+
+chomp($HOST=`hostname -s`);
+
+die "usage: $ARGV0 <operation> [parameters]\n" unless (scalar(@ARGV));
+print "*** $HOST: Interop started\n";
+print "    *** ", join(" ", @ARGV), "\n";
+
+setup();
+
+$op=shift(@ARGV);
+
+umount_no_check();
+
+if ($op eq "init") {
+
+    run("mkfs -t xfs $MKFS_EXTRA $SCRATCH_DEV");
+    
+} elsif ($op eq "test") {
+
+    run("xfs_repair -n $SCRATCH_DEV");
+    
+} elsif ($op eq "easy") {
+
+    mount("");
+    system("mount");
+    mkdir("$SCRATCH_MNT/fish",0777);
+    
+} elsif ($op eq "check") {
+
+    mount("-o ro");
+    system("cd $SCRATCH_MNT ; $TOOLS/fs-walk .");
+
+} else {
+    die "unknown operation \"$op\"\n";
+}
+
+umount_no_check();

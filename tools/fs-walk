@@ -1,0 +1,117 @@
+#!/usr/bin/perl -w
+
+#
+#  Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#  
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#  
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  
+#  Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+#  Mountain View, CA  94043, or:
+#  
+#  http://www.sgi.com 
+#  
+#  For further information regarding this notice, see: 
+#  
+#  http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+#
+# traverse the entire filesystem dumping info. 
+#
+#                                                       dxm 5/10/00
+use MD5;
+use Getopt::Std;
+
+my %opt;
+
+sub scan($)
+{
+    my ($file)=@_;
+    my ($md5)=new MD5;
+    my (@stat);
+
+    unless (@stat=lstat("$file")) {
+        printf("%-" . ($opt{v}?65:32) . "s $file\n", "!!! could not lstat");
+        return;
+    }
+
+    $stat[0]=$stat[8]=""; # wipe the device and access time
+    $md5->reset;
+    $md5->add(join(" ",@stat));
+    
+    print join(" ",@stat), "\n";
+    
+    if ($opt{v}) {
+        print $md5->hexdigest . " ";
+        $md5->reset;
+    }
+
+    if (-l "$file") {
+        if (!defined($link = readlink $file)) {
+            printf("%-32s $file\n", "!!! could not readlink");
+            return;
+        }
+        $md5->add($link);
+    } elsif (-f "$file") {
+        if (!open(FILE, "$file")) {
+            printf("%-32s $file\n", "!!! could not read");
+            return;
+        }
+        $md5->addfile(FILE);
+        close (FILE);
+    }
+    print $md5->hexdigest . " $file\n";
+}
+
+getopts('vs', \%opt);
+
+die "Usage: $0 <dir>\n" unless (@ARGV == 1);
+
+$dir=shift @ARGV;
+die "can't read $dir\n" unless (-r $dir);
+die "$dir is not a directory\n" unless (-d _);
+
+chomp($HOST = `hostname -s`);
+
+print "*** fs-walk host $HOST dir $dir\n";
+
+@todo=$dir;
+while ($dir = shift @todo) {
+    scan($dir);
+    unless (opendir(DIR,$dir)) {
+        printf("%-" . ($opt{v}?65:32) . "s $dir\n", "!!! could not opendir");
+        next;
+    }
+    unless (@all=readdir(DIR)) {
+        printf("%-" . ($opt{v}?65:32) . "s $dir\n", "!!! could not readdir");
+        next;
+    }
+    closedir(DIR);
+    @dirs=grep(-d "$dir/$_" && !-l "$dir/$_", @all);
+    foreach (@all) {
+        next if /^\.\.?$/;
+        scan("$dir/$_");
+    }
+    
+    foreach (grep(!/^\.\.?$/, @dirs)) {
+        push (@todo,"$dir/$_");
+    }
+}
+
