@@ -139,6 +139,15 @@ _log_head()
     '
 }
 
+# Get log stripe unit for v2 logs; if none specified,
+# (or v1 log) just return "1"
+
+_log_sunit()
+{
+    echo $MKFS_OPTIONS | (grep sunit || echo "sunit=1") \
+    	| sed "s/.*sunit=\(.*\).*/\1/"
+}    
+
 _after_log()
 {
     xfs_db -r $1 -c "sb" -c "print" | $AWK_PROG '
@@ -179,10 +188,12 @@ size=`_log_size`
 echo "log size = $size BB"                      >>$seq.full
 head=`_log_head`
 echo "log position = $head"                     >>$seq.full
+lsunit=`_log_sunit`
+echo "log sunit = $lsunit"			>>$seq.full
 
 [ $size -eq 4096 ] || \
     _fail "!!! unexpected log size $size"
-[ $head -eq 2 ] || \
+[ $head -eq 2 -o $head -eq $((lsunit/512)) ] || \
     _fail "!!! unexpected initial log position $head"
 
 echo "    lots of traffic"                      >>$seq.full
