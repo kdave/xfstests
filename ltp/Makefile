@@ -37,7 +37,10 @@ TARGETS = doio fsstress fsx growfiles iogen
 CFILES = $(TARGETS:=.c)
 HFILES = doio.h
 LDIRT = $(TARGETS)
-LCFLAGS =
+LCFLAGS = -DXFS
+
+#LCFLAGS += -DAIO
+#LIBAIO =-laio
 
 default: $(TARGETS)
 
@@ -51,7 +54,7 @@ fsstress: fsstress.c $(LIBATTR) $(LIBTEST)
 	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)
 
 fsx: fsx.c
-	$(LINKTEST) $(LDLIBS)
+	$(LINKTEST) $(LIBAIO) $(LDLIBS)
 
 growfiles: growfiles.c $(LIBTEST)
 	$(LINKTEST) $(LIBTEST) $(LDLIBS)
