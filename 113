@@ -65,15 +65,22 @@ _do_test()
     _n="$1"
     _param="$2"
     _count="$3"
+    _nproc="$4"
 
-    out=$testdir/aiostress.$$.$_n
-    rm -f $out
+    _files="$testdir/aiostress.$$.$_n"
+    __proc=$_nproc
+    [ $__proc -gt 1 ] && _param="-t $__proc $_param"
+    while [ $__proc -gt 1 ]; do
+        _files="$_files $testdir/aiostress.$$.$_n.$__proc"
+	__proc=`expr $__proc - 1`
+    done
+    rm -f $_files
  
     echo ""
     echo "-----------------------------------------------"
     echo "aio-stress.$_n : $_param"
     echo "-----------------------------------------------"
-    if ! $here/ltp/aio-stress $_param $AIOSTRESS_AVOID -I $_count $out >>$tmp.out 2>&1
+    if ! $here/ltp/aio-stress $_param $AIOSTRESS_AVOID -I $_count $_files >>$tmp.out 2>&1
     then
         echo "    aio-stress (count=$_count) returned $?"
         cat $tmp.out
@@ -85,8 +92,9 @@ _do_test()
 
 
 # real QA test starts here
-_supported_fs xfs udf
-_supported_os IRIX Linux
+_supported_os Linux
+
+[ -x $here/ltp/aio-stress ] || _notrun "aio-stress not built for this platform"
 
 _setup_testdir
 
@@ -97,16 +105,13 @@ procs=20
 
 _check_test_fs
 
-# LTP
- -I500 -o3 -S -r128 -t4 
-
 # the default
-_do_test 1 "" $count
+_do_test 1 "" $count 1
 
 # and the default with multiprocess
-_do_test 2 "-t $procs" $count
+_do_test 2 "" $count $procs
 
 # as above, but now using direct IO
-_do_test 3 "-t $procs -O" $count
+_do_test 3 "-O" $count $procs
 
 exit
