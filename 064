@@ -78,6 +78,16 @@ while [ $i -le 9 ]; do
 	sleep 2
 	_stable_fs
     fi 
+    echo "********* level $i ***********" >>$seq.full
+    date >>$seq.full
+    find $SCRATCH_MNT -exec stat {} \; >$tmp.dates.$i
+    if [ $i -gt 0 ]; then
+       level_1=`expr $i - 1`
+       diff -c $tmp.dates.$level_1 $tmp.dates.$i >>$seq.full
+    else
+       cat $tmp.dates.$i >>$seq.full
+    fi
+
     dump_file=$tmp.df.level$i
     _do_dump_file -l $i
     i=`expr $i + 1`	
