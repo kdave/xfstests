@@ -38,7 +38,7 @@
 #include "global.h"
 
 #include <errno.h>
-#include <acl.h>
+#include <sys/acl.h>
 
 char *prog;
 int irixsemantics = 0;
