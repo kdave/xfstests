@@ -69,10 +69,16 @@ _file_as_id()
 	_notrun "broken type in call to _file_as_id in test $seq"
     fi
 
-    perl <<EOF >/dev/null 2>&1
+    perl <<EOF >>$seq.full 2>&1
 	\$| = 1;
 	$magik = $2;
-	exec "dd if=/dev/zero of=$1 bs=$4 count=$5";
+	if ($5 == 0) {
+	    print "touch $1";
+	    exec "touch $1";
+	} else {
+	    print "dd if=/dev/zero of=$1 bs=$4 count=$5";
+	    exec "dd if=/dev/zero of=$1 bs=$4 count=$5";
+	}
 EOF
 # for debugging the above euid change, try... [need write in cwd]
 #	exec "dd if=/dev/zero of=$1 bs=$4 count=$5 >>$seq.full 2>&1";
@@ -90,12 +96,32 @@ _choose_gid()
 	/etc/group
 }
 
+#
+# filter to get the guts out
+# and make linux and irix similar
+#
 _filter_repquota()
 {
-    head -$1 | perl -ne "
-	s/^(\w+)\s+([-|+])/[NAME]    \2/g;
-	s($SCRATCH_DEV)([DEVICE])g;
-	print"
+    tee -a $seq.full | $AWK_PROG '
+	/File limits/ {
+		gotit = 1
+	}
+	gotit==1 {
+		sub(/Disk/, "Block") 
+		gsub(/timeleft/, "grace")
+		gsub(/[.]0 /,"")
+		sub(/- /, "* ")
+		sub(/[+] /, "* ")
+		gsub(/1week/,"7days")
+		gsub(/NOT STARTED/,"")
+		gsub(/[ \t]+/, " ")
+		if ($0 ~ / [-+]/)
+		    $1 = "name"
+		if ($0 !~ /^$/)
+		    print
+		next
+	}
+    ' | sed -e '/-----------------/d'
 }
 
 _qmount()
@@ -105,6 +131,64 @@ _qmount()
     chmod ugo+rwx $SCRATCH_MNT
     [ -x /usr/sbin/quot ] && quot $SCRATCH_MNT >>$seq.full 2>&1
 }
+
+#-----------------------------------------------------------------------------------
+#
+# wrappers for Linux/IRIX differences
+#
+_setquota()
+{
+    _opt_type=$1
+    _id=$2
+    _bsoft=$3
+    _bhard=$4
+    _isoft=$5
+    _ihard=$6
+    _fs=$7
+
+    [ $# -eq 7 ] || _fail "_setquota failed with wrong # args: $*"
+
+    if [ $HOSTOS = "Linux" ]; then
+	echo "setquota $_opt_type $_id $_bsoft $_bhard $_isoft $_ihard $_fs" >>$seq.full
+	setquota $_opt_type $_id $_bsoft $_bhard $_isoft $_ihard $_fs
+    else
+	# IRIX
+        if [ $_opt_type = "-u" ]; then
+		_opt_type=""
+		id_param="uid"
+	else 
+		id_param="gid"
+	fi
+	echo "/usr/etc/edquota $_opt_type -f $_fs -l $id_param=$_id,bsoft=$_bsoft,bhard=$_bhard,isoft=$_isoft,ihard=$_ihard" >>$seq.full
+	/usr/etc/edquota $_opt_type -f $_fs -l $id_param=$_id,bsoft=$_bsoft,bhard=$_bhard,isoft=$_isoft,ihard=$_ihard
+    fi
+}
+
+_quota()
+{
+    echo "quota $*" >>$seq.full
+    if [ $HOSTOS = "Linux" ]; then
+	quota $*
+    else
+        # clear -u
+        args=`echo $*|sed -e 's/-u//'`
+	quota -v $args
+    fi
+}
+
+_repquota()
+{
+    echo "repquota $*" >>$seq.full
+    if [ $HOSTOS = "Linux" ]; then
+	repquota $*
+    else
+        # clear -u
+        args=`echo $*|sed -e 's/-u//'`
+	repquota -v $args
+    fi
+}
+
+#-----------------------------------------------------------------------------------
 
 # make sure this script returns success
 /bin/true

@@ -3,7 +3,7 @@
 #
 # Exercises basic XFS quota functionality
 #	MOUNT_OPTIONS env var switches the test type (uid/gid/acct/enfd)
-# 	options are:  (-o) usrquota, grpquota, uqnoenforce, gqnoenforce
+# 	options are:  (-o) uquota, gquota, uqnoenforce, gqnoenforce
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
@@ -47,8 +47,6 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 
-export MOUNT_OPTIONS=-ousrquota
-
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
@@ -66,7 +64,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
 _supported_fs xfs
-_supported_os Linux
+_supported_os Linux IRIX
 
 rm -f $seq.out
 cp /dev/null $seq.full
@@ -74,6 +72,11 @@ chmod a+rwx $seq.full	# arbitrary users will write here
 
 _require_scratch
 _require_quota
+
+# setup a default run
+if [ -z "$MOUNT_OPTIONS" ]; then
+        export MOUNT_OPTIONS="-o uquota"
+fi
 
 blksoft=100
 blkhard=500
@@ -98,7 +101,7 @@ _filter_and_check_blocks()
 			}
 			s/^('$name'\s+[-|+][-|+]\s+)(\d+)/\1 OK/g;
 		}
-	' | _filter_repquota $1
+	' | _filter_repquota
 }
 
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -109,21 +112,28 @@ cat $tmp.mkfs >>$seq.full
 
 _qmount
 
+# Irix uses filesystem name and Linux uses device of filesystem
+if [ $HOSTOS = "Linux" ]; then
+    QUOTA_FS=$SCRATCH_DEV
+else
+    QUOTA_FS=$SCRATCH_MNT
+fi
+
 # setup exactly what it is we'll be testing
 enforce=1
 if src/feature -u $SCRATCH_DEV
 then
-	type=u ; eval `_choose_uid`; ln $seq.usrquota $seq.out
+	type=u ; eval `_choose_uid`; ln -s $seq.usrquota $seq.out
 elif src/feature -g $SCRATCH_DEV
 then
-	type=g ; eval `_choose_gid`; ln $seq.grpquota $seq.out
+	type=g ; eval `_choose_gid`; ln -s $seq.grpquota $seq.out
 elif src/feature -U $SCRATCH_DEV
 then
-	type=u ; eval `_choose_uid`; ln $seq.uqnoenforce $seq.out
+	type=u ; eval `_choose_uid`; ln -s $seq.uqnoenforce $seq.out
 	enforce=0
 elif src/feature -G $SCRATCH_DEV
 then
-	type=g ; eval `_choose_gid`; ln $seq.gqnoenforce $seq.out
+	type=g ; eval `_choose_gid`; ln -s $seq.gqnoenforce $seq.out
 	enforce=0
 else
 	_notrun "No quota support at mount time"
@@ -134,26 +144,28 @@ echo "and using type=$type id=$id" >>$seq.full
 
 echo
 echo "*** report no quota settings" | tee -a $seq.full
-repquota -$type $SCRATCH_DEV | _filter_repquota 6
+_repquota -$type $QUOTA_FS | _filter_repquota
 
 echo
 echo "*** report initial settings" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/initme $id $type 1024 0
-setquota -$type $id $blksoft $blkhard $inosoft $inohard $SCRATCH_DEV
-repquota -$type $SCRATCH_DEV | _filter_repquota 7
+echo "ls -l $SCRATCH_MNT" >>$seq.full
+ls -l $SCRATCH_MNT >>$seq.full
+_setquota -$type $id $blksoft $blkhard $inosoft $inohard $QUOTA_FS
+_repquota -$type $QUOTA_FS | _filter_repquota
 
 echo
 echo "*** push past the soft inode limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
 _file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota 7
+_repquota -$type $QUOTA_FS | _filter_repquota
 
 echo
 echo "*** push past the soft block limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota 7
+_repquota -$type $QUOTA_FS | _filter_repquota
 
 echo
 # Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -163,17 +175,17 @@ do
 	_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 done
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota 7
+_repquota -$type $QUOTA_FS | _filter_repquota
 
 echo
 # Note: for quota accounting (not enforcement), EDQUOT is not expected
 echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 540
+echo "ls -l $SCRATCH_MNT" >>$seq.full
+ls -l $SCRATCH_MNT >>$seq.full
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_and_check_blocks 7
+_repquota -$type $QUOTA_FS | _filter_and_check_blocks
 
-
-export -n MOUNT_OPTIONS
 
 # success, all done
 status=0

@@ -3,8 +3,8 @@
 #
 # Ensure that quota(1) displays blocksizes matching ondisk dquots.
 #
-# MOUNT_OPTIONS can be set to grpquota to test group quota,
-# defaults to usrquota if MOUNT_OPTIONS is not set.
+# MOUNT_OPTIONS can be set to gquota to test group quota,
+# defaults to uquota if MOUNT_OPTIONS is not set.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
@@ -48,8 +48,6 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 
-export MOUNT_OPTIONS=-ousrquota
-
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
@@ -74,7 +72,7 @@ _require_quota
 
 # setup a default run
 if [ -z "$MOUNT_OPTIONS" ]; then
-        MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
+        export MOUNT_OPTIONS="-o uquota"
 fi
 
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -88,9 +86,9 @@ _qmount
 
 # setup user/group to test
 if src/feature -U $SCRATCH_DEV ; then
-	type=u ; eval `_choose_uid`
+	type=u; eval `_choose_uid`
 elif src/feature -G $SCRATCH_DEV ; then
-	type=g ; eval `_choose_gid`
+	type=g; eval `_choose_gid`
 else
 	_notrun "No quota support at mount time"
 fi
@@ -99,21 +97,37 @@ fi
 _file_as_id $SCRATCH_MNT/foo $id $type $dbsize 220
 sync
 
-# set limit at 1001 (1k) blocks
-setquota -$type $id 1001 1001 10 10 $SCRATCH_DEV
+# Irix uses filesystem name and Linux uses device of filesystem
+if [ $HOSTOS = "Linux" ]; then
+    QUOTA_FS=$SCRATCH_DEV
+else
+    QUOTA_FS=$SCRATCH_MNT
+fi
 
-# cross check blks, softblks, hardblks <-> quota, xfs_db
-quota -$type $id | tee -a $seq.full | perl -ne '
-	if (m[^\s*'$SCRATCH_DEV'\s+(\d+)\s+(\d+)\s+(\d+)] ||
+# set limit at 1001 (1k) blocks
+bsoft=1001
+bhard=1001
+isoft=10
+ihard=10
+_setquota -$type $id $bsoft $bhard $isoft $ihard $QUOTA_FS
+
+_filter_quota()
+{
+    perl -ne '
+	if (m[^\s*'$QUOTA_FS'\s+(\d+)\s+(\d+)\s+(\d+)] ||
 		($next == 1 && m,^\s+(\d+)\s+(\d+)\s+(\d+),)) {
 		print "used_blocks=", $1, "\n";
 		print "soft_blocks=", $2, "\n";
 		print "hard_blocks=", $3, "\n";
 		$next = 0;
 	}
-	elsif (m[^\s*'$SCRATCH_DEV']) {		# devfs (long) names
+	elsif (m[^\s*'$QUOTA_FS']) {		# devfs (long) names
 		$next = 1;
-	}' | LC_COLLATE=POSIX sort >$tmp.quota
+	}' | LC_COLLATE=POSIX sort
+}
+
+# cross check blks, softblks, hardblks <-> quota, xfs_db
+_quota -$type $id | tee -a $seq.full | _filter_quota >$tmp.quota
 
 echo ===quota output >> $seq.full
 cat $tmp.quota >> $seq.full
@@ -140,8 +154,6 @@ cat $tmp.xfs_db >> $seq.full
 echo Comparing out of quota and xfs_db
 diff $tmp.quota $tmp.xfs_db 
 [ $? -eq 0 ] && echo OK.
-
-export -n MOUNT_OPTIONS
 
 # success, all done
 status=0

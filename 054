@@ -60,7 +60,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
 _supported_fs xfs
-_supported_os Linux
+_supported_os Linux IRIX
 
 cp /dev/null $seq.full
 chmod ugo+rwx $seq.full
@@ -114,7 +114,7 @@ _exercise()
 }
 
 _scratch_mkfs_xfs $SCRATCH_DEV >/dev/null 2>&1
-MOUNT_OPTIONS="$MOUNT_OPTIONS -ousrquota,grpquota"; export MOUNT_OPTIONS
+export MOUNT_OPTIONS="-o uquota,gquota"
 _qmount
 if src/feature -G $SCRATCH_DEV ; then
 	:
@@ -123,19 +123,19 @@ else
 fi
 umount $SCRATCH_MNT 2>/dev/null
 
-MOUNT_OPTIONS=""; export MOUNT_OPTIONS
+export MOUNT_OPTIONS=""
 echo "*** Default mount options"
 _exercise
 
-MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
+export MOUNT_OPTIONS="-o uquota"
 echo "*** User quota mount option"
 _exercise
 
-MOUNT_OPTIONS="-o grpquota"; export MOUNT_OPTIONS
+export MOUNT_OPTIONS="-o gquota"
 echo "*** Group quota mount option"
 _exercise
 
-MOUNT_OPTIONS="-o usrquota,grpquota"; export MOUNT_OPTIONS
+export MOUNT_OPTIONS="-o uquota,gquota"
 echo "*** User and Group quota mount options"
 _exercise
 
