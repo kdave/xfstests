@@ -58,7 +58,7 @@ static	int	set_events	(dm_sessid_t, void *, size_t);
 static	int	clear_events	(dm_sessid_t, void *, size_t);
 int		 finish_responding(dm_sessid_t);
 int		 establish_handler(void);
-void		 exit_handler	(void);
+void		 exit_handler	(int);
 
 #define MAXNAMELEN 256
 
@@ -175,7 +175,7 @@ main(
    * If we get here, cleanup after the event_loop failure
    */
  cleanup:
-  exit_handler();
+  exit_handler(0);
   return(1);
 }
 
@@ -360,7 +360,8 @@ handle_message(
 {
   int			pkt_error = 0;
   int			error;
-  int			respond, response, respcode;
+  dm_response_t		response;
+  int			respond, respcode;
   dm_namesp_event_t	*msg_ne;
 #if	!VERITAS_21
     dm_mount_event_t	*msg_me;
@@ -896,13 +897,11 @@ set_disposition(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 0
-#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 )
+#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 ) && !defined(linux)
 	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
 #endif
-#ifndef __sgi
+#if !defined( __sgi) && !defined(linux)
 	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
-#endif
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
 
@@ -977,13 +976,11 @@ set_events(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 0
-#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 )
+#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 ) && ! defined(linux)
 	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
 #endif
-#ifndef __sgi
+#if !defined( __sgi) && !defined(linux)
 	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
-#endif
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
 
@@ -1161,7 +1158,7 @@ establish_handler(void)
  * Shutdown the session using the global "sid" variable.
  */
 void
-exit_handler(void)
+exit_handler(int x)
 {
   int		error;
   void		*fs_hanp;
@@ -1187,7 +1184,7 @@ exit_handler(void)
   event_loop(sid, 0 /*waitflag*/);
 
   err_msg("Shutting down the session\n");
-  if (sid != NULL) {
+  if (sid != 0) {
     error = dm_destroy_session(sid);
     if (error == -1) {
       errno_msg("Can't shut down session - use 'mrmean -kv' to clean up!");

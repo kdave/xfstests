@@ -32,6 +32,10 @@
 
 #include <lib/hsm.h>
 
+#ifdef linux
+#include <string.h>
+#endif
+
 /*---------------------------------------------------------------------------
 
 Test program used to test the DMAPI function dm_get_config_events().  The

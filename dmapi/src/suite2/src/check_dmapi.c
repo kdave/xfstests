@@ -33,7 +33,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef linux
-#include <linux/dmapi_kern.h>
+#include <dmapi.h>
 #else
 #include <sys/dmi.h>
 #endif
@@ -141,11 +141,9 @@ main(
 	 * EXAMINE /usr/include/sys/dmi.h:
 	 *--------------------------------
 	 */
-#ifdef linux
-#define DMAPI_HDR "/usr/include/linux/dmapi.h"
-#else
+#ifdef __sgi
 #define DMAPI_HDR "/usr/include/sys/dmi.h"
-#endif
+
 	if (stat(DMAPI_HDR, &stat_buf)==-1){
 	  if (errno==ENOENT) { 
 	    printf( "You are missing a vital DMAPI file: %s\n", DMAPI_HDR);
@@ -162,6 +160,7 @@ main(
 	    printf("(You appear to have the correct version of %s\n", DMAPI_HDR);
 	  }
 	}
+#endif
 	
 	/*--------------------------
 	 * RESOLVE KERNEL PRESENCE:

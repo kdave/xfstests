@@ -478,23 +478,16 @@ extract_fields(
 	while (!isalnum(*cp))
 		cp++;
 
-if( cp != ibuf )
-printf("%s/%d: found leading whitspace to skip\n", __FILE__, __LINE__);
-
 	start = cp;
 	while (isalnum(*cp))
 		cp++;
 	*cp = '\0';
-
-printf("%s/%d: start=(%s)\n", __FILE__, __LINE__, start);
 
 	len = strtol(start, 0, 0);
 	if (len > HANDLE_LEN) {
 		err_msg("%s/%d: Handle length %d too long in input line", __FILE__, __LINE__, len);
 		return(1);
 	}
-
-printf("%s/%d: len=%ld\n", __FILE__, __LINE__, len);
 
 	*hlen = len;
 
@@ -512,11 +505,7 @@ printf("%s/%d: len=%ld\n", __FILE__, __LINE__, len);
 	cp += len*2;
 	*cp = '\0';
 
-printf("%s/%d: handle buf is (%s)\n", __FILE__, __LINE__, hanp );
-
 	atohan( hanp, (void**)&handle_buf, &len );
-
-printf("%s/%d: len now=%ld\n", __FILE__, __LINE__, len);
 
 
 	/* skip over white space */
@@ -529,11 +518,8 @@ printf("%s/%d: len now=%ld\n", __FILE__, __LINE__, len);
 		cp++;
 	*cp = '\0';
 
-printf("%s/%d: file len=%s\n", __FILE__, __LINE__, start);
-
 	*fsize = strtol(start, 0, 0);
 
-printf("%s/%d: fsize=%ld\n", __FILE__, __LINE__, *fsize);
 	return(0);
 
 }

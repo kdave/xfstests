@@ -32,12 +32,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>
-#include <linux/dmapi_kern.h>
+#ifdef linux
+#include <dmapi.h>
+#include <getopt.h>
+#else
+#include <sys/dmi.h>
+#endif
 
+int
 main( int argc, char **argv )
 {
 	extern char *optarg;
-	extern int optind;
 	int c;
 	int ret;
 	dm_sessid_t oldsid = DM_NO_SESSION;
@@ -65,6 +70,6 @@ main( int argc, char **argv )
 	ret = dm_create_session( oldsid, sessinfo, &newsid);
 	printf( "ret=%d\n", ret );
 	printf( "newsid=%d\n", newsid );
-
+	exit(0);
 }
 

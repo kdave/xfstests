@@ -119,13 +119,11 @@ main(
 		return(1);
 	}
 
-printf("about to call dm_path_to_handle for %s\n", dirpath);
 	if (dm_path_to_handle(dirpath, &hanp1, &hlen1)) {
 		fprintf(stderr, "dm_path_to_handle failed for %s, (%d) %s\n",
 			dirpath, errno, strerror(errno));
 		return(1);
 	}
-printf("about to call path_to_handle for %s\n", dirpath);
 	if (path_to_handle(dirpath, &hanp1a, &hlen1a)) {
 		fprintf(stderr, "path_to_handle failed for %s, (%d) %s\n",
 			dirpath, errno, strerror(errno));
@@ -138,7 +136,6 @@ printf("about to call path_to_handle for %s\n", dirpath);
 	if( memcmp(hanp1, hanp1a, hlen1) != 0 ){
 		fprintf(stderr, "dm_path_to_handle != path_to_handle, handles differ\n");
 	}
-printf("about to call dm_path_to_handle for %s\n", objpath);
 	if (dm_path_to_handle(objpath, &hanp2, &hlen2)) {
 		fprintf(stderr, "dm_path_to_handle failed for %s, (%d) %s\n",
 			objpath, errno, strerror(errno));
@@ -150,7 +147,6 @@ printf("about to call dm_path_to_handle for %s\n", objpath);
 		return(1);
 	}
 
-printf("about to call handle_to_path\n");
 	if (dm_handle_to_path(hanp1, hlen1, hanp2, hlen2,
 	    buflen, pathbufp, &rlenp)) {
 		if (errno == E2BIG) {

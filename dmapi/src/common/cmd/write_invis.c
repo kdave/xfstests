@@ -35,6 +35,7 @@
 #ifdef linux
 #include <string.h>
 #include <malloc.h>
+#include <getopt.h>
 #endif
 
 /*---------------------------------------------------------------------------
@@ -68,8 +69,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-c char] [-o offset] [-l length] "
 		"[-s sid] pathname\n", Progname);
 	exit(1);
@@ -92,7 +91,6 @@ main(
 	dm_ssize_t	rc;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -143,7 +141,7 @@ main(
 		   sufficiently big boundary.
 		*/
 		if ((bufp = memalign(4096, length)) == NULL) {
-			fprintf(stderr, "malloc of %d bytes failed\n", length);
+			fprintf(stderr, "malloc of %llu bytes failed\n", length);
 			exit(1);
 		}
 		memset(bufp, ch, length);

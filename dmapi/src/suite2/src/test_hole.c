@@ -293,12 +293,15 @@ main(
 		dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, 30000, length,
 			      &roff, &rlen))
 	/*---------------------------------------------------------*/
-	/* PROBLEM: No error is produced.  
-	/* off+len >= filesize should produce E2BIG...
+#if 0
+	PROBLEM: No error is produced.  
+	off+len >= filesize should produce E2BIG...
+
 	ERRTEST(E2BIG,
 		"probe (to past EOF)",
 		dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, 15000, 150000,
 			      &roff, &rlen))
+#endif
         /*---------------------------------------------------------*/
 	SHAREDTEST("probe", hanp, hlen, test_token, 
 		 dm_probe_hole(sid, hanp, hlen, test_token, 

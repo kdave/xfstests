@@ -34,6 +34,7 @@
 
 #ifdef linux
 #include <string.h>
+#include <getopt.h>
 #endif
 
 /*---------------------------------------------------------------------------
@@ -62,8 +63,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-s sid] pathname [attr]\n", Progname);
 	exit(1);
 }
@@ -82,7 +81,6 @@ main(
 	size_t	 	hlen;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

@@ -136,7 +136,7 @@ comp_stat ( dm_stat_t expected,
    else good++;
    if (found.dt_size != expected.dt_size) {
      fprintf(stderr, 
-	     "ERROR: get #%d, expected size %ld, but found %ld\n",
+	     "ERROR: get #%d, expected size %lld, but found %lld\n",
 	     i, expected.dt_size, found.dt_size);
    }
    else good++;
@@ -305,14 +305,13 @@ main(
 			      GET_MASK, &dmstat)) {
 	    fprintf(stderr,
 		    "ERROR: dm_get_fileattr failed on pass #%d, %s\n",
-		    ERR_NAME);
+		    i, ERR_NAME);
 	  }
 	  else {
 	    comp_stat(stat_arr[i], dmstat, i); 
 	  }
 	}
 	  
-#if 0
       	/*-----------------------------------------------------*\
 	|* Get_dirattrs loop                                   *|
 	\*-----------------------------------------------------*/
@@ -368,7 +367,6 @@ main(
 	  fprintf(stderr, "report: get_dirattrs successfully "
 		  "found %d files in %d loops.\n", i, loops);
 	}
-#endif
 
 	/*-----------------------------------------------------*\
 	|* Get_bulkattr loop                                   *|
@@ -492,12 +490,15 @@ main(
 		  dm_set_fileattr(sid, NULL, hlen, DM_NO_TOKEN, 
 				  SET_MASK, &fileattr))
 	  /*---------------------------------------------------------*/
-	  /* PROBLEM: 32 ones as a mask does not produce a "bad mask" 
-	  /* EINVAL.  If it doesn't, I suspect nothing will.
+#if 0
+	  PROBLEM: 32 ones as a mask does not produce a "bad mask" 
+	  EINVAL.  If it does not, I suspect nothing will.
+
 	  ERRTEST(EINVAL, 
 		  "set (bad mask) [BROKEN]",
 		  dm_set_fileattr(sid, hanp, hlen, DM_NO_TOKEN, 
 				  0xFFFFFFFF, &fileattr))
+#endif
 	  /*---------------------------------------------------------*/
 	  ERRTEST(EINVAL, 
 		  "set (bad token)",
@@ -544,12 +545,15 @@ main(
 		  dm_get_fileattr(sid, hanp, hlen, DM_NO_TOKEN, 
 				  GET_MASK, (dm_stat_t *)(-1000)))
 	  /*---------------------------------------------------------*/
-	  /* PROBLEM: 32 ones as a mask does not produce a "bad mask" 
-	  /* EINVAL.  If it doesn't, I suspect nothing will.
+#if 0
+	  PROBLEM: 32 ones as a mask does not produce a "bad mask" 
+	  EINVAL.  If it does not, I suspect nothing will.
+
 	  ERRTEST(EINVAL, 
 		  "get (bad mask) [BROKEN]",
 		  dm_get_fileattr(sid, hanp, hlen, DM_NO_TOKEN, 
 				  0xFFFFFFFF, &dmstat))
+#endif
 	  /*---------------------------------------------------------*/
 	  ERRTEST(EINVAL, 
 		  "get (bad token)",
@@ -564,7 +568,7 @@ main(
 	    
 
 	  dm_handle_free(hanp, hlen);
-#if 0
+
 	  /*------------------------------------*\
 	  |*  ## dm_get_dirattrs() subtests ##  *|
 	  \*------------------------------------*/
@@ -642,7 +646,6 @@ main(
 	    /*---------------------------------------------------------*/
 	    /*---------------------------------------------------------*/
 	  }
-#endif
 	    
 	 /*------------------------------------*\
 	 |*  ## dm_get_bulkattr() subtests ##  *|

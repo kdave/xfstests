@@ -213,12 +213,15 @@ main(int argc, char **argv) {
 				     &loc))
 	}
 	/*------------------------------------------------------------*/
-	/* mkdir_by_handle is NOT SUPPORTED in current SGI DMAPI 
+#if 0
+	mkdir_by_handle is NOT SUPPORTED in current SGI DMAPI 
+
  	{ 
 	  SHAREDTEST("mkdir_by_handle", fs_hanp, fs_hlen, test_token,
 		     dm_mkdir_by_handle(sid, fs_hanp, fs_hlen, test_token,
 					dir_hanp, dir_hlen, "FUBAR_DIR"))
 	}
+#endif
 	/*------------------------------------------------------------*/
 	{ dm_eventset_t eventset;
 	  DMEV_ZERO(eventset);

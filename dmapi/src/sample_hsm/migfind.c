@@ -30,6 +30,10 @@
 
 #include <lib/hsm.h>
 
+#ifdef linux
+#include <getopt.h>
+#endif
+
 #define NUMLEN	16		/* arbitrary max len of input size */
 #define MAX_K   (((u_int)LONG_MAX + 1) / 1024)
 #define MAX_M   (((u_int)LONG_MAX + 1) / (1024*1024))
@@ -76,7 +80,7 @@ verify_size(
 
         size = strtol(str,0,0); 
         if (size < 0 || size >= LONG_MAX ) {
-                printf("Size %d is invalid \n", size);
+                printf("Size %lld is invalid \n", size);
                 return(1);
         }
 
@@ -85,21 +89,13 @@ verify_size(
                 cp++;
         if (*cp == 'k' || *cp == 'K') {
                 if ( size >= (u_int) MAX_K) {
-#ifdef	__sgi
                         printf("Size %lld is invalid\n", size);
-#else
-                        printf("Size %ld is invalid\n", size);
-#endif
                         return(1);
                 }
                 size *= 1024;
         } else if (*cp == 'm' || *cp == 'M') {
                 if ( size >= (u_int) MAX_M) {
-#ifdef	__sgi
                         printf("Size %lld is invalid\n", size);
-#else
-                        printf("Size %ld is invalid\n", size);
-#endif
                         return(1);
                 }
                 size *= (1024*1024);

@@ -326,7 +326,7 @@ typedef	struct dm_timestruct dm_timestruct_t;
 
 #ifdef	linux
 
-#include <linux/dmapi.h>
+#include <dmapi.h>
 
 /* In the dm_fileattr_t structure, Veritas used 'timeval' structures for all
    the time fields while XDSM uses 'time_t' structures.  Define some symbols

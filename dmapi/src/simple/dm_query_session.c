@@ -32,12 +32,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/errno.h>
-#include <linux/dmapi_kern.h>
+#ifdef linux
+#include <dmapi.h>
+#include <getopt.h>
+#else
+#include <sys/dmi.h>
+#endif
 
+int
 main( int argc, char **argv )
 {
 	extern char *optarg;
-	extern int optind;
 	int c;
 	int ret;
 	char *sessinfo;
@@ -78,4 +83,5 @@ main( int argc, char **argv )
 	printf( "rlen=%d\n", rlen );
 	if( ret != -1 )
 		printf( "sessinfo=%s\n", sessinfo );
+	exit(0);
 }

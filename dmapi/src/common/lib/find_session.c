@@ -32,6 +32,9 @@
 
 #include <lib/hsm.h>
 
+#ifdef linux
+#include <string.h>
+#endif
 
 /*******************************************************************************
 *
@@ -84,7 +87,6 @@ find_test_session(
 	u_int		nelem;
 	size_t		rlen;
 	int		error;
-	int		rc;
 	u_int		i;
 
 	/* Retrieve the list of all active sessions on the host. */

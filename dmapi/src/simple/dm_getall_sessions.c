@@ -34,12 +34,17 @@
 #include <sys/errno.h>
 #include <string.h>
 #include <malloc.h>
-#include <linux/dmapi_kern.h>
+#ifdef linux
+#include <dmapi.h>
+#include <getopt.h>
+#else
+#include <sys/dmi.h>
+#endif
 
+int
 main( int argc, char **argv )
 {
 	extern char *optarg;
-	extern int optind;
 	int c;
 	int ret;
 	dm_sessid_t *sidbuf;
@@ -88,5 +93,6 @@ main( int argc, char **argv )
 		printf("%d ", sidbuf[i]);
 	}
 	printf("\"\n");
+	exit(0);
 }
 

@@ -339,7 +339,7 @@ main(
 	|* Beginning improper-input testing. *|
 	\*************************************/
 	sprintf(test_file, "%s/DMAPI_attribute_test_file.ERRNO", 
-		dir_name, i);
+		dir_name);
 	sprintf(command, "cp %s %s\n", ls_path, test_file); 
 	system(command);
 	
@@ -518,7 +518,7 @@ main(
 
 
 	 sprintf(test_file, "%s/DMAPI_attribute_test_file.ERRNO", 
-		 dir_name, i);
+		 dir_name);
 	 sprintf(command, "rm %s\n", test_file); 
 	 system(command);
 	 printf("\t(errno subtests complete)\n");

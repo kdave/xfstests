@@ -35,7 +35,7 @@
 #include <stdlib.h>
 
 #ifdef linux
-#include <linux/dmapi.h>
+#include <dmapi.h>
 #else
 #include <sys/dmi.h>
 #endif

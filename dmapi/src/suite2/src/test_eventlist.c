@@ -243,7 +243,8 @@ main(
 		  dm_set_eventlist(sid, hanp, hlen, 0, 
 				&eventset, DM_EVENT_MAX))
 	  /*---------------------------------------------------------*/
-	  /* PROBLEM: too-small buffer doesn't produce E2BIG 
+#if 0
+	  PROBLEM: too-small buffer does not produce E2BIG 
 	  { 
 	    dm_eventset_t  *small_evsp = malloc(0);
 	    if (dm_handle_to_fshandle(hanp, hlen, &fshanp, &fshlen)) {
@@ -262,6 +263,7 @@ main(
 			      DM_EVENT_INVALID, Vflag);
 	    }
 	  }
+#endif
 	  /*---------------------------------------------------------*/
 	  SHAREDTEST("get", hanp, hlen, test_token, 
 		     dm_get_eventlist(sid, hanp, hlen, test_token,

@@ -27,6 +27,7 @@
 #include <lib/hsm.h>
 
 #ifdef linux
+#include <string.h>
 #include <time.h>
 #define S_IAMB (S_IRWXU|S_IRWXG|S_IRWXO)
 #endif
@@ -255,11 +256,7 @@ print_victim(
 	printf("%d\t", hlen);   
 	hantoa(hanp, hlen, handle_str);
 	printf("%s ", handle_str);
-#ifdef __sgi
 	printf("\t%lld \n", fsize);
-#else
-	printf("\t%ld \n", fsize);
-#endif
 }
 
 
@@ -894,11 +891,7 @@ print_state(
 	/* Print all the stat block fields. */
 
 	fprintf(stdout, "dt_dev         0x%x\n",  dmstat->dt_dev);
-#ifdef	__sgi
 	fprintf(stdout, "dt_ino         %llx\n",  dmstat->dt_ino);
-#else
-	fprintf(stdout, "dt_ino         %x\n",  dmstat->dt_ino);
-#endif
 	fprintf(stdout, "dt_mode (type) %s\n",
 		mode_to_string(dmstat->dt_mode));
 	fprintf(stdout, "dt_mode (perm) 0%o\n", dmstat->dt_mode & S_MASK);
@@ -906,11 +899,7 @@ print_state(
 	fprintf(stdout, "dt_uid         %d\n",  dmstat->dt_uid);
 	fprintf(stdout, "dt_gid         %d\n", dmstat->dt_gid);
 	fprintf(stdout, "dt_rdev        0x%x\n", dmstat->dt_rdev);
-#ifdef	__sgi
 	fprintf(stdout, "dt_size        %lld\n", dmstat->dt_size);
-#else
-	fprintf(stdout, "dt_size        %d\n", dmstat->dt_size);
-#endif
 
 	fprintf(stdout, "dt_atime       %s\n",
 		date_to_string(dmstat->dt_atime));
@@ -920,11 +909,7 @@ print_state(
 		date_to_string(dmstat->dt_ctime));
 
 	fprintf(stdout, "dt_blksize     %d\n", dmstat->dt_blksize);
-#ifdef	__sgi
 	fprintf(stdout, "dt_blocks      %lld\n", dmstat->dt_blocks);
-#else
-	fprintf(stdout, "dt_blocks      %d\n", dmstat->dt_blocks);
-#endif
 
 #if defined(__sgi) || defined(linux)
 	fprintf(stdout, "dt_xfs_igen    %d\n",  dmstat->dt_xfs_igen);
@@ -955,33 +940,21 @@ print_line(
 	dm_stat_t	*dmstat)
 {
 	fprintf(stdout, "0x%x|",  dmstat->dt_dev);
-#ifdef	__sgi
 	fprintf(stdout, "%llx|",  dmstat->dt_ino);
-#else
-	fprintf(stdout, "%x|",  dmstat->dt_ino);
-#endif
 	fprintf(stdout, "%s|", mode_to_string(dmstat->dt_mode));
 	fprintf(stdout, "0%o|", dmstat->dt_mode & S_MASK);
 	fprintf(stdout, "%d|",  dmstat->dt_nlink);
 	fprintf(stdout, "%d|",  dmstat->dt_uid);
 	fprintf(stdout, "%d|", dmstat->dt_gid);
 	fprintf(stdout, "0x%x|", dmstat->dt_rdev);
-#ifdef	__sgi
 	fprintf(stdout, "%lld|", dmstat->dt_size);
-#else
-	fprintf(stdout, "%d|", dmstat->dt_size);
-#endif
 
 	fprintf(stdout, "%s|", date_to_string(dmstat->dt_atime));
 	fprintf(stdout, "%s|", date_to_string(dmstat->dt_mtime));
 	fprintf(stdout, "%s|", date_to_string(dmstat->dt_ctime));
 
 	fprintf(stdout, "%d|", dmstat->dt_blksize);
-#ifdef	__sgi
 	fprintf(stdout, "%lld|", dmstat->dt_blocks);
-#else
-	fprintf(stdout, "%d|", dmstat->dt_blocks);
-#endif
 
 #ifdef	__sgi
 	fprintf(stdout, "%d|",  dmstat->dt_xfs_igen);

@@ -39,6 +39,7 @@
 #include <lib/hsm.h>
 
 #ifdef linux
+#include <string.h>
 #define MAXNAMELEN 256
 #endif
 
@@ -46,14 +47,10 @@
    * Define some standard formats for the printf statements below.
    */
 
-#define HDR  "%s: token %d sequence %d\n"
+#define HDR  "%s: token=%d sequence=%d\n"
 #define VALS "\t%-15s %s\n"
 #define VALD "\t%-15s %d\n"
-#ifdef	__sgi
 #define VALLLD "\t%-15s %lld\n"
-#else
-#define VALLLD "\t%-15s %ld\n"
-#endif
 
 
 /*
@@ -220,7 +217,6 @@ print_one_message(
 	dm_eventmsg_t	*msg)
 {
 	int		pkt_error = 0;
-	int		error;
 	dm_namesp_event_t  *msg_ne;
 	void		*hanp1, *hanp2, *namp1, *namp2;
 	u_int		hlen1, hlen2, nlen1, nlen2;
@@ -295,6 +291,7 @@ print_one_message(
 			printf(HDR, "truncate", msg->ev_token,
 				msg->ev_sequence);
 			break;
+		default: break;
 		}
 		print_one_data_event(msg_de);
 
@@ -552,7 +549,8 @@ handle_message(
 	dm_sessid_t	sid,
 	dm_eventmsg_t	*msg)
 {
-	int		respond, response, respcode;
+	dm_response_t	response;
+	int		respond, respcode;
 	int		error = 0;
 
 	if (print_one_message(msg))

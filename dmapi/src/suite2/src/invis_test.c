@@ -173,9 +173,9 @@ main(
 	}
 
 	if( Vflag )
-		printf("using length = %lld\n", length );
+		printf("using length = %llu\n", length );
 	if( length > BUFSZ ){
-		fprintf(stderr, "length(%lld) > BUFSZ(%lld)\n", length, BUFSZ);
+		fprintf(stderr, "length(%llu) > BUFSZ(%d)\n", length, BUFSZ);
 		exit(1);
 	}
 

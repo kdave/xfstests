@@ -183,13 +183,8 @@ mr_info(
 	printf("\n");
 	for (i=0; i<ret; i++) {
 		printf("\tRegion %d:\n", i);
-#ifdef	__sgi
 		printf("\t\toffset %lld, ", rgn[i].rg_offset);
 		printf("size %lld, ", rgn[i].rg_size);
-#else
-		printf("\t\toffset %ld, ", rgn[i].rg_offset);
-		printf("size %ld, ", rgn[i].rg_size);
-#endif
 		printf("flags 0x%x", rgn[i].rg_flags);
 		printf(" ( ");
 		if (rgn[i].rg_flags & DM_REGION_NOEVENT)
@@ -214,7 +209,6 @@ event_info(
 	void		*hanp,
 	size_t		 hlen)
 {
-	u_int		i;
 	u_int		ret;
 	dm_eventset_t	eventlist;
 
@@ -318,13 +312,8 @@ alloc_info(
 				printf("(resident): ");
 			if (ext[i].ex_type == DM_EXTENT_HOLE)
 				printf("(hole): ");
-#ifdef __sgi
 			printf("offset %lld, ", ext[i].ex_offset);
 			printf("len %lld\n", ext[i].ex_length);
-#else
-			printf("offset %ld, ", ext[i].ex_offset);
-			printf("len %ld\n", ext[i].ex_length);
-#endif
 		}
 	} while (more == 1);
 	return(0);

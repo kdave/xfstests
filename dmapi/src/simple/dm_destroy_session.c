@@ -32,12 +32,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>
-#include <linux/dmapi_kern.h>
+#ifdef linux
+#include <dmapi.h>
+#include <getopt.h>
+#else
+#include <sys/dmi.h>
+#endif
 
+int
 main( int argc, char **argv )
 {
 	extern char *optarg;
-	extern int optind;
 	int c;
 	int ret;
 	dm_sessid_t sid = 0;
@@ -64,4 +69,5 @@ main( int argc, char **argv )
 
 	ret = dm_destroy_session( sid );
 	printf( "ret=%d\n", ret );
+	exit(0);
 }

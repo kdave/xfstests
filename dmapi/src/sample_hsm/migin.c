@@ -47,7 +47,7 @@ void		 event_loop(dm_sessid_t);
 int		 set_events(dm_sessid_t, void *, size_t);
 int		 mk_daemon(char *);
 void		 spawn_kid(dm_sessid_t, dm_token_t, char *);
-void		 migin_exit(void);
+void		 migin_exit(int);
 void    	 usage(char *);
 
 
@@ -226,7 +226,7 @@ out:
 	if (msgbuf != NULL)
 		free(msgbuf);
 
-	migin_exit();
+	migin_exit(0);
 }
 
 /*
@@ -253,11 +253,12 @@ spawn_kid(
 		sprintf(sidbuf, "%d", sid);
 		sprintf(tokenbuf, "%d", token);
 		if (Verbose) {
-			fprintf(stderr, "execl(%s, %s, %s, -s, %s, -t, xs, 0)\n",
-				WORKER_BEE, WORKER_BEE, action, sidbuf, tokenbuf);
+			fprintf(stderr, "execl(%s, %s, %s, -s, %s, -t, %s, 0)\n",
+				WORKER_BEE, WORKER_BEE, action, sidbuf,
+				tokenbuf);
 		}
 		if (execl(WORKER_BEE, WORKER_BEE, action, "-s", sidbuf, 
-			"-t", tokenbuf, NULL)) 
+			"-t", tokenbuf, NULL))
 		{
 			(void)dm_respond_event(sid, token, DM_RESP_ABORT, 
 						errno, 0, 0);
@@ -311,7 +312,7 @@ int
 mk_daemon(
 	char	*logfile)
 {
-	int 			fd, pid;
+	int 			fd;
 	int			i;
 	struct rlimit		lim;
 	struct sigaction	act;
@@ -369,7 +370,7 @@ mk_daemon(
 }
 
 void
-migin_exit(void)
+migin_exit(int x)
 {
 	dm_sessid_t	*sidbuf, *sid;
 	void		*infobuf;

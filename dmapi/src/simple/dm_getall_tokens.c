@@ -33,12 +33,17 @@
 #include <stdlib.h>
 #include <sys/errno.h>
 #include <malloc.h>
-#include <linux/dmapi_kern.h>
+#ifdef linux
+#include <dmapi.h>
+#include <getopt.h>
+#else
+#include <sys/dmi.h>
+#endif
 
+int
 main( int argc, char **argv )
 {
 	extern char *optarg;
-	extern int optind;
 	int c;
 	int ret;
 	dm_token_t *tokenbuf;
@@ -81,7 +86,8 @@ main( int argc, char **argv )
 
 	printf("tokens=\"");
 	for( i = 0; i < rnelem; i++ ){
-		printf("%d ", tokenbuf+i);
+		printf("%d ", (int)(tokenbuf+i));
 	}
 	printf("\"\n");
+	exit(0);
 }

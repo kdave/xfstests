@@ -192,13 +192,11 @@ main(
 	      continue;
 	    }
 	    
-printf("test_invis/%d: checking length(%d)>0\n", __LINE__, length);
 	    if (length > curlength) {
-printf("test_invis/%d: bufp malloc(%d)\n", __LINE__, length);
 	      if(curlength>0)
 		free(bufp);
 	      if ((bufp = malloc(length)) == NULL) {
-		fprintf(stderr, "malloc of %d bytes failed\n", length);
+		fprintf(stderr, "malloc of %llu bytes failed\n", length);
 		continue;
 	      }
 	      curlength = length;
@@ -226,7 +224,7 @@ printf("test_invis/%d: bufp malloc(%d)\n", __LINE__, length);
 		      test_file);
 	    }
 	    else {
-#if 0
+#ifdef __sgi
 	      if ((statbuf.st_atim.tv_sec == checkbuf.st_atim.tv_sec) &&
 	      (statbuf.st_atim.tv_nsec == checkbuf.st_atim.tv_nsec) &&
 	      (statbuf.st_mtim.tv_sec == checkbuf.st_mtim.tv_sec) &&
@@ -262,7 +260,6 @@ printf("test_invis/%d: bufp malloc(%d)\n", __LINE__, length);
 	    else {
 	      /* Be sure the buffer is filled with the test char */
 	      error_reported = 0;
-printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 	      for (k=0; k<i; k++){
 		if (((char *)bufp)[k] == ch) {
 		  if (Vflag) printf(".");
@@ -284,7 +281,7 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 		      test_file);
 	    }
 	    else {
-#if 0
+#ifdef __sgi
 	      if ((statbuf.st_atim.tv_sec == checkbuf.st_atim.tv_sec) &&
 	      (statbuf.st_atim.tv_nsec == checkbuf.st_atim.tv_nsec) &&
 	      (statbuf.st_mtim.tv_sec == checkbuf.st_mtim.tv_sec) &&
@@ -323,7 +320,7 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 	|* Beginning improper-input testing. *|
 	\*************************************/
 	sprintf(test_file, "%s/DMAPI_invis_test_file.ERRNO", 
-		dir_name, i);
+		dir_name);
 	sprintf(command, "cp %s %s\n", ls_path, test_file); 
 	system(command);
 
@@ -337,12 +334,12 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 	  sprintf(bufp, "%c", ch);
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
 			     (1000000*(unsigned int)(ch)), 1, bufp)==-1){
-	    printf("Error invis-writing %s at byte %d million: %s\n", 
+	    printf("Error invis-writing %s at byte %u million: %s\n", 
 		   (char*)bufp, (unsigned int)ch, ERR_NAME);
 	  }
 	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 (1000000*(unsigned int)(ch)), 1, bufp)==-1){
-	    printf("Error invis-reading at byte %d million: %s\n", ch,
+	    printf("Error invis-reading at byte %u million: %s\n",
 		   (unsigned int)ch, ERR_NAME);
 	  }
 	  else if (((char*)bufp)[0]!=ch) {
@@ -354,18 +351,18 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 		   "at byte %d million.\n", ch, (char*)bufp, ch);
 	  }
 
-#if 0
+#ifdef __sgi
 	  /* Try writing a character in the 2 gigabyte (2^31) range */
 	  sprintf(bufp, "%c", ch);
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
 			     2147840000, 1, bufp)==-1){
 	    printf("Error invis-writing %s at 2 gigabytes: %s\n", 
-		   (char*)bufp, (unsigned int)ch, ERR_NAME);
+		   (char*)bufp, ERR_NAME);
 	  }
 	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 2147840000, 1, bufp)==-1){
-	    printf("Error invis-reading at 2 gigabytes: %s\n", ch,
-		   (unsigned int)ch, ERR_NAME);
+	    printf("Error invis-reading at 2 gigabytes: %s\n",
+		   ERR_NAME);
 	  }
 	  else if (((char*)bufp)[0]!=ch) {
 	    printf("Error: wanted to read %c and instead got %s.\n",
@@ -414,42 +411,47 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 		  dm_write_invis(sid, NULL, hlen, DM_NO_TOKEN,
 				 0, 0, 0, NULL))
 	  /*---------------------------------------------------------*/
-	  /* PROBLEM: write_invis refuses to produce EINVAL for 
-	  /* lengths that will not fit in a dm_size_t.
+#if 0
+	  PROBLEM: write_invis refuses to produce EINVAL for 
+	  lengths that will not fit in a dm_size_t.
+
 	  ERRTEST(EINVAL,
 		  "(bad length) write",
 		  dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 0, 4096, (long long)0xFFFFFFFFFFFFFFFFLL,
 				 "write invalid length test"))
+#endif
 	  /*---------------------------------------------------------*/
-	  /* PROBLEM (somewhat fixed): A signal is sent, rather than EFBIG.
-	  /* Presumably, this signal is needed to comply with...something.
-	  /* If this is uncommented, the program will abort here, with the 
-	  /* error message "exceeded file size limit". 
+#if 0
+	  PROBLEM (somewhat fixed): A signal is sent, rather than EFBIG.
+	  Presumably, this signal is needed to comply with...something.
+	  If this is uncommented, the program will abort here, with the 
+	  error message "exceeded file size limit". 
+
 	  ERRTEST(EFBIG,
 		  "write",
 		  dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 0, (long long)0xFFFFFFFFFFLL, 
 				 (long long)0xFFFFFFFFFFLL,
 				 "foo foo foo"))
+#endif
 	  /*---------------------------------------------------------*/
-#if 0
+#ifdef VERITAS_21
 	  ERRTEST(EINVAL,
 		  "(bad offset) write",
 		  dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN,
-#ifdef	VERITAS_21
 				 0, (dm_size_t) ULONG_MAX, 5,
+				 "write invalid offset test"))
 #else
+#ifndef linux
+	  ERRTEST(EINVAL,
+		  "(bad offset) write",
+		  dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 0, (dm_size_t) ULONGLONG_MAX, 5,
-#endif
-				 "write invalid offset test"))
-#else
-	  ERRTEST(EINVAL,
-		  "(bad offset) write",
-		  dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN,
-				 0, (dm_size_t) ULONG_MAX, 5,
 				 "write invalid offset test"))
 #endif
+#endif
+
 	  /*---------------------------------------------------------*/
 	  ERRTEST(EINVAL,
 		  "(bad sid) write",
@@ -473,21 +475,20 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 		  dm_read_invis(sid, NULL, hlen, DM_NO_TOKEN,
 				 0, 0, bufp))
 	  /*---------------------------------------------------------*/
-#if 0
-	  ERRTEST(EINVAL,
-		  "(bad offset) read",
-		  dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
 #ifdef	VERITAS_21
-				ULONG_MAX, 5, bufp))
-#else
-				ULONGLONG_MAX, 5, bufp))
-#endif
-#else
 	  ERRTEST(EINVAL,
 		  "(bad offset) read",
 		  dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
-				ULONG_MAX, 5, bufp))
+				ULONG_MAX, 5, bufp));
+#else
+#ifndef linux
+	  ERRTEST(EINVAL,
+		  "(bad offset) read",
+		  dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
+				ULONGLONG_MAX, 5, bufp));
 #endif
+#endif
+
 	  /*---------------------------------------------------------*/
 	  ERRTEST(EINVAL,
 		  "(bad sid) read",
@@ -497,7 +498,7 @@ printf("%s/%d: i=%d\n", __FILE__, __LINE__, i);
 	  printf("\t(errno subtests complete!)\n");
 	}
 	sprintf(test_file, "%s/DMAPI_invis_test_file.ERRNO", 
-	        dir_name, i);
+	        dir_name);
 	sprintf(command, "rm %s \n", test_file); 
 	system(command);
 

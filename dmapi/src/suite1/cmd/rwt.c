@@ -163,8 +163,16 @@ main(
 			exit(1);
 		}
 		if (seek_off != offset) {
-			fprintf(stderr, "seeked to offset %d, actually "
-				"arrived at %d\n", offset, seek_off);
+			fprintf(stderr,
+#ifdef __sgi
+				"seeked to offset %lld, actually "
+				"arrived at %lld\n",
+				(int64_t)offset, (int64_t)seek_off);
+#else
+				"seeked to offset %d, actually "
+				"arrived at %d\n",
+				offset, seek_off);
+#endif
 			exit(1);
 		}
 	}

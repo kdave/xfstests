@@ -234,7 +234,7 @@ get_absolute_date(
 	if (strlen(ptr) != 8 && strlen(ptr) != 14)
 		return(0);
 	strncpy(date, ptr, 8);
-	date[9] = '\0';
+	date[8] = '\0';
 	l = atol(date);
 	if (l < MIN_HD_DATE)
 		return(0);

@@ -89,7 +89,7 @@ main(
 
 	sid = atol(argv[1]);
 	token = atol(argv[2]);
-	response = atol(argv[3]);
+	response = (dm_response_t)atoi(argv[3]);
 	reterror = atol(argv[4]);
 
 	if (dm_init_service(&name) == -1)  {

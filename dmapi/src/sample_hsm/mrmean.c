@@ -25,6 +25,11 @@
 
 #include <lib/dmport.h>
 
+#ifdef linux
+#include <string.h>
+#include <getopt.h>
+#endif
+
 extern char	*optarg;
 extern int	 optind, opterr, optopt;
 extern int	 errno;
@@ -225,7 +230,7 @@ get_sessions(
 	u_int	     *nsidp)
 {
 	dm_sessid_t	*sidbuf;
-	int		 more, error;
+	int		 error;
 	u_int	 	 nsids, nret;
 
 	/*
