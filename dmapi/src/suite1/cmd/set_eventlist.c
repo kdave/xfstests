@@ -167,6 +167,12 @@ main(
 			fprintf(stderr, "invalid event %s\n", argv[optind]);
 			usage();
 		}
+		if ((event == DM_EVENT_READ) || (event == DM_EVENT_WRITE) ||
+		    (event == DM_EVENT_TRUNCATE)) {
+			fprintf(stderr, "Use set_region to twiddle read/write/trunc events\n");
+			exit(1);
+		}
+
 		DMEV_SET(event, eventset);
 	}
 
