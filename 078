@@ -61,6 +61,11 @@ _require_loop
 LOOP_DEV=$TEST_DIR/$seq.fs
 LOOP_MNT=$TEST_DIR/$seq.mnt
 
+_filter_io()
+{
+	sed -e '/^----.*/d'
+}
+
 # real QA test starts here
 echo "*** create loop mount point"
 rm -f $LOOP_MNT 2>/dev/null
@@ -81,7 +86,7 @@ _grow_loop()
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
-	xfs_io -c "pwrite $new_size $bsize" $LOOP_DEV 
+	xfs_io -c "pwrite $new_size $bsize" $LOOP_DEV | _filter_io
 	echo "*** mount loop filesystem"
 	mount -t xfs -o loop $LOOP_DEV $LOOP_MNT
 
