@@ -38,6 +38,7 @@ extern int	 optind, optopt, opterr;
 extern int	 errno;
 char		*Progname;
 int		 Verbose;
+dm_sessid_t	 sid = DM_NO_SESSION;
 
 extern int	 setup_dmapi(dm_sessid_t *);
 extern void	 err_msg(char *, ...);
@@ -49,6 +50,7 @@ int		 mk_daemon(char *);
 void		 spawn_kid(dm_sessid_t, dm_token_t, char *);
 void		 migin_exit(int);
 void    	 usage(char *);
+void		 setup_signals();
 
 
 void
@@ -71,7 +73,6 @@ main(
 	int	 	 c;
 	int	 	 error;
 	char		*fsname, *logfile;
-	dm_sessid_t	 sid;
 	void		*fs_hanp;
 	size_t		 fs_hlen;
 
@@ -114,9 +115,12 @@ main(
 	/*
 	 * Turn ourselves into a daemon
 	 */
-	error = mk_daemon(logfile);
-	if (error) 
-		exit(1);
+	if (!Verbose){
+		error = mk_daemon(logfile);
+		if (error) 
+			exit(1);
+	}
+	setup_signals();
 	
 	/*
 	 * Now we have our filesystem name and possibly a size threshold
@@ -170,7 +174,7 @@ event_loop(
 	bufsize *= 16;
 	msgbuf  = (void *)malloc(bufsize);
 	if (msgbuf == NULL) {
-		err_msg("Can't allocate memory for buffer");
+		err_msg("Can't allocate memory for buffer\n");
 		goto out;
 	}
 
@@ -182,7 +186,7 @@ event_loop(
 				free(msgbuf);
 				msgbuf = (void *)malloc(rlen);
 				if (msgbuf == NULL) {
-					err_msg("Can't resize msg buffer");
+					err_msg("Can't resize msg buffer\n");
 					goto out;
 				}
 				continue;
@@ -233,7 +237,7 @@ out:
  * Fork and exec our worker bee to work on  the file. If 
  * there is any error in fork/exec'ing the file, we have to
  * supply the error return to the event. Once the child gets
- * started, he/she/it will respond to the event for us.
+ * started, they will respond to the event for us.
  */
 void
 spawn_kid(
@@ -257,17 +261,16 @@ spawn_kid(
 				WORKER_BEE, WORKER_BEE, action, sidbuf,
 				tokenbuf);
 		}
-		if (execl(WORKER_BEE, WORKER_BEE, action, "-s", sidbuf, 
-			"-t", tokenbuf, NULL))
-		{
-			(void)dm_respond_event(sid, token, DM_RESP_ABORT, 
-						errno, 0, 0);
-			exit(1);
-		}
+		execlp(WORKER_BEE, WORKER_BEE, action, "-s", sidbuf, 
+			"-t", tokenbuf, NULL);
+		errno_msg("execlp of worker bee failed");
+		(void)dm_respond_event(sid, token, DM_RESP_ABORT, 
+					errno, 0, 0);
+		exit(1);
 	}
 
 	if (pid < 0) {
-		err_msg("Can't fork worker bee");
+		err_msg("Can't fork worker bee\n");
 		(void)dm_respond_event(sid, token, DM_RESP_ABORT, errno,
 					0, 0);
 		return;
@@ -315,9 +318,8 @@ mk_daemon(
 	int 			fd;
 	int			i;
 	struct rlimit		lim;
-	struct sigaction	act;
+	pid_t			pid;
 
-#ifdef NOTYET
 	if ((pid = fork()) == -1)
 		return (-1);
 	if (pid)
@@ -327,7 +329,6 @@ mk_daemon(
 
 	(void) chdir("/");
 
-#endif /* NOTYET */
 	/*
 	 * Determine how many open files we've got and close
 	 * then all
@@ -351,6 +352,15 @@ mk_daemon(
 	(void)dup2(fd, STDERR_FILENO);
 	close(fd);
 
+	return(0);
+}
+
+
+void
+setup_signals()
+{
+	struct sigaction	act;
+
 	/*
 	 * Set up signals so that we can wait for spawned children 
 	 */
@@ -365,100 +375,23 @@ mk_daemon(
 	(void)sigaction(SIGUSR1, &act, NULL);
 	(void)sigaction(SIGUSR1, &act, NULL);
 	(void)sigaction(SIGUSR2, &act, NULL);
-
-	return(0);
 }
 
 void
 migin_exit(int x)
 {
-	dm_sessid_t	*sidbuf, *sid;
-	void		*infobuf;
-	char		*cp;
-	u_int		 nsessions, nret;
-	int		 i, found, error;
-	size_t		 buflen, retlen;
+	int		 error;
 
-	sidbuf  = NULL;
-	infobuf = NULL;
-	
 	/*
 	 * We could try and kill off all our kids, but we're not
 	 * 'Mr. Mean', so we just wait for them to die.
 	 */
-	err_msg("%s: waiting for all children to die...", Progname);
+	err_msg("%s: waiting for all children to die...\n", Progname);
 	while (wait3((int *)0, WNOHANG, (struct rusage *)0) > 0)
 		;
 
 	fprintf(stdout, "\n");
 
-	/*
-	 * Now search for our session and try and shut it down. We
-	 * could just as easily make the session ID a global, but
-	 * this demonstrates how sessions can be queried
-	 */
-	nsessions = 4;
-	sidbuf = (dm_sessid_t *)malloc(nsessions * sizeof(dm_sessid_t));
-	if (sidbuf == NULL) {
-		err_msg("Can't alloc mem to shut down session");
-		goto out;
-	}
-	error = dm_getall_sessions(nsessions, sidbuf, &nret);
-	if (error == -1) {
-		if (errno != E2BIG) {
-			errno_msg("Can't get list of active sessions");
-			goto out;
-		}
-		free(sidbuf);
-		nsessions = nret;
-		sidbuf = (dm_sessid_t *)malloc(nsessions * sizeof(dm_sessid_t));
-		if (sidbuf == NULL) {
-			err_msg("Can't alloc mem to shut down session");
-			goto out;
-		}
-		error = dm_getall_sessions(nsessions, sidbuf, &nret);
-		if (error == -1) {
-			errno_msg("Can't get list of active sessions");
-			goto out;
-		}
-	}
-
-	/*
-	 * Now we have all the active sessions in our system.
-	 * Query each one until we find ourselves.
-	 */
-	sid    = sidbuf;
-	buflen = DM_SESSION_INFO_LEN;
-	infobuf = malloc(buflen);
-	if (infobuf == NULL) {
-		err_msg("Can't alloc memory for session info buffer");
-		goto out;
-	}
-
-	/*
-	 * When we registered our session, we just hammered the last component
-	 * of the path name, so that's all we look for here. This prevents
-	 * mismatches when running at ./migin or some other such foo
-	 */
-        cp = strrchr(Progname, '/');
-        if (cp)
-                cp++;
-        else
-                cp = Progname;
-
-
-	found = 0;
-	for (i=0; i<nret; i++) {
-		error = dm_query_session(*sid, buflen, infobuf, &retlen);
-		if (error == -1)
-			continue;		/* We just punt on errors */
-
-		if (strstr(infobuf, cp)) {
-			found = 1;
-			break;
-		}
-		sid++;
-	}
 
 	/*
  	 * XXXX 	FIXME		XXX
@@ -468,21 +401,10 @@ migin_exit(int x)
 	 * 	filesystem handle global so that we can get at it
 	 */
 
-	if (!found) {
-		err_msg("Can't find session to shut down");
-		goto out;
-	}
-	error = dm_destroy_session(*sid);
+	error = dm_destroy_session(sid);
 	if (error == -1) {
-		errno_msg("Can't shut down session");
+		errno_msg("Can't shut down session\n");
 	}
-
-
-out:
-	if (infobuf)
-		free(infobuf);
-	if (sidbuf)
-		free(sidbuf);
 
 	exit(0);
 }
