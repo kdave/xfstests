@@ -64,7 +64,7 @@ main(int argc, char **argv)
 {
 	struct stat64	sbuf;
 	char		mode[10];
-	int		i, c;
+	int		i;
 
 	time(&timebuf);
 
@@ -76,7 +76,7 @@ main(int argc, char **argv)
 		}
 
 		printf("  File: \"%s\"\n", argv[i]);
-		printf("  Size: %-10llu", sbuf.st_size);
+		printf("  Size: %-10llu", (unsigned long long)sbuf.st_size);
 
 		strcpy(mode,"----------");
 		if (sbuf.st_mode & (S_IEXEC>>6))
@@ -144,10 +144,8 @@ main(int argc, char **argv)
 		printf("  Gid: (%d)\n", sbuf.st_gid);
 		printf("Device: %2d,%-2d", major(sbuf.st_dev),
 				minor(sbuf.st_dev));
-		c = printf("  Inode: %-10llu", (unsigned long long)sbuf.st_ino);
-		if (c >= 10)
-			putchar(' ');
-		printf("Links: %-5d", sbuf.st_nlink);
+		printf("  Inode: %-9llu", (unsigned long long)sbuf.st_ino);
+		printf(" Links: %-5ld", (long)sbuf.st_nlink);
 
 		if ( ((sbuf.st_mode & S_IFMT) == S_IFCHR)
 		    || ((sbuf.st_mode & S_IFMT) == S_IFBLK) )
