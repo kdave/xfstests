@@ -239,7 +239,8 @@ xfsctl(char* path, int fd, int cmd, void* arg) {
     return syssgi(SGI_FS_BULKSTAT, fd, 
 		  ((xfs_fsop_bulkreq_t*)arg)->lastip,
 		  ((xfs_fsop_bulkreq_t*)arg)->icount,
-		  ((xfs_fsop_bulkreq_t*)arg)->ubuffer);
+		  ((xfs_fsop_bulkreq_t*)arg)->ubuffer,
+		  ((xfs_fsop_bulkreq_t*)arg)->ocount);
   else if (cmd == SGI_FS_BULKSTAT_SINGLE)
     return syssgi(SGI_FS_BULKSTAT_SINGLE, fd, 
 		  ((xfs_fsop_bulkreq_t*)arg)->lastip,

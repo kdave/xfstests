@@ -84,9 +84,9 @@ _do_test()
     echo "-----------------------------------------------"
     echo "fsstress.$_n : $_param"
     echo "-----------------------------------------------"
-    # -v >$tmp.out
     # -m limits number of users/groups so check doesn't fail (malloc) later
-    if ! $here/ltp/fsstress $_param $FSSTRESS_AVOID -m 8 -n $_count -d $out >/dev/null 2>&1
+    dbgoutfile=$seq.full
+    if ! $here/ltp/fsstress $_param $FSSTRESS_AVOID -v -m 8 -n $_count -d $out >>$dbgoutfile 2>&1
     then
         echo "    fsstress (count=$_count) returned $? - see $seq.full"
         
@@ -111,7 +111,7 @@ _setup_testdir
 rm -f $here/$seq.full
 echo "brevity is wit..."
 
-count=2000
+count=1000
 procs=20
 
 _check_test_fs
@@ -127,6 +127,9 @@ _do_test 2 "-p $procs -r" $count
 # from Glen's notes
 
 _do_test 3 "-p 4 -z -f rmdir=10 -f link=10 -f creat=10 -f mkdir=10 -f rename=30 -f stat=30 -f unlink=30 -f truncate=20" $count
+
+# if all ok by here then probably don't need $seq.full
+rm -f $seq.full
 
 exit
 

@@ -40,6 +40,11 @@
 #define XFS_ERRTAG_MAX		17
 #define XFS_IDMODULO_MAX	32
 
+/* was (getpagesize()*32) BUT want it to be same
+ * on all platforms
+ */
+#define FILELEN_MAX		(32*4096)
+
 typedef enum {
 	OP_ALLOCSP,
 	OP_ATTR_REMOVE,
@@ -1737,7 +1742,7 @@ dread_f(int opno, long r)
 	off = (off64_t)(lr % stb.st_size);
 	off -= (off % align);
 	lseek64(fd, off, SEEK_SET);
-	len = (random() % (getpagesize() * 32)) + 1;
+	len = (random() % FILELEN_MAX) + 1;
 	len -= (len % align);
 	if (len <= 0)
 		len = align;
@@ -1807,7 +1812,7 @@ dwrite_f(int opno, long r)
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off -= (off % align);
 	lseek64(fd, off, SEEK_SET);
-	len = (random() % (getpagesize() * 32)) + 1;
+	len = (random() % FILELEN_MAX) + 1;
 	len -= (len % align);
 	if (len <= 0)
 		len = align;
@@ -2139,7 +2144,7 @@ read_f(int opno, long r)
 	lr = ((__int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
 	lseek64(fd, off, SEEK_SET);
-	len = (random() % (getpagesize() * 32)) + 1;
+	len = (random() % FILELEN_MAX) + 1;
 	buf = malloc(len);
 	e = read(fd, buf, len) < 0 ? errno : 0;
 	free(buf);
@@ -2539,7 +2544,7 @@ write_f(int opno, long r)
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	lseek64(fd, off, SEEK_SET);
-	len = (random() % (getpagesize() * 32)) + 1;
+	len = (random() % FILELEN_MAX) + 1;
 	buf = malloc(len);
 	memset(buf, nameseq & 0xff, len);
 	e = write(fd, buf, len) < 0 ? errno : 0;

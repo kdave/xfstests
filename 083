@@ -7,6 +7,12 @@
 # full boundary due to the fact that we will retry allocation
 # several times after flushing, before giving back ENOSPC.
 #
+# Note that this test will intentionally cause console msgs of form:
+#     dksc0d1s4: Process [fsstress] ran out of disk space
+#     dksc0d1s4: Process [fsstress] ran out of disk space
+#     dksc0d1s4: Process [fsstress] ran out of disk space
+#
+
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
@@ -75,6 +81,7 @@ workout()
 	fsz=$1
 	ags=$2
 	procs=$3
+	nops=$4
 
 	umount $SCRATCH_DEV >/dev/null 2>&1
 	echo "*** mkfs -dsize=$fsz,agcount=$ags"    >>$seq.full
@@ -84,16 +91,26 @@ workout()
 	_scratch_mount                              >>$seq.full 2>&1 \
 		|| _fail "mount failed"
 
-	ltp/fsstress -d $SCRATCH_MNT -w -p $procs -n 10000 $FSSTRESS_AVOID \
+	# -w ensures that the only ops are ones which cause write I/O
+	ltp/fsstress -d $SCRATCH_MNT -w -p $procs -n $nops $FSSTRESS_AVOID \
 		>>$seq.full
 	_check_scratch_fs
 }
 
 echo "*** test out-of-space handling for random write operations"
 
-# args: filesystem size/ag count/number fsstress processes
+filesize=100m
+agcount=6
+numprocs=15
 
-workout 100m 6 15
+if [ $HOSTOS = "IRIX" ]; then
+    # for 10000 ops was taking 30mins on my IRIX box
+    numops=1000
+else
+    numops=10000
+fi
+
+workout $filesize $agcount $numprocs $numops
 
 echo "*** done"
 status=0
