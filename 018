@@ -117,7 +117,7 @@ _require_scratch
 
 echo "*** init FS"
 
-rm -f $seq.full
+rm -f $seq.out $seq.full
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 _full "mkfs"
@@ -126,7 +126,17 @@ mkfs -t xfs -f $SCRATCH_DEV                 >>$seq.full 2>&1 \
 _full " mount"
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT      >>$seq.full 2>&1 \
     || _fail "mount failed"
-    
+
+if src/feature -U $SCRATCH_DEV
+then
+	ln $seq.usrquota $seq.out
+elif src/feature -G $SCRATCH_DEV
+then
+	ln $seq.grpquota $seq.out
+else
+	ln $seq.noquota $seq.out
+fi
+
 # generate some log traffic - but not too much - life gets a little
 # more complicated if the log wraps around. This traffic is
 # pretty much arbitary, but could probably be made better than this.
