@@ -36,7 +36,7 @@ include $(TOPDIR)/include/builddefs
 TARGETS = alloc acl_get bstat devzero dirstress fault feature \
 	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
 	  nametest permname randholes runas truncfile usemem \
-	  fileread fstest mmapcat append_reader append_writer \
+	  fstest mmapcat append_reader append_writer \
 	  dirperf metaperf enospc_unlink resvtest scaleread
 ifeq ($(ENABLE_DBM), yes)
 TARGETS += dbtest
