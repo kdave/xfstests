@@ -45,7 +45,7 @@ echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
-status=0	# success is the default!
+status=1	# failure is the default!
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -56,7 +56,7 @@ _cleanup()
     rm -f $tmp.*
     if [ $status -eq 0 ]; then
 	# don't keep these files around unless something went wrong
-	rm $seq.trans* $seq.op* $seq.full
+	rm -f $seq.trans* $seq.op* $seq.full
     fi
     echo "*** unmount"
     umount $SCRATCH_MNT 2>/dev/null
@@ -280,7 +280,7 @@ _cmp_output()
     echo "*** compare logprint: $1 with $2"
     if ! diff $1 $2 >/dev/null; then
 	echo "FAILED: logprint output $1 differs to $2"
-	status=1
+	touch $tmp.error
     fi
 }
 
@@ -377,7 +377,7 @@ _cmp_op_output()
     if ! _process_op_diff $filtered.diff
     then
 	echo "FAILED: logprint output $1 differs to $2 considering splits"
-	status=1
+	touch $tmp.error
     fi
 }
 
@@ -385,8 +385,8 @@ _cmp_op_output()
 # real QA test starts here
 
 # prelim
+rm -f $seq.full $tmp.*
 _require_scratch
-rm -f $seq.trans* $seq.op* $seq.full
 _clear_opts
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -433,5 +433,10 @@ _mkfs_create_log $mkfs $mnt
 _check_log
 _print_transaction_inode
 _cmp_output $seq.ugquota.trans_inode $filtered
+
+# got thru it all so we may have success
+if [ ! -e $tmp.error ]; then
+    status=0
+fi
 
 exit
