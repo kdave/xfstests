@@ -63,6 +63,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    rm -f $tmp.*
     echo "*** unmount"
     umount $SCRATCH_MNT 2>/dev/null
 }
@@ -77,10 +78,13 @@ _init()
     echo "*** reset partition"
     $here/src/devzero -b 2048 -n 50 -v 198 $SCRATCH_DEV
     echo "*** mkfs"
-    if ! mkfs_xfs -dsize=50m -lsize=512b $SCRATCH_DEV >$tmp.out 2>&1
+    lsize=2097152
+    dsize=50m
+    echo mkfs_xfs -dsize=$dsize -lsize=$lsize $SCRATCH_DEV >>$seq.full
+    if ! mkfs_xfs -dsize=$dsize -lsize=$lsize $SCRATCH_DEV >>$seq.full 2>&1
     then
-        cat $tmp.out
-        echo "failed to mkfs $SCRATCH_DEV"
+        echo "failed to mkfs $SCRATCH_DEV" >>$seq.full
+        _notrun "mkfs cannot create scratch fs, probably too small log"
         exit 1
     fi
 }
@@ -201,8 +205,6 @@ done
 [ $head -lt 1000 ] || \
     _fail "!!! unexpected log position $head"
 
-
-# happy exit
-rm $seq.full
+# success, all done
 status=0
-exit 0
+exit
