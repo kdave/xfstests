@@ -1,10 +1,10 @@
 #! /bin/sh
-# XFS QA Test No. 018
+# XFS QA Test No. 082
 #
-# xfs_logprint test - test v2 logs of different LR sizes
+# Test out the v2 stripe logs with logprint
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -36,7 +36,7 @@
 #-----------------------------------------------------------------------
 #
 # creator
-owner=tes@sgi.com
+owner=root@icy.melbourne.sgi.com
 
 seq=`basename $0`
 echo "QA output created by $seq"
@@ -44,6 +44,7 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -60,6 +61,7 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
+_notrun "Not finished yet"
 
 # prelim
 rm -f $seq.full $tmp.*
@@ -69,33 +71,54 @@ echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
-# mkfs-opt        mount-opt
-  -lversion=1     -ologbsize=32k
-  -lversion=2     -ologbsize=32k
-  -lversion=2     -ologbsize=64k
-  -lversion=2     -ologbsize=128k
-  -lversion=2     -ologbsize=256k
+# mkfs-opt        mount-opt            start-blk
+  -lversion=2 -ologbsize=32k           2
+  -lversion=2,su=4096 -ologbsize=32k   8
+  -lversion=2,su=32768 -ologbsize=32k  64
+# expect following line to fail
+  -lversion=2,su=36864 -ologbsize=32k  72
 EOF
 
-# do the work for various log params which
+# Do the work for various log params which
 # should not effect the data content of the log
-cat $tmp.seq.params \
-| while read mkfs mnt restofline
-do
-    if [ "$mkfs" != "#" ]; then 
-	_mkfs_log $mkfs
-	_create_log $mnt
-	_check_log
+# Try with and without sync'ing - sync'ing will mean that
+# the log will be written out unfilled and thus the log 
+# stripe can have an effect.
+#
+for s in sync nosync ; do
+    cat $tmp.seq.params \
+    | while read mkfs mnt start restofline
+    do
+	if [ "$mkfs" != "#" ]; then 
+	    echo "--- mkfs=$mkfs, mnt=$mnt, start=$start, sync=$s ---"
+	    _mkfs_log $mkfs
+	    if [ $s = "sync" ]; then
+		_create_log_sync $mnt
+	    else
+		_create_log $mnt
+	    fi
+	    _check_log
 
-	_print_operation
-	_cmp_op_output $seq.noquota.op $filtered
+	    sync_suffix=".$s"
 
-	_print_transaction_inode 2
-	_cmp_output $seq.noquota.trans_inode $filtered
+	    if [ $s = "sync" ]; then
+		# if sync then we have chance of DATA FORK EXTENTS items
+                # not hanging around very long due to inode syncing to disk
+		# (see comment in xfs_iflush_int())
+		# and this is to hard to reconcile in the op output
+		:
+	    else
+		_print_operation
+		_cmp_op_output $seq.noquota.op $filtered
+	    fi
 
-	_print_transaction_buf 2
-	_cmp_output $seq.noquota.trans_buf $filtered
-    fi
+	    _print_transaction_inode $start
+	    _cmp_output $seq.noquota.trans_inode $filtered
+
+	    _print_transaction_buf $start
+	    _cmp_output $seq.noquota.trans_buf $filtered
+	fi
+    done
 done
 
 # got thru it all so we may have success
