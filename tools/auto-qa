@@ -75,11 +75,11 @@ SOAK_PROC="3"
 
 ROOT="$HOME/qa"
 HOST=`hostname -s`
-if [ ! -z "CVSROOT" ]; then
-    CVS=true
+if [ ! -z "$CVSROOT" ]; then
     WORKAREA="$ROOT/linux-2.4-xfs"
+else
+    [ -z "$WORKAREA" ] && WORKAREA="$ROOT/linux-xfs"
 fi
-[ -z "$WORKAREA" ] && WORKAREA="$ROOT/linux-xfs"
 export WORKAREA
 
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
@@ -199,17 +199,17 @@ _update_autoqa_file()
 {
     SELF="$ROOT/auto-qa"
     SELF_UPDATE="cmd/xfstests/tools/auto-qa"
-    if [ $CVS = false ]; then
+    if [ -z "$CVSROOT" ]; then
 	    cmd="p_tupdate $SELF_UPDATE"
     else
 	    cmd="cvs -z3 update $SELF_UPDATE"
     fi
-    exec $SH -c "cd $WORKAREA ; eval $cmd; chmod +x $SELF_UPDATE ; exec $SELF"
+    exec $SH -c "cd $WORKAREA ; $cmd; chmod +x $SELF_UPDATE ; exec $SELF"
 }
 
 _update_workarea()
 {
-    if [ $CVS = false ]; then
+    if [ -z "$CVSROOT" ]; then
 	_log "        *** p_tupdate"
 	cd $WORKAREA 
 	p_tupdate 2>&1 \
