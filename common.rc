@@ -1,5 +1,4 @@
 ##/bin/sh
-
 #
 # Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
@@ -187,8 +186,17 @@ _scratch_mkfs()
     nfs*)
 	# do nothing for nfs
 	;;
-    udf|*)
+    udf*)
         $MKFS_PROG -t $FSTYP $MKFS_OPTIONS $* > /dev/null
+	;;
+    ext2)
+	mkfs.ext2 $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
+	;;
+    ext3)
+	mkfs.ext3 $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
+	;;
+    reiserfs)
+	mkfs.reiserfs $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
 	;;
     esac
 }
@@ -520,7 +528,7 @@ _require_scratch()
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
 		 ;;
-	nfs*)
+	nfs*|ext2|ext3|reiserfs)
 		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
 		 if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]
 		 then
