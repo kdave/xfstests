@@ -33,9 +33,6 @@
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
 #
 
-export MKFS_OPTIONS=${MKFS_OPTIONS:=-bsize=4096}
-export MOUNT_OPTIONS=${MOUNT_OPTIONS:=-ologbufs=2}
-
 tmp=/tmp/$$
 status=0
 needwrap=true
@@ -45,6 +42,8 @@ bad=""
 notrun=""
 interrupt=true
 
+export QA_CHECK_FS=${QA_CHECK_FS:=true}
+
 # generic initialization
 iam=check
 if ! . ./common.rc
@@ -53,7 +52,7 @@ then
     exit 1
 fi
 
-if [ $UID -ne 0 ]
+if [ `id -u` -ne 0 ]
 then
     echo "check: QA must be run as root"
     exit 1
@@ -62,6 +61,12 @@ fi
 _wallclock()
 {
     date "+%H %M %S" | $AWK_PROG '{ print $1*3600 + $2*60 + $3 }'
+}
+
+_timestamp()
+{
+    now=`date "+%D-%T"`
+    echo -n " [$now]"
 }
 
 _wrapup()
@@ -152,9 +157,31 @@ timestamp=${TIMESTAMP:=false}
 
 [ -f check.time ] || touch check.time
 
+_get_os
+if [ $os == "linux" ]; then
+
 FULL_FSTYP_DETAILS=`_full_fstyp_details`
 FULL_HOST_DETAILS=`_full_platform_details`
+
 FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
+
+FULL_MOUNT_OPTIONS=`_scratch_mount_options`
+
+cat <<EOF
+FSTYP         -- $FULL_FSTYP_DETAILS
+PLATFORM      -- $FULL_HOST_DETAILS
+MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
+MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS
+
+EOF
+fi
+
+#Linux specific flag '-f'
+if [ $os == "linux" ]; then
+   flag='-f'
+fi
+
+echo "MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS"
 FULL_MOUNT_OPTIONS=`_scratch_mount_options`
 
 cat <<EOF
@@ -168,7 +195,8 @@ EOF
 umount $SCRATCH_DEV 2>/dev/null
 # call the overridden mkfs.xfs - make sure the FS is built
 # the same as we'll create it later.
-if ! _scratch_mkfs_xfs -f >$tmp.err 2>&1
+
+if ! _scratch_mkfs_xfs $flag >$tmp.err 2>&1
 then
     echo "our local _scratch_mkfs_xfs routine ..."
     cat $tmp.err
@@ -223,10 +251,12 @@ do
 
 	start=`_wallclock`
 	$timestamp && echo -n "	["`date "+%T"`"]"
+	sh $seq >$tmp.rawout 2>&1
+	$timestamp && echo -n "	["`date "+%T"`"]"
 	[ ! -x $seq ] && chmod u+x $seq # ensure we can run it
 	./$seq >$tmp.rawout 2>&1
 	sts=$?
-	$timestamp && echo -n " ["`date "+%T"`"]"
+	$timestamp && _timestamp
 	stop=`_wallclock`
 
 	_fix_malloc <$tmp.rawout >$tmp.out
@@ -288,7 +318,6 @@ do
     
     seq="after_$seq"
     _check_test_fs
-    
 done
 
 interrupt=false

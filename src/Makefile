@@ -33,15 +33,27 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
+TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
+	nametest permname randholes runas truncfile usemem \
+	mmapcat append_reader append_writer dirperf metaperf \
+	devzero feature alloc fault fstest t_access_root  
+
+LINUX_TARGETS = loggen xfsctl resvtest godown bstat t_mtab
+
+ifeq ($(PKG_PLATFORM),linux)
+TARGETS += $(LINUX_TARGETS)
+endif
+
+ifeq ($(HAVE_DB), true)
 TARGETS = alloc acl_get bstat devzero dirstress fault feature \
 	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
 	  nametest permname randholes runas truncfile usemem \
 	  fstest mmapcat append_reader append_writer \
-	  dirperf metaperf enospc_unlink resvtest scaleread \
-	  godown t_access_root t_mtab
+	  dirperf metaperf
 ifeq ($(ENABLE_DBM), yes)
 TARGETS += dbtest
 endif
+
 ifeq ($(PKG_PLATFORM),linux)
 TARGETS += t_immutable
 endif
@@ -78,11 +90,20 @@ loggen:	loggen.o
 fstest:	fstest.o
 	$(LINKTEST)
 
-#scaleread: scaleread.o $(LDLIBS)
-#	$(LINKTEST)
-
 resvtest: resvtest.o
 	$(LINKTEST)
 
+#scaleread: scaleread.o $(LDLIBS)
+#	$(LINKTEST)
+
 acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
+
+
+ifeq ($(PKG_PLATFORM),irix)
+fill2: fill2.o 
+	$(LINKTEST)  -lgen
+
+runas: runas.o 
+	$(LINKTEST)  -lgen
+endif

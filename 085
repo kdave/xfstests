@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 085
+# FS QA Test No. 085
 #
 # To test log replay by shutdown of file system
 # This is the first simple initial test to ensure that
@@ -53,7 +53,12 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
+# put operating system in $os
+_get_os
+
 # real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
 
 _do_logprint()
 {
@@ -68,6 +73,19 @@ _do_logprint()
 
 rm -f $seq.full
 rm -f $tmp.log
+
+
+if [ $os == 'irix' ]; then
+    tail -f /var/adm/SYSLOG >$tmp.log &
+elif [ $os == 'linux' ]; then
+    tail -f /var/log/messages >$tmp.log &
+else
+    echo Error test $seq does not run on the operating system: `uname`
+    exit
+fi
+
+pid=$!
+cp $tmp.log $tmp.log.orig # note the original log
 
 _require_scratch
 

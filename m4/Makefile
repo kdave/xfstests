@@ -46,6 +46,7 @@ LSRCFILES = \
 	package_utilies.m4 \
 	package_uuiddev.m4 \
 	package_xfslibs.m4 \
+	general_headers.m4 \
 	visibility_hidden.m4
 
 default: 

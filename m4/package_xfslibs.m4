@@ -9,6 +9,17 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
     fi
   ])
 
+AC_DEFUN([AC_PACKAGE_NEED_XFS_XQM_H],
+  [ AC_CHECK_HEADERS([xfs/xqm.h])
+    if test "$ac_cv_header_xfs_xqm_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: cannot find a valid <xfs/xqm.h> header file.'
+        echo 'Install or upgrade the XFS development package.'
+        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
+        exit 1
+    fi
+  ])
+
 AC_DEFUN([AC_PACKAGE_NEED_XFS_HANDLE_H],
   [ AC_CHECK_HEADERS([xfs/handle.h])
     if test "$ac_cv_header_xfs_handle_h" != "yes"; then

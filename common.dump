@@ -38,8 +38,8 @@
 rm -f $here/$seq.full
 
 if [ -n "$DEBUGDUMP" ]; then
-  _dump_debug=-v5
-  _restore_debug=-v5
+  _dump_debug=-v4
+  _restore_debug=-v4
   _invutil_debug=-d
 fi
  
@@ -517,6 +517,7 @@ _do_create_dumpdir_fill()
 	if [ -n "$perms" ]; then
 	    chmod $perms $file
 	fi
+
 	# extended attributes (EA)
 	if [ -n "$ea_name" -a -n "$ea_value" ]; then
 	    if [ "X$namespace" = "Xroot" ]; then
@@ -769,33 +770,38 @@ _ls_filter()
 _dump_filter_main()
 {
   sed \
-      -e "s/`hostname`/HOSTNAME/"   \
-      -e "s#$SCRATCH_DEV#SCRATCH_DEV#"    \
-      -e "s#$SCRATCH_RAWDEV#SCRATCH_DEV#"    \
-      -e "s#$dumptape#TAPE_DEV#"    \
-      -e "s#$SCRATCH_MNT#SCRATCH_MNT#"    \
-      -e "s#$dump_file#DUMP_FILE#"  \
-      -e 's#/var/lib/xfsdump#/var/xfsdump#' \
-      -e 's/id:[ 	]*[0-9a-f-]*/id: ID/'  \
-      -e 's/time:[ 	].*/time: TIME/'       \
-      -e 's/date:[ 	].*/date: DATE/'       \
-      -e 's/dump begun .*/dump begun DATE/'    \
-      -e 's/[0-9][0-9]* seconds/SECS seconds/' \
-      -e 's/restore.[0-9][0-9]*/restore.PID/' \
-      -e 's/ino [0-9][0-9]*/ino INO/' \
-      -e '/: dump size/s/[0-9][0-9]*/NUM/'     \
-      -e '/dump size:/s/[0-9][0-9]*/NUM/'      \
-      -e '/dump size per stream:/s/[0-9][0-9]*/NUM/' \
+      -e "s/`hostname`/HOSTNAME/"			\
+      -e "s#$SCRATCH_DEV#SCRATCH_DEV#"			\
+      -e "s#$SCRATCH_RAWDEV#SCRATCH_DEV#"		\
+      -e "s#$dumptape#TAPE_DEV#"			\
+      -e "s#$SCRATCH_MNT#SCRATCH_MNT#"			\
+      -e "s#$dump_file#DUMP_FILE#"			\
+      -e 's#/var/lib/xfsdump#/var/xfsdump#'		\
+      -e 's/session id:[ 	]*[0-9a-f-]*/session id: ID/'  \
+      -e '/filesystem id:[ 	]*[0-9a-f-]*/d'		\
+      -e 's/time:[ 	].*/time: TIME/'		\
+      -e 's/date:[ 	].*/date: DATE/'		\
+      -e 's/dump begun .*/dump begun DATE/'		\
+      -e 's/[0-9][0-9]* seconds/SECS seconds/'		\
+      -e 's/restore.[0-9][0-9]*/restore.PID/'		\
+      -e 's/ino [0-9][0-9]*/ino INO/'			\
+      -e '/: dump size/s/[0-9][0-9]*/NUM/'		\
+      -e '/dump size:/s/[0-9][0-9]*/NUM/'		\
+      -e '/dump size per stream:/s/[0-9][0-9]*/NUM/'	\
       -e 's/\(media file size[	 ]*\)[0-9][0-9]*/\1NUM/' \
       -e 's/\(mfile size:[	 ]*\)[0-9][0-9]*/\1NUM/' \
-      -e '/drive[	 ]*[0-9][0-9]*:/d' \
-      -e '/\/dev\/tty/d' \
-      -e '/inventory session uuid/d' \
-      -e '/ - Running single-threaded/d' \
-      -e '/^.*I\/O metrics: .*$/d' \
-      -e 's/1048576/BLOCKSZ/' \
-      -e 's/2097152/BLOCKSZ/' \
-      -e 's/(pid[	 ]*[1-9][0-9]*)/\(pid PID\)/' \
+      -e '/drive[	 ]*[0-9][0-9]*:/d'		\
+      -e '/\/dev\/tty/d'				\
+      -e '/inventory session uuid/d'			\
+      -e '/ - Running single-threaded/d'		\
+      -e '/^.*I\/O metrics: .*$/d'			\
+      -e 's/1048576/BLOCKSZ/'				\
+      -e 's/2097152/BLOCKSZ/'				\
+      -e 's/(pid[	 ]*[1-9][0-9]*)/\(pid PID\)/'	\
+      -e '/version 3\.0/d'				\
+      -e 's/\/hw\/module.*$/SCRATCH_DEV/'		\
+      -e 's/id:[[:space:]]*[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/ID: ID/'						\
+      -e 's/\[y\/n\][- ]----------------------*/\[y\/n\]/'		\
   | perl -ne '
       if ($_ =~ /(?:Dump|Restore) Summary/) {
         $skip = 1;
@@ -1125,6 +1131,7 @@ _ls_compare_sub()
     | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -cs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
+   
 }
 
 #
