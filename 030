@@ -73,12 +73,14 @@ _check_ag()
 # real QA test starts here
 _require_scratch
 
+DSIZE="-dsize=100m"
+
 # first we need to ensure there are no bogus secondary
 # superblocks between the primary and first secondary
 # superblock (hanging around from earlier tests)...
 # 
-size="-d size=100m"
-mkfs_xfs -f $size $SCRATCH_DEV >/dev/null 2>&1
+
+mkfs_xfs $DSIZE $SCRATCH_DEV >/dev/null 2>&1
 if [ $? -ne 0 ]		# probably don't have a big enough scratch
 then
 	_notrun "SCRATCH_DEV too small, results would be non-deterministic"
@@ -100,7 +102,7 @@ src/devzero -v -1 -n "$clear" $SCRATCH_DEV >/dev/null
 
 # now kick off the real repair test...
 # 
-mkfs_xfs -f $size $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+mkfs_xfs $DSIZE $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
 source $tmp.mkfs
 _check_ag 0
 _check_ag -1

@@ -73,6 +73,7 @@ _filter_stat()
         /^Change:/d;
         s/Device: *[0-9][0-9]*,[0-9][0-9]*/Device: <DEVICE>/;
         s/Inode: *[0-9][0-9]*/Inode: <INODE>/;
+        s/Size: *[0-9][0-9]* *Filetype: Dir/Size: <DSIZE> Filetype: Dir/;
     ' | tr -s ' '
 }
 
@@ -127,9 +128,9 @@ _verify_fs()
 	umount $SCRATCH_DEV >/dev/null 2>&1
 
 	_full "mkfs"
-	mkfs_xfs -f $VERSION -p $protofile $SCRATCH_DEV >>$seqfull 2>&1 \
-		|| _fail "mkfs failed"
-	    
+	mkfs_xfs $VERSION -p $protofile $SCRATCH_DEV >>$seqfull 2>&1 \
+		|| _fail "mount failed"
+
 	echo "*** check FS"
 	_check_fs $SCRATCH_DEV
 
@@ -137,7 +138,7 @@ _verify_fs()
 	_full " mount"
 	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seqfull 2>&1 \
 		|| _fail "mount failed"
-	    
+    
 	echo "*** verify FS"
 	(cd $SCRATCH_MNT ; find . | sort \
 		| xargs $here/src/lstat64 | _filter_stat)

@@ -40,7 +40,8 @@ BOOT="/boot"
 SOAK_PASSES="-1"
 SOAK_STRESS="10000"
 SOAK_PROC="3"
-
+export MKFS_OPTIONS=${MKFS_OPTIONS:=-bsize=4096}
+export MOUNT_OPTIONS=${MOUNT_OPTIONS:=-ologbufs=2}
 
 _log()
 {
@@ -204,8 +205,7 @@ _sudo()
 
 _restart()
 {
-    # erk - why won't this thing reboot reliably??
-    exec $ROOT/su -c "(shutdown -r 2 \"auto-qa rebooting\" ; sleep 10 ; reboot ; sleep 10 ; reboot )&" < /dev/null
+    exec $ROOT/su -c "(shutdown -r 1 \"auto-qa rebooting\" )&" < /dev/null
 }
 
 _update_autoqa_file()
@@ -499,7 +499,7 @@ do
             
             _log "            *** clean TEST_DEV"
             
-            _sudo mkfs -t xfs -f $TEST_DEV 2>&1 \
+            _sudo mkfs -t xfs -f $MKFS_OPTIONS $TEST_DEV 2>&1 \
                         || _fail "            !!! failed to mkfs TEST_DEV"
             
             _log "            *** mounting TEST_DEV"

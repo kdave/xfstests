@@ -86,10 +86,8 @@ mount()
 
 mkfs_xfs()
 {
-    /sbin/mkfs.xfs $* $MKFS_OPTIONS
+    /sbin/mkfs.xfs -f $* $MKFS_OPTIONS
 }
-
-#
 
 _get_pids_by_name()
 {
@@ -345,7 +343,6 @@ _fail()
 # 
 _require_scratch()
 {
-
     if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
     then
         _notrun "this test requires a valid \$SCRATCH_DEV"
@@ -365,18 +362,13 @@ _require_scratch()
             echo "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
             exit 1
         fi
-        
         # and then unmount it
-    
         if ! umount $SCRATCH_DEV
         then
             echo "failed to unmount $SCRATCH_DEV"
             exit 1
         fi
     fi
-    
-    # should be ok now
-
 }
 
 # this test needs a logdev 
@@ -387,6 +379,8 @@ _require_logdev()
     then
         _notrun "This test requires a valid \$SCRATCH_LOGDEV" 
     fi
+    # ensure its not mounted
+    umount $SCRATCH_LOGDEV 2>/dev/null
 }
 
 # this test requires loopback device support
