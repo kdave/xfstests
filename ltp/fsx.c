@@ -29,6 +29,7 @@
  *
  *	Small changes to work under Linux -- davej.
  *
+ *	XFS space preallocation changes -- nathans.
  */
 
 #include <sys/types.h>
@@ -48,6 +49,8 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <errno.h>
+
+#include <xfs/libxfs.h>
 
 #ifndef MAP_FILE
 # define MAP_FILE 0
@@ -109,6 +112,7 @@ int	quiet = 0;			/* -q flag */
 unsigned long progressinterval = 0;	/* -p flag */
 int	readbdy = 1;			/* -r flag */
 int	style = 0;			/* -s flag */
+int	prealloc = 0;			/* -u flag */
 int	truncbdy = 1;			/* -t flag */
 int	writebdy = 1;			/* -w flag */
 long	monitorstart = -1;		/* -m flag */
@@ -121,8 +125,8 @@ int     mapped_writes = 1;              /* -W flag disables */
 int 	mapped_reads = 1;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 FILE *	fsxlogf = NULL;
-int badoff = -1;
-int closeopen = 0;
+int	badoff = -1;
+int	closeopen = 0;
 
 
 void
@@ -266,7 +270,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		if (size_by_seek == (off_t)-1)
 			prterr("save_buffer: lseek eof");
 		else if (bufferlength > size_by_seek) {
-		 		 		 fprintf(stderr, "save_buffer: .fsxgood file too short... will save 0x%qx bytes instead of 0x%qx\n", (unsigned long long)size_by_seek,
+			fprintf(stderr, "save_buffer: .fsxgood file too short... will save 0x%qx bytes instead of 0x%qx\n", (unsigned long long)size_by_seek,
 			     (unsigned long long)bufferlength);
 			bufferlength = size_by_seek;
 		}
@@ -281,7 +285,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		if (byteswritten == -1)
 			prterr("save_buffer write");
 		else
-		 		 		 fprintf(stderr, "save_buffer: short write, 0x%x bytes instead of 0x%qx\n",
+			fprintf(stderr, "save_buffer: short write, 0x%x bytes instead of 0x%qx\n",
 			     (unsigned)byteswritten,
 			     (unsigned long long)bufferlength);
 	}
@@ -525,7 +529,7 @@ dowrite(unsigned offset, unsigned size)
 			bzero(good_buf + file_size, offset - file_size);
 		file_size = offset + size;
 		if (lite) {
-		 		 		 fprintf(stderr, "Lite file size bug in fsx!");
+			fprintf(stderr, "Lite file size bug in fsx!\n");
 			report_failure(149);
 		}
 	}
@@ -581,7 +585,7 @@ domapwrite(unsigned offset, unsigned size)
 			bzero(good_buf + file_size, offset - file_size);
 		file_size = offset + size;
 		if (lite) {
-		 		 		 fprintf(stderr, "Lite file size bug in fsx!");
+			fprintf(stderr, "Lite file size bug in fsx!\n");
 			report_failure(200);
 		}
 	}
@@ -804,6 +808,7 @@ usage(void)
 	-s style: 1 gives smaller truncates (default 0)\n\
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
+	-x: preallocate file space before starting, XFS only (default 0)\n\
 	-D startingop: debug output starting at specified operation\n\
 	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
@@ -864,7 +869,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dl:m:no:p:qr:s:t:w:D:LN:OP:RS:W"))
+	while ((ch = getopt(argc, argv, "b:c:dl:m:no:p:qr:s:t:w:xD:LN:OP:RS:W"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -941,6 +946,9 @@ main(int argc, char **argv)
 			if (writebdy <= 0)
 				usage();
 			break;
+		case 'x':
+			prealloc = 1;
+			break;
 		case 'D':
 			debugstart = getnum(optarg, &endp);
 			if (debugstart < 1)
@@ -1010,6 +1018,21 @@ main(int argc, char **argv)
 		prterr(fname);
 		exit(91);
 	}
+	if (prealloc) {
+		xfs_flock64_t	resv = { 0 };
+
+		if (!platform_test_xfs_fd(fd)) {
+			prterr(fname);
+			fprintf(stderr, "main: cannot prealloc, non XFS\n");
+			exit(96);
+		}
+
+		resv.l_len = maxfilelen;
+		if ((xfsctl(fname, fd, XFS_IOC_RESVSP, &resv)) < 0) {
+			prterr(fname);
+			exit(97);
+		}
+	}
 	strncat(goodfile, fname, 256);
 	strcat (goodfile, ".fsxgood");
 	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
@@ -1029,13 +1052,13 @@ main(int argc, char **argv)
 		file_size = maxfilelen = lseek(fd, (off_t)0, L_XTND);
 		if (file_size == (off_t)-1) {
 			prterr(fname);
-		 		 		 fprintf(stderr, "main: lseek eof");
+			fprintf(stderr, "main: lseek eof\n");
 			exit(94);
 		}
 		ret = lseek(fd, (off_t)0, SEEK_SET);
 		if (ret == (off_t)-1) {
 			prterr(fname);
-		 		 		 fprintf(stderr, "main: lseek 0");
+			fprintf(stderr, "main: lseek 0\n");
 			exit(95);
 		}
 	}
@@ -1053,7 +1076,7 @@ main(int argc, char **argv)
 		if (written != maxfilelen) {
 			if (written == -1) {
 				prterr(fname);
-		 		fprintf(stderr, "main: error on write");
+		 		fprintf(stderr, "main: error on write\n");
 			} else
 		 		fprintf(stderr, "main: short write, 0x%x bytes instead of 0x%lx\n",
 				     (unsigned)written, maxfilelen);
