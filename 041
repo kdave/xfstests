@@ -70,7 +70,7 @@ _fill()
 	"src/fill2fs --verbose --dir=$1 --seed=0 --filesize=65536 --stddev=32768 --list=- >>$tmp.manifest"
 }
 
-_do_die_on_error=always
+_do_die_on_error=message_only
 rm -f $seq.full
 #agsize=16
 agsize=32
@@ -82,7 +82,7 @@ echo "done"
 # full allocation group -> partial; partial -> expand partial + new partial;
 # partial -> expand partial; partial -> full
 # 17 -> 33 -> 35 -> 48 megabytes, converted to fs blocks below
-#for size in 4352 8448 8960 12288
+# for size in 4352 8448 8960 12288
 # 33 -> 67 -> 75 -> 96 converted to fs blocks:
 for size in 8448 17512 19200 24576
 do
@@ -92,7 +92,15 @@ do
     _do "umount $SCRATCH_MNT"
     _do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
     echo "done"
-    _do "Check files" "src/fill2fs_check $tmp.manifest"
+    echo -n "Check files... "
+    if ! _do "src/fill2fs_check $tmp.manifest"; then
+      echo "fail (see $seq.full)"
+      _do "cat $tmp.manifest"
+      _do "ls -altrR $SCRATCH_MNT"
+      _do "dd if=$SCRATCH_DEV bs=4096 count=$size | gzip -9 > $seq.fsimage.gz"
+      status=1 ; exit
+    fi
+    echo "done"
 done
 
 # success, all done
