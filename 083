@@ -64,21 +64,37 @@ trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 _require_scratch
 _require_nobigloopfs
 
-echo "*** init fs"
-
 rm -f $seq.full
-umount $SCRATCH_DEV >/dev/null 2>&1
-echo "*** MKFS ***"                         >>$seq.full
-echo ""                                     >>$seq.full
-_scratch_mkfs_xfs -dsize=50m                >>$seq.full 2>&1 \
-	|| _fail "50m mkfs failed"
-_scratch_mount                              >>$seq.full 2>&1 \
-	|| _fail "mount failed"
+
+workout()
+{
+	fsz=$1
+	ags=$2
+	procs=$3
+
+	umount $SCRATCH_DEV >/dev/null 2>&1
+	echo "*** mkfs -dsize=$fsz,agcount=$ags"    >>$seq.full
+	echo ""                                     >>$seq.full
+	_scratch_mkfs_xfs -dsize=$fsz,agcount=$ags  >>$seq.full 2>&1 \
+		|| _fail "size=$fsz,agcount=$ags mkfs failed"
+	_scratch_mount                              >>$seq.full 2>&1 \
+		|| _fail "mount failed"
+
+	ltp/fsstress -d $SCRATCH_MNT -w -p $procs -n 10000 $FSSTRESS_AVOID \
+		>>$seq.full
+	_check_scratch_fs
+}
 
 echo "*** test out-of-space handling for random write operations"
 
-ltp/fsstress -d $SCRATCH_MNT -w -p 10 -n 10000 $FSSTRESS_AVOID >>$seq.full
-_check_scratch_fs
+# args: filesystem size/ag count/number fsstress processes
+
+workout 50m 3 1
+workout 100m 6 2
+
+#workout 50m 3 10
+# NOTE: deadlocks exist at small AG counts and large numbers
+#       of processes - TODO!
 
 echo "*** done"
 status=0
