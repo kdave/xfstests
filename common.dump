@@ -44,21 +44,23 @@ if [ -n "$DEBUGDUMP" ]; then
 fi
  
 # Use dump/restore in qa directory for debugging
-#PATH=".:$PATH"
-#export PATH
+PATH=".:$PATH"
+export PATH
 #which xfsdump
 #which xfsrestore
+#which xfsinvutil
 
 # status returned for not run tests
 NOTRUNSTS=2
 
 # name those directories
 dump_file=$tmp.dumpfile
+# dump_file=$here/dumpfile #TEMP OVERRIDE DUMP FILE
 dump_sdir=dumpdir
 dump_dir=$SCRATCH_MNT/$dump_sdir
 restore_sdir=restoredir
 restore_dir=$SCRATCH_MNT/$restore_sdir
-
+multi=3
 dumptape=$TAPE_DEV
 media_label="stress_tape_media"
 session_label="stress_$seq"
@@ -78,6 +80,16 @@ for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
 	mv $dir $dir.$seq
     fi
 done
+
+# remove this when xfstests irix/linux port done
+if [ "X$XFS_HOST_OS" = "Xirix" ]
+then # IRIX
+    have_mtvariable=false
+    MKFS_OPTS=""
+else # Linux
+    have_mtvariable=true
+    MKFS_OPTS="-f"
+fi
 
 
 #
@@ -198,6 +210,8 @@ _isrmt()
 #
 _set_variable()
 {
+    $have_mtvariable || return
+
     if _isrmt; then
 	:
     else
@@ -234,7 +248,7 @@ _wipe_fs()
 {
     _require_scratch
 
-    mkfs -t xfs -f $SCRATCH_DEV >>$seq.full  ||\
+    mkfs -t xfs $MKFS_OPTS $SCRATCH_DEV>>$seq.full  ||\
 	_error "mkfs failed"
       
     mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
@@ -254,7 +268,7 @@ _cleanup()
 	# save it for inspection
 	for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
 	    [ -d $dir ] || continue
-	    tar -zcvf $seq.inventory.tgz $dir
+	    tar -cvf $seq.inventory.tar $dir
 	    ls -lR $dir >$seq.inventory.ls
 	done
     fi
@@ -275,6 +289,11 @@ _cleanup()
     fi
 }
 
+#
+# ensure that bulkstat data will
+# match with incore data
+# by forcing disk data to be written out
+#
 _stable_fs()
 {
     umount $SCRATCH_MNT >>$seq.full ||\
@@ -307,7 +326,7 @@ _create_dumpdir_stress()
     echo "-----------------------------------------------"
     echo "fsstress : $_param"
     echo "-----------------------------------------------"
-    if ! $here/src/fsstress $_param $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
+    if ! $here/src/fsstress $_param -s 1 $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
     then
         echo "    fsstress (count=$_count) returned $? - see $seq.full"
         
@@ -400,6 +419,40 @@ dir_mix2	d	$nobody	$nobody	642
 End-of-File
 }
 
+_mk_fillconfig_ea()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size    user    group    perm   name value
+#
+smalll		10	$nobody	$nobody  777    attr1 some_text    
+biggg		102400	$nobody	$nobody  777    attr2 some_text2
+sub/smalll	10	$nobody	$nobody  777    attr3 some_text3
+sub/biggg	102400	$nobody	$nobody  777    attr4 some_text4
+dir		d	$nobody $nobody  777    attr5 dir_text
+#
+# Add more files so that there are more than the number
+# of streams.
+# There are bugs in dump/restore for # non-dir files < # streams
+# It can be tested in another configuration.
+# It is a pathalogical case.
+#
+sub/a		1	$nobody	$nobody
+sub/b		2	$nobody	$nobody
+sub/c		4	$nobody	$nobody
+sub/d		8	$nobody	$nobody
+sub/e		16	$nobody	$nobody
+sub/f		32	$nobody	$nobody
+sub/g		64	$nobody	$nobody
+sub/h		128	$nobody	$nobody
+sub/i		256	$nobody	$nobody
+sub/j		512	$nobody	$nobody
+sub/k		1024	$nobody	$nobody
+sub/l		2048	$nobody	$nobody
+sub/m		4096	$nobody	$nobody
+sub/n		8192	$nobody	$nobody
+End-of-File
+}
+
 #
 # Create a bunch of directories/files of different sizes
 # filled with data.
@@ -421,7 +474,7 @@ _do_create_dumpdir_fill()
 
     $verbose && echo -n "Setup "
     sed -e '/^#/d' $tmp.config \
-    | while read file nbytes owner group perms
+    | while read file nbytes owner group perms ea_name ea_value
     do
 	if [ $nbytes = "d" ]; then
 	    # create a directory
@@ -470,6 +523,9 @@ _do_create_dumpdir_fill()
 	if [ -n "$perms" ]; then
 	    chmod $perms $file
 	fi
+	if [ -n "$ea_name" -a -n "$ea_value" ]; then
+	    attr -s $ea_name -V $ea_value $file
+	fi
 	$verbose && echo -n "."
     done
     $verbose && echo
@@ -502,6 +558,13 @@ _create_dumpdir_fill_perm()
     _stable_fs
 }	
 
+_create_dumpdir_fill_ea()
+{
+    _wipe_fs
+    _mk_fillconfig_ea
+    _do_create_dumpdir_fill
+    _stable_fs
+}	
 
 
 #
@@ -617,11 +680,13 @@ _create_dumpdir_symlinks()
 
 #
 # Filter for ls
-# Filter out dates on symlinks
+# Filter out dates on symlinks and char devices
 #
 _ls_filter()
 {
-  $AWK_PROG '/^l/ { date = $8; sub(date,"DATE"); print}
+  $AWK_PROG '
+        /^l/ { date = $8; sub(date,"DATE"); print}
+        /^c/ { date = $9; sub(date,"DATE"); print}
         {print}' \
   | sed -e 's/total [0-9][0-9]*/total TOTAL/'
 }
@@ -636,6 +701,7 @@ _dump_filter_main()
   sed \
       -e "s/`hostname`/HOSTNAME/"   \
       -e "s#$SCRATCH_DEV#SCRATCH_DEV#"    \
+      -e "s#$SCRATCH_RAWDEV#SCRATCH_DEV#"    \
       -e "s#$dumptape#TAPE_DEV#"    \
       -e "s#$SCRATCH_MNT#SCRATCH_MNT#"    \
       -e "s#$dump_file#DUMP_FILE#"  \
@@ -644,25 +710,38 @@ _dump_filter_main()
       -e 's/date:[ 	].*/date: DATE/'       \
       -e 's/dump begun .*/dump begun DATE/'    \
       -e 's/[0-9][0-9]* seconds/SECS seconds/' \
+      -e 's/restore.[0-9][0-9]*/restore.PID/' \
       -e 's/ino [0-9][0-9]*/ino INO/' \
       -e '/: dump size/s/[0-9][0-9]*/NUM/'     \
       -e '/dump size:/s/[0-9][0-9]*/NUM/'      \
-      -e '/media file size/s/[0-9][0-9]*/NUM/' \
-      -e '/mfile size:[	 ]*/s/[0-9][0-9]*/NUM/' \
+      -e '/dump size per stream:/s/[0-9][0-9]*/NUM/' \
+      -e 's/\(media file size[	 ]*\)[0-9][0-9]*/\1NUM/' \
+      -e 's/\(mfile size:[	 ]*\)[0-9][0-9]*/\1NUM/' \
+      -e '/drive[	 ]*[0-9][0-9]*:/d' \
       -e '/\/dev\/tty/d' \
       -e '/inventory session uuid/d' \
-      -e 's#/var/lib/xfsdump#/var/xfsdump#' \
-
+      -e '/ - Running single-threaded/d' \
+      -e '/^.*I\/O metrics: .*$/d' \
+      -e 's/1048576/BLOCKSZ/' \
+      -e 's/2097152/BLOCKSZ/' \
+      -e 's/(pid[	 ]*[1-9][0-9]*)/\(pid PID\)/' \
+  | perl -ne '
+      if ($_ =~ /(?:Dump|Restore) Summary/) {
+        $skip = 1;
+      } elsif ($_ =~ /(?:Dump|Restore) Status/) {
+        $skip = 0;
+      }
+      print if (! $skip);'
 }
 
 _dump_filter()
 {
-  if $do_quota_check
-  then
-      _dump_filter_main | _check_quota_dumprestore
-  else
-      _dump_filter_main
-  fi
+   if $do_quota_check
+   then
+       _dump_filter_main | _check_quota_dumprestore
+   else
+       _dump_filter_main
+   fi
 }
 
 _invutil_filter()
@@ -676,17 +755,20 @@ _invutil_filter()
 
 }
 
+
 _dir_filter()
 {
   sed \
     -e "s#$dump_file#DUMP_FILE#"      \
     -e "s#$SCRATCH_DEV#SCRATCH_DEV#"        \
+    -e "s#$SCRATCH_RAWDEV#SCRATCH_DEV#"    \
     -e "s#$dumptape#TAPE_DEV#"         \
     -e "s#$dump_dir#DUMP_DIR#g"       \
     -e "s#$restore_dir#RESTORE_DIR#g" \
     -e "s#$SCRATCH_MNT#SCRATCH_MNT#g"       \
     -e "s#$dump_sdir#DUMP_SUBDIR#g"   \
     -e "s#$restore_sdir#RESTORE_SUBDIR#g" \
+    -e "s#$$#PID#g" \
 
 }
 
@@ -694,34 +776,41 @@ _parse_args()
 {
     OPTIND=0
     dump_args=""
-    while getopts "f:FL:oqQ" c $*
+    while [ $# -gt 0 ]
     do
-        case $c
+        case $1
         in
-        f)
-            [ -z "$OPTARG" ] && _error "missing argument for -f"
-	    dumptape=$OPTARG	
+        -f)
+            [ -z "$2" ] && _error "missing argument for -f"
+	    dumptape=$2	
+	    shift
             ;;
-        L)
-            [ -z "$OPTARG" ] && _error "missing argument for -L"
-	    session_label=$OPTARG	
+        -L)
+            [ -z "$2" ] && _error "missing argument for -L"
+	    session_label=$2
+	    shift
             ;;
-	o)
+	-o)
 	    dump_args="$dump_args -o"
             ;;
-	F)
+	-F)
 	    dump_args="$dump_args -F"
             ;;
-	q)
-	    do_quota_check=true
+	--multi)
+	    multi=$2
+	    shift
+	    ;;
+        -q)
+            do_quota_check=true
             ;;
-	Q)
-	    do_quota_check=false
+        -Q)
+            do_quota_check=false
             ;;
-	\?)
+	*)
             _error "invalid argument"
             ;;
         esac
+	shift
     done
 }
 
@@ -789,6 +878,28 @@ _do_dump_file()
 
     echo "Dumping to file..."
     opts="$_dump_debug$dump_args -f $dump_file -M $media_label -L $session_label $SCRATCH_MNT"
+    echo "xfsdump $opts" | _dir_filter  
+    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Do full dump to multiple files
+#
+_do_dump_multi_file()
+{
+    _parse_args "$@"
+
+    multi_args=""
+
+    i=0
+    while [ $i -lt $multi ]
+    do
+	multi_args="$multi_args -f $dump_file.$i -M $media_label.$i"
+	i=`expr $i + 1`
+    done
+
+    echo "Dumping to files..."
+    opts="$_dump_debug$dump_args $multi_args -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter  
     xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -861,6 +972,29 @@ _do_restore_file()
 }
 
 #
+# Restore the tape from multiple dump files
+#
+_do_restore_multi_file()
+{
+    _parse_args "$@"
+    _prepare_restore_dir
+
+    multi_args=""
+
+    i=0
+    while [ $i -lt $multi ]
+    do
+	multi_args="$multi_args -f $dump_file.$i"
+	i=`expr $i + 1`
+    done
+
+    echo "Restoring from file..."
+    opts="$_restore_debug$dump_args $multi_args -L $session_label $restore_dir"
+    echo "xfsrestore $opts" | _dir_filter  
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
 # Do xfsdump piped into xfsrestore - xfsdump | xfsrestore
 #
 # Use -s as we want to dump and restore to the same xfs partition
@@ -919,7 +1053,6 @@ _ls_nodate_compare_sub()
     diff -cs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
 }
 
-
 #
 # Compare using recursive diff the files of the dumped
 # subdirectory.
@@ -928,8 +1061,43 @@ _ls_nodate_compare_sub()
 _diff_compare_sub()
 {
     echo "Comparing dump directory with restore directory"
-    diff -rs $dump_dir $restore_dir/$dump_sdir | _dir_filter
+    diff -rs $dump_dir $restore_dir/$dump_sdir | _dir_filter | _check_quota_diff
 }
+
+_get_eas_on_path()
+{
+    _path=$1
+
+    find $_path -exec attr -l {} \; |\
+    awk '{print $9, $2}' |\
+    sed 's/["]//g' |\
+    while read file ea_name; do
+	attr -g $ea_name $file
+    done
+}
+
+#
+# Compare the extended attributes of the files/dirs
+# b/w the dumped and restore dirs.
+#
+#
+# Attribute "attr5" had a 8 byte value for /spare1/dump.5460/dir:
+# Attribute "attr5" had a 8 byte value for /spare1/restore.5460/dump.5460/dir:
+#
+_diff_compare_eas()
+{
+    echo "Comparing dump directory with restore directory"
+    echo "Looking at the extended attributes (EAs)"
+    echo "EAs on dump"
+    _get_eas_on_path $dump_dir | tee $seq.ea1 | _dir_filter
+    echo "EAs on restore"
+    _get_eas_on_path $restore_dir/$dump_sdir \
+    | sed -e "s#$restore_sdir\/##" \
+    | tee $seq.ea2 \
+    | _dir_filter
+    diff -s $seq.ea1 $seq.ea2
+}
+
 
 #
 # Compare using recursive diff the files of the dumped
@@ -957,7 +1125,7 @@ _do_invutil()
 {
     host=`hostname`
     echo "xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT \"$middate\" $*" >$seq.full
-    xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT "$middate" $* \
+    xfsinvutil $_invutil_debug $* -M $host:$SCRATCH_MNT "$middate" \
     | tee -a $seq.full | _invutil_filter
 }
 
