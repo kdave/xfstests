@@ -48,7 +48,7 @@
 Test program used to test the DMAPI function dm_handle_to_path().  The
 command line is:
 
-        handle_to_path [-b buflen] dirpath objpath
+        handle_to_path [-b buflen] {dirpath|dirhandle} {objpath|objhandle}
 
 There are two parameters.  The first is the pathname of a directory,
 and the second is the pathname of a file, directory, or symbolic link
@@ -78,7 +78,7 @@ char	*Progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage:\t%s [-b buflen] dirpath objpath\n", Progname);
+	fprintf(stderr, "usage:\t%s [-b buflen] {dirpath|dirhandle} {objpath|objhandle}\n", Progname);
 	exit(1);
 }
 
@@ -90,8 +90,8 @@ main(
 {
 	char		*dirpath;
 	char		*objpath;
-	void		*hanp1, *hanp2, *hanp1a;
-	size_t		hlen1, hlen2, hlen1a;
+	void		*hanp1, *hanp2;
+	size_t		hlen1, hlen2;
 	void		*pathbufp;
 	size_t		buflen = 1024;
 	size_t		rlenp;
@@ -125,27 +125,14 @@ main(
 		return(1);
 	}
 
-	if (dm_path_to_handle(dirpath, &hanp1, &hlen1)) {
-		fprintf(stderr, "dm_path_to_handle failed for %s, (%d) %s\n",
-			dirpath, errno, strerror(errno));
-		return(1);
+	if (opaque_to_handle(dirpath, &hanp1, &hlen1)) {
+		fprintf(stderr, "can't get handle for dir %s\n", dirpath);
+		exit(1);
 	}
-	if (path_to_handle(dirpath, &hanp1a, &hlen1a)) {
-		fprintf(stderr, "path_to_handle failed for %s, (%d) %s\n",
-			dirpath, errno, strerror(errno));
-		return(1);
-	}
-	if(hlen1 != hlen1a){
-		fprintf(stderr, "dm_path_to_handle != path_to_handle, %d != %d\n",
-			hlen1, hlen1a);
-	}
-	if( memcmp(hanp1, hanp1a, hlen1) != 0 ){
-		fprintf(stderr, "dm_path_to_handle != path_to_handle, handles differ\n");
-	}
-	if (dm_path_to_handle(objpath, &hanp2, &hlen2)) {
-		fprintf(stderr, "dm_path_to_handle failed for %s, (%d) %s\n",
-			objpath, errno, strerror(errno));
-		return(1);
+
+	if (opaque_to_handle(objpath, &hanp2, &hlen2)) {
+		fprintf(stderr, "can't get handle for obj %s\n", objpath);
+		exit(1);
 	}
 
 	if ((pathbufp = malloc(buflen == 0 ? 1 : buflen)) == NULL) {
