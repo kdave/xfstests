@@ -23,7 +23,7 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     AC_PACKAGE_NEED_UTILITY($1, "$cc", cc, [C compiler])
 
     if test -z "$MAKE"; then
-        AC_PATH_PROG(MAKE, gmake,, /usr/bin:/usr/freeware/bin)
+        AC_PATH_PROG(MAKE, gmake,, /usr/bin:/usr/local/bin:/usr/freeware/bin)
     fi
     if test -z "$MAKE"; then
         AC_PATH_PROG(MAKE, make,, /usr/bin)
