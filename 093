@@ -65,6 +65,11 @@ _testfilter()
     sed -e "s#$testdir#TESTDIR#g"
 }
 
+_filefilter()
+{
+    sed -e "s#$tmp##" -e "s#$file#file#"
+}
+
 # real QA test starts here
 _supported_fs xfs udf
 _supported_os IRIX
@@ -105,12 +110,66 @@ $tmp.append
 echo "ls -P on file"
 ls -P $file | _testfilter
 
+echo "cat file"
+echo "----"
+cat $file
+echo "----"
+
 echo "append to file as user without caps"
 # in particular user doesn't have FSETID or SETFCAP
 $runas -u $uid $tmp.append
 
+echo "cat file"
+echo "----"
+cat $file
+echo "----"
+
 echo "ls -P on file"
 ls -P $file | _testfilter
+
+# try again when it doesn't have the EA
+echo "append to file as user without caps a 2nd time"
+$runas -u $uid $tmp.append
+
+echo "ls -P on file"
+ls -P $file | _testfilter
+
+echo "cat file"
+echo "----"
+cat $file
+echo "----"
+
+echo "only let root write to file"
+chmod 700 $file
+chown root $file 
+
+echo "as non-root try to append to file"
+$runas -u $uid $tmp.append 2>&1 | _filefilter
+
+echo "restore perms on file"
+chmod 777 $file
+
+echo "set a root EA on file"
+attr -R -s test -V testval $file | _filefilter
+
+echo "list EA on file"
+attr -R -l $file | _filefilter
+
+echo "as non-root try to append to file"
+$runas -u $uid $tmp.append 2>&1 | _filefilter
+
+echo "list EA on file"
+attr -R -l $file | _filefilter
+
+chown $uid $file
+chmod ugo+w $testdir
+echo "as non-root call writemod"
+$runas -u $uid src/writemod $file 2>&1 | _filefilter
+
+echo "cat file"
+echo "----"
+cat $file
+echo "----"
 
 # success, all done
 status=0
