@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -43,7 +43,9 @@
 #include <unistd.h>
 
 #define MAXNAMELEN 256
+#ifndef __sgi__
 typedef unsigned int uint_t;
+#endif
 
 /*
  * Loop over directory sizes:
@@ -59,7 +61,7 @@ typedef unsigned int uint_t;
 
 static uint_t	addval;
 static uint_t	dirchars;
-static char	*dirname;
+static char	*directory;
 static uint_t	firstsize;
 static uint_t	lastsize;
 static uint_t	minchars;
@@ -106,7 +108,7 @@ main(int argc, char **argv)
 			nchars = (uint_t)atoi(optarg);
 			break;
 		case 'd':
-			dirname = optarg;
+			directory = optarg;
 			break;
 		case 'f':
 			firstsize = (uint_t)atoi(optarg);
@@ -137,15 +139,15 @@ main(int argc, char **argv)
 	}
 	if (stats == 0)
 		stats = 1;
-	if (!dirname)
-		dirname = ".";
+	if (!directory)
+		directory = ".";
 	else {
-		if (mkdir(dirname, 0777) < 0 && errno != EEXIST) {
-			perror(dirname);
+		if (mkdir(directory, 0777) < 0 && errno != EEXIST) {
+			perror(directory);
 			exit(1);
 		}
-		if (chdir(dirname) < 0) {
-			perror(dirname);
+		if (chdir(directory) < 0) {
+			perror(directory);
 			exit(1);
 		}
 	}
