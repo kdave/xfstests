@@ -85,7 +85,7 @@ main(
 	token = atol(argv[2]);
 
 	if (dm_init_service(&name) == -1)  {
-		fprintf(stderr, "Can't inititalize the DMAPI\n");
+		fprintf(stderr, "Can't initialize the DMAPI\n");
 		exit(1);
 	}
 

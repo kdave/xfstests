@@ -225,7 +225,7 @@ main(
 	 *-------------------------
 	 */
 	if (dm_init_service(&name) == -1)  {
-	  fprintf(stderr, "ERROR: can't inititalize the DMAPI (%s).\n",
+	  fprintf(stderr, "ERROR: can't initialize the DMAPI (%s).\n",
 		  strerror(errno));
 	  library_status=0;
 	}

@@ -121,7 +121,7 @@ main(
 	objpath = argv[optind];
 
 	if (dm_init_service(&name)) {
-		fprintf(stderr, "Can't inititalize the DMAPI\n");
+		fprintf(stderr, "Can't initialize the DMAPI\n");
 		return(1);
 	}
 
