@@ -44,28 +44,29 @@ use Getopt::Std;
 # the block addresses are large).
 #
 
-my @sbprint = ( '"print fdblocks"', '"print agcount"' );
-my @agfprint = ( '"print freeblks"', '"print flcount"' );
-my @agfcommands = ( '"write freeblks 0"',
-			'"write longest 0"', '"write flcount 0"',
-			'"write bnolevel 1"', '"write cntlevel 1"',
-			'"write flfirst 0"', '"write fllast 0"' );
-my @bnoprint = ( '"addr bnoroot"', '"print numrecs"' );
-my @bnocommands = ( '"addr bnoroot"', '"write numrecs 0"',
-			'"write leftsib -1"', '"write rightsib -1"' );
-my @cntprint = ( '"addr cntroot"', '"print numrecs"' );
-my @cntcommands = ( '"addr cntroot"', '"write numrecs 0"',
-			'"write leftsib -1"', '"write rightsib -1"' );
-
 my %opt;
-getopts('cf:l:v', \%opt);
-die "Usage: ag-wipe [-f firstAG] [-l lastAG] [-cv] device\n" unless (@ARGV == 1);
+getopts('cf:l:qr:v', \%opt);
+
+die "Usage: $0 [-f AG] [-l AG] [-r bytes] [-cqv] device\n" unless (@ARGV == 1);
 my $device = shift @ARGV;
 die "$device: no such file\n" unless (-e $device);
+
 my $clearall = defined($opt{'c'}) ? 1 : 0;
+my $retain = defined($opt{'r'}) ? $opt{'r'} : -1;
+my $quiet = defined($opt{'q'}) ? 1 : 0;
 my $verbose = defined($opt{'v'}) ? 1 : 0;
 my $nagfirst = defined($opt{'f'}) ? $opt{'f'} : 0;
 my $naglast = defined($opt{'l'}) ? $opt{'l'} : 0;
+
+# 
+# "clearall" means clear everything barring the final AG.
+# "retain" means clearall and retain a specified amount in the
+# second-from-last AG as well (value is the number of bytes).
+# [NB: retain with a value of zero is now the same as clearall].
+# 
+if ($retain >= 0) {
+	$clearall = 1;
+}
 
 sub xfs_db {
 	my $xfsdb = "xfs_db -x $device";
@@ -86,57 +87,114 @@ sub xfs_db {
 	return %hash;
 }
 
+
+# 
+# Stage 1: Get control information from the superblock
+# 
+
+my @sbprint = ( '"print fdblocks"', '"print agcount"', '"print blocksize"' );
+my @agffree = ( '"print freeblks"' );
+
 my %sb = xfs_db 'sb', @sbprint;
 print "=== Initially ", $sb{'fdblocks'}, " blocks free across ",
-	$sb{'agcount'}, " AGs\n";
+	$sb{'agcount'}, " AGs\n" unless $quiet;
 if ($clearall && ($nagfirst || $naglast)) {
-	print STDERR "  o Clearall specified with first/last AG, quiting\n";
+	print STDERR "  o Clearall/retain specified with first/last AG\n";
 	exit(1);
 }
 if ($nagfirst >= $sb{'agcount'}) {
-	print "  o First AG number is too large, quiting\n";
+	print STDERR "  o First AG number is too large\n";
 	exit(1);
 }
 if ($naglast >= $sb{'agcount'}) {
-	print "  o Last AG number is too large, quiting\n";
+	print STDERR "  o Last AG number is too large\n";
 	exit(1);
 }
 if ($naglast - $nagfirst < 0) {
-	print "  o No AGs to clear, quiting\n";
+	print STDERR "  o No AGs to clear\n";
 	exit(1);
 }
 if ($clearall) {
 	$naglast = $sb{'agcount'} - 2;
+	if ($retain > 0) {
+		my %check;
+
+		$naglast--;
+		$retain /= $sb{'blocksize'};	# convert to fsblocks
+		%check = xfs_db "'agf $naglast'", @agffree;
+		if ($check{'freeblks'} < $retain) {
+			print STDERR "  o Insufficient space to retain\n";
+			exit(1);
+		}
+	}
 }
 
+
+# 
+# Stage 2: Wipe out all completely masked allocation groups.
+# 
+
+my @agfprint = ( '"print freeblks"', '"print flcount"' );
+my @agfcommands = ( '"write freeblks 0"',
+			'"write longest 0"', '"write flcount 0"',
+			'"write bnolevel 1"', '"write cntlevel 1"',
+			'"write flfirst 0"', '"write fllast 0"' );
+my @bnoprint = ( '"addr bnoroot"', '"print numrecs"' );
+my @bnocommands = ( '"addr bnoroot"', '"write numrecs 0"',
+			'"write leftsib -1"', '"write rightsib -1"' );
+my @cntprint = ( '"addr cntroot"', '"print numrecs"' );
+my @cntcommands = ( '"addr cntroot"', '"write numrecs 0"',
+			'"write leftsib -1"', '"write rightsib -1"' );
+
 print "=== Wiping ", $naglast - $nagfirst + 1,
-	" AGs starting from AG #", $nagfirst, "\n";
+	" AGs starting from AG #", $nagfirst, "\n" unless $quiet;
 
 my $ag = $nagfirst;
 while ($ag <= $naglast) {
-	my %btree;
-	my %agf;
+	print "  o AG#", $ag, " AGF fields\n" unless $quiet;
 
-	print "  o AG#", $ag, " AGF fields\n";
-
-	%agf = xfs_db "'agf $ag'", @agfprint;
+	my %agf = xfs_db "'agf $ag'", @agfprint;
 	xfs_db "'agf $ag'", @agfcommands;
 
 	my $blockcnt = $agf{'freeblks'} + $agf{'flcount'};
 	$sb{'fdblocks'} -= $blockcnt;
-	print "     cleared ", $blockcnt, " blocks from AG#", $ag, "\n";
+	print "     cleared ", $blockcnt, " blocks from AG#", $ag, "\n"
+		unless $quiet;
 
-	%btree = xfs_db "'agf $ag'", @bnoprint;
-	xfs_db "'agf $ag'", @bnocommands;
-	print "     cleared ", $btree{'numrecs'}, " BNO btree records in AG#",
-		$ag, "\n";
+	my %btree = xfs_db "'agf $ag'", @bnoprint;
+	xfs_db "'agf $ag'", @bnocommands, "'agf $ag'", @cntcommands;
+	print "     cleared ", $btree{'numrecs'}, " BNO/CNT btree recs in AG#",
+		$ag, "\n" unless $quiet;
 
-	%btree = xfs_db "'agf $ag'", @cntprint;
-	xfs_db "'agf $ag'", @cntcommands;
-	print "     cleared ", $btree{'numrecs'}, " CNT btree in AG#",
-		$ag, "\n";
 	$ag++;
 }
 
-print "=== Updating final freespace count, ", $sb{'fdblocks'}, " blocks\n";
+
+# 
+# Stage 3: Wipe out any partially masked allocation group.
+# 
+
+if ($retain > 0) {
+	print "  o AG#", $ag, " AGF fields (partial)\n" unless $quiet;
+
+	my %ragf = xfs_db "'agf $ag'", '"print freeblks"',
+		'"addr bnoroot"', '"print recs[1].startblock"';
+	my $maskblks = $ragf{'freeblks'} - $retain;
+	my $newstart = $ragf{'recs[1].startblock'} + $maskblks;
+	xfs_db "'agf $ag'",
+		"'write freeblks $retain'", "'write longest $retain'",
+		"'agf $ag'", '"addr bnoroot"',
+		"'write recs[1].startblock $newstart'",
+		"'write recs[1].blockcount $retain'",
+		"'agf $ag'", '"addr cntroot"',
+		"'write recs[1].startblock $newstart'",
+		"'write recs[1].blockcount $retain'";
+
+	$sb{'fdblocks'} -= $maskblks;
+	print "     cleared ", $maskblks, " blocks from AG#", $ag, "\n"
+		unless $quiet;
+}
+
+print "=== Updating final freespace count, ", $sb{'fdblocks'}, " blocks\n"
+	unless $quiet;
 xfs_db "'sb 0'", "'write fdblocks $sb{'fdblocks'}'"

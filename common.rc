@@ -127,8 +127,10 @@ _scratch_mkfs_xfs()
         SCRATCH_OPTIONS="$SCRATCH_OPTIONS -llogdev=$SCRATCH_LOGDEV"
     /sbin/mkfs.xfs -f $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
     mkfs_status=$?
-    [ "$USE_BIG_LOOPFS" = yes ] && \
-        ./tools/ag-wipe -c $SCRATCH_DEV >/dev/null
+    if [ "$USE_BIG_LOOPFS" = yes ]; then
+	[ -z "$RETAIN_AG_BYTES" ] && RETAIN_AG_BYTES=0
+        ./tools/ag-wipe -q -r $RETAIN_AG_BYTES $SCRATCH_DEV
+    fi
     return $mkfs_status
 }
 
@@ -595,8 +597,11 @@ _check_filesystem()
         
         ok=0
     fi
-    
-    if ! /sbin/xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
+
+    # repair doesn't scale massively at this stage, optionally skip it for now
+    [ "$USE_BIG_LOOPFS" = yes ] || \
+    /sbin/xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
+    if [ $? -ne 0 ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
         
@@ -608,7 +613,7 @@ _check_filesystem()
         ok=0
     fi
     rm -f $tmp.fs_check
-    
+ 
     if [ $ok -eq 0 ]
     then
         echo "*** mount output ***"                             >>$seq.full

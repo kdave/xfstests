@@ -217,8 +217,10 @@ _test_mkfs_xfs()
         TEST_OPTIONS="$TEST_OPTIONS -llogdev=$TEST_LOGDEV"
     _sudo /sbin/mkfs.xfs -f $TEST_OPTIONS $MKFS_OPTIONS $* $TEST_DEV
     mkfs_status=$?
-    [ "$USE_BIG_LOOPFS" = yes ] && \
-        _sudo $QADIR/tools/ag-wipe -c $TEST_DEV >/dev/null
+    if [ "$USE_BIG_LOOPFS" = yes ]; then
+        [ -z "$RETAIN_AG_BYTES" ] && RETAIN_AG_BYTES=0
+        _sudo $QADIR/tools/ag-wipe -q -r $RETAIN_AG_BYTES $TEST_DEV
+    fi
     return $mkfs_status
 }
 
