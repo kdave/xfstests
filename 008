@@ -45,11 +45,17 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
+pgsize=`$here/src/getpagesize`
 trap "rm -f $tmp.*; _cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
     rm -rf $TEST_DIR/randholes.$$.*
+}
+
+_filter()
+{
+    sed -e "s/-b $pgsize/-b PGSIZE/g"
 }
 
 # get standard environment, filters and checks
@@ -66,7 +72,7 @@ _do_test()
     echo ""
     echo "randholes.$_n : $_param"
     echo "------------------------------------------"
-    if $here/src/randholes $_param $out >$tmp.out
+    if $here/src/randholes $_param $out | _filter >$tmp.out
     then
         # quick check - how many holes did we get?
         count=`xfs_bmap $out | egrep -c ': hole'`
@@ -90,16 +96,14 @@ _do_test()
 
 rm -f $here/$seq.out.full
 
-pgsize=`$here/src/getpagesize`
-
 _do_test 1 50 "-l 5000000 -c 50 -b $pgsize"
 _do_test 2 100 "-l 10000000 -c 100 -b $pgsize"
 _do_test 3 100 "-l 10000000 -c 100 -b 512"   # test partial pages
 
 # rinse, lather, repeat for direct IO
-_do_test 1 50 "-d -l 5000000 -c 50 -b $pgsize"
-_do_test 2 100 "-d -l 10000000 -c 100 -b $pgsize"
-_do_test 3 100 "-d -l 10000000 -c 100 -b 512"   # test partial pages
+_do_test 4 50 "-d -l 5000000 -c 50 -b $pgsize"
+_do_test 5 100 "-d -l 10000000 -c 100 -b $pgsize"
+# note: direct IO requires page aligned IO
 
 # todo: realtime.
 
