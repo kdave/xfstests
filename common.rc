@@ -837,11 +837,19 @@ _full_fstyp_details()
 {
      [ -z "$FSTYP" ] && FSTYP=xfs
      if [ $FSTYP = xfs ]; then
- 	if grep 'debug 0' /proc/fs/xfs/stat >/dev/null; then
- 	    FSTYP="$FSTYP (non-debug)"
- 	elif grep 'debug 1' /proc/fs/xfs/stat >/dev/null; then
- 	    FSTYP="$FSTYP (debug)"
- 	fi
+	if [ -d /proc/fs/xfs ]; then
+	    if grep -q 'debug 0' /proc/fs/xfs/stat; then
+		FSTYP="$FSTYP (non-debug)"
+	    elif grep -q 'debug 1' /proc/fs/xfs/stat; then
+		FSTYP="$FSTYP (debug)"
+	    fi
+	else
+	    if uname -a | grep -qi 'debug'; then
+		FSTYP="$FSTYP (debug)"
+	    else
+		FSTYP="$FSTYP (non-debug)"
+	    fi
+	fi
      fi
      echo $FSTYP
 }

@@ -1,0 +1,117 @@
+#! /bin/sh
+# FS QA Test No. 093
+#
+# Test out for IRIX the removal of file capabilities when
+# writing to the file (when it doesn't have CAP_FSETID & CAP_SETFCAP)
+# i.e. not root.
+# Test out fix for pv#901019
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@sgi.com
+
+seq=`basename $0`
+
+here=`pwd`
+tmp=/tmp/$$
+runas=$here/src/runas
+status=1	# FAILure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.attr
+
+_cleanup()
+{
+    [ -n "$testdir" ] && rm -f $file
+    _cleanup_testdir
+}
+
+_testfilter()
+{
+    sed -e "s#$testdir#TESTDIR#g"
+}
+
+# real QA test starts here
+_supported_fs xfs udf
+_supported_os IRIX
+
+[ -x $runas ] || _notrun "$runas executable not found"
+
+rm -f $seq.full
+
+_setup_testdir
+_need_to_be_root
+
+echo "QA output created by $seq"
+echo ""
+file=$testdir/$seq.file
+
+user=`grep ':all=:all=' /etc/capability | tail -1 | $AWK_PROG -F: '{print $1}'`
+uid=`grep $user /etc/passwd | $AWK_PROG -F: '{print $3}'`
+
+cat >$tmp.append <<EOF
+#!/bin/sh
+echo data >>$file
+EOF
+chmod ugo+x $tmp.append
+
+echo "touch file"
+touch $file
+chmod ugo+w $file 
+
+echo "chcap on file"
+chcap CAP_CHOWN+p $file
+
+echo "ls -P on file"
+ls -P $file | _testfilter
+
+echo "append to file as root"
+$tmp.append
+
+echo "ls -P on file"
+ls -P $file | _testfilter
+
+echo "append to file as user without caps"
+# in particular user doesn't have FSETID or SETFCAP
+$runas -u $uid $tmp.append
+
+echo "ls -P on file"
+ls -P $file | _testfilter
+
+# success, all done
+status=0
+exit
