@@ -57,6 +57,14 @@ int		 finish_responding(dm_sessid_t);
 int		 establish_handler(void);
 void		 exit_handler	(int);
 
+static int
+clear_region_event(
+	dm_sessid_t	 sid,
+	u_int		event,
+	void		*hanp,
+	size_t		 hlen,
+	char		*hans1);
+
 #define MAXNAMELEN 256
 
 /*
@@ -69,13 +77,17 @@ dm_sessid_t	 sid = 0;
 dm_sessid_t	 oldsid = 0;
 char		 *fsname;
 int		 register_new_mnts = 0;
+int		 rwt_bit_clear = 1;  /* Clear read/write/trunc bit before
+				      * responding to event; reset all other
+				      * bits.
+				      */
 
 void
 usage(
       char *prog)
 {
   fprintf(stderr, "Usage: %s ", prog);
-  fprintf(stderr, " <-S oldsid> <-v> <-s sleep> <-R> ");
+  fprintf(stderr, " <-S oldsid> <-v> <-s sleep> <-R> <-N> ");
   fprintf(stderr, "filesystem \n");
 }
 
@@ -95,13 +107,16 @@ main(
 /*  Progname  = argv[0];*/ Progname = "print_event";
   fsname  = NULL;
 
-  while ((c = getopt(argc, argv, "vs:S:R")) != EOF) {
+  while ((c = getopt(argc, argv, "vs:S:RN")) != EOF) {
     switch (c) {
     case 's':
       Sleep = atoi(optarg);
       break;
     case 'R':
       register_new_mnts = 1;
+      break;
+    case 'N':
+      rwt_bit_clear = 0;
       break;
     case 'S':
       oldsid = atoi(optarg);
@@ -445,6 +460,22 @@ handle_message(
     hlen1  = DM_GET_LEN  (msg_de, de_handle);
     if (hanp1 && hlen1) {
       hantoa(hanp1, hlen1, hans1);
+      if (rwt_bit_clear) {
+	      u_int rgflag;
+	      switch(msg->ev_type) {
+		/* DM_EVENT_* and DM_REGION_* are different values, ug */
+		case DM_EVENT_READ:
+			rgflag = DM_REGION_READ;
+			break;
+		case DM_EVENT_WRITE:
+			rgflag = DM_REGION_WRITE;
+			break;
+		case DM_EVENT_TRUNCATE:
+			rgflag = DM_REGION_TRUNCATE;
+			break;
+	      }
+	      clear_region_event(sid, rgflag, hanp1, hlen1, hans1);
+      }
     } else {
       sprintf(hans1, "<BAD HANDLE, hlen %d>", hlen1);
     }
@@ -476,7 +507,7 @@ handle_message(
       break;
     default: break;
     }
-  }
+  } /* RWT */
 
   /***** DESTROY EVENT *****/
 
@@ -645,6 +676,7 @@ handle_message(
 	     "mode bits",	type,
 	     "retcode",		msg_ne->ne_retcode);
       respond = 0;
+      clear_region_event(sid, 0, hanp2, hlen2, hans2);
       break;
 
     case DM_EVENT_REMOVE:
@@ -1051,6 +1083,37 @@ clear_events(
 	if (dm_set_eventlist(sid, fs_hanp, fs_hlen, DM_NO_TOKEN,
 			&eventlist, DM_EVENT_MAX) == -1) {
 		errno_msg("Can't clear event list");
+		return(1);
+	}
+	return(0);
+}
+
+
+
+static int
+clear_region_event(
+	dm_sessid_t	 sid,
+	u_int		event,
+	void		*hanp,
+	size_t		 hlen,
+	char		*hans1)
+{
+	dm_region_t	region = { 0, 0, 0 };
+	u_int		nelem = 1;
+	u_int		exactflag;
+
+	region.rg_flags = DM_REGION_READ|DM_REGION_WRITE|DM_REGION_TRUNCATE;
+	region.rg_flags &= ~event;
+
+	if (Verbose) {
+		err_msg("Clearing region mask 0x%x for file %s\n",
+			(int)event, hans1);
+		err_msg("Setting region mask 0x%x\n", region.rg_flags);
+	}
+
+	if (dm_set_region(sid, hanp, hlen, DM_NO_TOKEN, nelem, &region,
+			  &exactflag)) {
+		errno_msg("Can't set region event");
 		return(1);
 	}
 	return(0);
