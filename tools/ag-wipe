@@ -1,0 +1,133 @@
+#!/usr/bin/perl -w
+use strict;
+use IO::File;
+use Getopt::Std;
+
+#
+#  Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
+#  
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#  
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#  
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  
+#  Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+#  Mountain View, CA  94043, or:
+#  
+#  http://www.sgi.com 
+#  
+#  For further information regarding this notice, see: 
+#  
+#  http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+
+#
+# Modify a filesystem's superblock and AGF metadata structures
+# so that only a subset of the allocation groups will be used.
+# Intended use is in testing large virtual devices (eg. loop)
+# with extremely large filesystems, where we want to ensure
+# high allocation groups are used as much as possible (where
+# the block addresses are large).
+#
+
+my @sbprint = ( '"print fdblocks"', '"print agcount"' );
+my @agfprint = ( '"print freeblks"' );
+my @agfcommands = ( '"write freeblks 0"',
+			'"write longest 0"', '"write flcount 0"',
+			'"write bnolevel 1"', '"write cntlevel 1"',
+			'"write flfirst 0"', '"write fllast 0"' );
+my @bnoprint = ( '"addr bnoroot"', '"print numrecs"' );
+my @bnocommands = ( '"addr bnoroot"', '"write numrecs 0"',
+			'"write leftsib -1"', '"write rightsib -1"' );
+my @cntprint = ( '"addr cntroot"', '"print numrecs"' );
+my @cntcommands = ( '"addr cntroot"', '"write numrecs 0"',
+			'"write leftsib -1"', '"write rightsib -1"' );
+
+my %opt;
+getopts('f:l:v', \%opt);
+die "Usage: ag-wipe [-f firstAG] [-l lastAG] [-v] device\n" unless (@ARGV == 1);
+my $device = shift @ARGV;
+die "$device: no such file\n" unless (-e $device);
+my $verbose = defined($opt{'v'}) ? 1 : 0;
+my $nagfirst = defined($opt{'f'}) ? $opt{'f'} : 0;
+my $naglast = defined($opt{'l'}) ? $opt{'l'} : 0;
+
+sub xfs_db {
+	my $xfsdb = "xfs_db -x $device";
+	my %hash;
+
+	foreach (@_) {
+		$xfsdb .= ' -c ' . $_;
+	}
+	print $xfsdb, "\n" if ($verbose);
+
+	die unless open(DB, "$xfsdb 2>/dev/null |");
+	while (<DB>) {
+		if (/^(\S+) = (.*)$/) {
+			print if ($verbose);
+			$hash{$1} = $2;
+		}
+	}
+	return %hash;
+}
+
+my %sb = xfs_db 'sb', @sbprint;
+print "=== Initially ", $sb{'fdblocks'}, " blocks free across ",
+	$sb{'agcount'}, " AGs\n";
+if ($nagfirst >= $sb{'agcount'}) {
+	print "  o First AG number is too large, quiting\n";
+	exit(0);
+}
+if ($naglast >= $sb{'agcount'}) {
+	print "  o Last AG number is too large, quiting\n";
+	exit(0);
+}
+if ($naglast - $nagfirst < 0) {
+	print "  o No AGs to clear, quiting\n";
+	exit(0);
+}
+
+print "=== Wiping ", $naglast - $nagfirst,
+	" AGs starting from AG #", $nagfirst, "\n";
+
+my $ag = $nagfirst;
+while ($ag <= $naglast) {
+	my %btree;
+	my %agf;
+
+	print "  o AG#", $ag, " AGF fields\n";
+
+	%agf = xfs_db "'agf $ag'", @agfprint;
+	xfs_db "'agf $ag'", @agfcommands;
+
+	$sb{'fdblocks'} -= $agf{'freeblks'};
+	print "     cleared ", $agf{'freeblks'}, " blocks from AG#", $ag, "\n";
+
+	%btree = xfs_db "'agf $ag'", @bnoprint;
+	xfs_db "'agf $ag'", @bnocommands;
+	print "     cleared ", $btree{'numrecs'}, " BNO btree records in AG#",
+		$ag, "\n";
+
+	%btree = xfs_db "'agf $ag'", @cntprint;
+	xfs_db "'agf $ag'", @cntcommands;
+	print "     cleared ", $btree{'numrecs'}, " CNT btree in AG#",
+		$ag, "\n";
+	$ag++;
+}
+
+print "=== Updating final freespace count, ", $sb{'fdblocks'}, " blocks\n";
+xfs_db "'sb 0'", "'write fdblocks $sb{'fdblocks'}'"
