@@ -61,9 +61,13 @@ _attr()
 {
 	attr $* 2>$tmp.err >$tmp.out
 	exit=$?
-	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+	sed \
+	    -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g" \
+	    -e "s#$tmp[^ :]*#<TMPFILE>#g;" \
 		$tmp.out
-	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+	sed \
+	    -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g" \
+	    -e "s#$tmp[^ :]*#<TMPFILE>#g;" \
 		$tmp.err 1>&2
 	return $exit
 }
@@ -72,9 +76,13 @@ _getfattr()
 {
 	getfattr $* 2>$tmp.err >$tmp.out
 	exit=$?
-	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+	sed \
+	    -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g" \
+	    -e "s#$tmp[^ :]*#<TMPFILE>#g;" \
 		$tmp.out
-	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+	sed \
+	    -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g" \
+	    -e "s#$tmp[^ :]*#<TMPFILE>#g;" \
 		$tmp.err 1>&2
 	return $exit
 }
@@ -88,11 +96,11 @@ umount $SCRATCH_DEV >/dev/null 2>&1
 echo "*** mkfs"
 mkfs_xfs $SCRATCH_DEV >/dev/null \
 	|| _fail "mkfs failed"
-  
+
 echo "*** mount FS"
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >/dev/null \
 	|| _fail "mount failed"
-	
+
 testfile=$SCRATCH_MNT/testfile
 echo "*** make test file 1"
 
@@ -112,7 +120,11 @@ echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
 _getfattr --absolute-names $testfile.2
 
 # print name and size from 1st line of output
-_attr -g "a3" $testfile.2 | head -1
+_attr -g "a3" $testfile.2 > $tmp.hahahahaplonk
+head -1 $tmp.hahahahaplonk
+# NOTE:
+# Above goo works around some truly bizzaro sh/sed/head interaction
+# for some versions of these tools (fails on Redhat 7+, 6.2 worked)
 
 # print out the rest of the data apart from the header
 # the size is +1 for an extra \n at the end

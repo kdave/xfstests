@@ -78,15 +78,10 @@ _init()
     echo "*** reset partition"
     $here/src/devzero -b 2048 -n 50 -v 198 $SCRATCH_DEV
     echo "*** mkfs"
-    lsize=2097152
-    dsize=50m
-    echo mkfs_xfs -dsize=$dsize -lsize=$lsize $SCRATCH_DEV >>$seq.full
-    if ! mkfs_xfs -dsize=$dsize -lsize=$lsize $SCRATCH_DEV >>$seq.full 2>&1
-    then
-        echo "failed to mkfs $SCRATCH_DEV" >>$seq.full
-        _notrun "mkfs cannot create scratch fs, probably too small log"
-        exit 1
-    fi
+    force_opts="-dsize=50m -lsize=2097152"
+    echo mkfs_xfs $force_opts $SCRATCH_DEV >>$seq.full
+    mkfs_xfs $force_opts $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+    source $tmp.mkfs
 }
 
 _log_traffic()
@@ -140,12 +135,15 @@ _log_head()
 }
 
 # Get log stripe unit for v2 logs; if none specified,
-# (or v1 log) just return "1"
+# (or v1 log) just return "1" block
 
 _log_sunit()
 {
-    echo $MKFS_OPTIONS | (grep sunit || echo "sunit=1") \
-    	| sed "s/.*sunit=\(.*\).*/\1/"
+    if [ $lsunit -eq 0 ]; then
+        echo $dbsize
+    else
+        expr $lsunit \* $dbsize
+    fi
 }    
 
 _after_log()
@@ -194,7 +192,7 @@ echo "log sunit = $lsunit"			>>$seq.full
 [ $size -eq 4096 ] || \
     _fail "!!! unexpected log size $size"
 [ $head -eq 2 -o $head -eq $((lsunit/512)) ] || \
-    _fail "!!! unexpected initial log position $head"
+    _fail "!!! unexpected initial log position $head vs. $((lsunit/512))"
 
 echo "    lots of traffic"                      >>$seq.full
 _log_traffic 850
