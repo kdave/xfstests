@@ -128,6 +128,7 @@ BEGIN {
 
 _filter_logprint()
 {
+    _fix_malloc |\
     sed '
         s/data device: 0x[0-9a-f][0-9a-f]*/data device: <DEVICE>/;
         s/log device: 0x[0-9a-f][0-9a-f]*/log device: <DEVICE>/;
@@ -166,8 +167,7 @@ _filter_logprint()
 	/^[ 	]*$/d;
 	s/  */ /g;
 	s/ $//;
-    ' \
-    | _fix_malloc
+    '
 }
 
 _check_log()
@@ -316,6 +316,11 @@ _clear_opts()
     # - remove the log options in mount
     # - remove the quota options in mount
     # leave any other options given
+    # fix up removals when remaining -o or comma:
+    #   "-o blah," -> "-o blah"
+    #   "-o blah, -x woof" -> "-o blah -x woof"
+    #   "-x woof -o   " -> "-x woof"   
+    #   "-x woof -o  -y wow" -> "-x woof -y wow"   
     MKFS_OPTIONS=`echo $MKFS_OPTIONS | sed -e 's/-l[ ]*[^ $]*//g'`
     MOUNT_OPTIONS=`echo $MOUNT_OPTIONS |\
 	    sed -e 's/logbsize=[^ ,]*,*//g' \
@@ -324,13 +329,18 @@ _clear_opts()
 		-e 's/quota,*//g'           \
 		-e 's/uqnoenforce,*//g'     \
 		-e 's/gqnoenforce,*//g'     \
-		-e 's/-o *$//g'		    \
+		-e 's/\(-o[^-,]*\), *$/\1/g'    \
+		-e 's/\(-o[^-,]*\), *-/\1 -/g'  \
+ 		-e 's/-o *$//g'		    \
 		-e 's/-o *-/-/g'	    \
 		`
 	
     # export opts
     export MKFS_OPTIONS
     export MOUNT_OPTIONS
+    echo "MKFS_OPTIONS = $MKFS_OPTIONS" >>$seq.full
+    echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seq.full
+
 }
 
 #
