@@ -38,10 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#ifdef HAVE_GETDENTS
-#include <sys/dirent.h>
-#endif
+#include <dirent.h>
 
 typedef	void	*(*fpi_t)(void);
 typedef	void	(*fpt_t)(int, void *);
@@ -54,11 +51,9 @@ typedef struct	tdesc
 	fpd_t	done;
 } tdesc_t;
 
-#ifdef HAVE_GETDENTS
-static void	d_getdents(void *);
-static void	*i_getdents(void);
-static void	t_getdents(int, void *);
-#endif
+static void	d_readdir(void *);
+static void	*i_readdir(void);
+static void	t_readdir(int, void *);
 static void	crfiles(char **, int, char *);
 static void	d_chown(void *);
 static void	d_create(void *);
@@ -91,9 +86,7 @@ tdesc_t	tests[] = {
 	{ "chown",	i_chown, t_chown, d_chown },
 	{ "create",	i_create, t_create, d_create },
 	{ "crunlink",	(fpi_t)0, t_crunlink, (fpd_t)0 },
-#ifdef HAVE_GETDENTS
-	{ "getdents",	i_getdents, t_getdents, d_getdents },
-#endif
+	{ "readdir",	i_readdir, t_readdir, d_readdir },
 	{ "linkun",	i_linkun, t_linkun, d_linkun },
 	{ "open",	i_open, t_open, d_open },
 	{ "rename",	i_rename, t_rename, d_rename },
@@ -115,13 +108,6 @@ double		time_end;
 double		time_start;
 int		totsec = 0;
 int		verbose = 0;
-
-struct	getdents_data
-{
-	void	*buffer;
-	int	buflen;
-	int	fd;
-};
 
 int
 main(int argc, char **argv)
@@ -221,19 +207,12 @@ d_create(void *v)
 	rmfiles(flist_op);
 }
 
-#ifdef HAVE_GETDENTS
 static void
-d_getdents(void *v)
+d_readdir(void *v)
 {
-	struct getdents_data *g; 
-
 	rmfiles(flist_op);
-	g = v;
-	close(g->fd);
-	free(g->buffer);
-	free(g);
+	closedir((DIR *)v);
 }
-#endif
 
 /* ARGSUSED */
 static void
@@ -345,20 +324,12 @@ i_create(void)
 	return (void *)0;
 }
 
-#ifdef HAVE_GETDENTS
 static void *
-i_getdents(void)
+i_readdir(void)
 {
-	struct getdents_data	*g;
-
 	crfiles(flist_op, 0, (char *)0);
-	g = malloc(sizeof(*g));
-	g->buflen = 16 * 1024;
-	g->buffer = malloc(g->buflen);
-	g->fd = open(".", O_RDONLY);
-	return g;
+	return opendir(".");
 }
-#endif
 
 static void *
 i_linkun(void)
@@ -484,25 +455,17 @@ t_crunlink(int n, void *v)
 	}
 }
 
-#ifdef HAVE_GETDENTS
 static void
-t_getdents(int n, void *v)
+t_readdir(int n, void *v)
 {
-	int			eof;
-	struct getdents_data	*g;
-	int			i;
-	int			j;
+	DIR	*dir;
+	int	i;
 
-	for (g = v, i = 0; i < n; i++) {
-		(void)lseek(g->fd, 0, SEEK_SET);
-		eof = 0;
-		do {
-			j = ngetdents(g->fd, (dirent_t *)g->buffer, g->buflen,
-				&eof);
-		} while (j > 0 && eof == 0);
+	for (dir = (DIR *)v, i = 0; i < n; i++) {
+		rewinddir(dir);
+		while ((readdir(dir)) != NULL);
 	}
 }
-#endif
 
 /* ARGSUSED */
 static void
@@ -567,8 +530,10 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-		"usage: metaperf [-d dname] [-i iters|-t seconds] [-s fsize]\n\t[-l opfnamelen] [-L bgfnamelen]\n\t[-n opfcount] [-N bgfcount] test...\n");
+		"Usage: metaperf [-d dname] [-i iters|-t seconds] [-s fsize]\n"
+		"\t[-l opfnamelen] [-L bgfnamelen]\n"
+		"\t[-n opfcount] [-N bgfcount] test...\n");
 	fprintf(stderr,
-		"tests available: chown, create, crunlink, linkun, open, rename, stat\n");
+		"Tests: chown create crunlink linkun open rename stat readdir\n");
 	exit(1);
 }

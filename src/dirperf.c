@@ -83,6 +83,7 @@ static void	usage(void);
 #define	DFL_FIRST_SIZE	1
 #define	DFL_LAST_SIZE	(1024 * 1024)
 #define	MAX_DIR_COUNT	1024
+#define	MIN_DIR_COUNT	1
 
 int
 main(int argc, char **argv)
@@ -165,6 +166,8 @@ main(int argc, char **argv)
 		nchars = MAXNAMELEN - 1;
 	if (ndirs > MAX_DIR_COUNT)
 		ndirs = MAX_DIR_COUNT;
+	if (ndirs < MIN_DIR_COUNT)
+		ndirs = MIN_DIR_COUNT;
 	dirchars = hexchars(ndirs);
 	pfxchars = nchars - minchars;
 	if (pfxchars)
