@@ -126,6 +126,10 @@ _scratch_mkfs_xfs()
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="$SCRATCH_OPTIONS -llogdev=$SCRATCH_LOGDEV"
     /sbin/mkfs.xfs -f $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
+    mkfs_status=$?
+    [ "$USE_BIG_LOOPFS" = yes ] && \
+        ./tools/ag-wipe -c $SCRATCH_DEV >/dev/null
+    return $mkfs_status
 }
 
 _scratch_xfs_db_options()
@@ -149,6 +153,7 @@ _scratch_xfs_repair()
     SCRATCH_OPTIONS=""
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+    [ "$USE_BIG_LOOPFS" = yes ] && SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
     /sbin/xfs_repair $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
@@ -460,6 +465,22 @@ _require_loop()
     fi
 }
 
+# this test requires that (large) loopback device files are not in use
+# 
+_require_nobigloopfs()
+{
+    [ "$USE_BIG_LOOPFS" = yes ] && \
+	_notrun "Large filesystem testing in progress, skipped this test"
+}
+
+# this test requires that external log/realtime devices are not in use
+# 
+_require_nonexternal()
+{
+    [ "$USE_EXTERNAL" = yes ] && \
+	_notrun "External device testing in progress, skipped this test"
+}
+
 # check that a FS is mounted as XFS. if so, return mount point
 #
 _xfs_mounted()
@@ -479,34 +500,6 @@ _xfs_mounted()
     then
         echo "_xfs_mounted: $device is not a mounted XFS FS"
         exit 1
-    fi
-}
-
-
-# setup the .out file link, depending on which form of quota is
-# enabled as this often influences how the test output appears.
-# [NB: SCRATCH_DEV must be mounted for this to work]
-# 
-_setup_seq_out()
-{
-    # this lets us phase use of this into the dump/restore tests easier...
-    [ -f $seq.ugquota -a -f $seq.noquota -a $seq.usrquota -a $seq.grpquota ] \
-	|| return
-
-    rm -f $seq.out
-    if src/feature -U $SCRATCH_DEV
-    then
-	if src/feature -G $SCRATCH_DEV
-	then
-	    ln $seq.ugquota $seq.out
-	else
-	    ln $seq.usrquota $seq.out
-	fi
-    elif src/feature -G $SCRATCH_DEV
-    then
-	ln $seq.grpquota $seq.out
-    else
-	ln $seq.noquota $seq.out
     fi
 }
 
@@ -557,6 +550,8 @@ _check_filesystem()
     fi
 
     [ "$FSTYP" != xfs ] && return 0
+    testoption=""
+    [ "$USE_BIG_LOOPFS" = yes ] && testoption=-t
 
     type=`_fs_type $device`
     ok=1
@@ -588,7 +583,7 @@ _check_filesystem()
         ok=0
     fi
 
-    /usr/sbin/xfs_check $device 2>&1 | _fix_malloc >$tmp.fs_check 
+    /usr/sbin/xfs_check $testoption $device 2>&1 | _fix_malloc >$tmp.fs_check 
     if [ -s $tmp.fs_check ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (c) (see $seq.full)"
