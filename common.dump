@@ -1172,7 +1172,7 @@ _get_eas_on_path()
     # sort |\
 # and this is now the Linux way...
     echo "User names"
-    getfattr --absolute-names -Rh $_path |\
+    getfattr --absolute-names -Rh -m user $_path |\
     perl -wn -e '
 	if (m/^# file: (\S+)/) { $file = $1 }
 	elsif (m/^user\.(\w+)/) { print $file, " ",$1,"\n" }' |\
@@ -1180,6 +1180,18 @@ _get_eas_on_path()
     while read file ea_name; do
 	attr -g $ea_name $file
     done
+
+    if [ "$USE_ATTR_SECURE" = yes ]; then
+	echo "Security names"
+	getfattr --absolute-names -Rh -m security $_path |\
+	perl -wn -e '
+	    if (m/^# file: (\S+)/) { $file = $1 }
+	    elsif (m/^security\.(\w+)/) { print $file, " ",$1,"\n" }' |\
+	sort |\
+	while read file ea_name; do
+	    attr -g $ea_name $file
+	done
+    fi
 
     echo "Root names"
     getfattr --absolute-names -Rh -m trusted $_path |\
