@@ -68,10 +68,31 @@ chmod a+rwx $seq.full	# arbitrary users will write here
 _require_scratch
 _require_quota
 
-# setup a default run
-if [ -z "$MOUNT_OPTIONS" ]; then
-	MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
-fi
+blksoft=100
+blkhard=500
+inosoft=4
+inohard=10
+
+# The actual point at which limit enforcement takes place for the
+# hard block limit is variable depending on filesystem blocksize,
+# and iosize.  What we want to test is that the limit is enforced
+# (ie. blksize less than limit but not unduly less - ~85% is kind,
+# nowadays we actually get much closer to the limit before EDQUOT.
+# 
+_filter_and_check_blocks()
+{
+	perl -npe '
+		if (/^'$name'\s+([-|+]){2}\s+(\d+)/ && '$enforce') {
+			$maximum = '$blkhard';
+			$minimum = '$blkhard' * 85/100;
+			if ($2 < $minimum || $2 > $maximum) {
+				printf(" URK - %d is out of range! [%d,%d] \n",
+					$2, $minimum, $maximum);
+			}
+			s/^('$name'\s+[-|+][-|+]\s+)(\d+)/\1 OK/g;
+		}
+	' | _filter_repquota
+}
 
 # real QA test starts here
 mkfs_xfs $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
@@ -83,6 +104,7 @@ cat $tmp.mkfs >>$seq.full
 _qmount
 
 # setup exactly what it is we'll be testing
+enforce=1
 if src/feature -u $SCRATCH_DEV
 then
 	type=u ; eval `_choose_uid`; ln $seq.usrquota $seq.out
@@ -92,9 +114,11 @@ then
 elif src/feature -U $SCRATCH_DEV
 then
 	type=u ; eval `_choose_uid`; ln $seq.uqnoenforce $seq.out
+	enforce=0
 elif src/feature -G $SCRATCH_DEV
 then
 	type=g ; eval `_choose_gid`; ln $seq.gqnoenforce $seq.out
+	enforce=0
 else
 	_notrun "No quota support at mount time"
 fi
@@ -109,7 +133,7 @@ repquota -$type $SCRATCH_DEV | _filter_repquota
 echo
 echo "*** report initial settings" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/initme $id $type 1024 0
-setquota -$type $id 100 500 4 10 $SCRATCH_DEV
+setquota -$type $id $blksoft $blkhard $inosoft $inohard $SCRATCH_DEV
 repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
@@ -138,7 +162,7 @@ echo
 echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 540
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_and_check_blocks
 
 # success, all done
 status=0
