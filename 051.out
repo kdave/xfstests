@@ -8,6 +8,7 @@ Setup file
 file1 []
 Expect to FAIL
 chacl: "u::r--,g::rwx,o:rw-" is an invalid ACL specification.
+cannot find permission separator after char ":" (position 16)
 Expect to PASS
 file1 [u::r--,g::rwx,o::rw-]
 
@@ -50,6 +51,7 @@ Test was executed
 --- Test adding a USER ACE ---
 Expect to FAIL as no MASK provided
 chacl: "u::---,g::---,o::---,u:id2:r-x" is an invalid ACL specification.
+mask required and no mask
 Ensure that ACL has not been changed
 file1 [u::---,g::---,o::r-x]
 Expect to PASS - USER ACE matches user
@@ -61,6 +63,7 @@ Expect to FAIL - USER ACE does not match user
 --- Test adding a GROUP ACE ---
 Expect to FAIL as no MASK provided
 chacl: "u::---,g::---,o::---,g:id2:r-x" is an invalid ACL specification.
+mask required and no mask
 Ensure that ACL has not been changed
 file1 [u::---,g::---,o::---,u:id2:r-x,m::rwx]
 file1 [u::---,g::---,o::---,g:id2:r-x,m::rwx]
@@ -194,3 +197,33 @@ root/b/c9 [u::---,g::---,o::---]
 root/b/c9/9 [u::---,g::---,o::---]
 root/b/c0 [u::---,g::---,o::---]
 root/b/c0/0 [u::---,g::---,o::---]
+
+=== Test out error messages for ACL text parsing  ===
++ chacl u file1
+chacl: "u" is an invalid ACL specification.
+could not find qualifier separator after tag "u"
++ chacl u: file1
+chacl: "u:" is an invalid ACL specification.
+cannot find permission separator after char ":" (position 2)
++ chacl u:rumpledumpleunknownuser file1
+chacl: "u:rumpledumpleunknownuser" is an invalid ACL specification.
+cannot find permission separator after char ":" (position 2)
++ chacl u:rumpledumpleunknownuser: file1
+chacl: "u:rumpledumpleunknownuser:" is an invalid ACL specification.
+cannot find user "rumpledumpleunknownuser"
++ chacl g:rumpledumpleunknowngrp file1
+chacl: "g:rumpledumpleunknowngrp" is an invalid ACL specification.
+cannot find permission separator after char ":" (position 2)
++ chacl g:rumpledumpleunknowngrp: file1
+chacl: "g:rumpledumpleunknowngrp:" is an invalid ACL specification.
+cannot find group "rumpledumpleunknowngrp"
++ chacl o:user1:rwx file1
+chacl: "o:user1:rwx" is an invalid ACL specification.
+garbage after other tag: "user1"
++ chacl m:user1:rwx file1
+chacl: "m:user1:rwx" is an invalid ACL specification.
+garbage after mask tag: "user1"
++ chacl a::rwx file1
+chacl: "a::rwx" is an invalid ACL specification.
+invalid tag: "a"
++ set +x
