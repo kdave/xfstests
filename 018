@@ -92,21 +92,49 @@ _filter_logprint()
         s/1st: *[0-9][0-9]*  *last: *[0-9][0-9]*  *cnt: *[0-9][0-9]*  *freeblks: *[0-9][0-9]*  *longest: *[0-9][0-9]*/1st:<NUM> last:<NUM> cnt:<COUNT> freeblks:<COUNT> longest:<NUM>/;
         s/^uuid: *[0-9a-f-][0-9a-f-]* *format: *.*$/uuid: <UUID> format: <FORMAT>/;
         /flushiter:/d;
-    '
+    ' | _fix_malloc
 }
 
-_check_log()
+_setup_log()
 {
+    rm -f $seq.log
     _full "clean_log : xfs_logprint"
+
     _scratch_xfs_logprint -t       | tee -a $seq.full \
         | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
-    echo "### xfs_logprint output ###"
-    _scratch_xfs_logprint 2>&1 | _filter_logprint
-    echo "### xfs_logprint -t -i -s 0 output ###"
-    _scratch_xfs_logprint -t -i -s 0 2>&1 | _filter_logprint
-    echo "### xfs_logprint -t -b -s 0 output ###"
-    _scratch_xfs_logprint -t -b -s 0 2>&1 | _filter_logprint
+
+    echo "### xfs_logprint output ###"				>>$seq.log
+    _scratch_xfs_logprint 2>&1 | _filter_logprint		>>$seq.log
+    echo "### xfs_logprint -t -i -s 0 output ###"		>>$seq.log
+    _scratch_xfs_logprint -t -i -s 0 2>&1 | _filter_logprint	>>$seq.log
+    echo "### xfs_logprint -t -b -s 0 output ###"		>>$seq.log
+    _scratch_xfs_logprint -t -b -s 0 2>&1 | _filter_logprint	>>$seq.log
+
+    echo $seq.log
 }
+
+# find the comparison file, depending on which form of quota is
+# enabled as this often influences how the test output appears.
+# [NB: SCRATCH_DEV must be mounted for this to work]
+# 
+_setup_log_out()
+{
+    if src/feature -U $SCRATCH_DEV
+    then
+	if src/feature -G $SCRATCH_DEV
+	then
+	    echo $seq.ugquota
+	else
+	    echo $seq.usrquota
+	fi
+    elif src/feature -G $SCRATCH_DEV
+    then
+	echo $seq.grpquota
+    else
+	echo $seq.noquota
+    fi
+}
+
 
 # real QA test starts here
 
@@ -114,7 +142,6 @@ _require_scratch
 
 echo "*** init FS"
 
-touch $seq.out
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 _full "mkfs"
@@ -131,13 +158,13 @@ source $tmp.mkfs
 [ $lversion -eq 1 ]  \
     || _notrun "Logprint test, tailored to v1 log format (v$lversion in use)"
 
-rm -f $seq.out $seq.full
+rm -f $seq.log $seq.full
 
 _full " mount"
 _scratch_mount >>$seq.full 2>&1 \
     || _fail "mount failed"
 
-_setup_seq_out
+base=`_setup_log_out`
 
 # generate some log traffic - but not too much - life gets a little
 # more complicated if the log wraps around. This traffic is
@@ -149,7 +176,14 @@ _full "umount"
 umount $SCRATCH_DEV >>$seq.full 2>&1 \
     || _fail "umount failed"
 
-_check_log
+mine=`_setup_log`
+
+echo "*** compare logprint"
+
+if ! diff $mine $base >/dev/null; then
+    echo "FAILED: logprint output $mine differs to $base"
+    exit 1
+fi
 
 rm $seq.full
 exit
