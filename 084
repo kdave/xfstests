@@ -1,4 +1,10 @@
-# 
+#! /bin/sh
+# XFS QA Test No. 084
+#
+# Exercises unwritten extent reads and writes, looking
+# for data corruption (zeroes read) near the end of file.
+#
+#-----------------------------------------------------------------------
 # Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
@@ -28,60 +34,48 @@
 # For further information regarding this notice, see: 
 # 
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
 #
+# creator
+owner=nathans@sgi.com
 
-TOPDIR = ..
-include $(TOPDIR)/include/builddefs
+seq=`basename $0`
+echo "QA output created by $seq"
 
-TARGETS = alloc acl_get bstat devzero dirstress fault feature \
-	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
-	  nametest permname randholes runas truncfile usemem \
-	  fileread fstest mmapcat append_reader append_writer \
-	  dirperf metaperf enospc_unlink resvtest scaleread
-ifeq ($(ENABLE_DBM), yes)
-TARGETS += dbtest
-endif
-ifeq ($(PKG_PLATFORM),linux)
-TARGETS += t_immutable
-endif
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
-CFILES = $(TARGETS:=.c)
-LDIRT = $(TARGETS)
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
 
-default: $(TARGETS)
+_filter_resv()
+{
+	sed -e "s,$TEST_DIR/resv,[TESTFILE],g"
+}
 
-include $(BUILDRULES)
-LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
+pgsize=`$here/src/feature -p`
 
-randholes: randholes.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+# -i == number of iterations
+# -l == bytes to leak on each iteration
+# -b == read/write block size
+# -s == preallocation size
 
-truncfile: truncfile.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+# real QA test starts here
+echo
+echo "*** First case - I/O blocksize same as pagesize"
+$here/src/resvtest -i 20 -b $pgsize "$TEST_DIR/resv" | _filter_resv
+[ $? -eq 0 ] && echo done
+rm -f "$TEST_DIR/mumble"
 
-dbtest:	dbtest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LIBGDBM) $(LDLIBS)
+echo
+echo "*** Second case - 512 byte I/O blocksize"
+$here/src/resvtest -i 40 -b 512 "$TEST_DIR/resv" | _filter_resv
+[ $? -eq 0 ] && echo done
+rm -f "$TEST_DIR/grumble"
 
-nametest: nametest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-bstat: bstat.o $(LIBHANDLE)
-	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
-
-t_immutable: t_immutable.o $(LIBHANDLE) $(LIBACL)
-	$(LINKTEST) $(LIBACL) $(LIBHANDLE) $(LDLIBS)
-
-loggen:	loggen.o
-	$(LINKTEST) $(LDLIBS)
-
-fstest:	fstest.o
-	$(LINKTEST)
-
-#scaleread: scaleread.o $(LDLIBS)
-#	$(LINKTEST)
-
-resvtest: resvtest.o
-	$(LINKTEST)
-
-acl_get: acl_get.o $(LIBACL) $(LIBATTR)
-	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
+# success, all done
+status=0
+exit
