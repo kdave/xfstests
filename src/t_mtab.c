@@ -143,11 +143,14 @@ lock_mtab (void) {
 			}
 			we_created_lockfile = 1;
 		} else {
+#if 0	/* nathans: dont limit, we are forcing lots of parallel accesses */
 			static int tries = 0;
+#endif
 
 			/* Someone else made the link. Wait. */
 			alarm(LOCK_TIMEOUT);
-			if (fcntl (fd, F_SETLKW, &flock) == -1) {
+			if (fcntl (fd, F_SETLKW, &flock) == -1 &&
+			    errno != EBUSY) {
 				int errsv = errno;
 				fprintf(stderr, "can't lock lock file %s: %s",
 				     mounted_lock, (errno == EINTR) ?
@@ -155,6 +158,7 @@ lock_mtab (void) {
 				exit(1);
 			}
 			alarm(0);
+#if 0	/* nathans: dont limit, we are forcing lots of parallel accesses */
 			/* Limit the number of iterations - maybe there
 			   still is some old /etc/mtab~ */
 			if (tries++ > 3) {
@@ -166,6 +170,7 @@ lock_mtab (void) {
 				}
 				sleep(1);
 			}
+#endif
 		}
 		close (fd);
 	}

@@ -51,7 +51,19 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
+addentries()
+{
+	count=$1
+	pattern="%0$2d"
+
+	while [ $count -gt 0 ]; do
+		touch `printf $pattern $count`
+		count=`expr $count - 1`
+	done
+}
+
 # real QA test starts here
+rm -f $seq.full
 [ "X$TEST_DIR" = "X" ] && exit 1
 cd $TEST_DIR
 rm -fr test
@@ -59,17 +71,31 @@ mkdir test || exit 1
 cd $TEST_DIR/test
 mount > t_mtab
 
-$here/src/t_mtab 2 &
-$here/src/t_mtab 2 &
-$here/src/t_mtab 2 &
-wait
+mtab()
+{
+	$here/src/t_mtab 50 &
+	$here/src/t_mtab 50 &
+	$here/src/t_mtab 50 &
+	wait
 
-$here/src/t_mtab 10000
+	$here/src/t_mtab 10000
 
-echo directory entries:
-ls
-ls -li > $seq.full
+	echo directory entries:
+	ls | grep mtab
+	echo directory entries >> $here/$seq.full
+	ls -li >> $here/$seq.full
+}
 
-# success, all done
+# directory with only a few entries
+mtab
+
+# directory with a hundred more entries, each 4chars wide
+addentries 100 4
+mtab
+
+# directory with a thousand more entries, each 8chars wide
+addentries 1000 8
+mtab
+
 status=0
 exit
