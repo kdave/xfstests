@@ -41,9 +41,6 @@
 
 #include <libxfs.h>
 #include <malloc.h>
-#include <errno.h>
-#include <fcntl.h>
-
 #include <xfs_log.h>
 #include <xfs_log_priv.h>
 

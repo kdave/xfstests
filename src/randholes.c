@@ -72,7 +72,7 @@ int
 main(int argc, char *argv[])
 {
 	int seed, ch, fd, oflags;
-	char *filename;
+	char *filename = NULL;
         int r;
 
 	filesize = ((off64_t)256)*1024*1024;

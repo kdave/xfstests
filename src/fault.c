@@ -31,9 +31,6 @@
  */
 
 #include <libxfs.h>
-
-#include <errno.h>
-#include <fcntl.h>
 #include <sys/ioctl.h>
 
 void expect_error(int r, int err)

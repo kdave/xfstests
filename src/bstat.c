@@ -32,9 +32,6 @@
 
 #include <libxfs.h>
 #include <jdm.h>
-
-#include <errno.h>
-#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 
@@ -97,7 +94,7 @@ main(int argc, char **argv)
 	int		verbose = 0;
 	xfs_bstat_t	*t;
 	int		ret;
-	jdm_fshandle_t	*fshandlep;
+	jdm_fshandle_t	*fshandlep = NULL;
 	int		fd;
 	struct stat64	sb;
 	int nread;

@@ -54,7 +54,7 @@ main(int argc, char *argv[])
 {
 	int interleave, blocksize, count, rev, i, ch, fd;
 	long filesize;
-	char *filename;
+	char *filename = NULL;
         int errs;
 
 	filesize = 1024*1024;

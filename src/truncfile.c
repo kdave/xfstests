@@ -54,7 +54,7 @@ int
 main(int argc, char *argv[])
 {
 	int seed, i, ch, fd;
-	char *filename;
+	char *filename = NULL;
 
 	filesize = 256*1024*1024;
 	blocksize = 512;

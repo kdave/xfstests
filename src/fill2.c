@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
  * 
@@ -117,24 +116,24 @@ main(int argc, char **argv)
     char		*p;		/* for getsubopt calls */
     long		nbytes;		/* total number of bytes to write */
     int			dlen;		/* length of normal output data line */
-    const char		*dseed;		/* input string for seeding rand */
+    const char		*dseed = NULL;	/* input string for seeding rand */
     unsigned int	seed;		/* seed for output data */    
-    char		*dfile;		/* where to write output */
+    char		*dfile = NULL;	/* where to write output */
 
     FILE		*f;		/* output file */
     char		*dbuf;		/* output line buffer */
     char		bbuf[50];	/* block boundary string */
-    char		*active;	/* active buffer to copy out of */
+    char		*active = NULL;	/* active buffer to copy out of */
     size_t		hlen;		/* header length (bytes+key) in output */
 					/* lines */
     char		*hptr;		/* pointer to end of header */
     char		*ptr;		/* current position to copy from */
-    int			blktype;	/* current block boundary type */
+    int			blktype = 0;	/* current block boundary type */
     int			boundary;	/* set if current output char lies on */
 					/* block boundary */
     long		i;
     int			j;
-    int			l;
+    int			l = 0;
 
 
     /* defaults */

@@ -31,9 +31,7 @@
  */
 
 #include <libxfs.h>
-#include <fcntl.h>
 #include <malloc.h>
-#include <errno.h>
 
 int
 main(int argc, char **argv)

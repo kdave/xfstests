@@ -105,7 +105,7 @@ main(int argc, char *argv[])
 {
 	char *sourcefile, *c;
 	int totalnames, iterations, zeroout;
-	int zone, op, pct_remove, pct_create, ch, i, retval, fd;
+	int zone, op, pct_remove=0, pct_create=0, ch, i, retval, fd;
 	struct stat64 statb;
 	struct info *ip;
 	int seed, linedots;

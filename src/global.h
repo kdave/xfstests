@@ -33,28 +33,19 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
-/* includes */
-
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/fcntl.h>
-#include <sys/stat.h>
-#include <sys/statvfs.h>
-#include <sys/errno.h>
-#include <sys/time.h>
-#include <sys/ioctl.h>
-#include <sys/wait.h>
-#include <getopt.h>
-#include <malloc.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <dirent.h>
-
-/* xfs specific includes */
+/* xfs-specific includes */
 
 #include <libxfs.h>
 #include <attributes.h>
+
+/* libc includes */
+
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <malloc.h>
+#include <dirent.h>
 
 #endif
