@@ -437,6 +437,49 @@ _cmp_op_output()
     fi
 }
 
+# return xfs log version of device
+# e.g.
+#   _log_version /dev/dsk/dks0d1s4
+#
+_log_version()
+{
+    _dev=$1 
+    vers=`xfs_db -c 'sb 0' -c 'p versionnum' -r $_dev | $AWK_PROG '{print $3}'`
+    logver=`echo $vers | sed -e 's/0x[0-9a-f]\([0-9a-f]\)[0-9a-f][0-9a-f]/\1/'` 
+    if [ $logver = 4 -o $logver = 5 -o $logver = 6 -o $logver = 7 -o \
+         $logver = c -o $logver = d -o $logver = e -o $logver = f ]; then
+	echo 2
+    else
+	echo 1
+    fi
+}
+
+_require_v2log()
+{
+    # test out mkfs to see if it supports "-l version=2"
+    export MKFS_OPTIONS="-l version=2"
+    if ! _scratch_mkfs_xfs $extra_ops >>$seq.full 2>&1; then
+        _notrun "mkfs does not support v2 logs"
+    fi
+
+    # test out mount to see if it mounts a v2 log fs
+    export MOUNT_OPTIONS="-o logbsize=32k"
+    if ! _scratch_mount >>$seq.full 2>&1; then
+        _notrun "mount/kernel does not support v2 logs"
+    fi
+
+    # check after unmount to see if it is clean
+    # i.e. it is not a 6.5.25 buggy version checking kernel
+    touch $SCRATCH_MNT/file
+    umount $SCRATCH_DEV >>$seq.full 2>&1
+    if _scratch_xfs_logprint -t | tee -a $seq.full \
+        | head | grep -q "<DIRTY>"; then
+        _notrun "kernel does not support v2 logs"
+    fi
+ 
+    # otherwise presume it does support v2 logs...:)
+}
+
 
 # make sure this script returns success
 /bin/true
