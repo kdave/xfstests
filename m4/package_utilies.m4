@@ -104,14 +104,14 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     fi
 
     if test -z "$RPM"; then
-        AC_PATH_PROG(RPM, rpm,, /bin:/usr/freeware/bin)
+        AC_PATH_PROG(RPM, rpm,, /bin:/usr/bin:/usr/freeware/bin)
     fi
     rpm=$RPM
     AC_SUBST(rpm)
 
     dnl .. and what version is rpm
     rpm_version=0
-    test -x $RPM && rpm_version=`$RPM --version \
+    test -x "$RPM" && rpm_version=`$RPM --version \
                         | awk '{print $NF}' | awk -F. '{V=1; print $V}'`
     AC_SUBST(rpm_version)
     dnl At some point in rpm 4.0, rpm can no longer build rpms, and

@@ -92,6 +92,9 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     AC_PACKAGE_NEED_UTILITY($1, "$make", make, [GNU make])
 
     if test -z "$LIBTOOL"; then
+	AC_PATH_PROG(LIBTOOL, glibtool,, /usr/bin)
+    fi
+    if test -z "$LIBTOOL"; then
 	AC_PATH_PROG(LIBTOOL, libtool,, /usr/bin:/usr/local/bin:/usr/freeware/bin)
     fi
     libtool=$LIBTOOL
@@ -160,14 +163,14 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     fi
 
     if test -z "$RPM"; then
-        AC_PATH_PROG(RPM, rpm,, /bin:/usr/freeware/bin)
+        AC_PATH_PROG(RPM, rpm,, /bin:/usr/bin:/usr/freeware/bin)
     fi
     rpm=$RPM
     AC_SUBST(rpm)
 
     dnl .. and what version is rpm
     rpm_version=0
-    test -x $RPM && rpm_version=`$RPM --version \
+    test -x "$RPM" && rpm_version=`$RPM --version \
                         | awk '{print $NF}' | awk -F. '{V=1; print $V}'`
     AC_SUBST(rpm_version)
     dnl At some point in rpm 4.0, rpm can no longer build rpms, and
@@ -182,31 +185,15 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     AC_SUBST(rpmbuild)
   ])
 
-AC_DEFUN([AC_CHECK_GENERAL_HEADERS],
-  [ AC_HEADER_STDC
-    AC_CHECK_HEADERS([	assert.h		\
-			bstring.h		\
-			libgen.h		\
-			dirent.h		\
-			errno.h			\
-			malloc.h		\
-			uuid.h			\
-			uuid/uuid.h		\
-			sys/uuid.h		\
-			sys/file.h		\
-			sys/fcntl.h		\
-			sys/syssgi.h		\
-			sys/param.h		\
-			sys/stat.h		\
-			sys/statvfs.h		\
-			sys/time.h		\
-			sys/ioctl.h		\
-			sys/wait.h		\
-			sys/types.h		\
-    ])
-    AC_CHECK_HEADERS([	sys/fs/xfs_fsops.h	\
-			sys/fs/xfs_itable.h	\
-    ])
+AC_DEFUN([AC_PACKAGE_NEED_UUID_H],
+  [ AC_CHECK_HEADERS(uuid.h)
+    if test $ac_cv_header_uuid_h = no; then
+	AC_CHECK_HEADERS(uuid/uuid.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid UUID header.'
+	echo 'Install the Universally Unique Identifiers development package.'
+	exit 1])
+    fi
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_UUIDCOMPARE],
@@ -225,8 +212,8 @@ AC_DEFUN([AC_PACKAGE_NEED_UUIDCOMPARE],
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
-   [ AC_CHECK_HEADERS([sys/acl.h])
-     if test "$ac_cv_header_sys_acl_h" != "yes"; then
+  [ AC_CHECK_HEADERS([sys/acl.h])
+    if test "$ac_cv_header_sys_acl_h" != "yes"; then
         echo
         echo 'FATAL ERROR: sys/acl.h does not exist.'
         echo 'Install the access control lists (acl) development package.'
@@ -246,27 +233,13 @@ AC_DEFUN([AC_PACKAGE_NEED_ACL_LIBACL_H],
     fi
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
-  [ AC_CHECK_LIB(xfs, libxfs_init,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid XFS base library.'
-        echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
-        exit 1
-    ])
-    libxfs="-lxfs"
-    test -f `pwd`/../xfsprogs/libxfs/libxfs.la && \
-        libxfs="`pwd`/../xfsprogs/libxfs/libxfs.la"
-    test -f /usr/lib/libxfs.la && libxfs="/usr/lib/libxfs.la"
-    AC_SUBST(libxfs)
-  ])
 
 AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
-   [ AC_CHECK_LIB(acl, acl_init,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid Access Control List library.'
-        echo 'Install either the libacl (rpm) or the libacl1 (deb) package.'
-        echo 'Alternatively, run "make install-lib" from the acl source.'
+  [ AC_CHECK_LIB(acl, acl_init,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Access Control List library.'
+	echo 'Install either the libacl (rpm) or the libacl1 (deb) package.'
+	echo 'Alternatively, run "make install-lib" from the acl source.'
         exit 1
     ])
     libacl="-lacl"
@@ -274,84 +247,6 @@ AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
         libacl="`pwd`/../acl/libacl/libacl.la"
     test -f /usr/lib/libacl.la && libacl="/usr/lib/libacl.la"
     AC_SUBST(libacl)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTR_XATTR_H],
-  [ AC_CHECK_HEADERS([attr/xattr.h])
-    if test "$ac_cv_header_attr_xattr_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: attr/xattr.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTR_ERROR_H],
-  [ AC_CHECK_HEADERS([attr/error_context.h])
-    if test "$ac_cv_header_attr_error_context_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: attr/error_context.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_H],
-  [ have_attributes_h=false
-    AC_CHECK_HEADERS([attr/attributes.h sys/attributes.h], [have_attributes_h=true], )
-    if test "$have_attributes_h" = "false"; then
-        echo
-        echo 'FATAL ERROR: attributes.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
-  [ AC_CHECK_LIB(attr, getxattr,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    ])
-    libattr="-lattr"
-    test -f `pwd`/../attr/libattr/libattr.la && \
-        libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
-    AC_SUBST(libattr)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
-  [ AC_CHECK_LIB(attr, attr_get,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    ])
-    libattr="-lattr"
-    test -f `pwd`/../attr/libattr/libattr.la && \
-        libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
-    AC_SUBST(libattr)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_MACROS],
-  [ AC_MSG_CHECKING([macros in attr/attributes.h])
-    AC_TRY_LINK([
-#include <sys/types.h>
-#include <attr/attributes.h>],
-    [ int x = ATTR_SHIFT; ], [
-        echo
-        echo 'FATAL ERROR: incorrect macros exist in attributes.h header file.'
-        echo 'Upgrade the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-dev" from the attr source.'
-        exit 1 ],
-    [ echo ok ])
   ])
 
 AC_DEFUN([AC_PACKAGE_WANT_NDBM],
@@ -408,7 +303,7 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
         echo
         echo 'FATAL ERROR: could not find a valid XFS base library.'
         echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
+        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     ])
     libxfs="-lxfs"
@@ -418,12 +313,12 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
     AC_SUBST(libxfs)
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
-  [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
+AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
+  [ AC_CHECK_LIB(handle, open_by_fshandle,, [
         echo
         echo 'FATAL ERROR: could not find a current XFS handle library.'
         echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
+        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     ])
     libhdl="-lhandle"
@@ -443,5 +338,81 @@ AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
         echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
       ])
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTR_XATTR_H],
+  [ AC_CHECK_HEADERS([attr/xattr.h])
+    if test "$ac_cv_header_attr_xattr_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: attr/xattr.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTR_ERROR_H],
+  [ AC_CHECK_HEADERS([attr/error_context.h])
+    if test "$ac_cv_header_attr_error_context_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: attr/error_context.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTR_ATTRIBUTES_H],
+  [ AC_CHECK_HEADERS([attr/attributes.h])
+    if test "$ac_cv_header_attr_attributes_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: attr/attributes.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
+  [ AC_CHECK_LIB(attr, getxattr,, [
+        echo
+        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    ])
+    libattr="-lattr"
+    test -f `pwd`/../attr/libattr/libattr.la && \
+        libattr="`pwd`/../attr/libattr/libattr.la"
+    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    AC_SUBST(libattr)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
+  [ AC_CHECK_LIB(attr, attr_get,, [
+        echo
+        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    ])
+    libattr="-lattr"
+    test -f `pwd`/../attr/libattr/libattr.la && \
+        libattr="`pwd`/../attr/libattr/libattr.la"
+    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    AC_SUBST(libattr)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_MACROS],
+  [ AC_MSG_CHECKING([macros in attr/attributes.h])
+    AC_TRY_LINK([
+#include <sys/types.h>
+#include <attr/attributes.h>],
+    [ int x = ATTR_SECURE; ], [ echo ok ], [
+        echo
+	echo 'FATAL ERROR: could not find a current attributes header.'
+        echo 'Upgrade the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-dev" from the attr source.'
+	exit 1 ])
   ])
 
