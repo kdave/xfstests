@@ -33,8 +33,10 @@
 /*
  * Test for filesystem features on given mount point or device
  *   -q  test for quota support (kernel compile option)
- *   -u  test for user quota support (mount option)
- *   -g  test for group quota support (mount option)
+ *   -u  test for user quota enforcement support (mount option)
+ *   -g  test for group quota enforcement support (mount option)
+ *   -U  test for user quota accounting support (mount option)
+ *   -G  test for group quota accounting support (mount option)
  * Return code: 0 is true, anything else is error/not supported
  */
 

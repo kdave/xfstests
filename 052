@@ -1,11 +1,11 @@
 #! /bin/sh
-# XFS QA Test No. 050
+# XFS QA Test No. 052
 # $Id: 1.1 $
 #
-# Exercises basic XFS quota functionality
-#	MOUNT_OPTIONS env var switches the test type (uid/gid/acct/enfd)
-# 	options are:  (-o) usrquota, grpquota, uqnoenforce, gqnoenforce
-#	default is:   usrquota
+# Ensure that quota(1) displays blocksizes matching ondisk dquots.
+#
+# MOUNT_OPTIONS can be set to grpquota to test group quota,
+# defaults to usrquota if MOUNT_OPTIONS is not set.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
@@ -56,7 +56,6 @@ status=1	# failure is the default!
 
 _cleanup()
 {
-	echo; echo "*** unmount"
 	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
 }
@@ -68,76 +67,68 @@ _require_quota
 
 # setup a default run
 if [ -z "$MOUNT_OPTIONS" ]; then
-	MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
+        MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
 fi
 
 # real QA test starts here
 mkfs -t xfs -f $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seq.full
-chmod a+w $seq.full	# arbitrary users will write here
+chmod a+w $seq.full     # arbitrary users will write here
 
-# keep the blocksize and data size for dd later
+# keep the blocksize from mkfs ($dbsize)
 . $tmp.mkfs
 
 _qmount
 
-# setup exactly what it is we'll be testing
-if src/feature -u $SCRATCH_DEV
-then
-	type=u ; id=`_choose_uid`; ln $seq.usrquota $seq.out
-elif src/feature -g $SCRATCH_DEV
-then
-	type=g ; id=`_choose_gid`; ln $seq.grpquota $seq.out
-elif src/feature -U $SCRATCH_DEV
-then
-	type=u ; id=`_choose_uid`; ln $seq.uqnoenforce $seq.out
-elif src/feature -G $SCRATCH_DEV
-then
-	type=g ; id=`_choose_gid`; ln $seq.gqnoenforce $seq.out
+# setup user/group to test
+if src/feature -U $SCRATCH_DEV ; then
+	type=u ; id=`_choose_uid`
+elif src/feature -G $SCRATCH_DEV ; then
+	type=g ; id=`_choose_gid`
 else
 	_notrun "No quota support at mount time"
 fi
 
-echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
-echo "and using type=$type id=$id" >>$seq.full
+# create 100 (fs-blocksize) blocks
+_file_as_id $SCRATCH_MNT/foo $id $type $dbsize 220
+sync
 
-echo
-echo "*** report no quota settings" | tee -a $seq.full
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+# set limit at 1001 (1k) blocks
+setquota -n -$type $id $SCRATCH_DEV 1001 1001 10 10
 
-echo
-echo "*** report initial settings" | tee -a $seq.full
-setquota -n -$type $id $SCRATCH_DEV 100 500 4 10
-_file_as_id $SCRATCH_MNT/initme $id $type $dbsize 0
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+# cross check blks, softblks, hardblks <-> quota, xfs_db
+quota $type -n $id | tee -a $seq.full | perl -ne '
+	if (m,^\s*'$SCRATCH_DEV'\s+(\d+)\s+(\d+)\s+(\d+),) {
+		print "used_blocks=", $1, "\n";
+		print "soft_blocks=", $2, "\n";
+		print "hard_blocks=", $3, "\n";
+	}' | LC_COLLATE=POSIX sort >$tmp.quota
 
-echo
-echo "*** push past the soft inode limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie1 $id $type $dbsize 0
-_file_as_id $SCRATCH_MNT/softie2 $id $type $dbsize 0
-_qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+echo ===quota output >> $seq.full
+cat $tmp.quota >> $seq.full
+[ ! -s $tmp.quota ] && echo "warning: quota output file is empty"
 
-echo
-echo "*** push past the soft block limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type $dbsize 140
-_qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+umount $SCRATCH_MNT
 
-echo
-echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
-for i in 1 2 3 4 5 6 7 8 9 10 11 12
-do
-	_file_as_id $SCRATCH_MNT/hard$i $id $type $dbsize 0
-done
-_qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+# note - does (insitu) conversion from fs blocks to 1K blocks
+xfs_db -rc "dquot -$type $id" -c p $SCRATCH_DEV | tee -a $seq.full | perl -ne '
+	if (/^diskdq.bcount = (\d+)$/) {
+		 print "used_blocks=", $1 * '$dbsize' / 1024, "\n";
+	}
+	elsif (/^diskdq.blk_hardlimit = (\d+)$/) {
+		 print "hard_blocks=", $1 * '$dbsize' / 1024, "\n";
+	}
+	elsif (/^diskdq.blk_softlimit = (\d+)$/) {
+		print "soft_blocks=", $1 * '$dbsize' / 1024, "\n";
+	}' | LC_COLLATE=POSIX sort >$tmp.xfs_db
 
-echo
-echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type $dbsize 540
-_qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+echo ===xfs_db output >> $seq.full
+cat $tmp.xfs_db >> $seq.full
+[ ! -s $tmp.xfs_db ] && echo "warning: xfs_db output file is empty"
+
+echo Comparing out of quota and xfs_db
+diff $tmp.quota $tmp.xfs_db 
+[ $? -eq 0 ] && echo OK.
 
 # success, all done
 status=0
