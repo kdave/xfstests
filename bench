@@ -49,6 +49,7 @@
 # creator
 owner=nathans@sgi.com
 
+iam=bench
 tmp=/tmp/$$
 here=`pwd`; export here
 status=1	# failure is the default!
@@ -97,7 +98,7 @@ _run_benchmark()
     while [ $pass -le $passes -o $passes -lt 0 ]
     do
         _log "        *** clean scratch device [$bench starting, pass $pass]"
-        _scratch_mkfs_xfs 2>&1 | _fix_malloc >>$FULL
+        _scratch_mkfs 2>&1 | _fix_malloc >>$FULL
         _log "        *** mounting scratch device"
         _scratch_mount      || _fail "            !!! failed to mount"
         
@@ -166,7 +167,9 @@ FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
 FULL_MOUNT_OPTIONS=`_scratch_mount_options`
 
 # $OUT is the report which will ultimately be sent, keep it tidy.
-cat >$OUT <<EOF
+rm -f $OUT
+[ -z "$FSTYP" ] || echo "FS_TYPE       -- $FSTYP" >>$OUT
+cat >>$OUT <<EOF
 MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
 MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS
 
@@ -174,7 +177,7 @@ EOF
 
 for bench in $benches
 do
-    echo "" >$FULL
+    echo "" >>$FULL
     echo "" >$LOG
     _log "*** benchmark started [passes=$passes, benchmark=$bench]"
     _log "*** (`date`)"

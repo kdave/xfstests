@@ -74,7 +74,8 @@ _test_mount()
         TEST_OPTIONS="$TEST_OPTIONS -ortdev=$TEST_RTDEV"
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
         TEST_OPTIONS="$TEST_OPTIONS -ologdev=$TEST_LOGDEV"
-    mount -t xfs $TEST_OPTIONS $MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
+    [ -z "$FSTYP" ] && FSTYP=xfs
+    mount -t $FSTYP $TEST_OPTIONS $MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
 }
 
 _scratch_mount_options()
@@ -94,7 +95,8 @@ _scratch_mount()
         SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ortdev=$SCRATCH_RTDEV"
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ologdev=$SCRATCH_LOGDEV"
-    mount -t xfs $SCRATCH_OPTIONS $MOUNT_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
+    [ -z "$FSTYP" ] && FSTYP=xfs
+    mount -t $FSTYP $SCRATCH_OPTIONS $MOUNT_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
 }
 
 _scratch_mkfs_options()
@@ -105,6 +107,15 @@ _scratch_mkfs_options()
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="$SCRATCH_OPTIONS -llogdev=$SCRATCH_LOGDEV"
     echo $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_mkfs()
+{
+    if [ -z "$FSTYP" -o "$FSTYP" = xfs ]; then
+        _scratch_mkfs_xfs $*
+    else
+        /sbin/mkfs.$FSTYP $MKFS_OPTIONS $* $SCRATCH_DEV
+    fi
 }
 
 _scratch_mkfs_xfs()
@@ -544,6 +555,9 @@ _check_filesystem()
        	extra_log_options="-l$2"
         extra_mount_options="-ologdev=$2"
     fi
+
+    [ "$FSTYP" != xfs ] && return 0
+
     type=`_fs_type $device`
     ok=1
     
@@ -645,7 +659,7 @@ _check_scratch_fs()
 [ -d /usr/bsd ] && PATH=$PATH:/usr/bsd
 [ -d /usr/freeware/bin ] && PATH=$PATH:/usr/freeware/bin
 
-if [ "$iam" != new ]
+if [ "$iam" != new -a "$iam" != bench ]
 then
 
     # make some further configuration checks here
