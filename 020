@@ -81,7 +81,7 @@ _attr_list()
     file=$1
     
     echo "   *** print attributes"
-    if ! _getfattr -ad $file >$tmp.raw
+    if ! _getfattr -ad $file
     then
         echo "      !!! error return"
         return 1
@@ -92,6 +92,8 @@ _attr_list()
 [ -x /usr/bin/getfattr ] || _notrun "getfattr is not installed"
 
 # real QA test starts here
+
+rm -f $seq.full
 
 testfile=$TEST_DIR/attribute_$$
 
@@ -128,7 +130,7 @@ echo "*** add lots of attributes"
 v=0
 while [ $v -lt 1000 ]
 do
-    echo "value_$v" | attr -s "attribute_$v" $testfile >/dev/null
+    echo "value_$v" | attr -s "attribute_$v" $testfile >>$seq.full
     if [ $? -ne 0 ]
     then
         echo "!!! failed to add \"attribute_$v\""
@@ -140,14 +142,19 @@ done
 
 echo "*** check"
 # don't print it all out...
-getfattr $testfile \
-    | $AWK_PROG '{ l++ } END {print "   *** " (l - 1) " attribute(s)" }'
+getfattr -a $testfile \
+    | tee -a $seq.full \
+    | $AWK_PROG '
+    	/^#/ { next }
+	/^[ 	]*$/ { next }
+        { l++ } 
+	END {print "   *** " (l - 1) " attribute(s)" }'
 
 echo "*** remove lots of attributes"
 v=0
 while [ $v -lt 1000 ]
 do
-    if ! attr -r "attribute_$v" $testfile >/dev/null
+    if ! attr -r "attribute_$v" $testfile >>$seq.full
     then
         echo "!!! failed to remove \"attribute_$v\""
         exit 1

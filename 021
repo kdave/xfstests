@@ -111,11 +111,19 @@ echo "*** make test file 2"
 touch $testfile.2
 echo "value_1" | _attr -s "a1" $testfile.2 >/dev/null
 echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
-
 (echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
     | _attr -s "a3" $testfile.2 >/dev/null
-    
 _getfattr -a $testfile.2
+
+# print name and size from 1st line of output
+_attr -g "a3" $testfile.2 | head -1
+
+# print out the rest of the data apart from the header
+# the size is +1 for an extra \n at the end
+echo -n "size of attr value = "
+_attr -g "a3" $testfile.2 | tail -3 | wc -c
+echo ""
+
 inum_2=`ls -li $testfile.2 | $AWK_PROG '{ print $1 }'`
     
 echo "*** unmount FS"
@@ -131,5 +139,4 @@ echo "*** dump attributes (2)"
 xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c "print" $SCRATCH_DEV
     
 echo "*** done"
-rm $seq.full
 exit
