@@ -29,20 +29,42 @@
 # 
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
 #
-#
-# $Id: Makefile,v 2.195 1999/10/19 02:07:28 kenmcd Exp $
-#
 
-TOPDIR = ..
+TOPDIR = .
+HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs && echo yes || echo no)
+
+ifeq ($(HAVE_BUILDDEFS), yes)
 include $(TOPDIR)/include/builddefs
+endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
-LDIRT = *.bad *.new *.core *.full *.raw core a.out *.bak check.log check.time
-SUBDIRS = src
+CONFIGURE = configure include/builddefs
+LSRCFILES = configure configure.in
+LDIRT = *.bad *.new *.core *.full *.raw core a.out *.bak \
+	check.log check.time config.* conftest*
 
-default: new remake check $(TESTS) $(SUBDIRS)
+SUBDIRS = include src misc man
+
+default: $(CONFIGURE) new remake check $(TESTS)
+ifeq ($(HAVE_BUILDDEFS), no)
+	$(MAKE) -C . $@
+else
+	$(SUBDIRS_MAKERULE)
+endif
+
+ifeq ($(HAVE_BUILDDEFS), yes)
+include $(BUILDRULES)
+else
+clean:  # if configure hasn't run, nothing to clean
+endif
+
+$(CONFIGURE): configure.in include/builddefs.in
+	rm -f config.cache
+	autoconf
+	./configure
+
+install install-dev: default
 	$(SUBDIRS_MAKERULE)
 
-install:
-
-include $(BUILDRULES)
+realclean distclean: clean
+	rm -f $(LDIRT) $(CONFIGURE)

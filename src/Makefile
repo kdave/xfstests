@@ -30,18 +30,15 @@
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
 #
 
-TOPDIR = ../..
+TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
 TARGETS = alloc bstat dbtest devzero dirstress fault feature fsstress \
 	  fill fill2 holes ioctl loggen lstat64 nametest permname \
-	  randholes testrmt truncfile usemem runas
+	  randholes truncfile usemem runas
 CFILES = $(TARGETS:=.c) random.c
 HFILES = global.h
 LDIRT = $(TARGETS)
-
-DBMLIB = -lgdbm
-RMTLIB = $(TOPDIR)/dump/librmt/librmt.a
 
 default: $(TARGETS)
 
@@ -63,21 +60,17 @@ FSSTRESS_OBJECTS = fsstress.o random.o $(LIBATTR)
 fsstress:	$(HFILES) $(FSSTRESS_OBJECTS)
 		$(CCF) -o $@ $(LDFLAGS) $(FSSTRESS_OBJECTS) $(LDLIBS)
 
-DBTEST_OBJECTS = dbtest.o random.o $(DBMLIB)
+DBTEST_OBJECTS = dbtest.o random.o
 dbtest:		$(HFILES) $(DBTEST_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(DBTEST_OBJECTS) $(LDLIBS)
+		$(CCF) -o $@ $(LDFLAGS) $(DBTEST_OBJECTS) $(LIBGDBM) $(LDLIBS)
 
 NAMETEST_OBJECTS = nametest.o random.o
 nametest:	$(HFILES) $(NAMETEST_OBJECTS)
 		$(CCF) -o $@ $(LDFLAGS) $(NAMETEST_OBJECTS) $(LDLIBS)
 
-BSTAT_OBJECTS = bstat.o $(LIBHANDLE)
+BSTAT_OBJECTS = bstat.o
 bstat:		$(HFILES) $(BSTAT_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(BSTAT_OBJECTS) $(LDLIBS)
-
-TESTRMT_OBJECTS = testrmt.o $(RMTLIB)
-testrmt:	$(TESTRMT_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(TESTRMT_OBJECTS) $(LDLIBS)
+		$(CCF) -o $@ $(LDFLAGS) $(BSTAT_OBJECTS) $(LIBHANDLE) $(LDLIBS)
 
 LOGGEN_OBJECTS = loggen.o $(LIBXFS)
 loggen:		$(HFILES) $(LOGGEN_OBJECTS)
