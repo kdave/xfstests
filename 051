@@ -85,8 +85,7 @@ rm -f $seq.full
 
 _need_to_be_root
 _acl_setup_ids
-
-[ ! -x /bin/chacl -a ! -x /usr/bin/chacl ] && _notrun "chacl command not found"
+_acl_requirements
 [ -x $runas ] || _notrun "$runas executable not found"
 
 # get dir
@@ -94,15 +93,6 @@ cd $TEST_DIR
 rm -rf $seq.dir1
 mkdir $seq.dir1
 cd $seq.dir1
-
-# test if acl_get syscall is operational
-# and hence the ACL config has been turned on  
-touch syscalltest
-if chacl -l syscalltest 2>&1 | tee -a $here/$seq.full | grep 'Function not implemented' >/dev/null
-then
-  cd $here
-  _notrun "requires kernel ACL support"
-fi
 
 #-------------------------------------------------------
 # real QA test starts here
@@ -353,37 +343,11 @@ XFS_ACL_MAX_ENTRIES=25
 num_aces_pre=`expr $XFS_ACL_MAX_ENTRIES - 1`
 num_aces_post=`expr $XFS_ACL_MAX_ENTRIES + 1`
 
-_create_n_aces()
-{
-    n=`expr $1 - 4`
-    acl='u::rwx,g::rwx,o::rwx,m::rwx' # 4 ace acl start
-    while [ $n -ne 0 ]; do
-       acl="$acl,u:$n:rwx"
-       n=`expr $n - 1` 
-    done
-    echo $acl
-}
-
-_filter_aces()
-{
-    $AWK_PROG '
-	BEGIN {
-	    FS=":"
-	    while ( getline <"/etc/passwd" > 0 ) {
-		idlist[$1] = $3 
-	    }
-	}
-	/^user/ { if ($2 in idlist) sub($2, idlist[$2])}
-	{print}
-    '
-}
-
 acl1=`_create_n_aces $num_aces_pre`
 acl2=`_create_n_aces $XFS_ACL_MAX_ENTRIES`
 acl3=`_create_n_aces $num_aces_post`
 acl4=`_create_n_aces 16` # Andreas G. libacl size for initial get
 acl5=`_create_n_aces 17` # 1 over A.G. libacl initial size
-
 
 echo "1 below xfs acl max"
 chacl $acl1 largeaclfile

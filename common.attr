@@ -74,5 +74,54 @@ _acl_ls()
     ls -ln $* | awk '{ print $1, $3, $4, $NF }' | _acl_filter_id
 } 
 
+# create an ACL with n ACEs in it
+#
+_create_n_aces()
+{
+    n=`expr $1 - 4`
+    acl='u::rwx,g::rwx,o::rwx,m::rwx' # 4 ace acl start
+    while [ $n -ne 0 ]; do
+       acl="$acl,u:$n:rwx"
+       n=`expr $n - 1` 
+    done
+    echo $acl
+}
+
+# filter user ace names to user ids
+#
+_filter_aces()
+{
+    $AWK_PROG '
+	BEGIN {
+	    FS=":"
+	    while ( getline <"/etc/passwd" > 0 ) {
+		idlist[$1] = $3 
+	    }
+	}
+	/^user/ { if ($2 in idlist) sub($2, idlist[$2])}
+	{print}
+    '
+}
+
+# test if acl code will work
+#
+_acl_requirements()
+{
+    xfsdir=$TEST_DIR
+
+    if [ ! -x /bin/chacl -a ! -x /usr/bin/chacl ]; then
+	_notrun "chacl command not found"
+    fi
+
+    # test if acl_get syscall is operational
+    # and hence the ACL config has been turned on  
+    touch $xfsdir/syscalltest
+    if chacl -l $xfsdir/syscalltest 2>&1 | tee -a $here/$seq.full | grep 'Function not implemented' >/dev/null
+    then
+      cd $here
+      _notrun "requires kernel ACL support"
+    fi
+}
+
 # make sure this script returns success
 /bin/true
