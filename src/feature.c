@@ -40,6 +40,10 @@
  *   -U  test for user quota accounting support (mount option)
  *   -G  test for group quota accounting support (mount option)
  * Return code: 0 is true, anything else is error/not supported
+ *
+ * Test for machine features
+ *   -p  report pagesize
+ *   -w  report bits per long
  */
 
 #include <xfs/libxfs.h>
@@ -171,12 +175,14 @@ main(int argc, char **argv)
 	int	tflag = 0;
 	int	gflag = 0;
 	int	Gflag = 0;
+	int	pflag = 0;
 	int	qflag = 0;
 	int	uflag = 0;
 	int	Uflag = 0;
-	char	*fs;
+	int	wflag = 0;
+	char	*fs = NULL;
 
-	while ((c = getopt(argc, argv, "ctgGquUv")) != EOF) {
+	while ((c = getopt(argc, argv, "ctgGpquUvw")) != EOF) {
 		switch (c) {
 		case 'c':
 			cflag++;
@@ -190,6 +196,9 @@ main(int argc, char **argv)
 		case 'G':
 			Gflag++;
 			break;
+		case 'p':
+			pflag++;
+			break;
 		case 'q':
 			qflag++;
 			break;
@@ -199,6 +208,9 @@ main(int argc, char **argv)
 		case 'U':
 			Uflag++;
 			break;
+		case 'w':
+			wflag++;
+			break;
 		case 'v':
 			verbose++;
 			break;
@@ -207,11 +219,16 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!cflag && !tflag && !uflag && !gflag && !qflag && !Uflag && !Gflag)
+	/* filesystem features */
+	if (cflag || tflag || uflag || gflag || qflag || Uflag || Gflag) {
+		if (optind != argc-1)	/* need a device */
+			usage();
+		fs = argv[argc-1];
+	} else if (wflag || pflag) {
+		if (optind != argc)
+			usage();
+	} else 
 		usage();
-	if (optind != argc-1)
-		usage();
-	fs = argv[argc-1];
 
 	if (cflag)
 		return(haschown32(fs));
@@ -228,6 +245,15 @@ main(int argc, char **argv)
 	if (Uflag)
 		return(hasxfsquota(USRQUOTA, XFS_QUOTA_UDQ_ACCT, fs));
 
-	fprintf(stderr, "feature: dunno what you're doing?\n");
+	if (pflag) {
+		printf("%d\n", getpagesize());
+		exit(0);
+	}
+	if (wflag) {
+		printf("%d\n", BITS_PER_LONG);
+		exit(0);
+	}
+
+	fprintf(stderr, "feature: dunno what you're after.\n");
 	return(1);
 }
