@@ -182,6 +182,7 @@ GetOptions("bytes=f" => \$bytes,
 	   "percent=f" => \$percentage,
 	   "seed=i" => \$seed,
 	   "stddev=i" => \$stddev,
+	   "sync=i" => \$sync_bytes,
 	   "verbose!" => \$verbose);
 
 
@@ -203,6 +204,7 @@ Options:
   --percent=num     percentage of filesystem to fill
   --seed=num        seed for random number generator
   --stddev          set file size standard deviation
+  --sync=num	    sync every num bytes written
   --verbose         verbose output
 EOF
   exit(1) unless defined $help;
@@ -277,6 +279,7 @@ $total = 0;
 $files = 0;
 $dirs = 0;
 $d = 0;
+$sync_cnt = 1;
 
 #
 # fill filesystem
@@ -331,6 +334,11 @@ while ($total < $bytes) {
     }
     $total += $size;
     $files++;
+
+    if (defined $sync_bytes && int($total / $sync_bytes) > $sync_cnt) {
+      $sync_cnt++;
+      system("sync");
+    }
   }
   # note that if d==0 create directories more frequently than files
   elsif (($d == 0 && $r >= 0.5) || ($d > 0 && $r >= 2.4 && $r < 2.7)) {

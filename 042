@@ -84,7 +84,8 @@ _cull_files()
 		print MANIFEST $in[$i];
 	    }
 	}
-	close MANIFEST;'
+	close MANIFEST;
+	exit(0);'
 }
 
 # create a large contiguous file using dd
@@ -97,69 +98,63 @@ _cull_files()
 # check checksums for remaining files
 # create 3 minimum sized (16Mb) allocation groups
 # xfs_repair is going to need three to verify the superblock
+
 rm -f $seq.full
+bmap_cmd="xfs_bmap -v"
+mnt_cmd="mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+_do_die_on_error=message_only
+
 echo -n "Make a 48 megabyte filesystem on SCRATCH_DEV and mount... "
 _do "mkfs -t xfs -d size=48m,agcount=3 -l internal -f $SCRATCH_DEV"
-_do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+_do "$mnt_cmd"
 echo "done"
+
 echo -n "Reserve 16 1Mb unfragmented regions... "
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 do
     _do "dd if=/dev/zero of=$SCRATCH_MNT/hole$i bs=4096 count=256"
     _do "dd if=/dev/zero of=$SCRATCH_MNT/space$i bs=4096 count=1"
-    _do "xfs_bmap $SCRATCH_MNT/hole$i"
+    _do "$bmap_cmd $SCRATCH_MNT/hole$i"
 done
 echo "done" 
+
+# set up filesystem
 echo -n "Fill filesystem with 4k files, generate manifest... "
-_do "src/fill2fs --verbose --dir=$SCRATCH_MNT/fill --seed=0 --filesize=4096 --stddev=0 --list=$tmp.manifest"
+fill_options="--verbose --seed=0 --filesize=4096 --stddev=0 --sync=1000000"
+_do "src/fill2fs $fill_options --dir=$SCRATCH_MNT/fill --list=- > $tmp.manifest"
 echo "done"
+# flush the filesystem - make sure there is no space "lost" to pre-allocation
+_do "umount $SCRATCH_MNT"
+_do "$mnt_cmd"
 echo -n "Use up any further available space using dd... "
 _do "dd if=/dev/zero of=$SCRATCH_MNT/pad bs=4096"
 echo "done"
-echo -n "Delete every second file... "
-if ! _do "_cull_files"; then
-    echo "fail"
-    echo "Could not cull files. Test failed see $seq.full"
-    status=1; exit
-fi
-echo "done"
+
+# create fragmented file
+_do "Delete every second file" "_cull_files"
 echo -n "Create one very large file... "
 _do "src/fill2 -d nbytes=16000000,file=$SCRATCH_MNT/fragmented"
 echo "done"
-_do "xfs_bmap $SCRATCH_MNT/fragmented"
+_do "$bmap_cmd $SCRATCH_MNT/fragmented"
 _do "sum $SCRATCH_MNT/fragmented >$tmp.sum1"
-echo -n "Remove other files... "
-_do "rm -rf $SCRATCH_MNT/{pad,hole*}"
-echo "done"
+_do "Remove other files" "rm -rf $SCRATCH_MNT/{pad,hole*}"
 
-# flush everything
-_do "umount $SCRATCH_MNT"
-_do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+# defragment
+_do "Run xfs_fsr on filesystem" "xfs_fsr -v $SCRATCH_DEV"
+_do "$bmap_cmd $SCRATCH_MNT/fragmented"
+_do "Check 4k files" "src/fill2fs_check $tmp.manifest"
 
-echo -n "Run xfs_fsr on filesystem... "
-_do "xfs_fsr -v $SCRATCH_DEV"
-echo "done"
-_do "xfs_bmap $SCRATCH_MNT/fragmented"
-
-echo -n "Check 4k files... "
-if ! _do "src/fill2fs_check $tmp.manifest"; then
-    echo "fail"
-    echo "4k file is corrupt/missing after fsr. Test failed see $seq.full"
-    status=1; exit
-fi
-echo "done"
+# check
 echo -n "Check large file... "
 _do "sum $SCRATCH_MNT/fragmented >$tmp.sum2"
-if ! diff $tmp.sum1 $tmp.sum2; then
+if ! _do "diff $tmp.sum1 $tmp.sum2"; then
     echo "fail"
     echo "File is corrupt/missing after fsr. Test failed see $seq.full"
     status=1; exit
 fi
 echo "done"
+_do "Checking filesystem" "_check_fs $SCRATCH_DEV"
 
-echo -n "Checking filesystem... "
-_check_fs $SCRATCH_DEV
-echo "done"
 # success, all done
 echo "xfs_fsr tests passed."
 status=0 ; exit

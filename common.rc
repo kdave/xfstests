@@ -262,9 +262,16 @@ _is_block_dev()
     [ -b $1 ] && src/lstat64 $1 | $AWK_PROG '/Device type:/ { print $9 }'
 }
 
-# do a command, log it to $seq.full, optionally test return status
-# and die if command fails
-#
+# Do a command, log it to $seq.full, optionally test return status
+# and die if command fails. If called with one argument _do executes the
+# command, logs it, and returns its exit status. With two arguments _do
+# first prints the message passed in the first argument, and then "done"
+# or "fail" depending on the return status of the command passed in the
+# second argument. If the command fails and the variable _do_die_on_error
+# is set to "always" or the two argument form is used and _do_die_on_error
+# is set to "message_only" _do will print an error message to
+# $seq.out and exit.
+
 _do()
 {
   if [ $# -eq 1 ]; then
@@ -282,11 +289,19 @@ _do()
   (eval "$_cmd") >$tmp._out 2>&1; ret=$?
   cat $tmp._out | _fix_malloc >>$seq.full
   if [ $# -eq 2 ]; then
-    if [ $ret -eq 0 ]; then echo "done"; else echo "fail"; fi
+    if [ $ret -eq 0 ]; then
+      echo "done"
+    else
+      echo "fail"
+    fi
   fi
-  if [ "$_do_die_on_error" -a $ret -ne 0  ]; then
-    eval "echo $_cmd failed \(returned $ret\): see $seq.full"
-    status=1; exit
+  if [ $ret -ne 0  ] \
+     && [ "$_do_die_on_error" = "always" \
+	 -o \( $# -eq 2 -a "$_do_die_on_error" = "message_only" \) ]
+  then
+      [ $# -ne 2 ] && echo
+      eval "echo \"$_cmd\" failed \(returned $ret\): see $seq.full"
+      status=1; exit
   fi
 
   return $ret
@@ -515,7 +530,7 @@ _check_fs()
     fi
     
     [ $ok -eq 0 ] && exit 1
-    
+    return 0    
 }
 
 ################################################################################
