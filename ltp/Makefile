@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2003-2005 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -39,8 +39,12 @@ HFILES = doio.h
 LDIRT = $(TARGETS)
 LCFLAGS = -DXFS
 IFLAG = -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
-#LCFLAGS += -DAIO
-#LIBAIO =-laio
+
+ifeq ($(HAVE_AIO), true)
+TARGETS += aio-stress
+LCFLAGS += -DAIO
+LIBAIO = -laio -lpthread
+endif
 
 default: $(TARGETS)
 
@@ -61,3 +65,8 @@ growfiles: growfiles.c $(LIBTEST)
 
 iogen: iogen.c $(LIBTEST)
 	$(LINKTEST) $(LIBTEST)  $(IFLAG)
+
+ifeq ($(HAVE_AIO), true)
+aio-stress: aio-stress.c
+	$(LINKTEST) $(LIBAIO) $(LDLIBS)
+endif

@@ -844,9 +844,11 @@ usage(void)
 	-s style: 1 gives smaller truncates (default 0)\n\
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
-	-x: preallocate file space before starting, XFS only (default 0)\n\
-	-A: Use the AIO system calls\n\
-	-D startingop: debug output starting at specified operation\n\
+	-x: preallocate file space before starting, XFS only (default 0)\n"
+#ifdef AIO
+	"-A: Use the AIO system calls\n"
+#endif
+	"-D startingop: debug output starting at specified operation\n\
 	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
