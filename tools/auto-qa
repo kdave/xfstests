@@ -74,9 +74,9 @@ _fail()
 
 _get_kernel_version()
 {
-    [ -x $WORKAREA ] \
+    [ -x "$WORKAREA" ] \
         || _fail "can't access workarea $WORKAREA"
-    [ -r $WORKAREA/linux/Makefile ] \
+    [ -r "$WORKAREA/linux/Makefile" ] \
         || _fail "can't read makefile $WORKAREA/linux/Makefile"
 
     eval `awk '
@@ -205,7 +205,7 @@ _sudo()
 
 _restart()
 {
-    exec $ROOT/su -c "(shutdown -r 1 \"auto-qa rebooting\" )&" < /dev/null
+    exec $ROOT/su -c "(shutdown -r now \"auto-qa rebooting\" )&" < /dev/null
 }
 
 _update_autoqa_file()
@@ -265,7 +265,7 @@ in
     cron-restarted)
         # we don't auto restart after reboot, but cron the restart
         # to happen a bit later - it's much easier and safer that way
-        if [ $state != "cron-restarted" ]
+        if [ "$state" != "cron-restarted" ]
         then
             _fail "    !!! cron-restarted while not in \"cron-restarted\" state"
         fi
@@ -277,11 +277,11 @@ then
     _set_state $1
 fi
 
-[ $UID -eq 0 ]          && _fail "    !!! QA most be run as a normal user"
-[ -d $ROOT ]            || _fail "    !!! QA root \"$ROOT\" not found"
-[ -d $WORKAREA ]        || _fail "    !!! QA workarea \"$WORKAREA\" not found"
-[ -r $CONFIG ]          || _fail "    !!! Can't read config file $CONFIG"
-. $COMMON_CONFIG 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
+[ "$UID" -eq 0 ]	&& _fail "    !!! QA most be run as a normal user"
+[ -d "$ROOT" ]		|| _fail "    !!! QA root \"$ROOT\" not found"
+[ -d "$WORKAREA" ]	|| _fail "    !!! QA workarea \"$WORKAREA\" not found"
+[ -r "$CONFIG" ]	|| _fail "    !!! Can't read config file $CONFIG"
+. "$COMMON_CONFIG" 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
 
 _get_kernel_version
 IMAGE="$BOOT/vmlinuz$EXTRA"
@@ -366,20 +366,10 @@ do
             make EXTRAVERSION=$EXTRA dep 2>&1 \
                         || _fail "            !!! reconfig dep failed"
 
-            new_state="build"
+            new_state="buildtools"
             ;;
             
-        *build)
-            _log "        *** build kernel"
-            
-            _change_state "clean" ; # we better start from scratch if this fails
-            
-            cd $WORKAREA/linux
-            make -j2 EXTRAVERSION=$EXTRA bzImage 2>&1 \
-                        || _fail "            !!! build bzImage failed"
-            make -j2 EXTRAVERSION=$EXTRA modules 2>&1 \
-                        || _fail "            !!! build modules failed"
-                                    
+        *buildtools)
             _log "        *** build and install tools"
             for pkg in attr acl xfsprogs dmapi xfsdump xfstests 
             do
@@ -396,14 +386,25 @@ do
                         || _fail "            !!! install $pkg failed"
 
 		# attr and acl now have install-lib targets as well
-		[ $pkg == "attr" -o $pkg == "acl" ] || continue
+		[ "$pkg" == "attr" -o "$pkg" == "acl" ] || continue
 		_sudo make install-lib 2>&1 \
 			|| _fail "            !!! install $pkg failed"
             done
 
+            new_state="buildkernel"
+            ;;
+
+        *buildkernel)
+            _log "        *** build kernel"
+            
+            _change_state "clean" ; # we better start from scratch if this fails
+            
+            cd $WORKAREA/linux
+            make -j4 EXTRAVERSION=$EXTRA bzImage modules 2>&1 \
+                        || _fail "            !!! build bzImage/modules failed"
             new_state="install"
             ;;
-            
+
         *install)
             _log "        *** blat old modules"
             
@@ -454,7 +455,7 @@ do
             ls -l /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs/* \
                   /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs_support/* 
             
-            if [ $MODULAR -eq 0 ]
+            if [ "$MODULAR" -eq 0 ]
             then
                 new_state="reset"
             else
