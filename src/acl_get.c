@@ -66,6 +66,7 @@ main(int argc, char **argv)
 {
 	int c;
         char *file;
+	char *acl_text;
 	int getaccess = 0;
 	int getdefault = 0;
 	int usefd = 0;
@@ -124,24 +125,36 @@ main(int argc, char **argv)
 		acl = acl_get_file(file, ACL_TYPE_ACCESS);
 	    }
 	    if (acl == NULL) {
-		fprintf (stderr, "%s: error getting access ACL on \"%s\": %s\n",
+		fprintf(stderr, "%s: error getting access ACL on \"%s\": %s\n",
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    printf("%s: access ", file);
-	    acl_print(stdout, acl, NULL, TEXT_ABBREVIATE||TEXT_NO_ENDOFLINE);
+	    acl_text = acl_to_any_text(acl, NULL, "", ',', "", TEXT_ABBREVIATE);
+	    if (acl_text == NULL) {
+	    	fprintf(stderr, "%s: cannot get access ACL text on '%s': %s\n",
+			prog, file, strerror(errno));
+	    	return 0;
+	    }
+	    printf("%s: access %s", file, acl_text);
+	    acl_free(acl_text);
 	    acl_free(acl);
 	}
 
         if (getdefault) {
 	    acl = acl_get_file(file, ACL_TYPE_DEFAULT);
 	    if (acl == NULL) {
-		fprintf (stderr, "%s: error getting default ACL on \"%s\": %s\n",
+		fprintf(stderr, "%s: error getting default ACL on \"%s\": %s\n",
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    printf("%s: default ", file);
-	    acl_print(stdout, acl, NULL, TEXT_ABBREVIATE||TEXT_NO_ENDOFLINE);
+	    acl_text = acl_to_any_text(acl, NULL, "", ',', "", TEXT_ABBREVIATE);
+	    if (acl_text == NULL) {
+	    	fprintf(stderr, "%s: cannot get default ACL text on '%s': %s\n",
+			prog, file, strerror(errno));
+	    	return 0;
+	    }
+	    printf("%s: default %s", file, acl_text);
+	    acl_free(acl_text);
 	    acl_free(acl);
 	}
 
