@@ -1,0 +1,27 @@
+#!/bin/sh
+# 
+# Does a dbench run (10 clients if $DBENCH_CLIENTS is not set),
+# then massages the output into CSV format.
+# 
+DBENCH_CLIENTS=${DBENCH_CLIENTS:=10}
+
+run_dbench()
+{
+	mkdir ./dbench || exit 1
+	cd dbench
+	dbench $DBENCH_CLIENTS
+	status=$?
+	cd ..
+	rm -fr ./dbench
+	[ $status -ne 0 ] && exit 1
+}
+
+# 
+# Sample dbench output:
+# "Throughput 40.6701 MB/sec (NB=50.8376 MB/sec  406.701 MBit/sec)"
+# 
+if [ $# -gt 0 ]; then
+	echo "clients,MB/sec"
+	exit 0
+fi
+run_dbench | awk 'END { printf "%u,%s\n", '$DBENCH_CLIENTS', $2 }'
