@@ -1,6 +1,5 @@
 #! /bin/sh
 # XFS QA Test No. 073
-# $Id: 073,v 1.1 2003/07/14 05:12:23 fsgqa Exp $
 #
 # Test xfs_copy
 #
@@ -37,7 +36,7 @@
 #-----------------------------------------------------------------------
 #
 # creator
-owner=harshula@melbourne.sgi.com
+owner=nathans@sgi.com
 
 seq=`basename $0`
 echo "QA output created by $seq"
@@ -45,20 +44,134 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+_cleanup()
+{
+	umount $SCRATCH_MNT 2>/dev/null
+	umount $tmp.loop 2>/dev/null
+	[ -d $tmp.loop ] && rmdir $tmp.loop
+	[ -d $tmp.source_dir ] && rmdir $tmp.source_dir
+	rm -f $tmp.* /var/tmp/xfs_copy.log.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_filter_copy()
+{
+	sed -e "s,$1,<FSIMAGE1>,g" -e "s,$2,<FSIMAGE2>,g"
+}
+
+_populate_scratch()
+{
+	POSIXLY_CORRECT=yes \
+		dd if=/dev/zero of=$SCRATCH_MNT/big+attr count=1000 bs=4096
+	[ "$FAST_POPULATE" = true ] && return
+	echo $SCRATCH_MNT/big+attr | $here/src/fill2attr
+	$here/src/fill2fs --bytes=1048576 --filesize=4096 --stddev=0 --force \
+		--dir=$SCRATCH_MNT/fill --list=- > $tmp.manifest
+}
+
+_verify_copy()
+{
+	target=$1
+	target_dir=$tmp.loop
+	source=$2
+	source_dir=$3
+
+	[ $source = $SCRATCH_DEV ] && _scratch_mount
+
+	echo checking new image
+	_check_filesystem $target
+
+	echo mounting new image on loopback
+	rmdir $target_dir 2>/dev/null
+	mkdir $target_dir
+	mount -t xfs -o loop $target $target_dir 2>/dev/null
+	if [ $? -ne 0 ]; then
+		echo retrying mount with nouuid option
+		mount -t xfs -o loop -o nouuid $target $target_dir
+		if [ $? -ne 0 ]; then
+			echo mount failed - evil!
+			return
+		fi
+	fi
+
+	echo comparing new image files to old
+	diff -Naur $source_dir $target_dir
+
+	echo comparing new image directories to old
+	find $source_dir \
+		| _filter_copy $source_dir '#' \
+		| LC_COLLATE=POSIX sort \
+		> $tmp.manifest1
+	find $target_dir \
+		| _filter_copy $target_dir '#' \
+		| LC_COLLATE=POSIX sort \
+		> $tmp.manifest2
+	[ -s $tmp.manifest1 ] || echo no directory output
+	diff -u $tmp.manifest1 $tmp.manifest2
+
+	echo comparing new image geometry to old
+	xfs_info $source_dir \
+		| _filter_copy $source_dir '#' \
+		| tr -s ' ' \
+		> $tmp.geometry1
+	xfs_info $target_dir \
+		| _filter_copy $target_dir '#' \
+		| tr -s ' ' \
+		> $tmp.geometry2
+	[ -s $tmp.geometry1 ] || echo no geometry output
+	diff -u $tmp.geometry1 $tmp.geometry2
+
+	echo unmounting and removing new image
+	umount $source $target
+	rm -f $target
+}
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
+[ "$USE_EXTERNAL" = yes ] && _notrun "Cannot xfs_copy with external devices"
+[ -x /usr/sbin/xfs_copy ] || _notrun "xfs_copy binary not yet installed"
+
 # real QA test starts here
+_require_scratch
+_require_loop
 
-# if error
-exit
+_scratch_mkfs_xfs -dsize=41m | _filter_mkfs 2>/dev/null
+_scratch_mount 2>/dev/null || _fail "initial scratch mount failed"
 
-# optional stuff if your test has verbose output to help resolve problems
-#echo
-#echo "If failure, check $seq.full (this) and $seq.full.ok (reference)"
+echo
+echo === populating scratch device
+_populate_scratch
+umount $SCRATCH_MNT 2>/dev/null
+
+echo
+echo === copying scratch device to single target
+xfs_copy $SCRATCH_DEV $tmp.image | _filter_copy $tmp.image
+_verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
+
+echo
+echo === copying scratch device to single target, duplicate UUID
+xfs_copy -d $SCRATCH_DEV $tmp.image | _filter_copy $tmp.image
+_verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
+
+echo 
+echo === copying scratch device to single target, large ro device
+/sbin/mkfs.xfs -dfile,name=$tmp.source,size=1t | _filter_mkfs 2>/dev/null
+rmdir $tmp.source_dir 2>/dev/null
+mkdir $tmp.source_dir
+mount -t xfs -o loop $tmp.source $tmp.source_dir
+cp -a $here $tmp.source_dir
+mount -t xfs -o remount,ro $tmp.source $tmp.source_dir
+xfs_copy $tmp.source $tmp.image | _filter_copy $tmp.image
+_verify_copy $tmp.image $tmp.source $tmp.source_dir
+
+echo
+echo === copying scratch device to multiple targets
+xfs_copy -L$tmp.log -b $SCRATCH_DEV $tmp.image1 $tmp.image2 \
+	| _filter_copy $tmp.image1 $tmp.image2
+_verify_copy $tmp.image1 $SCRATCH_DEV $SCRATCH_MNT
+_verify_copy $tmp.image2 $SCRATCH_DEV $SCRATCH_MNT
 
 # success, all done
 status=0

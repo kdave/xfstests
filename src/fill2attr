@@ -34,21 +34,15 @@
 #
 #
 
-#
-# fill2attr:
-#
-#   $Id$
-#
-
+use strict;
 use File::Basename;
-
 
 # returns numbers with a normal distribution
 sub normal {
   my($mean) = $_[0];
   my($stddev) = $_[1];
   
-  $x = -6.0;
+  my $x = -6.0;
   for (my $i = 0; $i < 12; $i++) {
     $x += rand;
   }
@@ -57,44 +51,21 @@ sub normal {
   return $x;
 }
 
-
-#
-# determine script location and find fill2
-#
-chomp($cwd = `pwd`);
-chomp($_ = `which fill2 2>&1 | head -1`);
-if (-x $_) {
-  # look in the path
-  $fill2 = fill2;
-}
-else {
-  # in the same directory - get absolute path
-  chomp($dirname = dirname $0);
-  if ($dirname =~ m!^/.*!) {
-    $fill2 = $dirname . "/fill2";
-  }
-  else {
-    # relative
-    $fill2 = $cwd . "/" . $dirname . "/fill2";
-  }    
-  if (! -x $fill2) {
-    die("Error: $0: can't find fill2, tried \"$fill2\"\n");
-  }
-}
-
+# location of fill2
+my $fill2="./src/fill2";
 
 # for each file attach a random number of attributes
 # each filled with a random amount of data
 # attribute name is the checksum of the data stored within
 # the attribute
 
-$status = 0;			# return status
+my $status = 0;			# return status
+my $file;
 
 while (<>) {
   
   chomp($file = $_);
-  die("Error: $0: $file not found\n")
-    if ( ! -e $file);
+  die("Error: $0: $file not found\n") if ( ! -e $file);
   
   if ($0 =~ /fill2attr$/) {
 
@@ -114,23 +85,23 @@ while (<>) {
       }
       
       chomp($_ = `sum -r $tmp`);
-      ($sum) = split(/\s+/);
-      if (system("cat $tmp | attr -s $sum $file > /dev/null 2>&1") != 0) {
-	die("Error $0: could not attach attribute:\n" . `cat $tmp` . "\n");
-      }
+      my ($sum) = split(/\s+/);
+      system("cat $tmp | attr -s $sum $file > /dev/null");
+      system("rm $tmp");
     }
   }
   elsif ($0 =~ /fill2attr_check/) {
 
     # get the attributes for this file
-    $cmd = "attr -q -l $file |";
+    my $cmd = "attr -q -l $file |";
     open LIST, $cmd;
-    @labels = <LIST>;
+    my @labels = <LIST>;
     close LIST or die("Error listing attributes: $!");
     chomp(@labels);
 
     # check attribute contents
     foreach my $label (@labels) {
+      my $sum;
       ($sum) = split(/\s+/, `attr -q -g $label $file | sum -r`);
       if ($sum ne $label) {
 	warn("Attribute \"$label\" does not match " .
