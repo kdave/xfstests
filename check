@@ -157,6 +157,21 @@ timestamp=false
 
 [ -f check.time ] || touch check.time
 
+if [ ! -z "$MKFS_OPTIONS" ]
+then
+    echo "check: \$MKFS_OPTIONS specified - \"$MKFS_OPTIONS\""
+    umount $SCRATCH_DEV 2>/dev/null
+    # call the overridden mkfs.xfs - make sure the FS is built
+    # the same as we'll create it later.
+    if ! mkfs_xfs -f $SCRATCH_DEV >$tmp.err 2>&1
+    then
+	echo "our local mkfs_xfs routine ..."
+	cat $tmp.err
+        echo "check: failed to mkfs.xfs \$SCRATCH_DEV using specified options"
+        exit 1
+    fi
+fi
+
 if [ ! -z "$MOUNT_OPTIONS" ]
 then
     echo "check: \$MOUNT_OPTIONS specified - \"$MOUNT_OPTIONS\""
@@ -165,7 +180,7 @@ then
     # the same as we'll set it later.
     if ! mount -t xfs $TEST_DEV $TEST_DIR >$tmp.err 2>&1
     then
-	echo "our mount ..."
+	echo "our local mount routine ..."
 	cat $tmp.err
         # call the normal mount
 	echo "normal mount ..."

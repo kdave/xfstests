@@ -35,6 +35,7 @@
  * using IRIX semantics or Linux semantics
  */
  
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
