@@ -51,38 +51,32 @@ status=0	# success is the default!
 
 _cleanup()
 {
-    echo "*** unmount"
-    umount $SCRATCH_MNT 2>/dev/null
-    rm -f $tmp.*
+	echo "*** unmount"
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
-_s()
-{
-    echo $2 | attr -s $1 $testfile >/dev/null
-}
-
 _attr()
 {
-    attr $* 2>$tmp.err >$tmp.out
-    exit=$?
-    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.out
-    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.err 1>&2
-    return $exit
+	attr $* 2>$tmp.err >$tmp.out
+	exit=$?
+	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+		$tmp.out
+	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+		$tmp.err 1>&2
+	return $exit
 }
 
 _getfattr()
 {
-    getfattr $* 2>$tmp.err >$tmp.out
-    exit=$?
-    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.out
-    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.err 1>&2
-    return $exit
-}
-
-_filter_xfsdb2()
-{
-	sed -e 
+	getfattr $* 2>$tmp.err >$tmp.out
+	exit=$?
+	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+		$tmp.out
+	sed -e "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;"\
+		$tmp.err 1>&2
+	return $exit
 }
 
 # real QA test starts here
@@ -93,12 +87,12 @@ umount $SCRATCH_DEV >/dev/null 2>&1
 
 echo "*** mkfs"
 mkfs_xfs $SCRATCH_DEV >/dev/null \
-    || _fail "mkfs failed"
+	|| _fail "mkfs failed"
   
 echo "*** mount FS"
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >/dev/null \
-    || _fail "mount failed"
-    
+	|| _fail "mount failed"
+	
 testfile=$SCRATCH_MNT/testfile
 echo "*** make test file 1"
 
@@ -114,7 +108,7 @@ touch $testfile.2
 echo "value_1" | _attr -s "a1" $testfile.2 >/dev/null
 echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
 ( echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
-    | _attr -s "a3" $testfile.2 >/dev/null
+	| _attr -s "a3" $testfile.2 >/dev/null
 _getfattr --absolute-names $testfile.2
 
 # print name and size from 1st line of output
@@ -127,11 +121,11 @@ _attr -g "a3" $testfile.2 | tail -3 | wc -c
 echo ""
 
 inum_2=`ls -li $testfile.2 | $AWK_PROG '{ print $1 }'`
-    
+	
 echo "*** unmount FS"
 umount $SCRATCH_DEV >>$seq.full 2>&1 \
-    || _fail "umount failed"
-    
+	|| _fail "umount failed"
+
 echo "*** dump attributes (1)"
 
 xfs_db -r -c "inode $inum_1" -c "print a.sfattr" $SCRATCH_DEV
@@ -139,11 +133,11 @@ xfs_db -r -c "inode $inum_1" -c "print a.sfattr" $SCRATCH_DEV
 echo "*** dump attributes (2)"
 
 xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c print $SCRATCH_DEV \
-    | perl -ne '
+	| perl -ne '
 s/^(hdr.firstused =) (\d+)/\1 FIRSTUSED/;
 s/^(hdr.freemap\[0-2] = \[base,size]).*/\1 [FREEMAP..]/;
 s/^(entries\[0-2] = \[hashval,nameidx,incomplete,root,local]).*/\1 [ENTRIES..]/;
-    print;'
+	print;'
 
 echo "*** done"
 exit
