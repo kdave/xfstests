@@ -221,9 +221,21 @@ typedef struct xfs_fsop_bulkreq {
 
 static __inline__ int 
 xfsctl(char* path, int fd, int cmd, void* arg) {
-  if (cmd >= 0 && cmd < XFS_FSOPS_COUNT)
-    return syssgi(SGI_XFS_FSOPERATIONS, fd, cmd, (void*)0, arg);
-  else if (cmd == SGI_FS_BULKSTAT)
+  if (cmd >= 0 && cmd < XFS_FSOPS_COUNT) {
+    /*
+     * We have a problem in that xfsctl takes 1 arg but
+     * some sgi xfs ops take an input arg and/or an output arg
+     * So have to special case the ops to decide if xfsctl arg
+     * is an input or an output argument.
+     */
+    if (cmd == XFS_FS_GOINGDOWN) {
+      /* in arg */
+      return syssgi(SGI_XFS_FSOPERATIONS, fd, cmd, arg, 0);
+    } else {
+      /* out arg */
+      return syssgi(SGI_XFS_FSOPERATIONS, fd, cmd, 0, arg);
+    }
+  } else if (cmd == SGI_FS_BULKSTAT)
     return syssgi(SGI_FS_BULKSTAT, fd, 
 		  ((xfs_fsop_bulkreq_t*)arg)->lastip,
 		  ((xfs_fsop_bulkreq_t*)arg)->icount,

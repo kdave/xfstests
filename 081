@@ -70,13 +70,21 @@ _require_scratch
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
+
 # do a simple quota test to ensure DQUOT data is happening
-export MKFS_OPTIONS="-lversion=1"
-export MOUNT_OPTIONS="-ousrquota,grpquota"
+export MKFS_OPTIONS="-l version=1"
+export MOUNT_OPTIONS="-o quota,gquota"
+
+if [ "$HOSTOS" = "IRIX" ]; then 
+    start=0
+else
+    start=2
+fi
+
 _mkfs_log
 _create_log
 _check_log
-_print_transaction_inode 2
+_print_transaction_inode $start
 _cmp_output $seq.ugquota.trans_inode $filtered
 
 # got thru it all so we may have success

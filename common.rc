@@ -681,14 +681,14 @@ _check_xfs_filesystem()
     fi
 
     $XFS_LOGPRINT_PROG -t $extra_log_options $device 2>&1 \
-                | tee $tmp.fs_check | grep -q "<CLEAN>"
+                | tee $tmp.logprint | grep -q "<CLEAN>"
     if [ $? -ne 0 -a "$HOSTOS" = "Linux" ]
     then
         echo "_check_fs: filesystem on $device has dirty log (see $seq.full)"
         
         echo "_check_fs: filesystem on $device has dirty log"   >>$here/$seq.full
         echo "*** xfs_logprint -t output ***"                   >>$here/$seq.full
-        cat $tmp.fs_check                                       >>$here/$seq.full
+        cat $tmp.logprint                                       >>$here/$seq.full
         echo "*** end xfs_logprint output"                      >>$here/$seq.full
         
         ok=0
@@ -709,19 +709,19 @@ _check_xfs_filesystem()
     fi
     # repair doesn't scale massively at this stage, optionally skip it for now
     [ "$USE_BIG_LOOPFS" = yes ] || \
-    $XFS_REPAIR_PROG -n $extra_log_options $device >$tmp.fs_check 2>&1
+    $XFS_REPAIR_PROG -n $extra_log_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
         
         echo "_check_fs: filesystem on $device is inconsistent" >>$here/$seq.full
         echo "*** xfs_repair -n output ***"                     >>$here/$seq.full
-        cat $tmp.fs_check | _fix_malloc                         >>$here/$seq.full
+        cat $tmp.repair | _fix_malloc                           >>$here/$seq.full
         echo "*** end xfs_repair output"                        >>$here/$seq.full
         
         ok=0
     fi
-    rm -f $tmp.fs_check
+    rm -f $tmp.fs_check $tmp.logprint $tmp.repair
  
     if [ $ok -eq 0 ]
     then

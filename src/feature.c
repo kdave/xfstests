@@ -156,14 +156,29 @@ hasxfsquota(int type, int q, char *device)
 	fs_quota_stat_t	qstat;
 	int		qcmd;
 
-	if (q == 0)
-		return (access("/proc/fs/xfs/xqm", F_OK) < 0);
-
 	memset(&qstat, 0, sizeof(fs_quota_stat_t));
 
 #ifdef QCMD
+	if (q == 0) {
+		if (access("/proc/fs/xfs/xqm", F_OK) < 0) {
+			if (verbose) {
+				fprintf(stderr, "can't access /proc/fs/xfs/xqm\n");
+			}
+			return 1;
+		}
+		return 0;
+	}
 	qcmd = QCMD(Q_XGETQSTAT, type);
 #else
+	if (q == 0) {
+		if (quotactl(Q_SYNC, device, 0, (caddr_t)&qstat) == ENOPKG) {
+			if (verbose) {
+				fprintf(stderr, "Q_SYNC not supported\n");
+			}
+			return 1;
+		}
+		return 0;
+	}
 	qcmd = Q_GETQSTAT;
 #endif
 

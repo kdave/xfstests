@@ -193,7 +193,19 @@ _filter_logprint()
 		oper = $0
 		next
 	}
+	/^TRANS/ && dummy_rec == 1 {
+		# start printing again - dummy transaction over
+		dummy_rec = 0
+	}
+	/DUMMY1/ {
+		# filter out dummy transactions
+		dummy_rec = 1
+		next
+	}
         {
+		if (dummy_rec) {
+		    next
+		}
 		buf_data = 0
 		if (oper) { # now we can print out oper
 		    print oper
@@ -225,8 +237,8 @@ _print_logstate()
 _print_operation()
 {
     mkdir $fulldir >/dev/null 2>&1
-    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
-    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ //g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ //g'`
     raw=$fulldir/op.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
     filtered=$fulldir/op.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
@@ -249,8 +261,8 @@ _print_transaction_inode()
 {
     _start=$1
     mkdir $fulldir >/dev/null 2>&1
-    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
-    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ //g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ //g'`
     raw=$fulldir/trans_inode.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
     filtered=$fulldir/trans_inode.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
@@ -265,8 +277,8 @@ _print_transaction_buf()
 {
     _start=$1
     mkdir $fulldir >/dev/null 2>&1
-    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
-    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ //g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ //g'`
     raw=$fulldir/trans_buf.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
     filtered=$fulldir/trans_buf.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
@@ -298,7 +310,7 @@ _mkfs_log()
 _create_log()
 {
     # mount the FS
-    _full " mount"
+    _full "mount"
     _scratch_mount >>$seq.full 2>&1
     if [ $? -ne 0 ] ; then 
 	_echofull "mount failed: $MOUNT_OPTIONS"
@@ -340,7 +352,7 @@ _create_log_sync()
 	touch $file
 	sync
     done
-	
+
     # unmount the FS
     _full "umount"
     umount $SCRATCH_DEV >>$seq.full 2>&1
@@ -348,7 +360,6 @@ _create_log_sync()
 	_echofull "umount failed"
 	return 1
     fi
-
 }
 
 _cmp_output()

@@ -42,10 +42,14 @@ _require_quota()
     src/feature -q $TEST_DEV
     [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS quota"
 
-    [ ! -x /sbin/quotaon ] && _notrun "Quota user tools not installed"
+    if [ "$HOSTOS" = "IRIX" ]; then 
+	[ ! -x /usr/etc/quotaon ] && _notrun "Quota user tools not installed"
+    else
+	[ ! -x /sbin/quotaon ] && _notrun "Quota user tools not installed"
 
-    /sbin/quotaon -x 2>&1 | grep "option requires an argument -- x" >/dev/null
-    [ $? -ne 0 ] && _notrun "Installed quota tools do not support XFS"
+	/sbin/quotaon -x 2>&1 | grep "option requires an argument -- x" >/dev/null
+	[ $? -ne 0 ] && _notrun "Installed quota tools do not support XFS"
+    fi
 }
 
 # create a file as a specific user (uid)

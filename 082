@@ -61,26 +61,32 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
 
 # prelim
 rm -f $seq.full $tmp.*
 _require_scratch
+
+# link correct .out file
+_link_out_file $seq.op
+
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
 # mkfs-opt             mount-opt            start-blk
-  -lversion=2          -ologbsize=32k       2
-  -lversion=2,su=4096  -ologbsize=32k       8
-  -lversion=2,su=32768 -ologbsize=32k       64
+  version=2            logbsize=32k       2
+  version=2,su=4096    logbsize=32k       8
+  version=2,su=32768   logbsize=32k       64
 #
 # expect following line to fail
 #
-  -lversion=2,su=36864 -ologbsize=32k       72
+  version=2,su=36864   logbsize=32k       72
 #
 # following is not a power of 2 BBs 
 #
-  -lversion=2,su=5120  -ologbsize=32k       10
+  version=2,su=5120    logbsize=32k       10
 EOF
 
 # Do the work for various log params which
@@ -96,9 +102,15 @@ for s in sync nosync ; do
 	if [ "$mkfs" = "#" ]; then 
 	    continue
 	fi
-	echo "--- mkfs=$mkfs, mnt=$mnt, start=$start, sync=$s ---"
-	export MOUNT_OPTIONS=$mnt
-	export MKFS_OPTIONS=$mkfs
+	if [ "$HOSTOS" = "IRIX" ]; then 
+	    # don't have umount rec at start on IRIX
+	    # so we won't have to skip over it and get to 
+	    # another stripe boundary
+	    start=0
+	fi
+	echo "--- mkfs=$mkfs, mnt=$mnt, sync=$s ---"
+	export MKFS_OPTIONS="-l $mkfs"
+	export MOUNT_OPTIONS="-o $mnt"
 	if ! _mkfs_log; then
 	    continue
 	fi	

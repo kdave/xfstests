@@ -36,9 +36,10 @@ include $(TOPDIR)/include/builddefs
 TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	nametest permname randholes runas truncfile usemem \
 	mmapcat append_reader append_writer dirperf metaperf \
-	devzero feature alloc fault fstest t_access_root  
+	devzero feature alloc fault fstest t_access_root \
+	godown
 
-LINUX_TARGETS = loggen xfsctl resvtest godown bstat t_mtab
+LINUX_TARGETS = loggen xfsctl resvtest bstat t_mtab
 
 ifeq ($(PKG_PLATFORM),linux)
 TARGETS += $(LINUX_TARGETS)

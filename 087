@@ -60,7 +60,7 @@ _do_meta()
     param="-p 4 -z -f rmdir=10 -f link=10 -f creat=10 -f mkdir=10 \
            -f rename=30 -f stat=30 -f unlink=30 -f truncate=20"
     _echofull "calling fsstress $param -m8 -n $count"
-    if ! time $here/ltp/fsstress $param $FSSTRESS_AVOID -m 8 -n $count -d $out >>$seq.full 2>&1
+    if ! $here/ltp/fsstress $param $FSSTRESS_AVOID -m 8 -n $count -d $out >>$seq.full 2>&1
     then
 	_echofull "fsstress failed"
     fi
@@ -78,12 +78,13 @@ umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
 # mkfs-opt             mount-opt
-  -lversion=2          -ologbsize=32k
-  -lversion=2,su=4096  -ologbsize=32k
-  -lversion=2,su=32768 -ologbsize=32k
-  -lversion=2          -ologbsize=64k
-  -lversion=2          -ologbsize=128k
-  -lversion=2          -ologbsize=256k
+# ------------------------------
+  version=2            logbsize=32k
+  version=2,su=4096    logbsize=32k
+  version=2,su=32768   logbsize=32k
+  version=2            logbsize=64k
+  version=2            logbsize=128k
+  version=2            logbsize=256k
 EOF
 
 cat $tmp.seq.params \
@@ -94,8 +95,8 @@ do
     fi
 
     echo "--- mkfs=$mkfs, mnt=$mnt ---"
-    export MOUNT_OPTIONS=$mnt
-    export MKFS_OPTIONS=$mkfs
+    export MKFS_OPTIONS="-l $mkfs"
+    export MOUNT_OPTIONS="-o $mnt"
 
     # mkfs the FS
     _echofull "mkfs"
