@@ -1,0 +1,144 @@
+#!/usr/bin/perl -w
+#
+
+#
+#  Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#  
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#  
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  
+#  Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+#  Mountain View, CA  94043, or:
+#  
+#  http://www.sgi.com 
+#  
+#  For further information regarding this notice, see: 
+#  
+#  http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+#
+
+#
+# fill2attr:
+#
+#   $Id$
+#
+
+use File::Basename;
+
+
+# returns numbers with a normal distribution
+sub normal {
+  my($mean) = $_[0];
+  my($stddev) = $_[1];
+  
+  $x = -6.0;
+  for (my $i = 0; $i < 12; $i++) {
+    $x += rand;
+  }
+  
+  $x = $mean + $stddev * $x;
+  return $x;
+}
+
+
+#
+# determine script location and find fill2
+#
+chomp($cwd = `pwd`);
+chomp($_ = `which fill2 2>&1 | head -1`);
+if (-x $_) {
+  # look in the path
+  $fill2 = fill2;
+}
+else {
+  # in the same directory - get absolute path
+  chomp($dirname = dirname $0);
+  if ($dirname =~ m!^/.*!) {
+    $fill2 = $dirname . "/fill2";
+  }
+  else {
+    # relative
+    $fill2 = $cwd . "/" . $dirname . "/fill2";
+  }    
+  if (! -x $fill2) {
+    die("Error: $0: can't find fill2, tried \"$fill2\"\n");
+  }
+}
+
+
+# for each file attach a random number of attributes
+# each filled with a random amount of data
+# attribute name is the checksum of the data stored within
+# the attribute
+
+$status = 0;			# return status
+
+while (<>) {
+  
+  chomp($file = $_);
+  die("Error: $0: $file not found\n")
+    if ( ! -e $file);
+  
+  if ($0 =~ /fill2attr$/) {
+
+    # attach attributes to this file
+    my $num = abs(int(normal(3, 1)));
+    my $seed = 1;
+    my $verbose = 1;
+    my $tmp = "/tmp/fill2attr$$";
+    
+    for (my $i = 0; $i < $num; $i++) {
+      my $size = abs(int(normal(256, 200)));
+      my $cmd = "$fill2 -d nbytes=$size,linelength=72,seed=$seed -b 4k $tmp";
+      $cmd .= " > /dev/null 2>&1" if (! $verbose);
+      
+      if (system($cmd) != 0) {
+	die("Error $0: can't create $tmp\n");
+      }
+      
+      chomp($_ = `sum -r $tmp`);
+      ($sum) = split(/\s+/);
+      if (system("cat $tmp | attr -s $sum $file > /dev/null 2>&1") != 0) {
+	die("Error $0: could not attach attribute:\n" . `cat $tmp` . "\n");
+      }
+    }
+  }
+  elsif ($0 =~ /fill2attr_check/) {
+
+    # get the attributes for this file
+    $cmd = "attr -q -l $file |";
+    open LIST, $cmd;
+    @labels = <LIST>;
+    close LIST or die("Error listing attributes: $!");
+    chomp(@labels);
+
+    # check attribute contents
+    foreach my $label (@labels) {
+      ($sum) = split(/\s+/, `attr -q -g $label $file | sum -r`);
+      if ($sum ne $label) {
+	warn("Attribute \"$label\" does not match " .
+	     "attribute contents for file $file\n");
+	$status = 1;
+      }
+    }
+  }
+}
+
+exit($status);
