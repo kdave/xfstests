@@ -59,7 +59,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _free()
 {
-    _df_dir $TEST_DIR | $AWK_PROG '{ print $5 }'
+    _df_dir $SCRATCH_MNT | $AWK_PROG '{ print $5 }'
 }
 
 _filter_dd()
@@ -79,6 +79,7 @@ _require_scratch
 mkfs -t xfs -f -d size=50m $SCRATCH_DEV >/dev/null
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
 out=$SCRATCH_MNT/fillup.$$
+rm -f $seq.full
 
 free0=`_free`
 if [ -z "$free0" ]
@@ -86,10 +87,21 @@ then
     echo "   *** failed to get free space (0)"
     exit 1
 fi
+echo "free space at start $free0" >> $seq.full
 
 echo "fill disk:"	# well, filesystem really - not disk
 
 dd if=/dev/zero of=$out bs=1024k 2>&1 | _filter_dd
+
+echo "check free space:"
+
+free1=`_free`
+if [ -z "$free1" ]
+then
+    echo "   *** failed to get free space (1)"
+    exit 1
+fi
+echo "free space after fill $free1" >> $seq.full
 
 if [ ! -e $out ]
 then
@@ -121,15 +133,16 @@ fi
 
 echo "check free space:"
 
-free1=`_free`
-if [ -z "$free1" ]
+free2=`_free`
+if [ -z "$free2" ]
 then
-    echo "   *** failed to get free space (1)"
+    echo "   *** failed to get free space (2)"
     exit 1
 fi
+echo "free space after delete $free2" >> $seq.full
 
 echo -n "   !!! "
-_within_tolerance "free space" $free1 $free0 1% -v
+_within_tolerance "free space" $free2 $free0 1% -v
 
 status=0
 exit
