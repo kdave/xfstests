@@ -374,6 +374,24 @@ sub/biggg	102400	$nobody	$nobody
 End-of-File
 }
 
+_mk_fillconfig_perm()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size/dir  user group mode
+#
+file_suid	10	$nobody	$nobody	04777
+file_guid	10	$nobody	$nobody	02777
+file_sticky	10	$nobody	$nobody	01777
+file_mix1	10	$nobody	$nobody	761
+file_mix2	10	$nobody	$nobody	642
+dir_suid	d	$nobody	$nobody	04777
+dir_guid	d	$nobody	$nobody	02777
+dir_sticky	d	$nobody	$nobody	01777
+dir_mix1	d	$nobody	$nobody	761
+dir_mix2	d	$nobody	$nobody	642
+End-of-File
+}
+
 #
 # Create a bunch of directories/files of different sizes
 # filled with data.
@@ -397,9 +415,9 @@ _do_create_dumpdir_fill()
     sed -e '/^#/d' $tmp.config \
     | while read file nbytes owner group perms
     do
-	dir=`dirname $file`
-	if [ "$dir" != "." ]
-	then
+	if [ $nbytes = "d" ]; then
+	    # create a directory
+	    dir=$file	
 	    if [ ! -d $dir ]
 	    then
 		if mkdir $dir
@@ -411,15 +429,32 @@ _do_create_dumpdir_fill()
 		    exit 1
 		fi
 	    fi
-	fi
-	rm -f $file
-	if $here/src/fill $file $file $nbytes
-	then
-	    :
 	else
-	    $verbose && echo
-	    echo "Error: cannot create \"$file\""
-	    exit 1
+	    # create a directory/file
+	    dir=`dirname $file`
+	    if [ "$dir" != "." ]
+	    then
+		if [ ! -d $dir ]
+		then
+		    if mkdir $dir
+		    then
+			:
+		    else
+			$verbose && echo
+			echo "Error: cannot mkdir \"$dir\""
+			exit 1
+		    fi
+		fi
+	    fi
+	    rm -f $file
+	    if $here/src/fill $file $file $nbytes
+	    then
+		:
+	    else
+		$verbose && echo
+		echo "Error: cannot create \"$file\""
+		exit 1
+	    fi
 	fi
 	if [ -n "$owner" -a -n "$group" ]; then
 	    chown $owner.$group $file
@@ -447,6 +482,14 @@ _create_dumpdir_fill2()
 {
     _wipe_fs
     _mk_fillconfig2
+    _do_create_dumpdir_fill
+    _stable_fs
+}	
+
+_create_dumpdir_fill_perm()
+{
+    _wipe_fs
+    _mk_fillconfig_perm
     _do_create_dumpdir_fill
     _stable_fs
 }	
