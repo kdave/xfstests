@@ -1,0 +1,123 @@
+#! /bin/sh
+# FS QA Test No. 103
+#
+# Exercise the XFS nosymlinks and project inheritance inode flags
+# (for now only nosymlinks is tested; other is not yet implemented).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_create_scratch()
+{
+	echo "*** mkfs"
+	if ! _scratch_mkfs_xfs >$tmp.out 2>&1
+	then
+		cat $tmp.out
+		echo "failed to mkfs $SCRATCH_DEV"
+		exit 1
+	fi
+
+	echo "*** mount"
+	if ! _scratch_mount 2>/dev/null
+	then
+		echo "failed to mount $SCRATCH_DEV"
+		exit 1
+	fi
+}
+
+_filter_scratch()
+{
+	sed -e "s,$SCRATCH_MNT,SCRATCH_MNT,g"
+}
+
+# real QA test starts here
+_supported_fs xfs
+_require_command /usr/sbin/xfs_io
+_require_scratch
+
+_create_scratch
+
+
+echo "*** testing nosymlinks directories"
+mkdir $SCRATCH_MNT/nosymlinks
+echo "*** setting nosymlinks bit"
+xfs_io -r -c 'chattr +n' -c lsattr $SCRATCH_MNT/nosymlinks \
+	| _filter_scratch
+touch $SCRATCH_MNT/nosymlinks/source
+ln -s $SCRATCH_MNT/nosymlinks/source $SCRATCH_MNT/nosymlinks/target 2>&1 \
+	| _filter_scratch
+ln $SCRATCH_MNT/nosymlinks/source $SCRATCH_MNT/nosymlinks/hardlinksareok
+
+echo "*** 1st listing..."
+find $SCRATCH_MNT | _filter_scratch
+
+echo "*** clearing nosymlinks bit"
+xfs_io -r -c 'chattr -n' -c lsattr $SCRATCH_MNT/nosymlinks | _filter_scratch
+ln -s $SCRATCH_MNT/nosymlinks/source $SCRATCH_MNT/nosymlinks/target
+ln $SCRATCH_MNT/nosymlinks/source $SCRATCH_MNT/nosymlinks/hardlinksareok2
+
+echo "*** 2nd listing..."
+find $SCRATCH_MNT | _filter_scratch
+
+echo "*** finished testing nosymlinks directories"
+
+
+# echo "*** testing inherited project IDs"
+# mkdir $SCRATCH_MNT/projectids
+# xfs_io -r -c 'chattr +P' -c lsattr -c 'chproj 42' $SCRATCH_MNT/projectids\
+#	| _filter_scratch
+# mkdir -p $SCRATCH_MNT/projectids/a/b
+# touch $SCRATCH_MNT/projectids/a/b/c
+# xfs_io -r -c 'lsattr -R' $SCRATCH_MNT/projectids
+# xfs_io -r -c 'lsproj' $SCRATCH_MNT/projectids/a $SCRATCH_MNT/projectids/a/b/c\
+#	| _filter_scratch
+# echo "*** 3rd listing..."
+# find $SCRATCH_MNT | _filter_scratch
+# echo "*** finished testing inherited project IDs"
+
+status=0
+exit
