@@ -71,6 +71,15 @@ _attr()
     return $exit
 }
 
+_getfattr()
+{
+    getfattr $* 2>$tmp.err >$tmp.out
+    exit=$?
+    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.out
+    sed "s#$SCRATCH_MNT[^ .:]*#<TESTFILE>#g; s#$tmp[^ :]*#<TMPFILE>#g;" $tmp.err 1>&2
+    return $exit
+}
+
 # real QA test starts here
 
 _require_scratch
@@ -94,7 +103,7 @@ echo "*** make test file 1"
 touch $testfile.1
 echo "v1" | _attr -s "a1" $testfile.1 >/dev/null
 echo "v2--" | _attr -s "a2--" $testfile.1 >/dev/null
-_attr -l $testfile.1
+_getfattr -a $testfile.1
 inum_1=`ls -li $testfile.1 | $AWK_PROG '{ print $1 }'`
 
 echo "*** make test file 2"
@@ -106,7 +115,7 @@ echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
 (echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
     | _attr -s "a3" $testfile.2 >/dev/null
     
-_attr -l $testfile.2
+_getfattr -a $testfile.2
 inum_2=`ls -li $testfile.2 | $AWK_PROG '{ print $1 }'`
     
 echo "*** unmount FS"

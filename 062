@@ -59,6 +59,21 @@ _cleanup()
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
+_filter_scratch()
+{
+	sed -e "s,$SCRATCH_MNT,SCRATCH_MNT,g"
+}
+
+getfattr()
+{
+	/usr/bin/getfattr -adl $@ 2>&1 | _filter_scratch
+}
+
+setfattr()
+{
+	/usr/bin/setfattr $@
+}
+
 _create_test_bed()
 {
 	echo "*** create test bed"
@@ -70,24 +85,10 @@ _create_test_bed()
 	mknod $SCRATCH_MNT/dev/c c 0 0
 	mknod $SCRATCH_MNT/dev/p p
 	# sanity check
-	find $SCRATCH_MNT | LC_COLLATE=POSIX sort
-}
-
-getfattr()
-{
-	/usr/bin/getfattr $@ | sed -e \
-		"s/$SCRATCH_MNT/SCRATCH_MNT/g"
-}
-
-setfattr()
-{
-	/usr/bin/setfattr $@ | sed -e \
-		"s/$SCRATCH_MNT/SCRATCH_MNT/g"
+	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch
 }
 
 _require_scratch
-[ -x /usr/bin/getfattr ] || _notrun "getfattr is not installed"
-[ -x /usr/bin/setfattr ] || _notrun "setfattr is not installed"
 rm -f $tmp.backup1 $tmp.backup2 $seq.full
 
 # real QA test starts here
@@ -102,7 +103,7 @@ for nsp in user xfsroot; do
 
 		echo "*** set/get one initially empty attribute"
 		setfattr -l -n $nsp.name $SCRATCH_MNT/$inode
-		getfattr -al -d $SCRATCH_MNT/$inode
+		getfattr -r $nsp $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty, set several new attributes"
 		setfattr -l -n $nsp.name -v 0xbabe $SCRATCH_MNT/$inode
@@ -110,33 +111,33 @@ for nsp in user xfsroot; do
 		setfattr -l -n $nsp.name3 -v 0xdeface $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (hex)"
-		getfattr -al -d -e hex $SCRATCH_MNT/$inode
+		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (base64)"
-		getfattr -al -d -e base64 $SCRATCH_MNT/$inode
+		getfattr -r $nsp -e base64 $SCRATCH_MNT/$inode
 
 		echo "*** shrink value of an existing attribute"
 		setfattr -l -n $nsp.name2 -v 0xdeaf $SCRATCH_MNT/$inode
-		getfattr -al -d -e hex $SCRATCH_MNT/$inode
+		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** grow value of existing attribute"
 		setfattr -l -n $nsp.name2 -v 0xdecade $SCRATCH_MNT/$inode
-		getfattr -al -d -e hex $SCRATCH_MNT/$inode
+		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** set an empty value for second attribute"
 		setfattr -l -n $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -al -d -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -r $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty value"
 		setfattr -l -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
-		getfattr -al -d -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -r $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** remove attribute"
 		setfattr -l -x $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -al -d -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -r $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
-		getfattr -als -d $SCRATCH_MNT/$inode
+		getfattr -r '^user|^xfsroot' $SCRATCH_MNT/$inode
 	done
 done
 
@@ -159,26 +160,26 @@ _extend_test_bed()
 	# whack a symlink in the middle, just to be difficult
 	ln -s $SCRATCH_MNT/here/up $SCRATCH_MNT/descend/and
 	# dump out our new starting point
-	find $SCRATCH_MNT | LC_COLLATE=POSIX sort
+	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch
 }
 
 _extend_test_bed
 
 echo
 echo "*** forward directory descent with us following symlinks"
-getfattr -L -R -adls -e hex $SCRATCH_MNT
+getfattr -L -R -r '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 echo
 echo "*** reverse directory descent with us following symlinks"
-getfattr -L -R -5 -adls -e hex $SCRATCH_MNT
+getfattr -L -R -5 -r '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 echo
 echo "*** forward directory descent without following symlinks"
-getfattr -P -R -adls -e hex $SCRATCH_MNT
+getfattr -P -R -r '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 echo
 echo "*** reverse directory descent without following symlinks"
-getfattr -P -R -5 -adls -e hex $SCRATCH_MNT
+getfattr -P -R -5 -r '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 
 # 
@@ -188,7 +189,8 @@ echo; echo
 
 _backup()
 {
-	getfattr -a -sdlR $SCRATCH_MNT >$1
+	# NB: no filtering of scratch here... (need to restore too)
+	/usr/bin/getfattr -adl -sR $SCRATCH_MNT >$1
 	echo BACKUP $1 >>$seq.full
 	cat $1 >> $seq.full
 	[ ! -s $1 ] && echo "warning: $1 (backup file) is empty"
@@ -200,7 +202,7 @@ _backup $tmp.backup1
 echo "*** clear out the scratch device"
 rm -fr $SCRATCH_MNT/*
 echo "AFTER REMOVE" >>$seq.full
-getfattr -L -R -adls $SCRATCH_MNT >>$seq.full
+getfattr -L -R -r '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
 
 echo "*** reset test bed with no extended attributes"
 _create_test_bed
@@ -211,7 +213,7 @@ setfattr -lB $tmp.backup1
 _backup $tmp.backup2
 
 echo "AFTER RESTORE" >>$seq.full
-getfattr -L -R -adls $SCRATCH_MNT >>$seq.full
+getfattr -L -R -r '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
 
 echo "*** compare before and after backups"
 diff $tmp.backup1 $tmp.backup2

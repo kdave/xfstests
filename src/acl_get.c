@@ -44,6 +44,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/acl.h>
+#include <acl/libacl.h>
 
 char *prog;
 
@@ -54,7 +55,6 @@ void usage(void)
            "    -a - get access ACL\n"
            "    -d - get default ACL\n" 
            "    -f - get access ACL using file descriptor\n" 
-           "    -i - use irix semantics\n" 
            ,prog);
            
 }
@@ -68,24 +68,19 @@ main(int argc, char **argv)
         char *file;
 	int getaccess = 0;
 	int getdefault = 0;
-	int irixsemantics = 0;
 	int usefd = 0;
 	int fd = -1;
 	acl_t acl;
-	char *buf_acl;
 
         prog = basename(argv[0]);
 
-	while ((c = getopt(argc, argv, "adif")) != -1) {
+	while ((c = getopt(argc, argv, "adf")) != -1) {
 		switch (c) {
 		case 'a':
 			getaccess = 1;
 			break;
 		case 'd':
 			getdefault = 1;
-			break;
-		case 'i':
-			irixsemantics = 1;
 			break;
 		case 'f':
 			usefd = 1;
@@ -110,10 +105,6 @@ main(int argc, char **argv)
 	    file = argv[optind];
 	} 
 
-	if (irixsemantics) {
-	    acl_set_compat(ACL_COMPAT_IRIXGET);
-	}
-
 	if (usefd) {
 	    fd = open(file, O_RDONLY);
 	    if (fd < 0) {
@@ -137,21 +128,9 @@ main(int argc, char **argv)
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    if (irixsemantics && acl->acl_cnt == ACL_NOT_PRESENT) {
-		buf_acl = strdup("irix-empty");
-	    }
-	    else {	
-		buf_acl = acl_to_short_text (acl, (ssize_t *) NULL);
-		if (buf_acl == NULL) {
-		    fprintf (stderr, "%s: error converting ACL to short text "
-				     "for file \"%s\": %s\n",
-				 prog, file, strerror(errno));
-		    return 0;
-		}
-	    }
-	    printf("%s: access %s\n", file, buf_acl);
+	    printf("%s: access ", file);
+	    acl_print(stdout, acl, NULL, TEXT_ABBREVIATE||TEXT_NO_ENDOFLINE);
 	    acl_free(acl);
-	    acl_free(buf_acl);	
 	}
 
         if (getdefault) {
@@ -161,24 +140,9 @@ main(int argc, char **argv)
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    if (irixsemantics && acl->acl_cnt == ACL_NOT_PRESENT) {
-		buf_acl = strdup("irix-empty");
-	    }
-	    else if (!irixsemantics && acl->acl_cnt == 0) {
-		buf_acl = strdup("linux-empty");
-	    }
-	    else {	
-		buf_acl = acl_to_short_text (acl, (ssize_t *) NULL);
-		if (buf_acl == NULL) {
-		    fprintf (stderr, "%s: error converting ACL to short text "
-				     "for file \"%s\": %s\n",
-				 prog, file, strerror(errno));
-		    return 0;
-		}
-	    }
-	    printf("%s: default %s\n", file, buf_acl);
+	    printf("%s: default ", file);
+	    acl_print(stdout, acl, NULL, TEXT_ABBREVIATE||TEXT_NO_ENDOFLINE);
 	    acl_free(acl);
-	    acl_free(buf_acl);
 	}
 
 	return 0;

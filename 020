@@ -67,50 +67,29 @@ _attr()
     return $exit
 }
 
+_getfattr()
+{
+    getfattr $* 2>$tmp.err >$tmp.out
+    exit=$?
+    _filter $tmp.out
+    _filter $tmp.err 1>&2
+    return $exit
+}
+
 _attr_list()
 {
     file=$1
     
     echo "   *** print attributes"
-    if ! _attr -l $file >$tmp.raw
+    if ! _getfattr -ad $file >$tmp.raw
     then
         echo "      !!! error return"
         return 1
     fi
-    
-    $AWK_PROG -v file=$file '
-        {
-            print substr($2,2,length($2)-2)
-            count++
-        }
-        END { 
-            exit count 
-        }
-        ' <$tmp.raw >$tmp.list
-        
-    echo "      *** $? attribute(s)"
-    for l in `cat $tmp.list`
-    do
-        if ! _attr -g $l $file >$tmp.raw
-        then
-            echo "         *** $l"
-            echo "         !!! error return"
-            return 1
-        fi
-        $AWK_PROG '
-            NR==1 {
-                print "         *** field: " substr($2,2,length($2)-2) \
-                      " length: " $5
-                next
-            }
-            {
-                print "            ::: " $0
-            }
-        ' <$tmp.raw
-        
-    done
 }
 
+[ -x /usr/bin/attr ] || _notrun "attr is not installed"
+[ -x /usr/bin/getfattr ] || _notrun "getfattr is not installed"
 
 # real QA test starts here
 
@@ -161,8 +140,8 @@ done
 
 echo "*** check"
 # don't print it all out...
-attr -l $testfile \
-    | $AWK_PROG '{ l++ } END {print "   *** " l " attribute(s)" }'
+getfattr $testfile \
+    | $AWK_PROG '{ l++ } END {print "   *** " (l - 1) " attribute(s)" }'
 
 echo "*** remove lots of attributes"
 v=0
@@ -170,7 +149,7 @@ while [ $v -lt 1000 ]
 do
     if ! attr -r "attribute_$v" $testfile >/dev/null
     then
-        echo "!!! failed to add \"attribute_$v\""
+        echo "!!! failed to remove \"attribute_$v\""
         exit 1
     fi
     
