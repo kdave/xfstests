@@ -33,9 +33,13 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-TARGETS = alloc bstat dbtest devzero dirstress fault feature fsstress \
+TARGETS = alloc bstat devzero dirstress fault feature fsstress \
 	  fill fill2 holes ioctl loggen lstat64 nametest permname \
 	  randholes truncfile usemem runas
+ifeq ($(HAVE_DB), true)
+TARGETS += dbtest
+endif
+
 CFILES = $(TARGETS:=.c) random.c
 HFILES = global.h
 LDIRT = $(TARGETS)

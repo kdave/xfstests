@@ -180,21 +180,14 @@ libacl="/usr/lib/libacl.a"
 AC_SUBST(libacl)
 
 dnl Checks for GNU database manager header and library.
-AC_CHECK_HEADER(gdbm.h,, [
-	echo
-	echo 'FATAL ERROR: could not find a valid GNU database manager header.'
-	echo 'Install either the gdbm-devel (rpm) or the libgdbmg1-dev (deb) package.'
-	exit 1
-])
-AC_CHECK_LIB(gdbm, gdbm_open,, [
-	echo
-	echo 'FATAL ERROR: could not find a valid GNU database manager library.'
-	echo 'Install either the gdbm-devel (rpm) or the libgdbmg1-dev (deb) package.'
-	exit 1
-])
-libgdbm="/usr/lib/libgdbm.a"
+libgdbm=""
+have_db=true
+AC_CHECK_HEADER(gdbm/ndbm.h,, [ have_db=false ])
+if test $have_db = "true" -a -f /usr/lib/libgdbm.a; then
+	libgdbm="/usr/lib/libgdbm.a"
+fi
 AC_SUBST(libgdbm)
-
+AC_SUBST(have_db)
 
 dnl alternate root and usr prefixes
 test -z "$ROOT_PREFIX" && ROOT_PREFIX=""
