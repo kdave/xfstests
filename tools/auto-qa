@@ -79,15 +79,15 @@ export WORKAREA="$ROOT/linux-xfs"
 
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
 STATE=$ROOT/qa.state
-QADIR="$WORKAREA/cmd/xfs/stress"
+QADIR="$WORKAREA/cmd/xfstests"
 SUDO="su -c"
 IMAGE="$BOOT/vmlinuz-$VERSION$EXTRA"
 SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
 CONFIG="$ROOT/$HOST-$VERSION$EXTRA.config"
 MODULES="/lib/modules/$VERSION$EXTRA"
 SELF="$ROOT/auto-qa"
-SELF_UPDATE="cmd/xfs/tools/auto-qa"
-COMMON_CONFIG="$WORKAREA/cmd/xfs/stress/common.config"
+SELF_UPDATE="cmd/xfstests/tools/auto-qa"
+COMMON_CONFIG="$WORKAREA/cmd/xfstests/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
 
@@ -276,31 +276,21 @@ do
             ;;
             
         *clean)
-            # we need to configure or else we might fail to clean stress/src
-            _log "        *** configure for clean"
-            cd $WORKAREA/cmd/xfs
-            make configure 2>&1 \
-                                    || _fail "            !!! configure for clean failed"
-                                    
-            _log "        *** clean stress/src"
-            cd $WORKAREA/cmd/xfs/stress/src
-            make clobber 2>&1 \
-                                    || _fail "            !!! clean stress/src failed"
-
-            _log "        *** clean xfs tools"
-            cd $WORKAREA/cmd/xfs
-            make realclean 2>&1 \
-                                    || _fail "            !!! clean tools failed"
+            # we need to configure or else we might fail to clean
+            for pkg in attr acl xfsprogs xfsdump xfstests
+                cd $WORKAREA/cmd/$pkg
+                _log "        *** configure $pkg for clean"
+                make configure 2>&1 \
+                                    || _fail "            !!! configure $pkg for clean failed"
+                _log "        *** clean $pkg tools"
+                make realclean 2>&1 \
+                                    || _fail "            !!! clean $pkg failed"
+            done
 
             _log "        *** clean quota tools"
             cd $WORKAREA/cmd/quota
             ( rm -f configure ; autoconf ; sh configure ; make clean ) 2>&1 \
                                     || _fail "            !!! clean quota failed"
-
-            _log "        *** clean qa"
-            cd $WORKAREA/cmd/xfs/stress
-            rm -f *.full *.bad *.log *.time *.core core 2>&1 \
-                                    || _fail "            !!! clean qa failed"
 
             _log "        *** clean linux"
             cd $WORKAREA/linux
@@ -346,29 +336,31 @@ do
             make -j2 EXTRAVERSION=$EXTRA modules 2>&1 \
                                     || _fail "            !!! build modules failed"
                                     
-            _log "        *** build tools"
-            cd $WORKAREA/cmd/xfs
-            
-            # use e-fence - but this will only take effect on configure
-            export MALLOCLIB=/usr/lib/libefence.a
-            make configure 2>&1 \
-                                    || _fail "            !!! configure tools failed"
-            make default 2>&1 \
-                                    || _fail "            !!! build tools failed"
+            _log "        *** build and install tools"
+            for pkg in attr acl xfsprogs xfsdump xfstests 
+            do
+                cd $WORKAREA/cmd/$pkg
 
-            _log "        *** build quota tools"
+                # use e-fence - but this will only take effect on configure
+                export MALLOCLIB=/usr/lib/libefence.a
+                make configure 2>&1 \
+                                    || _fail "            !!! configure $pkg failed"
+                make default 2>&1 \
+                                    || _fail "            !!! build $pkg failed"
+
+                _sudo make install install-dev 2>&1 \
+                                    || _fail "            !!! install $pkg failed"
+            done
+
+            _log "        *** build and install quota tools"
             cd $WORKAREA/cmd/quota
             
             # use e-fence - but this will only take effect on configure
             export MALLOCLIB=/usr/lib/libefence.a
             ( rm -f configure ; autoconf ; sh configure ; make all ) 2>&1 \
                                     || _fail "            !!! build quota failed"
-
-            _log "        *** build stress/src"
-            cd $WORKAREA/cmd/xfs/stress/src
-            
-            make default 2>&1 \
-                                    || _fail "            !!! build stress/src failed"
+            _sudo make install 2>&1 \
+                                    || _fail "            !!! install quota failed"
 
             new_state="install"
             ;;
@@ -386,16 +378,6 @@ do
                                     || _fail "            !!! install kernel failed"
             _sudo make EXTRAVERSION=$EXTRA modules_install 2>&1 \
                                     || _fail "            !!! install modules failed"
-
-            _log "        *** install xfs tools"
-            cd $WORKAREA/cmd/xfs
-            _sudo make install 2>&1 \
-                                    || _fail "            !!! install tools failed"
-
-            _log "        *** install quota tools"
-            cd $WORKAREA/cmd/quota
-            _sudo make install 2>&1 \
-                                    || _fail "            !!! install quota failed"
 
             _log "        *** reinit lilo"
             _sudo /sbin/lilo 2>&1 \
