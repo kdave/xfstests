@@ -344,8 +344,66 @@ chacl m:user1:rwx file1
 chacl a::rwx file1
 set +x
 
+#-------------------------------------------------------
+
+echo ""
+echo "=== Test out large ACLs  ==="
+touch largeaclfile
+XFS_ACL_MAX_ENTRIES=25
+num_aces_pre=`expr $XFS_ACL_MAX_ENTRIES - 1`
+num_aces_post=`expr $XFS_ACL_MAX_ENTRIES + 1`
+
+_create_n_aces()
+{
+    n=`expr $1 - 4`
+    acl='u::rwx,g::rwx,o::rwx,m::rwx' # 4 ace acl start
+    while [ $n -ne 0 ]; do
+       acl="$acl,u:$n:rwx"
+       n=`expr $n - 1` 
+    done
+    echo $acl
+}
+
+_filter_aces()
+{
+    $AWK_PROG '
+	BEGIN {
+	    FS=":"
+	    while ( getline <"/etc/passwd" > 0 ) {
+		idlist[$1] = $3 
+	    }
+	}
+	/^user/ { if ($2 in idlist) sub($2, idlist[$2])}
+	{print}
+    '
+}
+
+acl1=`_create_n_aces $num_aces_pre`
+acl2=`_create_n_aces $XFS_ACL_MAX_ENTRIES`
+acl3=`_create_n_aces $num_aces_post`
+acl4=`_create_n_aces 16` # Andreas G. libacl size for initial get
+acl5=`_create_n_aces 17` # 1 over A.G. libacl initial size
 
 
+echo "1 below xfs acl max"
+chacl $acl1 largeaclfile
+getfacl largeaclfile | _filter_aces
+
+echo "xfs acl max"
+chacl $acl2 largeaclfile
+getfacl largeaclfile | _filter_aces
+
+echo "1 above xfs acl max"
+chacl $acl3 largeaclfile
+getfacl largeaclfile | _filter_aces
+
+echo "use 16 aces"
+chacl $acl4 largeaclfile
+getfacl largeaclfile | _filter_aces
+
+echo "use 17 aces"
+chacl $acl5 largeaclfile
+getfacl largeaclfile | _filter_aces
 
 #-------------------------------------------------------
 
