@@ -87,9 +87,17 @@ _mt()
     op=$1
     if _isrmt; then  
 	# REMOTE
-	_rmthost=`echo $dumptape | awk -F: '{print $1}'`
 	_rmtdev=`echo $dumptape | awk -F: '{print $2}'`
-	rsh -n $_rmthost "mt -t $_rmtdev $op"
+
+        if echo $dumptape | grep '@' >/dev/null; then
+	    _spec=`echo $dumptape | awk -F: '{print $1}'`
+	    _rmtuser=`echo $_spec | awk -F@ '{print $1}'`
+	    _rmthost=`echo $_spec | awk -F@ '{print $2}'`
+	    rsh -n -l $_rmtuser $_rmthost "mt -t $_rmtdev $op"
+	else
+	    _rmthost=`echo $dumptape | awk -F: '{print $1}'`
+	    rsh -n $_rmthost "mt -t $_rmtdev $op"
+	fi
     else
 	#LOCAL
 	mt -t $dumptape $op
