@@ -74,8 +74,12 @@ _check_root_inos()
 # real QA test starts here
 _require_scratch
 
-# devzero blows away 512byte blocks, so make 512byte inodes
-mkfs_xfs -isize=512 $SCRATCH_DEV | _filter_mkfs 2>/dev/null
+# devzero blows away 512byte blocks, so make 512byte inodes (at least)
+mkfs_xfs $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+source $tmp.mkfs
+[ $isize -lt 512 ] && \
+	mkfs_xfs -isize=512 $SCRATCH_DEV | _filter_mkfs 2>/dev/null
+
 `xfs_db -r -c sb -c p $SCRATCH_DEV | grep 'ino = ' | \
 	sed -e 's/ //g' -e 's/^/export /'`
 
