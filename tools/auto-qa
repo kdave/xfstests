@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -56,8 +56,7 @@ _fail()
     case $state
     in
 	cron*)
-	    mail -s "XFS QA status report" $EMAIL \
-		< $LOG 2>&1
+	    mail -s "XFS QA status report" $EMAIL < $LOG 2>&1
 	;;
     esac
 
@@ -89,11 +88,10 @@ _get_kernel_version()
 ROOT="$HOME/qa"
 HOST=`hostname -s`
 if [ ! -z "$CVSROOT" ]; then
-    WORKAREA="$ROOT/linux-2.4-xfs"
+    export WORKAREA="$ROOT/linux-2.4-xfs"
 else
-    [ -z "$WORKAREA" ] && WORKAREA="$ROOT/linux-xfs"
+    [ -z "$WORKAREA" ] && export WORKAREA="$ROOT/linux-xfs"
 fi
-export WORKAREA
 
 
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
@@ -234,6 +232,42 @@ _test_mount()
     _sudo mount -t xfs $TEST_OPTIONS $* $TEST_DEV $TEST_DIR
 }
 
+_i386_install()
+{
+    _sudo cp -f $WORKAREA/linux/arch/i386/boot/bzImage $IMAGE 2>&1 \
+		|| _fail "	    !!! install kernel failed"
+    _sudo cp -f $WORKAREA/linux/System.map $SYSTEMMAP 2>&1 \
+		|| _fail "	    !!! install kernel failed"
+    if [ -z "$KMODULES" -o "$KMODULES" = yes ]; then
+	_sudo make EXTRAVERSION=-$EXTRA modules_install 2>&1 \
+		|| _fail "	    !!! install modules failed"
+    fi
+
+    if [ -z "$KINSTALL" -o "$KINSTALL" = lilo ]; then
+	_log "	*** reinit lilo"
+	_sudo /sbin/lilo 2>&1 \
+		|| _fail "	    !!! reinit lilo failed"
+    fi
+}
+
+_i386_restart()
+{
+    if [ -z "$KINSTALL" -o "$KINSTALL" = lilo ]; then
+	_sudo /sbin/lilo -R $EXTRA $KERNEL_OPTIONS 2>&1 \
+		|| _fail "	    !!! lilo failed"
+    fi
+}
+
+_ia64_install()
+{
+    echo not yet implemented
+}
+
+_ia64_restart()
+{
+    echo not yet implemented
+}
+
 
 _log "*** linux-xfs QA (`date`)"
 
@@ -274,8 +308,8 @@ fi
 . "$COMMON_CONFIG" 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
 
 _get_kernel_version
-IMAGE="$BOOT/vmlinuz$EXTRA"
-SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
+IMAGE="$BOOT/vmlinuz-$EXTRA"
+SYSTEMMAP="$BOOT/System.map-$VERSION-$EXTRA"
 MODULES="/lib/modules/$SVERSION"
 
 cd $ROOT
@@ -300,7 +334,8 @@ do
 	    _log "QA init $VERSION (`date`)"
 	    _log "******************************************************"
 	    _log "--- kernel ($IMAGE)"
-	    _log "--- modules ($MODULES)"
+	    [ -z "$KMODULES" -o "$KMODULES" = yes ] && \
+		_log "--- modules ($MODULES)"
 
 	    _change_state "inited"
 	    _update_autoqa_file
@@ -313,19 +348,48 @@ do
 	
 	*update)
 	    _update_workarea
-	    new_state="clean"
+	    new_state="cleantools"
 	    ;;
 
-	*clean)
+	*cleantools)
 	    # we need to configure or else we might fail to clean
 	    for pkg in attr acl xfsprogs dmapi xfsdump xfstests
 	    do
+		[ -d $WORKAREA/cmd/$pkg ] || continue
 		cd $WORKAREA/cmd/$pkg
 		_log "	*** clean $pkg tools"
 		make realclean 2>&1 \
 			|| _fail "	    !!! clean $pkg failed"
 	    done
+	    new_state="buildtools"
+	    ;;
 
+	*buildtools)
+	    _log "	*** build and install tools"
+	    for pkg in attr acl xfsprogs dmapi xfsdump xfstests 
+	    do
+		[ -d $WORKAREA/cmd/$pkg ] || continue
+		cd $WORKAREA/cmd/$pkg
+
+		# use e-fence - but this will only take effect on configure
+		make configure 2>&1 \
+			|| _fail "	    !!! configure $pkg failed"
+		make default 2>&1 \
+			|| _fail "	    !!! build $pkg failed"
+
+		_sudo make install install-dev 2>&1 \
+			|| _fail "	    !!! install $pkg failed"
+
+		# attr and acl now have install-lib targets as well
+		[ "$pkg" = "attr" -o "$pkg" = "acl" ] || continue
+		_sudo make install-lib 2>&1 \
+			|| _fail "	    !!! install $pkg failed"
+	    done
+
+	    new_state="cleankernel"
+	    ;;
+
+	*cleankernel)
 	    _log "	*** clean linux"
 	    cd $WORKAREA/linux
 	    make mrproper 2>&1 \
@@ -346,79 +410,61 @@ do
 	
 	    _log "	*** reconfig kernel"
 	    
-	    _change_state "clean" ; # we better start from scratch if this fails
+	    # we better start from scratch if this fails
+	    _change_state "cleankernel"
 	    
 	    cd $WORKAREA/linux
 	    # we want to use default options for any new config options.
 	    echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" | \
-		make EXTRAVERSION=$EXTRA oldconfig 2>&1 \
+		make EXTRAVERSION=-$EXTRA oldconfig 2>&1 \
 			|| _fail "	    !!! reconfig oldconfig failed"
-	    make EXTRAVERSION=$EXTRA dep 2>&1 \
+	    make EXTRAVERSION=-$EXTRA dep 2>&1 \
 			|| _fail "	    !!! reconfig dep failed"
-
-	    new_state="buildtools"
-	    ;;
-	    
-	*buildtools)
-	    _log "	*** build and install tools"
-	    for pkg in attr acl xfsprogs dmapi xfsdump xfstests 
-	    do
-		cd $WORKAREA/cmd/$pkg
-
-		# use e-fence - but this will only take effect on configure
-		make configure 2>&1 \
-			|| _fail "	    !!! configure $pkg failed"
-		make default 2>&1 \
-			|| _fail "	    !!! build $pkg failed"
-
-		_sudo make install install-dev 2>&1 \
-			|| _fail "	    !!! install $pkg failed"
-
-		# attr and acl now have install-lib targets as well
-		[ "$pkg" = "attr" -o "$pkg" = "acl" ] || continue
-		_sudo make install-lib 2>&1 \
-			|| _fail "	    !!! install $pkg failed"
-	    done
 
 	    new_state="buildkernel"
 	    ;;
-
+	    
 	*buildkernel)
 	    _log "	*** build kernel"
 	    
 	    _change_state "clean" ; # we better start from scratch if this fails
 	    
 	    cd $WORKAREA/linux
-	    make -j4 EXTRAVERSION=$EXTRA bzImage modules 2>&1 \
-			|| _fail "	    !!! build bzImage/modules failed"
+	    [ -z "$KTARGET" ] && KTARGET=bzImage
+	    [ -z "$KMODULES" -o "$KMODULES" = yes ] && \
+		KTARGET="$KTARGET modules"
+	    make -j4 EXTRAVERSION=-$EXTRA $KTARGET 2>&1 \
+			|| _fail "	    !!! build $KTARGET failed"
 	    new_state="install"
 	    ;;
 
 	*install)
 	    _log "	*** blat old modules"
-	    
 	    _sudo rm -rf $MODULES
 	    
 	    _log "	*** install kernel"
 	    cd $WORKAREA/linux
-	    _sudo cp -f $WORKAREA/linux/arch/i386/boot/bzImage $IMAGE 2>&1 \
-			|| _fail "	    !!! install kernel failed"
-	    _sudo cp -f $WORKAREA/linux/System.map $SYSTEMMAP 2>&1 \
-			|| _fail "	    !!! install kernel failed"
-	    _sudo make EXTRAVERSION=$EXTRA modules_install 2>&1 \
-			|| _fail "	    !!! install modules failed"
+	    case `uname -m`
+	    in
+		i386|i686)	_i386_install ;;
+		ia64)		_ia64_install ;;
+	    esac
 
-	    _log "	*** reinit lilo"
-	    _sudo /sbin/lilo 2>&1 \
-			|| _fail "	    !!! reinit lilo failed"
-	    new_state="restart"
+	    if [ -z "$KRESTART" -o "$KRESTART" = yes ]; then
+		new_state="restart"
+	    else
+		new_state="done"
+	    fi
 	    ;;
 	    
 	*restart)
 	    _log "	    *** select qa kernel"
-	    _sudo /sbin/lilo -R linux-xfs-qa $KERNEL_OPTIONS 2>&1 \
-			|| _fail "	    !!! lilo failed"
-	    
+	    case `uname -m`
+	    in
+		i386|i686)	_i386_restart ;;
+		ia64)		_ia64_restart ;;
+	    esac
+
 	    _log "	    *** prepare to restart"
 	    _change_state "restarted"
 	    
@@ -434,16 +480,16 @@ do
 	    ;;
 	  
 	*check)
-	    uname=`uname -ar`
+	    uname=`uname -a`
 	    _log "	    *** uname $uname"
 	    _log "	    *** kernel"
-	    ls -l /boot/*$EXTRA*  2>&1
+	    [ -n "/boot/*$EXTRA*" ] && \
+		ls -l /boot/*$EXTRA*  2>&1
 	    _log "	    *** kernel modules"
-	    [ -d /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs ] && \
-		ls -l /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs/*
+	    [ -d /lib/modules/$SVERSION-$EXTRA/kernel/fs/xfs ] && \
+		ls -l /lib/modules/$SVERSION-$EXTRA/kernel/fs/xfs/*
 
-	    if [ "$MODULAR" -eq 0 ]
-	    then
+	    if [ "$MODULAR" -eq 0 ]; then
 		new_state="reset"
 	    else
 		new_state="probe"
@@ -452,23 +498,19 @@ do
 	    
 	*probe)
 	    _log "	    *** modules dependencies"
-	    
 	    _sudo depmod -a  2>&1 \
 			|| _fail "	    !!! failed to depmod -a" 
 	    
 	    _log "	    *** unmounting XFS mounts"
-	    
 	    _sudo umount -a -t xfs 2>&1
 	    
 	    _log "	    *** removing modules"
-	    
 	    for m in xfsidbg xfs kdbm_pg kdbm_vm
 	    do
 		_sudo rmmod $m 2> /dev/null
 	    done
 	    
 	    _log "	    *** installing modules"
-
 	    _sudo modprobe xfs 2>&1 \
 			|| _fail "	    !!! failed to modprobe xfs"
 
@@ -478,20 +520,16 @@ do
 	*reset)
 	    
 	    _log "	    *** unmounting TEST_DEV"
-	    
 	    _sudo umount $TEST_DEV 2>&1
 	    
 	    _log "	    *** unmounting SCRATCH_DEV"
-	    
 	    _sudo umount $SCRATCH_DEV 2>&1
 	    
 	    _log "	    *** clean TEST_DEV"
-	    
 	    _test_mkfs_xfs 2>&1 \
 			|| _fail "	    !!! failed to mkfs TEST_DEV"
 	    
 	    _log "	    *** mounting TEST_DEV"
-	    
 	    _test_mount 2>&1 \
 			|| _fail "	    !!! failed to mount"
 				    
