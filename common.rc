@@ -571,7 +571,7 @@ _check_filesystem()
         fi
     fi
 
-    /usr/sbin/xfs_logprint -t $device $extra_log_options 2>&1 \
+    /usr/sbin/xfs_logprint -t $extra_log_options $device 2>&1 \
                 | tee $tmp.fs_check | grep -q "<CLEAN>"
     if [ $? -ne 0 ]
     then
@@ -585,7 +585,8 @@ _check_filesystem()
         ok=0
     fi
 
-    /usr/sbin/xfs_check $testoption $device 2>&1 | _fix_malloc >$tmp.fs_check 
+    /usr/sbin/xfs_check $testoption $extra_log_options $device 2>&1 | \
+			_fix_malloc >$tmp.fs_check 
     if [ -s $tmp.fs_check ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (c) (see $seq.full)"
@@ -600,7 +601,7 @@ _check_filesystem()
 
     # repair doesn't scale massively at this stage, optionally skip it for now
     [ "$USE_BIG_LOOPFS" = yes ] || \
-    /sbin/xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
+    /sbin/xfs_repair -n $extra_log_options $device >$tmp.fs_check 2>&1
     if [ $? -ne 0 ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
