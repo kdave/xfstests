@@ -35,13 +35,17 @@
 #include <string.h>
 #include <malloc.h>
 #include <getopt.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 /*---------------------------------------------------------------------------
 
 Test program used to test the DMAPI function dm_write_invis().  The
 command line is:
 
-	write_invis [-c char] [-o offset] [-l length] [-s sid] {pathname|handle}
+	write_invis [-c char] [-o offset] [-l length] [-s sid] \
+		[-S storefile] {pathname|handle}
 
 where:
 'char' is the character to use as a repeated pattern ('X' is the default),
@@ -68,7 +72,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage:\t%s [-c char] [-o offset] [-l length] "
-		"[-s sid] {pathname|handle}\n", Progname);
+		"[-s sid] [-S storefile] {pathname|handle}\n", Progname);
 	exit(1);
 }
 
@@ -89,6 +93,9 @@ main(
 	dm_ssize_t	rc;
 	char		*name;
 	int		opt;
+	char		*storefile = NULL;
+	int		storefd;
+	int		exit_status = 0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -98,7 +105,7 @@ main(
 
 	/* Crack and validate the command line options. */
 
-	while ((opt = getopt(argc, argv, "c:o:l:s:")) != EOF) {
+	while ((opt = getopt(argc, argv, "c:o:l:s:S:")) != EOF) {
 		switch (opt) {
 		case 'c':
 			ch = *optarg;
@@ -111,6 +118,9 @@ main(
 			break;
 		case 's':
 			sid = atol(optarg);
+			break;
+		case 'S':
+			storefile = optarg;
 			break;
 		case '?':
 			usage();
@@ -145,16 +155,43 @@ main(
 		memset(bufp, ch, length);
 	}
 
+	if (storefile) {
+		ssize_t sret;
+		off_t	lret;
+
+		if ((storefd = open(storefile, O_RDONLY)) == -1) {
+			fprintf(stderr, "unable to open store file for read (%s), errno = %d\n", storefile, errno);
+			exit(1);
+		}
+		lret = lseek(storefd, offset, SEEK_SET);
+		if (lret < 0) {
+			fprintf(stderr, "unable to lseek(%s) to offset %lld, errno = %d\n",
+				storefile, (long long)lret, errno);
+			exit(1);
+		}
+		sret = read(storefd, bufp, length);
+		if (sret < 0) {
+			fprintf(stderr, "unable to read store file (%s), errno = %d\n", storefile, errno);
+			exit(1);
+		}
+		else if (sret != length) {
+			fprintf(stderr, "read(%s) returned %lld, expected %lld\n",
+				storefile, (long long)sret, (long long)length);
+			exit(1);
+		}
+		close(storefd);
+	}
+
 	rc = dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, offset, length, bufp);
 
 	if (rc < 0) {
 		fprintf(stderr, "dm_write_invis failed, %s\n", strerror(errno));
-		exit(1);
+		exit_status++;
 	} else if (rc != length) {
-		fprintf(stderr, "expected to write %lld bytes, actually "
+		fprintf(stderr, "dm_write_invis expected to write %lld bytes, actually "
 			"wrote %lld\n", length, rc);
-		exit(1);
+		exit_status++;
 	}
 	dm_handle_free(hanp, hlen);
-	exit(0);
+	exit(exit_status);
 }
