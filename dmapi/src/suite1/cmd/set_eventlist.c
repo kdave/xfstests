@@ -72,7 +72,7 @@ usage(void)
 {
 	int	i;
 
-	fprintf(stderr, "usage:\t%s [-F] [-m max] [-s sid] "
+	fprintf(stderr, "usage:\t%s [-F] [-m max] [-s sid] [-t token] "
 		"{pathname|handle} event [...]\n", Progname);
 	fprintf(stderr, "possible events are:\n");
 	for (i = 0; i < ev_namecnt; i++) {

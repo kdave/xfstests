@@ -50,6 +50,7 @@ int		 handle_message	(dm_sessid_t, dm_eventmsg_t *);
 static	int	format_mode(mode_t mode, char **ptr);
 static	int	get_fs_handle	(char *, void **, size_t *);
 static	int	set_disposition(dm_sessid_t, void *, size_t);
+static	int	set_disp_global(dm_sessid_t);
 static	int	set_events	(dm_sessid_t, void *, size_t);
 static	int	clear_events	(dm_sessid_t, void *, size_t);
 int		 finish_responding(dm_sessid_t);
@@ -67,14 +68,14 @@ int		 Verbose;
 dm_sessid_t	 sid = 0;
 dm_sessid_t	 oldsid = 0;
 char		 *fsname;
-
+int		 register_new_mnts = 0;
 
 void
 usage(
       char *prog)
 {
   fprintf(stderr, "Usage: %s ", prog);
-  fprintf(stderr, " <-S oldsid> <-v verbose> ");
+  fprintf(stderr, " <-S oldsid> <-v> <-s sleep> <-R> ");
   fprintf(stderr, "filesystem \n");
 }
 
@@ -94,10 +95,13 @@ main(
 /*  Progname  = argv[0];*/ Progname = "print_event";
   fsname  = NULL;
 
-  while ((c = getopt(argc, argv, "vs:S:")) != EOF) {
+  while ((c = getopt(argc, argv, "vs:S:R")) != EOF) {
     switch (c) {
     case 's':
       Sleep = atoi(optarg);
+      break;
+    case 'R':
+      register_new_mnts = 1;
       break;
     case 'S':
       oldsid = atoi(optarg);
@@ -149,6 +153,9 @@ main(
    * Set the event disposition so that our session will receive
    * all the events for the given file system
    */
+  error = set_disp_global(sid);
+  if (error)
+    goto cleanup;
   error = set_disposition(sid, fs_hanp, fs_hlen);
   if (error)
     goto cleanup;
@@ -517,12 +524,22 @@ handle_message(
 		printf(HDR, "mount", msg->ev_token, msg->ev_sequence);
 #if	!VERITAS_21
 		msg_me = DM_GET_VALUE(msg, ev_data, dm_mount_event_t *);
+		hanp1 = DM_GET_VALUE(msg_me, me_handle1, void *);
+		hlen1 = DM_GET_LEN(msg_me, me_handle1);
+		
 		print_one_mount_event(msg_me);
+
+		if (register_new_mnts) {
+			if (set_disposition(sid, hanp1, hlen1) == 0)
+				set_events(sid, hanp1, hlen1);
+		}
+
 #else	/* VERITAS_21 */
 		msg_ne = DM_GET_VALUE(msg, ev_data, dm_namesp_event_t *);
 		print_one_mount_event(msg_ne);
 #endif	/* VERITAS_21 */
-  }
+
+	}
 
   /***** NAMESPACE EVENTS *****/
 
@@ -829,16 +846,14 @@ get_fs_handle(
 */
 
 static int
-set_disposition(
-	dm_sessid_t	 sid,
-	void		*fs_hanp,
-	size_t		 fs_hlen)
+set_disp_global(
+	dm_sessid_t	sid)
 {
 	dm_eventset_t	eventlist;
 
 	if (Verbose) {
 		err_msg("Setting event disposition to send all "
-			"events to this session\n");
+			"mount events to this session\n");
 	}
 
 	/* DM_EVENT_MOUNT must be sent in a separate request using the global
@@ -854,6 +869,23 @@ set_disposition(
 			&eventlist, DM_EVENT_MAX) == -1) {
 		errno_msg("Can't set event disposition for mount");
 		return(1);
+	}
+
+	return(0);
+}
+
+
+static int
+set_disposition(
+	dm_sessid_t	 sid,
+	void		*fs_hanp,
+	size_t		 fs_hlen)
+{
+	dm_eventset_t	eventlist;
+
+	if (Verbose) {
+		err_msg("Setting event disposition to send all "
+			"events to this session\n");
 	}
 
 	DMEV_ZERO(eventlist);

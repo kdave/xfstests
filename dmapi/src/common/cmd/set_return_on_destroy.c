@@ -40,7 +40,7 @@
 Test program used to test the DMAPI function dm_set_return_on_destroy().  The
 command line is:
 
-	set_return_on_destroy [-F] [-s sid] {pathname|fshandle} [attr]
+	set_return_on_destroy [-F] [-s sid] [-t token] {pathname|fshandle} [attr]
 
 where pathname is the name of a file which resides in the filesystem of
 interest.  attr is the name of the DMAPI attribute; if none is specified,
@@ -63,7 +63,7 @@ char	*Progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage:\t%s [-F] [-s sid] {pathname|fshandle} [attr]\n", Progname);
+	fprintf(stderr, "usage:\t%s [-F] [-s sid] [-t token] {pathname|fshandle} [attr]\n", Progname);
 	exit(1);
 }
 
@@ -74,6 +74,7 @@ main(
 	char	**argv)
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
+	dm_token_t	token = DM_NO_TOKEN;
 	char		*pathname;
 	dm_attrname_t	*attrnamep = NULL;
 	dm_boolean_t	enable = DM_FALSE;
@@ -91,10 +92,13 @@ main(
 
 	/* Crack and validate the command line options. */
 
-	while ((opt = getopt(argc, argv, "Fs:")) != EOF) {
+	while ((opt = getopt(argc, argv, "Fs:t:")) != EOF) {
 		switch (opt) {
 		case 's':
 			sid = atol(optarg);
+			break;
+		case 't':
+			token = atol(optarg);
 			break;
 		case 'F':
 			Fflag++;
@@ -139,7 +143,7 @@ main(
 		hlen = fshlen;
 	}
 
-	if (dm_set_return_on_destroy(sid, hanp, hlen, DM_NO_TOKEN,
+	if (dm_set_return_on_destroy(sid, hanp, hlen, token,
 	    attrnamep, enable)) {
 		fprintf(stderr, "dm_set_return_on_destroy failed, %s\n",
 			strerror(errno));
