@@ -59,8 +59,44 @@ _cleanup()
 
 _ls()
 {
-    ls -ln $* | awk '{ print $1, $3, $4, $NF }'
+    ls -ln $* | awk '{ print $1, $3, $4, $NF }' | _filter_id
 } 
+
+_get_newid()
+{
+    cat /etc/passwd /etc/group $tmp.ids | gawk -F: '
+      { ids[$3]=1 }
+      END {
+        for(i=1;i<1000000;i++){
+          if (! (i in ids)) {
+	     print i;		 
+             exit
+          }
+        }	
+      }'
+}
+
+_setup_ids()
+{
+    touch $tmp.ids
+    acl1=`_get_newid`; echo "::$acl1" >>$tmp.ids
+    acl2=`_get_newid`; echo "::$acl2" >>$tmp.ids
+    acl3=`_get_newid`; echo "::$acl3" >>$tmp.ids
+}
+
+_filter_id()
+{
+    sed \
+       -e "s/u:$acl1/u:id1/" \
+       -e "s/u:$acl2/u:id2/" \
+       -e "s/u:$acl3/u:id3/" \
+       -e "s/g:$acl1/g:id1/" \
+       -e "s/g:$acl2/g:id2/" \
+       -e "s/g:$acl3/g:id3/" \
+       -e "s/ $acl1 / id1 /" \
+       -e "s/ $acl2 / id2 /" \
+       -e "s/ $acl3 / id3 /" \
+}
 
 # -----
 # minimal access ACL has ACEs: USER_OBJ, GROUP_OBJ, OTHER_OBJ
@@ -85,11 +121,10 @@ _ls()
 #   -> this would be done by simultaneously matching on ACEs
 #   -> interesting if it allows user to specify ACEs in any order
 #
-_need_to_be_root
-
 rm -f $seq.full
 
-acl1=1001;acl2=1002;acl3=1003
+_need_to_be_root
+_setup_ids
 
 [ -x /bin/chacl ] || _notrun "chacl command not found"
 [ -x $runas ] || _notrun "$runas executable not found"
@@ -130,24 +165,24 @@ _ls file1
 
 echo ""
 echo "--- Test get and set of ACL ---"
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to FAIL" 
 chacl u::r--,g::rwx,o:rw- file1 2>&1
 echo "Expect to PASS" 
 chacl u::r--,g::rwx,o::rw- file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 
 echo ""
 echo "--- Test sync of ACL with std permissions ---"
 _ls file1
 chmod u+w file1
 _ls file1
-chacl -l file1
+chacl -l file1 | _filter_id
 
 echo ""
 echo "--- Test owner permissions ---"
 chacl u::r-x,g::---,o::--- file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 # change to owner
 echo "Expect to PASS" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
@@ -157,7 +192,7 @@ $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo ""
 echo "--- Test group permissions ---"
 chacl u::---,g::r-x,o::--- file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to FAIL - acl1 is owner" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to PASS - acl2 matches group" 
@@ -170,7 +205,7 @@ $runas -u $acl3 -g $acl3 ./file1 2>&1
 echo ""
 echo "--- Test other permissions ---"
 chacl u::---,g::---,o::r-x file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to FAIL - acl1 is owner" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to FAIL - acl2 is in group" 
@@ -190,10 +225,10 @@ echo "--- Test adding a USER ACE ---"
 echo "Expect to FAIL as no MASK provided"
 chacl u::---,g::---,o::---,u:$acl2:r-x file1 2>&1
 echo "Ensure that ACL has not been changed"
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to PASS - USER ACE matches user"
 chacl u::---,g::---,o::---,u:$acl2:r-x,m::rwx file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to FAIL - USER ACE does not match user"
 $runas -u $acl3 -g $acl3 ./file1 2>&1
@@ -203,9 +238,9 @@ echo "--- Test adding a GROUP ACE ---"
 echo "Expect to FAIL as no MASK provided"
 chacl u::---,g::---,o::---,g:$acl2:r-x file1 2>&1
 echo "Ensure that ACL has not been changed"
-chacl -l file1
+chacl -l file1 | _filter_id
 chacl u::---,g::---,o::---,g:$acl2:r-x,m::rwx file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to PASS - GROUP ACE matches group"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to PASS - GROUP ACE matches sup group"
@@ -218,7 +253,7 @@ $runas -u $acl3 -g $acl3 ./file1 2>&1
 echo ""
 echo "--- Test MASK ---"
 chacl u::---,g::---,o::---,g:$acl2:r-x,m::-wx file1 2>&1
-chacl -l file1
+chacl -l file1 | _filter_id
 echo "Expect to FAIL as MASK prohibits execution"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 chacl u::---,g::---,o::---,u:$acl2:r-x,m::-wx file1 2>&1
@@ -250,8 +285,7 @@ echo "=== Test can read ACLs without access permissions ==="
 # This was a bug in kernel code where syscred wasn't being used
 # to override the capabilities
 chacl o::---,g::---,u::--- file1 2>&1
-chacl -l ./file1
-
+chacl -l file1 | _filter_id
 
 #-------------------------------------------------------
 
@@ -259,12 +293,12 @@ echo ""
 echo "=== Test Default ACLs ==="
 mkdir acldir
 chacl -b "u::rwx,g::rwx,o::rwx" "u::r-x,g::r--,o::---" ./acldir 2>&1
-chacl -l ./acldir
+chacl -l acldir | _filter_id
 
 cd acldir
 touch file2
 _ls file2
-chacl -l ./file2
+chacl -l file2 | _filter_id
 cd ..
 
 #-------------------------------------------------------
