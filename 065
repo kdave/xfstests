@@ -54,20 +54,20 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.dump
 
+# IRIX "ls -s" uses a block size of 512, for consistincy on linux use 
+# ls --block-size=512 -s <file>
+[ $HOSTOS == Linux ] && LS_BLOCKSIZE="--block-size=512"
+
 _my_ls_filter()
 {
     #
-    # Print size ($5) and fname ($9).
+    # Print size and fname.
     # The size is significant since we add to the file as part
     # of a file change for the incremental.
     #
     # Filter out the housekeeping files of xfsrestore
     # Filter out toplevel "dumpdir/$" report.
-    #
-    $AWK_PROG '
-        NF == 9 && $0 ~ /dir/ { print $9; next }
-        NF == 9 { print $5, $9; next }
-        NF == 1 { print } ' |\
+    grep -v total | grep -v "^$" | sed "s/^[ \t]*//g" | \
     sed -e 's/.*dumpdir/dumpdir/' |\
     egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree|dumpdir/$|dumpdir:$' |\
     egrep -v "$restore_dir:" 
@@ -170,7 +170,7 @@ while [ $i -le $num_dumps ]; do
     _stable_fs
 
     echo "Listing of what files we have at level $i:"
-    ls -lRF $dump_dir | _my_ls_filter | tee $tmp.ls.$i
+    ls -sRF $LS_BLOCKSIZE $dump_dir | _my_ls_filter | tee $tmp.ls.$i
 
     dump_file=$tmp.df.level$i
     _do_dump_file -l $i
@@ -194,8 +194,8 @@ while [ $i -le $num_dumps ]; do
     echo ""
     echo "restoring from df.level$i"
     _do_restore_file_cum -l $i
-    echo "ls -lRF restore_dir"
-    ls -lRF $restore_dir | _my_ls_filter |\
+    echo "ls -sRF restore_dir"
+    ls -sRF $LS_BLOCKSIZE $restore_dir | _my_ls_filter |\
     _check_quota_file | tee $tmp.restorals.$i
     i=`expr $i + 1`	
 done
