@@ -1,6 +1,6 @@
 #! /bin/sh
 # XFS QA Test No. 072
-# $Id: 072,v 1.2 2003/07/07 06:02:25 fsgqa Exp $
+# $Id: 072,v 1.3 2003/07/08 05:05:43 fsgqa Exp $
 #
 # Check some unwritten extent boundary conditions
 #
@@ -44,7 +44,7 @@ echo "QA output created by $seq"
 
 _cleanup()
 {
-	umount $tmp.$seq 2>/dev/null
+	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
 }
 
@@ -57,35 +57,36 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
-[ "$USE_EXTERNAL" = yes ] && _notrun "Test doesn't cope with external devices"
-
 # real QA test starts here
-_require_loop
+_require_scratch
 
-# use a sparse file to get the large size we want here...
-rm -f $TEST_DIR/test.xfs
-/sbin/mkfs.xfs -f $MKFS_OPTIONS -dfile,name=$TEST_DIR/test.xfs,size=100g \
-    >> $seq.full 2>&1 \
-    || _fail "!!! failed to mkfs xfs in a file"
-mkdir $tmp.$seq >> $seq.full 2>&1 \
-    || _fail "!!! failed to make mount point"
+rm -f $seq.full
+umount $SCRATCH_DEV >/dev/null 2>&1
+
+_scratch_mkfs_xfs >/dev/null	|| _fail "mkfs failed"
+_scratch_mount >/dev/null	|| _fail "mount failed"
+
+# check there's enough freespace on $SCRATCH_MNT ... (1GiB + 1MiB)
+avail=`df -P $SCRATCH_MNT | awk 'END {print $4}'`
+[ "$avail" -ge 1049600 ] || _notrun "Test device is too small ($avail KiB)"
+
 echo Silence is golden
 
 # reserve 1GiB, truncate at 100bytes
-xfs_io -f -c 'resvsp 0 1g' -c 'truncate 100' $tmp.$seq/ouch
-rm -f $tmp.$seq/ouch
-
-# reserve 1GiB, truncate at 2GiB
-xfs_io -f -c 'resvsp 0 1g' -c 'truncate 2g' $tmp.$seq/ouch
-rm -f $tmp.$seq/ouch
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 100' $SCRATCH_MNT/ouch
+rm -f $SCRATCH_MNT/ouch
 
 # reserve 1GiB, truncate at 1GiB
-xfs_io -f -c 'resvsp 0 1g' -c 'truncate 1g' $tmp.$seq/ouch
-rm -f $tmp.$seq/ouch
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 1g' $SCRATCH_MNT/ouch
+rm -f $SCRATCH_MNT/ouch
 
-# reserve 1GiB, 1GiB hole, reserve 1GiB, truncate at 3GiB
-xfs_io -f -c 'resvsp 0 1g' -c 'resvsp 2g 1g' -c 'truncate 3g' $tmp.$seq/ouch
-rm -f $tmp.$seq/ouch
+# reserve 1GiB, truncate at 2GiB
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 2g' $SCRATCH_MNT/ouch
+rm -f $SCRATCH_MNT/ouch
+
+# reserve 1GiB, 1GiB hole, reserve 1MiB, truncate at 3GiB
+xfs_io -f -c 'resvsp 0 1g' -c 'resvsp 2g 1m' -c 'truncate 3g' $SCRATCH_MNT/ouch
+rm -f $SCRATCH_MNT/ouch
 
 # success, all done
 status=0

@@ -65,6 +65,8 @@ $(CONFIGURE):
 aclocal.m4::
 	aclocal --acdir=$(TOPDIR)/m4 --output=$@
 
+install install-dev install-lib:
+
 realclean distclean: clean
 	rm -f $(LDIRT) $(CONFIGURE)
 	rm -rf autom4te.cache Logs
