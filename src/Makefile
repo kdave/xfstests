@@ -36,7 +36,7 @@ include $(TOPDIR)/include/builddefs
 TARGETS = alloc acl_get bstat devzero dirstress fault feature \
 	  fsstress fill fill2 getpagesize holes ioctl loggen lstat64 \
 	  nametest permname randholes runas truncfile usemem \
-	  fstest mmapcat
+	  fstest mmapcat append_reader append_writer
 ifeq ($(HAVE_DB), true)
 TARGETS += dbtest
 endif
