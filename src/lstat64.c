@@ -31,8 +31,8 @@
  */
  
 #include <stdio.h>
+#include <time.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/sysmacros.h>
 
 long	timebuf;
@@ -142,7 +142,7 @@ main(int argc, char **argv)
 		printf("  Gid: (%d)\n", sbuf.st_gid);
 		printf("Device: %2d,%-2d", major(sbuf.st_dev),
 				minor(sbuf.st_dev));
-		printf("  Inode: %-10lu", sbuf.st_ino);
+		printf("  Inode: %-10llu", (unsigned long long)sbuf.st_ino);
 		printf("Links: %-5d", sbuf.st_nlink);
 
 		if ( ((sbuf.st_mode & S_IFMT) == S_IFCHR)

@@ -166,7 +166,7 @@ main(int argc, char **argv)
 	if (!filename) {
 		static char	tmpfile[] = "allocXXXXXX";
 
-		mktemp(tmpfile);
+		mkstemp(tmpfile);
 		filename = malloc(strlen(tmpfile) + strlen(dirname) + 2);
 		sprintf(filename, "%s/%s", dirname, tmpfile);
 		unlinkit = 1;

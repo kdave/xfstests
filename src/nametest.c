@@ -300,11 +300,9 @@ main(int argc, char *argv[])
 			retval = unlink(ip->name);
 			if (retval < 0) {
 				if (errno == ENOENT) {
-					printf("\"%s\"(%lu) not removed, should have existed\n",
-						      ip->name, ip->inumber);
+					printf("\"%s\"(%llu) not removed, should have existed\n", ip->name, (unsigned long long)ip->inumber);
 				} else {
-					printf("\"%s\"(%lu) on remove: ",
-						      ip->name, ip->inumber);
+					printf("\"%s\"(%llu) on remove: ", ip->name, (unsigned long long)ip->inumber);
 					perror("unlink");
 				}
 			}
@@ -330,31 +328,33 @@ auto_lookup(struct info *ip)
 		good_looks++;
 		retval = 0;
 		if (ip->exists == 0) {
-			printf("\"%s\"(%lu) lookup, should not exist\n",
-				      ip->name, statb.st_ino);
+			printf("\"%s\"(%llu) lookup, should not exist\n",
+				ip->name, (unsigned long long)statb.st_ino);
 			retval = 1;
 		} else if (ip->inumber != statb.st_ino) {
-			printf("\"%s\"(%lu) lookup, should be inumber %lu\n",
-				      ip->name, statb.st_ino, ip->inumber);
+			printf("\"%s\"(%llu) lookup, should be inumber %llu\n",
+				ip->name, (unsigned long long)statb.st_ino,
+				(unsigned long long)ip->inumber);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) lookup ok\n",
-				ip->name, statb.st_ino);
+			printf("\"%s\"(%llu) lookup ok\n",
+				ip->name, (unsigned long long)statb.st_ino);
 		}
 	} else if (errno == ENOENT) {
 		bad_looks++;
 		retval = 0;
 		if (ip->exists == 1) {
-			printf("\"%s\"(%lu) lookup, should exist\n",
-				      ip->name, ip->inumber);
+			printf("\"%s\"(%llu) lookup, should exist\n",
+				ip->name, (unsigned long long)ip->inumber);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) lookup ENOENT ok\n",
-				ip->name, ip->inumber);
+			printf("\"%s\"(%llu) lookup ENOENT ok\n",
+				ip->name, (unsigned long long)ip->inumber);
 		}
 	} else {
 		retval = errno;
-		printf("\"%s\"(%lu) on lookup: ", ip->name, ip->inumber);
+		printf("\"%s\"(%llu) on lookup: ",
+			ip->name, (unsigned long long)ip->inumber);
 		perror("stat64");
 	}
 	return(retval);
@@ -376,12 +376,11 @@ auto_create(struct info *ip)
 			exit(1);
 		}
 		if (ip->exists == 1) {
-			printf("\"%s\"(%lu) created, but already existed as inumber %lu\n",
-				      ip->name, statb.st_ino, ip->inumber);
+			printf("\"%s\"(%llu) created, but already existed as inumber %llu\n", ip->name, (unsigned long long)statb.st_ino, (unsigned long long)ip->inumber);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) create new ok\n",
-				ip->name, statb.st_ino);
+			printf("\"%s\"(%llu) create new ok\n",
+				ip->name, (unsigned long long)statb.st_ino);
 		}
 		ip->exists = 1;
 		ip->inumber = statb.st_ino;
@@ -393,17 +392,18 @@ auto_create(struct info *ip)
 				perror("stat64");
 				exit(1);
 			}
-			printf("\"%s\"(%lu) not created, should not exist\n",
-				      ip->name, statb.st_ino);
+			printf("\"%s\"(%llu) not created, should not exist\n",
+				ip->name, (unsigned long long)statb.st_ino);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) not created ok\n",
-				ip->name, ip->inumber);
+			printf("\"%s\"(%llu) not created ok\n",
+				ip->name, (unsigned long long)ip->inumber);
 		}
 		ip->exists = 1;
 	} else {
 		retval = errno;
-		printf("\"%s\"(%lu) on create: ", ip->name, ip->inumber);
+		printf("\"%s\"(%llu) on create: ",
+			ip->name, (unsigned long long)ip->inumber);
 		perror("creat");
 	}
 	return(retval);
@@ -419,12 +419,12 @@ auto_remove(struct info *ip)
 		good_rms++;
 		retval = 0;
 		if (ip->exists == 0) {
-			printf("\"%s\"(%lu) removed, should not have existed\n",
-				      ip->name, ip->inumber);
+			printf("\"%s\"(%llu) removed, should not have existed\n",
+				ip->name, (unsigned long long)ip->inumber);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) remove ok\n",
-				ip->name, ip->inumber);
+			printf("\"%s\"(%llu) remove ok\n",
+				ip->name, (unsigned long long)ip->inumber);
 		}
 		ip->exists = 0;
 		ip->inumber = 0;
@@ -432,17 +432,18 @@ auto_remove(struct info *ip)
 		bad_rms++;
 		retval = 0;
 		if (ip->exists == 1) {
-			printf("\"%s\"(%lu) not removed, should have existed\n",
-				      ip->name, ip->inumber);
+			printf("\"%s\"(%llu) not removed, should have existed\n",
+				ip->name, (unsigned long long)ip->inumber);
 			retval = 1;
 		} else if (verbose) {
-			printf("\"%s\"(%lu) not removed ok\n",
-				ip->name, ip->inumber);
+			printf("\"%s\"(%llu) not removed ok\n",
+				ip->name, (unsigned long long)ip->inumber);
 		}
 		ip->exists = 0;
 	} else {
 		retval = errno;
-		printf("\"%s\"(%lu) on remove: ", ip->name, ip->inumber);
+		printf("\"%s\"(%llu) on remove: ",
+			ip->name, (unsigned long long)ip->inumber);
 		perror("unlink");
 	}
 	return(retval);
