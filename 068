@@ -1,0 +1,271 @@
+#! /bin/sh
+# XFS QA Test No. 068
+# $Id: 068,v 1.1 2002/09/02 06:04:01 nathans Exp $
+#
+# Test Linux LVM snapshot creation
+#
+# The timing and placement of kills and waits is particularily sensitive.
+# Don't change them unless you want to spend some time getting it right again.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000, 2002 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=freemyer@NorcrossGroup.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=`mktemp -d /tmp/xfstest.XXXXXX` || exit 1
+status=1	# failure is the default!
+
+# Either "dd" or "fsstress" can be used to generate io load.
+# Setting both to "FALSE" tests with no io load.
+GENERATE_IO_LOAD_VIA_DD=TRUE
+GENERATE_IO_LOAD_VIA_FSSTRESS=TRUE
+DELAY_BETWEEN_ITERATIONS=10
+#ITERATIONS=10000
+ITERATIONS=2
+
+VG=/dev/VGscratch
+SCRATCH_SNAP_MNT="$tmp/scratch_snap"
+
+# Only needed if running by hand,  ie.  check sets these
+#SCRATCH_LVM_DEV=/dev/xxxx
+#SCRATCH_MNT=/scratch
+
+_cleanup()
+{
+	echo Cleanup beginning
+
+	rm "$tmp/running" > /dev/null 2>&1
+	xfs_freeze -u "$SCRATCH_MNT"
+
+	sleep 10      # Give the dd loop time to finish
+
+	# Comment out unless needed.
+	# If needed, wrap with logic to ensure the FS is mounted.
+	# Kill off any other possible stray stragglers that may be out there.
+	# There should not be any.
+	#fuser -k -m "$SCRATCH_SNAP_MNT/dummy"     >/dev/null 2>&1
+	#fuser -k -m "$SCRATCH_MNT/dummy"	  >/dev/null 2>&1
+
+	wait
+
+	umount "$SCRATCH_SNAP_MNT" > /dev/null 2>&1
+	rmdir "$SCRATCH_SNAP_MNT" > /dev/null 2>&1
+	umount "$SCRATCH_MNT" > /dev/null 2>&1
+
+	lvremove -f "$VG/scratch_snap" > /dev/null 2>&1
+	lvremove -f "$VG/scratch" > /dev/null 2>&1
+
+#TODO   vgremove "$VG"
+
+	rm -rf "$tmp"	# if we ever use tmp files
+	trap 0 1 2 3 15
+	exit $status
+}
+
+trap "_cleanup" 0 1 2 3 15
+
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+[ -e "$SCRATCH_SNAP_MNT" ] && rm -rf "$SCRATCH_SNAP_MNT"
+mkdir "$SCRATCH_SNAP_MNT"
+
+#Verify we have the lvm user tools
+[ -x /sbin/lvcreate ] || _notrun "lvcreate utility is not installed in /sbin"
+[ -x /sbin/lvremove ] || _notrun "lvremove utility is not installed in /sbin"
+
+# If the above fails for LVM 2, the below may be useful notes
+#    try "lvm vgdisplay --version" and look for a > 1.9x version number, eg,
+# 
+#     LVM version:     1.95.10-cvs (2002-05-31)
+#     Library version: 0.96.03-ioctl-cvs (2002-06-27)
+#     Driver version:  1.0.3
+
+
+LVM=false
+
+# Check if LVM 1 is in the kernel
+if grep lvm /proc/devices > /dev/null 2>&1; then LVM=true; fi
+
+# Check if LVM 2 is in the kernel
+if grep device-mapper /proc/devices > /dev/null 2>&1; then LVM=true; fi
+
+# Check if EVMS is in the kernel
+#TODO   # I don't know how to do this one.
+
+[ "$LVM" = false ] && _notrun "LVM is not present in the running kernel."
+
+
+# real QA test starts here
+
+# Create a PV set from the scratch partition
+#TODO # (I don't know if this is needed.and it is dangerous because it intentionally deletes the partition table!!! 
+#TODO # dd if=/dev/zero of="$SCRATCH_LVM_DEV" bs=512 count=1
+#TODO # pvcreate "$SCRATCH_LVM_DEV"
+
+# Create a VG from the PV
+#TODO # vgcreate "$VG" "$SCRATCH_LVM_DEV"
+
+# Create a LV in the VG to snapshot
+#TODO # lvcreate -L 2G -n scratch "$VG"
+
+# Mount the LV
+mkdir "$SCRATCH_MNT" > /dev/null 2&>1
+
+mount "$VG/scratch" "$SCRATCH_MNT"
+
+touch "$tmp/running"
+
+if [ "$GENERATE_IO_LOAD_VIA_DD" != FALSE ];
+then
+	# Create a large 64 Meg zero filled file on the LV
+	dd if=/dev/zero of=$SCRATCH_MNT/dummy bs=64k count=1000 >/dev/null 2>&1
+
+	# Setup infinite loop copying the large file, thus generating heavy I/O
+	touch "$tmp/running"
+	while [ -f "$tmp/running" ]
+	do
+		dd if="$SCRATCH_MNT/dummy" of="$SCRATCH_MNT/junk" bs=64k \
+			> /dev/null 2>&1
+		# This forces metadata updates the next time around
+		rm "$SCRATCH_MNT/junk"
+		sync
+	done 
+fi &
+
+if [ "$GENERATE_IO_LOAD_VIA_FSSTRESS" != FALSE ];
+then
+	STRESS_DIR="$SCRATCH_MNT/fsstress_test_dir"
+	mkdir "$STRESS_DIR"
+
+	while [ -f "$tmp/running" ]
+	do
+		# -n 10 makes this take about 10 seconds,
+		# This allows the loop to end shortly after $tmp/running
+		# is deleted
+		$here/src/fsstress -d "$STRESS_DIR" -n 10  > /dev/null 2>&1
+		sync
+	done
+
+	rm -rf "$STRESS_DIR"
+fi &
+
+ii=1
+
+while [ $ii -le "$ITERATIONS" ]
+do
+
+	# Useful if running interactively, but not from the xfs test scripts
+	#echo $ii
+
+	# If the VFS lock patch is present, the calls to xfs_freeze
+	# are redundant, but should cause no problems
+	#       OPTIONAL
+	xfs_freeze -f "$SCRATCH_MNT"
+	if [ $? != 0 ] ; then
+		echo xfs_freeze -f "$SCRATCH_MNT" failed
+	fi
+	(
+		lvcreate --snapshot --size 1G --name scratch_snap "$VG/scratch"\
+			> /dev/null 2>&1
+		ret=$?
+		[ $ret != 0 ] && \
+			echo "Snapshot $SCRATCH_MNT create failed, status=$ret"
+		fi
+	) &
+	SNAPSHOT_shell_pid=$!
+
+	# If the Snapshot has not completed in ten minutes, kill it
+	(
+		# I have NOT figured out how to kill the sleep 600 before
+		# it exits naturally.
+		# This does not cause a problem, but it clutters the ps table.
+		sleep 600
+
+		# The kill $TIMEOUT_shell_pid keeps the below from occuring
+		echo Snapshot Lockup Occured on loop $ii
+		xfs_freeze -u "$SCRATCH_MNT"
+		kill $$
+	) &
+	TIMEOUT_shell_pid=$!
+
+	wait "$SNAPSHOT_shell_pid"
+
+	exec 2> /dev/null		# Send the shells stderr to /dev/null
+	kill "$TIMEOUT_shell_pid"	# Cancel the timeout
+	wait "$TIMEOUT_shell_pid"	# This causes consistent shell
+					# notification for some unknown reason
+	exec 2>&1			# Put it back to the same as stdout
+
+	# If the VFS lock patch is present, the calls to xfs_freeze
+	# are redundant, but should cause no problems
+	#       OPTIONAL
+	xfs_freeze -u "$SCRATCH_MNT"
+	if [ $? != 0 ] ; then
+		echo xfs_freeze -u "$SCRATCH_MNT" failed
+	fi
+	#	  MANDANTORY   (end)
+
+	mount -t xfs -o ro,nouuid "$VG/scratch_snap" "$SCRATCH_SNAP_MNT"
+	if [ $? != 0 ] ; then
+		echo mount for "$SCRATCH_SNAP_MNT" failed
+	fi
+	umount "$SCRATCH_SNAP_MNT"
+	if [ $? != 0 ] ; then
+		echo umount for "$SCRATCH_SNAP_MNT" failed
+	fi
+	lvremove -f "$VG/scratch_snap" > /dev/null 2>&1
+	if [ $? != 0 ] ; then
+	       echo lvremove for "$VG/scratch_snap" failed
+	fi
+
+	ii=`expr $ii + 1`
+
+	sleep "$DELAY_BETWEEN_ITERATIONS"      
+	# The VG seems to need time to stabalize between snapshots
+	# With LVM 1.0.3 and XFS 1.1, I have tried this at 3600 seconds
+	# and still had failures
+
+done
+
+# success, all done
+echo SUCCESS, COMPLETED ALL ITERATIONS WITH NO TIME OUTS!!!!!!!!!!!!
+status=0
+_cleanup
+exit 1   # _cleanup should exit, so we should never get here.
