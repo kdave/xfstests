@@ -57,9 +57,6 @@ _cleanup()
 . ./common.rc
 . ./common.filter
 
-# link correct .out file
-_link_out_file $seq.out
-
 _do_test()
 {
     _n="$1"
@@ -73,12 +70,17 @@ _do_test()
         status=1
         exit
     fi
+
+    _filter_param=`echo "$_param" | sed\
+	-e 's/-n [0-9][0-9]*/-n children/' \
+	-e 's/-l [0-9][0-9]*/-l loops/' \
+	-e 's/-f [0-9][0-9]*/-f files/'`
     
     echo ""
     echo "-----------------------------------------------"
-    echo "fstest.$_n : $_param"
+    echo "fstest.$_n : $_filter_param"
     echo "-----------------------------------------------"
-    if ! $here/src/fstest $_param -p $out >> $seq.full
+    if ! $here/src/fstest $_param -p $out >>$seq.full
     then
         echo "    fstest ($_param) returned $? - see $seq.full"
         status=1
@@ -88,15 +90,82 @@ _do_test()
     _check_test_fs
 }
 
+_usage()
+{
+    echo "$0: [-f files] [-l loops] [-n children]"
+}
+
+_process_args()
+{
+    while getopts "f:l:n:?" c $@
+    do
+        case $c
+        in
+            f)
+                numfiles=$OPTARG
+		param_type="$param_type, overidde -f"
+                ;;
+            l)
+                numloops=$OPTARG
+		param_type="$param_type, overidde -l"
+                ;;
+            n)
+                numchildren=$OPTARG
+		param_type="$param_type, overidde -n"
+                ;;
+	    ?)
+		_usage
+		exit	
+		;;
+	esac
+    done
+}
+
 
 # real QA test starts here
+rm -f $here/$seq.full
+
 _supported_fs xfs udf nfs
 _supported_os IRIX Linux
 
-_setup_testdir
+#
+# set params
+# These params can take a while on different CPUs/OSs
+# so we set them differently for different machines
+#
+if [ $HOSTOS == "IRIX" ]; then 
+    if uname -R | grep -i debug; then 
+        # e.g. getting around 37secs for 1,1,1 on IP30 debug
+	numchildren=2
+	numloops=1
+	numfiles=2
+        param_type="IRIX debug"
+    else
+        # getting around 1 sec 1,1,1 - 10secs 1,10,1 on IP30 nondebug
+	numloops=2
+	numfiles=5
+	numchildren=3
+        param_type="IRIX nondebug"
+    fi
+elif [ $HOSTOS == "Linux" ]; then
+    numloops=10
+    numfiles=5
+    numchildren=3
+    param_type="Linux"
+else
+    numloops=1
+    numfiles=1
+    numchildren=1
+    param_type="Default"
+fi
 
-rm -f $here/$seq.full
-echo "brevity is wit..."
+# can override the params here
+_process_args "$@"
+
+echo "Params are for $param_type" >>$seq.full
+echo "Params: n = $numchildren l = $numloops f = $numfiles" >>$seq.full
+
+_setup_testdir
 
 _check_test_fs
 
@@ -114,10 +183,10 @@ _check_test_fs
 size10=`expr 10 \* 1024 \* 1024`	# 10 megabytes
 size30=`expr 30 \* 1024 \* 1024`	# 30 megabytes
 
-_do_test 0 ""			# defaults
+_do_test 0 "-l $numloops"
 
-_do_test 1 "-s $size10 -b 8192 -m"
+_do_test 1 "-l $numloops -s $size10 -b 8192 -m"
 
-_do_test 2 "-n 3 -Fp -f 10 -s $size30 -b 512"
-_do_test 3 "-n 3 -Fp -f 10 -s $size30 -b 512 -m"
+_do_test 2 "-n $numchildren -F -l $numloops -f $numfiles -s $size30 -b 512"
 
+_do_test 3 "-n $numchildren -F -l $numloops -f $numfiles -s $size30 -b 512 -m"
