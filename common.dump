@@ -1033,12 +1033,15 @@ _do_restore_toc()
 {
     echo "Contents of dump ..."
     opts="$_restore_debug -f $dump_file -t"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     cd $SCRATCH_MNT # for IRIX which needs xfs cwd
-    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter |\
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter_main |\
+    _check_quota_file |\
     $AWK_PROG 'NF != 1 { print; next }
 	       {files = sprintf("%s\n%s", files, $1)}
 		END { print files | "sort" } '
+    # the above awk code is to alpha sort only the output
+    # of files (and not the verbose restore msgs)
     cd $here # put back
 }
 
@@ -1202,6 +1205,49 @@ _do_invutil()
 }
 
 #
+# ensure we can find the user quota msg if user quotas are on
+# ensure we can find the group quota msg if group quotas are on
+#
+_check_quota()
+{
+    usermsg=$1 
+    groupmsg=$2 
+    uquota=0
+    gquota=0 
+    $here/src/feature -U $SCRATCH_DEV && uquota=1
+    $here/src/feature -G $SCRATCH_DEV && gquota=1
+
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v full=$seq.full \
+              -v usermsg=$usermsg -v groupmsg=$groupmsg '
+	$0 ~ groupmsg {
+			print "Found group quota:", $0 >>full
+			found_gquota = 1
+			if (!gquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+	$0 ~ usermsg {
+			print "Found user quota:", $0 >>full
+			found_uquota = 1
+			if (!uquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
+			{ print }
+	END {
+		if (uquota && !found_uquota) {
+		    print "Missing: ", usermsg
+		}
+		if (gquota && !found_gquota) {
+		    print "Missing: ", groupmsg
+		}
+	}
+    '
+}
+
+#
 # Look for:
 # xfsdump: saving user quota information for: SCRATCH_MNT
 # xfsdump: saving group quota information for: SCRATCH_MNT
@@ -1210,38 +1256,8 @@ _do_invutil()
 #
 _check_quota_dumprestore()
 {
-    uquota=0
-    gquota=0 
-    $here/src/feature -U $SCRATCH_DEV && uquota=1
-    $here/src/feature -G $SCRATCH_DEV && gquota=1
-
-    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v full=$seq.full '
-	/user quota information/ {
-			print "Found user quota:", $0 >>full
-			found_uquota = 1
-			if (!uquota) {
-			    print "Found extra:", $0
-			}
-			next
-	}
-	/group quota information/ {
-			print "Found group quota:", $0 >>full
-			found_gquota = 1
-			if (!gquota) {
-			    print "Found extra:", $0
-			}
-			next
-	}
-			{ print }
-	END {
-		if (uquota && !found_uquota) {
-		    print "Missing saving/restoring uquota msg"
-		}
-		if (gquota && !found_gquota) {
-		    print "Missing saving/restoring gquota msg"
-		}
-	}
-    '
+   _check_quota 'user quota information' \
+                'group quota information'
 }
 
 #
@@ -1249,39 +1265,21 @@ _check_quota_dumprestore()
 # Only in RESTORE_DIR: xfsdump_quotas
 # Only in RESTORE_DIR: xfsdump_quotas_group
 #
-
 _check_quota_diff()
 {
-    uquota=0
-    gquota=0 
-    $here/src/feature -U $SCRATCH_DEV && uquota=1
-    $here/src/feature -G $SCRATCH_DEV && gquota=1
+   _check_quota 'Only in RESTORE_DIR: xfsdump_quotas' \
+       'Only in RESTORE_DIR: xfsdump_quotas_group' 
+}
 
-    $AWK_PROG -v uquota=$uquota -v gquota=$gquota '
-	/Only in RESTORE_DIR: xfsdump_quotas_group/ {
-			found_gquota = 1
-			if (!gquota) {
-			    print "Found extra:", $0
-			}
-			next
-	}
-	/Only in RESTORE_DIR: xfsdump_quotas/ {
-			found_uquota = 1
-			if (!uquota) {
-			    print "Found extra:", $0
-			}
-			next
-	}
-			{ print }
-	END {
-		if (uquota && !found_uquota) {
-		    print "Missing xfsdump_quotas msg"
-		}
-		if (gquota && !found_gquota) {
-		    print "Missing xfsdump_quotas_group msg"
-		}
-	}
-    '
+#
+# Look for the quota file in the output
+# Ensure that it is there if it should be
+# Filter it out so that the output is always the same
+# even with no quotas
+#
+_check_quota_file()
+{
+   _check_quota 'xfsdump_quotas' 'xfsdump_quotas_group'
 }
 
 # make sure this script returns success
