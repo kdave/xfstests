@@ -297,10 +297,32 @@ chacl -l file1 | _acl_filter_id
 chacl -l acldir | _acl_filter_id
 chacl -l acldir/file2 | _acl_filter_id
 
+
 #-------------------------------------------------------
 
+echo ""
+echo "=== Recursive change ACL ==="
+rm -fr root
+mkdir root
+pushd root
+# create an arbitrary little tree
+for i in 1 2 3 4 5 6 7 8 9 0
+do
+	mkdir -p a/$i
+	mkdir -p b/c$i/$i
+	touch a/$i/mumble
+done
+popd
+chown -R 12345.54321 root
+echo "Change #1..."
+$runas -u 12345 -g 54321 -- /bin/chacl -r u::rwx,g::-w-,o::--x root
+find root -print | xargs chacl -l
+echo "Change #2..."
+$runas -u 12345 -g 54321 -- /bin/chacl -r u::---,g::---,o::--- root
+find root -print | xargs chacl -l
 
 
+#-------------------------------------------------------
 
 # success, all done
 status=0
