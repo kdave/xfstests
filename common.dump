@@ -787,7 +787,7 @@ _dump_filter()
 {
    if $do_quota_check
    then
-       _dump_filter_main | _check_quota_dumprestore
+       _dump_filter_main | _check_quota_dumprestore | _check_quota_entries
    else
        _dump_filter_main
    fi
@@ -1038,6 +1038,7 @@ _do_restore_toc()
     cd $SCRATCH_MNT # for IRIX which needs xfs cwd
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter_main |\
     _check_quota_file |\
+    _check_quota_entries |\
     $AWK_PROG 'NF != 1 { print; next }
 	       {files = sprintf("%s\n%s", files, $1)}
 		END { print files | "sort" } '
@@ -1246,6 +1247,25 @@ _check_quota()
 		}
 	}
     '
+}
+
+#
+# xfsrestore: 3 directories and 40 entries processed 
+#   $5 = 40 
+#   num entries needs to be reduced by num quota file(s) 
+#
+_check_quota_entries()
+{
+    uquota=0
+    gquota=0 
+    $here/src/feature -U $SCRATCH_DEV && uquota=1
+    $here/src/feature -G $SCRATCH_DEV && gquota=1
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota '
+	/entries processed/ { 
+		if (uquota) $5--
+		if (gquota) $5--
+	}
+	{print}'
 }
 
 #
