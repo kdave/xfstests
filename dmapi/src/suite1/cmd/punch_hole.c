@@ -41,7 +41,7 @@
 Test program used to test the DMAPI function dm_punch_hole().  The
 command line is:
 
-	punch_hole [-o offset] [-l length] [-s sid] pathname
+	punch_hole [-o offset] [-l length] [-s sid] {pathname|handle}
 
 where pathname is the name of a file, offset is the offset of the start of
 the punch, and length is the length of the punch.  sid is the
@@ -63,7 +63,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage:\t%s [-o offset] [-l length] "
-		"[-s sid] pathname\n", Progname);
+		"[-s sid] {pathname|handle}\n", Progname);
 	exit(1);
 }
 
@@ -74,7 +74,7 @@ main(
 	char	**argv)
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
-	char		*pathname = NULL;
+	char		*object = NULL;
 	dm_off_t	offset = 0;
 	dm_size_t	length = 0;
 	void		*hanp;
@@ -107,7 +107,7 @@ main(
 	}
 	if (optind + 1 != argc)
 		usage();
-	pathname = argv[optind];
+	object = argv[optind];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -118,8 +118,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s\n", pathname);
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 
