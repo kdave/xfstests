@@ -129,7 +129,7 @@ main(int argc, char **argv)
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    acl_text = acl_to_any_text(acl, NULL, "", ',', "", TEXT_ABBREVIATE);
+	    acl_text = acl_to_any_text(acl, NULL, ',', TEXT_ABBREVIATE);
 	    if (acl_text == NULL) {
 	    	fprintf(stderr, "%s: cannot get access ACL text on '%s': %s\n",
 			prog, file, strerror(errno));
@@ -147,7 +147,7 @@ main(int argc, char **argv)
 			     prog, file, strerror(errno));
 		return 0;
 	    }
-	    acl_text = acl_to_any_text(acl, NULL, "", ',', "", TEXT_ABBREVIATE);
+	    acl_text = acl_to_any_text(acl, NULL, ',', TEXT_ABBREVIATE);
 	    if (acl_text == NULL) {
 	    	fprintf(stderr, "%s: cannot get default ACL text on '%s': %s\n",
 			prog, file, strerror(errno));
