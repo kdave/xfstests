@@ -45,7 +45,8 @@ bin_PROGRAMS =  \
 	test_invis \
 	invis_test \
 	region_test \
-	test_efault
+	test_efault \
+	mmap
 
 INCLUDES += -I ..
 
