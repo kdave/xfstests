@@ -64,8 +64,8 @@ nametest: nametest.o $(LIBTEST)
 bstat: bstat.o $(LIBHANDLE)
 	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
 
-loggen:	loggen.o $(LIBXFS)
-	$(LINKTEST) $(LIBXFS) $(LDLIBS)
+loggen:	loggen.o
+	$(LINKTEST) $(LDLIBS)
 
 acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
