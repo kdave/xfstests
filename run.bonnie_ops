@@ -1,0 +1,56 @@
+#!/bin/sh
+# 
+# Do a bonnie++ create/read/delete run using 8192 files (unless
+# BONNIE_KFILES environment variable is set -- note this number
+# is multiplied by 1024 by bonnie++).  By default the files are
+# created in the same directory, BONNIE_NDIRS specifies a count
+# of subdirs to evenly spread files through.  Regular files are
+# created by default (BONNIE_FILETYPE=regular), alternatively
+# the values "symlinks" and "hardlinks" can be used.
+# 
+# The script then massages the output into CSV format with the
+# human-readable output preceding it as a "comment" (#-prefixed).
+# 
+BONNIE_NDIRS=${BONNIE_NDIRS:=1}
+BONNIE_KFILES=${BONNIE_KFILES:=8}
+BONNIE_FILETYPE=${BONNIE_FILETYPE:=regular}
+
+. $here/common.bonnie
+
+# 
+# Sample bonnie throughput output (stderr):
+#Version 1.02c       ------Sequential Create------ --------Random Create--------
+#                    -Create-- --Read--- -Delete-- -Create-- --Read--- -Delete--
+#              files  /sec %CP  /sec %CP  /sec %CP  /sec %CP  /sec %CP  /sec %CP
+#                  4   525  27 +++++ +++   517  26   526  25 +++++ +++   230  12
+# [ Note: the "files" can also be "^files:max" and possibly other things ]
+filter_stderr()
+{
+	sed -e 's/^..................../# /g' | awk '{ print } END { print "# }'
+}
+
+# 
+# Sample bonnie IOPs output (stdout):
+# ",,,,,,,,,,,,,,4,525,27,+++++,+++,517,26,526,25,+++++,+++,230,12"
+# [ nathans note: always get +++ due to 0:0 for min:max file sizes. ]
+# [ I will need to fix the filter if I ever start using file sizes. ]
+# 
+filter_stdout()
+{
+	tr -d '+' | tr -d \' | tr -s ',' | sed -e 's/^,//' -e 's/,$//'
+}
+
+if [ $# -gt 0 ]; then
+	echo Kfiles/dirs,seqCR/s,CPU,seqRM/s,CPU,rndmCR/s,CPU,rndmRM/s,CPU
+	exit 0
+fi
+
+case "$BONNIE_FILETYPE"
+in
+	regular)  BONNIE_FILETYPE=0 ;;
+	symlink)  BONNIE_FILETYPE=-2 ;;
+	hardlink) BONNIE_FILETYPE=-1 ;;
+	*)  echo "BONNIE_FILETYPE has an unrecognised value" && exit 1 ;;
+esac
+
+run_bonnie -s 0 -n $BONNIE_KFILES:$BONNIE_FILETYPE:0:$BONNIE_NDIRS

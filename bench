@@ -134,6 +134,8 @@ _run_benchmark()
 _merge_results()
 {
     echo Results for $bench benchmark >>$OUT
+    headers=`$here/run.$bench -h`
+    echo "[$headers]" >>$OUT
     echo results.$bench.* | sort -nu | xargs cat >>$OUT
     echo >>$OUT
 }
@@ -156,6 +158,12 @@ benches=`echo run.* | sed -e 's/run\.//g'`
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _require_scratch
+
+cat >$OUT <<-EOF
+	MKFS_OPTIONS=$MKFS_OPTIONS
+	MOUNT_OPTIONS=$MOUNT_OPTIONS
+
+EOF
 
 rm -f bench.*
 for bench in $benches
