@@ -250,7 +250,7 @@ _cleanup()
 	for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
 	    [ -d $dir ] || continue
 	    tar -cvf $seq.inventory.tar $dir
-	    ls -lR $dir >$seq.inventory.ls
+	    ls -nR $dir >$seq.inventory.ls
 	done
     fi
 
@@ -748,15 +748,15 @@ _create_dumpdir_hardlinks()
 
 #
 # Filter for ls
-# Filter out dates on symlinks and char devices
+# Filter out times and dates on symlinks and char devices.
 # Filter out size on directories because this can differ
 # when transitioning to long inode numbers (ie. 64 bits).
 #
 _ls_filter()
 {
   $AWK_PROG '
-        /^l/ { date = $8; sub(date,"DATE"); print}
-        /^c/ { date = $9; sub(date,"DATE"); print}
+        /^l/ { date = $8; time = $7; sub(date,"DATE"); sub(time,"TIME"); print}
+        /^c/ { date = $9; time = $7; sub(date,"DATE"); sub(time,"TIME"); print}
         /^d/ { size = $5; sub(size,"SIZE"); print}
         {print}' \
   | sed -e 's/total [0-9][0-9]*/total TOTAL/'
@@ -1136,7 +1136,7 @@ _do_dump_restore()
 
 #
 # Compare dumped subdirectory with restored dir
-# using ls -lR.
+# using ls -nR.
 # Thus no contents are compared but permissions, sizes,
 # owners, etc... are.
 #
@@ -1146,8 +1146,8 @@ _ls_compare_sub()
     # verify we got back what we dumped
     #
     echo "Comparing listing of dump directory with restore directory"
-    ls -lR $dump_dir | tee -a $here/$seq.full | _ls_filter >$tmp.dump_dir
-    ls -lR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
+    ls -nR $dump_dir | tee -a $here/$seq.full | _ls_filter >$tmp.dump_dir
+    ls -nR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
     | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -bcs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
@@ -1170,8 +1170,8 @@ _ls_nodate_compare_sub()
     # verify we got back what we dumped
     #
     echo "Comparing listing of dump directory with restore directory"
-    ls -lR $dump_dir | tee -a $here/$seq.full | _ls_filter | _ls_nodate_filter >$tmp.dump_dir
-    ls -lR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
+    ls -nR $dump_dir | tee -a $here/$seq.full | _ls_filter | _ls_nodate_filter >$tmp.dump_dir
+    ls -nR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
     | _ls_nodate_filter | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -bcs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
