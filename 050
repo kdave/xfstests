@@ -61,7 +61,9 @@ _cleanup()
 	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
-rm -f $seq.full $seq.out
+rm -f $seq.out
+cp /dev/null $seq.full
+chmod a+rwx $seq.full	# arbitrary users will write here
 
 _require_scratch
 _require_quota
@@ -74,7 +76,6 @@ fi
 # real QA test starts here
 mkfs -t xfs -f $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seq.full
-chmod a+w $seq.full	# arbitrary users will write here
 
 # keep the blocksize and data size for dd later
 . $tmp.mkfs
