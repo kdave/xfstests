@@ -40,7 +40,6 @@
 owner=tes@sgi.com
 
 seq=`basename $0`
-echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
@@ -86,6 +85,9 @@ _ls()
 #   -> this would be done by simultaneously matching on ACEs
 #   -> interesting if it allows user to specify ACEs in any order
 #
+_need_to_be_root
+
+rm -f $seq.full
 
 acl1=1001;acl2=1002;acl3=1003
 
@@ -98,8 +100,18 @@ rm -rf $seq.dir1
 mkdir $seq.dir1
 cd $seq.dir1
 
+# test if acl_get syscall is operational
+# and hence the ACL config has been turned on  
+touch syscalltest
+if chacl -l syscalltest 2>&1 | tee -a $here/$seq.full | grep 'Function not implemented' >/dev/null
+then
+  cd $here
+  _notrun "requires kernel ACL support"
+fi
+
 #-------------------------------------------------------
 # real QA test starts here
+echo "QA output created by $seq"
 
 echo ""
 echo "=== Test minimal ACE ==="
