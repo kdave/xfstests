@@ -66,10 +66,10 @@ _fail()
 
 _get_kernel_version()
 {
-    [ -x "$WORKAREA" ] \
-	|| _fail "can't access workarea $WORKAREA"
-    [ -r "$WORKAREA/linux/Makefile" ] \
-	|| _fail "can't read makefile $WORKAREA/linux/Makefile"
+    [ -x "$KWORKAREA" ] \
+	|| _fail "can't access kernel workarea $KWORKAREA"
+    [ -r "$KWORKAREA/Makefile" ] \
+	|| _fail "can't read kernel makefile $KWORKAREA/Makefile"
 
     eval `awk '
 	BEGIN { FS = "[ \t=]+" }
@@ -80,7 +80,7 @@ _get_kernel_version()
 	END { 
 	    print "VERSION=" a "." b "." c d " ; SVERSION=" a "." b "." c
 	}
-   ' < $WORKAREA/linux/Makefile`
+   ' < $KWORKAREA/Makefile`
 }
 
 # this should be constant
@@ -88,18 +88,18 @@ _get_kernel_version()
 ROOT="$HOME/qa"
 HOST=`hostname -s`
 if [ ! -z "$CVSROOT" ]; then
-    export WORKAREA="$ROOT/linux-2.4-xfs"
+    export WORKAREA="$ROOT/xfs-cmds"
 else
-    [ -z "$WORKAREA" ] && export WORKAREA="$ROOT/linux-xfs"
+    [ -z "$WORKAREA" ] && export WORKAREA="$ROOT/xfs-cmds"
 fi
 
 
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
 STATE=$ROOT/qa.state
-QADIR="$WORKAREA/cmd/xfstests"
+QADIR="$WORKAREA/xfstests"
 SUDO="su -c"
 CONFIG="$ROOT/$HOST.config"
-COMMON_CONFIG="$WORKAREA/cmd/xfstests/common.config"
+COMMON_CONFIG="$WORKAREA/xfstests/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
 
@@ -173,7 +173,7 @@ _restart()
 _update_autoqa_file()
 {
     SELF="$ROOT/auto-qa"
-    SELF_UPDATE="cmd/xfstests/tools/auto-qa"
+    SELF_UPDATE="xfstests/tools/auto-qa"
     if [ -z "$CVSROOT" ]; then
 	    cmd="p_tupdate $SELF_UPDATE"
     else
@@ -186,22 +186,22 @@ _update_workarea()
 {
     if [ -z "$CVSROOT" ]; then
 	_log "	*** p_tupdate"
-	cd $WORKAREA 
-	p_tupdate 2>&1 \
+	cd "$1"
+	WORKAREA="$1" p_tupdate 2>&1 \
 			|| _fail "	    !!! p_tupdate failed"
 
 	_log "	*** p_check/p_purge"
-	cd $WORKAREA 
-	p_check -s | p_purge -yiu 2>&1 \
+	cd "$1"
+	WORKAREA="$1" p_check -s | p_purge -yiu 2>&1 \
 			|| _fail "	    !!! p_check/p_purge failed"
 
 	_log "	*** non-trunk files"
-	cd $WORKAREA 
-	p_list -c 2>&1 \
+	cd "$1"
+	WORKAREA="$1" p_list -c 2>&1 \
 			|| _fail "	    !!! p_list failed"
     else
 	_log "	*** cvs update"
-	cd $WORKAREA
+	cd "$1"
 	cvs -z3 update -d
     fi
 }
@@ -234,9 +234,9 @@ _test_mount()
 
 _i386_install()
 {
-    _sudo cp -f $WORKAREA/linux/arch/i386/boot/bzImage $IMAGE 2>&1 \
+    _sudo cp -f "$KWORKAREA/arch/i386/boot/bzImage" "$IMAGE" 2>&1 \
 		|| _fail "	    !!! install kernel failed"
-    _sudo cp -f $WORKAREA/linux/System.map $SYSTEMMAP 2>&1 \
+    _sudo cp -f "$KWORKAREA/System.map" "$SYSTEMMAP" 2>&1 \
 		|| _fail "	    !!! install kernel failed"
     if [ -z "$KMODULES" -o "$KMODULES" = yes ]; then
 	_sudo make EXTRAVERSION=-$EXTRA modules_install 2>&1 \
@@ -269,7 +269,7 @@ _ia64_restart()
 }
 
 
-_log "*** linux-xfs QA (`date`)"
+_log "*** XFS QA (`date`)"
 
 _get_state
 
@@ -303,6 +303,7 @@ fi
 
 [ "$UID" -eq 0 ]	&& _fail "    !!! QA most be run as a normal user"
 [ -d "$ROOT" ]		|| _fail "    !!! QA root \"$ROOT\" not found"
+[ -d "$KWORKAREA" ]	|| _fail "    !!! QA kernel \"$KWORKAREA\" not found"
 [ -d "$WORKAREA" ]	|| _fail "    !!! QA workarea \"$WORKAREA\" not found"
 [ -r "$CONFIG" ]	|| _fail "    !!! Can't read config file $CONFIG"
 . "$COMMON_CONFIG" 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
@@ -347,7 +348,8 @@ do
 	    ;;
 	
 	*update)
-	    _update_workarea
+	    _update_workarea "$KWORKAREA"
+	    _update_workarea "$WORKAREA"
 	    new_state="cleantools"
 	    ;;
 
@@ -355,8 +357,8 @@ do
 	    # we need to configure or else we might fail to clean
 	    for pkg in attr acl xfsprogs dmapi xfsdump xfstests
 	    do
-		[ -d $WORKAREA/cmd/$pkg ] || continue
-		cd $WORKAREA/cmd/$pkg
+		[ -d $WORKAREA/$pkg ] || continue
+		cd $WORKAREA/$pkg
 		_log "	*** clean $pkg tools"
 		make realclean 2>&1 \
 			|| _fail "	    !!! clean $pkg failed"
@@ -368,8 +370,8 @@ do
 	    _log "	*** build and install tools"
 	    for pkg in attr acl xfsprogs dmapi xfsdump xfstests 
 	    do
-		[ -d $WORKAREA/cmd/$pkg ] || continue
-		cd $WORKAREA/cmd/$pkg
+		[ -d $WORKAREA/$pkg ] || continue
+		cd $WORKAREA/$pkg
 
 		# use e-fence - but this will only take effect on configure
 		make configure 2>&1 \
@@ -390,13 +392,13 @@ do
 	    ;;
 
 	*cleankernel)
-	    _log "	*** clean linux"
-	    cd $WORKAREA/linux
+	    _log "	*** clean kernel"
+	    cd "$KWORKAREA"
 	    make mrproper 2>&1 \
-			|| _fail "	    !!! clean linux failed"
+			|| _fail "	    !!! clean kernel failed"
 
 	    _log "	*** install configuration file"
-	    cp -f $CONFIG $WORKAREA/linux/.config 2>&1 \
+	    cp -f $CONFIG "$KWORKAREA/.config" 2>&1 \
 			|| _fail "	    !!! failed to install config"
 	    
 	    _log "	*** remove version file"
@@ -413,7 +415,7 @@ do
 	    # we better start from scratch if this fails
 	    _change_state "cleankernel"
 	    
-	    cd $WORKAREA/linux
+	    cd "$KWORKAREA"
 	    # we want to use default options for any new config options.
 	    echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" | \
 		make EXTRAVERSION=-$EXTRA oldconfig 2>&1 \
@@ -429,7 +431,7 @@ do
 	    
 	    _change_state "clean" ; # we better start from scratch if this fails
 	    
-	    cd $WORKAREA/linux
+	    cd "$KWORKAREA"
 	    [ -z "$KTARGET" ] && KTARGET=bzImage
 	    [ -z "$KMODULES" -o "$KMODULES" = yes ] && \
 		KTARGET="$KTARGET modules"
@@ -443,7 +445,7 @@ do
 	    _sudo rm -rf $MODULES
 	    
 	    _log "	*** install kernel"
-	    cd $WORKAREA/linux
+	    cd "$KWORKAREA"
 	    case `uname -m`
 	    in
 		i386|i686)	_i386_install ;;

@@ -13,7 +13,7 @@ use strict;
 # 
 # NB: to cross check that srcdiff is finding all the functions in the
 #     user source file, providing you have "mkproto" installed, you
-#     can "cd cmd/xfsprogs/libxfs" and cut&paste this in a bourne shell:
+#     can "cd xfsprogs/libxfs" and cut&paste this in a bourne shell:
 #     $ for file in xfs_*.c; do
 #     > mkproto -nps < $file | perl -ne '
 #     > END { print "    $count\t- " }
@@ -24,7 +24,9 @@ use strict;
 # 
 
 die "WORKAREA not set" unless defined $ENV{'WORKAREA'};
+die "KWORKAREA not set" unless defined $ENV{'KWORKAREA'};
 chdir $ENV{'WORKAREA'};
+my $kworkarea = $ENV{'KWORKAREA'};
 my $xdiff = $ENV{'XDIFF'};
 my $quiet=0;
 my $usage=0;
@@ -82,10 +84,10 @@ sub straightdiff {
 sub m4macrodiff {
 	my ( $package ) = @_;
 
-	foreach (`ls cmd/$package/m4/*.m4`) {
+	foreach (`ls $package/m4/*.m4`) {
 		my $m4 = `basename $_`;
 		chomp($m4);
-		straightdiff $m4, "cmd/$package/m4", "cmd/xfstests/m4";
+		straightdiff $m4, "$package/m4", "xfstests/m4";
 	}
 }
 
@@ -93,18 +95,18 @@ my $first = shift @pkglist;
 foreach (@pkglist) {
 	print "\n=== Checking $_ package ===\n";
 	m4macrodiff $_;
-	straightdiff 'buildrules', "cmd/$first/include", "cmd/$_/include";
-	straightdiff 'buildmacros', "cmd/$first/include", "cmd/$_/include";
-	straightdiff 'Makefile', "cmd/$first/build", "cmd/$_/build";
-	straightdiff 'Makefile', "cmd/$first/build/rpm", "cmd/$_/build/rpm";
-	straightdiff 'Makefile', "cmd/$first/build/tar", "cmd/$_/build/tar";
+	straightdiff 'buildrules', "$first/include", "$_/include";
+	straightdiff 'buildmacros', "$first/include", "$_/include";
+	straightdiff 'Makefile', "$first/build", "$_/build";
+	straightdiff 'Makefile', "$first/build/rpm", "$_/build/rpm";
+	straightdiff 'Makefile', "$first/build/tar", "$_/build/tar";
 }
 print "\n=== Checking headers ===\n";
 foreach (@difflist) {
-	straightdiff $_, 'cmd/xfsprogs/include', 'linux/fs/xfs';
+	straightdiff $_, 'xfsprogs/include', "$kworkarea/fs/xfs";
 }
-straightdiff 'dmapi_kern.h', 'cmd/dmapi/include', 'linux/fs/xfs/dmapi';
-straightdiff 'dmapi.h', 'cmd/dmapi/include', 'linux/fs/xfs/dmapi';
+straightdiff 'dmapi_kern.h', 'dmapi/include', "$kworkarea/fs/xfs/dmapi";
+straightdiff 'dmapi.h', 'dmapi/include', "$kworkarea/fs/xfs/dmapi";
 
 # 
 # setstate
@@ -271,7 +273,7 @@ sub functiondiff {
 	print "( Total: $count routine$plural checked in $file )\n" unless ($quiet);
 }
 
-# cmd/xfsprogs/{libxfs,libxlog}/* fs/xfs/*
+# xfsprogs/{libxfs,libxlog}/* fs/xfs/*
 my @funclist = qw(
 	xfs_alloc.c  xfs_alloc_btree.c  xfs_attr_leaf.c
 	xfs_bmap.c  xfs_bmap_btree.c  xfs_btree.c  xfs_da_btree.c
@@ -283,7 +285,7 @@ my @funclist = qw(
 
 print "\n=== Checking libxfs code ===\n";
 foreach (@funclist) {
-	functiondiff $_, 'cmd/xfsprogs/libxfs', 'linux/fs/xfs';
+	functiondiff $_, 'xfsprogs/libxfs', "$kworkarea/fs/xfs";
 }
 print "\n=== Checking libxlog code ===\n";
-functiondiff 'xfs_log_recover.c', 'cmd/xfsprogs/libxlog', 'linux/fs/xfs';
+functiondiff 'xfs_log_recover.c', 'xfsprogs/libxlog', "$kworkarea/fs/xfs";
