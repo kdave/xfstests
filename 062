@@ -96,7 +96,7 @@ mkfs_xfs $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT || _fail "mount failed"
 _create_test_bed
 
-for nsp in user xfsroot; do
+for nsp in user trusted; do
 	for inode in reg dir lnk dev/b dev/c dev/p; do
 
 		echo; echo "=== TYPE $inode; NAMESPACE $nsp"; echo
@@ -137,7 +137,7 @@ for nsp in user xfsroot; do
 		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
-		getfattr -m '^user|^xfsroot' -e hex $SCRATCH_MNT/$inode
+		getfattr -m '^user|^trusted' -e hex $SCRATCH_MNT/$inode
 	done
 done
 
@@ -155,8 +155,8 @@ _extend_test_bed()
 	mkdir -p $SCRATCH_MNT/descend/down/here
 	find $SCRATCH_MNT/descend | xargs setfattr -n user.x -v yz
 	find $SCRATCH_MNT/descend | xargs setfattr -n user.1 -v 23
-	find $SCRATCH_MNT/here | xargs setfattr -n xfsroot.a -v bc
-	find $SCRATCH_MNT/here | xargs setfattr -n xfsroot.9 -v 87
+	find $SCRATCH_MNT/here | xargs setfattr -n trusted.a -v bc
+	find $SCRATCH_MNT/here | xargs setfattr -n trusted.9 -v 87
 	# whack a symlink in the middle, just to be difficult
 	ln -s $SCRATCH_MNT/here/up $SCRATCH_MNT/descend/and
 	# dump out our new starting point
@@ -167,11 +167,11 @@ _extend_test_bed
 
 echo
 echo "*** directory descent with us following symlinks"
-getfattr -h -L -R -m '^user|^xfsroot' -e hex $SCRATCH_MNT
+getfattr -h -L -R -m '^user|^trusted' -e hex $SCRATCH_MNT
 
 echo
 echo "*** directory descent without following symlinks"
-getfattr -h -P -R -m '^user|^xfsroot' -e hex $SCRATCH_MNT
+getfattr -h -P -R -m '^user|^trusted' -e hex $SCRATCH_MNT
 
 
 # 
@@ -194,7 +194,7 @@ _backup $tmp.backup1
 echo "*** clear out the scratch device"
 rm -fr $SCRATCH_MNT/*
 echo "AFTER REMOVE" >>$seq.full
-getfattr -L -R -m '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
+getfattr -L -R -m '^user|^trusted' $SCRATCH_MNT >>$seq.full
 
 echo "*** reset test bed with no extended attributes"
 _create_test_bed
@@ -205,7 +205,7 @@ setfattr -h --restore=$tmp.backup1
 _backup $tmp.backup2
 
 echo "AFTER RESTORE" >>$seq.full
-getfattr -L -R -m '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
+getfattr -L -R -m '^user|^trusted' $SCRATCH_MNT >>$seq.full
 
 echo "*** compare before and after backups"
 diff $tmp.backup1 $tmp.backup2
