@@ -112,6 +112,13 @@ main(
 	 
 
 	/*
+	 * Turn ourselves into a daemon
+	 */
+	error = mk_daemon(logfile);
+	if (error) 
+		exit(1);
+	
+	/*
 	 * Now we have our filesystem name and possibly a size threshold
 	 * to look for. Init the dmapi, and get a filesystem handle so
 	 * we can set up our events
@@ -125,13 +132,6 @@ main(
 		exit(1);
 	}
 
-	/*
-	 * Turn ourselves into a daemon
-	 */
-	error = mk_daemon(logfile);
-	if (error) 
-		exit(1);
-	
 
 	/*
 	 * Set the event disposition so that our session will receive 

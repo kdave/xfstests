@@ -469,6 +469,7 @@ extract_fields(
 	char	*cp, *start;
 	size_t	 len;
 	char *hanp;
+	char *hanpp=NULL;
 
 	/*
 	 * Skip any leading white space, and check the length
@@ -505,8 +506,9 @@ extract_fields(
 	cp += len*2;
 	*cp = '\0';
 
-	atohan( hanp, (void**)&handle_buf, &len );
-
+	atohan( hanp, (void**)&hanpp, &len );
+	memcpy( handle_buf, hanpp, len);
+	free( hanpp );
 
 	/* skip over white space */
 	while (!isalnum(*cp))

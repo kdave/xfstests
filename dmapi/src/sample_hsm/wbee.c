@@ -453,7 +453,7 @@ clear_mrgns(
 	size_t		 hlen, 
 	dm_token_t	 token)
 {
-	dm_region_t	*rgn;
+	dm_region_t	*rgn, *sv_rgn;
 	u_int		 nregions, nret;
 	u_int		 exact_flag;
 	int		 i;
@@ -502,6 +502,8 @@ clear_mrgns(
 		}
 	}
 
+	sv_rgn = rgn;
+
 	/*
 	 * Clear all the managed regions
 	 */
@@ -511,6 +513,8 @@ clear_mrgns(
 		rgn->rg_flags  = DM_REGION_NOEVENT;
 		rgn++;
 	}
+	rgn = sv_rgn;
+
 	error = dm_set_region(sid, hanp, hlen, token, nregions, rgn, 
 				&exact_flag);
 	if (error == -1) {
