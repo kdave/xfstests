@@ -32,6 +32,26 @@
  
 #include "global.h"
 
+/*
+ * Block I/O parameterization.  A basic block (BB) is the lowest size of
+ * filesystem allocation, and must equal 512.  Length units given to bio
+ * routines are in BB's.
+ */
+#define BBSHIFT         9
+#define BBSIZE          (1<<BBSHIFT)
+#define BBMASK          (BBSIZE-1)
+#define BTOBB(bytes)    (((__u64)(bytes) + BBSIZE - 1) >> BBSHIFT)
+#define BTOBBT(bytes)   ((__u64)(bytes) >> BBSHIFT)
+#define BBTOB(bbs)      ((bbs) << BBSHIFT)
+#define OFFTOBB(bytes)  (((__u64)(bytes) + BBSIZE - 1) >> BBSHIFT)
+#define OFFTOBBT(bytes) ((__u64)(bytes) >> BBSHIFT)
+#define BBTOOFF(bbs)    ((__u64)(bbs) << BBSHIFT)
+
+#define SEEKLIMIT32     0x7fffffff
+#define BBSEEKLIMIT32   BTOBBT(SEEKLIMIT32)
+#define SEEKLIMIT       0x7fffffffffffffffLL
+#define BBSEEKLIMIT     OFFTOBBT(SEEKLIMIT)
+
 #define	FSBTOBB(f)	(OFFTOBBT(FSBTOOFF(f)))
 #define	BBTOFSB(b)	(OFFTOFSB(BBTOOFF(b)))
 #define	OFFTOFSB(o)	((o) / blocksize)

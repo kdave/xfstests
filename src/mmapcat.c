@@ -8,7 +8,7 @@
 
 int main(int argc, char **argv)
 {
-	int fd,n;
+	int fd;
 	char *ptr, *ptr2;
 	struct stat st;
 
