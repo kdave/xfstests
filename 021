@@ -80,6 +80,11 @@ _getfattr()
     return $exit
 }
 
+_filter_xfsdb2()
+{
+	sed -e 
+}
+
 # real QA test starts here
 _require_scratch
 
@@ -108,7 +113,7 @@ echo "*** make test file 2"
 touch $testfile.2
 echo "value_1" | _attr -s "a1" $testfile.2 >/dev/null
 echo "value_2" | _attr -s "a2-----" $testfile.2 >/dev/null
-(echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
+( echo start ; dd if=/dev/zero bs=65525 count=1 ; echo end ) \
     | _attr -s "a3" $testfile.2 >/dev/null
 _getfattr --absolute-names $testfile.2
 
@@ -133,7 +138,12 @@ xfs_db -r -c "inode $inum_1" -c "print a.sfattr" $SCRATCH_DEV
 
 echo "*** dump attributes (2)"
 
-xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c "print" $SCRATCH_DEV
-    
+xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c print $SCRATCH_DEV \
+    | perl -ne '
+s/^(hdr.firstused =) (\d+)/\1 FIRSTUSED/;
+s/^(hdr.freemap\[0-2] = \[base,size]).*/\1 [FREEMAP..]/;
+s/^(entries\[0-2] = \[hashval,nameidx,incomplete,root,local]).*/\1 [ENTRIES..]/;
+    print;'
+
 echo "*** done"
 exit
