@@ -258,7 +258,7 @@ static void usage(void)
 " -l loops              set loop count\n"
 " -m                    use mmap\n"
 " -S                    use synchronous IO\n"
-" -P			preallocate space\n"
+" -P                    preallocate space\n"
 " -h                    show this help message\n");
 }
 
@@ -322,8 +322,8 @@ int main(int argc, char *argv[])
 		printf("Rounded file size to %d\n", file_size);
 	}
 
-	printf("num_children=%d file_size=%d num_files=%d loop_count=%d block_size=%d\nmmap=%d sync=%d\n",
-	       num_children, file_size, num_files, loop_count, block_size, use_mmap, use_sync);
+	printf("num_children=%d file_size=%d num_files=%d loop_count=%d block_size=%d\nmmap=%d sync=%d prealloc=%d\n",
+	       num_children, file_size, num_files, loop_count, block_size, use_mmap, use_sync, do_prealloc);
 
 	printf("Total data size %.1f Mbyte\n",
 	       num_files * num_children * 1.0e-6 * file_size);

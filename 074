@@ -1,10 +1,10 @@
 #! /bin/sh
-# XFS QA Test No. 013
+# XFS QA Test No. 074
 #
-# fsstress
+# fstest
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -36,7 +36,7 @@
 #-----------------------------------------------------------------------
 #
 # creator
-owner=dxm@sgi.com
+owner=nathans@sgi.com
 
 seq=`basename $0`
 echo "QA output created by $seq"
@@ -48,15 +48,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    # we might get here with a RO FS
-    mount -o remount,rw $TEST_DEV >/dev/null 2>&1
-    # now kill!
-    rm -rf $TEST_DIR/fsstress.$$.*
-}
-
-_filesize()
-{
-    ls -l $1 | $AWK_PROG '{print "    filesize = " $5}'
+    rm -rf $TEST_DIR/fstest.$$.* $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -67,9 +59,8 @@ _do_test()
 {
     _n="$1"
     _param="$2"
-    _count="$3"
-    
-    out=$TEST_DIR/fsstress.$$.$_n
+
+    out=$TEST_DIR/fstest.$$.$_n
     rm -rf $out
     if ! mkdir $out
     then
@@ -80,20 +71,13 @@ _do_test()
     
     echo ""
     echo "-----------------------------------------------"
-    echo "fsstress.$_n : $_param"
+    echo "fstest.$_n : $_param"
     echo "-----------------------------------------------"
-    # -v >$tmp.out
-    # -m limits number of users/groups so check doesn't fail (malloc) later
-    if ! $here/ltp/fsstress $_param $FSSTRESS_AVOID -m 8 -n $_count -d $out >/dev/null 2>&1
+    if ! $here/src/fstest $_param -p $out >> $seq.full
     then
-        echo "    fsstress (count=$_count) returned $? - see $seq.full"
-        
-        echo "--------------------------------------"       >>$here/$seq.full
-        echo "$_n - output from fsstress:"                  >>$here/$seq.full
-        echo "--------------------------------------"       >>$here/$seq.full
-        echo "<NOT LOGGED>"                                 >>$here/$seq.full
-        #cat $tmp.out                                       >>$here/$seq.full
+        echo "    fstest ($_param) returned $? - see $seq.full"
         status=1
+	exit
     fi
 
     _check_test_fs
@@ -105,36 +89,27 @@ _do_test()
 rm -f $here/$seq.full
 echo "brevity is wit..."
 
-count=2000
-procs=20
-
 _check_test_fs
 
-# the default
+# Options:
+# -F                    generate files with holes  (default=no)
+# -n num_children       set number of child processes (default=1)
+# -f num_files          set number of files (default=1)
+# -s file_size          set file sizes (default=1MiB)
+# -b block_size         set block (IO) size (default=1024)
+# -l loops              set loop count (default=100)
+# -m                    use mmap (default=no)
+# -S                    use synchronous IO (default=no)
+# -P                    preallocate space (default=no)
 
-_do_test 1 "-r" $count
+size10=`expr 10 \* 1024 \* 1024`	# 10 megabytes
+size30=`expr 30 \* 1024 \* 1024`	# 30 megabytes
 
-# and the default with multiprocess
+_do_test 0 ""			# defaults
 
-_do_test 2 "-p $procs -r" $count
+_do_test 1 "-s $size10 -b 8192 -m"
 
-# from Glen's notes
+_do_test 2 "-n 3 -Fp -f 10 -s $size30 -b 512"
 
-_do_test 3 "-p 4 -z -f rmdir=10 -f link=10 -f creat=10 -f mkdir=10 -f rename=30 -f stat=30 -f unlink=30 -f truncate=20" $count
+_do_test 3 "-n 3 -Fp -f 10 -s $size30 -b 512 -m"
 
-exit
-
-# Test with error injection:
-# 
-# (error injection)
-# fsstress -n 1000 -d $scratch -p 4 -z -f rmdir=10 -f link=10 -f creat=10 \
-#          -f mkdir=10 -f rename=30 -f stat=30 -f unlink=30 -f truncate=20 \
-#          -e 1
-# 
-# Error values 1 - 6 test IFLUSH
-#         1 - corrupt buffer being flushed to di_core.di_magic
-#         2 - corrupt inode being flushed i_d.di_magic
-#         3 - corrupt IFREG format check
-#         4 - corrupt IFDIR format check
-#         5 - corrupt i_d.di_nextents
-#         6 - corrupt i_d.di_forkoff > sb_inodesize
