@@ -81,6 +81,9 @@ _create_proto()
 	total=$1
 	count=0
 
+	# take inode size into account for non-shortform directories...
+	[ $total -gt 0 ] && total=`expr $total \* $isize / 512`
+
 	cat >$tmp.proto <<EOF
 DUMMY1
 0 0
@@ -108,9 +111,12 @@ MKFSV1="-p $tmp.proto -n version=1"
 MKFSV2="-p $tmp.proto -n version=2"
 
 # sanity test - default + one root directory entry
+# Note: must do this proto/mkfs now for later inode size calcs
 _create_proto 0
 echo "=== version 1, one entry"
-_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV1 >$tmp.mkfs0 2>&1
+_filter_mkfs <$tmp.mkfs0 >/dev/null 2>$tmp.mkfs
+source $tmp.mkfs
 _check_repair
 echo "=== version 2, one entry (shortform)"
 _scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
