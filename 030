@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 030
+# FS QA Test No. 030
 #
 # exercise xfs_repair repairing broken filesystems
 #
@@ -47,6 +47,7 @@ status=1	# failure is the default!
 
 _cleanup()
 {
+	cd /
 	umount $SCRATCH_DEV 2>/dev/null
 	rm -f $tmp.*
 }
@@ -57,6 +58,9 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 . ./common.repair
+
+# link correct .out file
+_link_out_file $seq.out
 
 # nuke the superblock, AGI, AGF, AGFL; then try repair the damage
 # 
@@ -70,6 +74,9 @@ _check_ag()
 }
 
 # real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
 _require_nobigloopfs
 _require_scratch
 
@@ -103,7 +110,7 @@ src/devzero -v -1 -n "$clear" $SCRATCH_DEV >/dev/null
 # now kick off the real repair test...
 # 
 _scratch_mkfs_xfs $DSIZE | _filter_mkfs 2>$tmp.mkfs
-source $tmp.mkfs
+. $tmp.mkfs
 _check_ag 0
 _check_ag -1
 

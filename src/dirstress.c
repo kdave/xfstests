@@ -45,7 +45,7 @@ int checkflag=0;
 
 #define MKNOD_DEV 0
 
-static int dirstress(char *dirname, int	dirnum, int nfiles, int keep);
+static int dirstress(char *dirname, int	dirnum, int nfiles, int keep, int nprocs_per_dir);
 static int create_entries(int nfiles);
 static int scramble_entries(int	nfiles);
 static int remove_entries(int nfiles);
@@ -130,8 +130,8 @@ main(
                         pid=getpid();
                         
                         if (verbose) fprintf(stderr,"** [%d] forked\n", pid);
-			r=dirstress(dirname, i / nprocs_per_dir, nfiles, keep);
-                        if (verbose) fprintf(stderr,"** [%d] exit\n", pid);
+			r=dirstress(dirname, i / nprocs_per_dir, nfiles, keep, nprocs_per_dir);
+                        if (verbose) fprintf(stderr,"** [%d] exit %d\n", pid, r);
 			exit(r);
 		}
 	}
@@ -143,7 +143,7 @@ main(
             istatus+=status/256;
         
 	printf("INFO: Dirstress complete\n");
-        if (verbose) fprintf(stderr,"** [%d] exit %d\n", pid, istatus);
+        if (verbose) fprintf(stderr,"** [%d] parent exit %d\n", pid, istatus);
 	return istatus;
 }
 
@@ -154,7 +154,8 @@ dirstress(
 	char	*dirname,
 	int	dirnum,
 	int	nfiles,
-	int	keep)
+	int	keep,
+	int	nprocs_per_dir)
 {
 	int		error;
 	char		buf[1024];
@@ -216,6 +217,11 @@ dirstress(
         if (verbose) fprintf(stderr,"** [%d] chdir ..\n", pid);
 	error = chdir("..");
 	if (error) {
+		/* If this is multithreaded, then expecting a ENOENT here is fine */
+		if (nprocs_per_dir > 1 && errno == ENOENT) {
+			return 0;
+		}
+
 		perror("Cannot chdir out of pid directory");
 		return 1;
 	}
@@ -232,6 +238,11 @@ dirstress(
         if (verbose) fprintf(stderr,"** [%d] chdir ..\n", pid);
 	error = chdir("..");
 	if (error) {
+		/* If this is multithreaded, then expecting a ENOENT here is fine */
+		if (nprocs_per_dir > 1 && errno == ENOENT) {
+			return 0;
+		}
+
 		perror("Cannot chdir out of working directory");
 		return 1;
 	}

@@ -31,7 +31,21 @@
  */
  
 #include "global.h"
+
+#ifdef HAVE_GDBM_NDBM_H
 #include <gdbm/ndbm.h>
+#else
+#ifdef HAVE_GDBM_H
+#include <gdbm.h>
+#else
+#ifdef HAVE_NDBM_H
+#include <ndbm.h>
+#else
+bozo!
+#endif
+#endif
+#endif
+
 
 /* #define WorkDir	"/xfs" */
 #define DBNAME	"DBtest"
@@ -106,6 +120,7 @@ main(int argc, char *argv[])
 	printf("\tperforming lookups for %d iterations...\n", loops);
 	if (randseed)
 		printf("\tusing %d as seed for srandom()...\n\n", randseed);
+	fflush(stdout);
 	InitDbmLookup(numrecs);
 	printf("\t\nThere were %d duplicate checksums generated\n", Dups);
 	for (l=0; l<loops; l++) {
@@ -117,6 +132,7 @@ main(int argc, char *argv[])
 	}
 	printf("\nCleaning up database...\n");
 	printf("\t\nThere were %d duplicate checksums generated\n", Dups);
+	fflush(stdout);
 	CleanupDbmLookup();
 	if (debugflg)
 		for (l=0; l<Dups; l++) {
@@ -136,7 +152,11 @@ int InitDbmLookup(int howmany)
 	int	i, rc;
 	myDB	dbRec;
 
-	sprintf(filename, "%s-%d", DBNAME, getpid());
+	sprintf(filename, "%s-%d", DBNAME, (int)getpid());
+	if (debugflg) {
+		printf("dbm_open(%s, O_WRONLY|O_CREAT, 0644)\n", filename);
+		fflush(stdout);
+	}
 	dbm = dbm_open(filename, O_WRONLY|O_CREAT, 0644);
 	if(dbm == NULL) DoSysError("\ndbm_open", (int)dbm);
 
@@ -152,8 +172,10 @@ int InitDbmLookup(int howmany)
 
 		if ( creatDbRec(&dbRec) )
 			DoSysError("\ncreatDbRec", -1);
-		if (debugflg)
+		if (debugflg) {
 			printf("created rec #%-7d\t%x\r", i+1, dbRec.checksum);
+			fflush(stdout);
+		}
 
 		if (InsertKey(KeyArray, keyIdx, dbRec.checksum))
 			keyIdx++;
@@ -162,7 +184,12 @@ int InitDbmLookup(int howmany)
 		key.dsize = sizeof(dbRec.checksum);
 		content.dptr = (char *)&dbRec;
 		content.dsize = sizeof(dbRec);
-write(2, NULL, 0);
+
+		write(2, NULL, 0);
+
+		if (debugflg) {
+			printf("dbm_store(dbm, key, content, DBM_INSERT)\n");
+		}
 		rc = dbm_store(dbm, key, content, DBM_INSERT);
 		if (rc < 0)
 			DoSysError("\ndbm_store", rc);
@@ -172,7 +199,15 @@ write(2, NULL, 0);
 		}
 	}
 	numDbmEntries = i;
+	if (debugflg) {
+		printf("dbm_close(dbm)\n");
+		fflush(stdout);
+	}
 	dbm_close(dbm); /* close to eliminate chance of in-memory caching */
+	if (debugflg) {
+		printf("dbm_open(%s, O_RDNLY, 0)\n", filename);
+		fflush(stdout);
+	}
 	dbm = dbm_open(filename, O_RDONLY, 0);
 	if(dbm == NULL) DoSysError("\ndbm_open", (int)dbm);
 	return 0;
@@ -186,11 +221,16 @@ int DoDbmLookup(void)
 	unsigned tmpck;
 
 	printf("\n\tSequential lookups...\n");
+	fflush(stdout);
 	for(i=0, j=0; i<numDbmEntries; i++) {
 		key.dptr = (char *)(KeyArray+j);
 		key.dsize = sizeof(KeyArray[0]);
 
 write(2, NULL, 0);
+		if (debugflg) {
+			printf("dbm_fetch(dbm, key = %d)\n", j);
+			fflush(stdout);
+		}
 		content = dbm_fetch(dbm, key);
 		dbp = (myDB *)content.dptr;
 		if ( !content.dptr ) {
@@ -207,12 +247,15 @@ write(2, NULL, 0);
 			assert( dbp );
 		}
 
-		if (debugflg && dbp)
+		if (debugflg && dbp) {
 			printf("Seq rec #%-6d: checksum %4x (%4x)\r", i,
 				dbp->checksum, KeyArray[j]);
+			fflush(stdout);
+		}
 
 		if (content.dsize == 0) {
 			printf("\nrec #%-8d: key = %4x (%d)\n", i, KeyArray[j], j);
+			fflush(stdout);
 			DoSysError("\ndbm_fetch", content.dsize);
 		}
 		if (dbp->checksum != KeyArray[j])
@@ -223,10 +266,15 @@ write(2, NULL, 0);
 			j = 0;
 	}
 	printf("\n\n\tRandom lookups...\n");
+	fflush(stdout);
 	for(i=0; i<numDbmEntries; i++) {
 		n = random() % keyIdx;
 		key.dptr = (char *)(KeyArray+n);
 		key.dsize = sizeof(KeyArray[0]);
+		if (debugflg) {
+			printf("dbm_fetch(dbm, key = %d)\n", n);
+			fflush(stdout);
+		}
 		content = dbm_fetch(dbm, key);
 		dbp = (myDB *)content.dptr;
 		if ( !content.dptr ) {
@@ -242,9 +290,11 @@ write(2, NULL, 0);
 			assert( dbp );
 		}
 
-		if (debugflg && dbp)
+		if (debugflg && dbp) {
 			printf("Rnd rec #%-6d: checksum %4x (%4x)\r", i,
 				dbp->checksum, KeyArray[n]);
+			fflush(stdout);
+		}
 
 		if (content.dsize == 0)
 			DoSysError("\ndbm_fetch", content.dsize);
@@ -261,11 +311,15 @@ void CleanupDbmLookup(void)
 	char filename[100];
 	int rc;
 
+	if (debugflg) {
+		printf("dbm_close(dbm)\n");
+		fflush(stdout);
+	}
 	dbm_close(dbm);
-	sprintf(filename, "%s-%d.dir", DBNAME, getpid());
+	sprintf(filename, "%s-%d.dir", DBNAME, (int)getpid());
 	rc = unlink(filename);
 	if (rc) DoSysError("\nunlink", rc);
-	sprintf(filename, "%s-%d.pag", DBNAME, getpid());
+	sprintf(filename, "%s-%d.pag", DBNAME, (int)getpid());
 	rc = unlink(filename);
 	if (rc) DoSysError("\nunlink", rc);
 }

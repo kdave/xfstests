@@ -139,9 +139,9 @@ main(int argc, char **argv)
 			mode[0] = '?';
 		}
 
-		printf("  Mode: (%04o/%s)", sbuf.st_mode & 07777, mode);
-		printf("         Uid: (%d)", sbuf.st_uid);
-		printf("  Gid: (%d)\n", sbuf.st_gid);
+		printf("  Mode: (%04o/%s)", (unsigned int)(sbuf.st_mode & 07777), mode);
+		printf("         Uid: (%d)", (int)sbuf.st_uid);
+		printf("  Gid: (%d)\n", (int)sbuf.st_gid);
 		printf("Device: %2d,%-2d", major(sbuf.st_dev),
 				minor(sbuf.st_dev));
 		printf("  Inode: %-9llu", (unsigned long long)sbuf.st_ino);

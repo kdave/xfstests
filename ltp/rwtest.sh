@@ -337,10 +337,11 @@ do
 
 		case $(uname) in
 		IRIX*)
-		  sz=$( perl -le 'print int( '$blks' * '$size' / 100 )' )
+			echo $blke
+		  #sz=$( perl -le 'print int( "$blke" * "$size" / 100 )' )
 		  ;;
 		*)
-		  sz=$(expr \( $blks '*' $size \) / 100)
+		  #sz=$(expr \( $blks '*' $size \) / 100)
 		  ;;
 		esac
 

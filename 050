@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 050
+# FS QA Test No. 050
 #
 # Exercises basic XFS quota functionality
 #	MOUNT_OPTIONS env var switches the test type (uid/gid/acct/enfd)
@@ -47,6 +47,8 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 
+export MOUNT_OPTIONS=-ousrquota
+
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
@@ -54,11 +56,18 @@ status=1	# failure is the default!
 
 _cleanup()
 {
+	cd /
 	echo; echo "*** unmount"
 	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
+
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
 rm -f $seq.out
 cp /dev/null $seq.full
 chmod a+rwx $seq.full	# arbitrary users will write here
@@ -92,7 +101,6 @@ _filter_and_check_blocks()
 	' | _filter_repquota $1
 }
 
-# real QA test starts here
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seq.full
 
@@ -163,6 +171,9 @@ echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 540
 _qmount
 repquota -$type $SCRATCH_DEV | _filter_and_check_blocks 7
+
+
+export -n MOUNT_OPTIONS
 
 # success, all done
 status=0

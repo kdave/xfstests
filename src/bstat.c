@@ -30,7 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
 #include <xfs/jdm.h>
 
 void
@@ -49,10 +49,10 @@ void
 printbstat(xfs_bstat_t *sp)
 {
 	printf("ino %lld mode %#o nlink %d uid %d gid %d rdev %#x\n",
-		sp->bs_ino, sp->bs_mode, sp->bs_nlink,
+		(long long)sp->bs_ino, sp->bs_mode, sp->bs_nlink,
 		sp->bs_uid, sp->bs_gid, sp->bs_rdev);
 	printf("\tblksize %d size %lld blocks %lld xflags %#x extsize %d\n",
-		sp->bs_blksize, sp->bs_size, sp->bs_blocks,
+		sp->bs_blksize, (long long)sp->bs_size, (long long)sp->bs_blocks,
 		sp->bs_xflags, sp->bs_extsize);
 	dotime(&sp->bs_atime, "atime");
 	dotime(&sp->bs_mtime, "mtime");
@@ -67,10 +67,10 @@ void
 printstat(struct stat64 *sp)
 {
 	printf("ino %lld mode %#o nlink %d uid %d gid %d rdev %#x\n",
-		(xfs_ino_t)sp->st_ino, sp->st_mode, sp->st_nlink,
-		sp->st_uid, sp->st_gid, (unsigned int)sp->st_rdev);
+		(long long)sp->st_ino, (unsigned int)sp->st_mode, (int)sp->st_nlink,
+		(int)sp->st_uid, (int)sp->st_gid, (int)sp->st_rdev);
 	printf("\tblksize %llu size %lld blocks %lld\n",
-		(__uint64_t)sp->st_blksize, sp->st_size, sp->st_blocks);
+		(unsigned long long)sp->st_blksize, (long long)sp->st_size, (long long)sp->st_blocks);
 	dotime(&sp->st_atime, "atime");
 	dotime(&sp->st_mtime, "mtime");
 	dotime(&sp->st_ctime, "ctime");
@@ -162,7 +162,7 @@ main(int argc, char **argv)
 
 	if (verbose)
 		printf(
-		  "XFS_IOC_FSBULKSTAT test: last=%lld nent=%d\n", last, nent);
+		  "XFS_IOC_FSBULKSTAT test: last=%lld nent=%d\n", (long long)last, nent);
 
 	bulkreq.lastip  = &last;
 	bulkreq.icount  = nent;
@@ -175,7 +175,7 @@ main(int argc, char **argv)
 		if (verbose)
 			printf(
 	    "XFS_IOC_FSBULKSTAT test: last=%lld ret=%d count=%d total=%d\n", 
-						last, ret, count, total);
+						(long long)last, ret, count, total);
 		if (count == 0)
 			exit(0);
 
@@ -202,14 +202,14 @@ main(int argc, char **argv)
 					if (verbose && nread > 0)
 						printf(
 						 "readlink: ino %lld: <%*s>\n",
-							    t[i].bs_ino,
+							    (long long)t[i].bs_ino,
 							    nread,
 							    cc_readlinkbufp);
 					free(cc_readlinkbufp);
 					if ( nread < 0 ) {
 						printf(
 					      "could not read symlink ino %llu\n",
-						      t[i].bs_ino );
+						      (unsigned long long)t[i].bs_ino );
 						printbstat(&t[i]);
 					}
 					break;
@@ -226,13 +226,13 @@ main(int argc, char **argv)
 					if (fd < 0) {
 						printf(
 					"unable to open handle ino %lld: %s\n",
-						  t[i].bs_ino, strerror(errno));
+						  (long long)t[i].bs_ino, strerror(errno));
 						continue;
 					}
 					if (fstat64(fd, &sb) < 0) {
 						printf(
 					"unable to stat ino %lld: %s\n",
-						  t[i].bs_ino, strerror(errno));
+						  (long long)t[i].bs_ino, strerror(errno));
 					}
 					close(fd);
 
@@ -272,7 +272,7 @@ main(int argc, char **argv)
 	if (verbose)
 		printf(
 	    "XFS_IOC_FSBULKSTAT test: last=%lld nent=%d ret=%d count=%d\n", 
-					       last, nent, ret, count);
+					       (long long)last, nent, ret, count);
 
 	return 1;
 }

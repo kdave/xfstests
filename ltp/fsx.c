@@ -11,28 +11,24 @@
  *	Small changes to work under Linux -- davej.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
+#include "global.h"
+
 #include <limits.h>
 #include <time.h>
 #include <strings.h>
 #include <sys/file.h>
 #include <sys/mman.h>
-#include <limits.h>
+#ifdef HAVE_ERR_H
 #include <err.h>
+#endif
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdarg.h>
 #include <errno.h>
 #ifdef AIO
 #include <libaio.h>
-#endif
-#ifdef XFS
-#include <xfs/libxfs.h>
 #endif
 
 #ifndef MAP_FILE
@@ -133,6 +129,24 @@ static void *round_up(void *ptr, unsigned long align, unsigned long offset)
 	ret = ((ret + align - 1) & ~(align - 1));
 	ret += offset;
 	return (void *)ret;
+}
+
+void
+vwarnc(int code, const char *fmt, va_list ap) {
+  fprintf(stderr, "fsx: ");
+  if (fmt != NULL) {
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, ": ");
+  }
+  fprintf(stderr, "%s\n", strerror(code));
+}
+
+void
+warn(const char * fmt, ...)  {
+	va_list ap;
+	va_start(ap, fmt);
+	vwarnc(errno, fmt, ap);
+	va_end(ap);
 }
 
 void
@@ -1125,13 +1139,13 @@ main(int argc, char **argv)
 #ifdef XFS
 	if (prealloc) {
 		xfs_flock64_t	resv = { 0 };
-
+#ifdef HAVE_XFS_PLATFORM_DEFS_H
 		if (!platform_test_xfs_fd(fd)) {
 			prterr(fname);
 			fprintf(stderr, "main: cannot prealloc, non XFS\n");
 			exit(96);
 		}
-
+#endif
 		resv.l_len = maxfilelen;
 		if ((xfsctl(fname, fd, XFS_IOC_RESVSP, &resv)) < 0) {
 			prterr(fname);

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 004
+# FS QA Test No. 004
 #
 # exercise xfs_db bug #789674 and other freesp functionality
 #
@@ -57,7 +57,7 @@ _populate_scratch()
 {
 	echo "=== mkfs output ===" >>$seq.full
 	_scratch_mkfs_xfs | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
-	source $tmp.mkfs
+	. $tmp.mkfs
 	_scratch_mount
 	dd if=/dev/zero of=$SCRATCH_MNT/foo count=200 bs=4096 >/dev/null 2>&1 &
 	dd if=/dev/zero of=$SCRATCH_MNT/goo count=400 bs=4096 >/dev/null 2>&1 &
@@ -72,17 +72,22 @@ _populate_scratch()
 . ./common.rc
 . ./common.filter
 
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
 _need_to_be_root
 _require_scratch
 _require_nobigloopfs
 
-# real QA test starts here
 rm -f $seq.full
 
 _populate_scratch
 
-eval `df -P -T --block-size=512 $SCRATCH_MNT 2>&1 \
-	| $AWK_PROG 'END { printf "blocks=%u used=%u avail=%u\n", $3, $4, $5 }'`
+[ "$HOSTOS" = "Linux" ] && DF_PROG="$DF_PROG -P --block-size=512"
+
+eval `$DF_PROG $SCRATCH_MNT 2>&1 \
+	| tail -1 | $AWK_PROG '{ printf "blocks=%u used=%u avail=%u\n", $3, $4, $5 }'`
 echo "df gave: blocks=$blocks used=$used avail=$avail" >>$seq.full
 echo "blocksize from mkfs is '$dbsize'" >>$seq.full
 

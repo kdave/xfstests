@@ -57,7 +57,8 @@ void fscounts(char *fname, int fsfd)
     }
 
     printf("XFS_IOC_FSCOUNTS-\n    freedata: %lld freertx: %lld freeino: %lld allocino: %lld\n",
-            counts.freedata, counts.freertx, counts.freeino, counts.allocino);
+            (long long)counts.freedata, (long long)counts.freertx,
+	   (long long)counts.freeino, (long long)counts.allocino);
 }
     
 __u64 getresblks(char *fname, int fsfd)
@@ -72,7 +73,7 @@ __u64 getresblks(char *fname, int fsfd)
     }
     
     printf("XFS_IOC_GET_RESBLKS-\n    resblks: %lld blksavail: %lld\n",
-            res.resblks, res.resblks_avail);
+            (long long)res.resblks, (long long)res.resblks_avail);
     
     return res.resblks;
 }
@@ -90,7 +91,7 @@ __u64 setresblks(char *fname, int fsfd, __u64 blks)
     }
     
     printf("XFS_IOC_SET_RESBLKS-\n    resblks: %lld blksavail: %lld\n",
-            res.resblks, res.resblks_avail);
+            (long long)res.resblks, (long long)res.resblks_avail);
     
     return res.resblks;
 }
@@ -117,7 +118,7 @@ void stat_print(int fd)
         exit(1);
     }
     printf("dev: %llu ino: %llu mode: %o\n",
-            (__u64)buf.st_dev, (__u64)buf.st_ino, buf.st_mode);
+            (unsigned long long)buf.st_dev, (unsigned long long)buf.st_ino, buf.st_mode);
 }
     
 

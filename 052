@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 052
+# FS QA Test No. 052
 #
 # Ensure that quota(1) displays blocksizes matching ondisk dquots.
 #
@@ -48,6 +48,8 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 
+export MOUNT_OPTIONS=-ousrquota
+
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
@@ -55,10 +57,16 @@ status=1	# failure is the default!
 
 _cleanup()
 {
+	cd /
 	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
 rm -f $seq.full
 
 _require_scratch
@@ -69,7 +77,6 @@ if [ -z "$MOUNT_OPTIONS" ]; then
         MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
 fi
 
-# real QA test starts here
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seq.full
 chmod a+w $seq.full     # arbitrary users will write here
@@ -133,6 +140,8 @@ cat $tmp.xfs_db >> $seq.full
 echo Comparing out of quota and xfs_db
 diff $tmp.quota $tmp.xfs_db 
 [ $? -eq 0 ] && echo OK.
+
+export -n MOUNT_OPTIONS
 
 # success, all done
 status=0

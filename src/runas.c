@@ -67,8 +67,15 @@ main(int argc, char **argv)
         gid_t sgids[SUP_MAX];
         int sup_cnt = 0;
 	int status;
+	char *p;
 
-        prog = basename(argv[0]);
+	prog = basename(argv[0]);
+	for (p = prog; *p; p++) {
+		if (*p == '/') {
+			prog = p + 1;
+		}
+	}
+
 
 	while ((c = getopt(argc, argv, "u:g:s:")) != -1) {
 		switch (c) {
@@ -108,7 +115,7 @@ main(int argc, char **argv)
         if (gid != -1) {
 	    if (setegid(gid) == -1) {
 		fprintf(stderr, "%s: setegid(%d) failed: %s\n",
-			prog, gid, strerror(errno));
+			prog, (int)gid, strerror(errno));
 		exit(1);
 	    }	
         }
@@ -124,7 +131,7 @@ main(int argc, char **argv)
         if (uid != -1) {
 	    if (seteuid(uid) == -1) {
 		fprintf(stderr, "%s: seteuid(%d) failed: %s\n",
-			prog, uid, strerror(errno));
+			prog, (int)uid, strerror(errno));
 		exit(1);
 	    }	
         }

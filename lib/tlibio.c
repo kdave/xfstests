@@ -97,7 +97,8 @@
 #else
 /* for linux or sgi */
 #include <sys/uio.h> /* readv(2)/writev(2) */
-#include <string.h>  /* bzero */
+#include <string.h>
+#include <strings.h>
 #endif
 #ifdef sgi
 #include <aio.h>
@@ -439,7 +440,7 @@ static void
 lio_async_callback_handler(sigval_t sigval)
 {
 	if ( Debug_level )
-	    printf("DEBUG %s/%d: received callback, nbytes=%ld, a callback called %d times\n",
+	    printf("DEBUG %s/%d: received callback, nbytes=%d, a callback called %d times\n",
 		__FILE__, __LINE__, sigval.sival_int, Received_callback+1);
 
 	Received_callback++;

@@ -30,7 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
 
 /* These should be in libxfs.h */
 #ifndef XFS_IOC_GOINGDOWN

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 073
+# FS QA Test No. 073
 #
 # Test xfs_copy
 #
@@ -46,6 +46,7 @@ tmp=/tmp/$$
 status=1	# failure is the default!
 _cleanup()
 {
+	cd /
 	umount $SCRATCH_MNT 2>/dev/null
 	umount $tmp.loop 2>/dev/null
 	[ -d $tmp.loop ] && rmdir $tmp.loop
@@ -79,7 +80,7 @@ _verify_copy()
 	[ $source = $SCRATCH_DEV ] && _scratch_mount
 
 	echo checking new image
-	_check_filesystem $target
+	_check_xfs_filesystem $target
 
 	echo mounting new image on loopback
 	rmdir $target_dir 2>/dev/null
@@ -130,10 +131,14 @@ _verify_copy()
 . ./common.rc
 . ./common.filter
 
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
 [ "$USE_EXTERNAL" = yes ] && _notrun "Cannot xfs_copy with external devices"
 [ -x /usr/sbin/xfs_copy ] || _notrun "xfs_copy binary not yet installed"
 
-# real QA test starts here
 _require_scratch
 _require_loop
 

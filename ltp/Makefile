@@ -38,26 +38,26 @@ CFILES = $(TARGETS:=.c)
 HFILES = doio.h
 LDIRT = $(TARGETS)
 LCFLAGS = -DXFS
-
+IFLAG = -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
 #LCFLAGS += -DAIO
 #LIBAIO =-laio
 
 default: $(TARGETS)
 
-include $(BUILDRULES)
+include $(BUILDRULES) 
 LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
 doio: doio.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(IFLAG)
 
 fsstress: fsstress.c $(LIBATTR) $(LIBTEST)
-	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)
+	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)  $(IFLAG)
 
 fsx: fsx.c
-	$(LINKTEST) $(LIBAIO) $(LDLIBS)
+	$(LINKTEST) $(LIBAIO) $(LDLIBS)  $(IFLAG)
 
 growfiles: growfiles.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)  $(IFLAG)
 
 iogen: iogen.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST)
+	$(LINKTEST) $(LIBTEST)  $(IFLAG)

@@ -4,10 +4,10 @@
    
    XFS space preallocation changes -- lord@sgi.com, April 2003
  */
-#include <dirent.h>
+
+#include "global.h"
+
 #include <sys/mman.h>
-#include <sys/wait.h>
-#include <xfs/libxfs.h>
 
 /* variables settable on the command line */
 static int loop_count = 100;
@@ -40,7 +40,7 @@ static void *x_malloc(int size)
 /* generate a buffer for a particular child, fnum etc. Just use a simple buffer
    to make debugging easy 
 */
-static void gen_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
+static void gen_buffer(char *buf, int loop, int child, int fnum, int ofs)
 {
 	uchar v = (loop+child+fnum+(ofs/block_size)) % 256;
 	memset(buf, v, block_size);
@@ -51,7 +51,7 @@ static void gen_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
 */
 static void check_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
 {
-	uchar *buf2;
+	char *buf2;
 
 	buf2 = x_malloc(block_size);
 
@@ -87,7 +87,7 @@ static void check_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
  */
 static void create_file(const char *dir, int loop, int child, int fnum)
 {
-	uchar *buf;
+	char *buf;
 	int size, fd;
 	char fname[1024];
 
@@ -100,16 +100,27 @@ static void create_file(const char *dir, int loop, int child, int fnum)
 	}
 
 	if (do_prealloc) {
-		xfs_flock64_t	resv;
+		struct flock64 resv;
 
 		resv.l_whence = 0;
 		resv.l_start = 0;
 		resv.l_len = file_size;
 
-		if ((xfsctl(fname, fd, XFS_IOC_RESVSP, &resv)) < 0) {
+#ifdef XFS_IOC_RESVSP64
+		if ((xfsctl(fname, fd, XFS_IOC_RESVSP64, &resv)) < 0) {
 			perror(fname);
 			exit(1);
 		}
+#else
+#ifdef F_RESVSP64
+		if ((fcntl(fd, F_RESVSP64, &resv)) < 0) {
+			perror(fname);
+			exit(1);
+		}
+#else
+bozo!
+#endif
+#endif
 	}
 		
 	if (!use_mmap) {

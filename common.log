@@ -169,7 +169,7 @@ _filter_logprint()
 	/^[ 	]*$/d;
 	s/  */ /g;
 	s/ $//;
-    ' |\
+    '|\
     awk '
 	# collapse BUF DATA group into 1 line
         # for Oper data this can be over separate operations...ughh
@@ -225,8 +225,10 @@ _print_logstate()
 _print_operation()
 {
     mkdir $fulldir >/dev/null 2>&1
-    raw=$fulldir/op.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
-    filtered=$fulldir/op.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    raw=$fulldir/op.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
+    filtered=$fulldir/op.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
     echo "### xfs_logprint output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -c  2>&1 \
@@ -247,8 +249,10 @@ _print_transaction_inode()
 {
     _start=$1
     mkdir $fulldir >/dev/null 2>&1
-    raw=$fulldir/trans_inode.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
-    filtered=$fulldir/trans_inode.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    raw=$fulldir/trans_inode.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
+    filtered=$fulldir/trans_inode.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
     echo "### xfs_logprint -t -i -s START output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -t -i -s $_start 2>&1 \
@@ -261,8 +265,10 @@ _print_transaction_buf()
 {
     _start=$1
     mkdir $fulldir >/dev/null 2>&1
-    raw=$fulldir/trans_buf.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
-    filtered=$fulldir/trans_buf.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
+    mntopt=`echo $MOUNT_OPTIONS | sed 's/ /_/g'`
+    mkfsopt=`echo $MKFS_OPTIONS | sed 's/ /_/g'`
+    raw=$fulldir/trans_buf.mnt$mntopt.mkfs$mkfsopt$sync_suffix.raw
+    filtered=$fulldir/trans_buf.mnt$mntopt.mkfs$mkfsopt$sync_suffix.filtered
 
     echo "### xfs_logprint -t -b -s START output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -t -b -s $_start 2>&1 \
@@ -275,7 +281,7 @@ _mkfs_log()
 {
     # create the FS
     _full "mkfs"
-    extra_ops="-lsize=2000b"
+    extra_ops="-l size=2000b"
     _scratch_mkfs_xfs $extra_ops >>$seq.full 2>&1
     if [ $? -ne 0 ] ; then 
 	_echofull "Cannot mkfs for this test using option specified: $MKFS_OPTIONS $extra_ops"

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 014
+# FS QA Test No. 014
 #
 # truncfile
 #
@@ -44,24 +44,31 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
-trap "rm -f $tmp.*; _cleanup; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    rm -rf $TEST_DIR/truncfile.$$.*
+    cd /
+    rm -f $tmp.*
+    rm -rf $testdir/truncfile.$$.*
+    _cleanup_testdir
 }
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
 
-echo "berevity is wit..."
+_setup_testdir
+
+echo "brevity is wit..."
 
 echo "------"
 echo "test 1"
 echo "------"
-if ! src/truncfile -c 10000 $TEST_DIR/truncfile.$$.0 >$tmp.out 2>&1
+if ! src/truncfile -c 10000 $testdir/truncfile.$$.0 >$tmp.out 2>&1
 then
     out=`cat $tmp.out`
     echo "truncfile returned $? : \"$out\""

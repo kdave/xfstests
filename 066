@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 066
+# FS QA Test No. 066
 #
 # Test dumping of large files
 #
@@ -44,26 +44,37 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 . ./common.dump
 
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    _cleanup_testdir
+}
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_setup_testdir
+
 _my_ls_filter()
 {
    $AWK_PROG 'NF > 5 {print $5, $9}'
 }
 
-rm -f $TEST_DIR/testfile
-if src/feature -t $TEST_DIR/testfile; then
+rm -f $testdir/testfile
+if src/feature -t $testdir/testfile; then
 	:
 else
 	_notrun "Installed libc doesn't correctly handle setrlimit/ftruncate64"
 fi
-
-# real QA test starts here
 
 _create_dumpdir_largefile
 echo "ls dumpdir/largefile"

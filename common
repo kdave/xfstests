@@ -1,4 +1,4 @@
-##/bin/sh
+##/bin/sh 
 #
 # Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
 # 
@@ -49,15 +49,15 @@ check=${check-true}
 
 if $check
 then
-    if make >/tmp/$$.make 2>&1
+    if $MAKE_PROG >/tmp/$$.gmake 2>&1
     then
 	:
     else
-	cat /tmp/$$.make
-	echo "Warning: make failed -- some tests may be missing"
+	cat /tmp/$$.gmake
+	echo "Warning: $MAKE_PROG failed -- some tests may be missing"
 	warn=1
     fi
-    rm -f /tmp/$$.make
+    rm -f /tmp/$$.gmake
 fi
 
 diff=diff
@@ -66,6 +66,7 @@ then
     which xdiff >/dev/null 2>&1 && diff=xdiff
     which gdiff >/dev/null 2>&1 && diff=gdiff
     which tkdiff >/dev/null 2>&1 && diff=tkdiff
+    which xxdiff >/dev/null 2>&1 && diff=xxdiff
 fi
 verbose=false
 quick=${quick-false}
@@ -76,6 +77,8 @@ sortme=false
 expunge=true
 have_test_arg=false
 rm -f $tmp.list $tmp.tmp $tmp.sed
+
+export FSTYP=xfs
 
 for r
 do
@@ -147,14 +150,33 @@ common options
     -v			verbose
 
 check options
+    -xfs                test XFS
+    -udf                test UDF
+    -nfs                test NFS
     -g group[,group...]	include tests from these groups
     -l			line mode diff [xdiff]
     -n			show me, do not run tests
     -q			quick, no checks (you are on your own)
     -T			output timestamps
     -x group[,group...]	exclude tests from these groups
+    -r 			randomize order
 '
 	    exit 0
+	    ;;
+
+	-udf)	# -udf ... set FSTYP to udf
+	    FSTYP=udf
+	    xpand=false
+	    ;;
+
+	-xfs)	# -xfs ... set FSTYP to xfs
+	    FSTYP=xfs
+	    xpand=false
+	    ;;
+
+	-nfs)	# -nfs ... set FSTYP to nfs
+	    FSTYP=nfs
+	    xpand=false
 	    ;;
 
 	-g)	# -g group ... pick from group file
@@ -186,12 +208,10 @@ check options
 	    verbose=true
 	    xpand=false
 	    ;;
-
 	-x)	# -x group ... exclude from group file
 	    xgroup=true
 	    xpand=false
 	    ;;
-
 	'[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]')
 	    echo "No tests?"
 	    status=1
@@ -275,17 +295,32 @@ if $quick
 then
     :
 else
-
-    if ( cd src; make -i )
+    
+    if ( cd src; $MAKE_PROG -is)
     then
 	:
     else
 	echo
 	echo ":----------------------------------------------"
-	echo ": Warning: make failed in src -- some tests may fail as a result"
+	echo ": Warning: $MAKE_PROG failed in src -- some tests may fail as a result"
 	echo ":----------------------------------------------"
 	echo
 	warn=1
     fi
 
 fi
+
+case "$FSTYP" in
+    xfs)
+	 [ "$XFS_LOGPRINT_PROG" = "" ] && _fatal "xfs_logprint not found"
+	 [ "$XFS_REPAIR_PROG" = "" ] && _fatal "xfs_repair not found"
+	 [ "$XFS_CHECK_PROG" = "" ] && _fatal "xfs_check not found"
+	 [ "$XFS_DB_PROG" = "" ] && _fatal "xfs_db not found"
+	 [ "$MKFS_XFS_PROG" = "" ] && _fatal "mkfs_xfs not found" 
+	 ;;
+    udf)
+	 [ "$MKFS_UDF_PROG" = "" ] && _fatal "mkfs_udf not found"
+	 ;;
+    nfs)
+	 ;;
+esac

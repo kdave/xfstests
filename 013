@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 013
+# FS QA Test No. 013
 #
 # fsstress
 #
@@ -48,10 +48,12 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    cd /
     # we might get here with a RO FS
     mount -o remount,rw $TEST_DEV >/dev/null 2>&1
     # now kill!
-    rm -rf $TEST_DIR/fsstress.$$.*
+    rm -rf $testdir/fsstress.$$.*
+    _cleanup_testdir
 }
 
 _filesize()
@@ -63,13 +65,16 @@ _filesize()
 . ./common.rc
 . ./common.filter
 
+# put operating system in $os
+_get_os
+
 _do_test()
 {
     _n="$1"
     _param="$2"
     _count="$3"
     
-    out=$TEST_DIR/fsstress.$$.$_n
+    out=$testdir/fsstress.$$.$_n
     rm -rf $out
     if ! mkdir $out
     then
@@ -101,11 +106,22 @@ _do_test()
 
 
 # real QA test starts here
+_supported_fs xfs udf
+_supported_os IRIX Linux
+
+_setup_testdir
 
 rm -f $here/$seq.full
 echo "brevity is wit..."
 
-count=2000
+if [ $os == 'irix' ]; then
+    count=1024    
+elif [ $os == 'linux' ]; then
+    count=2000
+else
+    echo Error test $seq does not run on the operating system: `uname`
+    exit
+fi
 procs=20
 
 _check_test_fs

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 010
+# FS QA Test No. 010
 #
 # dbtest
 #
@@ -44,12 +44,15 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    rm -f $TEST_DIR/DBtest*.{pag,dir}
+    cd /
+    rm -f $tmp.*
+    rm -f $testdir/DBtest*.{pag,dir}
+    _cleanup_testdir
 }
-trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # filter random number output from dbtest
 #
@@ -64,11 +67,29 @@ _filter_dbtest()
 . ./common.rc
 . ./common.filter
 
+# link correct .out file
+_link_out_file $seq.out
+
+# put operating system in $os
+_get_os
+
 [ -x $here/src/dbtest ] || _notrun "dbtest was not built for this platform"
 
 # real QA test starts here
-cd $TEST_DIR
-$here/src/dbtest -l 5 -n 3000 | _filter_dbtest
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
+
+_setup_testdir
+
+rm -f $seq.full
+
+cd $testdir
+
+if [ $os == 'irix' ]; then
+    $here/src/dbtest -l 5 -n 500 2>&1 | tee -a $here/$seq.full | _filter_dbtest
+elif [ $os == 'linux' ]; then
+    $here/src/dbtest -l 5 -n 3000 2>&1 | tee -a $here/$seq.full | _filter_dbtest
+fi
 
 # success, all done
 exit

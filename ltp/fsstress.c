@@ -30,14 +30,13 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <xfs/libxfs.h>
-#include <attr/xattr.h>
-#include <attr/attributes.h>
-#include <sys/statvfs.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <dirent.h>
+#include "global.h"
 
+#ifdef HAVE_ATTR_XATTR_H
+#include <attr/xattr.h>
+#endif
+
+#include <math.h>
 #define XFS_ERRTAG_MAX		17
 #define XFS_IDMODULO_MAX	32
 
@@ -214,7 +213,11 @@ int		verbose = 0;
 
 void	add_to_flist(int, int, int);
 void	append_pathname(pathname_t *, char *);
+#ifdef HAVE_LIBATTR
 int	attr_list_path(pathname_t *, char *, const int, int);
+#else
+int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
+#endif
 int	attr_remove_path(pathname_t *, const char *, int);
 int	attr_set_path(pathname_t *, const char *, const char *, const int, int);
 void	check_cwd(void);
@@ -268,7 +271,7 @@ int main(int argc, char **argv)
 	struct timeval	t;
 	ptrdiff_t	srval;
 	int             nousage = 0;
-	xfs_error_injection_t	err_inj;
+	xfs_error_injection_t	        err_inj;
 
 	errrange = errtag = 0;
 	umask(0);
@@ -357,7 +360,7 @@ int main(int argc, char **argv)
 		perror(dirname);
 		exit(1);
 	}
-	sprintf(buf, "fss%x", getpid());
+	sprintf(buf, "fss%x", (unsigned int)getpid());
 	fd = creat(buf, 0666);
 	if (lseek64(fd, (off64_t)(MAXFSIZE32 + 1ULL), SEEK_SET) < 0)
 		maxfsize = (off64_t)MAXFSIZE32;
@@ -472,22 +475,40 @@ append_pathname(pathname_t *name, char *str)
 }
 
 int
-attr_list_path(pathname_t *name, char *buffer, const int buffersize, int flags)
+attr_list_path(pathname_t *name,
+	       char *buffer,
+	       const int buffersize,
+	       int flags
+#ifndef HAVE_LIBATTR
+	       , attrlist_cursor_t *cursor
+#endif
+	       )
 {
 	char		buf[MAXNAMELEN];
 	pathname_t	newname;
 	int		rval;
 
+#ifdef ATTR_DONTFOLLOW
 	if (flags != ATTR_DONTFOLLOW) {
 		errno = EINVAL;
 		return -1;
 	}
+#endif
+
+#ifdef HAVE_LIBATTR
 	rval = llistxattr(name->path, buffer, buffersize);
+#else
+	rval = attr_list(name->path, buffer, buffersize, flags, cursor);
+#endif
 	if (rval >= 0 || errno != ENAMETOOLONG)
 		return rval;
 	separate_pathname(name, buf, &newname);
 	if (chdir(buf) == 0) {
+#ifdef HAVE_LIBATTR
 		rval = attr_list_path(&newname, buffer, buffersize, flags);
+#else
+		rval = attr_list_path(&newname, buffer, buffersize, flags, cursor);
+#endif
 		chdir("..");
 	}
 	free_pathname(&newname);
@@ -1322,7 +1343,7 @@ allocsp_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	struct flock64	fl;
+	struct xfs_flock64	fl;
 	__int64_t	lr;
 	off64_t		off;
 	struct stat64	stb;
@@ -1370,8 +1391,13 @@ allocsp_f(int opno, long r)
 void
 attr_remove_f(int opno, long r)
 {
-	char			*aname, *l;
+	attrlist_ent_t		*aep;
+	attrlist_t		*alist;
+	char			*aname;
 	char			buf[4096];
+#ifndef HAVE_LIBATTR
+	attrlist_cursor_t	cursor;
+#endif
 	int			e;
 	int			ent;
 	pathname_t		f;
@@ -1383,13 +1409,22 @@ attr_remove_f(int opno, long r)
 	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
 	total = 0;
-	e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
-	check_cwd();
-	if (e > 0) {
-		for (l = buf; l - buf <= e; l += strlen(l)+1)
-			if (strncmp(l, "user.",5) == 0)
-				total++;
-	}
+#ifndef HAVE_LIBATTR
+	bzero(&cursor, sizeof(cursor));
+#endif
+	do {
+		bzero(buf, sizeof(buf));
+#ifdef HAVE_LIBATTR
+		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
+#else
+		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
+#endif
+		check_cwd();
+		if (e)
+			break;
+		alist = (attrlist_t *)buf;
+		total += alist->al_count;
+	} while (alist->al_more);
 	if (total == 0) {
 		if (v)
 			printf("%d/%d: attr_remove - no attrs for %s\n",
@@ -1398,20 +1433,30 @@ attr_remove_f(int opno, long r)
 		return;
 	}
 	which = (int)(random() % total);
+#ifndef HAVE_LIBATTR
+	bzero(&cursor, sizeof(cursor));
+#endif
 	ent = 0;
 	aname = NULL;
-	e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
-	check_cwd();
-	if (e <= 0)
-		return;
-	for (l = buf; l - buf <= e; l += strlen(l)+1) {
-		if (strncmp(l, "user.",5) == 0) {
-			if (++ent == which) {
-				aname = l;
-				break;
-			}
+	do {
+		bzero(buf, sizeof(buf));
+#ifdef HAVE_LIBATTR
+		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
+#else
+		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
+#endif
+		check_cwd();
+		if (e)
+			break;
+		alist = (attrlist_t *)buf;
+		if (which < ent + alist->al_count) {
+			aep = (attrlist_ent_t *)
+				&buf[alist->al_offset[which - ent]];
+			aname = aep->a_name;
+			break;
 		}
-	}
+		ent += alist->al_count;
+	} while (alist->al_more);
 	if (aname == NULL) {
 		if (v)
 			printf(
@@ -1486,7 +1531,7 @@ bulkstat_f(int opno, long r)
 		total += count;
 	free(t);
 	if (verbose)
-		printf("%d/%d: bulkstat nent %d total %llu\n",
+		printf("%d/%d: bulkstat nent %d total %lld\n",
 			procid, opno, nent, (long long)total);
 	close(fd);
 }
@@ -1567,7 +1612,7 @@ chown_f(int opno, long r)
 	e = lchown_path(&f, u, g) < 0 ? errno : 0;
 	check_cwd();
 	if (v)
-		printf("%d/%d: chown %s %d/%d %d\n", procid, opno, f.path, u, g, e);
+		printf("%d/%d: chown %s %d/%d %d\n", procid, opno, f.path, (int)u, (int)g, e);
 	free_pathname(&f);
 }
 
@@ -1820,7 +1865,7 @@ freesp_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	struct flock64	fl;
+	struct xfs_flock64	fl;
 	__int64_t	lr;
 	off64_t		off;
 	struct stat64	stb;
@@ -2190,7 +2235,7 @@ resvsp_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	struct flock64	fl;
+	struct xfs_flock64	fl;
 	__int64_t	lr;
 	off64_t		off;
 	struct stat64	stb;
@@ -2406,7 +2451,7 @@ unresvsp_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	struct flock64	fl;
+	struct xfs_flock64	fl;
 	__int64_t	lr;
 	off64_t		off;
 	struct stat64	stb;

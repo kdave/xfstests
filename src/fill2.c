@@ -44,7 +44,9 @@
  *   determined.
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
+
+#define constpp char * const *
 
 #define N(x) (sizeof(x)/sizeof(x[0]))
 
@@ -121,7 +123,13 @@ main(int argc, char **argv)
 
 
     /* defaults */
+
     progname = basename(argv[0]);
+    for (p = progname; *p; p++) {
+	    if (*p == '/') {
+		    progname = p + 1;
+	    }
+    }
     nbytes = 1024 * 1024;
     dlen = 73;	/* includes the trailing newline */
 
@@ -330,7 +338,7 @@ main(int argc, char **argv)
 		dfile, strerror(errno));
 	status = 1;
     }
-    exit(status);
+    return status;
 }
 
 

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 070
+# FS QA Test No. 070
 #
 # fsstress incarnation testing extended attributes writes
 #
@@ -44,16 +44,27 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    _cleanup_testdir
+}
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
 # real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
+
+_setup_testdir
 
 $here/ltp/fsstress \
-	-d $TEST_DIR/fsstress \
+	-d $testdir/fsstress \
 	-f allocsp=0 \
 	-f freesp=0 \
 	-f bulkstat=0 \

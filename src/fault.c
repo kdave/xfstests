@@ -30,7 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
 
 void expect_error(int r, int err)
 {
@@ -57,15 +57,33 @@ main(int argc, char **argv)
     }
 
     fsfd = open(argv[1], O_RDONLY);
+
     if (fsfd < 0) {
 	perror("open");
 	exit(1);
     }
     
     printf("--- xfsctl with bad output address\n");
+#ifdef XFS_IOC_FSCOUNTS
     expect_error(xfsctl(argv[1], fsfd, XFS_IOC_FSCOUNTS, NULL), EFAULT);
+#else
+#ifdef XFS_FS_COUNTS
+    expect_error(syssgi(SGI_XFS_FSOPERATIONS, fsfd, XFS_FS_COUNTS, NULL, NULL), EFAULT);
+#else
+bozo!
+#endif
+#endif
+
     printf("--- xfsctl with bad input address\n");
+#ifdef XFS_IOC_SET_RESBLKS
     expect_error(xfsctl(argv[1], fsfd, XFS_IOC_SET_RESBLKS, NULL), EFAULT);
+#else
+#ifdef XFS_SET_RESBLKS
+    expect_error(syssgi(SGI_XFS_FSOPERATIONS, fsfd, XFS_SET_RESBLKS, NULL, NULL), EFAULT);
+#else
+bozo!
+#endif
+#endif
     
     close(fsfd);
     

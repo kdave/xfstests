@@ -30,7 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
 
 int
 main(int argc, char **argv)
@@ -97,7 +97,7 @@ main(int argc, char **argv)
 	if ((lseek64(fd, offset, SEEK_SET)) < 0) {
 		fprintf(stderr, "%s: error seeking to offset %llu "
 					"on \"%s\": %s\n",
-			progname, offset, path, strerror(errno));
+			progname, (unsigned long long)offset, path, strerror(errno));
 		exit(1);
 	}
 

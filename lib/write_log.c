@@ -68,6 +68,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -251,7 +252,7 @@ int 			nrecs;
 int 			(*func)();
 long			data;
 {
-	int			fd, leftover, nbytes, offset, recnum, reclen, rval;
+	int			fd, leftover, nbytes, offset, recnum, reclen;
 	char    		buf[BSIZE*32], *bufend, *cp, *bufstart;
 	char		albuf[WLOG_REC_MAX_SIZE];
 	struct wlog_rec	wrec;
@@ -353,7 +354,7 @@ long			data;
 			 * stop if instructed to.
 			 */
 
-			if ((rval = (*func)(&wrec, data)) == WLOG_STOP_SCAN) {
+			if ((*func)(&wrec, data) == WLOG_STOP_SCAN) {
 				break;
 			}
 

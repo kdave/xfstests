@@ -38,7 +38,7 @@ include $(TOPDIR)/include/builddefs
 endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
-CONFIGURE = configure include/builddefs
+CONFIGURE = configure include/builddefs include/config.h
 LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
@@ -59,6 +59,7 @@ clean:  # if configure hasn't run, nothing to clean
 endif
 
 $(CONFIGURE):
+	autoheader
 	autoconf
 	./configure
 

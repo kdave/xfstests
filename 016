@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 016
+# FS QA Test No. 016
 #
 # test end of log overwrite bug #796141
 #
@@ -62,6 +62,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    cd /
     rm -f $tmp.*
     echo "*** unmount"
     umount $SCRATCH_MNT 2>/dev/null
@@ -83,7 +84,7 @@ _init()
     [ $? -ne 0 ] && \
         _notrun "Cannot mkfs for this test using MKFS_OPTIONS specified"
     _filter_mkfs <$tmp.mkfs0 >/dev/null 2>$tmp.mkfs
-    source $tmp.mkfs
+    . $tmp.mkfs
 }
 
 _log_traffic()
@@ -164,7 +165,7 @@ _check_corrupt()
     f="c6c6c6c6"
     echo "*** check for corruption"
     echo "expect $f..." >>$seq.full
-    xfs_db -r $1 -c "fsblock $2" -c "print" | head | tee -a $seq.full | \
+    xfs_db -r -c "fsblock $2" -c "print" $1 | head | tee -a $seq.full | \
         grep -q -v "$f $f $f $f $f $f $f $f" && \
             _fail "!!! block $2 corrupted!"
 }
@@ -174,6 +175,8 @@ _check_corrupt()
 . ./common.filter
 
 # real QA test starts here
+_supported_fs xfs
+_supported_os Linux
 
 rm -f $seq.full
 

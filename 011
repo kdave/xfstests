@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 011
+# FS QA Test No. 011
 #
 # dirstress
 #
@@ -41,34 +41,33 @@ owner=dxm@sgi.com
 seq=`basename $0`
 echo "QA output created by $seq"
 
-# get standard environment, filters and checks
-. ./common.rc
-. ./common.filter
-
+out=""
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
-out=$TEST_DIR/dirstress.$$
-trap "rm -f $tmp.*; _cleanup; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    rm -rf $out
+    cd /
+    rm -f $tmp.*
+    [ -n "$out" ] && rm -rf $out
+    _cleanup_testdir
 }
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
-count=1000
-if ! mkdir $out
-then
-    echo "!! couldn't mkdir $out"
-    status=1
-    exit
-fi
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
 
-rm -f $seq.out.full
+_setup_testdir
+
+out=$testdir/dirstress.$$
+
+rm -f $seq.full
 
 _test()
 {
@@ -80,13 +79,19 @@ _test()
     if ! $here/src/dirstress -d $out -f $count $args >$tmp.out 2>&1
     then
         echo "    dirstress failed"
-        echo "*** TEST $test -d $out -f $count $args" >>$seq.out.full
-        cat $tmp.out >>$seq.out.full
+        echo "*** TEST $test -d $out -f $count $args" >>$seq.full
+        cat $tmp.out >>$seq.full
         status=1
     fi
 }
 
 # dirstress doesn't check returns - this is a crash & burn test.
+if ! mkdir $out
+then
+    echo "!! couldn't mkdir $out"
+    status=1
+    exit
+fi
 
 count=1000
 _test 1 "-p 1 -n 1" $count

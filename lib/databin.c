@@ -96,14 +96,12 @@ int bsize;	/* size of buffer */
 int offset;	/* offset into the file where buffer starts */
 char **errmsg;
 {
-    int cnt;
-    unsigned char *chr;
-    int total;
-    long expbits;
-    long actbits;
+	int cnt;
+	unsigned char *chr;
+	long expbits;
+	long actbits;
 
 	chr=buffer;
-	total=bsize;
 
 	if ( errmsg != NULL ) {
 	    *errmsg = Errmsg;

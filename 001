@@ -1,9 +1,8 @@
 #! /bin/sh
-#
-# XFS QA Test No. 001
+# FS QA Test No. 001
 #
 # Random file copier to produce chains of identical files so the head
-# and the tail cna be diff'd at then end of each iteration.
+# and the tail can be diff'd at the end of each iteration.
 #
 # Exercises creat, write and unlink for a variety of directory sizes, and
 # checks for data corruption.
@@ -62,8 +61,11 @@ done_cleanup=false
 trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
 
 verbose=true
+verify=$here/verify_fill
 
 if [ $# -eq 0 ]
 then
@@ -127,17 +129,18 @@ else
 fi
 
 ncopy=200		# number of file copies in the chain step
+udf_fsize=20240		# number of sectors for UDF
 
 _setup()
 {
-    if mkdir -p $TEST_DIR/$$
+    if mkdir -p $testdir/$$
     then
 	:
     else
-	echo "Error: cannot mkdir \"$TEST_DIR/$$\""
+	echo "Error: cannot mkdir \"$testdir/$$\""
 	exit 1
     fi
-    cd $TEST_DIR/$$
+    cd $testdir/$$
 
     $verbose && echo -n "setup "
     sed -e '/^#/d' $tmp.config \
@@ -202,12 +205,14 @@ _mark_iteration()
 #
 _chain()
 {
-    $AWK_PROG <$tmp.config '
+    $AWK_PROG -v full_file=$here/$seq.full -v verify=$verify <$tmp.config '
 BEGIN	{ nfile = 0 }
 /^\#/	{ next }
 	{ file[nfile] = $1
+	  size[nfile] = $2
 	  link[nfile] = 0
 	  nfile++
+	  total_size += $2
 	}
 END	{ srand('$iter')
 	  for (i=0; i < '$ncopy'; i++) {
@@ -216,28 +221,39 @@ END	{ srand('$iter')
 	    while (j < 0 || j >= nfile)
 		j = int(rand() * nfile)
 	    if (link[j] == 0) {
+		# previous should already exist and next one should not exist
 		printf "if [ ! -f %s ]; then echo \"%s missing!\"; exit; fi\n",file[j],file[j]
 		printf "if [ -f %s.0 ]; then echo \"%s.0 already present!\"; exit; fi\n",file[j],file[j]
-		printf "cp %s %s.0\n",file[j],file[j]
+		printf "cp %s %s.0 || exit 1\n",file[j],file[j]
+		printf "ls -i %s.0\n", file[j] >full_file;
+		total_size += size[j]
+		printf "# total size = %d\n", total_size 
 	    }
 	    else {
+		# previous should already exist and next one should not exist
 		printf "if [ ! -f %s.%d ]; then echo \"%s.%d missing!\"; exit; fi\n",file[j],link[j]-1,file[j],link[j]-1
 		printf "if [ -f %s.%d ]; then echo \"%s.%d already present!\"; exit; fi\n",file[j],link[j],file[j],link[j]
-		printf "cp %s.%d %s.%d\n",file[j],link[j]-1,file[j],link[j]
+		printf "cp %s.%d %s.%d || exit 1\n",file[j],link[j]-1,file[j],link[j]
+		printf "ls -i %s.%d\n", file[j], link[j] >full_file;
+		total_size += size[j]
+		printf "# total size = %d\n", total_size 
 	    }
 	    link[j]++
 	  }
-	  # close all the chains, and remove all of the files except
-	  # the head of the chain
+	  # close all the chains, 
+	  # if have at least one copy then move the last copy to "file[j].last"
+	  # and remove all of the other files except the head of the chain
 	  for (j=0; j<nfile; j++) {
-	    if (link[j] > 0)
+	    if (link[j] > 0) {
 		printf "mv %s.%d %s.last\n",file[j],link[j]-1,file[j]
+		printf "ls -i %s.last\n", file[j] >full_file;
+	    }
 	    for (i=0; i<link[j]-1; i++) {
 		printf "rm -f %s.%d\n",file[j],i
 	    }
 	  }
 	}' \
-	| sh
+	| tee -a $here/$seq.full | sh
 }
 
 _check()
@@ -247,6 +263,7 @@ _check()
     sed -e '/^#/d' $tmp.config \
     | while read file nbytes
     do
+	# the file is never removed so it should exist
 	if [ ! -f $file ]
 	then
 	    $verbose && echo
@@ -254,6 +271,7 @@ _check()
 	    touch $tmp.bad
 	    continue
 	fi
+	# checks that the file and its last copy are the same
 	if [ -f $file.last ]
 	then
 	    if cmp $file $file.last >/dev/null 2>&1
@@ -283,16 +301,19 @@ _cleanup()
     then
 	$verbose && echo "cleanup"
 	cd /
-	rm -rf $TEST_DIR/$$
+	rm -rf $testdir/$$
+	_cleanup_testdir
 	done_cleanup=true
     fi
 }
 
+rm -f $here/$seq.full
 status=0
 _cleanup
 status=1
 done_cleanup=false
 
+_setup_testdir
 _setup
 
 # do the test
@@ -300,6 +321,7 @@ _setup
 for iter in 1 2 3 4 5
 do
     echo -n "iter $iter chain ... "
+    echo "iter $iter" >> $here/$seq.full
     _chain
     _check
     if [ -f $tmp.bad ]

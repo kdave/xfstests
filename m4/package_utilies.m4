@@ -17,59 +17,69 @@ AC_DEFUN([AC_PACKAGE_NEED_UTILITY],
 #  MSGFMT MSGMERGE RPM
 #
 AC_DEFUN([AC_PACKAGE_UTILITIES],
-  [ if test -z "$CC"; then
-        AC_PROG_CC
-    fi
+  [ AC_PROG_CC
     cc="$CC"
     AC_SUBST(cc)
     AC_PACKAGE_NEED_UTILITY($1, "$cc", cc, [C compiler])
 
     if test -z "$MAKE"; then
-        AC_PATH_PROG(MAKE, make, /usr/bin/make)
+        AC_PATH_PROG(MAKE, gmake,, /usr/bin:/usr/freeware/bin)
+    fi
+    if test -z "$MAKE"; then
+        AC_PATH_PROG(MAKE, make,, /usr/bin)
     fi
     make=$MAKE
     AC_SUBST(make)
     AC_PACKAGE_NEED_UTILITY($1, "$make", make, [GNU make])
 
     if test -z "$LIBTOOL"; then
-	AC_PATH_PROG(LIBTOOL, libtool,,/usr/bin:/usr/local/bin)
+	AC_PATH_PROG(LIBTOOL, glibtool,, /usr/bin)
+    fi
+    if test -z "$LIBTOOL"; then
+	AC_PATH_PROG(LIBTOOL, libtool,, /usr/bin:/usr/local/bin:/usr/freeware/bin)
     fi
     libtool=$LIBTOOL
     AC_SUBST(libtool)
     AC_PACKAGE_NEED_UTILITY($1, "$libtool", libtool, [GNU libtool])
 
     if test -z "$TAR"; then
-        AC_PATH_PROG(TAR, tar)
+        AC_PATH_PROG(TAR, tar,, /usr/freeware/bin:/bin:/usr/local/bin:/usr/bin)
     fi
     tar=$TAR
     AC_SUBST(tar)
     if test -z "$ZIP"; then
-        AC_PATH_PROG(ZIP, gzip, /bin/gzip)
+        AC_PATH_PROG(ZIP, gzip,, /bin:/usr/local/bin:/usr/freeware/bin)
     fi
+
     zip=$ZIP
     AC_SUBST(zip)
+
     if test -z "$MAKEDEPEND"; then
         AC_PATH_PROG(MAKEDEPEND, makedepend, /bin/true)
     fi
     makedepend=$MAKEDEPEND
     AC_SUBST(makedepend)
+
     if test -z "$AWK"; then
-        AC_PATH_PROG(AWK, awk, /bin/awk)
+        AC_PATH_PROG(AWK, awk,, /bin:/usr/bin)
     fi
     awk=$AWK
     AC_SUBST(awk)
+
     if test -z "$SED"; then
-        AC_PATH_PROG(SED, sed, /bin/sed)
+        AC_PATH_PROG(SED, sed,, /bin:/usr/bin)
     fi
     sed=$SED
     AC_SUBST(sed)
+
     if test -z "$ECHO"; then
-        AC_PATH_PROG(ECHO, echo, /bin/echo)
+        AC_PATH_PROG(ECHO, echo,, /bin:/usr/bin)
     fi
     echo=$ECHO
     AC_SUBST(echo)
+
     if test -z "$SORT"; then
-        AC_PATH_PROG(SORT, sort, /bin/sort)
+        AC_PATH_PROG(SORT, sort,, /bin:/usr/bin)
     fi
     sort=$SORT
     AC_SUBST(sort)
@@ -79,13 +89,14 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
 
     if test "$enable_gettext" = yes; then
         if test -z "$MSGFMT"; then
-                AC_CHECK_PROG(MSGFMT, msgfmt, /usr/bin/msgfmt)
+                AC_PATH_PROG(MSGFMT, msgfmt,, /usr/bin:/usr/freeware/bin)
         fi
         msgfmt=$MSGFMT
         AC_SUBST(msgfmt)
         AC_PACKAGE_NEED_UTILITY($1, "$msgfmt", msgfmt, gettext)
+
         if test -z "$MSGMERGE"; then
-                AC_CHECK_PROG(MSGMERGE, msgmerge, /usr/bin/msgmerge)
+                AC_PATH_PROG(MSGMERGE, msgmerge,, /usr/bin:/usr/freeware/bin)
         fi
         msgmerge=$MSGMERGE
         AC_SUBST(msgmerge)
@@ -93,10 +104,11 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
     fi
 
     if test -z "$RPM"; then
-        AC_PATH_PROG(RPM, rpm, /bin/rpm)
+        AC_PATH_PROG(RPM, rpm,, /bin:/usr/freeware/bin)
     fi
     rpm=$RPM
     AC_SUBST(rpm)
+
     dnl .. and what version is rpm
     rpm_version=0
     test -x $RPM && rpm_version=`$RPM --version \

@@ -126,7 +126,7 @@ writeblk(int fd)
 	}
 	if (verbose > 1)
 		printf("writing   data at offset=%llx\n",
-		       (fileoffset + offset));
+		       (unsigned long long)(fileoffset + offset));
 }
 
 void
@@ -141,5 +141,5 @@ truncfile(int fd)
 	}
 	if (verbose > 1)
 		printf("truncated file to offset %llx\n",
-		       (fileoffset + offset));
+		       (unsigned long long)(fileoffset + offset));
 }

@@ -46,11 +46,23 @@
  *   -w  report bits per long
  */
 
-#include <xfs/libxfs.h>
+#include "global.h"
+
 #include <sys/quota.h>
 #include <sys/resource.h>
 #include <signal.h>
+
+#ifdef HAVE_XFS_XQM_H
 #include <xfs/xqm.h>
+#endif
+
+#ifndef USRQUOTA
+#define USRQUOTA  0
+#endif
+
+#ifndef GRPQUOTA
+#define GRPQUOTA  1
+#endif
 
 int verbose = 0;
 
@@ -75,11 +87,11 @@ int check_big_ID(char *filename)
 	}
 
 	/* 98789 is greater than 2^16 (65536) */
-	if ((__u32)sbuf.st_uid == 98789 || (__u32)sbuf.st_gid == 98789)
+	if ((__uint32_t)sbuf.st_uid == 98789 || (__uint32_t)sbuf.st_gid == 98789)
 		return(0);
 	if (verbose)
 		fprintf(stderr, "lstat64 on %s gave uid=%d, gid=%d\n",
-			filename, sbuf.st_uid, sbuf.st_gid);
+			filename, (int)sbuf.st_uid, (int)sbuf.st_gid);
 	return(1);
 }
 
@@ -104,7 +116,7 @@ int
 hastruncate64(char *filename)
 {
 	struct rlimit64 rlimit64;
-	off64_t	bigoff = 4294967307;	/* > 2^32 */
+	off64_t bigoff = 4294967307;	/* > 2^32 */
 	struct stat64 bigst;
 	int fd;
 
@@ -131,7 +143,7 @@ hastruncate64(char *filename)
 
 	if (verbose)
 		fprintf(stderr, "fstat64 on %s gave sz=%lld (truncsz=%lld)\n",
-			filename, bigst.st_size, bigoff);
+			filename, (long long)bigst.st_size, (long long)bigoff);
 
 	if (bigst.st_size != bigoff)
 		return(1);
@@ -148,7 +160,13 @@ hasxfsquota(int type, int q, char *device)
 		return (access("/proc/fs/xfs/xqm", F_OK) < 0);
 
 	memset(&qstat, 0, sizeof(fs_quota_stat_t));
+
+#ifdef QCMD
 	qcmd = QCMD(Q_XGETQSTAT, type);
+#else
+	qcmd = Q_GETQSTAT;
+#endif
+
 	if (quotactl(qcmd, device, 0, (caddr_t)&qstat) < 0) {
 		if (verbose)
 			perror("quotactl");
@@ -250,7 +268,18 @@ main(int argc, char **argv)
 		exit(0);
 	}
 	if (wflag) {
+#ifdef BITS_PER_LONG
 		printf("%d\n", BITS_PER_LONG);
+#else
+#ifdef NBBY
+		/* This can change under IRIX depending on whether we compile
+		 * with -n32/-32 or -64
+		 */
+		printf("%d\n", (int)(NBBY * sizeof(long)));
+#else
+bozo!
+#endif
+#endif
 		exit(0);
 	}
 

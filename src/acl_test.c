@@ -170,8 +170,14 @@ main(int argc, char **argv)
 	int c, i;
 	acl_t acl1, acl2, acl3;
 	acl_entry_t ace1;
+	char *p;
 
-        prog = basename(argv[0]);
+	prog = argv[0];
+	for (p = prog; *p; p++) {
+		if (*p == '/') {
+			prog = p + 1;
+		}
+	}
 
 	while ((c = getopt(argc, argv, "i")) != -1) {
 		switch (c) {

@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 071
+# FS QA Test No. 071
 #
 # Exercise IO at large file offsets.
 #
@@ -48,6 +48,7 @@ status=1	# failure is the default!
 
 _cleanup()
 {
+    cd /
     rm -f $tmp.*
     umount $SCRATCH_DEV 2>/dev/null
 }
@@ -67,6 +68,11 @@ _filter_off()
     sed -e "s/$1/<OFFSET>/g" | _filter_io
 }
 
+_filter_xfs_io()
+{
+    sed -e "s/[0-9/.]* bytes, [0-9] ops\; [0-9/.]* sec ([0-9/.]* [MKiBbytes]*\/sec and [0-9/.]* ops\/sec)/XXX bytes, X ops\; XXX sec (X YYY\/sec and XXX ops\/sec/"
+}
+
 write_block()
 {
     location=$1
@@ -80,13 +86,13 @@ write_block()
     echo "Writing $bytes bytes, offset is $words (direct=$direct)" | _filter_io
     echo "Writing $bytes bytes at $location $words (direct=$direct)" >>$seq.full
     xfs_io -c "pwrite $offset 512" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | tee -a $seq.full
+	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
     xfs_bmap -v $SCRATCH_MNT/$seq >>$seq.full
 
     echo "Reading $bytes bytes (direct=$direct)" | _filter_io
     echo "Reading $bytes bytes at $location (direct=$direct)" >>$seq.full
     xfs_io -c "pread $offset $bytes" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | tee -a $seq.full
+	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
 
     xfs_io -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full
 
@@ -94,9 +100,14 @@ write_block()
 }
 
 # real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+[ -x /usr/sbin/xfs_io ] || _notrun "xfs_io executable not found"
+
 _require_scratch
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-source $tmp.mkfs
+. $tmp.mkfs
 echo
 _scratch_mount
 

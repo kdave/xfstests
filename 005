@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 005
+# FS QA Test No. 005
 #
 # Test symlinks & ELOOP
 #
@@ -39,7 +39,7 @@
 owner=dxm@sgi.com
 
 #
-# note ELOOP limit used to be 32 but changed to 8. Who know what
+# note ELOOP limit used to be 32 but changed to 8. Who knows what
 # it might be next.
 #
 
@@ -53,8 +53,10 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    cd $TEST_DIR
+    cd $testdir
     rm -f symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9} symlink_self empty_file
+    cd /
+    _cleanup_testdir
 }
 
 _touch()
@@ -70,9 +72,16 @@ _touch()
 . ./common.rc
 . ./common.filter
 
-# real QA test starts here
+# link correct .out file
+_link_out_file $seq.out
 
-cd $TEST_DIR
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
+
+_setup_testdir
+
+cd $testdir
 
 o=empty_file
 _touch $o
@@ -91,5 +100,7 @@ echo ""
 echo "*** touch recusive symlinks"
 echo ""
 _touch symlink_self
+
+
 
 exit

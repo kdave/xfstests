@@ -41,43 +41,23 @@
  *
  */
 
-#include <stdio.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <string.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <time.h>
-#include <stdarg.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/sysmacros.h>
-#ifdef CRAY
-#include <sys/iosw.h>
-#endif
+#include "global.h"
+
 #ifdef sgi
 #include <aio.h>	/* for aio_read,write */
 #include <inttypes.h>	/* for uint64_t type */
 #include <siginfo.h>	/* signal handlers & SA_SIGINFO */
 #endif
-#ifndef CRAY
+
 #include <sys/uio.h>	/* for struct iovec (readv)*/
 #include <sys/mman.h>	/* for mmap(2) */
 #include <sys/ipc.h>	/* for i/o buffer in shared memory */
 #include <sys/shm.h>	/* for i/o buffer in shared memory */
-#endif
 #include <sys/wait.h>
-#ifdef CRAY
-#include <sys/listio.h>
-#include <sys/panic.h>
-#endif
 #include <sys/time.h>	/* for delays */
+#include <ctype.h>
 
 #ifndef NO_XFS
-#include <xfs/libxfs.h>
 struct io_req;
 int do_xfsctl(struct io_req *);
 #endif
@@ -283,6 +263,10 @@ int     aio_unregister( int );
 int     parse_cmdline( int, char **, char * );
 int     lock_file_region( char *, int, int, int, int );
 struct	fd_cache *alloc_fdcache(char *, int);
+int     aio_register( int, int, int );
+#ifndef linux
+int aio_wait(int);
+#endif
 
 /*
  * Upanic conditions, and a map from symbolics to values
@@ -379,13 +363,8 @@ int 	argc;
 char	**argv;
 {
 	int	    	    	i, pid, stat, ex_stat;
-#ifdef CRAY
-	sigset_t	    	omask;
-#else
-	int		    	omask;
-#endif
 	struct sigaction	sa;
-
+	int omask;
 	umask(0);		/* force new file modes to known values */
 #if _CRAYMPP
 	Npes = sysconf(_SC_CRAY_NPES);	/* must do this before parse_cmdline */
@@ -627,11 +606,11 @@ doio()
 	if ((cp = strchr(Host, '.')) != NULL)
 		*cp = '\0';
 
-	Pattern_Length = sprintf(Pattern, "-:%d:%s:%s*", getpid(), Host, Prog);
+	Pattern_Length = sprintf(Pattern, "-:%d:%s:%s*", (int)getpid(), Host, Prog);
 
 	if (!(Pattern_Length % 16)) {
 		Pattern_Length = sprintf(Pattern, "-:%d:%s:%s**",
-					 getpid(), Host, Prog);
+					 (int)getpid(), Host, Prog);
 	}
 
 	/*
@@ -1427,7 +1406,9 @@ do_write(req)
 struct io_req	*req;
 {
 	static int		pid = -1;
-	int	    	    	fd, nbytes, oflags, signo;
+	int	    	    	fd, nbytes, oflags;
+	/* REFERENCED */
+	int			signo;
 	int	    	    	logged_write, rval, got_lock;
 	long    	    	offset, woffset = 0;
 	char    	    	*addr, pattern, *file, *msg;
@@ -2953,8 +2934,11 @@ do_rw(req)
 	struct status		*s;
 	struct wlog_rec		wrec;
 	struct syscall_info	*sy;
-#if defined(CRAY) || defined(sgi)
+#ifdef sgi
 	struct aio_info		*aiop;
+#endif
+#ifdef CRAY
+	/* REFERENCED */
 	struct iosw		*iosw;
 #endif
 #ifndef NO_XFS
@@ -3543,12 +3527,12 @@ int	patshift;
 
 				for (i = 0; i < nb; i++) {
 					expected[i] = pattern[(pattern_index + i) % pattern_length];
-					if (! isprint(expected[i])) {
+					if (! isprint((int)expected[i])) {
 						expected[i] = '.';
 					}
 
 					actual[i] = cp[i];
-					if (! isprint(actual[i])) {
+					if (! isprint((int)actual[i])) {
 						actual[i] = '.';
 					}
 				}

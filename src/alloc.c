@@ -37,20 +37,27 @@
  * filesystem allocation, and must equal 512.  Length units given to bio
  * routines are in BB's.
  */
+
+/* Assume that if we have BTOBB, then we have the rest */
+#ifndef BTOBB
 #define BBSHIFT         9
 #define BBSIZE          (1<<BBSHIFT)
 #define BBMASK          (BBSIZE-1)
 #define BTOBB(bytes)    (((__u64)(bytes) + BBSIZE - 1) >> BBSHIFT)
 #define BTOBBT(bytes)   ((__u64)(bytes) >> BBSHIFT)
 #define BBTOB(bbs)      ((bbs) << BBSHIFT)
-#define OFFTOBB(bytes)  (((__u64)(bytes) + BBSIZE - 1) >> BBSHIFT)
 #define OFFTOBBT(bytes) ((__u64)(bytes) >> BBSHIFT)
-#define BBTOOFF(bbs)    ((__u64)(bbs) << BBSHIFT)
 
 #define SEEKLIMIT32     0x7fffffff
 #define BBSEEKLIMIT32   BTOBBT(SEEKLIMIT32)
 #define SEEKLIMIT       0x7fffffffffffffffLL
 #define BBSEEKLIMIT     OFFTOBBT(SEEKLIMIT)
+#endif
+
+#ifndef OFFTOBB
+#define OFFTOBB(bytes)  (((__u64)(bytes) + BBSIZE - 1) >> BBSHIFT)
+#define BBTOOFF(bbs)    ((__u64)(bbs) << BBSHIFT)
+#endif
 
 #define	FSBTOBB(f)	(OFFTOBBT(FSBTOOFF(f)))
 #define	BBTOFSB(b)	(OFFTOFSB(BBTOOFF(b)))
@@ -85,40 +92,53 @@ char		*filename;
 /* params are in bytes */
 void map(off64_t off, off64_t len)
 {
-    struct getbmap	bm[2]={{0}};
+    struct getbmap	bm[2];
     
+    bzero(bm, sizeof(bm));
+
     bm[0].bmv_count = 2;
     bm[0].bmv_offset = OFFTOBB(off);
     if (len==(off64_t)-1) { /* unsigned... */
         bm[0].bmv_length = -1;
         printf("    MAP off=%lld, len=%lld [%lld-]\n", 
-                (__s64)off, (__s64)len,
-                (__s64)BBTOFSB(bm[0].bmv_offset));
+                (long long)off, (long long)len,
+                (long long)BBTOFSB(bm[0].bmv_offset));
     } else {
         bm[0].bmv_length = OFFTOBB(len);
         printf("    MAP off=%lld, len=%lld [%lld,%lld]\n", 
-                (__s64)off, (__s64)len,
-                (__s64)BBTOFSB(bm[0].bmv_offset),
-                (__s64)BBTOFSB(bm[0].bmv_length));
+                (long long)off, (long long)len,
+                (long long)BBTOFSB(bm[0].bmv_offset),
+                (long long)BBTOFSB(bm[0].bmv_length));
     }
     
     printf("        [ofs,count]: start..end\n");
     for (;;) {
+#ifdef XFS_IOC_GETBMAP
 	    if (xfsctl(filename, fd, XFS_IOC_GETBMAP, bm) < 0) {
+#else
+#ifdef F_GETBMAP
+	    if (fcntl(fd, F_GETBMAP, bm) < 0) {
+#else
+bozo!
+#endif
+#endif
 		    perror("getbmap");
 		    break;
 	    }
+
 	    if (bm[0].bmv_entries == 0)
 		    break;
+
 	    printf("        [%lld,%lld]: ",
-		    (__s64)BBTOFSB(bm[1].bmv_offset),
-		    (__s64)BBTOFSB(bm[1].bmv_length));
+		    (long long)BBTOFSB(bm[1].bmv_offset),
+		    (long long)BBTOFSB(bm[1].bmv_length));
+
 	    if (bm[1].bmv_block == -1)
 		    printf("hole");
 	    else
 		    printf("%lld..%lld",
-			    (__s64)BBTOFSB(bm[1].bmv_block),
-			    (__s64)BBTOFSB(bm[1].bmv_block +
+			    (long long)BBTOFSB(bm[1].bmv_block),
+			    (long long)BBTOFSB(bm[1].bmv_block +
 				    bm[1].bmv_length - 1));
 	    printf("\n");
     }
@@ -136,11 +156,30 @@ main(int argc, char **argv)
 	char		line[1024];
 	off64_t		off;
 	int		oflags;
-	static char	*opnames[] =
-		{ "freesp", "allocsp", "unresvsp", "resvsp" };
+	static char	*opnames[] = { "freesp",
+				       "allocsp",
+				       "unresvsp",
+				       "resvsp" };
 	int		opno;
-	static int	optab[] =
-		{ XFS_IOC_FREESP64, XFS_IOC_ALLOCSP64, XFS_IOC_UNRESVSP64, XFS_IOC_RESVSP64 };
+
+	/* Assume that if we have FREESP64 then we have the rest */
+#ifdef XFS_IOC_FREESP64
+#define USE_XFSCTL
+	static int	optab[] = { XFS_IOC_FREESP64,
+				    XFS_IOC_ALLOCSP64,
+				    XFS_IOC_UNRESVSP64,
+				    XFS_IOC_RESVSP64 };
+#else
+#ifdef F_FREESP64
+#define USE_FCNTL
+	static int	optab[] = { F_FREESP64,
+				    F_ALLOCSP64,
+				    F_UNRESVSP64,
+				    F_RESVSP64 };
+#else
+bozo!
+#endif
+#endif
 	int		rflag = 0;
 	struct statvfs64	svfs;
 	int		tflag = 0;
@@ -219,17 +258,43 @@ main(int argc, char **argv)
 	if (rflag) {
 		struct fsxattr a;
 
+#ifdef XFS_IOC_FSGETXATTR
 		if (xfsctl(filename, fd, XFS_IOC_FSGETXATTR, &a) < 0) {
 			perror("XFS_IOC_FSGETXATTR");
 			status = 1;
 			goto done;
 		}
+#else
+#ifdef F_FSGETXATTR
+		if (fcntl(fd, F_FSGETXATTR, &a) < 0) {
+			perror("F_FSGETXATTR");
+			status = 1;
+			goto done;
+		}
+#else
+bozo!
+#endif
+#endif
+
 		a.fsx_xflags |= XFS_XFLAG_REALTIME;
+
+#ifdef XFS_IOC_FSSETXATTR
 		if (xfsctl(filename, fd, XFS_IOC_FSSETXATTR, &a) < 0) {
 			perror("XFS_IOC_FSSETXATTR");
 			status = 1;
 			goto done;
 		}
+#else
+#ifdef F_FSSETXATTR
+		if (fcntl(fd, F_FSSETXATTR, &a) < 0) {
+			perror("F_FSSETXATTR");
+			status = 1;
+			goto done;
+		}
+#else
+bozo!
+#endif
+#endif
 	}
 	while (!done) {
                 char *p;
@@ -269,10 +334,18 @@ main(int argc, char **argv)
 				len = v;
                         
                         printf("    CMD %s, off=%lld, len=%lld\n", 
-                                opnames[opno], (__s64)off, (__s64)len);
+                                opnames[opno], (long long)off, (long long)len);
                         
 			f.l_len = len;
+#ifdef USE_XFSCTL
 			c = xfsctl(filename, fd, optab[opno], &f);
+#else
+#ifdef USE_FCNTL
+			c = fcntl(fd, optab[opno], &f);
+#else
+bozo!
+#endif
+#endif
 			if (c < 0) {
 				perror(opnames[opno]);
 				break;
@@ -307,7 +380,7 @@ main(int argc, char **argv)
 				off = FSBTOOFF(v);
 			else
 				off = v;
-                        printf("    TRUNCATE off=%lld\n", (__s64)off);
+                        printf("    TRUNCATE off=%lld\n", (long long)off);
 			if (ftruncate64(fd, off) < 0) {
 				perror("ftruncate");
 				break;

@@ -33,36 +33,24 @@
  * iogen - a tool for generating file/sds io for a doio process
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <string.h>
-#include <signal.h>
-#include <time.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/sysmacros.h>
-#ifdef CRAY
-#include <sys/file.h>
-#include <sys/iosw.h>
-#include <sys/listio.h>
+#include "global.h"
+
+#ifdef HAVE_SYS_SYSSGI_H
+#include <sys/syssgi.h>
 #endif
-#ifdef sgi
-#include <sys/statvfs.h>
+
+#ifdef HAVE_SYS_UUID_H
+#include <sys/uuid.h>
+#endif
+
+#ifdef HAVE_SYS_FS_XFS_FSOPS_H
+#include <sys/fs/xfs_fsops.h>
+#endif
+
+#ifdef HAVE_SYS_FS_XFS_ITABLE_H
 #include <sys/fs/xfs_itable.h>
 #endif
 
-#ifndef NO_XFS
-#include <xfs/libxfs.h>
-#endif
-
-#ifdef CRAY
-#include "libkern.h"
-#endif
 
 #include "doio.h"
 #include "str_to_bytes.h"
@@ -276,8 +264,8 @@ struct strmap	Syscall_Map[] = {
 	{ "llaread",		LLAREAD,	SY_ASYNC		},
 	{ "llwrite",		LLWRITE,	0			},
 	{ "llawrite",		LLAWRITE,	SY_ASYNC		},
-#endif
 	{ "ffsync",		DFFSYNC, 	SY_WRITE		},
+#endif
 #endif /* SGI */
 #ifndef NO_XFS
 	{ "resvsp",		RESVSP, 	SY_WRITE		},
@@ -986,7 +974,15 @@ struct file_info    *rec;
 #endif
 #ifndef NO_XFS
 	if( (fd = open(rec->f_path, O_RDWR|O_DIRECT, 0)) != -1 ) {
+#ifdef XFS_IOC_DIOINFO
 	    if(xfsctl(rec->f_path, fd, XFS_IOC_DIOINFO, &finfo) != -1) {
+#else
+#ifdef F_DIOINFO
+	    if(fcntl(fd, F_DIOINFO, &finfo) != -1) {
+#else
+bozo!
+#endif
+#endif
 		rec->f_riou = finfo.d_miniosz;
 	    } else {
 		fprintf(stderr,
@@ -1047,7 +1043,7 @@ int 	nbytes;
     struct stat	sbuf;
 #ifndef NO_XFS
     int		nb;
-    struct xfs_flock64 f;
+    struct flock64 f;
     struct fsxattr xattr;
     struct dioattr finfo;
     char	*b, *buf;
@@ -1109,7 +1105,15 @@ int 	nbytes;
 	    bzero(&xattr, sizeof(xattr));
 	    xattr.fsx_xflags = XFS_XFLAG_REALTIME;
 	    /*fprintf(stderr, "set: fsx_xflags = 0x%x\n", xattr.fsx_xflags);*/
+#ifdef XFS_IOC_FSSETXATTR
 	    if( xfsctl(path, fd, XFS_IOC_FSSETXATTR, &xattr) == -1 ) {
+#else
+#ifdef F_FSSETXATTR
+		    if (fcntl(fd, F_FSSETXATTR, &xattr) < 0) {
+#else
+bozo!
+#endif
+#endif
 		fprintf(stderr, "iogen%s: Error %s (%d) setting XFS XATTR->Realtime on file %s\n",
 			TagName, SYSERR, errno, path);
 		close(fd);
@@ -1117,7 +1121,15 @@ int 	nbytes;
 	    }
 
 #ifdef DEBUG
+#ifdef XFS_IOC_FSGETXATTR
 	    if( xfsctl(path, fd, XFS_IOC_FSGETXATTR, &xattr) == -1 ) {
+#else
+#ifdef F_FSGETXATTR
+	    if (fcntl(fd, F_FSGETXATTR, &xattr) < 0) {
+#else
+bozo!
+#endif
+#endif
 		fprintf(stderr, "iogen%s: Error getting realtime flag %s (%d)\n",
 			TagName, SYSERR, errno);
 		close(fd);
@@ -1145,6 +1157,7 @@ int 	nbytes;
 		   fd, f.l_whence, (long long)f.l_start, (long long)f.l_len);*/
 
 	    /* non-zeroing reservation */
+#ifdef XFS_IOC_RESVSP
 	    if( xfsctl( path, fd, XFS_IOC_RESVSP, &f ) == -1) {
 		fprintf(stderr,
 			"iogen%s:  Could not xfsctl(XFS_IOC_RESVSP) %d bytes in file %s: %s (%d)\n",
@@ -1152,6 +1165,19 @@ int 	nbytes;
 		close(fd);
 		return -1;
 	    }
+#else
+#ifdef F_RESVSP
+	    if( fcntl( fd, F_RESVSP, &f ) == -1) {
+		fprintf(stderr,
+			"iogen%s:  Could not fcntl(F_RESVSP) %d bytes in file %s: %s (%d)\n",
+			TagName, nbytes, path, SYSERR, errno);
+		close(fd);
+		return -1;
+	    }
+#else
+bozo!
+#endif
+#endif
 	}
 
 	if( Oallocate ) {
@@ -1165,6 +1191,7 @@ int 	nbytes;
 		    (long long)f.l_len);*/
 
 	    /* zeroing reservation */
+#ifdef XFS_IOC_ALLOCSP
 	    if( xfsctl( path, fd, XFS_IOC_ALLOCSP, &f ) == -1) {
 		fprintf(stderr,
 			"iogen%s:  Could not xfsctl(XFS_IOC_ALLOCSP) %d bytes in file %s: %s (%d)\n",
@@ -1172,6 +1199,19 @@ int 	nbytes;
 		close(fd);
 		return -1;
 	    }
+#else
+#ifdef F_ALLOCSP
+	    if ( fcntl(fd, F_ALLOCSP, &f) < 0) {
+		fprintf(stderr,
+			"iogen%s:  Could not fcntl(F_ALLOCSP) %d bytes in file %s: %s (%d)\n",
+			TagName, nbytes, path, SYSERR, errno);
+		close(fd);
+		return -1;
+	    }
+#else
+bozo!
+#endif
+#endif
 	}
 #endif
 
@@ -1184,7 +1224,15 @@ int 	nbytes;
 	if(Owrite == 2) {
 	    close(fd);
 	    if( (fd = open(path, O_CREAT|O_RDWR|O_DIRECT, 0)) != -1 ) {
+#ifdef XFS_IOC_DIOINFO
 		if(xfsctl(path, fd, XFS_IOC_DIOINFO, &finfo) == -1) {
+#else
+#ifdef F_DIOINFO
+	        if (fcntl(fd, F_DIOINFO, &finfo) < 0) {
+#else
+bozo!
+#endif
+#endif
 		    fprintf(stderr,
 			    "iogen%s: Error %s (%d) getting direct I/O info for file %s\n",
 			    TagName, SYSERR, errno, path);

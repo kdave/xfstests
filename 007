@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 007
+# FS QA Test No. 007
 #
 # drive the src/nametest program
 # which does a heap of open(create)/unlink/stat
@@ -51,8 +51,10 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    cd /
     rm -f $tmp.*
-    rm -rf $TEST_DIR/$seq
+    rm -rf $testdir/$seq
+    _cleanup_testdir
 }
 
 # get standard environment, filters and checks
@@ -60,6 +62,11 @@ _cleanup()
 . ./common.filter
 
 # real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
+
+_setup_testdir
+
 status=1 # default failure 
 sourcefile=$tmp.nametest
 seed=1
@@ -74,15 +81,9 @@ while [ $i -le $num_filenames ]; do
   i=`expr $i + 1`
 done
 
-mkdir $TEST_DIR/$seq
-cd $TEST_DIR/$seq
+mkdir $testdir/$seq
+cd $testdir/$seq
 $here/src/nametest -l $sourcefile -s $seed -i $iterations -z
-
-
-#optional stuff if your test has verbose output to help resolve problems
-#echo
-#echo "If failure, check $seq.full (this) and $seq.full.ok (reference)"
-
 
 # success, all done
 status=0

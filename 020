@@ -1,5 +1,5 @@
 #! /bin/sh
-# XFS QA Test No. 020
+# FS QA Test No. 020
 #
 # extended attributes
 #
@@ -44,15 +44,20 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
-trap "rm -f $tmp.* $testfile; exit \$status" 0 1 2 3 15
+trap "_cleanup; rm -f $tmp.* $testfile; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
+_cleanup()
+{
+    _cleanup_testdir
+}
+
 _filter()
 {
-    sed "s#$TEST_DIR[^ :]*#<TESTFILE>#g; 
+    sed "s#$testdir[^ :]*#<TESTFILE>#g; 
             s#$tmp[^ :]*#<TMPFILE>#g;
             s#/proc[^ :]*#<PROCFILE>#g" $1
 }
@@ -87,14 +92,19 @@ _attr_list()
     fi
 }
 
+
+# real QA test starts here
+_supported_fs xfs udf
+_supported_os Linux
+
 [ -x /usr/bin/attr ] || _notrun "attr is not installed"
 [ -x /usr/bin/getfattr ] || _notrun "getfattr is not installed"
 
-# real QA test starts here
+_setup_testdir
 
 rm -f $seq.full
 
-testfile=$TEST_DIR/attribute_$$
+testfile=$testdir/attribute_$$
 
 echo "*** list non-existant file"
 _attr_list $testfile

@@ -66,33 +66,17 @@
  * Author: Richard Logan
  *
  */
-#include <stdio.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <time.h>
+
+#include "global.h"
+
+#ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/param.h>
-#include <sys/signal.h>
-#include <errno.h>
-#include <string.h>
+#endif
+
 #include "dataascii.h"
 #include "random_range.h"
 #include "databin.h"
 
-#ifndef NO_XFS
-#include <xfs/libxfs.h>
-#endif
-
-#ifdef CRAY
-#include <sys/panic.h>
-#include <sys/category.h>
-#endif
 
 extern char *openflags2symbols();
 
@@ -908,14 +892,14 @@ extern int Forker_npids;	/* num of forked pid, defined in forker.c */
 	    no_file_check=1;
 	    if ( write_check_inter || file_check_inter )
                 printf("%s%s: %d Using random pattern - no data checking will be performed!\n",
-		    Progname, TagName, getpid());
+		    Progname, TagName, (int)getpid());
 	}
 	else if ( max_lseek == LSK_EOFPLUSGROW || Mode & MODE_GROW_BY_LSEEK ) {
 	    no_file_check=1;
 
 	    if ( file_check_inter )
 	        printf("%s%s: %d Using random lseek beyond EOF or lseek grow,\n\
-no whole file checking will be performed!\n", Progname, TagName, getpid());
+no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 
 	}
 
@@ -1811,10 +1795,11 @@ growfile(fd, file, grow_incr, buf)
 int fd;
 char *file;
 int grow_incr;
-char *buf;
+unsigned char *buf;
 {
    int noffset;
    int ret;
+   /* REFERENCED */
    int cur_offset;
    char *errmsg;
    int fsize;		/* current size of file */
@@ -2005,7 +1990,7 @@ char *buf;
 		else if ( Pattern == PATTERN_PID )
 		    datapidgen(Pid, buf, grow_incr, Woffset);
 		else if ( Pattern == PATTERN_ASCII )
-		    dataasciigen(NULL, buf, grow_incr, Woffset);
+		    dataasciigen(NULL, (char *)buf, grow_incr, Woffset);
 		else if ( Pattern == PATTERN_RANDOM )
 		    databingen('r', buf, grow_incr, Woffset);
 		else if ( Pattern == PATTERN_ALT )
@@ -2019,7 +2004,7 @@ char *buf;
 		else if ( Pattern == PATTERN_ONES )
 		    databingen('o', buf, grow_incr, Woffset);
 		else
-		    dataasciigen(NULL, buf, grow_incr, Woffset);
+		    dataasciigen(NULL, (char *)buf, grow_incr, Woffset);
 
 		if ( Debug > 2 )
 		    printf("%s: %d DEBUG3 %s/%d: attempting to write %d bytes\n",
@@ -2042,7 +2027,7 @@ char *buf;
 *****/
 
 #if NEWIO
-		ret=lio_write_buffer(fd, io_type, buf, grow_incr,
+		ret=lio_write_buffer(fd, io_type, (char *)buf, grow_incr,
 			 SIGUSR1, &errmsg,0);
 #else
 		ret=write_buffer(fd, io_type, buf, grow_incr, 0, &errmsg);
@@ -2798,6 +2783,7 @@ int size;
 #endif
 
 #ifndef NO_XFS
+#ifdef XFS_IOC_RESVSP
     struct xfs_flock64 f;
 
 	f.l_whence = 0;
@@ -2811,7 +2797,21 @@ int size;
                         __FILE__, __LINE__, errno, strerror(errno));
 		return -1;
 	}
+#else
+    struct flock64 f;
 
+	f.l_whence = 0;
+	f.l_start = 0;
+	f.l_len = size;
+
+	/* non-zeroing reservation */
+	if( fcntl( fd, F_RESVSP64, &f ) == -1 ){
+                fprintf(stderr, "%s%s %s/%d: Unable to pre-alloc space: fcntl(F_RESVSP) failed: %d  %s\n",
+			Progname, TagName,
+                        __FILE__, __LINE__, errno, strerror(errno));
+		return -1;
+	}
+#endif
 #endif
 
 	return 0;

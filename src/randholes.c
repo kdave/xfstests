@@ -63,8 +63,11 @@ void dumpblock(int *buffer, __uint64_t offset, int blocksize);
 void
 usage(char *progname)
 {
-	fprintf(stderr, "usage: %s [-l filesize] [-b blocksize] [-c count] [-o write offset] [-s seed] [-x extentsize] [-w] [-v] [-d] [-r] [-a] [-p] filename\n",
-			progname);
+	fprintf(stderr,
+		"usage: %s [-l filesize] [-b blocksize] [-c count]"
+		" [-o write offset] [-s seed] [-x extentsize]"
+		" [-w] [-v] [-d] [-r] [-a] [-p] filename\n",
+		progname);
 	exit(1);
 }
 
@@ -85,10 +88,10 @@ main(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "b:l:s:c:o:x:vwdrapt")) != EOF) {
 		switch(ch) {
 		case 'b':	blocksize  = atoi(optarg);	break;
-		case 'l':	filesize   = strtoll(optarg, NULL, 16); break;
+		case 'l':	filesize   = strtoull(optarg, NULL, 16); break;
 		case 's':	seed       = atoi(optarg);	break;
 		case 'c':	count      = atoi(optarg);	break;
-		case 'o':	fileoffset = strtoll(optarg, NULL, 16); break;
+		case 'o':	fileoffset = strtoull(optarg, NULL, 16); break;
 		case 'x':	extsize    = atoi(optarg);	break;
 		case 'v':	verbose++;			break;
 		case 'w':	wsync++;			break;
@@ -106,13 +109,13 @@ main(int argc, char *argv[])
 		usage(argv[0]);
 	if ((filesize % blocksize) != 0) {
 		filesize -= filesize % blocksize;
-		printf("filesize not a multiple of blocksize, reducing filesize to %lld\n",
-				 filesize);
+		printf("filesize not a multiple of blocksize, reducing filesize to %llu\n",
+		       (unsigned long long)filesize);
 	}
 	if ((fileoffset % blocksize) != 0) {
 		fileoffset -= fileoffset % blocksize;
-		printf("fileoffset not a multiple of blocksize, reducing fileoffset to %lld\n",
-		       fileoffset);
+		printf("fileoffset not a multiple of blocksize, reducing fileoffset to %llu\n",
+		       (unsigned long long)fileoffset);
 	}
 	if (count > (filesize/blocksize)) {
 		count = (filesize/blocksize);
@@ -126,9 +129,10 @@ main(int argc, char *argv[])
 	printf("randholes: Seed = %d (use \"-s %d\" to re-execute this test)\n", seed, seed);
 	srandom(seed);
         
-        printf("randholes: blocksize=%d, filesize=%Ld, seed=%d\n"
-               "randholes: count=%d, offset=%Ld, extsize=%d\n",
-                blocksize, filesize, seed, count, fileoffset, extsize);
+        printf("randholes: blocksize=%d, filesize=%llu, seed=%d\n"
+               "randholes: count=%d, offset=%llu, extsize=%d\n",
+                blocksize, (unsigned long long)filesize, seed,
+	       count, (unsigned long long)fileoffset, extsize);
         printf("randholes: verbose=%d, wsync=%d, direct=%d, rt=%d, alloconly=%d, preserve=%d, test=%d\n",
                 verbose, wsync, direct, rt, alloconly, preserve, test);
         
@@ -153,7 +157,9 @@ main(int argc, char *argv[])
 		perror("open");
 		return 1;
 	}
+
 	if (rt) {
+#ifdef XFS_IOC_FSGETXATTR
 		if (xfsctl(filename, fd, XFS_IOC_FSGETXATTR, &rtattr) < 0) {
 			perror("xfsctl(XFS_IOC_FSGETXATTR)");
 			return 1;
@@ -168,14 +174,49 @@ main(int argc, char *argv[])
 				return 1;
 			}
 		}
+#else
+#ifdef F_FSGETXATTR
+                if (fcntl(fd, F_FSGETXATTR, &rtattr) < 0) {
+                        perror("fcntl(F_FSGETXATTR)");
+                        return 1;
+                }
+                if ((rtattr.fsx_xflags & XFS_XFLAG_REALTIME) == 0 ||
+                    (extsize && rtattr.fsx_extsize != extsize * blocksize)) {
+                        rtattr.fsx_xflags |= XFS_XFLAG_REALTIME;
+                        if (extsize)
+                                rtattr.fsx_extsize = extsize * blocksize;
+                        if (fcntl(fd, F_FSSETXATTR, &rtattr) < 0) {
+                                perror("fcntl(F_FSSETXATTR)");
+                                return 1;
+                        }
+                }
+#else
+bozo!
+#endif
+#endif
 	}
+
 	if (direct) {
+#ifdef XFS_IOC_DIOINFO
 		if (xfsctl(filename, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 			perror("xfsctl(XFS_IOC_FIOINFO)");
 			return 1;
 		}
+#else
+#ifdef F_DIOINFO
+                if (fcntl(fd, F_DIOINFO, &diob) < 0) {
+                        perror("fcntl(F_FIOINFO)");
+                        return 1;
+                }
+#else
+bozo!
+#endif
+#endif
 		if (blocksize % diob.d_miniosz) {
-			fprintf(stderr, "blocksize %d must be a multiple of %d for direct I/O\n", blocksize, diob.d_miniosz);
+			fprintf(stderr,
+				"blocksize %d must be a multiple of %d for direct I/O\n",
+				blocksize,
+				diob.d_miniosz);
 			return 1;
 		}
 	}
@@ -229,10 +270,22 @@ writeblks(char *fname, int fd)
 			fl.l_start = offset;
 			fl.l_len = blocksize;
 			fl.l_whence = 0;
+
+#ifdef XFS_IOC_RESVSP64
 			if (xfsctl(fname, fd, XFS_IOC_RESVSP64, &fl) < 0) {
 				perror("xfsctl(XFS_IOC_RESVSP64)");
 				exit(1);
 			}
+#else
+#ifdef F_RESVSP64
+                        if (fcntl(fd, F_RESVSP64, &fl) < 0) {
+                                perror("fcntl(F_RESVSP64)");
+                                exit(1);
+                        }
+#else
+bozo!
+#endif
+#endif
 			continue;
 		}
 		SETBIT(valid, block);
@@ -253,8 +306,9 @@ writeblks(char *fname, int fd)
                 if (test && verbose>1) printf("NOT ");
 		if (verbose > 1) {
 			printf("writing data at offset=%llx, value 0x%llx and 0x%llx\n",
-			       fileoffset + offset,
-			       *(__uint64_t *)buffer, *(__uint64_t *)(buffer+256));
+			       (unsigned long long)(fileoffset + offset),
+			       *(unsigned long long *)buffer,
+			       *(unsigned long long *)(buffer+256));
 		}
 	}
 
@@ -304,10 +358,10 @@ readblks(int fd)
 				if ((*(__uint64_t *)tmp != 0LL) ||
 				    (*(__uint64_t *)(tmp+256) != 0LL)) {
 					printf("mismatched data at offset=%llx, expected 0x%llx, got 0x%llx and 0x%llx\n",
-					       fileoffset + block * blocksize,
+					       (unsigned long long)fileoffset + block * blocksize,
 					       0LL,
-					       *(__uint64_t *)tmp,
-					       *(__uint64_t *)(tmp+256));
+					       *(unsigned long long *)tmp,
+					       *(unsigned long long *)(tmp+256));
                                         err++;
 				}
 			} else {
@@ -315,11 +369,12 @@ readblks(int fd)
 				      fileoffset + block * blocksize) ||
 				     (*(__uint64_t *)(tmp+256) !=
 				      fileoffset + block * blocksize) ) {
-					printf("mismatched data at offset=%llx, expected 0x%llx, got 0x%llx and 0x%llx\n",
-					       fileoffset + block * blocksize,
-					       fileoffset + block * blocksize,
-					       *(__uint64_t *)tmp,
-					       *(__uint64_t *)(tmp+256));
+					printf("mismatched data at offset=%llx, "
+					       "expected 0x%llx, got 0x%llx and 0x%llx\n",
+					       (unsigned long long)fileoffset + block * blocksize,
+					       (unsigned long long)fileoffset + block * blocksize,
+					       *(unsigned long long *)tmp,
+					       *(unsigned long long *)(tmp+256));
                                         err++;
 				}
 			}
@@ -365,7 +420,7 @@ dumpblock(int *buffer, __uint64_t offset, int blocksize)
 
 	for (i = 0; i < (blocksize / 16); i++) {
 		printf("%llx: 0x%08x 0x%08x 0x%08x 0x%08x\n",
-		       offset, *buffer, *(buffer + 1), *(buffer + 2),
+		       (unsigned long long)offset, *buffer, *(buffer + 1), *(buffer + 2),
 		       *(buffer + 3));
 		offset += 16;
 		buffer += 4;
