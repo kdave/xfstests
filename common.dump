@@ -53,11 +53,11 @@ fi
 NOTRUNSTS=2
 
 # name those directories
-dump_dir=$SCRATCH_MNT/dump.$$
 dump_file=$tmp.dumpfile
-dump_sdir=dump.$$
-restore_dir=$SCRATCH_MNT/restore.$$
-restore_sdir=restore.$$
+dump_sdir=dumpdir
+dump_dir=$SCRATCH_MNT/$dump_sdir
+restore_sdir=restoredir
+restore_dir=$SCRATCH_MNT/$restore_sdir
 
 dumptape=$TAPE_DEV
 media_label="stress_tape_media"
@@ -87,15 +87,15 @@ _mt()
     op=$1
     if _isrmt; then  
 	# REMOTE
-	_rmtdev=`echo $dumptape | awk -F: '{print $2}'`
+	_rmtdev=`echo $dumptape | $AWK_PROG -F: '{print $2}'`
 
         if echo $dumptape | grep '@' >/dev/null; then
-	    _spec=`echo $dumptape | awk -F: '{print $1}'`
-	    _rmtuser=`echo $_spec | awk -F@ '{print $1}'`
-	    _rmthost=`echo $_spec | awk -F@ '{print $2}'`
+	    _spec=`echo $dumptape | $AWK_PROG -F: '{print $1}'`
+	    _rmtuser=`echo $_spec | $AWK_PROG -F@ '{print $1}'`
+	    _rmthost=`echo $_spec | $AWK_PROG -F@ '{print $2}'`
 	    rsh -n -l $_rmtuser $_rmthost "mt -t $_rmtdev $op"
 	else
-	    _rmthost=`echo $dumptape | awk -F: '{print $1}'`
+	    _rmthost=`echo $dumptape | $AWK_PROG -F: '{print $1}'`
 	    rsh -n $_rmthost "mt -t $_rmtdev $op"
 	fi
     else
@@ -236,7 +236,7 @@ _wipe_fs()
     mkfs -t xfs -f $SCRATCH_DEV >>$seq.full  ||\
 	_error "mkfs failed"
       
-    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
+    mount -t xfs -o sync $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
 	_error "mount failed"
 }
 
@@ -272,10 +272,12 @@ _cleanup()
 
 _stable_fs()
 {
-    umount $SCRATCH_MNT >>$seq.full ||\
-	_error "unmount failed"
-    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
-	_error "mount failed"
+sync; sync; sleep 30 
+# This can cause xfs recovery on ia64 which will die on ia64
+#   umount $SCRATCH_MNT >>$seq.full ||\
+#	_error "unmount failed"
+#    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full ||\
+#	_error "mount failed"
 }
 
 #
@@ -378,6 +380,8 @@ End-of-File
 
 _mk_fillconfig_perm()
 {
+    # dir_guid: ugo=rwx,g+s on dir is for IRIX chmod(1)
+
     cat <<End-of-File >$tmp.config
 # pathname	size/dir  user group mode
 #
@@ -387,7 +391,7 @@ file_sticky	10	$nobody	$nobody	01777
 file_mix1	10	$nobody	$nobody	761
 file_mix2	10	$nobody	$nobody	642
 dir_suid	d	$nobody	$nobody	04777
-dir_guid	d	$nobody	$nobody	02777
+dir_guid	d	$nobody	$nobody	ugo=rwx,g+s
 dir_sticky	d	$nobody	$nobody	01777
 dir_mix1	d	$nobody	$nobody	761
 dir_mix2	d	$nobody	$nobody	642
@@ -837,7 +841,7 @@ _do_restore_file()
     _prepare_restore_dir
 
     echo "Restoring from file..."
-    opts="$_restore_debug$dumpargs -f $dump_file  -L $session_label $restore_dir"
+    opts="$_restore_debug$dump_args -f $dump_file  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter  
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -874,6 +878,29 @@ _ls_compare_sub()
     ls -lR $dump_dir | tee -a $seq.full | _ls_filter >$tmp.dump_dir
     ls -lR $restore_dir/$dump_sdir | tee -a $seq.full | _ls_filter \
     | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
+
+    diff -cs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
+}
+
+#
+# filter out the date fields
+#
+_ls_nodate_filter()
+{
+    $AWK_PROG 'NF == 9 { print $1, $2, $3, $4, $9 }'
+}
+
+#
+# _ls_compare_sub but don't compare dates
+_ls_nodate_compare_sub()
+{
+    #
+    # verify we got back what we dumped
+    #
+    echo "Comparing listing of dump directory with restore directory"
+    ls -lR $dump_dir | tee -a $seq.full | _ls_filter | _ls_nodate_filter >$tmp.dump_dir
+    ls -lR $restore_dir/$dump_sdir | tee -a $seq.full | _ls_filter \
+    | _ls_nodate_filter | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -cs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
 }
