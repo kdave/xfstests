@@ -103,41 +103,41 @@ echo "and using type=$type id=$id" >>$seq.full
 
 echo
 echo "*** report no quota settings" | tee -a $seq.full
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
 echo "*** report initial settings" | tee -a $seq.full
-setquota -n -$type $id $SCRATCH_DEV 100 500 4 10
-_file_as_id $SCRATCH_MNT/initme $id $type $dbsize 0
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+setquota -$type $id 100 500 4 10 $SCRATCH_DEV
+_file_as_id $SCRATCH_MNT/initme $id $type 1024 0
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
 echo "*** push past the soft inode limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie1 $id $type $dbsize 0
-_file_as_id $SCRATCH_MNT/softie2 $id $type $dbsize 0
+_file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
+_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 _qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
 echo "*** push past the soft block limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type $dbsize 140
+_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 _qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
 echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
 for i in 1 2 3 4 5 6 7 8 9 10 11 12
 do
-	_file_as_id $SCRATCH_MNT/hard$i $id $type $dbsize 0
+	_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 done
 _qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 echo
 echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type $dbsize 540
+_file_as_id $SCRATCH_MNT/softie $id $type 1024 540
 _qmount
-repquota -m -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota
 
 # success, all done
 status=0

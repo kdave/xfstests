@@ -1,0 +1,136 @@
+#! /bin/sh
+# XFS QA Test No. 054
+# $Id: 1.1 $
+#
+# Check behavior of chown with both user and group quota enabled,
+# and changing both user and group together via chown(2).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+_cleanup()
+{
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+cp /dev/null $seq.full
+chmod ugo+rwx $seq.full
+
+_require_scratch
+
+_filter_stat()
+{
+    sed "
+        /^Access:/d;
+        /^Modify:/d;
+        /^Change:/d;
+        s/Device: *[0-9][0-9]*,[0-9][0-9]*/Device: <DEVICE>/;
+        s/Inode: *[0-9][0-9]*/Inode: <INODE>/;
+        s,$SCRATCH_MNT,<MOUNT>,;
+    " | tr -s ' '
+}
+
+_exercise()
+{
+	mkfs -t xfs -f $SCRATCH_DEV >/dev/null 2>&1
+	_qmount
+
+	umask 022
+	touch $SCRATCH_MNT/testfile
+
+	chown 12345 $SCRATCH_MNT/testfile
+	chgrp 54321 $SCRATCH_MNT/testfile
+	src/lstat64 $SCRATCH_MNT/testfile | _filter_stat
+
+	chown 34567 $SCRATCH_MNT/testfile
+	chgrp 76543 $SCRATCH_MNT/testfile
+	src/lstat64 $SCRATCH_MNT/testfile | _filter_stat
+
+	chown 56789 $SCRATCH_MNT/testfile
+	chgrp 98765 $SCRATCH_MNT/testfile
+	src/lstat64 $SCRATCH_MNT/testfile | _filter_stat
+
+	# finally give back to original owners
+	chown 12345 $SCRATCH_MNT/testfile
+	chgrp 54321 $SCRATCH_MNT/testfile
+	src/lstat64 $SCRATCH_MNT/testfile | _filter_stat
+
+	echo
+	umount $SCRATCH_MNT 2>/dev/null
+}
+
+# real QA test starts here
+mkfs -t xfs -f $SCRATCH_DEV >/dev/null 2>&1
+MOUNT_OPTIONS="-o usrquota,grpquota"; export MOUNT_OPTIONS
+_qmount
+if src/feature -G $SCRATCH_DEV ; then
+	:
+else
+	_notrun "No quota support at mount time"
+fi
+umount $SCRATCH_MNT 2>/dev/null
+
+MOUNT_OPTIONS=""; export MOUNT_OPTIONS
+echo "*** Default mount options"
+_exercise
+
+MOUNT_OPTIONS="-o usrquota"; export MOUNT_OPTIONS
+echo "*** User quota mount option"
+_exercise
+
+MOUNT_OPTIONS="-o grpquota"; export MOUNT_OPTIONS
+echo "*** Group quota mount option"
+_exercise
+
+MOUNT_OPTIONS="-o usrquota,grpquota"; export MOUNT_OPTIONS
+echo "*** User and Group quota mount options"
+_exercise
+
+# success, all done
+status=0
+exit
