@@ -1,4 +1,10 @@
-# 
+#! /bin/sh
+# XFS QA Test No. 088
+#
+# test out CAP_DAC_OVERRIDE and CAP_DAC_SEARCH code in 
+# xfs_iaccess(ip,mode,cr)
+#
+#-----------------------------------------------------------------------
 # Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
@@ -28,61 +34,34 @@
 # For further information regarding this notice, see: 
 # 
 # http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
 #
+# creator
+owner=root@icy.melbourne.sgi.com
 
-TOPDIR = ..
-include $(TOPDIR)/include/builddefs
+seq=`basename $0`
+echo "QA output created by $seq"
 
-TARGETS = alloc acl_get bstat devzero dirstress fault feature \
-	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
-	  nametest permname randholes runas truncfile usemem \
-	  fstest mmapcat append_reader append_writer \
-	  dirperf metaperf enospc_unlink resvtest scaleread \
-	  godown t_access_root
-ifeq ($(ENABLE_DBM), yes)
-TARGETS += dbtest
-endif
-ifeq ($(PKG_PLATFORM),linux)
-TARGETS += t_immutable
-endif
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
-CFILES = $(TARGETS:=.c)
-LDIRT = $(TARGETS)
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
 
-default: $(TARGETS)
+_filter()
+{
+    sed -e "s#$TEST_DIR#TEST_DIR#g" \
+        -e '/----------/d'
+}
 
-include $(BUILDRULES)
-LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
+# real QA test starts here
 
-randholes: randholes.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+path=$TEST_DIR/t_access
+src/t_access_root $path | _filter
 
-truncfile: truncfile.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-dbtest:	dbtest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LIBGDBM) $(LDLIBS)
-
-nametest: nametest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-bstat: bstat.o $(LIBHANDLE)
-	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
-
-t_immutable: t_immutable.o $(LIBHANDLE) $(LIBACL)
-	$(LINKTEST) $(LIBACL) $(LIBHANDLE) $(LDLIBS)
-
-loggen:	loggen.o
-	$(LINKTEST) $(LDLIBS)
-
-fstest:	fstest.o
-	$(LINKTEST)
-
-#scaleread: scaleread.o $(LDLIBS)
-#	$(LINKTEST)
-
-resvtest: resvtest.o
-	$(LINKTEST)
-
-acl_get: acl_get.o $(LIBACL) $(LIBATTR)
-	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
+# success, all done
+status=0
+exit
