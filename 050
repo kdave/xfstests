@@ -90,7 +90,7 @@ _filter_and_check_blocks()
 			}
 			s/^('$name'\s+[-|+][-|+]\s+)(\d+)/\1 OK/g;
 		}
-	' | _filter_repquota
+	' | _filter_repquota $1
 }
 
 # real QA test starts here
@@ -127,26 +127,26 @@ echo "and using type=$type id=$id" >>$seq.full
 
 echo
 echo "*** report no quota settings" | tee -a $seq.full
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota 6
 
 echo
 echo "*** report initial settings" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/initme $id $type 1024 0
 setquota -$type $id $blksoft $blkhard $inosoft $inohard $SCRATCH_DEV
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota 7
 
 echo
 echo "*** push past the soft inode limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
 _file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota 7
 
 echo
 echo "*** push past the soft block limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota 7
 
 echo
 echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
@@ -155,13 +155,13 @@ do
 	_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 done
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_repquota
+repquota -$type $SCRATCH_DEV | _filter_repquota 7
 
 echo
 echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 540
 _qmount
-repquota -$type $SCRATCH_DEV | _filter_and_check_blocks
+repquota -$type $SCRATCH_DEV | _filter_and_check_blocks 7
 
 # success, all done
 status=0
