@@ -171,6 +171,7 @@ _filter_logprint()
         s/^uuid: *[0-9a-f-][0-9a-f-]* *format: *.*$/uuid: <UUID> format: <FORMAT>/;
         /flushiter:/d;
 	/version:/,/h_size:/d;
+	/override tail/s/[0-9][0-9]*/<TAIL_BLK>/;
 	/^---*/d;
 	/^===*/d;
 	/^~~~*/d;
@@ -212,11 +213,12 @@ _print_operation()
 
 _print_transaction_inode()
 {
+    _start=$1
     raw=$seq.trans_inode.mnt$mnt.mkfs$mkfs.raw
     filtered=$seq.trans_inode.mnt$mnt.mkfs$mkfs.filtered
 
-    echo "### xfs_logprint -t -i -s 2 output ###" | tee $raw >$filtered
-    _scratch_xfs_logprint -t -i -s 2 2>&1 \
+    echo "### xfs_logprint -t -i -s START output ###" | tee $raw >$filtered
+    _scratch_xfs_logprint -t -i -s $_start 2>&1 \
     | tee -a $raw      \
     | _filter_logprint \
     >>$filtered
@@ -224,11 +226,12 @@ _print_transaction_inode()
 
 _print_transaction_buf()
 {
+    _start=$1
     raw=$seq.trans_buf.mnt$mnt.mkfs$mkfs.raw
     filtered=$seq.trans_buf.mnt$mnt.mkfs$mkfs.filtered
 
-    echo "### xfs_logprint -t -b -s 2 output ###" | tee $raw >$filtered
-    _scratch_xfs_logprint -t -b -s 2 2>&1 \
+    echo "### xfs_logprint -t -b -s START output ###" | tee $raw >$filtered
+    _scratch_xfs_logprint -t -b -s $_start 2>&1 \
     | tee -a $raw      \
     | _filter_logprint \
     >>$filtered
@@ -392,24 +395,24 @@ echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
-# mkfs-opt        mount-opt
-  -lversion=1     -ologbsize=32k
-  -lversion=2     -ologbsize=32k
-  -lversion=2     -ologbsize=64k
-  -lversion=2     -ologbsize=128k
-  -lversion=2     -ologbsize=256k
+# mkfs-opt        mount-opt            start-blk
+  -lversion=1     -ologbsize=32k       2
+  -lversion=2     -ologbsize=32k       2
+  -lversion=2     -ologbsize=64k       2
+  -lversion=2     -ologbsize=128k      2
+  -lversion=2     -ologbsize=256k      2
 # NB: Stripe only affects LRs which weren't full when written out
 #     So if we wrote out 32K LR then the stripe has no effect
 #     In our case, it is likely that the LRs will be full but
 #     it may no be the case in all QA environments where the LR
 #     may be forced out early.
-#  -lversion=2,su=4096 -ologbsize=32k
+  -lversion=2,su=4096 -ologbsize=32k   8
 EOF
 
 # do the work for various log params which
 # should not effect the data content of the log
 cat $tmp.seq.params \
-| while read mkfs mnt
+| while read mkfs mnt start
 do
     if [ "$mkfs" != "#" ]; then 
 	_mkfs_create_log $mkfs $mnt
@@ -418,10 +421,10 @@ do
 	_print_operation
 	_cmp_op_output $seq.noquota.op $filtered
 
-	_print_transaction_inode
+	_print_transaction_inode $start
 	_cmp_output $seq.noquota.trans_inode $filtered
 
-	_print_transaction_buf
+	_print_transaction_buf $start
 	_cmp_output $seq.noquota.trans_buf $filtered
     fi
 done
@@ -431,7 +434,7 @@ mkfs="-lversion=1"
 mnt="-ousrquota,grpquota"
 _mkfs_create_log $mkfs $mnt
 _check_log
-_print_transaction_inode
+_print_transaction_inode 2
 _cmp_output $seq.ugquota.trans_inode $filtered
 
 # got thru it all so we may have success
