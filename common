@@ -47,19 +47,6 @@ _setenvironment
 
 check=${check-true}
 
-if $check
-then
-    if $MAKE_PROG >/tmp/$$.gmake 2>&1
-    then
-	:
-    else
-	cat /tmp/$$.gmake
-	echo "Warning: $MAKE_PROG failed -- some tests may be missing"
-	warn=1
-    fi
-    rm -f /tmp/$$.gmake
-fi
-
 diff=diff
 if [ ! -z "$DISPLAY" ]
 then
@@ -69,7 +56,6 @@ then
     which xxdiff >/dev/null 2>&1 && diff=xxdiff
 fi
 verbose=false
-quick=${quick-false}
 group=false
 xgroup=false
 showme=false
@@ -156,7 +142,7 @@ check options
     -g group[,group...]	include tests from these groups
     -l			line mode diff [xdiff]
     -n			show me, do not run tests
-    -q			quick, no checks (you are on your own)
+    -q			quick [deprecated]
     -T			output timestamps
     -x group[,group...]	exclude tests from these groups
     -r 			randomize order
@@ -189,8 +175,7 @@ check options
 	    xpand=false
 	    ;;
 
-	-q)	# "quick", no checks (you are on your own)
-	    quick=true
+	-q)	# "quick", no longer used - always quick :-)
 	    xpand=false
 	    ;;
 
@@ -290,25 +275,6 @@ fi
 #
 list=`sort $tmp.list`
 rm -f $tmp.list $tmp.tmp $tmp.sed
-
-if $quick
-then
-    :
-else
-    
-    if ( cd src; $MAKE_PROG -is)
-    then
-	:
-    else
-	echo
-	echo ":----------------------------------------------"
-	echo ": Warning: $MAKE_PROG failed in src -- some tests may fail as a result"
-	echo ":----------------------------------------------"
-	echo
-	warn=1
-    fi
-
-fi
 
 case "$FSTYP" in
     xfs)

@@ -863,7 +863,7 @@ usage(void)
 int
 getnum(char *s, char **e)
 {
-	int ret = -1;
+	int ret;
 
 	*e = (char *) 0;
 	ret = strtol(s, e, 0);
@@ -1033,7 +1033,7 @@ main(int argc, char **argv)
 			break;
 		case 'p':
 			progressinterval = getnum(optarg, &endp);
-			if (progressinterval < 0)
+			if (progressinterval == 0)
 				usage();
 			break;
 		case 'q':

@@ -35,6 +35,10 @@
 
 #include <config.h>
 
+#ifdef sgi
+#include <../../xfsprogs/include/irix.h>
+#endif
+
 #ifdef HAVE_XFS_LIBXFS_H
 #include <xfs/libxfs.h>
 #endif
@@ -160,98 +164,3 @@
 #endif
 
 #endif
-
-#ifdef sgi
-#define xfs_flock64 flock64
-#define xfs_flock64_t struct flock64
-
-#define XFS_IOC_DIOINFO                F_DIOINFO                       
-#define XFS_IOC_FSGETXATTR             F_FSGETXATTR                   
-#define XFS_IOC_FSSETXATTR             F_FSSETXATTR                    
-#define XFS_IOC_ALLOCSP64              F_ALLOCSP64                    
-#define XFS_IOC_FREESP64               F_FREESP64                 
-#define XFS_IOC_GETBMAP                F_GETBMAP                 
-#define XFS_IOC_FSSETDM                F_FSSETDM                 
-#define XFS_IOC_RESVSP                 F_RESVSP                 
-#define XFS_IOC_UNRESVSP               F_UNRESVSP                 
-#define XFS_IOC_RESVSP64               F_RESVSP64                 
-#define XFS_IOC_UNRESVSP64             F_UNRESVSP64                 
-#define	XFS_IOC_GETBMAPA               F_GETBMAPA                 
-#define	XFS_IOC_FSGETXATTRA            F_FSGETXATTRA                         
-#define	XFS_IOC_GETBMAPX               F_GETBMAPX
-                   
-#define XFS_IOC_FSGEOMETRY_V1          XFS_FS_GEOMETRY_V1          
-#define XFS_IOC_FSBULKSTAT             SGI_FS_BULKSTAT     
-#define XFS_IOC_FSBULKSTAT_SINGLE      SGI_FS_BULKSTAT_SINGLE
-#define XFS_IOC_FSINUMBERS             /* TODO */
-#define XFS_IOC_PATH_TO_FSHANDLE       /* TODO */		         
-#define XFS_IOC_PATH_TO_HANDLE         /* TODO */		       
-#define XFS_IOC_FD_TO_HANDLE           /* TODO */
-#define XFS_IOC_OPEN_BY_HANDLE         /* TODO */
-#define XFS_IOC_READLINK_BY_HANDLE     /* TODO */
-#define XFS_IOC_SWAPEXT                /* TODO */
-#define XFS_IOC_FSGROWFSDATA           XFS_GROWFS_DATA      
-#define XFS_IOC_FSGROWFSLOG            XFS_GROWFS_LOG      
-#define XFS_IOC_FSGROWFSRT             XFS_GROWFS_RT      
-#define XFS_IOC_FSCOUNTS               XFS_FS_COUNTS      
-#define XFS_IOC_SET_RESBLKS            XFS_SET_RESBLKS      
-#define XFS_IOC_GET_RESBLKS            XFS_GET_RESBLKS      
-#define XFS_IOC_ERROR_INJECTION        SGI_XFS_INJECT_ERROR
-#define XFS_IOC_ERROR_CLEARALL         SGI_XFS_CLEARALL_ERROR
-#define XFS_IOC_FREEZE                 XFS_FS_FREEZE      
-#define XFS_IOC_THAW                   XFS_FS_THAW      
-#define XFS_IOC_FSSETDM_BY_HANDLE      /* TODO */    
-#define XFS_IOC_ATTRLIST_BY_HANDLE     /* TODO */      
-#define XFS_IOC_ATTRMULTI_BY_HANDLE    /* TODO */      
-#define XFS_IOC_FSGEOMETRY             XFS_FS_GEOMETRY      
-#define XFS_IOC_GOINGDOWN              XFS_FS_GOINGDOWN
-
-typedef struct xfs_error_injection {
-        __int32_t           fd;
-        __int32_t           errtag;
-} xfs_error_injection_t;
-
-
-typedef struct xfs_fsop_bulkreq {
-        ino64_t             *lastip;      
-        __int32_t           icount;   
-        xfs_bstat_t         *ubuffer;      
-        __int32_t           *ocount;       
-} xfs_fsop_bulkreq_t;
-
-static __inline__ int 
-xfsctl(char* path, int fd, int cmd, void* arg) {
-  if (cmd >= 0 && cmd < XFS_FSOPS_COUNT) {
-    /*
-     * We have a problem in that xfsctl takes 1 arg but
-     * some sgi xfs ops take an input arg and/or an output arg
-     * So have to special case the ops to decide if xfsctl arg
-     * is an input or an output argument.
-     */
-    if (cmd == XFS_FS_GOINGDOWN) {
-      /* in arg */
-      return syssgi(SGI_XFS_FSOPERATIONS, fd, cmd, arg, 0);
-    } else {
-      /* out arg */
-      return syssgi(SGI_XFS_FSOPERATIONS, fd, cmd, 0, arg);
-    }
-  } else if (cmd == SGI_FS_BULKSTAT)
-    return syssgi(SGI_FS_BULKSTAT, fd, 
-		  ((xfs_fsop_bulkreq_t*)arg)->lastip,
-		  ((xfs_fsop_bulkreq_t*)arg)->icount,
-		  ((xfs_fsop_bulkreq_t*)arg)->ubuffer,
-		  ((xfs_fsop_bulkreq_t*)arg)->ocount);
-  else if (cmd == SGI_FS_BULKSTAT_SINGLE)
-    return syssgi(SGI_FS_BULKSTAT_SINGLE, fd, 
-		  ((xfs_fsop_bulkreq_t*)arg)->lastip,
-		  ((xfs_fsop_bulkreq_t*)arg)->ubuffer);
-  else if (cmd == SGI_XFS_INJECT_ERROR)
-    return syssgi(SGI_XFS_INJECT_ERROR,
-		  ((xfs_error_injection_t*)arg)->errtag, fd);
-  else if (cmd == SGI_XFS_CLEARALL_ERROR)
-    return syssgi(SGI_XFS_CLEARALL_ERROR, fd);
-  else
-    return fcntl(fd, cmd, arg);
-}
-
-#endif /* sgi */                           
