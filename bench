@@ -1,7 +1,7 @@
 #!/bin/sh
 # 
 # Wrapper for automating benchmarking runs.
-# Usage:   bench [passes] [user] [group] [script]
+# Usage:   bench passes user group [script]
 # 
 # ..where passes is the number of times to run each script; uid/gid
 # gives credentials to use when running the script; and script is a
@@ -50,7 +50,6 @@
 owner=nathans@sgi.com
 
 tmp=/tmp/$$
-seq=bench
 here=`pwd`
 status=1	# failure is the default!
 
@@ -64,11 +63,9 @@ _cleanup()
     umount $SCRATCH_DEV >/dev/null 2>&1
 }
 
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-ROOT="."
-LOG="$ROOT/bench.log"
-FULL="$ROOT/bench.full"
+OUT="bench.out"
+LOG="bench.log"
+FULL="bench.full"
 
 _log()
 {
@@ -100,7 +97,7 @@ _run_benchmark()
     do
         _log "        *** clean scratch device [$bench starting, pass $pass]"
         mkfs_xfs -f $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL \
-                        || _fail "            !!! failed to mkfs SCRATCH_DEV"
+                            || _fail "            !!! mkfs SCRATCH_DEV failed"
 
         _log "        *** mounting scratch device"
         mount -t xfs $SCRATCH_DEV $SCRATCH_MNT \
@@ -111,11 +108,13 @@ _run_benchmark()
                             || _fail "            !!! couldn't mkdir benchdir"
         chown -R $user.$group $SCRATCH_MNT/bench \
                             || _fail "            !!! couldn't chown benchdir"
+
         cd $SCRATCH_MNT/bench
+        seq=`perl -e 'printf "results.%s.%03d\n", '$bench, $pass`
 
         _log "        *** bench [src/runas -u $uid -g $gid run.$bench]"
-        $here/src/runas -u $uid -g $gid $here/run.$bench | _logp
-        [ $? -eq 0 ]        || _fail "            !!! non-zero $bench status"
+        $here/src/runas -u $uid -g $gid $here/run.$bench \
+                            | _fix_malloc | tee $seq | _logp
         cd $here
 
         _log "        *** unmounting scratch device"
@@ -129,22 +128,33 @@ _run_benchmark()
     done
 }
 
+_merge_results()
+{
+    echo Results for $bench benchmark >>$OUT
+    echo results.$bench.* | sort -u | xargs cat >>$OUT
+    echo >>$OUT
+}
+
 # real QA test starts here
+
+if [ $# -lt 3 ]; then
+    echo Usage:  bench passes user group [script]
+    exit 1
+fi
+
+passes=$1
+user=$2
+group=$3
+
+benches=`echo run.* | sed -e 's/run\.//g'`
+[ $# -gt 3 ] && benches=$4
+[ -z "$benches" -o "$benches" = "*" ] && _fail "no benchmark scripts found"
+
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _require_scratch
 
-passes=-1
-user=root
-group=root
-benches=`echo run.* | sed -e 's/run\.//g'`
-
-[ $# -gt 0 ] && passes=$1
-[ $# -gt 1 ] && user=$2
-[ $# -gt 2 ] && group=$3
-[ $# -gt 3 ] && benches=$4
-
-[ -z "$benches" -o "$benches" = "*" ] && _fail "no benchmark scripts found"
-
+rm -f bench.*
 for bench in $benches
 do 
     echo "" >$FULL
@@ -154,7 +164,8 @@ do
     _log "        *** unmounting scratch device"
     umount $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL
 
-    _run_benchmark |  _fix_malloc
+    _run_benchmark | _fix_malloc
+    _merge_results
 
     _log "*** done $bench"
 done

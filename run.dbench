@@ -9,18 +9,19 @@ run_dbench()
 {
 	mkdir ./dbench || exit 1
 	cd dbench
-	dbench $DBENCH_CLIENTS || exit 1
+	dbench $DBENCH_CLIENTS
+	status=$?
 	cd ..
-	rm -fr ./dbench || exit 1
+	rm -fr ./dbench
+	[ $status -ne 0 ] && exit 1
 }
 
-# dbench gives:
+# 
+# Sample dbench output:
 # "Throughput 40.6701 MB/sec (NB=50.8376 MB/sec  406.701 MBit/sec)"
 # 
 if [ $# -gt 0 ]; then
 	echo "clients,MB/sec"
 	exit 0
 fi
-run_dbench | perl -ne \
-	'if (m/^Throughput (\S+) /) { print '$DBENCH_CLIENTS',",",$1,"\n"; }'
-
+run_dbench | awk 'END { printf "%u,%s\n", '$DBENCH_CLIENTS', $2 }'
