@@ -87,6 +87,16 @@ _fail()
     exit 1
 }
 
+bench_mkfs_xfs()
+{
+    mkfs_xfs -f $extra_mkfs_options $@
+}
+
+bench_mount_xfs()
+{
+    mount -t xfs $extra_mount_options $@
+}
+
 _run_benchmark()
 {
     pass=1
@@ -96,11 +106,11 @@ _run_benchmark()
     while [ $pass -le $passes -o $passes -lt 0 ]
     do
         _log "        *** clean scratch device [$bench starting, pass $pass]"
-        mkfs_xfs -f $SCRATCH_DEV 2>&1 |  _fix_malloc >>$FULL \
+        bench_mkfs_xfs  $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL \
                             || _fail "            !!! mkfs SCRATCH_DEV failed"
 
         _log "        *** mounting scratch device"
-        mount -t xfs $SCRATCH_DEV $SCRATCH_MNT \
+        bench_mount_xfs $SCRATCH_DEV $SCRATCH_MNT \
                             || _fail "            !!! failed to mount"
         
         _log "        *** mkdir"
@@ -164,10 +174,17 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _require_scratch
 rm -f bench.* results.*
 
+if [ ! -z "$SCRATCH_LOGDEV" -a ! -z "$USE_SCRATCH_LOGDEV" ]
+then
+	extra_log_options="-l $SCRATCH_LOGDEV"
+	extra_mkfs_options="-llogdev=$SCRATCH_LOGDEV"
+	extra_mount_options="-ologdev=$SCRATCH_LOGDEV"
+fi
+
 # $OUT is the report which will ultimately be sent, keep it tidy.
 cat >$OUT <<EOF
-bench: MKFS_OPTIONS=$MKFS_OPTIONS
-bench: MOUNT_OPTIONS=$MOUNT_OPTIONS
+bench: MKFS_OPTIONS=$MKFS_OPTIONS $extra_mkfs_options
+bench: MOUNT_OPTIONS=$MOUNT_OPTIONS $extra_mount_options
 
 EOF
 

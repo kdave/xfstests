@@ -503,7 +503,8 @@ _check_fs()
         fi
     fi
 
-    xfs_logprint -t $device 2>&1 | tee $tmp.fs_check | grep -q "<CLEAN>"
+    xfs_logprint -t $device $extra_log_options 2>&1 \
+                | tee $tmp.fs_check | grep -q "<CLEAN>"
     if [ $? -ne 0 ]
     then
         echo "_check_fs: filesystem on $device has dirty log (see $seq.full)"
@@ -516,7 +517,6 @@ _check_fs()
         ok=0
     fi
         
-    
     xfs_check $device 2>&1 | _fix_malloc >$tmp.fs_check 
     if [ -s $tmp.fs_check ]
     then
@@ -530,7 +530,7 @@ _check_fs()
         ok=0
     fi
     
-    if ! xfs_repair -n $device >$tmp.fs_check 2>&1
+    if ! xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
         
