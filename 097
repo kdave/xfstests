@@ -1,0 +1,259 @@
+#! /bin/sh
+# FS QA Test No. 097. Modifed from UDFQA test 033.
+#
+# simple attr tests for EAs:
+#  - set
+#  - get
+#  - list
+#  - remove
+# Basic testing.
+# 
+#-----------------------------------------------------------------------
+#  Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Silicon Graphics, Inc., 1500 Crittenden Lane,
+#  Mountain View, CA 94043, USA, or: http://www.sgi.com
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajones@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+TARGET_DIR=
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    rm -f $tmp.*
+    cd $TARGET_DIR
+    rm -f foo
+}
+
+_umount_and_mount()
+{
+    cd /
+    umount $TARGET_DIR
+    if [ "$FSTYP" == "xfs" ]; then
+	_test_mount
+    else
+	_scratch_mount
+    fi
+    
+    cd $TARGET_DIR
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# link correct .out file
+# This is done bacause udf and xfs print attrs in different orders.
+rm -rf $seq.out
+if [ "$FSTYP" == "xfs" ]; then
+    ln -s $seq.out.xfs $seq.out
+else
+    ln -s $seq.out.udf $seq.out
+fi
+
+# real QA test starts here
+_supported_fs udf xfs
+_supported_os IRIX
+
+_require_scratch
+_setup_testdir 
+
+TARGET_DIR=$SCRATCH_MNT
+[ "$FSTYP" == "xfs" ] && TARGET_DIR=$TEST_DIR
+cd $TARGET_DIR
+
+echo "create file foo"
+touch foo
+
+echo "should be no EAs for foo:"
+attr -l foo
+
+echo "set EA <noise,woof>:"
+attr -s noise -V woof foo
+
+echo "set EA <colour,blue>:"
+attr -s colour -V blue foo
+
+echo "set EA <size,small>:"
+attr -s size -V small foo
+
+echo "list the EAs for foo: noise, colour, size" 
+attr -l foo
+
+echo "check the list again for foo"
+attr -l foo
+
+echo "unmount the FS and see if EAs are persistent"
+_umount_and_mount
+
+echo "check the list again for foo after umount/mount"
+attr -l foo
+
+echo "get the value of the noise EA"
+attr -g noise foo
+
+echo "get the value of the colour EA which was removed earlier"
+attr -g colour foo
+
+echo "get the value of the size EA"
+attr -g size foo
+
+echo "remove the colour EA on foo"
+attr -r colour foo
+
+echo "list EAs for foo: noise, size"
+attr -l foo
+
+echo "get the value of the noise EA"
+attr -g noise foo
+
+echo "get the value of the colour EA which was removed earlier"
+attr -g colour foo
+
+echo "get the value of the size EA"
+attr -g size foo
+
+echo "list all the EAs again: noise, size"
+attr -l foo
+
+echo "change the value of the size EA from small to huge"
+attr -s size -V huge foo
+
+echo "get the size EA which should now have value huge"
+attr -g size foo
+
+echo "list EAs: noise, size"
+attr -l foo
+
+echo "remove the size EA from foo"
+attr -r size foo
+
+echo "list EAs: noise (size EA has been removed)"
+attr -l foo
+
+echo "get the noise EA: woof"
+attr -g noise foo
+
+echo "try removing non-existent EA named woof"
+attr -r woof foo
+
+echo "try removing already removed EA size"
+attr -r size foo
+
+echo "list EAs: noise"
+attr -l foo
+
+echo "try removing already removed EA colour"
+attr -r colour foo
+
+echo "list EAs: noise"
+attr -l foo
+
+echo "remove remaining EA noise"
+attr -r noise foo
+
+echo "list EAs: should be no EAs left now"
+attr -l foo
+
+echo "unmount the FS and see if EAs are persistent"
+_umount_and_mount
+
+echo "list EAs: should still be no EAs left"
+attr -l foo
+
+echo ""
+echo "*** Test out the root namespace ***"
+echo ""
+
+echo "set EA <root:colour,marone>:"
+attr -R -s colour -V marone foo
+
+echo "set EA <user:colour,beige>:"
+attr -s colour -V beige foo
+
+echo "set EA <user:vomit,pizza>:"
+attr -s vomit -V pizza foo
+
+echo "set EA <root:noise,whack>:"
+attr -R -s noise -V whack foo
+
+echo "list root EAs: <root:colour,noise>:"
+attr -R -l foo
+
+echo "list user EAs: <user:colour,vomit>:"
+attr -l foo
+
+echo "get root EA colour: marone"
+attr -R -g colour foo
+
+echo "get root EA noise: whack"
+attr -R -g noise foo
+
+echo "get root EA vomit which is a user EA => find nothing"
+attr -R -g vomit foo
+
+echo ""
+echo "unmount the FS and see if EAs are persistent"
+echo ""
+_umount_and_mount
+
+echo "get root EA colour: marone"
+attr -R -g colour foo
+
+echo "get root EA noise: whack"
+attr -R -g noise foo
+
+echo "get user EA vomit: pizza" 
+attr -g vomit foo
+
+echo "remove the root colour EA"
+attr -R -r colour foo
+
+echo "list root EAs: <root:noise>:"
+attr -R -l foo
+
+echo "list user EAs: <user:colour,vomit>:"
+attr -l foo
+
+echo "remove the final root EA noise"
+attr -R -r noise foo
+
+echo "list root EAs: none"
+attr -R -l foo
+
+cd /
+_cleanup_testdir
+
+# Check the filesystem
+_check_scratch_fs
+
+# optional stuff if your test has verbose output to help resolve problems
+#echo
+#echo "If failure, check $seq.full (this) and $seq.full.ok (reference)"
+
+# success, all done
+status=0
+exit

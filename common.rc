@@ -764,13 +764,20 @@ _check_xfs_filesystem()
     return 0    
 }
 
+# Filter the knowen errors the UDF Verifier reports. 
+_udf_test_known_error_filter() 
+{
+	egrep -v "PVD  60  Error: Interchange Level: 1, Maximum Interchange Level: 0|FSD  28  Error: Interchange Level: 1, Maximum Interchange Level: 1,|PVD  72  Warning: Volume Set Identifier: \"\*IRIX UDF\",|Warning: [0-9]+ unused blocks NOT marked as unallocated."
+
+}
+
 _check_udf_filesystem()
 {
     [ "$DISABLE_UDF_TEST" == "1" ] && return
 
     if [ $# -ne 1 -a $# -ne 2 ]
     then
-	echo "Usage: _check_fs device [last_block]" 1>&2
+	echo "Usage: _check_udf_filesystem device [last_block]" 1>&2
 	exit 1
     fi
 
@@ -791,17 +798,13 @@ _check_udf_filesystem()
         OPT_ARG="-lastvalidblock $LAST_BLOCK"
     fi
 
-    # Output messages format:
-    #       Error messages contain :   "Error:" or   "error:"
-    #     Warning messages contain : "Warning:" or "warning:"
-    #   Attention messages contain :    "Note:" or    "note:"
-    # Message continuation lines start with a "-" character.
-
     rm -f $seq.checkfs
     sleep 1 # Due to a problem with time stamps in udf_test
-    $here/src/udf_test $OPT_ARG $device | tee $here/$seq.checkfs | \
-	egrep -i "error:|warning:|Error count:|Warning count:" | \
-	egrep -v "Error count:   0|Warning count:   0"
+    $here/src/udf_test $OPT_ARG $device | tee $here/$seq.checkfs | egrep "Error|Warning" | \
+	_udf_test_known_error_filter | \
+	egrep -iv "Error count:.*[0-9]+.*total occurrences:.*[0-9]+|Warning count:.*[0-9]+.*total occurrences:.*[0-9]+" | \
+	sed "s/^.*$/Warning UDF Verifier reported errors see $seq.checkfs./g"
+
 }
 
 _check_test_fs()
@@ -900,7 +903,7 @@ _setup_xfs_testdir()
     testdir=$TEST_DIR
 }
 
-_setup_udf_testdir()
+_setup_udf_scratchdir()
 {
     [ "$FSTYP" != "udf" ] \
 	&& _fail "setup_udf_testdir: \$FSTYP is not udf"
@@ -926,10 +929,10 @@ _setup_udf_testdir()
     testdir=$SCRATCH_MNT
 }
 
-_setup_nfs_testdir()
+_setup_nfs_scratchdir()
 {
     [ "$FSTYP" != "nfs" ] \
-	&& _fail "setup_udf_testdir: \$FSTYP is not nfs"
+	&& _fail "setup_nfs_testdir: \$FSTYP is not nfs"
     [ -z "$SCRATCH_DEV" ] \
 	&& _notrun "this test requires a valid host fs for \$SCRATCH_DEV"
     [ -z "$SCRATCH_MNT" ] \
@@ -938,7 +941,7 @@ _setup_nfs_testdir()
     # mounted?
     if _mount | grep -q $SCRATCH_DEV
     then 
-        # if it's mounted, make sure its on $TEST_RW_DIR
+        # if it's mounted, make sure its on $SCRATCH_MNT
         if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
         then 
             _fail "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
@@ -952,6 +955,11 @@ _setup_nfs_testdir()
     testdir=$SCRATCH_MNT
 }
 
+#
+# Warning for UDF and NFS this function calls _setup_udf_scratchdir and 
+# _setup_udf_scratchdir. This is done because testdir is a persistent 
+# XFS only partition. 
+#
 _setup_testdir()
 {
     case $FSTYP in
@@ -959,10 +967,10 @@ _setup_testdir()
 	_setup_xfs_testdir
 	;;
     udf)
-	_setup_udf_testdir
+	_setup_udf_scratchdir
 	;;
     nfs*)
-	_setup_nfs_testdir
+	_setup_nfs_scratchdir
 	;;
     *)
 	_fail "\$FSTYP is not xfs, udf or nfs"
@@ -1043,6 +1051,88 @@ _link_out_file()
       echo Error test $seq does not run on the operating system: `uname`
       exit
    fi
+}
+
+# Populate a filesystem with inodes for performance experiments
+# 
+# usage: populate [-v] [-n ndirs] [-f nfiles] [-d depth] [-r root] [-s size]
+# 
+
+_die()
+{
+        echo $@
+        exit 1
+}
+
+_nfiles()
+{
+        f=0
+        while [ $f -lt $1 ]
+        do
+                file=f$f
+                touch $file
+                if [ $size -gt 0 ]; then
+                    dd if=/dev/zero of=$file bs=1024 count=$size 
+                fi
+                f=`expr $f + 1`
+        done
+}
+
+# takes dirname, depth
+_descend()
+{
+        dirname=$1; depth=$2
+        mkdir $dirname  || die "mkdir $dirname failed"
+        cd $dirname
+
+        _nfiles $files           # files for this dir
+
+        [ $depth -eq 0 ] && return
+        deep=`expr $depth - 1`  # go 1 down
+
+        [ $verbose = true ] && echo "descending, depth from leaves = $deep"
+
+        d=0
+        while [ $d -lt $dirs ]
+        do
+                _descend d$d $deep &
+                d=`expr $d + 1`
+                wait
+        done
+}
+
+
+_populate_fs()
+{
+
+    here=`pwd`
+    dirs=5          # ndirs in each subdir till leaves
+    size=0          # sizeof files in K
+    files=100       # num files in _each_ subdir
+    depth=2         # depth of tree from root to leaves
+    verbose=false
+    root=root       # path of initial root of directory tree
+
+    while getopts "d:f:n:r:s:v" c
+    do
+        case $c in
+        d)      depth=$OPTARG;;
+        n)      dirs=$OPTARG;;
+        f)      files=$OPTARG;;
+        s)      size=$OPTARG;;
+        v)      verbose=true;;
+        r)      root=$OPTARG;;
+        esac
+    done
+
+
+    _descend $root $depth
+    wait
+
+    cd $here
+
+    [ $verbose = true ] && echo done
+
 }
 
 # make sure this script returns success

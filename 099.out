@@ -1,0 +1,215 @@
+QA output created by 099
+
+=== Test minimal ACE ===
+Setup file
+-rwxrw-r-- id1 id2 file1
+
+--- Test get and set of ACL ---
+Note: IRIX interface gave an empty ACL - Linux outputs an ACL
+file1 []
+Try using single colon separator
+Note: IRIX interface FAILs because of single colon - Linux one allows it
+chacl: "u::r--,g::rwx,o:rw-" is an invalid ACL specification.
+Expect to PASS
+file1 [u::r--,g::rwx,o::rw-]
+
+--- Test sync of ACL with std permissions ---
+-r--rwxrw-+ id1 id2 file1
+-rw-rwxrw-+ id1 id2 file1
+file1 [u::rw-,g::rwx,o::rw-]
+
+--- Test owner permissions ---
+file1 [u::r-x,g::---,o::---]
+Expect to PASS
+Test was executed
+Expect to FAIL
+./file1: Permission denied
+
+--- Test group permissions ---
+file1 [u::---,g::r-x,o::---]
+Expect to FAIL - acl1 is owner
+./file1: Permission denied
+Expect to PASS - acl2 matches group
+Test was executed
+Expect to PASS - acl2 matches sup group
+Test was executed
+Expect to FAIL - acl3 is not in group
+./file1: Permission denied
+
+--- Test other permissions ---
+file1 [u::---,g::---,o::r-x]
+Expect to FAIL - acl1 is owner
+./file1: Permission denied
+Expect to FAIL - acl2 is in group
+./file1: Permission denied
+Expect to FAIL - acl2 is in sup. group
+./file1: Permission denied
+Expect to PASS - acl3 is not owner or in group
+Test was executed
+
+=== Test Extended ACLs ===
+
+--- Test adding a USER ACE ---
+Expect to FAIL as no MASK provided
+chacl: error setting access acl on "file1":Invalid argument
+Ensure that ACL has not been changed
+file1 [u::---,g::---,o::r-x]
+Expect to PASS - USER ACE matches user
+file1 [u::---,g::---,o::---,u:id2:r-x,m::rwx]
+Test was executed
+Expect to FAIL - USER ACE does not match user
+./file1: Permission denied
+
+--- Test adding a GROUP ACE ---
+Expect to FAIL as no MASK provided
+chacl: error setting access acl on "file1":Invalid argument
+Ensure that ACL has not been changed
+file1 [u::---,g::---,o::---,u:id2:r-x,m::rwx]
+file1 [u::---,g::---,o::---,g:id2:r-x,m::rwx]
+Expect to PASS - GROUP ACE matches group
+Test was executed
+Expect to PASS - GROUP ACE matches sup group
+Test was executed
+Expect to FAIL - GROUP ACE does not match group
+./file1: Permission denied
+
+--- Test MASK ---
+file1 [u::---,g::---,o::---,g:id2:r-x,m::-w-]
+Expect to FAIL as MASK prohibits execution
+./file1: Permission denied
+Expect to FAIL as MASK prohibits execution
+./file1: Permission denied
+Expect to PASS as MASK allows execution
+Test was executed
+
+--- Test ACE priority ---
+Expect to FAIL as should match on owner
+./file1: Permission denied
+Expect to PASS as should match on user
+Test was executed
+
+=== Test can read ACLs without access permissions ===
+file1 [o::---,g::---,u::---]
+
+=== Test Default ACLs ===
+acldir [u::rwx,g::rwx,o::rwx/u::r-x,g::r--,o::---]
+-r--r-----+ 0 0 file2
+file2 [u::r--,g::r--,o::---]
+-r--r-----+ 0 0 file3
+file3 [u::r--,g::r--,o::---]
+
+=== Removing ACLs ===
+file1 [o::---,g::---,u::---]
+acldir [u::rwx,g::rwx,o::rwx/u::r-x,g::r--,o::---]
+acldir/file2 [u::r--,g::r--,o::---]
+Remove ACLs...
+Note: IRIX interface would mean empty ACLs - Linux would show mode ACLs
+file1 []
+acldir []
+acldir/file2 []
+
+=== Test out error messages for ACL text parsing  ===
++ chacl u file1
+chacl: "u" is an invalid ACL specification.
++ chacl u: file1
+chacl: "u:" is an invalid ACL specification.
++ chacl u:rumpledumpleunknownuser file1
+chacl: "u:rumpledumpleunknownuser" is an invalid ACL specification.
++ chacl u:rumpledumpleunknownuser: file1
+chacl: "u:rumpledumpleunknownuser:" is an invalid ACL specification.
++ chacl g:rumpledumpleunknowngrp file1
+chacl: "g:rumpledumpleunknowngrp" is an invalid ACL specification.
++ chacl g:rumpledumpleunknowngrp: file1
+chacl: "g:rumpledumpleunknowngrp:" is an invalid ACL specification.
++ chacl o:user1:rwx file1
+chacl: "o:user1:rwx" is an invalid ACL specification.
++ chacl m:user1:rwx file1
+chacl: "m:user1:rwx" is an invalid ACL specification.
++ chacl a::rwx file1
+chacl: "a::rwx" is an invalid ACL specification.
+
+=== Test out large ACLs  ===
+1 below xfs acl max
+largeaclfile 
+user::rwx
+group::rwx
+other::rwx
+mask::rwx
+user:20:rwx
+user:19:rwx
+user:18:rwx
+user:17:rwx
+user:16:rwx
+user:15:rwx
+user:14:rwx
+user:13:rwx
+user:12:rwx
+user:11:rwx
+user:10:rwx
+user:9:rwx
+user:8:rwx
+user:7:rwx
+user:6:rwx
+user:5:rwx
+user:4:rwx
+user:3:rwx
+user:2:rwx
+user:1:rwx
+
+xfs acl max
+largeaclfile 
+user::rwx
+group::rwx
+other::rwx
+mask::rwx
+user:21:rwx
+user:20:rwx
+user:19:rwx
+user:18:rwx
+user:17:rwx
+user:16:rwx
+user:15:rwx
+user:14:rwx
+user:13:rwx
+user:12:rwx
+user:11:rwx
+user:10:rwx
+user:9:rwx
+user:8:rwx
+user:7:rwx
+user:6:rwx
+user:5:rwx
+user:4:rwx
+user:3:rwx
+user:2:rwx
+user:1:rwx
+
+1 above xfs acl max
+chacl: error setting access acl on "largeaclfile":Error 0
+largeaclfile 
+user::rwx
+group::rwx
+other::rwx
+mask::rwx
+user:21:rwx
+user:20:rwx
+user:19:rwx
+user:18:rwx
+user:17:rwx
+user:16:rwx
+user:15:rwx
+user:14:rwx
+user:13:rwx
+user:12:rwx
+user:11:rwx
+user:10:rwx
+user:9:rwx
+user:8:rwx
+user:7:rwx
+user:6:rwx
+user:5:rwx
+user:4:rwx
+user:3:rwx
+user:2:rwx
+user:1:rwx
+

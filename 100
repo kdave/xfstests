@@ -1,0 +1,92 @@
+#! /bin/sh
+# FS QA Test No. 093. Modified from UDF QA test 030.
+#
+# Test whether a tarred directory structure can be untarred onto
+# a UDF file system.
+# 
+#-----------------------------------------------------------------------
+#  Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Silicon Graphics, Inc., 1500 Crittenden Lane,
+#  Mountain View, CA 94043, USA, or: http://www.sgi.com
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajones@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_cleanup()
+{
+     rm -f $tmp.* $testfile
+}
+ 
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os IRIX Linux
+
+# Use _populate_fs() in common.rc to create a directory structure.
+TEMP_DIR=/tmp
+TAR_FILE=temp.tar
+NDIRS=3
+NFILES=6
+DEPTH=5
+POPULATED_DIR=$TEMP_DIR/populate_root
+SIZE=10
+
+rm -f $seq.full
+
+# Clean up if file exist from prevous run
+rm -rf $POPULATED_DIR
+rm -f $TEMP_DIR/$TAR_FILE
+
+# Create the new directory structure
+_populate_fs -n $NDIRS -f $NFILES -d $DEPTH -r $POPULATED_DIR -s $SIZE >>$here/$seq.full 2>&1
+
+# Then tar up the directory structure
+tar -cvf $TEMP_DIR/$TAR_FILE $POPULATED_DIR >>$here/$seq.full 2>&1
+
+# create f/s
+_require_scratch
+_setup_testdir
+
+# untar on f/s
+cd $testdir
+tar -xRvf $TEMP_DIR/$TAR_FILE >>$here/$seq.full 2>&1
+cd $here
+
+
+# use diff -qr to compare
+ls -R -l ${testdir}${POPULATED_DIR} >>$here/$seq.full 2>&1
+diff -qr $POPULATED_DIR ${testdir}${POPULATED_DIR}
+
+cd /
+_cleanup_testdir
+_check_scratch_fs
+
+status=0
+exit
