@@ -44,7 +44,7 @@ default: $(TARGETS)
 
 include $(BUILDRULES)
 
-install: default
+install install-dev: default
 
 # binaries using non-default objects/libs need an entry below
 # 
