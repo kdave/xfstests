@@ -152,8 +152,19 @@ timestamp=${TIMESTAMP:=false}
 
 [ -f check.time ] || touch check.time
 
+FULL_FSTYP_DETAILS=`_full_fstyp_details`
+FULL_HOST_DETAILS=`_full_platform_details`
 FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
-echo "MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS"
+FULL_MOUNT_OPTIONS=`_scratch_mount_options`
+
+cat <<EOF
+FSTYP         -- $FULL_FSTYP_DETAILS
+PLATFORM      -- $FULL_HOST_DETAILS
+MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
+MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS
+
+EOF
+
 umount $SCRATCH_DEV 2>/dev/null
 # call the overridden mkfs.xfs - make sure the FS is built
 # the same as we'll create it later.
@@ -165,8 +176,6 @@ then
     exit 1
 fi
 
-FULL_MOUNT_OPTIONS=`_scratch_mount_options`
-echo "MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS"
 # call the overridden mount - make sure the FS mounts with
 # the same options that we'll mount with later.
 if ! _scratch_mount >$tmp.err 2>&1
