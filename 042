@@ -87,14 +87,6 @@ _cull_files()
 	close MANIFEST;'
 }
 
-_do()
-{
-    if [ $# -ne 1 ]; then echo "Usage: _do \"cmd\"" 1>&2 ; exit 1; fi
-    echo "*** $1" >>$seq.full
-    eval "$1 2>&1 | _fix_malloc >>$seq.full"
-}
-
-
 # create a large contiguous file using dd
 # use fill2fs to fill the filesystem up with 4k sized files
 # fill any remaining space using dd
@@ -103,7 +95,6 @@ _do()
 # delete the dd-generated file
 # run xfs_fsr on the filesystem
 # check checksums for remaining files
-
 # create 3 minimum sized (16Mb) allocation groups
 # xfs_repair is going to need three to verify the superblock
 rm -f $seq.full
@@ -120,7 +111,7 @@ do
 done
 echo "done" 
 echo -n "Fill filesystem with 4k files, generate manifest... "
-_do "(src/fill2fs --verbose --dir=$SCRATCH_MNT/fill --seed=0 --filesize=4096 --stddev=0 --list=$tmp.manifest)"
+_do "src/fill2fs --verbose --dir=$SCRATCH_MNT/fill --seed=0 --filesize=4096 --stddev=0 --list=$tmp.manifest"
 echo "done"
 echo -n "Use up any further available space using dd... "
 _do "dd if=/dev/zero of=$SCRATCH_MNT/pad bs=4096"
@@ -136,7 +127,7 @@ echo -n "Create one very large file... "
 _do "src/fill2 -d nbytes=16000000,file=$SCRATCH_MNT/fragmented"
 echo "done"
 _do "xfs_bmap $SCRATCH_MNT/fragmented"
-_do "(sum $SCRATCH_MNT/fragmented >$tmp.sum1)"
+_do "sum $SCRATCH_MNT/fragmented >$tmp.sum1"
 echo -n "Remove other files... "
 _do "rm -rf $SCRATCH_MNT/{pad,hole*}"
 echo "done"
@@ -158,7 +149,7 @@ if ! _do "src/fill2fs_check $tmp.manifest"; then
 fi
 echo "done"
 echo -n "Check large file... "
-_do "(sum $SCRATCH_MNT/fragmented >$tmp.sum2)"
+_do "sum $SCRATCH_MNT/fragmented >$tmp.sum2"
 if ! diff $tmp.sum1 $tmp.sum2; then
     echo "fail"
     echo "File is corrupt/missing after fsr. Test failed see $seq.full"

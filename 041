@@ -51,7 +51,7 @@ status=1	# failure is the default!
 _cleanup()
 {
     umount $SCRATCH_MNT
-    rm -f $tmp.*
+#    rm -f $tmp.*
 }
 trap "_cleanup ; exit \$status" 0 1 2 3 15
 
@@ -63,21 +63,14 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 
 _require_scratch
 
-_do()
-{
-    if [ $# -ne 1 ]; then echo "Usage: _do \"cmd\"" 1>&2 ; exit 1; fi
-    echo "*** $1" >>$seq.full
-    eval "$1 2>&1 | _fix_malloc >>$seq.full"
-}
-
 _fill()
 {
     if [ $# -ne 1 ]; then echo "Usage: _fill \"path\"" 1>&2 ; exit 1; fi
-    echo -n "Fill filesystem... "
-    _do "(src/fill2fs --verbose --dir=$1 --seed=0 --filesize=65536 --stddev=32768 --list=- >>$tmp.manifest)"
-    echo "done"
+    _do "Fill filesystem" \
+	"src/fill2fs --verbose --dir=$1 --seed=0 --filesize=65536 --stddev=32768 --list=- >>$tmp.manifest"
 }
 
+_do_die_on_error=y
 rm -f $seq.full
 #agsize=16
 agsize=32
@@ -101,16 +94,7 @@ do
     _do "umount $SCRATCH_MNT"
     _do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
     echo "done"
-    echo -n "Check files... "
-    if ! _do "src/fill2fs_check $tmp.manifest"; then
-	echo "fail"
-	echo "Files corrupt/missing after growfs. Test failed see $seq.full"
-	status=1; exit
-    fi
-    echo "done"
-#    echo -n "Checking filesystem... "
-#    _check_fs $SCRATCH_DEV
-#    echo "done"
+    _do "Check files" "src/fill2fs_check $tmp.manifest"
 done
 
 # success, all done
