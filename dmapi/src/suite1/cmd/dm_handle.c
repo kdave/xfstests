@@ -38,9 +38,7 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
 
 /*---------------------------------------------------------------------------
 
@@ -72,13 +70,6 @@ Tested DMAPI functions are:
 
 char	*Progname;
 
-
-static void
-usage(void)
-{
-	fprintf(stderr, "usage:\t%s pathname\n", Progname);
-	exit(1);
-}
 
 
 int
@@ -280,4 +271,5 @@ main(
 	dm_handle_free(fshanp1, fshlen1);
 	dm_handle_free(fshanp2, fshlen2);
 	dm_handle_free(fshanp3, fshlen3);
+	exit(0);
 }

@@ -33,9 +33,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -70,8 +70,6 @@ int check_one_event (dm_sessid_t, void*, size_t, dm_token_t,
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-v] [-s sid] [-t token]"
 		"ls_path directory \n", Progname);
 	/* fprintf(stderr, "possible events are:\n");
@@ -94,11 +92,9 @@ main(
 	char		object[128];
 	void		*hanp;
 	size_t	 	hlen;
-	int		Fflag = 0;
 	int		Vflag = 0;
 	char		*name;
 	int		opt;
-	dm_eventtype_t  event;
 	int             error;
         void           *fshanp;
         size_t          fshlen;

@@ -40,9 +40,9 @@
 #include <lib/dmport.h>
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -68,8 +68,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-a] [-s sid] string\n", Progname);
 	exit(1);
 }
@@ -82,10 +80,8 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	char		*string;
-	dm_token_t	token;
 	char		*name;
 	int		opt;
-	int		i;
 	dm_msgtype_t    msgtype = DM_MSGTYPE_SYNC;
 	
 	if (Progname = strrchr(argv[0], '/')) {

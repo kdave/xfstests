@@ -38,9 +38,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+#include <time.h>
 
 /*---------------------------------------------------------------------------
 
@@ -79,8 +79,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-v] [-s sid] ls_path pathname\n", 
 		Progname);
 	exit(1);

@@ -35,9 +35,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 
 extern	int	optind;
@@ -62,11 +62,11 @@ static struct {
 	int	daylb;
 	int	dayle;
 } daytab[] = {
-	1987,	96,	303,	/* new legislation - 1st Sun in April */
-	1976,	119,	303,	/* normal Last Sun in Apr - last Sun in Oct */
-	1975,	58,	303,	/* 1975: Last Sun in Feb - last Sun in Oct */
-	1974,	5,	333,	/* 1974: Jan 6 - last Sun. in Nov */
-	1970,	119,	303,	/* start GMT */
+	{1987,	96,	303},	/* new legislation - 1st Sun in April */
+	{1976,	119,	303},	/* normal Last Sun in Apr - last Sun in Oct */
+	{1975,	58,	303},	/* 1975: Last Sun in Feb - last Sun in Oct */
+	{1974,	5,	333},	/* 1974: Jan 6 - last Sun. in Nov */
+	{1970,	119,	303},	/* start GMT */
 };
 #define DAYTABSIZE (sizeof(daytab)/sizeof(daytab[0]))
 
@@ -329,7 +329,6 @@ main(
 	char	**argv)
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
-	char		buffer[500];
 	void		*hanp;
 	size_t		hlen;
 	dm_fileattr_t	fileattr;
@@ -421,4 +420,5 @@ main(
 			strerror(errno));
 		exit(1);
 	}
+	exit(0);
 }

@@ -32,11 +32,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
 #include <malloc.h>
 #include <getopt.h>
-#endif
 
 /*---------------------------------------------------------------------------
 

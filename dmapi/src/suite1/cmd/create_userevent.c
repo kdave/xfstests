@@ -32,9 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 /*---------------------------------------------------------------------------
 
@@ -60,8 +59,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-s sid] string\n", Progname);
 	exit(1);
 }
@@ -77,7 +74,6 @@ main(
 	dm_token_t	token;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

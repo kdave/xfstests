@@ -32,9 +32,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -62,8 +62,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-o offset] [-l length] "
 		"[-s sid] pathname\n", Progname);
 	exit(1);
@@ -85,7 +83,6 @@ main(
 	size_t	 	hlen;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

@@ -38,11 +38,7 @@
 #define HDR  "%s: token %d sequence %d\n"
 #define VALS "\t%-15s %s\n"
 #define VALD "\t%-15s %d\n"
-#ifdef	__sgi
 #define VALLLD "\t%-15s %lld\n"
-#else
-#define VALLLD "\t%-15s %ld\n"
-#endif
 
 extern int	 optind;
 extern int	 errno;
@@ -368,7 +364,7 @@ handle_message(
 #endif
   void			*hanp1, *hanp2, *namp1, *namp2;
   u_int			hlen1, hlen2, nlen1, nlen2;
-  char			hans1[HANDLE_STR], hans2[HANDLE_STR], hans3[HANDLE_STR];
+  char			hans1[HANDLE_STR], hans2[HANDLE_STR];
   char			nams1[MAXNAMELEN], nams2[MAXNAMELEN];
 
   /*
@@ -471,6 +467,7 @@ handle_message(
 	     "offset",		msg_de->de_offset,
 	     "length",		msg_de->de_length);
       break;
+    default: break;
     }
   }
 

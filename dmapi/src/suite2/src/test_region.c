@@ -35,9 +35,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -67,14 +67,6 @@ extern  char    *optarg;
 
 char	*Progname;
 
-static	struct	{
-	char	*name;
-	int	value;
-} rg_events[3] = {
-	{ "DM_REGION_READ", DM_REGION_READ },
-	{ "DM_REGION_WRITE", DM_REGION_WRITE },
-	{ "DM_REGION_TRUNCATE", DM_REGION_TRUNCATE }
-};
 
 u_int reg_flags[8] = {DM_REGION_NOEVENT,
 		      DM_REGION_READ,
@@ -86,14 +78,10 @@ u_int reg_flags[8] = {DM_REGION_NOEVENT,
 		      DM_REGION_READ | DM_REGION_WRITE | DM_REGION_TRUNCATE};
 
 
-static	int	nevents = sizeof(rg_events)/sizeof(rg_events[0]);
-
 
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-s sid] ls_path pathname\n", Progname);
 	exit(1);
 }

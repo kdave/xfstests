@@ -32,9 +32,7 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
 
 /*---------------------------------------------------------------------------
 
@@ -59,8 +57,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s sid token\n",
 		Progname);
 	exit(1);

@@ -36,9 +36,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -69,8 +69,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-v] [-s sid] ls_path directoryname\n",
 		Progname);
 	exit(1);
@@ -95,7 +93,6 @@ main(
 	dm_token_t      test_token;
 	char		*name;
 	int		opt;
-	int		i;
 	int             Vflag = 0;
 	char		filename[128];
 	char		command[128];
@@ -182,7 +179,6 @@ main(
 	/* Check that dm_probe_hole returns an extent from the next
 	 * highest multiple of the block size, to the end of the file
 	 */
-	i = 0;
 	for (offset = 0; offset < 29604; offset++) { 
 	  if (dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, offset, length,
 			    &roff, &rlen)) {

@@ -155,4 +155,5 @@ main(
 		exit(1);
 	}
 	fprintf(stdout, "SUCCESS!\n");
+	exit(0);
 }

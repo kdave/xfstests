@@ -38,8 +38,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
+#ifdef linux
 #define MAXNAMELEN 256
 #endif
 

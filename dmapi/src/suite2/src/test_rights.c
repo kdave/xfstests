@@ -41,9 +41,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 Automated test of access rights, involving many DMAPI functions
@@ -104,7 +104,6 @@ main(int argc, char **argv) {
 	char            command[150];
 	int		opt;
 	int             i=0;
-	int             error_count=0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -293,6 +292,7 @@ abort_test:
 
 	printf("Access rights testing complete.\n");
 
+	exit(0);
 }
 
 

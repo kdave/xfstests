@@ -35,9 +35,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 extern	int	optind;
 extern	int	opterr;
@@ -62,7 +61,7 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	dm_token_t	token = DM_NO_TOKEN;
-	char		buffer[500];
+/*	char		buffer[500];*/
 	void		*hanp;
 	size_t		hlen;
 	dm_stat_t	dmstat;
@@ -166,4 +165,5 @@ main(
 		}
 XXX Shut off for now.  */
 	}
+	exit(0);
 }

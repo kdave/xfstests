@@ -32,9 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 /*---------------------------------------------------------------------------
 
@@ -61,8 +60,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-b buflen] [-s sid] [-t token] "
 		"pathname attr\n", Progname);
 	exit(1);
@@ -85,7 +82,6 @@ main(
 	size_t	 	 hlen;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -148,7 +144,7 @@ main(
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp is %d, value is '%s'\n", rlenp, bufp);
+	fprintf(stdout, "rlenp is %d, value is '%s'\n", rlenp, (char*)bufp);
 
 	dm_handle_free(hanp, hlen);
 	exit(0);

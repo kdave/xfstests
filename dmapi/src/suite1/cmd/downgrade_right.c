@@ -32,9 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 /*---------------------------------------------------------------------------
 
@@ -149,4 +148,5 @@ main(
 	}
 
 	dm_handle_free(hanp, hlen);
+	exit(0);
 }

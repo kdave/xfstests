@@ -33,9 +33,9 @@
 #include <stdlib.h>
 #include <sys/errno.h>
 #include <malloc.h>
+#include <getopt.h>
 #ifdef linux
 #include <dmapi.h>
-#include <getopt.h>
 #else
 #include <sys/dmi.h>
 #endif

@@ -34,6 +34,7 @@
 #include <sys/param.h>
 
 #include <string.h>
+#include <getopt.h>
 
 #include <lib/hsm.h>
 
@@ -76,8 +77,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-b buflen] [-s sid] pathname\n",
 		Progname);
 	exit(1);
@@ -98,7 +97,6 @@ main(
 	size_t	 	 fshlen;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

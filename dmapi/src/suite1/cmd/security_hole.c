@@ -35,9 +35,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#ifdef linux
 #include <string.h>
-#endif
 
 /*
 	To read unallocated disk blocks in a filesystem, do

@@ -243,4 +243,5 @@ int main(
 	S_NEXT(dm_xstat_t, dx_statinfo);
 	S_NEXT(dm_xstat_t, dx_attrdata);
 	S_END(dm_xstat_t);
+	exit(0);
 }

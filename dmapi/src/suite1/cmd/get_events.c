@@ -32,9 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 /*---------------------------------------------------------------------------
 
@@ -61,8 +60,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-b buflen] [-m maxmsgs] [-f] sid\n",
 		Progname);
 	exit(1);
@@ -79,14 +76,10 @@ main(
 	u_int		flags = 0;
 	void		*bufp;
 	size_t		buflen = 10000;
-	void		*hanp;
-	size_t		hlen;
-	char		hans1[HANDLE_STR];
 	u_int		maxmsgs = 1;
 	size_t		rlenp;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

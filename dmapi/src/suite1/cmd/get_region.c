@@ -32,9 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
+#include <getopt.h>
 
 /*---------------------------------------------------------------------------
 
@@ -57,22 +56,10 @@ extern  char    *optarg;
 
 char	*Progname;
 
-static	struct	{
-	char	*name;
-	int	value;
-} rg_events[3] = {
-	{ "DM_REGION_READ", DM_REGION_READ },
-	{ "DM_REGION_WRITE", DM_REGION_WRITE },
-	{ "DM_REGION_TRUNCATE", DM_REGION_TRUNCATE }
-};
-static	int	nevents = sizeof(rg_events)/sizeof(rg_events[0]);
-
 
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-n nelem] [-s sid] pathname\n", Progname);
 	exit(1);
 }

@@ -216,8 +216,7 @@ main(
 	  else {
 	    printf("ERROR: kernel set_disp call failed: (%d) %s\n", 
 		   errno, strerror(errno));
-/* XXX */
-/*	    exit(1);*/
+	    exit(1);
 	  }
 	}
 

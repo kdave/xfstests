@@ -25,10 +25,8 @@
 
 #include <lib/dmport.h>
 
-#ifdef linux
 #include <string.h>
 #include <getopt.h>
-#endif
 
 extern char	*optarg;
 extern int	 optind, opterr, optopt;

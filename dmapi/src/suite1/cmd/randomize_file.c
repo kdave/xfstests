@@ -152,4 +152,5 @@ main(
 		fprintf(stderr, "can't unlink %s\n", path);
 		exit(1);
 	}
+	exit(0);
 }

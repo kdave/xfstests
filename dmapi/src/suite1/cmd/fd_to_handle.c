@@ -42,6 +42,7 @@
 
 #include <lib/dmport.h>
 
+#include <string.h>
 
 static void
 hantoa(
@@ -88,4 +89,5 @@ main(
 	hantoa(hanp, hlen, buffer);
 
 	fprintf(stdout, "handle %s, path %s\n", buffer, argv[1]);
+	exit(0);
 }

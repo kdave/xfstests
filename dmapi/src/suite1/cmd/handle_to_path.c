@@ -37,6 +37,11 @@
 
 #include <lib/dmport.h>
 
+#include <getopt.h>
+#ifdef linux
+#include <xfs/handle.h>
+#endif
+
 /*---------------------------------------------------------------------------
 
 Test program used to test the DMAPI function dm_handle_to_path().  The
@@ -158,10 +163,11 @@ main(
 		}
 		return(1);
 	}
-	fprintf(stderr, "rlenp is %d, pathbufp is %s\n", rlenp, pathbufp);
+	fprintf(stderr, "rlenp is %d, pathbufp is %s\n", rlenp, (char*)pathbufp);
 	if (strlen(pathbufp) + 1 != rlenp) {
 		fprintf(stderr, "rlenp is %d, should be %d\n", rlenp,
 			strlen(pathbufp) + 1);
 		return(1);
 	}
+	exit(0);
 }

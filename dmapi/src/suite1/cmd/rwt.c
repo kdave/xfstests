@@ -40,9 +40,7 @@
 #include <strings.h>
 #include <unistd.h>
 
-#ifdef linux
 #include <string.h>
-#endif
 
 /*---------------------------------------------------------------------------
 
@@ -81,8 +79,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-r|-w|-t] [-o offset] [-l length] "
 		"pathname\n", Progname);
 	exit(1);
@@ -106,7 +102,6 @@ main(
 	int		fd;
 	ssize_t		rc;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -164,15 +159,9 @@ main(
 		}
 		if (seek_off != offset) {
 			fprintf(stderr,
-#ifdef __sgi
 				"seeked to offset %lld, actually "
 				"arrived at %lld\n",
 				(int64_t)offset, (int64_t)seek_off);
-#else
-				"seeked to offset %d, actually "
-				"arrived at %d\n",
-				offset, seek_off);
-#endif
 			exit(1);
 		}
 	}

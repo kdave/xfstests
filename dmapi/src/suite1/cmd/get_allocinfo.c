@@ -39,9 +39,7 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
-#endif
 
 /*---------------------------------------------------------------------------
 
@@ -252,11 +250,7 @@ print_alloc(
 	char		*type = NULL;
 	int		rc;
 
-#ifdef	__sgi
 	fprintf(stdout, "%s: starting offset %lld\n", pathname, startoff);
-#else
-	fprintf(stdout, "%s: starting offset %d\n", pathname, startoff);
-#endif
 
 	/* Allocate space for the number of extents requested by the user. */
 
@@ -302,32 +296,20 @@ print_alloc(
 			}
 
 			if (!Dflag) {
-#if	__sgi
 				fprintf(stdout, "\t%d: [%lld..%lld]: %s", num,
-#else
-				fprintf(stdout, "\t%d: [%d..%d]: %s", num,
-#endif
 					extent[i].ex_offset / 512,
 					(extent[i].ex_offset +
 					extent[i].ex_length - 1) / 512, type);
 				if ((extent[i].ex_offset % 512 != 0) ||
 				    (endoff % 512 != 0)) {
-#if	__sgi
 					fprintf(stdout, "\t[%lld..%lld]\n",
-#else
-					fprintf(stdout, "\t[%d..%d]\n",
-#endif
 						extent[i].ex_offset % 512,
 						(endoff-1) % 512);
 				} else {
 					fprintf(stdout, "\n");
 				}
 			} else {
-#ifdef	__sgi
 				fprintf(stdout, "%5s	%13lld	%13lld\n",
-#else
-				fprintf(stdout, "%5s	%13d	%13d\n",
-#endif
 					type, extent[i].ex_offset,
 					extent[i].ex_length);
 			}
@@ -340,22 +322,13 @@ print_alloc(
 			*/
 
 			if (extent[i].ex_offset != endoff) {
-#ifdef	__sgi
 				fprintf(stderr, "new extent (%lld)is not "
 					"adjacent to previous one (%lld)\n",
-#else
-				fprintf(stderr, "new extent (%d)is not "
-					"adjacent to previous one (%d)\n",
-#endif
 					extent[i].ex_offset, endoff);
 				return(1);
 			}
 			if (num && (extent[i].ex_offset % 512) != 0) {
-#ifdef	__sgi
 				fprintf(stderr, "non-initial ex_offset (%lld) "
-#else
-				fprintf(stderr, "non-initial ex_offset (%d) "
-#endif
 					"is not a 512-byte multiple\n",
 					extent[i].ex_offset);
 				return(1);
@@ -383,11 +356,7 @@ print_alloc(
 		*/
 
 		if (rc && startoff != endoff) {
-#ifdef	__sgi
 			fprintf(stderr, "startoff is %lld, should be %lld\n",
-#else
-			fprintf(stderr, "startoff is %d, should be %d\n",
-#endif
 				startoff, endoff);
 			return(1);
 		}

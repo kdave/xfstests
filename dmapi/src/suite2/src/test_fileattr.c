@@ -44,9 +44,9 @@
 
 #include <unistd.h>
 
-#ifdef linux
+#include <time.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 Automated test of the DMAPI functions:
@@ -92,19 +92,19 @@ comp_stat ( dm_stat_t expected,
    if (found.dt_mode != expected.dt_mode) {
      fprintf(stderr, 
 	     "ERROR: get #%d, expected mode %ld, but found %ld\n",
-	     i, expected.dt_mode, found.dt_mode);
+	     i, (long)expected.dt_mode, (long)found.dt_mode);
    }
    else good++;
    if (found.dt_uid != expected.dt_uid) {
      fprintf(stderr, 
 	     "ERROR: get #%d, expected uid %ld, but found %ld\n",
-	     i, expected.dt_uid, found.dt_uid);
+	     i, (long)expected.dt_uid, (long)found.dt_uid);
    }
    else good++;
    if (found.dt_gid != expected.dt_gid) {
      fprintf(stderr, 
 	     "ERROR: get #%d, expected gid %ld, but found %ld\n",
-	     i, expected.dt_gid, found.dt_gid);
+	     i, (long)expected.dt_gid, (long)found.dt_gid);
    }
    else good++;
    if (found.dt_atime != expected.dt_atime) {
@@ -175,7 +175,6 @@ main(
 	char		*pathname;
 	char            test_file[100];
 	char            command[100];
-	int		fs_num_files;
 	int		num_files=50;
 	dm_stat_t	*stat_arr;
 	dm_stat_t	dmstat;
@@ -190,7 +189,6 @@ main(
 	void            *bufp;
 	dm_stat_t       *statbuf;
 	int             loops=0;
-	int             all_file_count=0;
 	void            *fs_hanp;
 	size_t          fs_hlen;
 	void            *targhanp;
@@ -610,7 +608,7 @@ main(
 	      }
 	    }
 	    /*---------------------------------------------------------*/
- 	    { void *p = (void *)(((char *)bufp)+1);
+ 	    { 
               if (dm_init_attrloc(sid, hanp, hlen, DM_NO_TOKEN, &loc)){
 		fprintf(stderr, 
 			"ERROR: dm_init_attrloc failed with %s.\n",
@@ -713,4 +711,5 @@ abort_test:
 	  system(command);
 	}
 	printf("File attribute tests complete.\n");
+	exit(0);
 }

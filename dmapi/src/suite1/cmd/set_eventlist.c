@@ -32,9 +32,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -98,7 +98,6 @@ main(
 	u_int		maxevent = DM_EVENT_MAX;
 	char		*name;
 	int		opt;
-	int		i;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;

@@ -32,9 +32,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -85,11 +85,9 @@ main(
 	dm_token_t	token;
 	dm_right_t	right;
 	char		*object;
-	char		*rightstr;
 	void		*hanp;
 	size_t	 	hlen;
 	int		Fflag = 0;
-	int		wflag = 0;
 	char		*name;
 	int		opt;
 
@@ -154,4 +152,5 @@ main(
 	fprintf(stderr, "right is %s\n", rt_value_to_name(right));
 
 	dm_handle_free(hanp, hlen);
+	exit(0);
 }

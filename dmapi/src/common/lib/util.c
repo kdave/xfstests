@@ -26,9 +26,10 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
 #include <time.h>
+#ifdef linux
+#include <stdint.h>
 #define S_IAMB (S_IRWXU|S_IRWXG|S_IRWXO)
 #endif
 
@@ -577,16 +578,17 @@ validate_state(
 
 	if (dmstat->dt_dev != statb.st_dev) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_dev 0x%x, "
-				"statb.st_dev 0x%x\n", dmstat->dt_dev,
-				statb.st_dev);
+			fprintf(stdout, "ERROR:dmstat->dt_dev 0x%llx, "
+				"statb.st_dev 0x%llx\n",
+				(uint64_t)dmstat->dt_dev,
+				(uint64_t)statb.st_dev);
 		}
 		errors++;
 	}
 	if (dmstat->dt_ino != statb.st_ino) {
 		if (report_errors) {
 			fprintf(stdout, "ERROR:dmstat->dt_ino %llx, "
-#if	defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32)
+#if	defined(linux) || (defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32))
 				"statb.st_ino %llx\n",
 #else
 				"statb.st_ino %x\n",
@@ -639,16 +641,17 @@ validate_state(
 	}
 	if (dmstat->dt_rdev != statb.st_rdev) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_rdev 0x%x, "
-				"statb.st_rdev 0x%x\n", dmstat->dt_rdev,
-				statb.st_rdev);
+			fprintf(stdout, "ERROR:dmstat->dt_rdev 0x%llx, "
+				"statb.st_rdev 0x%llx\n",
+				(uint64_t)dmstat->dt_rdev,
+				(uint64_t)statb.st_rdev);
 		}
 		errors++;
 	}
 	if (dmstat->dt_size != statb.st_size) {
 		if (report_errors) {
 			fprintf(stdout, "ERROR:dmstat->dt_size %lld, "
-#if	defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32)
+#if defined(linux) || (defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32))
 				"statb.st_size %lld\n",
 #else
 				"statb.st_size %d\n",
@@ -659,32 +662,32 @@ validate_state(
 	}
 	if (dmstat->dt_atime != statb.st_atime) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_atime %d, "
-				"statb.st_atime %d\n", dmstat->dt_atime,
+			fprintf(stdout, "ERROR:dmstat->dt_atime %ld, "
+				"statb.st_atime %ld\n", dmstat->dt_atime,
 				statb.st_atime);
 		}
 		errors++;
 	}
 	if (dmstat->dt_mtime != statb.st_mtime) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_mtime %d, "
-				"statb.st_mtime %d\n", dmstat->dt_mtime,
+			fprintf(stdout, "ERROR:dmstat->dt_mtime %ld, "
+				"statb.st_mtime %ld\n", dmstat->dt_mtime,
 				statb.st_mtime);
 		}
 		errors++;
 	}
 	if (dmstat->dt_ctime != statb.st_ctime) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_ctime %d, "
-				"statb.st_ctime %d\n", dmstat->dt_ctime,
+			fprintf(stdout, "ERROR:dmstat->dt_ctime %ld, "
+				"statb.st_ctime %ld\n", dmstat->dt_ctime,
 				statb.st_ctime);
 		}
 		errors++;
 	}
 	if (dmstat->dt_dtime != statb.st_ctime) {
 		if (report_errors) {
-			fprintf(stdout, "ERROR:dmstat->dt_dtime %d, "
-				"statb.st_ctime %d\n", dmstat->dt_dtime,
+			fprintf(stdout, "ERROR:dmstat->dt_dtime %ld, "
+				"statb.st_ctime %ld\n", dmstat->dt_dtime,
 				statb.st_ctime);
 		}
 		errors++;
@@ -692,7 +695,7 @@ validate_state(
 	if (dmstat->dt_blksize != statb.st_blksize) {
 		if (report_errors) {
 			fprintf(stdout, "ERROR:dmstat->dt_blksize %d, "
-				"statb.st_blksize %d\n", dmstat->dt_blksize,
+				"statb.st_blksize %ld\n", dmstat->dt_blksize,
 				statb.st_blksize);
 		}
 		errors++;
@@ -700,7 +703,7 @@ validate_state(
 	if (dmstat->dt_blocks != statb.st_blocks) {
 		if (report_errors) {
 			fprintf(stdout, "ERROR:dmstat->dt_blocks %lld, "
-#if	defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32)
+#if defined(linux) || (defined(__sgi) && (_MIPS_SIM != _MIPS_SIM_ABI32))
 				"statb.st_blocks %lld\n",
 #else
 				"statb.st_blocks %d\n",
@@ -890,7 +893,7 @@ print_state(
 {
 	/* Print all the stat block fields. */
 
-	fprintf(stdout, "dt_dev         0x%x\n",  dmstat->dt_dev);
+	fprintf(stdout, "dt_dev         0x%llx\n",  (uint64_t)dmstat->dt_dev);
 	fprintf(stdout, "dt_ino         %llx\n",  dmstat->dt_ino);
 	fprintf(stdout, "dt_mode (type) %s\n",
 		mode_to_string(dmstat->dt_mode));
@@ -898,7 +901,7 @@ print_state(
 	fprintf(stdout, "dt_nlink       %d\n",  dmstat->dt_nlink);
 	fprintf(stdout, "dt_uid         %d\n",  dmstat->dt_uid);
 	fprintf(stdout, "dt_gid         %d\n", dmstat->dt_gid);
-	fprintf(stdout, "dt_rdev        0x%x\n", dmstat->dt_rdev);
+	fprintf(stdout, "dt_rdev        0x%llx\n", (uint64_t)dmstat->dt_rdev);
 	fprintf(stdout, "dt_size        %lld\n", dmstat->dt_size);
 
 	fprintf(stdout, "dt_atime       %s\n",
@@ -939,14 +942,14 @@ extern void
 print_line(
 	dm_stat_t	*dmstat)
 {
-	fprintf(stdout, "0x%x|",  dmstat->dt_dev);
+	fprintf(stdout, "0x%llx|",  (uint64_t)dmstat->dt_dev);
 	fprintf(stdout, "%llx|",  dmstat->dt_ino);
 	fprintf(stdout, "%s|", mode_to_string(dmstat->dt_mode));
 	fprintf(stdout, "0%o|", dmstat->dt_mode & S_MASK);
 	fprintf(stdout, "%d|",  dmstat->dt_nlink);
 	fprintf(stdout, "%d|",  dmstat->dt_uid);
 	fprintf(stdout, "%d|", dmstat->dt_gid);
-	fprintf(stdout, "0x%x|", dmstat->dt_rdev);
+	fprintf(stdout, "0x%llx|", (uint64_t)dmstat->dt_rdev);
 	fprintf(stdout, "%lld|", dmstat->dt_size);
 
 	fprintf(stdout, "%s|", date_to_string(dmstat->dt_atime));
@@ -956,13 +959,11 @@ print_line(
 	fprintf(stdout, "%d|", dmstat->dt_blksize);
 	fprintf(stdout, "%lld|", dmstat->dt_blocks);
 
-#ifdef	__sgi
 	fprintf(stdout, "%d|",  dmstat->dt_xfs_igen);
 	fprintf(stdout, "%s|", xflags_to_string(dmstat->dt_xfs_xflags));
 	fprintf(stdout, "%d|", dmstat->dt_xfs_extsize);
 	fprintf(stdout, "%d|", dmstat->dt_xfs_extents);
 	fprintf(stdout, "%d|", dmstat->dt_xfs_aextents);
-#endif
 
 	/* Print all other fields. */
 

@@ -32,10 +32,8 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <string.h>
 #include <getopt.h>
-#endif
 
 /*---------------------------------------------------------------------------
 

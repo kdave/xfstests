@@ -41,9 +41,9 @@
 #include <lib/hsm.h>
 #include <lib/errtest.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 Automated search for EFAULT in the following DMAPI commands:
@@ -89,7 +89,6 @@ int
 main(int argc, char **argv) {
      
         dm_sessid_t	sid = DM_NO_SESSION;
-	dm_token_t	test_token = DM_NO_TOKEN;
 	void		*hanp;
 	size_t		hlen;
 	char		*name;
@@ -98,7 +97,6 @@ main(int argc, char **argv) {
 	char            test_file[100];
 	char            command[100];
 	int		opt;
-	int             i=0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -155,7 +153,6 @@ main(int argc, char **argv) {
 	{ dm_off_t     off=0;
 	  u_int        nelem=1;
 	  dm_extent_t  extent;
-	  dm_extent_t  *extentp;
 	  u_int        nelem_ret;
 	  
 	  ERRTEST(EFAULT, "get_allocinfo (bad offp)",
@@ -255,5 +252,6 @@ abort_test:
 
 	printf("EFAULT testing complete.\n");
 
+	exit(0);
 }
 

@@ -30,6 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
+#include <stdlib.h>
 #include <lib/dmport.h>
 
 /*
@@ -162,4 +163,5 @@ main(
 	rc = dm_sync_by_handle(sid, hanp, hlen, token);
 	rc = dm_upgrade_right(sid, hanp, hlen, token);
 	ssrc = dm_write_invis(sid, hanp, hlen, flags, token, off, len, bufp);
+	exit(0);
 }

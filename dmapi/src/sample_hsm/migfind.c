@@ -30,9 +30,7 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
 #include <getopt.h>
-#endif
 
 #define NUMLEN	16		/* arbitrary max len of input size */
 #define MAX_K   (((u_int)LONG_MAX + 1) / 1024)

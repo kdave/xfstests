@@ -32,9 +32,9 @@
 
 #include <lib/hsm.h>
 
-#ifdef linux
+#include <getopt.h>
 #include <string.h>
-#endif
+
 
 /*---------------------------------------------------------------------------
 
@@ -155,4 +155,5 @@ main(
 		fprintf(stdout, "there is no hold\n");
 	}
 	dm_handle_free(hanp, hlen);
+	exit(0);
 }
