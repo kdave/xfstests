@@ -40,7 +40,7 @@
 
 Test program used to test dm_handle_to_fshandle().  The command line is:
 
-        path_to_fshandle handle
+        handle_to_fshandle handle
 
 where handle is an object's handle.
 

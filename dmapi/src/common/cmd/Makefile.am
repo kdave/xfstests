@@ -32,6 +32,7 @@
 ## http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
 ##
 
-bin_PROGRAMS = read_invis set_region set_return_on_destroy write_invis
+bin_PROGRAMS = read_invis set_region set_return_on_destroy write_invis \
+		handle_write_invis handle_read_invis
 
 LDADD = $(top_builddir)/src/common/lib/libdmtest.la
