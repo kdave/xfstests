@@ -40,7 +40,7 @@
 Test program used to test the DMAPI function dm_set_region().  The
 command line is:
 
-	set_region [-n nelem] [-o offset] [-l length] [-s sid] pathname [event...]
+	set_region [-n nelem] [-o offset] [-l length] [-s sid] {pathname|handle} [event...]
 
 where pathname is the name of a file, nelem is the number of regions to pass
 in the call, offset is the offset of the start of
@@ -76,7 +76,7 @@ usage(void)
 	int	i;
 
 	fprintf(stderr, "usage:\t%s [-n nelem] [-o offset] [-l length] "
-		"[-s sid] pathname [event...]\n", Progname);
+		"[-s sid] {pathname|handle} [event...]\n", Progname);
 	fprintf(stderr, "possible events are:\n");
 	for (i = 0; i < nevents; i++)
 		fprintf(stderr, "%s (0x%x)\n", rg_events[i].name, rg_events[i].value);
@@ -91,7 +91,7 @@ main(
 {
 	dm_region_t	region = { 0, 0, 0 };
 	dm_sessid_t	sid = DM_NO_SESSION;
-	char		*pathname = NULL;
+	char		*object = NULL;
 	u_int		exactflag;
 	u_int		nelem = 1;
 	void		*hanp;
@@ -128,7 +128,7 @@ main(
 	}
 	if (optind + 1 > argc)
 		usage();
-	pathname = argv[optind++];
+	object = argv[optind++];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -139,8 +139,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s\n", pathname);
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 

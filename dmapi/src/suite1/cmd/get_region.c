@@ -40,7 +40,7 @@
 Test program used to test the DMAPI function dm_set_region().  The
 command line is:
 
-	get_region [-n nelem] [-s sid] pathname
+	get_region [-n nelem] [-s sid] {pathname|handle}
 
 where pathname is the name of a file, nelem is the number of regions to pass
 in the call, and sid is the session ID whose events you you are interested in.
@@ -60,7 +60,7 @@ char	*Progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage:\t%s [-n nelem] [-s sid] pathname\n", Progname);
+	fprintf(stderr, "usage:\t%s [-n nelem] [-s sid] {pathname|handle}\n", Progname);
 	exit(1);
 }
 
@@ -72,7 +72,7 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	dm_region_t	*regbufp = NULL;
-	char		*pathname = NULL;
+	char		*object = NULL;
 	u_int		nelemp;
 	u_int		nelem = 1;
 	void		*hanp;
@@ -103,7 +103,7 @@ main(
 	}
 	if (optind + 1 != argc)
 		usage();
-	pathname = argv[optind++];
+	object = argv[optind++];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -114,8 +114,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s\n", pathname);
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 
