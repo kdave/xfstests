@@ -44,12 +44,24 @@
  *   needed by fill2fs to ensure that the number of bytes written is accurately
  *   determined.
  *
+ *   To compile standalone on IRIX: cc -DTOOL_ONLY -o fill2 fill2.c -lgen
+ *
  *   $Id$
  */
 
-
-#include <libxfs.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <assert.h>
+
+#ifndef TOOL_ONLY
+#include <platform_defs.h>
+#else
+#define constpp char * const *
+#endif /* TOOL_ONLY */
 
 #define N(x) (sizeof(x)/sizeof(x[0]))
 
