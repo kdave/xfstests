@@ -44,7 +44,7 @@
 #include <xfs/xfs_log_priv.h>
 
 void
-usage()
+usage(void)
 {
     fprintf(stderr,"Usage: loggen\n"
                    "           set up parameters before writing record(s):\n"
@@ -86,7 +86,7 @@ loggen_alloc(int blocks)
 }
 
 void
-loggen_write()
+loggen_write(void)
 {         
     if (!buf) {
         fprintf(stderr,"no buffer allocated\n");
@@ -108,7 +108,7 @@ loggen_zero(int count)
     fprintf(stderr,"   *** zero block (1BB) x %d\n", count);
     loggen_alloc(1);
     while (count--)
-        loggen_write(count);
+        loggen_write();
 }      
       
 void
@@ -166,7 +166,7 @@ loggen_unmount(int count)
         ASSIGN_ANY_LSN(head->h_lsn,         
                 param_cycle, param_block++, ARCH_CONVERT);
         
-        loggen_write(count);
+        loggen_write();
     }
 } 
   
@@ -268,7 +268,7 @@ loggen_empty(int count)
         ASSIGN_ANY_LSN(head->h_lsn,         
                 param_cycle, param_block++, ARCH_CONVERT);
         
-        loggen_write(count);
+        loggen_write();
     }
 }   
 
@@ -319,5 +319,3 @@ main(int argc, char *argv[])
     }
     return 0;   
 }
-
-
