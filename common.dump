@@ -44,7 +44,7 @@ if [ -n "$DEBUGDUMP" ]; then
 fi
  
 # Use dump/restore in qa directory for debugging
-PATH=".:$PATH"
+PATH="$here:$PATH"
 export PATH
 #which xfsdump
 #which xfsrestore
@@ -463,13 +463,8 @@ _do_create_dumpdir_fill()
 {
     echo "Creating directory system to dump using src/fill."
 
-    if mkdir -p $dump_dir
-    then
-	:
-    else
-	echo "Error: cannot mkdir \"$dump_dir\""
-	exit 1
-    fi
+    mkdir -p $dump_dir ||\
+	_error "cannot mkdir \"$dump_dir\""
     cd $dump_dir
 
     $verbose && echo -n "Setup "
@@ -598,13 +593,8 @@ _do_create_dump_symlinks()
 {
     echo "Creating directory system of symlinks to dump."
 
-    if mkdir -p $dump_dir
-    then
-	:
-    else
-	echo "Error: cannot mkdir \"$dump_dir\""
-	exit 1
-    fi
+    mkdir -p $dump_dir ||\
+	_error "cannot mkdir \"$dump_dir\""
     cd $dump_dir
 
     $verbose && echo -n "Setup "
@@ -677,6 +667,64 @@ _create_dumpdir_symlinks()
     _do_create_dump_symlinks
     _stable_fs
 }	
+
+#
+# create hardlinks of form $_fname, $_fname_h1 $_fname_h2 ...
+#
+_create_hardlinks()
+{
+    _fname=$1	
+    _numlinks=$2
+
+    touch $_fname
+    _j=1
+    while [ $_j -le $_numlinks ]; do
+        _suffix=_h$_j
+	_hardlink=$_fname$_suffix
+	echo "creating hardlink $_hardlink to $_fname"
+	ln $_fname $_hardlink
+	_j=`expr $_j + 1`
+    done
+}
+
+#
+# create a set of hardlinks
+# create hardlinks of form file1, file1_h1 file1_h2 ...
+# create hardlinks of form file2, file2_h1 file2_h2 ...
+# create hardlinks of form file3, file3_h1 file3_h2 ...
+#
+_create_hardset()
+{
+    _numsets=$1
+    _i=1
+    while [ $_i -le $_numsets ]; do
+	_create_hardlinks file$_i 5
+	_i=`expr $_i + 1`
+    done
+}
+
+
+_modify_level()
+{
+    _level=$1
+    echo "mod level $_level" >$dump_dir/file$_level
+}
+
+_create_dumpdir_hardlinks()
+{
+    _numsets=$1
+    _wipe_fs
+    echo "Creating directory system of hardlinks to incrementally dump."
+
+    mkdir -p $dump_dir ||\
+	_error "cannot mkdir \"$dump_dir\""
+    cd $dump_dir
+
+    _create_hardset $_numsets
+
+    cd $here
+    _stable_fs
+}
 
 #
 # Filter for ls
@@ -772,6 +820,9 @@ _dir_filter()
 
 }
 
+#
+# Note: requires a space between option letter and argument 
+#
 _parse_args()
 {
     OPTIND=0
@@ -806,8 +857,13 @@ _parse_args()
         -Q)
             do_quota_check=false
             ;;
+        -l)
+            [ -z "$2" ] && _error "missing argument for -l"
+	    dump_args="$dump_args -l$2"
+	    shift
+            ;;
 	*)
-            _error "invalid argument"
+            _error "invalid argument to common.dump function: $1"
             ;;
         esac
 	shift
@@ -829,14 +885,14 @@ _do_dump_sub()
 }
 
 #
-# Do full level 0 dump
+# Do dump to tape
 #
 _do_dump()
 {
     _parse_args $*
 
     echo "Dumping to tape..."
-    opts="$_dump_debug$dump_args -l0 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
+    opts="$_dump_debug$dump_args -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter  
     xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -856,18 +912,6 @@ _do_dump_min()
     xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
 
-#
-# Do level 1 incremental dump
-#
-_do_dump_incremental()
-{
-    _parse_args $*
-
-    echo "Dumping incrementally to tape..."
-    opts="$_dump_debug$dump_args -l1 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
-    xfsdump $opts 2>&1 | tee -a $seq.full | _dump_filter
-}
 
 #
 # Do full dump to file
@@ -908,11 +952,8 @@ _do_dump_multi_file()
 _prepare_restore_dir()
 {
     rm -rf $restore_dir
-    if ! mkdir $restore_dir; then
-	echo "    failed to mkdir $restore_dir"
-	status=1
-	exit
-    fi
+    mkdir $restore_dir ||\
+	_error "failed to mkdir $restore_dir"
 }
 
 
@@ -937,7 +978,7 @@ _do_restore()
 
 
     echo "Restoring from tape..."
-    opts="$_restore_debug$dump_args -f $dumptape  -L $session_label $restore_dir"
+    opts="$_restore_debug -f $dumptape  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter  
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -952,7 +993,7 @@ _do_restore_min()
 
     echo "Restoring from tape..."
     onemeg=1048576
-    opts="$_restore_debug$dump_args -m -b $onemeg -f $dumptape  -L $session_label $restore_dir"
+    opts="$_restore_debug -m -b $onemeg -f $dumptape  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter  
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -966,9 +1007,39 @@ _do_restore_file()
     _prepare_restore_dir
 
     echo "Restoring from file..."
-    opts="$_restore_debug$dump_args -f $dump_file  -L $session_label $restore_dir"
+    opts="$_restore_debug -f $dump_file  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter  
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+#
+# Cumulative restore from a file
+# Need to specify the dump level e.g. "-l 0"
+#
+_do_restore_file_cum()
+{
+    _parse_args $*
+    if echo $dump_args | grep '\-l0' >/dev/null; then
+	_prepare_restore_dir
+    fi
+
+    echo "Restoring cumumlative from file..."
+    opts="$_restore_debug -f $dump_file -r $restore_dir"
+    echo "xfsrestore $opts" | _dir_filter  
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
+}
+
+_do_restore_toc()
+{
+    echo "Contents of dump ..."
+    opts="$_restore_debug -f $dump_file -t"
+    echo "xfsrestore $opts" | _dir_filter  
+    cd $SCRATCH_MNT # for IRIX which needs xfs cwd
+    xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter |\
+    $AWK_PROG 'NF != 1 { print; next }
+	       {files = sprintf("%s\n%s", files, $1)}
+		END { print files | "sort" } '
+    cd $here # put back
 }
 
 #
@@ -989,7 +1060,7 @@ _do_restore_multi_file()
     done
 
     echo "Restoring from file..."
-    opts="$_restore_debug$dump_args $multi_args -L $session_label $restore_dir"
+    opts="$_restore_debug $multi_args -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter  
     xfsrestore $opts 2>&1 | tee -a $seq.full | _dump_filter
 }
@@ -1141,8 +1212,8 @@ _check_quota_dumprestore()
 {
     uquota=0
     gquota=0 
-    src/feature -U $SCRATCH_DEV && uquota=1
-    src/feature -G $SCRATCH_DEV && gquota=1
+    $here/src/feature -U $SCRATCH_DEV && uquota=1
+    $here/src/feature -G $SCRATCH_DEV && gquota=1
 
     $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v full=$seq.full '
 	/user quota information/ {
@@ -1183,8 +1254,8 @@ _check_quota_diff()
 {
     uquota=0
     gquota=0 
-    src/feature -U $SCRATCH_DEV && uquota=1
-    src/feature -G $SCRATCH_DEV && gquota=1
+    $here/src/feature -U $SCRATCH_DEV && uquota=1
+    $here/src/feature -G $SCRATCH_DEV && gquota=1
 
     $AWK_PROG -v uquota=$uquota -v gquota=$gquota '
 	/Only in RESTORE_DIR: xfsdump_quotas_group/ {

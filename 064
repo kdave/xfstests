@@ -1,8 +1,8 @@
 #! /bin/sh
-# XFS QA Test No. 024
+# XFS QA Test No. 064
 # $Id: 1.1 $
 #
-# Test out incremental dumps
+# test multilevel dump and restores with hardlinks
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
@@ -37,33 +37,77 @@
 #-----------------------------------------------------------------------
 #
 # creator
-owner=tes@bruce.melbourne.sgi.com
+owner=tes@sagan.melbourne.sgi.com
 
 seq=`basename $0`
 echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
-status=0	# success is the default!
+status=1	# failure is the default!
 trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
+. ./common.filter
 . ./common.dump
+
+
+_ls_size_filter()
+{
+    #
+    # Print size ($5) and fname ($9).
+    # The size is significant since we add to the file as part
+    # of a file change for the incremental.
+    #
+    # Filter out the housekeeping files of xfsrestore
+    #
+    $AWK_PROG 'NF == 9 { print $5, $9 }' |\
+    egrep -v 'dumpdir|housekeeping|dirattr|dirextattr|namreg|state|tree' 
+}
 
 # real QA test starts here
 
-_require_tape $TAPE_DEV
-_create_dumpdir_fill
-src/bstat $SCRATCH_MNT >>$here/$seq.full
-_erase_hard
-_do_dump
-_append_dumpdir_fill
-src/bstat $SCRATCH_MNT >>$here/$seq.full
-_erase_hard
-_do_dump -l 1
-_do_restore
-_diff_compare
+_create_dumpdir_hardlinks 9
+
+echo "Do the incremental dumps"
+i=0
+while [ $i -le 9 ]; do
+    if [ $i -gt 0 ]; then
+	_modify_level $i
+	sleep 2
+	_stable_fs
+    fi 
+    dump_file=$tmp.df.level$i
+    _do_dump_file -l $i
+    i=`expr $i + 1`	
+done
+
+echo "Listing of what files we start with:"
+ls -l $dump_dir | _ls_size_filter
+
+echo "Look at what files are contained in the inc. dump"
+i=0
+while [ $i -le 9 ]; do
+    echo ""
+    echo "restoring from df.level$i"
+    dump_file=$tmp.df.level$i
+    _do_restore_toc
+    i=`expr $i + 1`	
+done
+
+echo "Do the cumulative restores"
+i=0
+while [ $i -le 9 ]; do
+    dump_file=$tmp.df.level$i
+    echo ""
+    echo "restoring from df.level$i"
+    _do_restore_file_cum -l $i
+    echo "ls -l restore_dir"
+    ls -lR $restore_dir | _ls_size_filter
+    i=`expr $i + 1`	
+done
 
 # success, all done
+status=0
 exit
