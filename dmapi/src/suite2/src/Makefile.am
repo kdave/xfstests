@@ -43,7 +43,6 @@ bin_PROGRAMS =  \
 	test_bulkattr \
 	send_msg \
 	dm_test_daemon \
-	dump_allocinfo \
 	test_invis \
 	invis_test \
 	region_test \
