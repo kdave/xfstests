@@ -64,7 +64,7 @@ main(int argc, char **argv)
 {
 	struct stat64	sbuf;
 	char		mode[10];
-	int		i;
+	int		i, c;
 
 	time(&timebuf);
 
@@ -144,7 +144,9 @@ main(int argc, char **argv)
 		printf("  Gid: (%d)\n", sbuf.st_gid);
 		printf("Device: %2d,%-2d", major(sbuf.st_dev),
 				minor(sbuf.st_dev));
-		printf("  Inode: %-10llu", (unsigned long long)sbuf.st_ino);
+		c = printf("  Inode: %-10llu", (unsigned long long)sbuf.st_ino);
+		if (c >= 10)
+			putchar(' ');
 		printf("Links: %-5d", sbuf.st_nlink);
 
 		if ( ((sbuf.st_mode & S_IFMT) == S_IFCHR)
