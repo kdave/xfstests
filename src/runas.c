@@ -62,7 +62,8 @@ main(int argc, char **argv)
 	int c;
         uid_t uid = -1;
         gid_t gid = -1;
-        char *cmd=NULL;
+        int pid;
+        char **cmd;
         gid_t sgids[SUP_MAX];
         int sup_cnt = 0;
 	int status;
@@ -91,13 +92,18 @@ main(int argc, char **argv)
 	}
 
         /* build up the cmd */
-	for ( ; optind < argc; optind++) {
-	    cmd = realloc(cmd, (cmd==NULL?0:strlen(cmd)) + 
-                               strlen(argv[optind]) + 4);
-	    strcat(cmd, " ");
-	    strcat(cmd, argv[optind]);
-	}
- 
+        if (optind == argc) {
+            usage();
+            exit(1);
+        }
+	else {
+	    char **p;
+	    p = cmd = (char **)malloc(sizeof(char *) * (argc - optind + 1));
+	    for ( ; optind < argc; optind++, p++) {
+	        *p = strdup(argv[optind]);
+            }
+	    *p = NULL;
+	} 
 
         if (gid != -1) {
 	    if (setegid(gid) == -1) {
@@ -123,8 +129,19 @@ main(int argc, char **argv)
 	    }	
         }
 
-	status = system(cmd);
+	pid = fork();
+	if (pid == -1) {
+            fprintf(stderr, "%s: fork failed: %s\n",
+	            prog, strerror(errno));
+            exit(1);
+        }
+	if (pid == 0) {
+            execv(cmd[0], cmd);
+            fprintf(stderr, "%s: %s\n", cmd[0], strerror(errno));
+            exit(errno);
+	}
 
+        wait(&status);
 	if (WIFSIGNALED(status)) {
 	    fprintf(stderr, "%s: command terminated with signal %d\n", 
                  prog, WTERMSIG(status));
