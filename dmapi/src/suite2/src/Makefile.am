@@ -39,6 +39,8 @@ bin_PROGRAMS =  \
 	test_dmattr \
 	test_eventlist \
 	test_region \
+	test_bulkall \
+	test_bulkattr \
 	send_msg \
 	dm_test_daemon \
 	dump_allocinfo \
@@ -48,6 +50,6 @@ bin_PROGRAMS =  \
 	test_efault \
 	mmap
 
-INCLUDES += -I ..
+INCLUDES = -I ..
 
 LDADD = $(top_builddir)/src/common/lib/libdmtest.la
