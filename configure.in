@@ -1,0 +1,246 @@
+dnl unpacking check - this file must exist
+AC_INIT(src/fsstress.c)
+pkg_name="xfstests"
+AC_SUBST(pkg_name)
+
+#
+# Note: the following environment variables may be set to override the
+# defaults (to change paths and/or executables, build parameters, etc):
+#
+#   DEBUG  OPTIMIZER  MAKE  CC  LD  TAR  ZIP  RPM  AWK  SED  ECHO
+#   MALLOCLIB  DISTRIBUTION  PACKAGE_BUILDER  PREFIX  ROOT_PREFIX
+#
+
+DEBUG=${DEBUG:-'-DDEBUG'}		# -DNDEBUG
+OPTIMIZER=${OPTIMIZER:-'-g'}		# -O2
+MALLOCLIB=${MALLOCLIB:-''}		# /usr/lib/libefence.a
+
+dnl Debug build?
+debug_build="$DEBUG"
+AC_SUBST(debug_build)
+
+dnl Optimization options?
+opt_build="$OPTIMIZER"
+AC_SUBST(opt_build)
+
+dnl Alternate malloc library?
+malloc_lib="$MALLOCLIB"
+AC_SUBST(malloc_lib)
+
+dnl Set version
+. VERSION
+
+pkg_version=${PKG_MAJOR}.${PKG_MINOR}.${PKG_REVISION}
+pkg_release=$PKG_BUILD
+AC_SUBST(pkg_version)
+AC_SUBST(pkg_release)
+
+pkg_distribution="SGI ProPack"
+test -z "$DISTRIBUTION" || pkg_distribution="$DISTRIBUTION"
+AC_SUBST(pkg_distribution)
+
+pkg_builder=`id -u -n`@`hostname -f`
+test -z "$PACKAGE_BUILDER" || pkg_builder="$PACKAGE_BUILDER"
+AC_SUBST(pkg_builder)
+
+dnl check if user wants their own C compiler
+test -z "$CC" && AC_PROG_CC
+cc=$CC
+AC_SUBST(cc)
+
+dnl check if users wants their own make
+test -z "$MAKE" && AC_PATH_PROG(MAKE, make, /usr/bin/make)
+make=$MAKE
+AC_SUBST(make)
+
+dnl check if users wants their own linker
+test -z "$LD" && AC_PATH_PROG(LD, ld, /usr/bin/ld)
+ld=$LD
+AC_SUBST(ld)
+
+dnl check if the tar program is available
+test -z "$TAR" && AC_PATH_PROG(TAR, tar)
+tar=$TAR
+AC_SUBST(tar)
+
+dnl check if the gzip program is available
+test -z "$ZIP" && AC_PATH_PROG(ZIP, gzip, /bin/gzip)
+zip=$ZIP
+AC_SUBST(zip)
+
+dnl check if the rpm program is available
+test -z "$RPM" && AC_PATH_PROG(RPM, rpm, /bin/rpm)
+rpm=$RPM
+AC_SUBST(rpm)
+
+dnl .. and what version is rpm
+rpm_version=0
+test -x $RPM && \
+	rpm_version=`$RPM --version | awk '{print $NF}' | awk -F. '{print $1}'`
+AC_SUBST(rpm_version)
+
+dnl check if the makedepend program is available
+test -z "$MAKEDEPEND" && AC_PATH_PROG(MAKEDEPEND, makedepend, /bin/true)
+makedepend=$MAKEDEPEND
+AC_SUBST(makedepend)
+
+dnl check if symbolic links are supported
+AC_PROG_LN_S
+
+dnl check if user wants their own awk, sed and echo
+test -z "$AWK" && AC_PATH_PROG(AWK, awk, /bin/awk)
+awk=$AWK
+AC_SUBST(awk)
+test -z "$SED" && AC_PATH_PROG(SED, sed, /bin/sed)
+sed=$SED
+AC_SUBST(sed)
+test -z "$ECHO" && AC_PATH_PROG(ECHO, echo, /bin/echo)
+echo=$ECHO
+AC_SUBST(echo)
+
+CPPFLAGS="-I/usr/include/xfs"
+AC_SUBST(CPPFLAGS)
+
+dnl Checks for UUID header and library.
+AC_CHECK_HEADER(uuid/uuid.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid UUID header.'
+	echo 'Install either the e2fsprogs-devel (rpm) or the uuid-dev (deb) package.'
+	exit 1
+])
+AC_CHECK_LIB(uuid, uuid_generate,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid UUID library.'
+	echo 'Install either the e2fsprogs-devel (rpm) or the uuid-dev (deb) package.'
+	exit 1
+])
+libuuid="/usr/lib/libuuid.a"
+AC_SUBST(libuuid)
+
+dnl Checks for base XFS headers and libraries.
+AC_CHECK_HEADER(xfs/libxfs.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid XFS library header.'
+	echo 'Install either the xfsprogs-devel (rpm) or the xfslibs-dev (deb) package.'
+	exit 1
+])
+AC_CHECK_LIB(xfs, libxfs_init,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid XFS base library.'
+	echo 'Install either the xfsprogs-devel (rpm) or the xfslibs-dev (deb) package.'
+])
+AC_CHECK_HEADER(xfs/handle.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid XFS handle header.'
+	echo 'Install either the xfsprogs-devel (rpm) or the xfslibs-dev (deb) package.'
+	exit 1
+])
+AC_CHECK_LIB(handle, path_to_handle,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid XFS handle library.'
+	echo 'Install either the xfsprogs-devel (rpm) or the xfslibs-dev (deb) package.'
+])
+libxfs="-lxfs"
+libhdl="-lhandle"
+AC_SUBST(libxfs)
+AC_SUBST(libhdl)
+
+dnl Checks for Extended Attributes header and library.
+AC_CHECK_HEADER(attr/attributes.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Extended Attributes header.'
+	echo 'Install either the attr-devel (rpm) or the attr-dev (deb) package.'
+	exit 1
+])
+AC_CHECK_LIB(attr, attr_get,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
+	echo 'Install either the attr-devel (rpm) or the attr-dev (deb) package.'
+])
+libattr="/usr/lib/libattr.a"
+AC_SUBST(libattr)
+
+dnl Checks for Access Control List header and library.
+AC_CHECK_HEADER(acl/acl.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Access Control List header.'
+	echo 'Install either the acl-devel (rpm) or the acl-dev (deb) package.'
+	exit 1
+])
+AC_CHECK_LIB(acl, acl_get,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Access Control List library.'
+	echo 'Install either the acl-devel (rpm) or the acl-dev (deb) package.'
+])
+libacl="/usr/lib/libacl.a"
+AC_SUBST(libacl)
+
+dnl Checks for GNU database manager header and library.
+AC_CHECK_HEADER(gdbm.h,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid GNU database manager header.'
+	echo 'Install either the gdbm-devel (rpm) or the libgdbmg1-dev (deb) package.'
+])
+AC_CHECK_LIB(gdbm, gdbm_open,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid GNU database manager library.'
+	echo 'Install either the gdbm-devel (rpm) or the libgdbmg1-dev (deb) package.'
+])
+libgdbm="/usr/lib/libgdbm.a"
+AC_SUBST(libgdbm)
+
+
+dnl alternate root and usr prefixes
+test -z "$ROOT_PREFIX" && ROOT_PREFIX=""
+root_prefix="$ROOT_PREFIX"
+test -z "$PREFIX" && PREFIX="/usr"
+prefix="$PREFIX"
+
+dnl man pages (source)
+dnl also check if man page source is gzipped
+dnl (usually on Debian, but not Redhat pre-7.0)
+have_zipped_manpages=false
+for d in ${prefix}/share/man ${prefix}/man ; do
+    if test -f $d/man1/man.1.gz
+    then
+	pkg_man_dir=$d
+	have_zipped_manpages=true
+	break
+    fi
+done
+AC_SUBST(pkg_man_dir)
+AC_SUBST(have_zipped_manpages)
+
+dnl binaries
+pkg_bin_dir=${prefix}/sbin
+AC_SUBST(pkg_bin_dir)
+
+dnl static libraries
+pkg_lib_dir=${prefix}/lib
+AC_SUBST(pkg_lib_dir)
+
+dnl runtime shared system libraries
+pkg_slib_dir=${root_prefix}/lib
+AC_SUBST(pkg_slib_dir)
+
+dnl system binaries
+pkg_sbin_dir=${root_prefix}/sbin
+AC_SUBST(pkg_sbin_dir)
+
+dnl include files
+pkg_inc_dir=${prefix}/include
+AC_SUBST(pkg_inc_dir)
+
+dnl doc directory
+pkg_doc_dir=${prefix}/share/doc/${pkg_name}
+AC_SUBST(pkg_doc_dir)
+
+
+dnl
+dnl output files
+dnl
+
+AC_OUTPUT( \
+dnl  Build definitions for use in Makefiles
+    include/builddefs \
+)

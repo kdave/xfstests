@@ -1,0 +1,172 @@
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#
+# @configure_input@
+#
+
+ifndef _BUILDDEFS_INCLUDED_
+_BUILDDEFS_INCLUDED_ = 1
+
+DEBUG = @debug_build@
+OPTIMIZER = @opt_build@
+MALLOCLIB = @malloc_lib@
+
+LIBXFS = @libxfs@
+LIBACL = @libacl@
+LIBATTR = @libattr@
+LIBGDBM = @libgdbm@
+LIBUUID = @libuuid@
+LIBHANDLE = @libhdl@
+CPPFLAGS = -I/usr/include/xfs -I/usr/include/attr
+
+BUILDRULES = $(TOPDIR)/include/buildrules
+
+# General package information
+PKG_NAME = @pkg_name@
+PKG_RELEASE = @pkg_release@
+PKG_VERSION = @pkg_version@
+PKG_DISTRIBUTION = @pkg_distribution@
+PKG_BUILDER = @pkg_builder@
+PKG_BIN_DIR = @pkg_bin_dir@
+PKG_LIB_DIR = @pkg_lib_dir@
+PKG_SBIN_DIR = @pkg_sbin_dir@
+PKG_SLIB_DIR = @pkg_slib_dir@
+PKG_INC_DIR = @pkg_inc_dir@
+PKG_MAN_DIR = @pkg_man_dir@
+PKG_DOC_DIR = @pkg_doc_dir@
+
+# LCFLAGS, LLDFLAGS, LLDLIBS, LSRCFILES and LDIRT may be specified in
+# user Makefiles. Note: LSRCFILES is anything other than Makefile, $(CFILES)
+# $(CXXFILES), or $(HFILES) and is used to construct the manifest list
+# during the "dist" phase (packaging).
+
+CFLAGS += $(OPTIMIZER) $(DEBUG) -funsigned-char -Wall -Wno-parentheses \
+	$(LCFLAGS) -I$(TOPDIR)/include '-DVERSION="$(PKG_VERSION)"' \
+	-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
+
+LDFLAGS = $(LLDFLAGS)
+LDLIBS = $(LLDLIBS) $(MALLOCLIB)
+
+MAKEOPTS = --no-print-directory
+SRCFILES = Makefile $(HFILES) $(CFILES) $(LSRCFILES) $(LFILES) $(YFILES)
+DIRT = $(LDIRT) dep dep.bak $(OBJECTS) $(CMDTARGET) $(LIBTARGET) \
+	$(STATICLIBTARGET) *.[1-9].gz
+
+OBJECTS = $(ASFILES:.s=.o) \
+          $(CFILES:.c=.o) \
+          $(LFILES:.l=.o) \
+          $(YFILES:%.y=%.tab.o)
+
+MAKE	= @make@
+CC	= @cc@
+LD	= @ld@
+AWK	= @awk@
+SED	= @sed@
+INSTALL	= $(TOPDIR)/install-sh -o root -g root
+ECHO	= @echo@
+LN_S	= @LN_S@
+
+CCF	= $(CC) $(CFLAGS)
+MAKEF	= $(MAKE) $(MAKEOPTS)
+CXXF	= $(CXX) $(CXXFLAGS)
+LDF	= $(LD) $(LDFLAGS)
+MAKEDEPEND  = @makedepend@
+
+ZIP	= @zip@
+TAR	= @tar@
+RPM	= @rpm@
+RPM_VERSION = @rpm_version@
+
+HAVE_ZIPPED_MANPAGES = @have_zipped_manpages@
+
+SHELL = /bin/sh
+IMAGES_DIR = $(TOPDIR)/all-images
+DIST_DIR = $(TOPDIR)/dist
+
+SUBDIRS_MAKERULE = \
+	@for d in $(SUBDIRS) ""; do \
+	    if test -d "$$d" -a ! -z "$$d"; then \
+		$(ECHO) === $$d ===; \
+		$(MAKEF) -C $$d $@ || exit $$?; \
+	    fi; \
+	done
+
+MAN_MAKERULE = \
+    @for f in *.[12345678] ""; do \
+	if test ! -z "$$f"; then \
+	    $(ZIP) --best -c < $$f > $$f.gz; \
+	fi; \
+    done
+
+INSTALL_MAN = \
+    @for d in $(MAN_PAGES); do \
+	first=true; \
+	for m in `$(AWK) '/^\.SH NAME/ {ok=1; next} ok {print; exit}' $$d \
+	| sed -e 's/,/ /g' -e 's/\\-.*//' -e 's/\\\f[0-9]//g' -e 's/  / /g;q'`; \
+	do \
+	    [ -z "$$m" -o "$$m" = "\\" ] && continue; \
+	    t=$(MAN_DEST)/$$m.$(MAN_SECTION); \
+	    if $$first; then \
+		if $(HAVE_ZIPPED_MANPAGES); then \
+		    $(ZIP) --best -c $$d > $$d.gz; _sfx=.gz; \
+		fi; \
+		u=$$m.$(MAN_SECTION)$$_sfx; \
+		echo $(INSTALL) -m 644 $${d}$$_sfx $${t}$$_sfx; \
+		$(INSTALL) -m 644 $${d}$$_sfx $${t}$$_sfx; \
+	    else \
+		echo $(INSTALL) -S $$u $${t}$$_sfx; \
+		$(INSTALL) -S $$u $${t}$$_sfx; \
+	    fi; \
+	    first=false; \
+	done; \
+    done
+
+DIST_MAKERULE = \
+	$(MAKEF) -C build dist
+
+SOURCE_MAKERULE = \
+	@test -z "$$DIR" && DIR="."; \
+	for f in $(SRCFILES) ""; do \
+	    if test ! -z "$$f"; then $(ECHO) $$DIR/$$f; fi;\
+	done; \
+	for d in `echo $(SUBDIRS)` ; do \
+	    if test -d "$$d" -a ! -z "$$d"; then \
+		$(MAKEF) DIR=$$DIR/$$d -C $$d $@ || exit $$?; \
+	    fi; \
+	done
+
+endif
+
+#
+# For targets that should always be rebuilt,
+# define a target that is never up-to-date.
+# Targets needing this should depend on $(_FORCE)
+_FORCE = __force_build
