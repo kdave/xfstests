@@ -59,7 +59,9 @@ setlkw_timeout (int sig) {
 
 void
 lock_mtab (void) {
+#if 0	/* nathans: dont limit, we are forcing lots of parallel accesses */
 	int tries = 3;
+#endif
 	char linktargetfile[PATH_MAX + 20];
 
 	if (!signals_have_been_setup) {
@@ -120,10 +122,12 @@ lock_mtab (void) {
 		if (fd < 0) {
 			int errsv = errno;
 			/* Strange... Maybe the file was just deleted? */
+#if 0	/* nathans: dont limit, we are forcing lots of parallel accesses */
 			if (errno == ENOENT && tries-- > 0)
+#endif
+			if (errno == ENOENT)
 				continue;
-			fprintf(stderr, "can't open lock file %s: %s "
-			     "(use -n flag to override)",
+			fprintf(stderr, "can't open lock file %s: %s\n",
 			     mounted_lock, strerror (errsv));
 			exit(1);
 		}
@@ -136,7 +140,7 @@ lock_mtab (void) {
 		if (j == 0) {
 			/* We made the link. Now claim the lock. */
 			if (fcntl (fd, F_SETLK, &flock) == -1 &&
-			    errno != EBUSY) {
+			    errno != EBUSY && errno != EAGAIN) {
 				int errsv = errno;
 				printf(_("Can't lock lock file %s: %s\n"),
 					   mounted_lock, strerror (errsv));
@@ -151,7 +155,7 @@ lock_mtab (void) {
 			/* Someone else made the link. Wait. */
 			alarm(LOCK_TIMEOUT);
 			if (fcntl (fd, F_SETLKW, &flock) == -1 &&
-			    errno != EBUSY) {
+			    errno != EBUSY && errno != EAGAIN) {
 				int errsv = errno;
 				fprintf(stderr, "can't lock lock file %s: %s",
 				     mounted_lock, (errno == EINTR) ?

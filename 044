@@ -127,12 +127,17 @@ echo -e -n "\n\r*** XFS QA 044 - expect mount failure messages\n\r\n\r" >/dev/co
 
 echo "*** mkfs"
 
+# this test only works for version 1 logs currently
 lversion=1
 lsize=16777216
 _scratch_mkfs_xfs -lsize=$lsize,version=$lversion >$tmp.mkfs0 2>&1
 [ $? -ne 0 ] && \
     _notrun "Cannot mkfs for this test using MKFS_OPTIONS specified"
-_filter_mkfs <$tmp.mkfs0 2>/dev/null
+_filter_mkfs <$tmp.mkfs0 2>$tmp.mkfs1
+. $tmp.mkfs1
+[ $lversion -ne 1 ] && \
+    _notrun "Cannot run this test yet using MKFS_OPTIONS specified"
+
 _check_mount
 _check_require_logdev
 
