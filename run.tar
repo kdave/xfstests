@@ -1,0 +1,35 @@
+#!/bin/sh -x
+# 
+# Produces a .tar file (if one doesn't exist as $TARFILE), then
+# times how long it takes to untar it onto the current directory.
+# 
+TARFILE=${TARFILE:=/var/tmp/bench.tar}
+
+barf()
+{
+	echo $@ >2
+	exit 1
+}
+
+new_tar()
+{
+	source="/bin /sbin /lib /dev"
+	if [ ! -f $1 ]; then
+		tar cf $1 $source || barf "tar c failed"
+	fi
+}
+
+run_tar()
+{
+	# %U=user %S=system %E=elapsed
+	mkdir ./tar || exit 1
+	/usr/bin/time -f '%U,%S,%E' tar xf $1 ./tar || exit 1
+	rm -fr ./tar || exit 1
+}
+
+if [ $# -gt 0 ]; then
+	echo "user,system,elapsed"
+	exit 0
+fi
+new_tar $TARFILE
+run_tar $TARFILE

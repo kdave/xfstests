@@ -35,19 +35,11 @@
 
 # configuration (you could tune this)
 
-BOOT="/boot"
-SOAK_PASSES="-1"
-SOAK_STRESS="10000"
-SOAK_PROC="3"
-export EXTRA=${EXTRA:=-xfs-qa}
-export MKFS_OPTIONS=${MKFS_OPTIONS:=-bsize=4096}
-export MOUNT_OPTIONS=${MOUNT_OPTIONS:=-ologbufs=2}
-export MALLOCLIB=${MALLOCLIB:=/usr/lib/libefence.a}
-
 _log()
 {
     echo "$*" >&2
     echo "$*" >> $LOG
+    sync
 }
 
 _fail()
@@ -64,7 +56,7 @@ _fail()
     case $state
     in
 	cron*)
-	    mail -s "XFS QA status report" $ADMINEMAIL \
+	    mail -s "XFS QA status report" $EMAIL \
 		< $LOG 2>&1
 	;;
     esac
@@ -112,35 +104,6 @@ CONFIG="$ROOT/$HOST.config"
 COMMON_CONFIG="$WORKAREA/cmd/xfstests/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
-
-# need to add auto-qa hosts here
-
-case $HOST
-in
-    bruce)
-	EMAIL="nathans@larry"
-	ADMINEMAIL="nathans@larry"
-	MODULAR=0
-	;;
-    sagan)
-	EMAIL="tes@larry"
-	ADMINEMAIL="tes@larry"
-	MODULAR=1
-	;;
-    troppo)
-	EMAIL="kaos@larry"
-	ADMINEMAIL="kaos@larry"
-	MODULAR=0
-	;;
-    frodo)
-	EMAIL="nathans@larry"
-	ADMINEMAIL="nathans@larry"
-	MODULAR=0
-	;;
-    *)
-	_fail "auto-qa: no configuration information for host '$HOST'"
-	;;
-esac
 
 # do some cleanup on exit
 
@@ -427,7 +390,7 @@ do
 	    
 	*restart)
 	    _log "	    *** select qa kernel"
-	    _sudo /sbin/lilo -R linux-xfs-qa 2>&1 \
+	    _sudo /sbin/lilo -R linux-xfs-qa $KERNEL_OPTIONS 2>&1 \
 			|| _fail "	    !!! lilo failed"
 	    
 	    _log "	    *** prepare to restart"
@@ -510,12 +473,21 @@ do
 	    new_state="run"
 	    ;;
 	    
-	    
 	soak-run)
 	    cd $QADIR
 	    
 	    _log "	    *** run soak test"
-	    _sudo ./soak $SOAK_PASSES $SOAK_STRESS $SOAK_PROC\
+	    _sudo ./soak $SOAK_PASSES $SOAK_STRESS $SOAK_PROC \
+			|| _fail "	    !!! failed to run soak test"
+
+	    new_state="done"
+	    ;;
+	    
+	bench-run)
+	    cd $QADIR
+	    
+	    _log "	    *** run benchmarks"
+	    _sudo ./bench $BENCH_PASSES `id -u && id -g` \
 			|| _fail "	    !!! failed to run soak test"
 
 	    new_state="done"
