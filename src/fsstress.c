@@ -32,8 +32,6 @@
 
 #include "global.h"
 
-/* XXX temporary hack - error injection is disabled */
-#define ERROR_INJECT_DISABLE 
 #define XFS_ERRTAG_MAX		17
 
 typedef enum {
@@ -384,13 +382,9 @@ int main(int argc, char **argv)
 			errtag += (random() % (XFS_ERRTAG_MAX - errtag));
 		}
 		printf("Injecting failure on tag #%d\n", errtag);
-#ifndef ERROR_INJECT_DISABLE
 		err_inj.errtag = errtag;
 		err_inj.fd = fd;
 		srval = ioctl(fd, XFS_IOC_ERROR_INJECTION, &err_inj);
-#else
-                srval = -1;
-#endif
 		if (srval < -1) {
 			perror("fsstress - XFS_SYSSGI error injection call");
 			close(fd);
@@ -410,13 +404,10 @@ int main(int argc, char **argv)
 	while (wait(&stat) > 0)
 		continue;
 	if (errtag != 0) {
-#ifndef ERROR_INJECT_DISABLE
 		err_inj.errtag = 0;
 		err_inj.fd = fd;
 		if((srval = ioctl(fd, XFS_IOC_ERROR_CLEARALL, &err_inj)) != 0) {
-#else
-                if (1) {
-#endif
+			fprintf(stderr, "Bad ej clear on %d (%d).\n", fd, errno);
 			perror("fsstress - XFS_SYSSGI clear error injection call");
 			close(fd);
 			exit(1);
