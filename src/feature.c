@@ -32,6 +32,7 @@
 
 /*
  * Test for filesystem features on given mount point or device
+ *   -c  test for 32bit chown support (via libc)
  *   -q  test for quota support (kernel compile option)
  *   -u  test for user quota enforcement support (mount option)
  *   -g  test for group quota enforcement support (mount option)
@@ -50,7 +51,45 @@ void
 usage(void)
 {
 	fprintf(stderr, "Usage: feature [-v] -<q|u|g|U|G> <filesystem>\n");
+	fprintf(stderr, "       feature [-v] -c <file>\n");
 	exit(1);
+}
+
+int check_big_ID(char *filename)
+{
+	struct stat64	sbuf;
+
+	memset(&sbuf, 0, sizeof(struct stat64));
+	if (lstat64(filename, &sbuf) < 0) {
+		fprintf(stderr, "lstat64 failed on ");
+		perror(filename);
+		return(1);
+	}
+
+	/* 98789 is greater than 2^16 (65536) */
+	if ((__u32)sbuf.st_uid == 98789 || (__u32)sbuf.st_gid == 98789)
+		return(0);
+	if (verbose)
+		fprintf(stderr, "lstat64 on %s gave uid=%d, gid=%d\n",
+			filename, sbuf.st_uid, sbuf.st_gid);
+	return(1);
+}
+
+int
+haschown32(char *filename)
+{
+	if (check_big_ID(filename) == 0)
+		return(0);
+
+	if (chown(filename, 98789, 98789) < 0) {
+		fprintf(stderr, "chown failed on ");
+		perror(filename);
+		return(1);
+	}
+
+	if (check_big_ID(filename) == 0)
+		return(0);
+	return (1);
 }
 
 int
@@ -85,6 +124,7 @@ int
 main(int argc, char **argv)
 {
 	int	c;
+	int	cflag = 0;
 	int	gflag = 0;
 	int	Gflag = 0;
 	int	qflag = 0;
@@ -92,8 +132,11 @@ main(int argc, char **argv)
 	int	Uflag = 0;
 	char	*fs;
 
-	while ((c = getopt(argc, argv, "gGquUv")) != EOF) {
+	while ((c = getopt(argc, argv, "cgGquUv")) != EOF) {
 		switch (c) {
+		case 'c':
+			cflag++;
+			break;
 		case 'g':
 			gflag++;
 			break;
@@ -117,12 +160,14 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!uflag && !gflag && !qflag && !Uflag && !Gflag)
+	if (!cflag && !uflag && !gflag && !qflag && !Uflag && !Gflag)
 		usage();
 	if (optind != argc-1)
 		usage();
 	fs = argv[argc-1];
 
+	if (cflag)
+		return(haschown32(fs));
 	if (qflag)
 		return(hasxfsquota(0, 0, fs));
 	if (gflag)
