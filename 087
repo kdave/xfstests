@@ -1,0 +1,154 @@
+#! /bin/sh
+# XFS QA Test No. 087
+#
+# * like 086 but want to create more/different kinds of metadata
+#   and so will use fsstress
+# * also can interrupt metadata with godown
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.log
+
+_do_meta()
+{
+    out=$SCRATCH_MNT/fsstress
+    count=10000
+    param="-p 4 -z -f rmdir=10 -f link=10 -f creat=10 -f mkdir=10 \
+           -f rename=30 -f stat=30 -f unlink=30 -f truncate=20"
+    _echofull "calling fsstress $param -m8 -n $count"
+    if ! time $here/ltp/fsstress $param $FSSTRESS_AVOID -m 8 -n $count -d $out >>$seq.full 2>&1
+    then
+	_echofull "fsstress failed"
+    fi
+}
+
+# real QA test starts here
+rm -f $seq.full $tmp.*
+_require_scratch
+
+echo "*** init FS"
+umount $SCRATCH_DEV >/dev/null 2>&1
+
+cat >$tmp.seq.params <<EOF
+# mkfs-opt             mount-opt
+  -lversion=2          -ologbsize=32k
+  -lversion=2,su=4096  -ologbsize=32k
+  -lversion=2,su=32768 -ologbsize=32k
+  -lversion=2          -ologbsize=64k
+EOF
+
+cat $tmp.seq.params \
+| while read mkfs mnt restofline
+do
+    if [ "$mkfs" = "#" ]; then 
+	continue
+    fi
+
+    echo "--- mkfs=$mkfs, mnt=$mnt ---"
+    export MOUNT_OPTIONS=$mnt
+    export MKFS_OPTIONS=$mkfs
+
+    # mkfs the FS
+    _echofull "mkfs"
+    if ! _mkfs_log; then
+	_echofull "mkfs failed: $MKFS_OPTIONS"
+	continue
+    fi
+
+    # mount the FS
+    _echofull "mount"
+    if ! _scratch_mount >>$seq.full 2>&1; then
+	_echofull "mount failed: $MOUNT_OPTIONS"
+	continue
+    fi
+
+    # create the metadata
+    _do_meta
+
+    # check before on what FS should look like
+    _echofull "ls -RF $SCRATCH_MNT"
+    ls -RF $SCRATCH_MNT >$tmp.ls1
+
+    _echofull "godown"
+    src/godown -v -f $SCRATCH_MNT >> $seq.full
+
+    _echofull "unmount"
+    umount $SCRATCH_DEV >>$seq.full 2>&1 \
+	|| _fail "umount failed"
+
+    _echofull "logprint after going down..."
+    _print_logstate
+
+    _full "logprint headers"
+    _scratch_xfs_logprint -n >>$seq.full 2>&1
+
+    _echofull "mount with replay"
+    _scratch_mount >>$seq.full 2>&1 \
+	|| _fail "mount failed: $MOUNT_OPTIONS"
+
+    # check on what FS looks like after log recovery
+    _echofull "ls -RF $SCRATCH_MNT"
+    ls -RF $SCRATCH_MNT >$tmp.ls2
+
+    _echofull "diff ls before and after"
+    diff -us $tmp.ls1 $tmp.ls2 | sed "s#$tmp#TMP#g"
+
+    _echofull "unmount"
+    umount $SCRATCH_MNT
+
+    _echofull "logprint after mount and replay..."
+    _print_logstate
+
+    if _check_scratch_fs; then
+	_echofull "filesystem is checked ok"
+    else
+	_echofull "filesystem is NOT ok"
+    fi
+done
+
+status=0 
+exit
