@@ -46,6 +46,9 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
+# This isn't really related to fs block size, it's just what
+# alloc uses for the "block" unit in it's input parameters...
+bsize=4096
 
 _cleanup()
 {
@@ -63,15 +66,12 @@ _block_filter()
 _init()
 {
     echo "*** mkfs"
-    if ! (mkfs_xfs $SCRATCH_DEV | _filter_mkfs 1>/dev/null 2>$tmp.out)
+    if ! mkfs_xfs $SCRATCH_DEV >$tmp.out 2>&1
     then
 	cat $tmp.out
         echo "failed to mkfs $SCRATCH_DEV"
         exit 1
     fi
-
-    source $tmp.out
-    bsize=$dbsize
 
     echo "*** mount"
     if ! mount $SCRATCH_DEV $SCRATCH_MNT -t xfs
