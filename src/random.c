@@ -20,6 +20,7 @@
  *
  **************************************************************************/
 
+#include <sys/types.h>
 
 /*
  * modified by dxm@sgi.com so that this file acts as a drop in replacement
@@ -29,9 +30,9 @@
 /*
  *	A random number generator called as a function by
  *	random (iseed)	or	irandm (iseed)
- *	The parameter should be a pointer to a 2-element long vector.
+ *	The parameter should be a pointer to a 2-element int32_t vector.
  *	The first function returns a double uniform in 0 .. 1.
- *	The second returns a long integer uniform in 0 .. 2**31-1
+ *	The second returns a int32_t integer uniform in 0 .. 2**31-1
  *	Both update iseed[] in exactly the same way.
  *	iseed[] must be a 2-element integer vector.
  *	The initial value of the second element may be anything.
@@ -40,13 +41,13 @@
  *	The table mt[0:127] is defined by mt[i] = 69069 ** (128-i)
  */
 
-#define MASK ((long) 593970775)
+#define MASK ((int32_t) 593970775)
 /*	or in hex, 23674657	*/
 
 #define SCALE ((double) 1.0 / (1024.0 * 1024.0 * 1024.0 * 2.0))
 /*	i.e. 2 to power -31	*/
 
-static long mt [128] =   {
+static int32_t mt [128] =   {
       902906369,
      2030498053,
      -473499623,
@@ -178,9 +179,9 @@ static long mt [128] =   {
 		};
 
 double 
-_random (long is [2])
+_random (int32_t is [2])
 {
-	long it, leh, nit;
+	int32_t it, leh, nit;
 
 	it = is [0];
 	leh = is [1];
@@ -193,15 +194,15 @@ _random (long is [2])
 	leh = leh * mt[nit & 127] + nit;
 	is [0] = it;    is [1] = leh;
 	if (leh < 0) leh = ~leh;
-	return (SCALE * ((long) (leh | 1)));
+	return (SCALE * ((int32_t) (leh | 1)));
 }
 
 
 
-long 
-_irandm (long is [2])
+int32_t 
+_irandm (int32_t is [2])
 {
-	long it, leh, nit;
+	int32_t it, leh, nit;
 
 	it = is [0];
 	leh = is [1];
@@ -223,7 +224,7 @@ _irandm (long is [2])
  * XXX not thread safe I guess.
  */
 
-static long saved_seed[2];
+static int32_t saved_seed[2];
 
 long random(void)
 {
