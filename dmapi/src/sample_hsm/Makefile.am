@@ -32,6 +32,8 @@
 ## http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
 ##
 
-bin_PROGRAMS = migfind migin migout mls mrmean print_event wbee
+bin_PROGRAMS = migfind migin migout mls mrmean wbee
+
+# print_event -- superceded by suite1/cmd/print_event
 
 LDADD = $(top_builddir)/src/common/lib/libdmtest.la
