@@ -28,9 +28,14 @@
 owner=dxm@sgi.com
 
 #
-# note ELOOP limit used to be 32 but changed to 8. Who knows what
-# it might be next.
-#
+# Note1: On Linux, ELOOP limit used to be 32 but changed to 8, and lately
+# its become 5.  Who knows what it might be next.
+# Note2: On IRIX, the limit is around the 30 mark.
+# 
+# What we are looking for here is: no panic due to blowing the stack;
+# and that the ELOOP error code is returned at some point (the actual
+# limit point is unimportant, just checking that we do hit it).
+# 
 
 seq=`basename $0`
 echo "QA output created by $seq"
@@ -50,19 +55,17 @@ _cleanup()
 
 _touch()
 {
-    touch $@ 2>&1 | sed \
-	-e "s/creating \`//g" \
-	-e "s/setting times of \`//g" \
-	-e "s/cannot touch \`//g" \
-	-e "s/'//g"
+    touch $@ 2>&1 | grep -q 'Too many levels of symbolic links'
+    if [ $? -eq 0 ]; then
+	echo "ELOOP returned.  Good."
+    else
+	echo "No ELOOP?  Unexpected!"
+    fi
 }
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
-
-# link correct .out file
-_link_out_file $seq.out
 
 # real QA test starts here
 _supported_fs xfs udf nfs
@@ -79,7 +82,7 @@ _setup_testdir
 cd $testdir
 
 o=empty_file
-_touch $o
+touch $o
 for f in symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9}
 do
     ln -s $o $f
@@ -95,7 +98,5 @@ echo ""
 echo "*** touch recusive symlinks"
 echo ""
 _touch symlink_self
-
-
 
 exit
