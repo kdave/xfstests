@@ -52,6 +52,7 @@ status=0	# success is the default!
 
 _cleanup()
 {
+    rm -f $tmp.*
     echo "*** unmount"
     umount $SCRATCH_MNT 2>/dev/null
 }
@@ -98,7 +99,6 @@ _filter_logprint()
         s/1st: *[0-9][0-9]*  *last: *[0-9][0-9]*  *cnt: *[0-9][0-9]*  *freeblks: *[0-9][0-9]*  *longest: *[0-9][0-9]*/1st:<NUM> last:<NUM> cnt:<COUNT> freeblks:<COUNT> longest:<NUM>/;
         s/^uuid: *[0-9a-f-][0-9a-f-]* *format: *.*$/uuid: <UUID> format: <FORMAT>/;
     '
-
 }
 
 _check_log()
@@ -118,14 +118,19 @@ _require_scratch
 
 echo "*** init FS"
 
-rm -f $seq.out $seq.full
+touch $seq.out
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 _full "mkfs"
-mkfs_xfs -lsize=2000b $SCRATCH_DEV    >>$seq.full 2>&1 \
-    || _fail "mkfs failed"
+mkfs_xfs -lsize=2000b $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+source $tmp.mkfs
+[ $dbsize -eq 4096 ] \
+    || _notrun "Log print test tailored to 4K blocks (currently using $dbsize)"
+
+rm -f $seq.out $seq.full
+
 _full " mount"
-mount -t xfs $SCRATCH_DEV $SCRATCH_MNT      >>$seq.full 2>&1 \
+mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full 2>&1 \
     || _fail "mount failed"
 
 _setup_seq_out
