@@ -133,11 +133,11 @@ _run_benchmark()
 
 _merge_results()
 {
-    echo Results for $bench benchmark >>$OUT
+    echo Results for $bench benchmark
     headers=`$here/run.$bench -h`
-    echo "[$headers]" >>$OUT
-    echo results.$bench.* | sort -nu | xargs cat >>$OUT
-    echo >>$OUT
+    echo "[$headers]"
+    echo results.$bench.* | sort -nu | xargs cat
+    echo
 }
 
 # real QA test starts here
@@ -162,12 +162,15 @@ fi
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _require_scratch
-
-echo "MKFS_OPTIONS=$MKFS_OPTIONS" >>$OUT
-echo "MOUNT_OPTIONS=$MOUNT_OPTIONS" >>$OUT
-echo "" >>$OUT
-
 rm -f bench.*
+
+# $OUT is the report which will ultimately be sent, keep it tidy.
+cat >$OUT <<EOF
+bench: MKFS_OPTIONS=$MKFS_OPTIONS
+bench: MOUNT_OPTIONS=$MOUNT_OPTIONS
+
+EOF
+
 for bench in $benches
 do
     echo "" >$FULL
@@ -180,7 +183,7 @@ do
     umount $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL
 
     _run_benchmark | _fix_malloc
-    _merge_results
+    _merge_results >>$OUT
 
     _log "*** done $bench"
 done
