@@ -66,7 +66,7 @@ _filter_scratch()
 
 getfattr()
 {
-	/usr/bin/getfattr -adl $@ 2>&1 | _filter_scratch
+	/usr/bin/getfattr -adh $@ 2>&1 | _filter_scratch
 }
 
 setfattr()
@@ -102,42 +102,42 @@ for nsp in user xfsroot; do
 		echo; echo "=== TYPE $inode; NAMESPACE $nsp"; echo
 
 		echo "*** set/get one initially empty attribute"
-		setfattr -l -n $nsp.name $SCRATCH_MNT/$inode
-		getfattr -r $nsp $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name $SCRATCH_MNT/$inode
+		getfattr -m $nsp $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty, set several new attributes"
-		setfattr -l -n $nsp.name -v 0xbabe $SCRATCH_MNT/$inode
-		setfattr -l -n $nsp.name2 -v 0xdeadbeef $SCRATCH_MNT/$inode
-		setfattr -l -n $nsp.name3 -v 0xdeface $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name -v 0xbabe $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name2 -v 0xdeadbeef $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name3 -v 0xdeface $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (hex)"
-		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (base64)"
-		getfattr -r $nsp -e base64 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e base64 $SCRATCH_MNT/$inode
 
 		echo "*** shrink value of an existing attribute"
-		setfattr -l -n $nsp.name2 -v 0xdeaf $SCRATCH_MNT/$inode
-		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name2 -v 0xdeaf $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** grow value of existing attribute"
-		setfattr -l -n $nsp.name2 -v 0xdecade $SCRATCH_MNT/$inode
-		getfattr -r $nsp -e hex $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name2 -v 0xdecade $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
 
 		echo "*** set an empty value for second attribute"
-		setfattr -l -n $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -r $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty value"
-		setfattr -l -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
-		getfattr -r $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
+		setfattr -h -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** remove attribute"
-		setfattr -l -x $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -r $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
+		setfattr -h -x $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
-		getfattr -r '^user|^xfsroot' -e hex $SCRATCH_MNT/$inode
+		getfattr -m '^user|^xfsroot' -e hex $SCRATCH_MNT/$inode
 	done
 done
 
@@ -166,20 +166,12 @@ _extend_test_bed()
 _extend_test_bed
 
 echo
-echo "*** forward directory descent with us following symlinks"
-getfattr -L -R -r '^user|^xfsroot' -e hex $SCRATCH_MNT
+echo "*** directory descent with us following symlinks"
+getfattr -h -L -R -m '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 echo
-echo "*** reverse directory descent with us following symlinks"
-getfattr -L -R -5 -r '^user|^xfsroot' -e hex $SCRATCH_MNT
-
-echo
-echo "*** forward directory descent without following symlinks"
-getfattr -P -R -r '^user|^xfsroot' -e hex $SCRATCH_MNT
-
-echo
-echo "*** reverse directory descent without following symlinks"
-getfattr -P -R -5 -r '^user|^xfsroot' -e hex $SCRATCH_MNT
+echo "*** directory descent without following symlinks"
+getfattr -h -P -R -m '^user|^xfsroot' -e hex $SCRATCH_MNT
 
 
 # 
@@ -190,7 +182,7 @@ echo; echo
 _backup()
 {
 	# NB: no filtering of scratch here... (need to restore too)
-	/usr/bin/getfattr -adl -R -r '^user|^system' $SCRATCH_MNT >$1
+	/usr/bin/getfattr -adh -R -m '^user|^system' $SCRATCH_MNT >$1
 	echo BACKUP $1 >>$seq.full
 	cat $1 >> $seq.full
 	[ ! -s $1 ] && echo "warning: $1 (backup file) is empty"
@@ -202,18 +194,18 @@ _backup $tmp.backup1
 echo "*** clear out the scratch device"
 rm -fr $SCRATCH_MNT/*
 echo "AFTER REMOVE" >>$seq.full
-getfattr -L -R -r '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
+getfattr -L -R -m '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
 
 echo "*** reset test bed with no extended attributes"
 _create_test_bed
 _extend_test_bed
 
 echo "*** restore everything"
-setfattr -lB $tmp.backup1
+setfattr -hB $tmp.backup1
 _backup $tmp.backup2
 
 echo "AFTER RESTORE" >>$seq.full
-getfattr -L -R -r '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
+getfattr -L -R -m '^user|^xfsroot' $SCRATCH_MNT >>$seq.full
 
 echo "*** compare before and after backups"
 diff $tmp.backup1 $tmp.backup2
