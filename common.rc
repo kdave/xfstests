@@ -262,6 +262,36 @@ _is_block_dev()
     [ -b $1 ] && src/lstat64 $1 | $AWK_PROG '/Device type:/ { print $9 }'
 }
 
+# do a command, log it to $seq.full, optionally test return status
+# and die if command fails
+#
+_do()
+{
+  if [ $# -eq 1 ]; then
+    _cmd=$1
+  elif [ $# -eq 2 ]; then
+    _note=$1
+    _cmd=$2
+    echo -n "$_note... "
+  else
+    echo "Usage: _do [note] cmd" 1>&2
+    status=1; exit
+  fi
+
+  (eval "echo '---' $_cmd") >>$seq.full
+  (eval "$_cmd") >$tmp._out 2>&1; ret=$?
+  cat $tmp._out | _fix_malloc >>$seq.full
+  if [ $# -eq 2 ]; then
+    if [ $ret -eq 0 ]; then echo "done"; else echo "fail"; fi
+  fi
+  if [ "$_do_die_on_error" -a $ret -ne 0  ]; then
+    eval "echo $_cmd failed \(returned $ret\): see $seq.full"
+    status=1; exit
+  fi
+
+  return $ret
+}
+
 # bail out, setting up .notrun file
 # 
 _notrun()

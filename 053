@@ -1,0 +1,105 @@
+#! /bin/sh
+# XFS QA Test No. 053
+# $Id: 1.1 $
+#
+# xfs_repair breaks acls
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajag@bruce.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.attr
+
+# real QA test starts here
+_require_scratch
+_acl_setup_ids
+_do_die_on_error=y
+test=$SCRATCH_MNT/test
+
+# make filesystem on scratch using the defaults
+_do 'make filesystem on $SCRATCH_DEV' \
+    'mkfs -t xfs -f $SCRATCH_DEV'
+_do 'mount filesytem' \
+    'mount -t xfs $SCRATCH_DEV $SCRATCH_MNT'
+
+# create test files and set acls
+acls="
+u::r--,g::rwx,o::rw-
+u::r-x,g::---,o::---
+u::---,g::r-x,o::---
+u::---,g::---,o::r-x
+u::---,g::r-x,o::rwx
+u::---,g::---,o::---,u:$acl2:r-x,m::rwx
+u::rwx,g::r-x,o::r--
+u::---,g::---,o::---,g:$acl2:r-x,m::-w-"
+
+i=0
+for acl in $acls
+do
+  _do "touch $test.$i"
+  _do "chacl $acl $test.$i"
+  i=`expr $i + 1`
+done
+
+list_acls()
+{
+  i=0
+  for acl in $acls
+  do
+    chacl -l $test.$i | _acl_filter_id | sed -e "s!$SCRATCH_MNT!\$SCRATCH_MNT!"
+    i=`expr $i + 1`
+  done
+}
+
+echo "acls before repair:"
+list_acls
+_do 'unmount $SCRATCH_DEV' 'umount $SCRATCH_DEV'
+_do 'repair filesystem' 'xfs_repair $SCRATCH_DEV'
+_do 'mount filesytem' 'mount -t xfs $SCRATCH_DEV $SCRATCH_MNT'
+echo "acls after repair: "
+list_acls
+
+# success, all done
+status=0; exit
