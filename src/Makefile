@@ -36,7 +36,8 @@ include $(TOPDIR)/include/builddefs
 TARGETS = alloc acl_get bstat devzero dirstress fault feature \
 	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
 	  nametest permname randholes runas truncfile usemem \
-	  fstest mmapcat append_reader append_writer
+	  fstest mmapcat append_reader append_writer \
+	  dirperf metaperf
 ifeq ($(ENABLE_DBM), yes)
 TARGETS += dbtest
 endif
@@ -66,6 +67,9 @@ bstat: bstat.o $(LIBHANDLE)
 
 loggen:	loggen.o
 	$(LINKTEST) $(LDLIBS)
+
+fstest:	fstest.o
+	$(LINKTEST)
 
 acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
