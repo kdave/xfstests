@@ -40,7 +40,7 @@
 Test program used to test the DMAPI function dm_get_dmattr().  The
 command line is:
 
-	get_dmattr [-b buflen] [-s sid] [-t token] pathname attr
+	get_dmattr [-b buflen] [-s sid] [-t token] {pathname|handle} attr
 
 where pathname is the name of a file, buflen is the size of the buffer to use
 in the call, attr is the name of the DMAPI attribute, and sid is the session ID
@@ -61,7 +61,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage:\t%s [-b buflen] [-s sid] [-t token] "
-		"pathname attr\n", Progname);
+		"{pathname|handle} attr\n", Progname);
 	exit(1);
 }
 
@@ -73,7 +73,7 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	dm_token_t	token = DM_NO_TOKEN;
-	char		*pathname;
+	char		*object;
 	dm_attrname_t	*attrnamep;
 	void		*bufp;
 	size_t		buflen = 10000;
@@ -108,7 +108,7 @@ main(
 	}
 	if (optind + 2 != argc)
 		usage();
-	pathname = argv[optind++];
+	object = argv[optind++];
 	attrnamep = (dm_attrname_t *)argv[optind];
 
 	if (dm_init_service(&name) == -1)  {
@@ -120,9 +120,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s, %s\n",
-			pathname, strerror(errno));
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 
