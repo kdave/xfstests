@@ -35,9 +35,10 @@
  * Use IRIX semantics or Linux semantics if pertinent.
  */
  
-#include "global.h"
-
 #include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <getopt.h>
 #include <sys/acl.h>
 
 char *prog;
