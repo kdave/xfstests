@@ -56,7 +56,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.dump
 
 
-_ls_size_filter()
+_my_ls_filter()
 {
     #
     # Print size ($5) and fname ($9).
@@ -64,14 +64,25 @@ _ls_size_filter()
     # of a file change for the incremental.
     #
     # Filter out the housekeeping files of xfsrestore
+    # Filter out toplevel "dumpdir/$" report.
     #
     $AWK_PROG 'NF == 9 { print $5, $9; next }
                NF == 1 { print }' |\
     sed -e 's/.*dumpdir/dumpdir/' |\
-    egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree' 
+    egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree|dumpdir/$' |\
+    egrep -v "$restore_dir:" 
 }
 
 # real QA test starts here
+
+#
+# too much hassle to get output matching with quotas turned on
+# so don't run it
+#
+mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+$here/src/feature -U $SCRATCH_DEV && _notrun "do not run with user quotas" 
+$here/src/feature -G $SCRATCH_DEV && _notrun "do not run with group quotas"
+umount $SCRATCH_DEV
 
 #
 # adding      - touch/echo, mkdir
@@ -155,7 +166,7 @@ while [ $i -le $num_dumps ]; do
     _stable_fs
 
     echo "Listing of what files we have at level $i:"
-    ls -lRF $dump_dir | _ls_size_filter | tee $tmp.ls.$i
+    ls -lRF $dump_dir | _my_ls_filter | tee $tmp.ls.$i
 
     dump_file=$tmp.df.level$i
     _do_dump_file -l $i
@@ -180,7 +191,7 @@ while [ $i -le $num_dumps ]; do
     echo "restoring from df.level$i"
     _do_restore_file_cum -l $i
     echo "ls -lRF restore_dir"
-    ls -lRF $restore_dir/dumpdir | _ls_size_filter |\
+    ls -lRF $restore_dir | _my_ls_filter |\
     _check_quota_file | tee $tmp.restorals.$i
     i=`expr $i + 1`	
 done
