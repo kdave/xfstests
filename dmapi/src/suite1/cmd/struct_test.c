@@ -80,6 +80,7 @@
 }
 
 
+char *Progname;
 
 int main(
 	int	argc,

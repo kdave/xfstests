@@ -45,12 +45,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static	char *	prog;
+char *	Progname;
+
 
 static void
 Usage(void)
 {
-	fprintf(stderr,"Usage: %s filename\n", prog);
+	fprintf(stderr,"Usage: %s filename\n", Progname);
 	exit(1);
 }
 
@@ -68,7 +69,7 @@ main(
 	int	fd;
 	int	i;
 
-	prog = argv[0];
+	Progname = argv[0];
 
 	if (argc != 2)
 		Usage();
@@ -77,7 +78,7 @@ main(
 	/* Create the file and make it a regular file. */
 
 	if ((fd = open(pathname, O_RDWR|O_CREAT|O_EXCL, 0600)) < 0) {
-		fprintf(stderr,"%s: Cannot open %s, %s\n", prog,
+		fprintf(stderr,"%s: Cannot open %s, %s\n", Progname,
 			pathname, strerror(errno));
 		exit(1);
 	}
@@ -87,7 +88,7 @@ main(
 	buflen = 1;
 	if ((buf = malloc(buflen)) == NULL) {
 		fprintf(stderr,"%s: malloc(%d) returned NULL\n",
-			prog, buflen);
+			Progname, buflen);
 		exit(1);
 	}
 	memset(buf, '\0', buflen);

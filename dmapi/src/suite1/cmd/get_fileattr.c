@@ -61,7 +61,9 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	dm_token_t	token = DM_NO_TOKEN;
-/*	char		buffer[500];*/
+#if 0
+	char		buffer[500];
+#endif
 	void		*hanp;
 	size_t		hlen;
 	dm_stat_t	dmstat;
@@ -130,7 +132,7 @@ main(
 
 		print_state(&dmstat);
 		(void)validate_state(&dmstat, pathname, 1);
-/* XXX Shut off for now
+#if 0
 	} else {
 		if ((rc = filesys_bulkscan_init(pathname, &scanp)) != 0) {
 			fprintf(stderr, "filesys_bulkscan failed, %s\n",
@@ -163,7 +165,7 @@ main(
 				fileio_err_image(rc));
 			exit(1);
 		}
-XXX Shut off for now.  */
+#endif
 	}
 	exit(0);
 }

@@ -50,7 +50,7 @@ extern	char	*sys_errlist[];
 extern  int     optind;
 extern  char    *optarg;
 
-static	char	*Progname;
+char	*Progname;
 
 
 static void

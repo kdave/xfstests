@@ -39,6 +39,7 @@
 
 #include <getopt.h>
 #ifdef linux
+#include <xfs/xfs_fs.h>
 #include <xfs/handle.h>
 #endif
 

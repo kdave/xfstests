@@ -43,6 +43,7 @@
 	symbol 'dmrlenp' for the dm_size_t cases.
 */
 
+char *Progname;
 
 int
 main(

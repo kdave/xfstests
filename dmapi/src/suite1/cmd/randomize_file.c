@@ -48,6 +48,7 @@
 #define	FIELD_WIDTH 21
 
 static	char	buffer[4096];
+char *Progname;
 
 int
 main(
@@ -61,6 +62,7 @@ main(
 	int	i;
 	int	j;
 
+	Progname = argv[0];
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s infile\n", argv[0]);
 		exit(1);

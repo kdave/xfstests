@@ -37,7 +37,8 @@
 #include <getopt.h>
 #ifdef linux
 #include <dmapi.h>
-#else
+#endif
+#ifdef __sgi
 #include <sys/dmi.h>
 #endif
 

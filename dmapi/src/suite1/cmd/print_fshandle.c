@@ -49,6 +49,7 @@
 
 #include <lib/dmport.h>
 
+char *Progname;
 
 static void
 hantoa(
@@ -84,6 +85,7 @@ main(
 		fprintf(stderr, "usage:	%s path\n", argv[0]);
 		exit(1);
 	}
+	Progname = argv[0];
 	(void)dm_init_service(&name);
 
 	if (dm_path_to_fshandle(argv[1], &fshanp, &fshlen) != 0) {

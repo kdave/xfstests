@@ -44,7 +44,7 @@ extern	int	optind;
 extern	int	opterr;
 extern	char	*optarg;
 
-static	char		*Progname;
+char		*Progname;
 
 #define MIN_HD_DATE     19800101
 #define MIN_HD_TMSTAMP  315554400       /* timestamp of 19800101 */

@@ -44,6 +44,8 @@
 
 #include <string.h>
 
+char *Progname;
+
 static void
 hantoa(
         void    *hanp,
@@ -73,6 +75,7 @@ main(
 		fprintf(stderr, "usage:	%s path\n", argv[0]);
 		exit(1);
 	}
+	Progname = argv[0];
 
 	(void)dm_init_service(&name);
 

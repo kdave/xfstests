@@ -59,6 +59,11 @@ usage(void)
 {
 	fprintf(stderr, "usage:\t%s sid token response reterror\n",
 		Progname);
+	fprintf(stderr, "  Response values:\n");
+	fprintf(stderr, "  %d = DM_RESP_INVALID\n", DM_RESP_INVALID);
+	fprintf(stderr, "  %d = DM_RESP_CONTINUE\n", DM_RESP_CONTINUE );
+	fprintf(stderr, "  %d = DM_RESP_ABORT\n", DM_RESP_ABORT);
+	fprintf(stderr, "  %d = DM_RESP_DONTCARE\n", DM_RESP_DONTCARE);
 	exit(1);
 }
 
