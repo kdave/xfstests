@@ -31,6 +31,11 @@ my $xdiff = $ENV{'XDIFF'};
 my $quiet = 0;
 my $usage = 0;
 
+if ( ! -f "$kworkarea/xfs_fs.h" ) {
+	$kworkarea .= '/fs/xfs';
+	die "Cannot find XFS in KWORKAREA" unless -f "$kworkarea/xfs_fs.h";
+}
+
 foreach (@ARGV) {
 	if (/^-q$/) {
 		$quiet++;
@@ -102,10 +107,10 @@ foreach (@pkglist) {
 }
 print "\n=== Checking headers ===\n";
 foreach (@difflist) {
-	straightdiff $_, 'xfsprogs/include', "$kworkarea/fs/xfs";
+	straightdiff $_, 'xfsprogs/include', "$kworkarea";
 }
-straightdiff 'dmapi_kern.h', 'dmapi/include', "$kworkarea/fs/xfs/dmapi";
-straightdiff 'dmapi.h', 'dmapi/include', "$kworkarea/fs/xfs/dmapi";
+straightdiff 'dmapi_kern.h', 'dmapi/include', "$kworkarea/dmapi";
+straightdiff 'dmapi.h', 'dmapi/include', "$kworkarea/dmapi";
 
 # 
 # setstate
@@ -284,7 +289,7 @@ my @funclist = qw(
 
 print "\n=== Checking libxfs code ===\n";
 foreach (@funclist) {
-	functiondiff $_, 'xfsprogs/libxfs', "$kworkarea/fs/xfs";
+	functiondiff $_, 'xfsprogs/libxfs', "$kworkarea";
 }
 print "\n=== Checking libxlog code ===\n";
-functiondiff 'xfs_log_recover.c', 'xfsprogs/libxlog', "$kworkarea/fs/xfs";
+functiondiff 'xfs_log_recover.c', 'xfsprogs/libxlog', "$kworkarea";
