@@ -95,45 +95,45 @@ mkfs -t xfs -f $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
 mount -t xfs $SCRATCH_DEV $SCRATCH_MNT || _fail "mount failed"
 _create_test_bed
 
-for nsp in user root; do
+for nsp in user xfsroot; do
 	for inode in reg dir lnk dev/b dev/c dev/p; do
 
 		echo; echo "=== TYPE $inode; NAMESPACE $nsp"; echo
 
 		echo "*** set/get one initially empty attribute"
-		setfattr -l -N $nsp -n name $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name $SCRATCH_MNT/$inode
+		getfattr -al -d $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty, set several new attributes"
-		setfattr -l -N $nsp -n name -v 0xbabe $SCRATCH_MNT/$inode
-		setfattr -l -N $nsp -n name2 -v 0xdeadbeef $SCRATCH_MNT/$inode
-		setfattr -l -N $nsp -n name3 -v 0xdeface $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name -v 0xbabe $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name2 -v 0xdeadbeef $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name3 -v 0xdeface $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (hex)"
-		getfattr -al -N $nsp -d -e hex $SCRATCH_MNT/$inode
+		getfattr -al -d -e hex $SCRATCH_MNT/$inode
 
 		echo "*** fetch several attribute names and values (base64)"
-		getfattr -al -N $nsp -d -e base64 $SCRATCH_MNT/$inode
+		getfattr -al -d -e base64 $SCRATCH_MNT/$inode
 
 		echo "*** shrink value of an existing attribute"
-		setfattr -l -N $nsp -n name2 -v 0xdeaf $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d -e hex $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name2 -v 0xdeaf $SCRATCH_MNT/$inode
+		getfattr -al -d -e hex $SCRATCH_MNT/$inode
 
 		echo "*** grow value of existing attribute"
-		setfattr -l -N $nsp -n name2 -v 0xdecade $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d -e hex $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name2 -v 0xdecade $SCRATCH_MNT/$inode
+		getfattr -al -d -e hex $SCRATCH_MNT/$inode
 
 		echo "*** set an empty value for second attribute"
-		setfattr -l -N $nsp -n name2 $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d -n name2 $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -al -d -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** overwrite empty value"
-		setfattr -l -N $nsp -n name2 -v 0xcafe $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d -e hex -n name2 $SCRATCH_MNT/$inode
+		setfattr -l -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
+		getfattr -al -d -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** remove attribute"
-		setfattr -l -N $nsp -x name2 $SCRATCH_MNT/$inode
-		getfattr -al -N $nsp -d -n name2 $SCRATCH_MNT/$inode
+		setfattr -l -x $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -al -d -n $nsp.name2 $SCRATCH_MNT/$inode
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
 		getfattr -als -d $SCRATCH_MNT/$inode
@@ -152,10 +152,10 @@ _extend_test_bed()
 	# must set some descents' attributes to be useful
 	mkdir -p $SCRATCH_MNT/here/up/ascend
 	mkdir -p $SCRATCH_MNT/descend/down/here
-	find $SCRATCH_MNT/descend | xargs setfattr -N user -n x -v yz
-	find $SCRATCH_MNT/descend | xargs setfattr -N user -n 1 -v 23
-	find $SCRATCH_MNT/here | xargs setfattr -N root -n a -v bc
-	find $SCRATCH_MNT/here | xargs setfattr -N root -n 9 -v 87
+	find $SCRATCH_MNT/descend | xargs setfattr -n user.x -v yz
+	find $SCRATCH_MNT/descend | xargs setfattr -n user.1 -v 23
+	find $SCRATCH_MNT/here | xargs setfattr -n root.a -v bc
+	find $SCRATCH_MNT/here | xargs setfattr -n root.9 -v 87
 	# whack a symlink in the middle, just to be difficult
 	ln -s $SCRATCH_MNT/here/up $SCRATCH_MNT/descend/and
 	# dump out our new starting point
