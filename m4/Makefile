@@ -41,6 +41,7 @@ LSRCFILES = \
 	package_dmapidev.m4 \
 	package_globals.m4 \
 	package_ncurses.m4 \
+	package_pthread.m4 \
 	package_types.m4 \
 	package_utilies.m4 \
 	package_uuiddev.m4 \

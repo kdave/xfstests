@@ -1,5 +1,5 @@
-#
-# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -33,10 +33,28 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-HFILES = dataascii.h databin.h pattern.h \
-	random_range.h string_to_tokens.h tlibio.h write_log.h
-LSRCFILES = builddefs.in buildrules
+TARGETS = doio fsstress fsx growfiles iogen
+CFILES = $(TARGETS:=.c)
+HFILES = doio.h
+LDIRT = $(TARGETS)
+LCFLAGS =
 
-default install install-dev:
+default: $(TARGETS)
 
 include $(BUILDRULES)
+LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
+
+doio: doio.c $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+
+fsstress: fsstress.c $(LIBATTR) $(LIBTEST)
+	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)
+
+fsx: fsx.c
+	$(LINKTEST) $(LDLIBS)
+
+growfiles: growfiles.c $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)
+
+iogen: iogen.c $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)

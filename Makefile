@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -39,11 +39,11 @@ endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs
-LSRCFILES = configure configure.in
-LDIRT = *.bad *.new *.core *.full *.raw core a.out *.bak \
-	check.log check.time config.* conftest*
+LSRCFILES = configure configure.in aclocal.m4 README VERSION
+LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
+	check.log check.time
 
-SUBDIRS = include src
+SUBDIRS = include lib ltp src m4
 
 default: $(CONFIGURE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
@@ -58,14 +58,13 @@ else
 clean:  # if configure hasn't run, nothing to clean
 endif
 
-$(CONFIGURE): configure.in include/builddefs.in
-	rm -f config.cache
+$(CONFIGURE):
 	autoconf
 	./configure
 
-install install-dev: default
-	$(SUBDIRS_MAKERULE)
+aclocal.m4::
+	aclocal --acdir=$(TOPDIR)/m4 --output=$@
 
 realclean distclean: clean
 	rm -f $(LDIRT) $(CONFIGURE)
-	rm -rf autom4te.cache
+	rm -rf autom4te.cache Logs

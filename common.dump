@@ -228,20 +228,12 @@ _require_tape()
     _set_variable
 }
 
-_error()
-{
-    echo "Error: $*" | tee -a $here/$seq.full
-    echo "(see $here/$seq.full for details)"
-    status=1
-    exit
-}
-
 _wipe_fs()
 {
     _require_scratch
 
-    _scratch_mkfs_xfs >>$here/$seq.full || _error "mkfs failed"
-    _scratch_mount >>$here/$seq.full || _error "mount failed"
+    _scratch_mkfs_xfs >>$here/$seq.full || _fail "mkfs failed"
+    _scratch_mount >>$here/$seq.full || _fail "mount failed"
 }
 
 # 
@@ -286,20 +278,20 @@ _cleanup()
 _stable_fs()
 {
     _saveddir=`pwd`; cd /
-    umount $SCRATCH_MNT >>$here/$seq.full || _error "unmount failed"
-    _scratch_mount >>$here/$seq.full || _error "mount failed"
+    umount $SCRATCH_MNT >>$here/$seq.full || _fail "unmount failed"
+    _scratch_mount >>$here/$seq.full || _fail "mount failed"
     cd $_saveddir
 }
 
 #
-# Run src/fsstress to create a mixture of 
+# Run fsstress to create a mixture of 
 # files,dirs,links,symlinks
 #
 # Pinched from test 013.
 #
 _create_dumpdir_stress()
 {
-    echo "Creating directory system to dump using src/fsstress."
+    echo "Creating directory system to dump using fsstress."
 
     _wipe_fs
 
@@ -315,7 +307,7 @@ _create_dumpdir_stress()
     echo "-----------------------------------------------"
     echo "fsstress : $_param"
     echo "-----------------------------------------------"
-    if ! $here/src/fsstress $_param -s 1 $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
+    if ! $here/ltp/fsstress $_param -s 1 $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
     then
         echo "    fsstress (count=$_count) returned $? - see $here/$seq.full"
         
@@ -452,8 +444,7 @@ _do_create_dumpdir_fill()
 {
     echo "Creating directory system to dump using src/fill."
 
-    mkdir -p $dump_dir ||\
-	_error "cannot mkdir \"$dump_dir\""
+    mkdir -p $dump_dir || _fail "cannot mkdir \"$dump_dir\""
     cd $dump_dir
 
     $verbose && echo -n "Setup "
@@ -524,8 +515,7 @@ _do_create_dumpdir_fill()
 _create_dumpdir_largefile()
 {
     _wipe_fs
-    mkdir -p $dump_dir ||\
-	_error "cannot mkdir \"$dump_dir\""
+    mkdir -p $dump_dir || _fail "cannot mkdir \"$dump_dir\""
     _largesize=4294967297
     _largefile=$dump_dir/largefile
     echo "dd a largefile at offset $_largesize"
@@ -598,8 +588,7 @@ _do_create_dump_symlinks()
 {
     echo "Creating directory system of symlinks to dump."
 
-    mkdir -p $dump_dir ||\
-	_error "cannot mkdir \"$dump_dir\""
+    mkdir -p $dump_dir || _fail "cannot mkdir \"$dump_dir\""
     cd $dump_dir
 
     $verbose && echo -n "Setup "
@@ -721,8 +710,7 @@ _create_dumpdir_hardlinks()
     _wipe_fs
     echo "Creating directory system of hardlinks to incrementally dump."
 
-    mkdir -p $dump_dir ||\
-	_error "cannot mkdir \"$dump_dir\""
+    mkdir -p $dump_dir || _fail "cannot mkdir \"$dump_dir\""
     cd $dump_dir
 
     _create_hardset $_numsets
@@ -838,12 +826,12 @@ _parse_args()
         case $1
         in
         -f)
-            [ -z "$2" ] && _error "missing argument for -f"
+            [ -z "$2" ] && _fail "missing argument for -f"
 	    dumptape=$2	
 	    shift
             ;;
         -L)
-            [ -z "$2" ] && _error "missing argument for -L"
+            [ -z "$2" ] && _fail "missing argument for -L"
 	    session_label=$2
 	    shift
             ;;
@@ -864,12 +852,12 @@ _parse_args()
             do_quota_check=false
             ;;
         -l)
-            [ -z "$2" ] && _error "missing argument for -l"
+            [ -z "$2" ] && _fail "missing argument for -l"
 	    dump_args="$dump_args -l$2"
 	    shift
             ;;
 	*)
-            _error "invalid argument to common.dump function: $1"
+            _fail "invalid argument to common.dump function: $1"
             ;;
         esac
 	shift
@@ -958,8 +946,7 @@ _do_dump_multi_file()
 _prepare_restore_dir()
 {
     rm -rf $restore_dir
-    mkdir $restore_dir ||\
-	_error "failed to mkdir $restore_dir"
+    mkdir $restore_dir || _fail "failed to mkdir $restore_dir"
 }
 
 

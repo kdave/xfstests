@@ -30,8 +30,13 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include "global.h"
+#include <xfs/libxfs.h>
 #include <attr/xattr.h>
+#include <attr/attributes.h>
+#include <sys/statvfs.h>
+#include <sys/time.h>
+#include <sys/wait.h>
+#include <dirent.h>
 
 #define XFS_ERRTAG_MAX		17
 
@@ -355,7 +360,7 @@ int main(int argc, char **argv)
 		seed = (int)t.tv_sec ^ (int)t.tv_usec;
 		printf("seed = %ld\n", seed);
 	}
-	i = ioctl(fd, XFS_IOC_FSGEOMETRY, &geom);
+	i = xfsctl(buf, fd, XFS_IOC_FSGEOMETRY, &geom);
 	if (i >= 0 && geom.rtblocks)
 		rtpct = MIN(MAX(geom.rtblocks * 100 /
 				(geom.rtblocks + geom.datablocks), 1), 99);
@@ -384,7 +389,7 @@ int main(int argc, char **argv)
 		printf("Injecting failure on tag #%d\n", errtag);
 		err_inj.errtag = errtag;
 		err_inj.fd = fd;
-		srval = ioctl(fd, XFS_IOC_ERROR_INJECTION, &err_inj);
+		srval = xfsctl(buf, fd, XFS_IOC_ERROR_INJECTION, &err_inj);
 		if (srval < -1) {
 			perror("fsstress - XFS_SYSSGI error injection call");
 			close(fd);
@@ -393,7 +398,6 @@ int main(int argc, char **argv)
 		}
 	} else
 		close(fd);
-	unlink(buf);
 	for (i = 0; i < nproc; i++) {
 		if (fork() == 0) {
 			procid = i;
@@ -406,15 +410,18 @@ int main(int argc, char **argv)
 	if (errtag != 0) {
 		err_inj.errtag = 0;
 		err_inj.fd = fd;
-		if((srval = ioctl(fd, XFS_IOC_ERROR_CLEARALL, &err_inj)) != 0) {
-			fprintf(stderr, "Bad ej clear on %d (%d).\n", fd, errno);
-			perror("fsstress - XFS_SYSSGI clear error injection call");
+		srval = xfsctl(buf, fd, XFS_IOC_ERROR_CLEARALL, &err_inj);
+		if (srval != 0) {
+			fprintf(stderr, "Bad ej clear on %s fd=%d (%d).\n",
+				buf, fd, errno);
+			perror("xfsctl(XFS_IOC_ERROR_CLEARALL)");
 			close(fd);
 			exit(1);
 		}
 		close(fd);
 	}
 
+	unlink(buf);
 	return 0;
 }
 
@@ -1340,10 +1347,10 @@ allocsp_f(int opno, long r)
 	fl.l_whence = SEEK_SET;
 	fl.l_start = off;
 	fl.l_len = 0;
-	e = ioctl(fd, XFS_IOC_ALLOCSP64, &fl) < 0 ? errno : 0;
+	e = xfsctl(f.path, fd, XFS_IOC_ALLOCSP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%d: ioctl(XFS_IOC_ALLOCSP64) %s %lld 0 %d\n",
-			procid, opno, f.path, off, e);
+		printf("%d/%d: xfsctl(XFS_IOC_ALLOCSP64) %s %lld 0 %d\n",
+			procid, opno, f.path, (long long)off, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -1463,12 +1470,12 @@ bulkstat_f(int opno, long r)
         bsr.ubuffer=t;
         bsr.ocount=&count;
             
-	while (ioctl(fd, XFS_IOC_FSBULKSTAT, &bsr) == 0 && count > 0)
+	while (xfsctl(".", fd, XFS_IOC_FSBULKSTAT, &bsr) == 0 && count > 0)
 		total += count;
 	free(t);
 	if (verbose)
-		printf("%d/%d: bulkstat nent %d total %lld\n",
-			procid, opno, nent, total);
+		printf("%d/%d: bulkstat nent %d total %llu\n",
+			procid, opno, nent, (long long)total);
 	close(fd);
 }
 
@@ -1520,10 +1527,10 @@ bulkstat1_f(int opno, long r)
         bsr.ubuffer=&t;
         bsr.ocount=NULL;
         
-	e = ioctl(fd, XFS_IOC_FSBULKSTAT_SINGLE, &bsr) < 0 ? errno : 0;
+	e = xfsctl(".", fd, XFS_IOC_FSBULKSTAT_SINGLE, &bsr) < 0 ? errno : 0;
 	if (v)
 		printf("%d/%d: bulkstat1 %s ino %lld %d\n", 
-                    procid, opno, good?"real":"random", (int64_t)ino, e);
+                    procid, opno, good?"real":"random", (long long)ino, e);
 	close(fd);
 }
 
@@ -1591,11 +1598,12 @@ creat_f(int opno, long r)
 	e1 = 0;
 	check_cwd();
 	if (fd >= 0) {
-		if (extsize && ioctl(fd, XFS_IOC_FSGETXATTR, &a) >= 0) {
+		if (extsize &&
+		    xfsctl(f.path, fd, XFS_IOC_FSGETXATTR, &a) >= 0) {
 			a.fsx_xflags |= XFS_XFLAG_REALTIME;
 			a.fsx_extsize =
 				geom.rtextsize * geom.blocksize * extsize;
-			if (ioctl(fd, XFS_IOC_FSSETXATTR, &a) < 0)
+			if (xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &a) < 0)
 				e1 = errno;
 		}
 		add_to_flist(type, id, parid);
@@ -1655,10 +1663,10 @@ dread_f(int opno, long r)
 		close(fd);
 		return;
 	}
-	if (ioctl(fd, XFS_IOC_DIOINFO, &diob) < 0) {
+	if (xfsctl(f.path, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 		if (v)
 			printf(
-			"%d/%d: dread - ioctl(fd, XFS_IOC_DIOINFO) %s failed %d\n",
+			"%d/%d: dread - xfsctl(XFS_IOC_DIOINFO) %s failed %d\n",
 				procid, opno, f.path, errno);
 		free_pathname(&f);
 		close(fd);
@@ -1680,7 +1688,7 @@ dread_f(int opno, long r)
 	free(buf);
 	if (v)
 		printf("%d/%d: dread %s [%lld,%d] %d\n",
-			procid, opno, f.path, off, len, e);
+			procid, opno, f.path, (long long)off, (int)len, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -1725,10 +1733,10 @@ dwrite_f(int opno, long r)
 		close(fd);
 		return;
 	}
-	if (ioctl(fd, XFS_IOC_DIOINFO, &diob) < 0) {
+	if (xfsctl(f.path, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 		if (v)
-			printf(
-			"%d/%d: dwrite - ioctl(fd, XFS_IOC_DIOINFO) %s failed %d\n",
+			printf("%d/%d: dwrite - xfsctl(XFS_IOC_DIOINFO)"
+				" %s failed %d\n",
 				procid, opno, f.path, errno);
 		free_pathname(&f);
 		close(fd);
@@ -1753,7 +1761,7 @@ dwrite_f(int opno, long r)
 	free(buf);
 	if (v)
 		printf("%d/%d: dwrite %s [%lld,%d] %d\n",
-			procid, opno, f.path, off, len, e);
+			procid, opno, f.path, (long long)off, (int)len, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -1834,10 +1842,10 @@ freesp_f(int opno, long r)
 	fl.l_whence = SEEK_SET;
 	fl.l_start = off;
 	fl.l_len = 0;
-	e = ioctl(fd, XFS_IOC_FREESP64, &fl) < 0 ? errno : 0;
+	e = xfsctl(f.path, fd, XFS_IOC_FREESP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%d: ioctl(XFS_IOC_FREESP64) %s %lld 0 %d\n",
-			procid, opno, f.path, off, e);
+		printf("%d/%d: xfsctl(XFS_IOC_FREESP64) %s %lld 0 %d\n",
+			procid, opno, f.path, (long long)off, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -2077,7 +2085,7 @@ read_f(int opno, long r)
 	free(buf);
 	if (v)
 		printf("%d/%d: read %s [%lld,%d] %d\n",
-			procid, opno, f.path, off, len, e);
+			procid, opno, f.path, (long long)off, (int)len, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -2204,10 +2212,11 @@ resvsp_f(int opno, long r)
 	fl.l_whence = SEEK_SET;
 	fl.l_start = off;
 	fl.l_len = (off64_t)(random() % (1024 * 1024));
-	e = ioctl(fd, XFS_IOC_RESVSP64, &fl) < 0 ? errno : 0;
+	e = xfsctl(f.path, fd, XFS_IOC_RESVSP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%d: ioctl(XFS_IOC_RESVSP64) %s %lld %lld %d\n",
-			procid, opno, f.path, off, fl.l_len, e);
+		printf("%d/%d: xfsctl(XFS_IOC_RESVSP64) %s %lld %lld %d\n",
+			procid, opno, f.path,
+			(long long)off, (long long)fl.l_len, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -2347,7 +2356,7 @@ truncate_f(int opno, long r)
 	check_cwd();
 	if (v)
 		printf("%d/%d: truncate %s %lld %d\n", procid, opno, f.path,
-			off, e);
+			(long long)off, e);
 	free_pathname(&f);
 }
 
@@ -2419,10 +2428,11 @@ unresvsp_f(int opno, long r)
 	fl.l_whence = SEEK_SET;
 	fl.l_start = off;
 	fl.l_len = (off64_t)(random() % (1 << 20));
-	e = ioctl(fd, XFS_IOC_UNRESVSP64, &fl) < 0 ? errno : 0;
+	e = xfsctl(f.path, fd, XFS_IOC_UNRESVSP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%d: ioctl(XFS_IOC_UNRESVSP64) %s %lld %lld %d\n",
-			procid, opno, f.path, off, fl.l_len, e);
+		printf("%d/%d: xfsctl(XFS_IOC_UNRESVSP64) %s %lld %lld %d\n",
+			procid, opno, f.path,
+			(long long)off, (long long)fl.l_len, e);
 	free_pathname(&f);
 	close(fd);
 }
@@ -2476,7 +2486,7 @@ write_f(int opno, long r)
 	free(buf);
 	if (v)
 		printf("%d/%d: write %s [%lld,%d] %d\n",
-			procid, opno, f.path, off, len, e);
+			procid, opno, f.path, (long long)off, (int)len, e);
 	free_pathname(&f);
 	close(fd);
 }

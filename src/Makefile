@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -34,53 +34,38 @@ TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
 TARGETS = alloc acl_get bstat devzero dirstress fault feature \
-	  fsstress fill fill2 getpagesize holes xfsctl loggen lstat64 \
+	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
 	  nametest permname randholes runas truncfile usemem \
 	  fstest mmapcat append_reader append_writer
-ifeq ($(HAVE_DB), true)
+ifeq ($(ENABLE_DBM), yes)
 TARGETS += dbtest
 endif
 
-CFILES = $(TARGETS:=.c) random.c
-HFILES = global.h
+CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 
 default: $(TARGETS)
 
 include $(BUILDRULES)
+LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
-install install-dev: default
+randholes: randholes.o $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)
 
-# binaries using non-default objects/libs need an entry below
-# 
-RANDHOLES_OBJECTS = randholes.o random.o
-randholes:	$(HFILES) $(RANDHOLES_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(RANDHOLES_OBJECTS) $(LDLIBS)
+truncfile: truncfile.o $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)
 
-TRUNCFILE_OBJECTS = truncfile.o random.o
-truncfile:	$(HFILES) $(TRUNCFILE_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(TRUNCFILE_OBJECTS) $(LDLIBS)
+dbtest:	dbtest.o $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LIBGDBM) $(LDLIBS)
 
-FSSTRESS_OBJECTS = fsstress.o random.o $(LIBATTR)
-fsstress:	$(HFILES) $(FSSTRESS_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(FSSTRESS_OBJECTS) $(LDLIBS)
+nametest: nametest.o $(LIBTEST)
+	$(LINKTEST) $(LIBTEST) $(LDLIBS)
 
-DBTEST_OBJECTS = dbtest.o random.o
-dbtest:		$(HFILES) $(DBTEST_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(DBTEST_OBJECTS) $(LIBGDBM) $(LDLIBS)
+bstat: bstat.o $(LIBHANDLE)
+	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
 
-NAMETEST_OBJECTS = nametest.o random.o
-nametest:	$(HFILES) $(NAMETEST_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(NAMETEST_OBJECTS) $(LDLIBS)
+loggen:	loggen.o $(LIBXFS)
+	$(LINKTEST) $(LIBXFS) $(LDLIBS)
 
-BSTAT_OBJECTS = bstat.o
-bstat:		$(HFILES) $(BSTAT_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(BSTAT_OBJECTS) $(LIBHANDLE) $(LDLIBS)
-
-LOGGEN_OBJECTS = loggen.o $(LIBXFS)
-loggen:		$(HFILES) $(LOGGEN_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(LOGGEN_OBJECTS) $(LDLIBS)
-
-ACLGET_OBJECTS = acl_get.o $(LIBACL) $(LIBATTR)
-acl_get:	$(HFILES) $(ACLGET_OBJECTS)
-		$(CCF) -o $@ $(LDFLAGS) $(ACLGET_OBJECTS) $(LDLIBS)
+acl_get: acl_get.o $(LIBACL) $(LIBATTR)
+	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -45,124 +45,52 @@ LIBATTR = @libattr@
 LIBGDBM = @libgdbm@
 LIBUUID = @libuuid@
 LIBHANDLE = @libhdl@
-HAVE_DB = @have_db@
-CPPFLAGS = -I/usr/include/xfs -I/usr/include/attr
+LIBTEST = $(TOPDIR)/lib/libtest.la
 
-BUILDRULES = $(TOPDIR)/include/buildrules
+PKG_NAME        = @pkg_name@
+PKG_USER        = @pkg_user@
+PKG_GROUP       = @pkg_group@
+PKG_RELEASE     = @pkg_release@
+PKG_VERSION     = @pkg_version@
+PKG_PLATFORM    = @pkg_platform@
+PKG_DISTRIBUTION= @pkg_distribution@
 
-# General package information
-PKG_NAME = @pkg_name@
-PKG_RELEASE = @pkg_release@
-PKG_VERSION = @pkg_version@
-PKG_DISTRIBUTION = @pkg_distribution@
-PKG_BUILDER = @pkg_builder@
-PKG_BIN_DIR = @pkg_bin_dir@
-PKG_LIB_DIR = @pkg_lib_dir@
-PKG_SBIN_DIR = @pkg_sbin_dir@
-PKG_SLIB_DIR = @pkg_slib_dir@
-PKG_INC_DIR = @pkg_inc_dir@
-PKG_MAN_DIR = @pkg_man_dir@
-PKG_DOC_DIR = @pkg_doc_dir@
+CC              = @cc@
+AWK             = @awk@
+SED             = @sed@
+TAR             = @tar@
+ZIP             = @zip@
+MAKE            = @make@
+ECHO            = @echo@
+SORT            = @sort@
+LN_S            = @LN_S@
+LIBTOOL         = @LIBTOOL@
+MAKEDEPEND      = @makedepend@
 
-# LCFLAGS, LLDFLAGS, LLDLIBS, LSRCFILES and LDIRT may be specified in
-# user Makefiles. Note: LSRCFILES is anything other than Makefile, $(CFILES)
-# $(CXXFILES), or $(HFILES) and is used to construct the manifest list
-# during the "dist" phase (packaging).
+MSGFMT          = @msgfmt@
+MSGMERGE        = @msgmerge@
 
-CFLAGS += -O1 $(OPTIMIZER) $(DEBUG) -funsigned-char -Wall $(LCFLAGS) \
-	-I$(TOPDIR)/include '-DVERSION="$(PKG_VERSION)"' -D_GNU_SOURCE \
-	-D_FILE_OFFSET_BITS=64
+RPM             = @rpm@
+RPMBUILD        = @rpmbuild@
+RPM_VERSION     = @rpm_version@
 
-LDFLAGS = $(LLDFLAGS)
-LDLIBS = $(LLDLIBS) $(MALLOCLIB)
+ENABLE_SHARED = @enable_shared@
+ENABLE_DBM = @enable_dbm@
 
-MAKEOPTS = --no-print-directory
-SRCFILES = Makefile $(HFILES) $(CFILES) $(LSRCFILES) $(LFILES) $(YFILES)
-DIRT = $(LDIRT) dep dep.bak $(OBJECTS) $(CMDTARGET) $(LIBTARGET) \
-	$(STATICLIBTARGET) *.[1-9].gz
+ifeq ($(PKG_PLATFORM),linux)
+PCFLAGS = -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64
+endif
+ifeq ($(PKG_PLATFORM),darwin)
+PCFLAGS = -traditional-cpp
+endif
 
-OBJECTS = $(ASFILES:.s=.o) \
-          $(CFILES:.c=.o) \
-          $(LFILES:.l=.o) \
-          $(YFILES:%.y=%.tab.o)
+CFLAGS += -O1 $(OPTIMIZER) $(DEBUG) -funsigned-char -Wall -I$(TOPDIR)/include \
+	-DVERSION=\"$(PKG_VERSION)\"
 
-MAKE	= @make@
-CC	= @cc@
-LD	= @ld@
-AWK	= @awk@
-SED	= @sed@
-INSTALL	= $(TOPDIR)/install-sh -o root -g root
-ECHO	= @echo@
-LN_S	= @LN_S@
+# Global, Platform, Local CFLAGS
+CFLAGS += $(GCFLAGS) $(PCFLAGS) $(LCFLAGS)
 
-CCF	= $(CC) $(CFLAGS)
-MAKEF	= $(MAKE) $(MAKEOPTS)
-CXXF	= $(CXX) $(CXXFLAGS)
-LDF	= $(LD) $(LDFLAGS)
-MAKEDEPEND  = @makedepend@
-
-ZIP	= @zip@
-TAR	= @tar@
-RPM	= @rpm@
-RPM_VERSION = @rpm_version@
-
-HAVE_ZIPPED_MANPAGES = @have_zipped_manpages@
-
-SHELL = /bin/sh
-IMAGES_DIR = $(TOPDIR)/all-images
-DIST_DIR = $(TOPDIR)/dist
-
-SUBDIRS_MAKERULE = \
-	@for d in $(SUBDIRS) ""; do \
-	    if test -d "$$d" -a ! -z "$$d"; then \
-		$(ECHO) === $$d ===; \
-		$(MAKEF) -C $$d $@ || exit $$?; \
-	    fi; \
-	done
-
-MAN_MAKERULE = \
-    @for f in *.[12345678] ""; do \
-	if test ! -z "$$f"; then \
-	    $(ZIP) --best -c < $$f > $$f.gz; \
-	fi; \
-    done
-
-INSTALL_MAN = \
-    @for d in $(MAN_PAGES); do \
-	first=true; \
-	for m in `$(AWK) '/^\.SH NAME/ {ok=1; next} ok {print; exit}' $$d \
-	| sed -e 's/,/ /g' -e 's/\\-.*//' -e 's/\\\f[0-9]//g' -e 's/  / /g;q'`; \
-	do \
-	    [ -z "$$m" -o "$$m" = "\\" ] && continue; \
-	    t=$(MAN_DEST)/$$m.$(MAN_SECTION); \
-	    if $$first; then \
-		if $(HAVE_ZIPPED_MANPAGES); then \
-		    $(ZIP) --best -c $$d > $$d.gz; _sfx=.gz; \
-		fi; \
-		u=$$m.$(MAN_SECTION)$$_sfx; \
-		echo $(INSTALL) -m 644 $${d}$$_sfx $${t}$$_sfx; \
-		$(INSTALL) -m 644 $${d}$$_sfx $${t}$$_sfx; \
-	    else \
-		echo $(INSTALL) -S $$u $${t}$$_sfx; \
-		$(INSTALL) -S $$u $${t}$$_sfx; \
-	    fi; \
-	    first=false; \
-	done; \
-    done
-
-DIST_MAKERULE = \
-	$(MAKEF) -C build dist
-
-SOURCE_MAKERULE = \
-	@test -z "$$DIR" && DIR="."; \
-	for f in $(SRCFILES) ""; do \
-	    if test ! -z "$$f"; then $(ECHO) $$DIR/$$f; fi;\
-	done; \
-	for d in `echo $(SUBDIRS)` ; do \
-	    if test -d "$$d" -a ! -z "$$d"; then \
-		$(MAKEF) DIR=$$DIR/$$d -C $$d $@ || exit $$?; \
-	    fi; \
-	done
+include $(TOPDIR)/include/buildmacros
 
 endif
 
