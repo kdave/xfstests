@@ -56,7 +56,7 @@ static void reqval(char, char * [], int);
 static void respec(char, char * [], int);
 static void unknown(char, char *);
 static void usage(void);
-static char *progname;
+char *progname;
 
 char *dopts[] =		{ "nbytes", "linelength", "seed", "file", NULL };
 enum			{ D_NBYTES, D_LINELENGTH, D_SEED, D_FILE, D_ISSET, D_NUM };
