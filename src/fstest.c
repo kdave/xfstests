@@ -1,19 +1,13 @@
 /* Verification tool, designed to detect data corruption on a filesystem
 
    tridge@samba.org, March 2002
+   
+   XFS space preallocation changes -- lord@sgi.com, April 2003
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 #include <dirent.h>
-#include <fcntl.h>
-#include <errno.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <xfs/libxfs.h>
 
 /* variables settable on the command line */
 static int loop_count = 100;
@@ -22,6 +16,7 @@ static int file_size = 1024*1024;
 static int block_size = 1024;
 static char *base_dir = ".";
 static int use_mmap;
+static int do_prealloc;
 static int use_sync;
 static int do_frags = 1;
 
@@ -78,6 +73,8 @@ static void check_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
 		for (j=0;j<MIN(20, block_size-i);j++) {
 			printf("%02x ", buf[j+i]);
 		}
+		for (j=i;buf[j] == buf2[j] && j<block_size;j++) ;
+		printf("Corruption length: %d\n", j - i);
 		printf("\n");
 		exit(1);
 	}
@@ -100,6 +97,19 @@ static void create_file(const char *dir, int loop, int child, int fnum)
 	if (fd == -1) {
 		perror(fname);
 		exit(1);
+	}
+
+	if (do_prealloc) {
+		xfs_flock64_t	resv;
+
+		resv.l_whence = 0;
+		resv.l_start = 0;
+		resv.l_len = file_size;
+
+		if ((xfsctl(fname, fd, XFS_IOC_RESVSP, &resv)) < 0) {
+			perror(fname);
+			exit(1);
+		}
 	}
 		
 	if (!use_mmap) {
@@ -248,6 +258,7 @@ static void usage(void)
 " -l loops              set loop count\n"
 " -m                    use mmap\n"
 " -S                    use synchronous IO\n"
+" -P			preallocate space\n"
 " -h                    show this help message\n");
 }
 
@@ -260,7 +271,7 @@ int main(int argc, char *argv[])
 	int num_children = 1;
 	int i, status, ret;
 
-	while ((c = getopt(argc, argv, "Fn:s:f:p:l:b:Shm")) != -1) {
+	while ((c = getopt(argc, argv, "FPn:s:f:p:l:b:Shm")) != -1) {
 		switch (c) {
 		case 'F':
 			do_frags = 2;
@@ -282,6 +293,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'm':
 			use_mmap = 1;
+			break;
+		case 'P':
+			do_prealloc = 1;
 			break;
 		case 'S':
 			use_sync = 1;
