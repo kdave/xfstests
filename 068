@@ -1,6 +1,6 @@
 #! /bin/sh
 # XFS QA Test No. 068
-# $Id: 068,v 1.2 2002/09/03 06:34:06 fsgqa Exp $
+# $Id: 068,v 1.3 2002/09/03 23:15:38 nathans Exp $
 #
 # Test Linux LVM snapshot creation
 #
@@ -47,6 +47,7 @@ echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
+mkdir "$tmp"
 status=1	# failure is the default!
 
 # Either "dd" or "fsstress" can be used to generate io load.
@@ -103,7 +104,8 @@ trap "_cleanup" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
-[ -e "$SCRATCH_SNAP_MNT" ] && rm -rf "$SCRATCH_SNAP_MNT"
+if [ -e "$SCRATCH_SNAP_MNT" ]; then
+	rmdir "$SCRATCH_SNAP_MNT" || _notrun "Cannot rmdir $SCRATCH_SNAP_MNT"
 mkdir "$SCRATCH_SNAP_MNT"
 
 #Verify we have the lvm user tools
@@ -207,7 +209,6 @@ do
 		ret=$?
 		[ $ret != 0 ] && \
 			echo "Snapshot $SCRATCH_MNT create failed, status=$ret"
-		fi
 	) &
 	SNAPSHOT_shell_pid=$!
 
