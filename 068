@@ -1,6 +1,6 @@
 #! /bin/sh
 # XFS QA Test No. 068
-# $Id: 068,v 1.3 2002/09/03 23:15:38 nathans Exp $
+# $Id: 068,v 1.4 2002/09/04 10:58:49 fsgqa Exp $
 #
 # Test Linux LVM snapshot creation
 #
@@ -69,7 +69,7 @@ _cleanup()
 {
 	echo Cleanup beginning
 
-	rm "$tmp/running" > /dev/null 2>&1
+	rm "$tmp/running"
 	xfs_freeze -u "$SCRATCH_MNT"
 
 	sleep 10      # Give the dd loop time to finish
@@ -106,6 +106,7 @@ trap "_cleanup" 0 1 2 3 15
 
 if [ -e "$SCRATCH_SNAP_MNT" ]; then
 	rmdir "$SCRATCH_SNAP_MNT" || _notrun "Cannot rmdir $SCRATCH_SNAP_MNT"
+fi
 mkdir "$SCRATCH_SNAP_MNT"
 
 #Verify we have the lvm user tools
@@ -123,10 +124,10 @@ mkdir "$SCRATCH_SNAP_MNT"
 LVM=false
 
 # Check if LVM 1 is in the kernel
-if grep lvm /proc/devices > /dev/null 2>&1; then LVM=true; fi
+if grep lvm /proc/devices > /dev/null; then LVM=true; fi
 
 # Check if LVM 2 is in the kernel
-if grep device-mapper /proc/devices > /dev/null 2>&1; then LVM=true; fi
+if grep device-mapper /proc/devices > /dev/null; then LVM=true; fi
 
 # Check if EVMS is in the kernel
 #TODO   # I don't know how to do this one.
@@ -148,13 +149,13 @@ if grep device-mapper /proc/devices > /dev/null 2>&1; then LVM=true; fi
 #TODO # lvcreate -L 2G -n scratch "$VG"
 
 # Mount the LV
-mkdir "$SCRATCH_MNT" > /dev/null 2&>1
+mkdir "$SCRATCH_MNT"
 
 mount "$VG/scratch" "$SCRATCH_MNT"
 
 touch "$tmp/running"
 
-if [ "$GENERATE_IO_LOAD_VIA_DD" != FALSE ];
+if [ "$GENERATE_IO_LOAD_VIA_DD" != FALSE ]
 then
 	# Create a large 64 Meg zero filled file on the LV
 	dd if=/dev/zero of=$SCRATCH_MNT/dummy bs=64k count=1000 >/dev/null 2>&1
@@ -171,7 +172,7 @@ then
 	done 
 fi &
 
-if [ "$GENERATE_IO_LOAD_VIA_FSSTRESS" != FALSE ];
+if [ "$GENERATE_IO_LOAD_VIA_FSSTRESS" != FALSE ]
 then
 	STRESS_DIR="$SCRATCH_MNT/fsstress_test_dir"
 	mkdir "$STRESS_DIR"
@@ -200,9 +201,7 @@ do
 	# are redundant, but should cause no problems
 	#       OPTIONAL
 	xfs_freeze -f "$SCRATCH_MNT"
-	if [ $? != 0 ] ; then
-		echo xfs_freeze -f "$SCRATCH_MNT" failed
-	fi
+	[ $? != 0 ] && echo xfs_freeze -f "$SCRATCH_MNT" failed
 	(
 		lvcreate --snapshot --size 1G --name scratch_snap "$VG/scratch"\
 			> /dev/null 2>&1
@@ -238,23 +237,17 @@ do
 	# are redundant, but should cause no problems
 	#       OPTIONAL
 	xfs_freeze -u "$SCRATCH_MNT"
-	if [ $? != 0 ] ; then
-		echo xfs_freeze -u "$SCRATCH_MNT" failed
-	fi
+	[ $? != 0 ] && echo xfs_freeze -u "$SCRATCH_MNT" failed
 	#	  MANDANTORY   (end)
 
 	mount -t xfs -o ro,nouuid "$VG/scratch_snap" "$SCRATCH_SNAP_MNT"
-	if [ $? != 0 ] ; then
-		echo mount for "$SCRATCH_SNAP_MNT" failed
-	fi
+	[ $? -eq 0 ] || echo mount for "$SCRATCH_SNAP_MNT" failed
+
 	umount "$SCRATCH_SNAP_MNT"
-	if [ $? != 0 ] ; then
-		echo umount for "$SCRATCH_SNAP_MNT" failed
-	fi
+	[ $? -eq 0 ] || echo umount for "$SCRATCH_SNAP_MNT" failed
+
 	lvremove -f "$VG/scratch_snap" > /dev/null 2>&1
-	if [ $? != 0 ] ; then
-	       echo lvremove for "$VG/scratch_snap" failed
-	fi
+	[ $? -eq 0 ] || echo lvremove for "$VG/scratch_snap" failed
 
 	ii=`expr $ii + 1`
 
