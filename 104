@@ -1,0 +1,128 @@
+#! /bin/sh
+# FS QA Test No. 104
+#
+# XFS online growfs-while-allocating tests (data subvol variant)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_create_scratch()
+{
+	echo "*** mkfs"
+	_scratch_mkfs_xfs $@ | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
+	. $tmp.mkfs
+
+	echo "*** mount"
+	if ! _scratch_mount 2>/dev/null
+	then
+		echo "failed to mount $SCRATCH_DEV"
+		exit 1
+	fi
+}
+ 
+_fill_scratch()
+{
+	xfs_io -f -c "resvsp 0 ${1}" $SCRATCH_MNT/resvfile
+}
+
+_stress_scratch()
+{
+	procs=3
+	nops=1000
+	# -w ensures that the only ops are ones which cause write I/O
+	ltp/fsstress -d $SCRATCH_MNT -w -p $procs -n $nops $FSSTRESS_AVOID &
+}
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_scratch_mkfs_xfs | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
+. $tmp.mkfs	# extract blocksize and data size for scratch device
+
+endsize=`expr 550 \* 1048576`	# stop after growing this big
+incsize=`expr  42 \* 1048576`	# grow in chunks of this size
+modsize=`expr   4 \* $incsize`	# pause after this many increments
+
+[ `expr $endsize / $dbsize` -lt $dblocks ] || _notrun "Scratch device too small"
+
+nags=4
+size=`expr 120 \* 1048576`	# 120 megabytes initially
+sizeb=`expr $size / $dbsize`	# in data blocks
+echo "*** creating scratch filesystem"
+_create_scratch -dsize=${size} -dagcount=${nags}
+
+fillsize=`expr 110 \* 1048576`	# 110 megabytes of filling
+echo "*** using some initial space on scratch filesystem"
+_fill_scratch $fillsize
+
+# 
+# Grow the filesystem while actively stressing it...
+# Kick off more stress threads on each iteration, grow; repeat.
+# 
+while [ $size -le $endsize ]; do
+	echo "*** stressing a ${size} byte filesystem"
+	echo "*** stressing a ${sizeb} block filesystem" >> $seq.full
+	_stress_scratch
+	sleep 1
+	size=`expr $size + $incsize`
+	sizeb=`expr $size / $dbsize`	# in data blocks
+	echo "*** growing to a ${size} byte filesystem"
+	echo "*** growing to a ${sizeb} block filesystem" >> $seq.full
+	xfs_growfs -D ${sizeb} $SCRATCH_MNT \
+		| tee -a $seq.full | _filter_mkfs 2>$tmp.growfs
+	. $tmp.growfs
+	[ `expr $size % $modsize` -eq 0 ] && wait	# every 4th iteration
+	echo AGCOUNT=$agcount | tee -a $seq.full
+	echo && echo >> $seq.full
+done
+wait	# stop for any remaining stress processes
+
+umount $SCRATCH_DEV
+_check_scratch_fs
+
+status=0
+exit
