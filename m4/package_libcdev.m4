@@ -8,7 +8,7 @@ AC_DEFUN([AC_HAVE_FADVISE],
 #define _FILE_OFFSET_BITS 64
 #include <fcntl.h>
     ], [
-	posix_fadvise(0, 1, 0, 0);
+	posix_fadvise(0, 1, 0, POSIX_FADV_NORMAL);
     ],	have_fadvise=yes
 	AC_MSG_RESULT(yes),
 	AC_MSG_RESULT(no))
