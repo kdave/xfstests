@@ -33,6 +33,15 @@
 
 # automatic qa system. 31/08/00 dxm@sgi.com
 
+# configuration (you could tune this)
+
+EXTRA="-xfs-qa"
+BOOT="/boot"
+SOAK_PASSES="-1"
+SOAK_STRESS="10000"
+SOAK_PROC="3"
+
+
 _log()
 {
     echo "$*" >&2
@@ -62,14 +71,24 @@ _fail()
     exit 1
 }
 
-# configuration (you could tune this)
+_get_kernel_version()
+{
+    [ -x $WORKAREA ] \
+        || _fail "can't access workarea $WORKAREA"
+    [ -r $WORKAREA/linux/Makefile ] \
+        || _fail "can't read makefile $WORKAREA/linux/Makefile"
 
-EXTRA="-xfs-qa"
-VERSION="2.4.6-pre3"
-BOOT="/boot"
-SOAK_PASSES="-1"
-SOAK_STRESS="10000"
-SOAK_PROC="3"
+    eval `awk '
+        BEGIN { FS = "[ \t=]+" }
+        /^VERSION =/ { a=$2 }
+        /^PATCHLEVEL =/ { b=$2 }
+        /^SUBLEVEL =/ { c=$2 }
+        /^EXTRAVERSION =/ { d=$2 }
+	END { 
+	    print "VERSION=" a "." b "." c d " ; SVERSION=" a "." b "." c
+        }
+   ' < $WORKAREA/linux/Makefile`
+}
 
 # this should be constant
 
@@ -82,14 +101,12 @@ else
 fi
 export WORKAREA
 
+
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
 STATE=$ROOT/qa.state
 QADIR="$WORKAREA/cmd/xfstests"
 SUDO="su -c"
-IMAGE="$BOOT/vmlinuz-$VERSION$EXTRA"
-SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
 CONFIG="$ROOT/$HOST.config"
-MODULES="/lib/modules/$VERSION$EXTRA"
 COMMON_CONFIG="$WORKAREA/cmd/xfstests/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
@@ -271,6 +288,11 @@ fi
 [ -r $CONFIG ]          || _fail "    !!! Can't read config file $CONFIG"
 . $COMMON_CONFIG 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
 
+_get_kernel_version
+IMAGE="$BOOT/vmlinuz$EXTRA"
+SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
+MODULES="/lib/modules/$SVERSION"
+
 cd $ROOT
 
 started=1
@@ -289,9 +311,11 @@ do
         *init)
             echo "" > $ROOT/qa.log
             echo "" > $ROOT/qa.full
-            _log "******************************************"
-            _log "QA init (`date`)"
-            _log "******************************************"
+            _log "******************************************************"
+            _log "QA init $VERSION (`date`)"
+            _log "******************************************************"
+	    _log "--- kernel ($IMAGE)"
+	    _log "--- modules ($MODULES)"
 
             _change_state "inited"
             _update_autoqa_file
@@ -427,9 +451,9 @@ do
             _log "            *** kernel"
             ls -l /boot/*$EXTRA*  2>&1
             _log "            *** kernel modules"
-            ls -l /lib/modules/$VERSION$EXTRA/kernel/fs/pagebuf/* \
-                  /lib/modules/$VERSION$EXTRA/kernel/fs/xfs/*     \
-                  /lib/modules/$VERSION$EXTRA/kernel/fs/xfs_support/* 
+            ls -l /lib/modules/$SVERSION$EXTRA/kernel/fs/pagebuf/* \
+                  /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs/*     \
+                  /lib/modules/$SVERSION$EXTRA/kernel/fs/xfs_support/* 
             
             if [ $MODULAR -eq 0 ]
             then
