@@ -20,7 +20,7 @@ use strict;
 #     > s/^.* (xfs\w+|\*xfs\w+|xlog\w+|\*xlog\w+) \(.*/\1/ && { $count++ }'
 #     > echo $file
 #     > done
-# (compare this to "srcdiff | fgrep Total:") ... repeat for logprint.
+# (compare this to "srcdiff | fgrep Total:")
 # 
 
 die "WORKAREA not set" unless defined $ENV{'WORKAREA'};
@@ -30,12 +30,12 @@ my $quiet=0;
 my $usage=0;
 
 foreach (@ARGV) {
-    if (/^-q$/) {
-        $quiet++;
-    } else {
-        print STDERR "Illegal option $_\n";
-        $usage++;
-    }
+	if (/^-q$/) {
+		$quiet++;
+	} else {
+		print STDERR "Illegal option $_\n";
+		$usage++;
+	}
 }
 
 if ($usage) {
@@ -43,6 +43,7 @@ if ($usage) {
     exit 1;
 }
 
+my @pkglist = qw( attr acl dmapi xfsdump xfsprogs );
 my @difflist = qw(
 	xfs_ag.h  xfs_alloc.h  xfs_alloc_btree.h xfs_arch.h
 	xfs_attr_leaf.h  xfs_attr_sf.h  xfs_bit.h  xfs_bmap.h
@@ -62,16 +63,22 @@ sub straightdiff {
 	my ( $file, $prefix1, $prefix2 ) = @_;
 
 	`diff $prefix1/$file $prefix2/$file >/dev/null 2>&1`;
-        if (!$quiet) {
-	    print sprintf("\t%-35s ... ", $file);
-	    if ($? != 0)	{ print "FAILED\n"; }
-	    else		{ print "ok\n"; }
-        } elsif ($? != 0) { 
+	if (!$quiet) {
+		print sprintf("\t%-35s ... ", $file);
+		if ($? != 0)	{ print "FAILED\n"; }
+		else		{ print "ok\n"; }
+	} elsif ($? != 0) { 
 	        printf("\t%-35s ... ", $file);
-                print "FAILED\n"; 
-        }
+		print "FAILED\n"; 
+	}
 }
 
+my $first = shift @pkglist;
+foreach (@pkglist) {
+	print "\n=== Checking $_ package ===\n";
+	straightdiff 'buildrules', "cmd/$first/include", "cmd/$_/include";
+	straightdiff 'buildmacros', "cmd/$first/include", "cmd/$_/include";
+}
 print "\n=== Checking headers ===\n";
 foreach (@difflist) {
 	straightdiff $_, 'cmd/xfsprogs/include', 'linux/fs/xfs';
