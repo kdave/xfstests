@@ -45,7 +45,9 @@ whose attributes you are interested in.
 
 ----------------------------------------------------------------------------*/
 
+#ifndef linux
 extern	char	*sys_errlist[];
+#endif
 extern  int     optind;
 extern  char    *optarg;
 
@@ -57,7 +59,7 @@ usage(void)
 {
 	int	i;
 
-	fprintf(stderr, "usage:\t%s [-b buflen] [-l loc] [-s sid] dirpath\n",
+	fprintf(stderr, "usage:\t%s [-b buflen] [-l loc] [-s sid] [-1] [-q] dirpath\n",
 		Progname);
 	exit(1);
 }
@@ -79,9 +81,11 @@ main(
 	void		*hanp;
 	size_t		hlen;
 	char		*name;
-	int		error;
 	int		opt;
 	int		i;
+	int		ret;
+	int		oneline = 0;
+	int		quiet = 0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -91,7 +95,7 @@ main(
 
 	/* Crack and validate the command line options. */
 
-	while ((opt = getopt(argc, argv, "b:l:s:")) != EOF) {
+	while ((opt = getopt(argc, argv, "b:l:s:1q")) != EOF) {
 		switch (opt) {
 		case 'b':
 			buflen = atol(optarg);
@@ -101,6 +105,12 @@ main(
 			break;
 		case 's':
 			sid = atol(optarg);
+			break;
+		case '1':
+			oneline = 1;
+			break;
+		case 'q':
+			quiet = 1;
 			break;
 		case '?':
 			usage();
@@ -117,7 +127,7 @@ main(
 	if (sid == DM_NO_SESSION)
 		find_test_session(&sid);
 
-	/* Get the diretory's handle. */
+	/* Get the directory's handle. */
 
 	if (dm_path_to_handle(dirpath, &hanp, &hlen)) {
 		fprintf(stderr, "can't get handle for file %s, %s\n",
@@ -132,35 +142,46 @@ main(
 
 	mask = DM_AT_HANDLE|DM_AT_EMASK|DM_AT_PMANR|DM_AT_PATTR|DM_AT_DTIME|DM_AT_CFLAG|DM_AT_STAT;
 
-	if ((error = dm_get_dirattrs(sid, hanp, hlen, DM_NO_TOKEN, mask,
-			&loc, buflen, bufp, &rlenp)) < 0) {
-		if (errno == E2BIG) {
-			fprintf(stderr, "dm_get_dirattrs buffer too small, "
-				"should be %d bytes\n", rlenp);
-		} else {
+	do {
+		memset(bufp, 0, buflen);
+		if ((ret = dm_get_dirattrs(sid, hanp, hlen, DM_NO_TOKEN, mask,
+				&loc, buflen, bufp, &rlenp)) < 0) {
 			fprintf(stderr, "dm_get_dirattrs failed, %s\n",
 				strerror(errno));
+			exit(1);
 		}
-		exit(1);
-	}
-	fprintf(stdout, "rc = %d, rlenp is %d, loc is %lld\n", error,
-		rlenp, loc);
-	if (rlenp > 0) {
-		dm_stat_t	*statp;
-
-		statp = (dm_stat_t *)bufp;
-		while (statp != NULL) {
-
-			hantoa((char *)statp + statp->dt_handle.vd_offset,
-				statp->dt_handle.vd_length, buffer);
-			fprintf(stdout, "handle %s\n", buffer);
-			fprintf(stdout, "name %s\n",
-				(char *)statp + statp->dt_compname.vd_offset);
-			print_line(statp);
-
-			statp = DM_STEP_TO_NEXT(statp, dm_stat_t *);
+		if (!quiet) {
+			fprintf(stdout, "ret = %d, rlenp is %d, loc is %lld\n", ret,
+				rlenp, loc);
 		}
-	}
+		if (rlenp > 0) {
+			dm_stat_t	*statp;
+
+			statp = (dm_stat_t *)bufp;
+			while (statp != NULL) {
+
+				hantoa((char *)statp + statp->dt_handle.vd_offset,
+					statp->dt_handle.vd_length, buffer);
+				if (oneline) {
+					fprintf(stdout, "%s %s\n",
+						(char *)statp + statp->dt_compname.vd_offset,
+						buffer);
+				}
+				else {
+					fprintf(stdout, "handle %s\n", buffer);
+					fprintf(stdout, "name %s\n",
+						(char *)statp + statp->dt_compname.vd_offset);
+					print_line(statp);
+				}
+
+				statp = DM_STEP_TO_NEXT(statp, dm_stat_t *);
+			}
+		}
+		else if ((ret == 1) && (rlenp == 0) && (!quiet)) {
+			fprintf(stderr, "buflen is too short to hold anything\n");
+			exit(1);
+		}
+	} while (ret != 0);
 
 	dm_handle_free(hanp, hlen);
 	exit(0);

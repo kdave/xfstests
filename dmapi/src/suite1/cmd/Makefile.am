@@ -66,7 +66,8 @@ DM_TARGS = \
 	obj_ref_hold \
 	obj_ref_rele \
 	obj_ref_query \
-	print_event
+	print_event \
+	get_dirattrs
 
 # things needing -ldm -lhandle
 NT_TARGS = \
