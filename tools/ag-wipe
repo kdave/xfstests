@@ -45,7 +45,7 @@ use Getopt::Std;
 #
 
 my @sbprint = ( '"print fdblocks"', '"print agcount"' );
-my @agfprint = ( '"print freeblks"' );
+my @agfprint = ( '"print freeblks"', '"print flcount"' );
 my @agfcommands = ( '"write freeblks 0"',
 			'"write longest 0"', '"write flcount 0"',
 			'"write bnolevel 1"', '"write cntlevel 1"',
@@ -58,10 +58,11 @@ my @cntcommands = ( '"addr cntroot"', '"write numrecs 0"',
 			'"write leftsib -1"', '"write rightsib -1"' );
 
 my %opt;
-getopts('f:l:v', \%opt);
-die "Usage: ag-wipe [-f firstAG] [-l lastAG] [-v] device\n" unless (@ARGV == 1);
+getopts('cf:l:v', \%opt);
+die "Usage: ag-wipe [-f firstAG] [-l lastAG] [-cv] device\n" unless (@ARGV == 1);
 my $device = shift @ARGV;
 die "$device: no such file\n" unless (-e $device);
+my $clearall = defined($opt{'c'}) ? 1 : 0;
 my $verbose = defined($opt{'v'}) ? 1 : 0;
 my $nagfirst = defined($opt{'f'}) ? $opt{'f'} : 0;
 my $naglast = defined($opt{'l'}) ? $opt{'l'} : 0;
@@ -88,20 +89,27 @@ sub xfs_db {
 my %sb = xfs_db 'sb', @sbprint;
 print "=== Initially ", $sb{'fdblocks'}, " blocks free across ",
 	$sb{'agcount'}, " AGs\n";
+if ($clearall && ($nagfirst || $naglast)) {
+	print STDERR "  o Clearall specified with first/last AG, quiting\n";
+	exit(1);
+}
 if ($nagfirst >= $sb{'agcount'}) {
 	print "  o First AG number is too large, quiting\n";
-	exit(0);
+	exit(1);
 }
 if ($naglast >= $sb{'agcount'}) {
 	print "  o Last AG number is too large, quiting\n";
-	exit(0);
+	exit(1);
 }
 if ($naglast - $nagfirst < 0) {
 	print "  o No AGs to clear, quiting\n";
-	exit(0);
+	exit(1);
+}
+if ($clearall) {
+	$naglast = $sb{'agcount'} - 2;
 }
 
-print "=== Wiping ", $naglast - $nagfirst,
+print "=== Wiping ", $naglast - $nagfirst + 1,
 	" AGs starting from AG #", $nagfirst, "\n";
 
 my $ag = $nagfirst;
@@ -114,8 +122,9 @@ while ($ag <= $naglast) {
 	%agf = xfs_db "'agf $ag'", @agfprint;
 	xfs_db "'agf $ag'", @agfcommands;
 
-	$sb{'fdblocks'} -= $agf{'freeblks'};
-	print "     cleared ", $agf{'freeblks'}, " blocks from AG#", $ag, "\n";
+	my $blockcnt = $agf{'freeblks'} + $agf{'flcount'};
+	$sb{'fdblocks'} -= $blockcnt;
+	print "     cleared ", $blockcnt, " blocks from AG#", $ag, "\n";
 
 	%btree = xfs_db "'agf $ag'", @bnoprint;
 	xfs_db "'agf $ag'", @bnocommands;
