@@ -66,11 +66,10 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_MACROS],
     AC_TRY_LINK([
 #include <sys/types.h>
 #include <attr/attributes.h>],
-    [ int x = ATTR_SHIFT; ], [
+    [ int x = ATTR_SECURE; ], [ echo ok ], [
         echo
-        echo 'FATAL ERROR: incorrect macros exist in attributes.h header file.'
+	echo 'FATAL ERROR: could not find a current attributes header.'
         echo 'Upgrade the extended attributes (attr) development package.'
         echo 'Alternatively, run "make install-dev" from the attr source.'
-        exit 1 ],
-    [ echo ok ])
+	exit 1 ])
   ])

@@ -35,8 +35,8 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
     AC_SUBST(libxfs)
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
-  [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
+AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
+  [ AC_CHECK_LIB(handle, open_by_fshandle,, [
         echo
         echo 'FATAL ERROR: could not find a current XFS handle library.'
         echo 'Install or upgrade the XFS library package.'
