@@ -36,13 +36,15 @@
  *   -t  test for working rlimit/ftruncate64 (via libc)
  *   -q  test for quota support (kernel compile option)
  *   -u  test for user quota enforcement support (mount option)
+ *   -p  test for project quota enforcement support (mount option)
  *   -g  test for group quota enforcement support (mount option)
  *   -U  test for user quota accounting support (mount option)
  *   -G  test for group quota accounting support (mount option)
+ *   -P  test for project quota accounting support (mount option)
  * Return code: 0 is true, anything else is error/not supported
  *
  * Test for machine features
- *   -p  report pagesize
+ *   -s  report pagesize
  *   -w  report bits per long
  */
 
@@ -64,14 +66,19 @@
 #define GRPQUOTA  1
 #endif
 
+#ifndef PRJQUOTA
+#define PRJQUOTA  2
+#endif
+
 int verbose = 0;
 
 void
 usage(void)
 {
-	fprintf(stderr, "Usage: feature [-v] -<q|u|g|U|G> <filesystem>\n");
+	fprintf(stderr, "Usage: feature [-v] -<q|u|g|p|U|G|P> <filesystem>\n");
 	fprintf(stderr, "       feature [-v] -c <file>\n");
 	fprintf(stderr, "       feature [-v] -t <file>\n");
+	fprintf(stderr, "       feature -s | -w\n");
 	exit(1);
 }
 
@@ -116,7 +123,7 @@ int
 hastruncate64(char *filename)
 {
 	struct rlimit64 rlimit64;
-	off64_t bigoff = 4294967307;	/* > 2^32 */
+	off64_t bigoff = 4294967307LL;	/* > 2^32 */
 	struct stat64 bigst;
 	int fd;
 
@@ -191,9 +198,13 @@ hasxfsquota(int type, int q, char *device)
 		return (0);
 	else if (q == XFS_QUOTA_GDQ_ENFD && qstat.qs_flags & XFS_QUOTA_GDQ_ENFD)
 		return (0);
+	else if (q == XFS_QUOTA_PDQ_ENFD && qstat.qs_flags & XFS_QUOTA_PDQ_ENFD)
+		return (0);
 	else if (q == XFS_QUOTA_UDQ_ACCT && qstat.qs_flags & XFS_QUOTA_UDQ_ACCT)
 		return (0);
 	else if (q == XFS_QUOTA_GDQ_ACCT && qstat.qs_flags & XFS_QUOTA_GDQ_ACCT)
+		return (0);
+	else if (q == XFS_QUOTA_PDQ_ACCT && qstat.qs_flags & XFS_QUOTA_PDQ_ACCT)
 		return (0);
 	if (verbose)
 		fprintf(stderr, "quota type (%d) not available\n", q);
@@ -209,13 +220,15 @@ main(int argc, char **argv)
 	int	gflag = 0;
 	int	Gflag = 0;
 	int	pflag = 0;
+	int	Pflag = 0;
 	int	qflag = 0;
+	int	sflag = 0;
 	int	uflag = 0;
 	int	Uflag = 0;
 	int	wflag = 0;
 	char	*fs = NULL;
 
-	while ((c = getopt(argc, argv, "ctgGpquUvw")) != EOF) {
+	while ((c = getopt(argc, argv, "ctgGpPqsuUvw")) != EOF) {
 		switch (c) {
 		case 'c':
 			cflag++;
@@ -232,8 +245,14 @@ main(int argc, char **argv)
 		case 'p':
 			pflag++;
 			break;
+		case 'P':
+			Pflag++;
+			break;
 		case 'q':
 			qflag++;
+			break;
+		case 's':
+			sflag++;
 			break;
 		case 'u':
 			uflag++;
@@ -253,11 +272,11 @@ main(int argc, char **argv)
 	}
 
 	/* filesystem features */
-	if (cflag || tflag || uflag || gflag || qflag || Uflag || Gflag) {
+	if (cflag|tflag|uflag|gflag|pflag|qflag|Uflag|Gflag|Pflag) {
 		if (optind != argc-1)	/* need a device */
 			usage();
 		fs = argv[argc-1];
-	} else if (wflag || pflag) {
+	} else if (wflag || sflag) {
 		if (optind != argc)
 			usage();
 	} else 
@@ -271,14 +290,18 @@ main(int argc, char **argv)
 		return(hasxfsquota(0, 0, fs));
 	if (gflag)
 		return(hasxfsquota(GRPQUOTA, XFS_QUOTA_GDQ_ENFD, fs));
+	if (pflag)
+		return(hasxfsquota(PRJQUOTA, XFS_QUOTA_PDQ_ENFD, fs));
 	if (uflag)
 		return(hasxfsquota(USRQUOTA, XFS_QUOTA_UDQ_ENFD, fs));
 	if (Gflag)
 		return(hasxfsquota(GRPQUOTA, XFS_QUOTA_GDQ_ACCT, fs));
+	if (Pflag)
+		return(hasxfsquota(PRJQUOTA, XFS_QUOTA_PDQ_ACCT, fs));
 	if (Uflag)
 		return(hasxfsquota(USRQUOTA, XFS_QUOTA_UDQ_ACCT, fs));
 
-	if (pflag) {
+	if (sflag) {
 		printf("%d\n", getpagesize());
 		exit(0);
 	}
