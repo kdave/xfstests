@@ -1,27 +1,50 @@
-#!/bin/sh
-# 
-# Does a dbench run (10 clients if $DBENCH_CLIENTS is not set),
-# then massages the output into CSV format.
-# 
-DBENCH_CLIENTS=${DBENCH_CLIENTS:=10}
+##/bin/sh
 
-run_dbench()
+_run_dbench()
 {
 	mkdir ./dbench || exit 1
 	cd dbench
-	dbench $DBENCH_CLIENTS
+	dbench $1
 	status=$?
 	cd ..
 	rm -fr ./dbench
 	[ $status -ne 0 ] && exit 1
 }
 
-# 
+#
 # Sample dbench output:
 # "Throughput 40.6701 MB/sec (NB=50.8376 MB/sec  406.701 MBit/sec)"
 # 
-if [ $# -gt 0 ]; then
+
+# Output for a single-shot dbench run.
+_format_header()
+{
 	printf "%8s, %s\n" clients MB/sec
-	exit 0
-fi
-run_dbench | awk 'END { printf "%8u, %s\n", '$DBENCH_CLIENTS', $2 }'
+}
+_filter_dbench()
+{
+	clients=$1
+	perl -ne 'm/Throughput (\S+) MB\/sec/ &&
+			{ printf "%8u, %s\n", '$clients', $1 }'
+}
+
+# Output for a "multipass" dbench run.
+_format_header_multipass()
+{
+	for i in $@; do
+		printf "%4s::MB/sec," $i
+	done
+	printf "\n"
+}
+_filter_dbench_multipass()
+{
+	perl -ne '
+	if (m/Throughput (\S+) MB\/sec/) {
+		$results[$count++] = $1;
+	}
+	END {	for ($i = 0; $i < $count - 1; $i++) {
+			printf "%12.3f,", $results[$i];
+		}
+		printf "%12.3f\n", $results[$count-1];
+	}'
+}
