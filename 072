@@ -1,6 +1,6 @@
 #! /bin/sh
 # XFS QA Test No. 072
-# $Id: 072,v 1.1 2003/07/07 03:34:36 fsgqa Exp $
+# $Id: 072,v 1.2 2003/07/07 06:02:25 fsgqa Exp $
 #
 # Check some unwritten extent boundary conditions
 #
@@ -42,34 +42,50 @@ owner=nathans@sgi.com
 seq=`basename $0`
 echo "QA output created by $seq"
 
+_cleanup()
+{
+	umount $tmp.$seq 2>/dev/null
+	rm -f $tmp.*
+}
+
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 
+[ "$USE_EXTERNAL" = yes ] && _notrun "Test doesn't cope with external devices"
+
 # real QA test starts here
-rm -f $TEST_MNT/ouch
+_require_loop
+
+# use a sparse file to get the large size we want here...
+rm -f $TEST_DIR/test.xfs
+/sbin/mkfs.xfs -f $MKFS_OPTIONS -dfile,name=$TEST_DIR/test.xfs,size=100g \
+    >> $seq.full 2>&1 \
+    || _fail "!!! failed to mkfs xfs in a file"
+mkdir $tmp.$seq >> $seq.full 2>&1 \
+    || _fail "!!! failed to make mount point"
 echo Silence is golden
 
-# reserve 1MiB, truncate at 100bytes
-xfs_io -f -c 'resvsp 0 1m' -c 'truncate 100' $TEST_MNT/ouch
-rm -f $TEST_MNT/ouch
+# reserve 1GiB, truncate at 100bytes
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 100' $tmp.$seq/ouch
+rm -f $tmp.$seq/ouch
 
-# reserve 1MiB, truncate at 2MiB
-xfs_io -f -c 'resvsp 0 1m' -c 'truncate 2m' $TEST_MNT/ouch
-rm -f $TEST_MNT/ouch
+# reserve 1GiB, truncate at 2GiB
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 2g' $tmp.$seq/ouch
+rm -f $tmp.$seq/ouch
 
-# reserve 1MiB, truncate at 1m
-xfs_io -f -c 'resvsp 0 1m' -c 'truncate 1m' $TEST_MNT/ouch
-rm -f $TEST_MNT/ouch
+# reserve 1GiB, truncate at 1GiB
+xfs_io -f -c 'resvsp 0 1g' -c 'truncate 1g' $tmp.$seq/ouch
+rm -f $tmp.$seq/ouch
 
-# reserve 1MiB, 1MiB hole, reserve 1MiB, truncate at 3m
-xfs_io -f -c 'resvsp 0 1m' -c 'resvsp 2m 1m' -c 'truncate 3m' $TEST_MNT/ouch
-rm -f $TEST_MNT/ouch
+# reserve 1GiB, 1GiB hole, reserve 1GiB, truncate at 3GiB
+xfs_io -f -c 'resvsp 0 1g' -c 'resvsp 2g 1g' -c 'truncate 3g' $tmp.$seq/ouch
+rm -f $tmp.$seq/ouch
 
 # success, all done
 status=0
