@@ -8,7 +8,14 @@
 #	o  removes ~/test
 # 
 
+package="$1"
 tmpdir="$HOME/test"
+
+if [ -z "$package" ]
+then
+	echo "srctest requires one argument - package name"
+	exit 1
+fi
 
 if [ -z "$WORKAREA" ]
 then
@@ -57,9 +64,9 @@ _buildme()
 		exit 1
 	fi
 
-	if [ ! -f build/xfs-cmds-*.src.tar.gz ]
+	if [ ! -f build/$package-*.src.tar.gz ]
 	then
-		echo Makepkgs failed to create build/xfs-cmds-*.src.tar.gz
+		echo Makepkgs failed to create build/package-*.src.tar.gz
 		exit 1
 	fi
 }
@@ -68,14 +75,12 @@ status=1
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # first, build from the WORKAREA
-_buildme $WORKAREA/cmd/xfs
+_buildme $WORKAREA/cmd/$package
 
-cp $WORKAREA/cmd/xfs/build/xfs-cmds-*.src.tar.gz $tmpdir
 cd $tmpdir
-tar xzf xfs-cmds-*.src.tar.gz
-rm xfs-cmds-*.src.tar.gz	# must delete for _buildme "cd" to work
+gunzip < $WORKAREA/cmd/$package/build/$package-*.src.tar.gz | tar xf -
 
 # now, cross check the src build
-_buildme $tmpdir/xfs-cmds-*
+_buildme $tmpdir/$package-*
 
 status=0
