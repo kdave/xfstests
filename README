@@ -1,11 +1,30 @@
+_______________________
+BUILDING THE FSQA SUITE
+_______________________
+
+Building Linux:
+	- cd into the xfstests directory and run make.
+	
+Building IRIX:
+	- Note gmake must be used. FSQA will not build with IRIX make.
+	- fw_gcc, fw_make, fw_autoconf, fw_libtool and compiler_dev 
+	  and all their prerequisites must be installed. 
+	- cd into the xfstests directory and run gmake. 
+
 ______________________
-USING THE XFS QA SUITE
+USING THE FSQA SUITE
 ______________________
 
-Preparing system for tests:
+Preparing system for tests (IRIX and Linux):
 
     - compile XFS into your kernel or load XFS modules
     - install user tools including mkfs.xfs, xfs_db & xfs_bmap
+    - If you wish to run the udf components of the suite install 
+      mkfs_udf and udf_db for IRIX and mkudffs for Linux. Also download and 
+      build the Philips UDF Verification Software from 
+      http://www.extra.research.philips.com/udf/, then copy the udf_test 
+      binary to xfstests/src/.
+	
     
     - create two partitions to use for testing
         - one TEST partition
@@ -36,6 +55,8 @@ Preparing system for tests:
         - or add a case to the switch in common.config assigning
           these variables based on the hostname of your test
           machine
+	- or add these variables to a file called local.config and keep that
+	  file in your workarea.
 
     - if testing xfsdump, make sure the tape devices have a
       tape which can be overwritten.
@@ -46,7 +67,16 @@ Preparing system for tests:
 Running tests:
 
     - cd xfstests
-    - ./check 001 002 003 ... 
+    - By default the tests suite will run xfs tests:
+    - ./check 001 002 003 ... or you can explicitly run a filesystem: 
+      ./check -xfs [test(s)]
+    - You can run a range of tests: ./check 067-078
+    - Groups of tests maybe ran by: ./check -g [group(s)]
+      See the 'group' file for details on groups
+    - for udf tests: ./check -udf [test(s)]
+      Running all the udf tests: ./check -udf -g udf
+    - for running nfs tests: ./check -nfs [test(s)]
+
     
     The check script tests the return value of each script, and
     compares the output against the expected output. If the output
@@ -54,10 +84,10 @@ Running tests:
     will be produced for the failing test.
     
     Unexpected console messages, crashes and hangs may be considered
-    to be failures but are not necesarily detected by the QA system.
+    to be failures but are not necessarily detected by the QA system.
 
 __________________________ 
-ADDING TO THE XFS QA SUITE
+ADDING TO THE FSQA SUITE
 __________________________
 
 
@@ -81,7 +111,7 @@ Test script environment:
 	    writeable.  You should cleanup when your test is done,
 	    e.g. use a _cleanup shell procedure in the trap ... see
 	    001 for an example.  If you need to know, the $TEST_DIR
-	    direcotry is within the filesystem on the block device
+	    directory is within the filesystem on the block device
 	    $TEST_DEV.
 
 	(b) mkfs a new XFS filesystem on $SCRATCH_DEV, and mount this
@@ -171,7 +201,7 @@ Pass/failure:
 
     Note that:
 	exit 1
-    won't have the desired effect becuase of the way the exit trap
+    won't have the desired effect because of the way the exit trap
     works.
 
     The recent pass/fail history is maintained in the file "check.log".
