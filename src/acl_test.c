@@ -207,6 +207,23 @@ main(int argc, char **argv)
 	dump_acl_by_entry(acl3);
 
         /* ---------------------------------------------- */
+        printf("*** test out ACL to text for empty ACL***\n");
+	{
+	    char *text;
+	    ssize_t len;
+	    acl_t empty_acl = acl_init(0);
+	    text = acl_to_text(empty_acl, NULL); 
+            printf("acl_to_text(empty_acl,NULL) -> \"%s\"\n", text); 
+	    text = acl_to_text(empty_acl, &len); 
+            printf("acl_to_text(empty_acl,NULL) -> \"%s\", len = %u\n", text, len); 
+	    text = acl_to_text(NULL, NULL); 
+            printf("acl_to_text(NULL,NULL) -> \"%s\"\n", text==NULL?"NULL":text); 
+        }
+	/* NOTE: Other tests will test out the text for ACLs with ACEs.
+         *       So don't have to test it here.
+         *       It is simplest to choose ids not in /etc/passwd /etc/group
+         *       which is done already in a script. 
+         */
 
 	return 0;
 }
