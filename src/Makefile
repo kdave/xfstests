@@ -45,12 +45,6 @@ TARGETS += $(LINUX_TARGETS)
 endif
 
 ifeq ($(HAVE_DB), true)
-TARGETS = alloc acl_get bstat devzero dirstress fault feature \
-	  fill fill2 getpagesize holes xfsctl loggen lstat64 \
-	  nametest permname randholes runas truncfile usemem \
-	  fstest mmapcat append_reader append_writer \
-	  dirperf metaperf
-ifeq ($(ENABLE_DBM), yes)
 TARGETS += dbtest
 endif
 

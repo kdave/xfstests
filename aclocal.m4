@@ -224,10 +224,9 @@ AC_DEFUN([AC_PACKAGE_NEED_UUIDCOMPARE],
     AC_SUBST(libuuid)
   ])
 
-
-AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
-  [ AC_CHECK_HEADERS([xfs/libxfs.h])
-    if test "$ac_cv_header_xfs_libxfs_h" != "yes"; then
+AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
+   [ AC_CHECK_HEADERS([sys/acl.h])
+     if test "$ac_cv_header_sys_acl_h" != "yes"; then
         echo
         echo 'FATAL ERROR: sys/acl.h does not exist.'
         echo 'Install the access control lists (acl) development package.'
@@ -262,12 +261,12 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
     AC_SUBST(libxfs)
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
-  [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
+AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
+   [ AC_CHECK_LIB(acl, acl_init,, [
         echo
-        echo 'FATAL ERROR: could not find a current XFS handle library.'
-        echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
+        echo 'FATAL ERROR: could not find a valid Access Control List library.'
+        echo 'Install either the libacl (rpm) or the libacl1 (deb) package.'
+        echo 'Alternatively, run "make install-lib" from the acl source.'
         exit 1
     ])
     libacl="-lacl"
