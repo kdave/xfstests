@@ -152,9 +152,9 @@ group=$3
 shift; shift; shift
 
 if [ $# -gt 0 ]; then
-	benches="$@"
+    benches="$@"
 else
-	benches=`echo run.* | sed -e 's/run\.//g'`
+    benches=`echo run.* | sed -e 's/run\.//g'`
 fi
 [ -z "$benches" -o "$benches" = "*" ] && _fail "no benchmark scripts found"
 
@@ -163,13 +163,24 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _require_scratch
 rm -f bench.* results.*
 
+_full_platform_details()
+{
+    [ -z "$FSTYP" ] && FSTYP=xfs
+    os=`uname -s`
+    host=`hostname -s`
+    kernel=`uname -r`
+    platform=`uname -i`
+
+    echo "$os/$platform $host $kernel [FSTYP=$FSTYP]"
+}
+
+FULL_HOST_DETAILS=`_full_platform_details`
 FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
 FULL_MOUNT_OPTIONS=`_scratch_mount_options`
 
 # $OUT is the report which will ultimately be sent, keep it tidy.
-rm -f $OUT
-[ -z "$FSTYP" ] || echo "FS_TYPE       -- $FSTYP" >>$OUT
-cat >>$OUT <<EOF
+cat >$OUT <<EOF
+PLATFORM      -- $FULL_HOST_DETAILS
 MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
 MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS
 
