@@ -37,8 +37,8 @@ int		nvalid;	/* number of bytes in valid array */
 #define	SETBIT(ARRAY, N)	((ARRAY)[(N)/8] |= (1 << ((N)%8)))
 #define	BITVAL(ARRAY, N)	((ARRAY)[(N)/8] & (1 << ((N)%8)))
 
-off64_t filesize;
-int blocksize;
+__uint64_t filesize;
+unsigned int blocksize;
 int count;
 int verbose;
 int wsync;
@@ -48,7 +48,7 @@ int rt;
 int extsize;
 int preserve;
 int test;
-off64_t fileoffset;
+__uint64_t fileoffset;
 struct dioattr diob;
 struct fsxattr rtattr;
 
@@ -58,7 +58,7 @@ void usage(char *progname);
 int findblock(void);
 void writeblks(int fd);
 int readblks(int fd);
-void dumpblock(int *buffer, off64_t offset, int blocksize);
+void dumpblock(int *buffer, __uint64_t offset, int blocksize);
 
 void
 usage(char *progname)
@@ -75,7 +75,7 @@ main(int argc, char *argv[])
 	char *filename = NULL;
         int r;
 
-	filesize = ((off64_t)256)*1024*1024;
+	filesize = ((__uint64_t)256)*1024*1024;
 	blocksize = 512;
 	count = filesize/blocksize;
 	verbose = 0;
@@ -201,7 +201,7 @@ main(int argc, char *argv[])
 void
 writeblks(int fd)
 {
-	off64_t offset;
+	__uint64_t offset;
 	char *buffer;
 	int block;
 	struct flock64 fl;
@@ -222,7 +222,7 @@ writeblks(int fd)
 			fflush(stdout);
 		}
 		block = findblock();
-		offset = (off64_t)block * blocksize;
+		offset = (__uint64_t)block * blocksize;
 		if (alloconly) {
                         if (test) continue;
                         
@@ -242,7 +242,7 @@ writeblks(int fd)
 			        exit(1);
 		        }
                 }
-		*(off64_t *)buffer = *(off64_t *)(buffer+256) =
+		*(__uint64_t *)buffer = *(__uint64_t *)(buffer+256) =
 			fileoffset + offset;
                 if (!test) {
 		        if (write(fd, buffer, blocksize) < blocksize) {
@@ -254,7 +254,7 @@ writeblks(int fd)
 		if (verbose > 1) {
 			printf("writing data at offset=%llx, value 0x%llx and 0x%llx\n",
 			       fileoffset + offset,
-			       *(off64_t *)buffer, *(off64_t *)(buffer+256));
+			       *(__uint64_t *)buffer, *(__uint64_t *)(buffer+256));
 		}
 	}
 
@@ -264,9 +264,9 @@ writeblks(int fd)
 int
 readblks(int fd)
 {
-	long offset;
+	unsigned long offset;
 	char *buffer, *tmp;
-	int xfer, block, i;
+	unsigned int xfer, block, i;
         int err=0;
 
 	if (alloconly)
@@ -301,25 +301,25 @@ readblks(int fd)
 				fflush(stdout);
 			}
 			if (BITVAL(valid, block) == 0) {
-				if ((*(off64_t *)tmp != 0LL) ||
-				    (*(off64_t *)(tmp+256) != 0LL)) {
+				if ((*(__uint64_t *)tmp != 0LL) ||
+				    (*(__uint64_t *)(tmp+256) != 0LL)) {
 					printf("mismatched data at offset=%llx, expected 0x%llx, got 0x%llx and 0x%llx\n",
 					       fileoffset + block * blocksize,
 					       0LL,
-					       *(off64_t *)tmp,
-					       *(off64_t *)(tmp+256));
+					       *(__uint64_t *)tmp,
+					       *(__uint64_t *)(tmp+256));
                                         err++;
 				}
 			} else {
-				if ( (*(off64_t *)tmp !=
+				if ( (*(__uint64_t *)tmp !=
 				      fileoffset + block * blocksize) ||
-				     (*(off64_t *)(tmp+256) !=
+				     (*(__uint64_t *)(tmp+256) !=
 				      fileoffset + block * blocksize) ) {
 					printf("mismatched data at offset=%llx, expected 0x%llx, got 0x%llx and 0x%llx\n",
 					       fileoffset + block * blocksize,
 					       fileoffset + block * blocksize,
-					       *(off64_t *)tmp,
-					       *(off64_t *)(tmp+256));
+					       *(__uint64_t *)tmp,
+					       *(__uint64_t *)(tmp+256));
                                         err++;
 				}
 			}
@@ -359,7 +359,7 @@ findblock(void)
 }
 
 void
-dumpblock(int *buffer, off64_t offset, int blocksize)
+dumpblock(int *buffer, __uint64_t offset, int blocksize)
 {
 	int	i;
 
