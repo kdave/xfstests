@@ -20,11 +20,12 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTR_ERROR_H],
     fi
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_ATTR_ATTRIBUTES_H],
-  [ AC_CHECK_HEADERS([attr/attributes.h])
-    if test "$ac_cv_header_attr_attributes_h" != "yes"; then
+AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_H],
+  [ have_attributes_h=false
+    AC_CHECK_HEADERS([attr/attributes.h sys/attributes.h], [have_attributes_h=true], )
+    if test "$have_attributes_h" = "false"; then
         echo
-        echo 'FATAL ERROR: attr/attributes.h does not exist.'
+        echo 'FATAL ERROR: attributes.h does not exist.'
         echo 'Install the extended attributes (attr) development package.'
         echo 'Alternatively, run "make install-lib" from the attr source.'
         exit 1

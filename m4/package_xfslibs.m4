@@ -61,6 +61,21 @@ AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
     AC_SUBST(libhdl)
   ])
 
+AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
+  [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
+        echo
+        echo 'FATAL ERROR: could not find a current XFS handle library.'
+        echo 'Install or upgrade the XFS library package.'
+        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
+        exit 1
+    ])
+    libhdl="-lhandle"
+    test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
+        libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
+    test -f /usr/lib/libhandle.la && libhdl="/usr/lib/libhandle.la"
+    AC_SUBST(libhdl)
+  ])
+
 AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
   [ AC_MSG_CHECKING([xfsctl from xfs/libxfs.h])
     AC_TRY_LINK([#include <xfs/libxfs.h>], [ int x = xfsctl(0, 0, 0, 0); ],
