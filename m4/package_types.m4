@@ -35,13 +35,13 @@ AC_DEFUN([AC_SIZEOF_POINTERS_AND_LONG],
     fi
     AC_CHECK_SIZEOF(long, 4)
     AC_CHECK_SIZEOF(char *, 4)
-    if test $ac_cv_sizeof_long -eq 4; then
+    if test $ac_cv_sizeof_long -eq 4 -o $ac_cv_sizeof_long -eq 0; then
       AC_DEFINE(HAVE_32BIT_LONG)
     fi
     if test $ac_cv_sizeof_long -eq 8; then
       AC_DEFINE(HAVE_64BIT_LONG)
     fi
-    if test $ac_cv_sizeof_char_p -eq 4; then
+    if test $ac_cv_sizeof_char_p -eq 4 -o $ac_cv_sizeof_char_p -eq 0; then
       AC_DEFINE(HAVE_32BIT_PTR)
     fi
     if test $ac_cv_sizeof_char_p -eq 8; then

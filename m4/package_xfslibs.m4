@@ -25,7 +25,7 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
         echo
         echo 'FATAL ERROR: could not find a valid XFS base library.'
         echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
+        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     ])
     libxfs="-lxfs"
@@ -40,7 +40,7 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
         echo
         echo 'FATAL ERROR: could not find a current XFS handle library.'
         echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
+        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     ])
     libhdl="-lhandle"
