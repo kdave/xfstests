@@ -81,13 +81,14 @@ int		 rwt_bit_clear = 1;  /* Clear read/write/trunc bit before
 				      * responding to event; reset all other
 				      * bits.
 				      */
+int		 dmf_events = 0;     /* Use only those events that DMF uses */
 
 void
 usage(
       char *prog)
 {
   fprintf(stderr, "Usage: %s ", prog);
-  fprintf(stderr, " <-S oldsid> <-v> <-s sleep> <-R> <-N> ");
+  fprintf(stderr, " <-S oldsid> <-v> <-s sleep> <-R> <-N> <-D> ");
   fprintf(stderr, "filesystem \n");
 }
 
@@ -107,13 +108,16 @@ main(
 /*  Progname  = argv[0];*/ Progname = "print_event";
   fsname  = NULL;
 
-  while ((c = getopt(argc, argv, "vs:S:RN")) != EOF) {
+  while ((c = getopt(argc, argv, "vs:S:RND")) != EOF) {
     switch (c) {
     case 's':
       Sleep = atoi(optarg);
       break;
     case 'R':
       register_new_mnts = 1;
+      break;
+    case 'D':
+      dmf_events = 1;
       break;
     case 'N':
       rwt_bit_clear = 0;
@@ -995,8 +999,15 @@ set_events(
 	dm_eventset_t	eventlist;
 
 	if (Verbose) {
-		err_msg("Setting event list to enable all events "
-			"for this file system\n");
+		if (dmf_events) {
+			err_msg("Setting event list to enable all "
+				"DMF-supported events "
+				"for this file system\n");
+		}
+		else {
+			err_msg("Setting event list to enable all events "
+				"for this file system\n");
+		}
 	}
 	DMEV_ZERO(eventlist);
 
@@ -1044,6 +1055,13 @@ set_events(
 	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
+
+	/* Did we want just the DMF events? */
+	if (dmf_events) {
+		DMEV_ZERO(eventlist);
+		DMEV_SET(DM_EVENT_UNMOUNT, eventlist);
+		DMEV_SET(DM_EVENT_DESTROY, eventlist);
+	}
 
 	/* Pseudo-events. */
 
