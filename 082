@@ -61,7 +61,6 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
-_notrun "Not finished yet"
 
 # prelim
 rm -f $seq.full $tmp.*
@@ -71,12 +70,18 @@ echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
-# mkfs-opt        mount-opt            start-blk
-  -lversion=2 -ologbsize=32k           2
-  -lversion=2,su=4096 -ologbsize=32k   8
-  -lversion=2,su=32768 -ologbsize=32k  64
+# mkfs-opt             mount-opt            start-blk
+  -lversion=2          -ologbsize=32k       2
+  -lversion=2,su=4096  -ologbsize=32k       8
+  -lversion=2,su=32768 -ologbsize=32k       64
+#
 # expect following line to fail
-  -lversion=2,su=36864 -ologbsize=32k  72
+#
+  -lversion=2,su=36864 -ologbsize=32k       72
+#
+# following is not a power of 2 BBs 
+#
+  -lversion=2,su=5120  -ologbsize=32k       10
 EOF
 
 # Do the work for various log params which
@@ -109,14 +114,14 @@ for s in sync nosync ; do
 		:
 	    else
 		_print_operation
-		_cmp_op_output $seq.noquota.op $filtered
+		_cmp_op_output $seq.op $filtered
 	    fi
 
 	    _print_transaction_inode $start
-	    _cmp_output $seq.noquota.trans_inode $filtered
+	    _cmp_output $seq.trans_inode $filtered
 
 	    _print_transaction_buf $start
-	    _cmp_output $seq.noquota.trans_buf $filtered
+	    _cmp_output $seq.trans_buf $filtered
 	fi
     done
 done

@@ -71,31 +71,25 @@ _full()
 _filter_opnum()
 {
     $AWK_PROG '
-function extract_opnum(str) {
-	# e.g. "(379):" => "379"
-	gsub(/[():]/,"",str)
-	return str
-}
 BEGIN { 
-	opnum = -1
-        #debug = 1
+	debug = 0 
 	}
 /^Oper/ && debug {
 	    printf "line = %s\n", $0
 	}
 /^Oper/ {
 	    was_cont = 0
-	    prev_opnum = opnum
-	    opnum = extract_opnum($2)
 	}
 /^Oper/ && /flags: CONTINUE/ { 
+            # this will be the first op of split region
 	    $9 = "none" # overwrite CONTINUE flags
-	    $2 = sprintf("(%d):", remember+opnum)	
-	    remember += opnum
 	    print
+	    print "Not printing rest"
+	    was_cont = 1
 	    next        
 	}
 /^Oper/ && /flags: WAS_CONT END/ {
+	    # this will be the last op of split region
 	    # skip over was-continued op
 	    # we assume there can be only 1
 	    was_cont = 1
@@ -105,26 +99,22 @@ BEGIN {
 	    # skip over any continued op stuff
 	    next
 	}
-/^Oper/ && /UNMOUNT/ {
-	    remember = 0
-	    opnum = -1
-	    print
-	    next
-	}
-/^Oper/ && (opnum == 0) { 
-	    # have operation 0 with NO continued op
-	    remember += (prev_opnum+1)
-	}
-/^Oper/ && debug { printf "line2 = %s, remember = %d, prev_opnum = %d\n", $0, remember, prev_opnum}
-/^Oper/ && (remember > 0) {
-	    # add in opnum accumulation from previous LRs 
-	    $2 = sprintf("(%d):", remember+opnum)	
-	    print
-	    next
-	}
 	{print}
     '
 }
+
+#
+# Filter out things that can change
+# We have complexities which change when log is sync'ed at different
+# times.
+# Example1: DATA FORK EXTENTS
+# These will not show up if inode is sync'ed sooner
+#	/DATA FORK EXTENTS/d;
+#	/INODE:/s/flags:0x5/flags:0x1/g;
+# define XFS_ILOG_CORE   0x001   /* log standard inode fields */
+# define XFS_ILOG_DEXT   0x004   /* log i_df.if_extents */
+#
+#
 
 _filter_logprint()
 {
@@ -164,9 +154,47 @@ _filter_logprint()
 	/^~~~*/d;
 	/extended-header/d;
 	/LOG REC AT LSN/d;
+	/DATA FORK EXTENTS/d;
+	s/BUF: cnt:[1-9][0-9]* total:[1-9][0-9]*.*/BUF: cnt:C total:T/;
+	s/INO: cnt:[1-9][0-9]* total:[1-9][0-9]*.*/INO: cnt:C total:T/;
+	s/#regs: *[1-9][0-9]*/#regs:R/;
+	/INODE:/s/flags:0x5/flags:0x1/g;
+	s/Oper ([0-9][0-9]*)/Oper (OPNUM)/;
 	/^[ 	]*$/d;
 	s/  */ /g;
 	s/ $//;
+    ' |\
+    awk '
+	# collapse BUF DATA group into 1 line
+        # for Oper data this can be over separate operations...ughh
+        /BUF DATA/ { 
+		if (!buf_data) { # 1st one
+		    if (oper) {	
+			print oper
+			oper = 0
+		    }		
+		    print
+		}
+		buf_data = 1
+		oper = 0 # wont need it now
+		next
+	}
+	/^Oper/ { 
+		# store it as we dont know if 2nd BUF DATA is to follow
+		if (oper) {
+		    print oper
+		}
+		oper = $0
+		next
+	}
+        {
+		buf_data = 0
+		if (oper) { # now we can print out oper
+		    print oper
+		    oper = 0	
+		}
+		print
+	}
     '
 }
 
@@ -323,7 +351,9 @@ _clear_opts()
     #   "-x woof -o  -y wow" -> "-x woof -y wow"   
     MKFS_OPTIONS=`echo $MKFS_OPTIONS | sed -e 's/-l[ ]*[^ $]*//g'`
     MOUNT_OPTIONS=`echo $MOUNT_OPTIONS |\
-	    sed -e 's/logbsize=[^ ,]*,*//g' \
+	    sed \
+		-e 's/logbsize=[^ ,]*,*//g' \
+		-e 's/logbufs=[^ ,]*,*//g' \
 		-e 's/usrquota,*//g'        \
 		-e 's/grpquota,*//g'        \
 		-e 's/quota,*//g'           \
@@ -370,17 +400,8 @@ _process_op_diff()
 	BEGIN { num_splits = 1 }
 	/^[0-9]/ {
 
-		# ensure cmd is a change op
-		cmd = $1
-		gsub(/[0-9][0-9]*/,"", cmd)
-		gsub(/,/,"", cmd)
-		if (cmd != "c") {
-			print "bad diff cmd: ", $0
-			exit 1
-		}
-
 		# ensure a split happened in previous difference
-		if (num_splits != 1 && num_splits != 2) {
+		if (num_splits < 1 || num_splits > 3) {
 			print num_splits, " split(s) found prior to diff cmd: ", $0
 			num_splits = 1 # shut-up end condition
 			exit 1
@@ -395,7 +416,7 @@ _process_op_diff()
 	}
 	{ next }
 	END { 
-		if (num_splits != 1 && num_splits != 2) {
+		if (num_splits < 1 || num_splits > 3) {
 			print num_splits, " split(s) found prior to diff end"
 			exit 1
 		}

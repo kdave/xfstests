@@ -410,14 +410,6 @@ biggg		102400	$nobody	$nobody  777    attr2 some_text2  root
 sub/smalll	10	$nobody	$nobody  777    attr3 some_text3  user
 sub/biggg	102400	$nobody	$nobody  777    attr4 some_text4  root
 dir		d	$nobody $nobody  777    attr5 dir_text    user
-xflag_realtime	10	$nobody $nobody  777    XFS_XFLAG_REALTIME  some_text5  root
-xflag_prealloc	10	$nobody $nobody  777    XFS_XFLAG_PREALLOC  some_text6  root
-xflag_immutable 10	$nobody $nobody  777    XFS_XFLAG_IMMUTABLE some_text7  root
-xflag_append	10	$nobody $nobody  777    XFS_XFLAG_APPEND    some_text8  root
-xflag_sync	10	$nobody $nobody  777    XFS_XFLAG_SYNC      some_text9  root
-xflag_noatime	10	$nobody $nobody  777    XFS_XFLAG_NOATIME   some_text10 root
-xflag_nodump	10	$nobody $nobody  777    XFS_XFLAG_NODUMP    some_text11 root
-xflag_hasattr	10	$nobody $nobody  777    XFS_XFLAG_HASATTR   some_text12 root
 #
 # Add more files so that there are more than the number
 # of streams.
@@ -439,6 +431,25 @@ sub/k		1024	$nobody	$nobody
 sub/l		2048	$nobody	$nobody
 sub/m		4096	$nobody	$nobody
 sub/n		8192	$nobody	$nobody
+End-of-File
+}
+
+#
+# extended file attribute flags
+#
+_mk_fillconfig_xattr()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size    user    group    perm   name 
+#
+xflag_realtime	10	$nobody $nobody  777    XFS_XFLAG_REALTIME
+xflag_prealloc	10	$nobody $nobody  777    XFS_XFLAG_PREALLOC
+xflag_immutable 10	$nobody $nobody  777    XFS_XFLAG_IMMUTABLE
+xflag_append	10	$nobody $nobody  777    XFS_XFLAG_APPEND
+xflag_sync	10	$nobody $nobody  777    XFS_XFLAG_SYNC
+xflag_noatime	10	$nobody $nobody  777    XFS_XFLAG_NOATIME
+xflag_nodump	10	$nobody $nobody  777    XFS_XFLAG_NODUMP
+xflag_hasattr	10	$nobody $nobody  777    XFS_XFLAG_HASATTR
 End-of-File
 }
 
@@ -506,12 +517,19 @@ _do_create_dumpdir_fill()
 	if [ -n "$perms" ]; then
 	    chmod $perms $file
 	fi
+	# extended attributes (EA)
 	if [ -n "$ea_name" -a -n "$ea_value" ]; then
 	    if [ "X$namespace" = "Xroot" ]; then
 		attr -R -s $ea_name -V $ea_value $file
 	    else
 		attr -s $ea_name -V $ea_value $file
 	    fi
+	# extended file attribute flags - no value - NOT EAs
+	elif [ -n "$ea_name" -a -z "$ea_value" ]; then
+	    # set the flag
+	    # TODO XXX
+            # use xfs_io to send the ioctl
+	    :
 	fi
 	$verbose && echo -n "."
     done
