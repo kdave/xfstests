@@ -128,8 +128,10 @@ _acl_ls file1
 
 echo ""
 echo "--- Test get and set of ACL ---"
+echo "Note: Old interface gave an empty ACL - now output an ACL"
 chacl -l file1 | _acl_filter_id
-echo "Expect to FAIL" 
+echo "Try using single colon separator"
+echo "Note: Old interface FAILed because of single colon - new one allows it" 
 chacl u::r--,g::rwx,o:rw- file1 2>&1
 echo "Expect to PASS" 
 chacl u::r--,g::rwx,o::rw- file1 2>&1
@@ -293,6 +295,7 @@ echo "Remove ACLs..."
 chacl -R file1
 chacl -B acldir
 chacl -R acldir/file2
+echo "Note: Old interface would mean empty ACLs - now we show mode ACLs" 
 chacl -l file1 | _acl_filter_id
 chacl -l acldir | _acl_filter_id
 chacl -l acldir/file2 | _acl_filter_id
@@ -315,10 +318,10 @@ done
 popd >/dev/null
 chown -R 12345.54321 root
 echo "Change #1..."
-$runas -u 12345 -g 54321 -- /bin/chacl -r u::rwx,g::-w-,o::--x root
+$runas -u 12345 -g 54321 -- /usr/bin/chacl -r u::rwx,g::-w-,o::--x root
 find root -print | xargs chacl -l
 echo "Change #2..."
-$runas -u 12345 -g 54321 -- /bin/chacl -r u::---,g::---,o::--- root
+$runas -u 12345 -g 54321 -- /usr/bin/chacl -r u::---,g::---,o::--- root
 find root -print | xargs chacl -l
 
 
@@ -326,6 +329,7 @@ find root -print | xargs chacl -l
 
 echo ""
 echo "=== Test out error messages for ACL text parsing  ==="
+echo "Note: Old interface gave more informative error msgs"
 
 touch file1
 set -x

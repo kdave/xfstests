@@ -5,10 +5,10 @@ Setup file
 -rwxrw-r-- id1 id2 file1
 
 --- Test get and set of ACL ---
-file1 []
-Expect to FAIL
-chacl: "u::r--,g::rwx,o:rw-" is an invalid ACL specification.
-cannot find permission separator after char ":" (position 16)
+Note: Old interface gave an empty ACL - now output an ACL
+file1 [u::rwx,g::rw-,o::r--]
+Try using single colon separator
+Note: Old interface FAILed because of single colon - new one allows it
 Expect to PASS
 file1 [u::r--,g::rwx,o::rw-]
 
@@ -50,23 +50,21 @@ Test was executed
 
 --- Test adding a USER ACE ---
 Expect to FAIL as no MASK provided
-chacl: "u::---,g::---,o::---,u:id2:r-x" is an invalid ACL specification.
-mask required and no mask
+chacl: access ACL 'u::---,g::---,o::---,u:id2:r-x': Missing or wrong entry at entry 3
 Ensure that ACL has not been changed
 file1 [u::---,g::---,o::r-x]
 Expect to PASS - USER ACE matches user
-file1 [u::---,g::---,o::---,u:id2:r-x,m::rwx]
+file1 [u::---,u:id2:r-x,g::---,m::rwx,o::---]
 Test was executed
 Expect to FAIL - USER ACE does not match user
 ./file1: Permission denied
 
 --- Test adding a GROUP ACE ---
 Expect to FAIL as no MASK provided
-chacl: "u::---,g::---,o::---,g:id2:r-x" is an invalid ACL specification.
-mask required and no mask
+chacl: access ACL 'u::---,g::---,o::---,g:id2:r-x': Missing or wrong entry at entry 3
 Ensure that ACL has not been changed
-file1 [u::---,g::---,o::---,u:id2:r-x,m::rwx]
-file1 [u::---,g::---,o::---,g:id2:r-x,m::rwx]
+file1 [u::---,u:id2:r-x,g::---,m::rwx,o::---]
+file1 [u::---,g::---,g:id2:r-x,m::rwx,o::---]
 Expect to PASS - GROUP ACE matches group
 Test was executed
 Expect to PASS - GROUP ACE matches sup group
@@ -75,7 +73,7 @@ Expect to FAIL - GROUP ACE does not match group
 ./file1: Permission denied
 
 --- Test MASK ---
-file1 [u::---,g::---,o::---,g:id2:r-x,m::-w-]
+file1 [u::---,g::---,g:id2:r-x,m::-w-,o::---]
 Expect to FAIL as MASK prohibits execution
 ./file1: Permission denied
 Expect to FAIL as MASK prohibits execution
@@ -90,7 +88,7 @@ Expect to PASS as should match on user
 Test was executed
 
 === Test can read ACLs without access permissions ===
-file1 [o::---,g::---,u::---]
+file1 [u::---,g::---,o::---]
 
 === Test Default ACLs ===
 acldir [u::rwx,g::rwx,o::rwx/u::r-x,g::r--,o::---]
@@ -100,13 +98,14 @@ file2 [u::r--,g::r--,o::---]
 file3 [u::r--,g::r--,o::---]
 
 === Removing ACLs ===
-file1 [o::---,g::---,u::---]
+file1 [u::---,g::---,o::---]
 acldir [u::rwx,g::rwx,o::rwx/u::r-x,g::r--,o::---]
 acldir/file2 [u::r--,g::r--,o::---]
 Remove ACLs...
-file1 []
-acldir []
-acldir/file2 []
+Note: Old interface would mean empty ACLs - now we show mode ACLs
+file1 [u::---,g::---,o::---]
+acldir [u::rwx,g::rwx,o::rwx]
+acldir/file2 [u::r--,g::r--,o::---]
 
 === Recursive change ACL ===
 Change #1...
@@ -199,31 +198,23 @@ root/b/c0 [u::---,g::---,o::---]
 root/b/c0/0 [u::---,g::---,o::---]
 
 === Test out error messages for ACL text parsing  ===
+Note: Old interface gave more informative error msgs
 + chacl u file1
-chacl: "u" is an invalid ACL specification.
-could not find qualifier separator after tag "u"
+chacl: u - Invalid argument
 + chacl u: file1
-chacl: "u:" is an invalid ACL specification.
-cannot find permission separator after char ":" (position 2)
+chacl: u: - Invalid argument
 + chacl u:rumpledumpleunknownuser file1
-chacl: "u:rumpledumpleunknownuser" is an invalid ACL specification.
-cannot find permission separator after char ":" (position 2)
+chacl: u:rumpledumpleunknownuser - Invalid argument
 + chacl u:rumpledumpleunknownuser: file1
-chacl: "u:rumpledumpleunknownuser:" is an invalid ACL specification.
-cannot find user "rumpledumpleunknownuser"
+chacl: u:rumpledumpleunknownuser: - Invalid argument
 + chacl g:rumpledumpleunknowngrp file1
-chacl: "g:rumpledumpleunknowngrp" is an invalid ACL specification.
-cannot find permission separator after char ":" (position 2)
+chacl: g:rumpledumpleunknowngrp - Invalid argument
 + chacl g:rumpledumpleunknowngrp: file1
-chacl: "g:rumpledumpleunknowngrp:" is an invalid ACL specification.
-cannot find group "rumpledumpleunknowngrp"
+chacl: g:rumpledumpleunknowngrp: - Invalid argument
 + chacl o:user1:rwx file1
-chacl: "o:user1:rwx" is an invalid ACL specification.
-garbage after other tag: "user1"
+chacl: o:user1:rwx - Invalid argument
 + chacl m:user1:rwx file1
-chacl: "m:user1:rwx" is an invalid ACL specification.
-garbage after mask tag: "user1"
+chacl: m:user1:rwx - Invalid argument
 + chacl a::rwx file1
-chacl: "a::rwx" is an invalid ACL specification.
-invalid tag: "a"
+chacl: a::rwx - Invalid argument
 + set +x
