@@ -259,15 +259,28 @@ chacl -l file1 | _acl_filter_id
 
 echo ""
 echo "=== Test Default ACLs ==="
+# make test clearer by testing with and without umask
+umask 0
+
 mkdir acldir
 chacl -b "u::rwx,g::rwx,o::rwx" "u::r-x,g::r--,o::---" acldir 2>&1
 chacl -l acldir | _acl_filter_id
-
 cd acldir
+
 touch file2
 _acl_ls file2
 chacl -l file2 | _acl_filter_id
+
+#ensure that umask is not having an effect 
+#so set it and see
+umask 722
+touch file3
+_acl_ls file3
+chacl -l file3 | _acl_filter_id
+
 cd ..
+umask 022
+
 
 #-------------------------------------------------------
 
