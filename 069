@@ -1,6 +1,6 @@
 #! /bin/sh
 # XFS QA Test No. 069
-# $Id: 069,v 1.1 2002/09/04 07:44:40 fsgqa Exp $
+# $Id: 069,v 1.2 2002/09/04 11:14:37 fsgqa Exp $
 #
 # Test out writes with O_APPEND flag sets.
 #
@@ -68,24 +68,27 @@ mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >/dev/null \
 
 cd $SCRATCH_MNT
 
-sizes="1 20 300 40000 3000000 200000000 12345"
+sizes="1 20 300 40000 3000000 12345"
 for size in $sizes ; do
 	$here/src/append_writer $size &
 	echo $! $size >> pids
 done
 
+cd $here
+
 wait
 ls -lh >> $seq.full
-echo "*** PIDs file"
-cat pids >> $seq.full
+echo "*** PIDs file" >> $seq.full
+cat $SCRATCH_MNT/pids >> $seq.full
 
-cat pids | while read pid size
+cat $SCRATCH_MNT/pids | while read pid size
 do
-	echo "*** checking file with $size integers $pid"
+	echo "*** checking file with $size integers"
 	echo checking pid=$pid size=$size >> $seq.full
-	$here/src/append_reader testfile.$pid
+	$here/src/append_reader $SCRATCH_MNT/testfile.$pid
 	status=$?
-	[ $status -ne 0 ] && echo "corrupt O_APPEND to testfile.$pid!"
+	[ $status -ne 0 ] && \
+		echo "maybe corrupt O_APPEND to $SCRATCH_MOUNT/testfile.$pid!"
 	echo status: $status >> $seq.full
 done
 
