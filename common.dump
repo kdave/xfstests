@@ -424,13 +424,13 @@ End-of-File
 _mk_fillconfig_ea()
 {
     cat <<End-of-File >$tmp.config
-# pathname	size    user    group    perm   name value
+# pathname	size    user    group    perm   name value namespace
 #
-smalll		10	$nobody	$nobody  777    attr1 some_text    
-biggg		102400	$nobody	$nobody  777    attr2 some_text2
-sub/smalll	10	$nobody	$nobody  777    attr3 some_text3
-sub/biggg	102400	$nobody	$nobody  777    attr4 some_text4
-dir		d	$nobody $nobody  777    attr5 dir_text
+smalll		10	$nobody	$nobody  777    attr1 some_text   user 
+biggg		102400	$nobody	$nobody  777    attr2 some_text2  root
+sub/smalll	10	$nobody	$nobody  777    attr3 some_text3  user
+sub/biggg	102400	$nobody	$nobody  777    attr4 some_text4  root
+dir		d	$nobody $nobody  777    attr5 dir_text    user
 #
 # Add more files so that there are more than the number
 # of streams.
@@ -471,7 +471,7 @@ _do_create_dumpdir_fill()
 
     $verbose && echo -n "Setup "
     sed -e '/^#/d' $tmp.config \
-    | while read file nbytes owner group perms ea_name ea_value
+    | while read file nbytes owner group perms ea_name ea_value namespace
     do
 	if [ $nbytes = "d" ]; then
 	    # create a directory
@@ -521,7 +521,11 @@ _do_create_dumpdir_fill()
 	    chmod $perms $file
 	fi
 	if [ -n "$ea_name" -a -n "$ea_value" ]; then
-	    attr -s $ea_name -V $ea_value $file
+	    if [ "X$namespace" = "Xroot" ]; then
+		attr -R -s $ea_name -V $ea_value $file
+	    else
+		attr -s $ea_name -V $ea_value $file
+	    fi
 	fi
 	$verbose && echo -n "."
     done
@@ -1163,6 +1167,7 @@ _get_eas_on_path()
     # sed 's/["]//g' |\
     # sort |\
 # and this is now the Linux way...
+    echo "User names"
     getfattr --absolute-names -Rh $_path |\
     perl -wn -e '
 	if (m/^# file: (\S+)/) { $file = $1 }
@@ -1170,6 +1175,16 @@ _get_eas_on_path()
     sort |\
     while read file ea_name; do
 	attr -g $ea_name $file
+    done
+
+    echo "Root names"
+    getfattr --absolute-names -Rh -m xfsroot $_path |\
+    perl -wn -e '
+	if (m/^# file: (\S+)/) { $file = $1 }
+	elsif (m/^xfsroot\.(\w+)/) { print $file, " ",$1,"\n" }' |\
+    sort |\
+    while read file ea_name; do
+	attr -R -g $ea_name $file
     done
 }
 
