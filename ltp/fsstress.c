@@ -39,6 +39,7 @@
 #include <dirent.h>
 
 #define XFS_ERRTAG_MAX		17
+#define XFS_IDMODULO_MAX	32
 
 typedef enum {
 	OP_ALLOCSP,
@@ -204,6 +205,7 @@ int		nameseq;
 int		nops;
 int		nproc = 1;
 int		operations = 1;
+unsigned int	idmodulo = XFS_IDMODULO_MAX;
 int		procid;
 int		rtpct;
 unsigned long	seed = 0;
@@ -265,7 +267,7 @@ int main(int argc, char **argv)
 	int		stat;
 	struct timeval	t;
 	ptrdiff_t	srval;
-        int             nousage=0;
+	int             nousage = 0;
 	xfs_error_injection_t	err_inj;
 
 	errrange = errtag = 0;
@@ -273,7 +275,7 @@ int main(int argc, char **argv)
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, "d:e:f:i:n:p:rs:vwzHS")) != -1) {
+	while ((c = getopt(argc, argv, "d:e:f:i:m:n:p:rs:vwzHS")) != -1) {
 		switch (c) {
 		case 'd':
 			dirname = optarg;
@@ -298,6 +300,15 @@ int main(int argc, char **argv)
 		case 'i':
 			ilist = realloc(ilist, ++ilistlen * sizeof(*ilist));
 			ilist[ilistlen - 1] = strtol(optarg, &p, 16);
+			break;
+		case 'm':
+			idmodulo = strtoul(optarg, NULL, 0);
+			if (idmodulo > XFS_IDMODULO_MAX) {
+				fprintf(stderr,
+					"chown modulo %d too big (max %d)\n",
+					idmodulo, XFS_IDMODULO_MAX);
+				exit(1);
+			}
 			break;
 		case 'n':
 			operations = atoi(optarg);
@@ -1273,6 +1284,7 @@ usage(void)
 	printf("   -f op_name=freq  changes the frequency of option name to freq\n");
 	printf("                    the valid operation names are:\n");
 	show_ops(-1, "                        ");
+	printf("   -m modulo        uid/gid modulo for chown/chgrp (default 32)\n");
 	printf("   -n nops          specifies the no. of operations per process (default 1)\n");
 	printf("   -p nproc         specifies the no. of processes (default 1)\n");
 	printf("   -r               specifies random name padding\n");
@@ -1541,18 +1553,21 @@ chown_f(int opno, long r)
 	pathname_t	f;
 	int		nbits;
 	uid_t		u;
+	gid_t		g;
 	int		v;
 
 	init_pathname(&f);
 	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
 	u = (uid_t)random();
-	nbits = (int)(random() % 32);
+	g = (gid_t)random();
+	nbits = (int)(random() % idmodulo);
 	u &= (1 << nbits) - 1;
-	e = lchown_path(&f, u, -1) < 0 ? errno : 0;
+	g &= (1 << nbits) - 1;
+	e = lchown_path(&f, u, g) < 0 ? errno : 0;
 	check_cwd();
 	if (v)
-		printf("%d/%d: chown %s %d %d\n", procid, opno, f.path, u, e);
+		printf("%d/%d: chown %s %d/%d %d\n", procid, opno, f.path, u, g, e);
 	free_pathname(&f);
 }
 
