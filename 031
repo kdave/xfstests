@@ -59,7 +59,11 @@ _check_repair()
 	do
 		echo "Repairing, iteration $i" | tee -a $seq.full
 		xfs_repair $SCRATCH_DEV 2>&1 | tee -a $seq.full >$tmp.$i
-		diff $tmp.0 $tmp.$i
+		diff $tmp.0 $tmp.$i >> $seq.full
+		if [ $? -ne 0 ]; then
+			echo "ERROR: repair round $i differs (see $seq.full)"
+			break
+		fi
 		# echo all interesting stuff...
 		perl -ne '
 			s/(rebuilding directory inode) (\d+)/\1 INO/g;
