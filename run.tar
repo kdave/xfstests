@@ -3,7 +3,7 @@
 # Produces a .tar file (if one doesn't exist as $TARFILE), then
 # times how long it takes to untar it onto the current directory.
 # 
-TARFILE=${TARFILE:=/var/tmp/bench.tar}
+TARFILE=${TARFILE:=/var/tmp/bench.tar.gz}
 
 barf()
 {
@@ -15,7 +15,7 @@ new_tar()
 {
 	source="bin sbin lib"
 	if [ ! -f $TARFILE ]; then
-		( cd / && tar cf $TARFILE $source ) || barf "tar c failed"
+		( cd / && tar czf $TARFILE $source ) || barf "tar cz failed"
 	fi
 }
 
@@ -24,7 +24,7 @@ run_tar()
 	# %U=user %S=system %E=elapsed
 	mkdir ./tar || exit 1
 	size=`ls -lh $TARFILE | awk '{print $5}'`
-	time=`/usr/bin/time -f '%U,%S,%E' tar xf $TARFILE 2>&1`
+	time=`/usr/bin/time -f '%U,%S,%E' tar xzf $TARFILE 2>&1`
 	status=$?
 	cd ..
 	rm -fr ./tar
