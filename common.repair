@@ -76,6 +76,9 @@ s/(imap claims in-use inode) (\d+)/\1 INO/;
 s/(cleared root inode) (\d+)/\1 INO/;
 s/(resetting inode) (\d+)/\1 INO/;
 s/(disconnected dir inode) (\d+)/\1 INO/;
+# for log
+s/internal log/<TYPEOF> log/g;
+s/external log on \S+/<TYPEOF> log/g;
 	print;'
 }
 
@@ -91,10 +94,10 @@ _check_repair()
 	value=$1
 	structure="$2"
 	_zero_position $value "$structure"
-	xfs_repair $SCRATCH_DEV 2>&1 | _filter_repair
+	_scratch_xfs_repair 2>&1 | _filter_repair
 	# some basic sanity checks...
-	_check_fs $SCRATCH_DEV
-	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT              #mount
+	_check_scratch_fs
+	_scratch_mount                                      #mount
 	dd if=/bin/sh of=$SCRATCH_MNT/sh 2>&1 |_filter_dd   #open,write
 	dd if=$SCRATCH_MNT/sh of=/dev/null 2>&1 |_filter_dd #read
 	rm -f $SCRATCH_MNT/sh                               #unlink

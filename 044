@@ -70,7 +70,7 @@ _filter_logprint()
 _check_mount()
 {
     echo "    *** mount (expect success)"
-    if ! mount -t xfs -o logdev=$SCRATCH_LOGDEV $SCRATCH_DEV $SCRATCH_MNT
+    if ! _scratch_mount
     then
         echo "        !!! mount failed (expecting success)"
         status=1
@@ -89,7 +89,7 @@ _check_mount()
 _check_no_mount()
 {
     echo "    *** mount (expect failure)"
-    if mount -t xfs -o logdev=$SCRATCH_LOGDEV $SCRATCH_DEV $SCRATCH_MNT >$tmp.err 2>&1
+    if _scratch_mount >$tmp.err 2>&1
     then
         cat $tmp.err
         echo "        !!! mount succeeded (expecting failure)"
@@ -128,10 +128,7 @@ echo "*** mkfs"
 
 lversion=1
 lsize=16777216
-ldev=$SCRATCH_LOGDEV
-MKFS_OPTIONS="-llogdev=$ldev,size=$lsize,version=$lversion"; export MKFS_OPTIONS
-
-mkfs_xfs $logopts $SCRATCH_DEV | _filter_mkfs 2>/dev/null
+_scratch_mkfs_xfs -lsize=$lsize,version=$lversion | _filter_mkfs 2>/dev/null
 _check_mount
 _check_require_logdev
 

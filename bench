@@ -15,7 +15,7 @@
 # generation purposes).
 # 
 #-----------------------------------------------------------------------
-# Copyright (c) 2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2002-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -88,16 +88,6 @@ _fail()
     exit 1
 }
 
-bench_mkfs_xfs()
-{
-    mkfs_xfs -f $extra_mkfs_options $@
-}
-
-bench_mount_xfs()
-{
-    mount -t xfs $extra_mount_options $@
-}
-
 _run_benchmark()
 {
     pass=1
@@ -107,12 +97,9 @@ _run_benchmark()
     while [ $pass -le $passes -o $passes -lt 0 ]
     do
         _log "        *** clean scratch device [$bench starting, pass $pass]"
-        bench_mkfs_xfs  $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL \
-                            || _fail "            !!! mkfs SCRATCH_DEV failed"
-
+        _scratch_mkfs_xfs 2>&1 | _fix_malloc >>$FULL
         _log "        *** mounting scratch device"
-        bench_mount_xfs $SCRATCH_DEV $SCRATCH_MNT \
-                            || _fail "            !!! failed to mount"
+        _scratch_mount      || _fail "            !!! failed to mount"
         
         _log "        *** mkdir"
         mkdir $SCRATCH_MNT/bench \
@@ -136,7 +123,7 @@ _run_benchmark()
                             || _fail "            !!! failed to umount"
 
         _log "        *** post-umount filesystem check"
-        _check_fs $SCRATCH_DEV
+        _check_scratch_fs
         
         let "pass = pass + 1"
     done
@@ -175,17 +162,13 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _require_scratch
 rm -f bench.* results.*
 
-if [ ! -z "$SCRATCH_LOGDEV" -a ! -z "$USE_SCRATCH_LOGDEV" ]
-then
-	extra_log_options="-l $SCRATCH_LOGDEV"
-	extra_mkfs_options="-llogdev=$SCRATCH_LOGDEV"
-	extra_mount_options="-ologdev=$SCRATCH_LOGDEV"
-fi
+FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
+FULL_MOUNT_OPTIONS=`_scratch_mount_options`
 
 # $OUT is the report which will ultimately be sent, keep it tidy.
 cat >$OUT <<EOF
-bench: MKFS_OPTIONS=$MKFS_OPTIONS $extra_mkfs_options
-bench: MOUNT_OPTIONS=$MOUNT_OPTIONS $extra_mount_options
+bench: MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
+bench: MOUNT_OPTIONS --$FULL_MOUNT_OPTIONS
 
 EOF
 
@@ -195,8 +178,8 @@ do
     echo "" >$LOG
     _log "*** benchmark started [passes=$passes, benchmark=$bench]"
     _log "*** (`date`)"
-    _log "*** MKFS_OPTIONS=$MKFS_OPTIONS"
-    _log "*** MOUNT_OPTIONS=$MOUNT_OPTIONS"
+    _log "MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS"
+    _log "MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS"
     _log "        *** unmounting scratch device"
     umount $SCRATCH_DEV 2>&1 | _fix_malloc >>$FULL
 

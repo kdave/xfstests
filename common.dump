@@ -240,11 +240,8 @@ _wipe_fs()
 {
     _require_scratch
 
-    mkfs_xfs $SCRATCH_DEV>>$here/$seq.full  ||\
-	_error "mkfs failed"
-      
-    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$here/$seq.full ||\
-	_error "mount failed"
+    _scratch_mkfs_xfs >>$here/$seq.full || _error "mkfs failed"
+    _scratch_mount >>$here/$seq.full || _error "mount failed"
 }
 
 # 
@@ -273,11 +270,11 @@ _cleanup()
     done
 
     if [ $status -ne $NOTRUNSTS ]; then
-	# Sleep added to stop _check_fs from complaining that the
+	# Sleep added to stop _check_scratch_fs from complaining that the
 	# scratch_dev is still busy
 	sleep 10
 
-	_check_fs $SCRATCH_DEV
+	_check_scratch_fs
     fi
 }
 
@@ -289,10 +286,8 @@ _cleanup()
 _stable_fs()
 {
     _saveddir=`pwd`; cd /
-    umount $SCRATCH_MNT >>$here/$seq.full ||\
-	_error "unmount failed"
-    mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$here/$seq.full ||\
-	_error "mount failed"
+    umount $SCRATCH_MNT >>$here/$seq.full || _error "unmount failed"
+    _scratch_mount >>$here/$seq.full || _error "mount failed"
     cd $_saveddir
 }
 

@@ -75,8 +75,8 @@ rm -f $seq.full
 #agsize=16
 agsize=32
 echo -n "Make $agsize megabyte filesystem on SCRATCH_DEV and mount... "
-_do "mkfs_xfs -dsize=${agsize}m,agcount=1 $SCRATCH_DEV"
-_do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+_do "_scratch_mkfs_xfs -dsize=${agsize}m,agcount=1"
+_do "_scratch_mount"
 echo "done"
 
 # full allocation group -> partial; partial -> expand partial + new partial;
@@ -90,7 +90,7 @@ do
     _do "Grow filesystem to $size blocks" "xfs_growfs -D ${size} $SCRATCH_MNT"
     echo -n "Flush filesystem... "
     _do "umount $SCRATCH_MNT"
-    _do "mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
+    _do "_scratch_mount"
     echo "done"
     echo -n "Check files... "
     if ! _do "src/fill2fs_check $tmp.manifest"; then

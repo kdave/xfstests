@@ -1,7 +1,7 @@
 ##/bin/sh
 
 #
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -45,23 +45,10 @@ umask 022
 # awk
 AWK_PROG=awk
 
-# ps
-PS_HAVE_BSD=false
-PS_ALL_FLAGS=-efw
-
-# host os
-PLATFORM=linux
-
 # extra parameters for fsstress
-FSSTRESS_AVOID=
+FSSTRESS_AVOID="-f resvsp=0 -f unresvsp=0"
 
-# env variables for mem checking
-#EF_PROTECT_FREE=1 # efence
-#export EF_PROTECT_FREE
-# Not used because we get weird errors of form:
-# ElectricFence Exiting: mmap() failed: Cannot allocate memory
-
-export AWK_PROG PS_HAVE_BSD PS_ALL_FLAGS PLATFORM
+export AWK_PROG FSSTRESS_AVOID
 
 # we override mount and mkfs.xfs so we can specify extra options
 
@@ -84,9 +71,76 @@ mount()
     esac
 }
 
-mkfs_xfs()
+_test_mount()
 {
-    /sbin/mkfs.xfs -f $* $MKFS_OPTIONS
+    TEST_OPTIONS=""
+    [ -z "$TEST_RTDEV" ] || TEST_OPTIONS="$TEST_OPTIONS -ortdev=$TEST_RTDEV"
+    [ -z "$TEST_LOGDEV" ] || TEST_OPTIONS="$TEST_OPTIONS -ologdev=$TEST_LOGDEV"
+    mount -t xfs $TEST_OPTIONS $* $TEST_DEV $TEST_DIR
+}
+
+_scratch_mount_options()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ortdev=$SCRATCH_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ologdev=$SCRATCH_LOGDEV"
+    echo $SCRATCH_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
+}
+
+_scratch_mount()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ortdev=$SCRATCH_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -ologdev=$SCRATCH_LOGDEV"
+    mount -t xfs $SCRATCH_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
+}
+
+_scratch_mkfs_options()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -rrtdev=$SCRATCH_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -llogdev=$SCRATCH_LOGDEV"
+    echo $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_mkfs_xfs()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -rrtdev=$SCRATCH_RTDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="$SCRATCH_OPTIONS -llogdev=$SCRATCH_LOGDEV"
+    /sbin/mkfs.xfs -f $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_db_options()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+    echo $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_logprint()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+    /usr/sbin/xfs_logprint $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_repair()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+    /sbin/xfs_repair $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
 _get_pids_by_name()
@@ -375,10 +429,11 @@ _require_scratch()
 # 
 _require_logdev()
 {
-    if [ -z "$SCRATCH_LOGDEV" -o ! -b "$SCRATCH_LOGDEV" ]
-    then
+    [ -z "$SCRATCH_LOGDEV" -o ! -b "$SCRATCH_LOGDEV" ] && \
         _notrun "This test requires a valid \$SCRATCH_LOGDEV" 
-    fi
+    [ "$USE_EXTERNAL" != yes ] && \
+        _notrun "This test requires USE_EXTERNAL to be enabled"
+
     # ensure its not mounted
     umount $SCRATCH_LOGDEV 2>/dev/null
 }
@@ -470,7 +525,7 @@ _remount()
 
 }
 
-# run xfs_check on a FS. 
+# run xfs_check and friends on a FS. 
 #
 # if the filesystem is mounted, it's either remounted ro before being
 # checked or it's unmounted and then remounted
@@ -478,15 +533,19 @@ _remount()
 
 USE_REMOUNT=0
 
-_check_fs()
+_check_filesystem()
 {
-    if [ $# -ne 1 ]
+    if [ $# -ne 1 -a $# -ne 2 ]
     then
-	echo "Usage: _check_fs device" 1>&2
+	echo "Usage: _check_fs device [logdevice]" 1>&2
 	exit 1
     fi
     
     device=$1
+    if [ $# -eq 2 -a "$2" != "" ]; then
+       	extra_log_options="-l$2"
+        extra_mount_options="-ologdev=$2"
+    fi
     type=`_fs_type $device`
     ok=1
     
@@ -503,7 +562,7 @@ _check_fs()
         fi
     fi
 
-    xfs_logprint -t $device $extra_log_options 2>&1 \
+    /usr/sbin/xfs_logprint -t $device $extra_log_options 2>&1 \
                 | tee $tmp.fs_check | grep -q "<CLEAN>"
     if [ $? -ne 0 ]
     then
@@ -516,8 +575,8 @@ _check_fs()
         
         ok=0
     fi
-        
-    xfs_check $device 2>&1 | _fix_malloc >$tmp.fs_check 
+
+    /usr/sbin/xfs_check $device 2>&1 | _fix_malloc >$tmp.fs_check 
     if [ -s $tmp.fs_check ]
     then
         echo "_check_fs: filesystem on $device is inconsistent (c) (see $seq.full)"
@@ -530,7 +589,7 @@ _check_fs()
         ok=0
     fi
     
-    if ! xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
+    if ! /sbin/xfs_repair -n $device $extra_log_options >$tmp.fs_check 2>&1
     then
         echo "_check_fs: filesystem on $device is inconsistent (r) (see $seq.full)"
         
@@ -555,7 +614,7 @@ _check_fs()
         # mounted... 
         if [ $USE_REMOUNT -eq 0 ]
         then
-            if ! mount -t xfs $device $mountpoint
+            if ! mount -t xfs $extra_mount_options $device $mountpoint
             then
                 echo "!!! failed to remount $device on $mountpoint"
                 ok=0
@@ -567,6 +626,19 @@ _check_fs()
     
     [ $ok -eq 0 ] && exit 1
     return 0    
+}
+
+_check_test_fs()
+{
+    _check_filesystem $TEST_DEV $TEST_LOGDEV
+}
+
+_check_scratch_fs()
+{
+    SCRATCH_LOG=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_LOG="$SCRATCH_LOGDEV"
+    _check_filesystem $SCRATCH_DEV $SCRATCH_LOG
 }
 
 ################################################################################
@@ -589,7 +661,7 @@ then
     if [ -z "`_fs_type $TEST_DEV`" ]
     then
         # $TEST_DEV is not mounted
-        if ! mount -t xfs $TEST_DEV $TEST_DIR
+        if ! _test_mount
         then
             echo "common.rc: could not mount $TEST_DEV on $TEST_DIR"
             exit 1

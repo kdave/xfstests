@@ -51,9 +51,9 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
-_get_uuid()
+_get_existing_uuid()
 {
-	xfs_db -r $1 -c "uuid" | $AWK_PROG '/^UUID/ { print $3 }'
+    xfs_db -r $TEST_DEV -c "uuid" | $AWK_PROG '/^UUID/ { print $3 }'
 }
 
 # real QA test starts here
@@ -61,9 +61,9 @@ _get_uuid()
 _require_scratch
 
 echo "*** get uuid"
-uuid=`_get_uuid $TEST_DEV`
+uuid=`_get_existing_uuid`
 echo "*** mkfs"
-if ! mkfs_xfs $SCRATCH_DEV >$tmp.out 2>&1
+if ! _scratch_mkfs_xfs >$tmp.out 2>&1
 then
     cat $tmp.out
     echo "!!! failed to mkfs on $SCRATCH_DEV"
@@ -71,7 +71,7 @@ then
 fi
 
 echo "*** mount fs with bad mount option (expect failure)"
-if mount -t xfs $SCRATCH_DEV $SCRATCH_MNT -o foobar >$tmp.out 2>&1
+if _scratch_mount -o foobar >$tmp.out 2>&1
 then
     cat $tmp.out
     echo "!!! mount succeeded (expecting failure)"
@@ -79,10 +79,10 @@ then
 fi
 
 echo "*** duplicate uuid"
-xfs_db -x $SCRATCH_DEV -c "uuid $uuid" >/dev/null
+xfs_db -x -c "uuid $uuid" `_scratch_xfs_db_options` >/dev/null
 
 echo "*** mount fs with duplicate uuid (expect failure)"
-if mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >$tmp.out 2>&1
+if _scratch_mount >$tmp.out 2>&1
 then
     cat $tmp.out
     echo "!!! mount succeeded (expecting failure)"

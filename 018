@@ -65,18 +65,12 @@ _full()
     echo ""            >>$seq.full
 }
 
-_clean_log()
-{
-    _full "clean_log : xfs_logprint"
-    xfs_logprint -t $1                     | tee -a $seq.full \
-        | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
-}
-
 _filter_logprint()
 {
     sed '
         s/data device: 0x[0-9a-f][0-9a-f]*/data device: <DEVICE>/;
         s/log device: 0x[0-9a-f][0-9a-f]*/log device: <DEVICE>/;
+        s/log file: \".*\"/log device: <DEVICE>/;
         s/daddr: [0-9][0-9]*/daddr: <DADDR>/;
         s/length: [0-9][0-9]*/length: <LENGTH>/;
         s/length: [0-9][0-9]*/length: <LENGTH>/;
@@ -103,13 +97,15 @@ _filter_logprint()
 
 _check_log()
 {
-    _clean_log $SCRATCH_DEV
+    _full "clean_log : xfs_logprint"
+    _scratch_xfs_logprint -t       | tee -a $seq.full \
+        | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
     echo "### xfs_logprint output ###"
-    xfs_logprint $SCRATCH_DEV 2>&1 | _filter_logprint
+    _scratch_xfs_logprint 2>&1 | _filter_logprint
     echo "### xfs_logprint -t -i -s 0 output ###"
-    xfs_logprint -t -i -s 0 $SCRATCH_DEV 2>&1 | _filter_logprint
+    _scratch_xfs_logprint -t -i -s 0 2>&1 | _filter_logprint
     echo "### xfs_logprint -t -b -s 0 output ###"
-    xfs_logprint -t -b -s 0 $SCRATCH_DEV 2>&1 | _filter_logprint
+    _scratch_xfs_logprint -t -b -s 0 2>&1 | _filter_logprint
 }
 
 # real QA test starts here
@@ -122,7 +118,7 @@ touch $seq.out
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 _full "mkfs"
-mkfs_xfs -lsize=2000b $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs -lsize=2000b | _filter_mkfs 2>$tmp.mkfs
 source $tmp.mkfs
 [ $dbsize -eq 4096 ] \
     || _notrun "Logprint test, tailored to 4K blocks ($dbsize in use)"
@@ -134,7 +130,7 @@ source $tmp.mkfs
 rm -f $seq.out $seq.full
 
 _full " mount"
-mount -t xfs $SCRATCH_DEV $SCRATCH_MNT >>$seq.full 2>&1 \
+_scratch_mount >>$seq.full 2>&1 \
     || _fail "mount failed"
 
 _setup_seq_out

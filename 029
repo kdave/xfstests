@@ -51,15 +51,6 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
-mkfs_args=""
-logp_args=""
-if [ ! -z "$SCRATCH_LOGDEV" ]	# test external log if possible
-then
-	_require_logdev
-	mkfs_args="-l logdev=$SCRATCH_LOGDEV,size=1200b"
-	logp_args="-l $SCRATCH_LOGDEV"
-fi
-
 _filter_logprint()
 {
 	perl -ne '
@@ -78,10 +69,10 @@ _filter_logprint()
 _require_scratch
 
 echo
-mkfs_xfs $mkfs_args $SCRATCH_DEV | _filter_mkfs 2>/dev/null
+_scratch_mkfs_xfs | _filter_mkfs 2>/dev/null
 
 echo
-xfs_logprint $logp_args $SCRATCH_DEV | _filter_logprint
+_scratch_xfs_logprint | _filter_logprint
 
 status=0
 exit

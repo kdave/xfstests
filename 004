@@ -57,15 +57,15 @@ trap "_cleanup" 0 1 2 3 15
 _populate_scratch()
 {
 	echo "=== mkfs output ===" >>$seq.full
-	mkfs_xfs $SCRATCH_DEV | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
+	_scratch_mkfs_xfs | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
 	source $tmp.mkfs
-	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+	_scratch_mount
 	dd if=/dev/zero of=$SCRATCH_MNT/foo count=200 bs=4096 >/dev/null 2>&1 &
 	dd if=/dev/zero of=$SCRATCH_MNT/goo count=400 bs=4096 >/dev/null 2>&1 &
 	dd if=/dev/zero of=$SCRATCH_MNT/moo count=800 bs=4096 >/dev/null 2>&1 &
 	wait
 	umount $SCRATCH_MNT			# flush everything
-	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT	# and then remount
+	_scratch_mount				# and then remount
 }
 
 

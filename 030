@@ -80,12 +80,12 @@ DSIZE="-dsize=100m"
 # superblock (hanging around from earlier tests)...
 # 
 
-mkfs_xfs $DSIZE $SCRATCH_DEV >/dev/null 2>&1
+_scratch_mkfs_xfs $DSIZE >/dev/null 2>&1
 if [ $? -ne 0 ]		# probably don't have a big enough scratch
 then
 	_notrun "SCRATCH_DEV too small, results would be non-deterministic"
 else
-	mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+	_scratch_mount
 	src/feature -U $SCRATCH_DEV && \
 		_notrun "Quota are enabled, test needs controlled sb recovery"
 	src/feature -G $SCRATCH_DEV && \
@@ -102,7 +102,7 @@ src/devzero -v -1 -n "$clear" $SCRATCH_DEV >/dev/null
 
 # now kick off the real repair test...
 # 
-mkfs_xfs $DSIZE $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs $DSIZE | _filter_mkfs 2>$tmp.mkfs
 source $tmp.mkfs
 _check_ag 0
 _check_ag -1

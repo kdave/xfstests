@@ -75,16 +75,16 @@ _check_root_inos()
 _require_scratch
 
 # devzero blows away 512byte blocks, so make 512byte inodes (at least)
-mkfs_xfs $SCRATCH_DEV | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
 source $tmp.mkfs
 [ $isize -lt 512 ] && \
-	mkfs_xfs -isize=512 $SCRATCH_DEV | _filter_mkfs >/dev/null 2>&1
+	_scratch_mkfs_xfs -isize=512 | _filter_mkfs >/dev/null 2>&1
 
 `xfs_db -r -c sb -c p $SCRATCH_DEV | grep 'ino = ' | \
 	sed -e 's/ //g' -e 's/^/export /'`
 
 # check we won't get any quota inodes setup on mount
-mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+_scratch_mount
 src/feature -U $SCRATCH_DEV && \
 	_notrun "Quota are enabled, test needs controlled sb recovery"
 src/feature -G $SCRATCH_DEV && \

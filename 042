@@ -100,13 +100,11 @@ _cull_files()
 # xfs_repair is going to need three to verify the superblock
 
 rm -f $seq.full
-bmap_cmd="xfs_bmap -v"
-mnt_cmd="mount -t xfs $SCRATCH_DEV $SCRATCH_MNT"
 _do_die_on_error=message_only
 
 echo -n "Make a 48 megabyte filesystem on SCRATCH_DEV and mount... "
-_do "mkfs_xfs -dsize=48m,agcount=3 $SCRATCH_DEV"
-_do "$mnt_cmd"
+_do "_scratch_mkfs_xfs -dsize=48m,agcount=3"
+_do "_scratch_mount"
 echo "done"
 
 echo -n "Reserve 16 1Mb unfragmented regions... "
@@ -114,7 +112,7 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 do
     _do "dd if=/dev/zero of=$SCRATCH_MNT/hole$i bs=4096 count=256"
     _do "dd if=/dev/zero of=$SCRATCH_MNT/space$i bs=4096 count=1"
-    _do "$bmap_cmd $SCRATCH_MNT/hole$i"
+    _do "xfs_bmap -v $SCRATCH_MNT/hole$i"
 done
 echo "done" 
 
@@ -125,7 +123,7 @@ _do "src/fill2fs $fill_options --dir=$SCRATCH_MNT/fill --list=- > $tmp.manifest"
 echo "done"
 # flush the filesystem - make sure there is no space "lost" to pre-allocation
 _do "umount $SCRATCH_MNT"
-_do "$mnt_cmd"
+_do "_scratch_mount"
 echo -n "Use up any further available space using dd... "
 _do "dd if=/dev/zero of=$SCRATCH_MNT/pad bs=4096"
 echo "done"
@@ -135,13 +133,13 @@ _do "Delete every second file" "_cull_files"
 echo -n "Create one very large file... "
 _do "src/fill2 -d nbytes=16000000,file=$SCRATCH_MNT/fragmented"
 echo "done"
-_do "$bmap_cmd $SCRATCH_MNT/fragmented"
+_do "xfs_bmap -v $SCRATCH_MNT/fragmented"
 _do "sum $SCRATCH_MNT/fragmented >$tmp.sum1"
 _do "Remove other files" "rm -rf $SCRATCH_MNT/{pad,hole*}"
 
 # defragment
 _do "Run xfs_fsr on filesystem" "xfs_fsr -v $SCRATCH_DEV"
-_do "$bmap_cmd $SCRATCH_MNT/fragmented"
+_do "xfs_bmap -v $SCRATCH_MNT/fragmented"
 _do "Check 4k files" "src/fill2fs_check $tmp.manifest"
 
 # check
@@ -153,7 +151,7 @@ if ! _do "diff $tmp.sum1 $tmp.sum2"; then
     status=1; exit
 fi
 echo "done"
-_do "Checking filesystem" "_check_fs $SCRATCH_DEV"
+_do "Checking filesystem" "_check_scratch_fs"
 
 # success, all done
 echo "xfs_fsr tests passed."

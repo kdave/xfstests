@@ -150,41 +150,33 @@ timestamp=${TIMESTAMP:=false}
 
 [ -f check.time ] || touch check.time
 
-if [ ! -z "$MKFS_OPTIONS" ]
+FULL_MKFS_OPTIONS=`_scratch_mkfs_options`
+echo check: MKFS_OPTIONS  -- $FULL_MKFS_OPTIONS
+umount $SCRATCH_DEV 2>/dev/null
+# call the overridden mkfs.xfs - make sure the FS is built
+# the same as we'll create it later.
+if ! _scratch_mkfs_xfs -f >$tmp.err 2>&1
 then
-    echo "check: \$MKFS_OPTIONS specified -- \"$MKFS_OPTIONS\""
-    umount $SCRATCH_DEV 2>/dev/null
-    # call the overridden mkfs.xfs - make sure the FS is built
-    # the same as we'll create it later.
-    if ! mkfs_xfs -f $SCRATCH_DEV >$tmp.err 2>&1
-    then
-	echo "our local mkfs_xfs routine ..."
-	cat $tmp.err
-        echo "check: failed to mkfs.xfs \$SCRATCH_DEV using specified options"
-        exit 1
-    fi
+    echo "our local _scratch_mkfs_xfs routine ..."
+    cat $tmp.err
+    echo "check: failed to mkfs.xfs \$SCRATCH_DEV using specified options"
+    exit 1
 fi
 
-if [ ! -z "$MOUNT_OPTIONS" ]
+FULL_MOUNT_OPTIONS=`_scratch_mount_options`
+echo check: MOUNT_OPTIONS -- $FULL_MOUNT_OPTIONS
+# call the overridden mount - make sure the FS mounts with
+# the same options that we'll mount with later.
+if ! _scratch_mount >$tmp.err 2>&1
 then
-    echo "check: \$MOUNT_OPTIONS specified -- \"$MOUNT_OPTIONS\""
-    umount $TEST_DEV
-    # call the overridden mount - make sure the FS starts as
-    # the same as we'll set it later.
-    if ! mount -t xfs $TEST_DEV $TEST_DIR >$tmp.err 2>&1
-    then
-	echo "our local mount routine ..."
-	cat $tmp.err
-        # call the normal mount
-	echo "normal mount ..."
-        /bin/mount -t xfs $TEST_DEV $TEST_DIR
-        echo "check: failed to mount \$TEST_DEV using specified mount options"
-        exit 1
-    fi
+    echo "our local mount routine ..."
+    cat $tmp.err
+    echo "check: failed to mount \$SCRATCH_DEV using specified options"
+    exit 1
 fi
 
 seq="check"
-_check_fs $TEST_DEV
+_check_test_fs
 
 for seq in $list
 do
@@ -283,7 +275,7 @@ do
     [ -f $seq.notrun ] || try=`expr $try + 1`
     
     seq="after_$seq"
-    _check_fs $TEST_DEV
+    _check_test_fs
     
 done
 

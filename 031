@@ -54,11 +54,11 @@ rm -f $seq.full
 
 _check_repair()
 {
-	xfs_repair $SCRATCH_DEV >$tmp.0 2>&1
+	_scratch_xfs_repair >$tmp.0 2>&1
 	for i in 1 2 3 4
 	do
 		echo "Repairing, iteration $i" | tee -a $seq.full
-		xfs_repair $SCRATCH_DEV 2>&1 | tee -a $seq.full >$tmp.$i
+		_scratch_xfs_repair 2>&1 | tee -a $seq.full >$tmp.$i
 		diff $tmp.0 $tmp.$i >> $seq.full
 		if [ $? -ne 0 ]; then
 			echo "ERROR: repair round $i differs (see $seq.full)"
@@ -67,6 +67,8 @@ _check_repair()
 		# echo all interesting stuff...
 		perl -ne '
 			s/(rebuilding directory inode) (\d+)/\1 INO/g;
+			s/internal log/<TYPEOF> log/g;
+			s/external log on \S+/<TYPEOF> log/g;
 			/^\S+/ && print;
 		' $tmp.$i
 	done
@@ -102,34 +104,34 @@ EOF
 # 
 _require_scratch
 
-MKFSV1="-p $tmp.proto -n version=1 $SCRATCH_DEV"
-MKFSV2="-p $tmp.proto -n version=2 $SCRATCH_DEV"
+MKFSV1="-p $tmp.proto -n version=1"
+MKFSV2="-p $tmp.proto -n version=2"
 
 # sanity test - default + one root directory entry
 _create_proto 0
 echo "=== version 1, one entry"
-mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 echo "=== version 2, one entry (shortform)"
-mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # block-form root directory & repeat
 _create_proto 20
 echo "=== version 1, twenty entries"
-mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 echo "=== version 2, twenty entries (block form)"
-mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # leaf-form root directory & repeat
 _create_proto 1000
 echo "=== version 1, thousand entries"
-mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 echo "=== version 2, thousand entries (leaf form)"
-mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # success, all done

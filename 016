@@ -80,7 +80,7 @@ _init()
     echo "*** mkfs"
     force_opts="-dsize=50m -lsize=2097152"
     echo mkfs_xfs $force_opts $SCRATCH_DEV >>$seq.full
-    mkfs_xfs $force_opts $SCRATCH_DEV | _filter_mkfs >/dev/null 2>$tmp.mkfs
+    _scratch_mkfs_xfs $force_opts | _filter_mkfs >/dev/null 2>$tmp.mkfs
     source $tmp.mkfs
 }
 
@@ -92,7 +92,7 @@ _log_traffic()
     out=$SCRATCH_MNT/$$.tmp
     
     echo "   *** mount"
-    if ! mount -t xfs $SCRATCH_DEV $SCRATCH_MNT
+    if ! _scratch_mount
     then
         echo "failed to mount $SCRATCH_DEV"
         exit 1
@@ -122,14 +122,14 @@ _log_traffic()
 
 _log_size()
 {
-    xfs_logprint -tb $SCRATCH_DEV | $AWK_PROG '
-        /log device/ {  print $7}
+    _scratch_xfs_logprint -tb | $AWK_PROG '
+        /log file: / || /log device: / { print $7}
     '
 }
 
 _log_head()
 {
-    xfs_logprint -tb $SCRATCH_DEV | $AWK_PROG '
+    _scratch_xfs_logprint -tb | $AWK_PROG '
         /head:/ { print $5 }
     '
 }
