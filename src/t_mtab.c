@@ -135,7 +135,8 @@ lock_mtab (void) {
 
 		if (j == 0) {
 			/* We made the link. Now claim the lock. */
-			if (fcntl (fd, F_SETLK, &flock) == -1) {
+			if (fcntl (fd, F_SETLK, &flock) == -1 &&
+			    errno != EBUSY) {
 				int errsv = errno;
 				printf(_("Can't lock lock file %s: %s\n"),
 					   mounted_lock, strerror (errsv));
