@@ -48,7 +48,7 @@ char	*Progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-a|-A] [-s sid] [-t token] pathname\n",
+	fprintf(stderr, "Usage: %s [-a|-A] [-s sid] [-t token] {pathname|handle}\n",
 		Progname);
 	exit(1);
 }
@@ -67,10 +67,11 @@ main(
 	void		*hanp;
 	size_t		hlen;
 	dm_stat_t	dmstat;
-	char		*pathname;
+	char		*pathname_obj;
 	int		a_flag = 0;
 	char		*name;
 	int		opt;
+	int		validate = 0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -79,7 +80,7 @@ main(
 	}
 
 	opterr = 0;
-	while ((opt = getopt(argc, argv, "Aas:t:")) != EOF) {
+	while ((opt = getopt(argc, argv, "Aas:t:v")) != EOF) {
 		switch (opt) {
 		case 'A':
 			a_flag = 2;
@@ -93,6 +94,9 @@ main(
 		case 't':
 			token = atol(optarg);
 			break;
+		case 'v':
+			validate = 1;
+			break;
 		case '?':
 			usage();
 		}
@@ -100,7 +104,7 @@ main(
 	if (optind + 1 != argc) {
 		usage();
 	}
-	pathname = argv[optind];
+	pathname_obj = argv[optind];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -109,18 +113,19 @@ main(
 	if (sid == DM_NO_SESSION)
 		find_test_session(&sid);
 
+	/* Get the file's handle or convert the external handle. */
+
+	if (opaque_to_handle(pathname_obj, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", pathname_obj);
+		exit(1);
+	}
+
 	if (!a_flag) {
-		fprintf(stdout, "path            %s\n", pathname);
+		fprintf(stdout, "path/handle            %s\n", pathname_obj);
 
 		/* Get the file's state, print it, then verify it against
 		   what is in the file's stat block.
 		*/
-
-		if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-			fprintf(stderr, "dm_path_to_handle failed, %s\n",
-				strerror(errno));
-			exit(1);
-		}
 
 		if (dm_get_fileattr(sid, hanp, hlen, token,
 	DM_AT_EMASK|DM_AT_PMANR|DM_AT_PATTR|DM_AT_DTIME|DM_AT_CFLAG|DM_AT_STAT,
@@ -131,7 +136,8 @@ main(
 		}
 
 		print_state(&dmstat);
-		(void)validate_state(&dmstat, pathname, 1);
+		if(validate)
+			(void)validate_state(&dmstat, pathname_obj, 1);
 #if 0
 	} else {
 		if ((rc = filesys_bulkscan_init(pathname, &scanp)) != 0) {
