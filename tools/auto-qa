@@ -75,7 +75,12 @@ SOAK_PROC="3"
 
 ROOT="$HOME/qa"
 HOST=`hostname -s`
-export WORKAREA="$ROOT/linux-xfs"
+if [ ! -z "CVSROOT" ]; then
+    CVS=true
+    WORKAREA="$ROOT/linux-2.4-xfs"
+fi
+[ -z "$WORKAREA" ] && WORKAREA="$ROOT/linux-xfs"
+export WORKAREA
 
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin/ptools:/usr/local/bin"
 STATE=$ROOT/qa.state
@@ -85,8 +90,6 @@ IMAGE="$BOOT/vmlinuz-$VERSION$EXTRA"
 SYSTEMMAP="$BOOT/System.map-$VERSION$EXTRA"
 CONFIG="$ROOT/$HOST-$VERSION$EXTRA.config"
 MODULES="/lib/modules/$VERSION$EXTRA"
-SELF="$ROOT/auto-qa"
-SELF_UPDATE="cmd/xfstests/tools/auto-qa"
 COMMON_CONFIG="$WORKAREA/cmd/xfstests/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
@@ -114,6 +117,11 @@ in
 	EMAIL="nathans@larry"
 	ADMINEMAIL="nathans@larry"
 	MODULAR=0
+	;;
+    goldfish)
+	EMAIL="nathans@larry"
+	ADMINEMAIL="nathans@larry"
+	MODULAR=1
 	;;
     *)
         _fail "auto-qa: no configuration information for host '$HOST'"
@@ -187,6 +195,43 @@ _restart()
     exec $ROOT/su -c "shutdown -r 2 \"auto-qa rebooting\" &" < /dev/null
 }
 
+_update_autoqa_file()
+{
+    SELF="$ROOT/auto-qa"
+    SELF_UPDATE="cmd/xfstests/tools/auto-qa"
+    if [ $CVS = false ]; then
+	    cmd="p_tupdate $SELF_UPDATE"
+    else
+	    cmd="cvs -z3 update $SELF_UPDATE"
+    fi
+    exec $SH -c "cd $WORKAREA ; eval $cmd; chmod +x $SELF_UPDATE ; exec $SELF"
+}
+
+_update_workarea()
+{
+    if [ $CVS = false ]; then
+	_log "        *** p_tupdate"
+	cd $WORKAREA 
+	p_tupdate 2>&1 \
+			|| _fail "            !!! p_tupdate failed"
+
+	_log "        *** p_check/p_purge"
+	cd $WORKAREA 
+	p_check -s | p_purge -yiu 2>&1 \
+			|| _fail "            !!! p_check/p_purge failed"
+
+	_log "        *** non-trunk files"
+	cd $WORKAREA 
+	p_list -c 2>&1 \
+			|| _fail "            !!! p_list failed"
+    else
+	_log "        *** cvs update"
+	cd $WORKAREA
+	cvs -z3 update -d
+    fi
+}
+            
+
 _log "*** linux-xfs QA (`date`)"
 
 _get_state
@@ -248,7 +293,7 @@ do
             _log "******************************************"
 
             _change_state "inited"
-            exec $SH -c "cd $WORKAREA ; p_tupdate $SELF_UPDATE ; chmod +x $SELF_UPDATE ; exec $SELF"
+            _update_autoqa_file
             ;;
             
         *inited)
@@ -257,24 +302,10 @@ do
             ;;
         
         *update)
-            _log "        *** p_tupdate"
-            cd $WORKAREA 
-            p_tupdate 2>&1 \
-                                    || _fail "            !!! p_tupdate failed"
-
-            _log "        *** p_check/p_purge"
-            cd $WORKAREA 
-            p_check -s | p_purge -yiu 2>&1 \
-                                    || _fail "            !!! p_check/p_purge failed"
-
-            _log "        *** non-trunk files"
-            cd $WORKAREA 
-            p_list -c 2>&1 \
-                                    || _fail "            !!! p_list failed"
-
+            _update_workarea
             new_state="clean"
             ;;
-            
+
         *clean)
             # we need to configure or else we might fail to clean
             for pkg in attr acl xfsprogs xfsdump xfstests
@@ -282,26 +313,26 @@ do
                 cd $WORKAREA/cmd/$pkg
                 _log "        *** clean $pkg tools"
                 make realclean 2>&1 \
-                                    || _fail "            !!! clean $pkg failed"
+                        || _fail "            !!! clean $pkg failed"
             done
 
             _log "        *** clean quota tools"
             cd $WORKAREA/cmd/quota
             ( rm -f configure ; autoconf ; sh configure ; make clean ) 2>&1 \
-                                    || _fail "            !!! clean quota failed"
+                        || _fail "            !!! clean quota failed"
 
             _log "        *** clean linux"
             cd $WORKAREA/linux
             make mrproper 2>&1 \
-                                    || _fail "            !!! clean linux failed"
+                        || _fail "            !!! clean linux failed"
 
             _log "        *** install configuration file"
             cp -f $CONFIG $WORKAREA/linux/.config 2>&1 \
-                                    || _fail "            !!! failed to install config"
+                        || _fail "            !!! failed to install config"
             
             _log "        *** remove version file"
             rm -f include/linux/version.h 2>&1 \
-                                    || _fail "            !!! failed to clean version"
+                        || _fail "            !!! failed to clean version"
 
             new_state="reconfig"
             ;;
@@ -310,15 +341,15 @@ do
         
             _log "        *** reconfig kernel"
             
-            _change_state "clean" ;# if this fails, we'd better start from scratch
+            _change_state "clean" ; # we better start from scratch if this fails
             
             cd $WORKAREA/linux
             # we want to use default options for any new config options.
             echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" | \
                 make EXTRAVERSION=$EXTRA oldconfig 2>&1 \
-                                    || _fail "            !!! reconfig oldconfig failed"
+                        || _fail "            !!! reconfig oldconfig failed"
             make EXTRAVERSION=$EXTRA dep 2>&1 \
-                                    || _fail "            !!! reconfig dep failed"
+                        || _fail "            !!! reconfig dep failed"
 
             new_state="build"
             ;;
@@ -326,13 +357,13 @@ do
         *build)
             _log "        *** build kernel"
             
-            _change_state "clean" ;# if this fails, we'd better start from scratch
+            _change_state "clean" ; # we better start from scratch if this fails
             
             cd $WORKAREA/linux
             make -j2 EXTRAVERSION=$EXTRA bzImage 2>&1 \
-                                    || _fail "            !!! build bzImage failed"
+                        || _fail "            !!! build bzImage failed"
             make -j2 EXTRAVERSION=$EXTRA modules 2>&1 \
-                                    || _fail "            !!! build modules failed"
+                        || _fail "            !!! build modules failed"
                                     
             _log "        *** build and install tools"
             for pkg in attr acl xfsprogs xfsdump xfstests 
@@ -342,12 +373,12 @@ do
                 # use e-fence - but this will only take effect on configure
                 export MALLOCLIB=/usr/lib/libefence.a
                 make configure 2>&1 \
-                                    || _fail "            !!! configure $pkg failed"
+                        || _fail "            !!! configure $pkg failed"
                 make default 2>&1 \
-                                    || _fail "            !!! build $pkg failed"
+                        || _fail "            !!! build $pkg failed"
 
                 _sudo make install install-dev 2>&1 \
-                                    || _fail "            !!! install $pkg failed"
+                        || _fail "            !!! install $pkg failed"
             done
 
             _log "        *** build and install quota tools"
@@ -356,9 +387,9 @@ do
             # use e-fence - but this will only take effect on configure
             export MALLOCLIB=/usr/lib/libefence.a
             ( rm -f configure ; autoconf ; sh configure ; make all ) 2>&1 \
-                                    || _fail "            !!! build quota failed"
+                        || _fail "            !!! build quota failed"
             _sudo make install 2>&1 \
-                                    || _fail "            !!! install quota failed"
+                        || _fail "            !!! install quota failed"
 
             new_state="install"
             ;;
@@ -371,22 +402,22 @@ do
             _log "        *** install kernel"
             cd $WORKAREA/linux
             _sudo cp -f $WORKAREA/linux/arch/i386/boot/bzImage $IMAGE 2>&1 \
-                                    || _fail "            !!! install kernel failed"
+                        || _fail "            !!! install kernel failed"
             _sudo cp -f $WORKAREA/linux/System.map $SYSTEMMAP 2>&1 \
-                                    || _fail "            !!! install kernel failed"
+                        || _fail "            !!! install kernel failed"
             _sudo make EXTRAVERSION=$EXTRA modules_install 2>&1 \
-                                    || _fail "            !!! install modules failed"
+                        || _fail "            !!! install modules failed"
 
             _log "        *** reinit lilo"
             _sudo /sbin/lilo 2>&1 \
-                                    || _fail "            !!! reinit lilo failed"
+                        || _fail "            !!! reinit lilo failed"
             new_state="restart"
             ;;
             
         *restart)
             _log "            *** select qa kernel"
             _sudo /sbin/lilo -R linux-xfs-qa 2>&1 \
-                                    || _fail "            !!! lilo failed"
+                        || _fail "            !!! lilo failed"
             
             _log "            *** prepare to restart"
             _change_state "restarted"
@@ -426,7 +457,7 @@ do
             _log "            *** modules dependencies"
             
             _sudo depmod -a  2>&1 \
-                                    || _fail "            !!! failed to depmod -a" 
+                        || _fail "            !!! failed to depmod -a" 
             
             _log "            *** unmounting XFS mounts"
             
@@ -442,7 +473,7 @@ do
             _log "            *** installing modules"
 
 	    _sudo modprobe xfs 2>&1 \
-                                    || _fail "            !!! failed to modprobe xfs"
+                        || _fail "            !!! failed to modprobe xfs"
 
             new_state="reset"
             ;;
@@ -460,12 +491,12 @@ do
             _log "            *** clean TEST_DEV"
             
             _sudo mkfs -t xfs -f $TEST_DEV 2>&1 \
-                                    || _fail "            !!! failed to mkfs TEST_DEV"
+                        || _fail "            !!! failed to mkfs TEST_DEV"
             
             _log "            *** mounting TEST_DEV"
             
             _sudo mount -t xfs $TEST_DEV $TEST_DIR 2>&1 \
-                                    || _fail "            !!! failed to mount"
+                        || _fail "            !!! failed to mount"
                                     
             new_state="run"
             ;;
@@ -476,7 +507,7 @@ do
             
             _log "            *** run soak test"
             _sudo ./soak $SOAK_PASSES $SOAK_STRESS $SOAK_PROC\
-                                    || _fail "            !!! failed to run soak test"
+                        || _fail "            !!! failed to run soak test"
 
             new_state="done"
             ;;
