@@ -56,7 +56,7 @@ _cleanup()
     rm -f $tmp.*
     if [ $status -eq 0 ]; then
 	# don't keep these files around unless something went wrong
-	rm -f $seq.trans* $seq.op* $seq.full
+	rm -f $seq.trans* $seq.op*
     fi
     echo "*** unmount"
     umount $SCRATCH_MNT 2>/dev/null
@@ -407,12 +407,14 @@ cat >$tmp.seq.params <<EOF
 #     it may no be the case in all QA environments where the LR
 #     may be forced out early.
   -lversion=2,su=4096 -ologbsize=32k   8
+  -lversion=2,su=32768 -ologbsize=32k  64
+  -lversion=2,su=36864 -ologbsize=32k  72 # expect mount to fail
 EOF
 
 # do the work for various log params which
 # should not effect the data content of the log
 cat $tmp.seq.params \
-| while read mkfs mnt start
+| while read mkfs mnt start restofline
 do
     if [ "$mkfs" != "#" ]; then 
 	_mkfs_create_log $mkfs $mnt
