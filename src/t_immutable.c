@@ -566,7 +566,7 @@ static int test_immutable(const char *dir)
 	  fail++;
      } else {
 	  if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble), strerror(errno));
+	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble), strerror(errno));
 	       fail++;
 	  }
 	  close(fd);
@@ -636,11 +636,11 @@ static int test_immutable(const char *dir)
      if (!getuid()) {
 	  if (stat("/dev/null", &st) != -1) {
 	       if (mknod(path, S_IFCHR|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH, st.st_rdev) != -1) {
-		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not fail\n", path, st.st_rdev);
+		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not fail\n", path, (long long int)st.st_rdev);
 		    fail++;
 		    unlink(path);
 	       } else if (errno != EACCES) { 
-		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not set errno == EACCESS\n", path, st.st_rdev);
+		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not set errno == EACCESS\n", path, (long long int)st.st_rdev);
 		    fail++;
 	       }
 	  }
@@ -665,7 +665,7 @@ static int test_immutable(const char *dir)
           fail++;
      } else {
           if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble), strerror(errno));
+               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble), strerror(errno));
                fail++;
           }
           close(fd);
@@ -1182,13 +1182,13 @@ static int test_append(const char *dir)
      } else {
 	  lseek(fd, 0, SEEK_SET); /* this is silently ignored */
 	  if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 		       strerror(errno));
 	       fail++;
 	  }
 	  lseek(fd, origsize, SEEK_SET); /* this is silently ignored */
           if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
                        strerror(errno));
                fail++;
           }
@@ -1225,7 +1225,7 @@ static int test_append(const char *dir)
                     else {
                          if (read(fd, buf, strlen(scribble2)) == -1) {
                               fprintf(stderr, "read(%s, &buf, %d) failed: %s\n", path,
-				      strlen(scribble2), strerror(errno));
+				      (int)strlen(scribble2), strerror(errno));
                               fail++;
                          } else {
                               if (memcmp(scribble2, buf, strlen(scribble2))) {
@@ -1246,13 +1246,13 @@ static int test_append(const char *dir)
      } else {
 	  lseek(fd, 0, SEEK_SET); /* this is silently ignored */
 	  if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 		       strerror(errno));
 	       fail++;
 	  }
 	  lseek(fd, origsize, SEEK_SET); /* this is silently ignored */
           if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
                        strerror(errno));
                fail++;
           }
@@ -1290,7 +1290,7 @@ static int test_append(const char *dir)
                     else {
                          if (read(fd, buf, strlen(scribble4)) == -1) {
                               fprintf(stderr, "read(%s, &buf, %d) failed: %s\n", path,
-				      strlen(scribble4), strerror(errno));
+				      (int)strlen(scribble4), strerror(errno));
                               fail++;
                          } else {
                               if (memcmp(scribble4, buf, strlen(scribble4))) {
@@ -1374,13 +1374,13 @@ static int test_append(const char *dir)
 	  } else {
 	       lseek(fd, 0, SEEK_SET); /* this is silently ignored */
 	       if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 			    strerror(errno));
 		    fail++;
 	       }
 	       lseek(fd, origsize, SEEK_SET); /* this is silently ignored */
 	       if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 			    strerror(errno));
 		    fail++;
 	       }
@@ -1417,7 +1417,7 @@ static int test_append(const char *dir)
 			 else {
 			      if (read(fd, buf, strlen(scribble2)) == -1) {
 				   fprintf(stderr, "read(%s, &buf, %d) failed: %s\n", path,
-					   strlen(scribble2), strerror(errno));
+					   (int)strlen(scribble2), strerror(errno));
 				   fail++;
 			      } else {
 				   if (memcmp(scribble2, buf, strlen(scribble2))) {
@@ -1438,13 +1438,13 @@ static int test_append(const char *dir)
 	  } else {
 	       lseek(fd, 0, SEEK_SET); /* this is silently ignored */
 	       if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 			    strerror(errno));
 		    fail++;
 	       }
 	       lseek(fd, origsize, SEEK_SET); /* this is silently ignored */
 	       if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble),
+		    fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble),
 			    strerror(errno));
 		    fail++;
 	       }
@@ -1482,7 +1482,7 @@ static int test_append(const char *dir)
 			 else {
 			      if (read(fd, buf, strlen(scribble4)) == -1) {
 				   fprintf(stderr, "read(%s, &buf, %d) failed: %s\n", path,
-					   strlen(scribble4), strerror(errno));
+					   (int)strlen(scribble4), strerror(errno));
 				   fail++;
 			      } else {
 				   if (memcmp(scribble4, buf, strlen(scribble4))) {
@@ -1514,7 +1514,7 @@ static int test_append(const char *dir)
 	  fail++;
      } else {
 	  if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble), strerror(errno));
+	       fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble), strerror(errno));
 	       fail++;
 	  }
 	  close(fd);
@@ -1589,7 +1589,7 @@ static int test_append(const char *dir)
 	  asprintf(&path, "%s/append-only.d/newdev-%d", dir, getuid());
 	  if (stat("/dev/null", &st) != -1) {
 	       if (mknod(path, S_IFCHR|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH, st.st_rdev) == -1) {
-		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) failed: %s\n", path, st.st_rdev, strerror(errno));
+		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) failed: %s\n", path, (long long int)st.st_rdev, strerror(errno));
 		    fail++;
 	       } else if (unlink(path) != -1) { 
 		    fprintf(stderr, "unlink(%s) did not fail\n", path);
@@ -1615,7 +1615,7 @@ static int test_append(const char *dir)
           fail++;
      } else {
           if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble), strerror(errno));
+               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble), strerror(errno));
                fail++;
           }
           close(fd);
@@ -1633,7 +1633,7 @@ static int test_append(const char *dir)
           } else
                chown(path, 0, 0);
      }
-
+     
      free(path);
      asprintf(&path, "%s/append-only.d/dir/newfile-%d", dir, getuid());
      if ((fd = open(path, O_RDWR|O_CREAT, 0666)) == -1) {
@@ -1641,7 +1641,7 @@ static int test_append(const char *dir)
           fail++;
      } else {
           if (write(fd, scribble, strlen(scribble)) != strlen(scribble)) {
-               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, strlen(scribble), strerror(errno));
+               fprintf(stderr, "write(%s, %s, %d) failed: %s\n", path, scribble, (int)strlen(scribble), strerror(errno));
                fail++;
           }
           close(fd);
