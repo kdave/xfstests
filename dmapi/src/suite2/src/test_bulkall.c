@@ -202,9 +202,10 @@ my_print_victim(
 		 */
 		if (verbose & V_PRINT) {
 			if (attrlen) {
-				printf("%d (%s)\n",
-				       attrlen,
-				       isalpha(attrval[0]) ? attrval : "");
+				if (isalpha(attrval[0]) )
+					printf("(%s)\n", attrval);
+				else
+					printf("<len=%d>\n", attrlen);
 			}
 			else {
 				printf("<none>\n");
