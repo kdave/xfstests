@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -35,17 +35,14 @@
 
 /* xfs-specific includes */
 
-#include <libxfs.h>
-#include <attributes.h>
+#include <xfs/libxfs.h>
+#include <attr/attributes.h>
 
 /* libc includes */
 
-#include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/time.h>
-#include <sys/ioctl.h>
 #include <sys/wait.h>
-#include <malloc.h>
 #include <dirent.h>
 
 #endif

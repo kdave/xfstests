@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -42,11 +42,11 @@
  * Return code: 0 is true, anything else is error/not supported
  */
 
-#include <libxfs.h>
+#include <xfs/libxfs.h>
 #include <sys/quota.h>
 #include <sys/resource.h>
 #include <signal.h>
-#include <xqm.h>
+#include <xfs/xqm.h>
 
 int verbose = 0;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -78,8 +78,9 @@ void usage(void)
            
 }
 
-int		fd;
-int		blocksize = 0;
+int		fd = -1;
+int		blocksize;
+char		*filename;
 
 /* params are in bytes */
 void map(off64_t off, off64_t len)
@@ -103,7 +104,7 @@ void map(off64_t off, off64_t len)
     
     printf("        [ofs,count]: start..end\n");
     for (;;) {
-	    if (ioctl(fd, XFS_IOC_GETBMAP, bm) < 0) {
+	    if (xfsctl(filename, fd, XFS_IOC_GETBMAP, bm) < 0) {
 		    perror("getbmap");
 		    break;
 	    }
@@ -129,8 +130,8 @@ main(int argc, char **argv)
 	int		c;
 	char		*dirname = NULL;
 	int		done = 0;
+	int		status = 0;
 	struct flock64	f;
-	char		*filename = NULL;
 	off64_t		len;
 	char		line[1024];
 	off64_t		off;
@@ -201,31 +202,33 @@ main(int argc, char **argv)
 		perror(filename);
 		exit(1);
 	}
-	if (unlinkit)
-		unlink(filename);
 	if (!blocksize) {
-	        if (fstatvfs64(fd, &svfs) < 0) {
-		        perror(filename);
-		        exit(1);
-	        }
+		if (fstatvfs64(fd, &svfs) < 0) {
+			perror(filename);
+			status = 1;
+			goto done;
+		}
 		blocksize = (int)svfs.f_bsize;
-        }
-        if (blocksize<0) {
-                fprintf(stderr,"illegal blocksize %d\n", blocksize);
-                exit(1);
-        }
+	}
+	if (blocksize<0) {
+		fprintf(stderr,"illegal blocksize %d\n", blocksize);
+		status = 1;
+		goto done;
+	}
 	printf("    blocksize %d\n", blocksize);
 	if (rflag) {
 		struct fsxattr a;
 
-		if (ioctl(fd, XFS_IOC_FSGETXATTR, &a) < 0) {
+		if (xfsctl(filename, fd, XFS_IOC_FSGETXATTR, &a) < 0) {
 			perror("XFS_IOC_FSGETXATTR");
-			exit(1);
+			status = 1;
+			goto done;
 		}
 		a.fsx_xflags |= XFS_XFLAG_REALTIME;
-		if (ioctl(fd, XFS_IOC_FSSETXATTR, &a) < 0) {
+		if (xfsctl(filename, fd, XFS_IOC_FSSETXATTR, &a) < 0) {
 			perror("XFS_IOC_FSSETXATTR");
-			exit(1);
+			status = 1;
+			goto done;
 		}
 	}
 	while (!done) {
@@ -269,7 +272,7 @@ main(int argc, char **argv)
                                 opnames[opno], (__s64)off, (__s64)len);
                         
 			f.l_len = len;
-			c = ioctl(fd, optab[opno], &f);
+			c = xfsctl(filename, fd, optab[opno], &f);
 			if (c < 0) {
 				perror(opnames[opno]);
 				break;
@@ -327,8 +330,12 @@ main(int argc, char **argv)
 			break;
 		}
 	}
-        if (!nflag) printf("\n");
-	close(fd);
-	exit(0);
+	if (!nflag) printf("\n");
+done:
+	if (fd != -1)
+		close(fd);
+	if (unlinkit)
+		unlink(filename);
+	exit(status);
 	/* NOTREACHED */
 }

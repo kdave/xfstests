@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -30,10 +30,8 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <libxfs.h>
-#include <jdm.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
+#include <xfs/libxfs.h>
+#include <xfs/jdm.h>
 
 void
 dotime(void *ti, char *s)
@@ -171,7 +169,7 @@ main(int argc, char **argv)
 	bulkreq.ubuffer = t;
 	bulkreq.ocount  = &count;
 
-	while ((ret = ioctl(fsfd, XFS_IOC_FSBULKSTAT, &bulkreq)) == 0) {
+	while ((ret = xfsctl(name, fsfd, XFS_IOC_FSBULKSTAT, &bulkreq)) == 0) {
 		total += count;
 
 		if (verbose)
@@ -269,7 +267,7 @@ main(int argc, char **argv)
 		close(fsfd);
 
 	if (ret < 0 )
-		perror("ioctl(XFS_IOC_FSBULKSTAT)");
+		perror("xfsctl(XFS_IOC_FSBULKSTAT)");
 
 	if (verbose)
 		printf(

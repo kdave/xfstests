@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -56,7 +56,7 @@ struct fsxattr rtattr;
 
 void usage(char *progname);
 int findblock(void);
-void writeblks(int fd);
+void writeblks(char *fname, int fd);
 int readblks(int fd);
 void dumpblock(int *buffer, __uint64_t offset, int blocksize);
 
@@ -154,8 +154,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	if (rt) {
-		if (ioctl(fd, XFS_IOC_FSGETXATTR, &rtattr) < 0) {
-			perror("ioctl(XFS_IOC_FSGETXATTR)");
+		if (xfsctl(filename, fd, XFS_IOC_FSGETXATTR, &rtattr) < 0) {
+			perror("xfsctl(XFS_IOC_FSGETXATTR)");
 			return 1;
 		}
 		if ((rtattr.fsx_xflags & XFS_XFLAG_REALTIME) == 0 ||
@@ -163,15 +163,15 @@ main(int argc, char *argv[])
 			rtattr.fsx_xflags |= XFS_XFLAG_REALTIME;
 			if (extsize)
 				rtattr.fsx_extsize = extsize * blocksize;
-			if (ioctl(fd, XFS_IOC_FSSETXATTR, &rtattr) < 0) {
-				perror("ioctl(XFS_IOC_FSSETXATTR)");
+			if (xfsctl(filename, fd, XFS_IOC_FSSETXATTR, &rtattr) < 0) {
+				perror("xfsctl(XFS_IOC_FSSETXATTR)");
 				return 1;
 			}
 		}
 	}
 	if (direct) {
-		if (ioctl(fd, XFS_IOC_DIOINFO, &diob) < 0) {
-			perror("ioctl(XFS_IOC_FIOINFO)");
+		if (xfsctl(filename, fd, XFS_IOC_DIOINFO, &diob) < 0) {
+			perror("xfsctl(XFS_IOC_FIOINFO)");
 			return 1;
 		}
 		if (blocksize % diob.d_miniosz) {
@@ -180,7 +180,7 @@ main(int argc, char *argv[])
 		}
 	}
         printf(test?"write (skipped)\n":"write\n");
-	writeblks(fd);
+	writeblks(filename, fd);
         printf("readback\n");
 	r=readblks(fd);
 	if (close(fd) < 0) {
@@ -199,7 +199,7 @@ main(int argc, char *argv[])
 }
 
 void
-writeblks(int fd)
+writeblks(char *fname, int fd)
 {
 	__uint64_t offset;
 	char *buffer;
@@ -229,8 +229,8 @@ writeblks(int fd)
 			fl.l_start = offset;
 			fl.l_len = blocksize;
 			fl.l_whence = 0;
-			if (ioctl(fd, XFS_IOC_RESVSP64, &fl) < 0) {
-				perror("ioctl(XFS_IOC_RESVSP64)");
+			if (xfsctl(fname, fd, XFS_IOC_RESVSP64, &fl) < 0) {
+				perror("xfsctl(XFS_IOC_RESVSP64)");
 				exit(1);
 			}
 			continue;

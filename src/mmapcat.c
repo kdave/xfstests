@@ -1,10 +1,11 @@
 /* mmapcat.c - derived from source by misiek@pld.ORG.PL */
 
-#include<fcntl.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <stdio.h>
 
 int main(int argc, char **argv)
 {

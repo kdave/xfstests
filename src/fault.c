@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -30,8 +30,7 @@
  * http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
  */
 
-#include <libxfs.h>
-#include <sys/ioctl.h>
+#include <xfs/libxfs.h>
 
 void expect_error(int r, int err)
 {
@@ -63,10 +62,10 @@ main(int argc, char **argv)
 	exit(1);
     }
     
-    printf("--- ioctl with bad output address\n");
-    expect_error(ioctl(fsfd, XFS_IOC_FSCOUNTS, NULL), EFAULT);
-    printf("--- ioctl with bad input address\n");
-    expect_error(ioctl(fsfd, XFS_IOC_SET_RESBLKS, NULL), EFAULT);
+    printf("--- xfsctl with bad output address\n");
+    expect_error(xfsctl(argv[1], fsfd, XFS_IOC_FSCOUNTS, NULL), EFAULT);
+    printf("--- xfsctl with bad input address\n");
+    expect_error(xfsctl(argv[1], fsfd, XFS_IOC_SET_RESBLKS, NULL), EFAULT);
     
     close(fsfd);
     
