@@ -13,7 +13,12 @@
 int main(int argc, char **argv)
 {
 	char file[MAXPATHLEN];
-	int fd, i;
+	int fd, i, iterations;
+
+	if (argc < 2)
+		exit(1);
+
+	iterations = atoi(argv[1]);
 
 	sprintf(file, "testfile.%d", getpid());
 
@@ -22,7 +27,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	for (i = 0; ;i ++) {
+	for (i = 0; i < iterations;i++) {
 		if (write(fd, &i, sizeof(i)) != sizeof(i)) {
 			perror("couldn't write");
 			exit(1);
