@@ -47,7 +47,7 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -66,18 +66,8 @@ _do_logprint()
     fi
 }
 
-_cleanup()
-{
-    rm -f $tmp.*
-    kill $pid
-}
-
 rm -f $seq.full
 rm -f $tmp.log
-
-tail -f /var/log/messages >$tmp.log &
-pid=$!
-cp $tmp.log $tmp.log.orig # note the original log
 
 _require_scratch
 
@@ -111,18 +101,6 @@ fi
 echo "mount with replay"
 _scratch_mount $mnt >>$seq.full 2>&1 \
     || _fail "mount failed: $mnt $MOUNT_OPTIONS"
-
-sleep 2
-
-# compare with what has now been added to the log
-comm -13 $tmp.log.orig $tmp.log >$tmp.comm
-echo "$tmp.comm" >>$seq.full
-cat $tmp.comm >>$seq.full
-
-echo "check syslog for recovery..." 
-grep recovery $tmp.comm |\
-sed -e 's/.*Start/Start/' -e 's/system:.*/system/' \
-    -e 's/.*End/End/'
 
 echo "ls SCRATCH_MNT"
 ls $SCRATCH_MNT

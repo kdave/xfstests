@@ -32,8 +32,11 @@
 #
 
 # automatic qa system. 31/08/00 dxm@sgi.com
-
-# configuration (you could tune this)
+#
+# Usage: auto_qa start-state [stop-state]
+# Do auto_qa from start-state up to stop-state inclusive
+# or if no stop-state given then do it until reach "done" state.
+#
 
 _log()
 {
@@ -98,7 +101,7 @@ STATE=$ROOT/qa.state
 QADIR="$WORKAREA/xfstests"
 SUDO="su -c"
 CONFIG="$ROOT/$HOST.config"
-COMMON_CONFIG="$WORKAREA/xfstests/common.config"
+COMMON_CONFIG="$QADIR/common.config"
 SH="/bin/sh"
 LOG="$ROOT/qa.log"
 
@@ -139,6 +142,8 @@ _set_state()
 _change_state()
 {
     new=$1
+
+    # if have state XXXX-state then preserve XXXX-newstate
     
     case $state
     in
@@ -167,18 +172,6 @@ _sudo()
 _restart()
 {
     exec $ROOT/su -c "(shutdown -r now \"auto-qa rebooting\" )&" < /dev/null
-}
-
-_update_autoqa_file()
-{
-    SELF="$ROOT/auto-qa"
-    SELF_UPDATE="xfstests/tools/auto-qa"
-    if [ -z "$CVSROOT" ]; then
-	    cmd="p_tupdate $SELF_UPDATE"
-    else
-	    cmd="cvs -z3 update $SELF_UPDATE"
-    fi
-    exec $SH -c "cd $WORKAREA ; $cmd; chmod +x $SELF_UPDATE ; exec $SELF"
 }
 
 _update_workarea()
@@ -237,6 +230,7 @@ _i386_install()
 		|| _fail "	    !!! install modules failed"
     fi
 
+
     if [ -z "$KINSTALL" -o "$KINSTALL" = lilo ]; then
 	_log "	*** reinit lilo"
 	_sudo /sbin/lilo 2>&1 \
@@ -260,6 +254,12 @@ _ia64_install()
 _ia64_restart()
 {
     echo not yet implemented
+}
+
+_check_kernel()
+{
+    [ -d "$KWORKAREA" ]	|| _fail "    !!! QA kernel workarea \"$KWORKAREA\" not found"
+    [ -r "$CONFIG" ]	|| _fail "    !!! Can't read config file $CONFIG"
 }
 
 
@@ -290,15 +290,13 @@ in
 	;;
 esac
 
-if [ "$1" != "" ]
-then
-    _set_state $1
-fi
+[ -n "$1" ] && _set_state $1
+[ -n "$2" ] && stop_state=$2
 
 [ "$UID" -eq 0 ]	&& _fail "    !!! QA most be run as a normal user"
 [ -d "$ROOT" ]		|| _fail "    !!! QA root \"$ROOT\" not found"
 [ -d "$WORKAREA" ]	|| _fail "    !!! QA workarea \"$WORKAREA\" not found"
-[ -r "$CONFIG" ]	|| _fail "    !!! Can't read config file $CONFIG"
+cd $QADIR
 . "$COMMON_CONFIG" 	|| _fail "    !!! Couldn't source $COMMON_CONFIG"
 
 _get_kernel_version
@@ -327,21 +325,10 @@ do
 	    _log "******************************************************"
 	    _log "QA init $VERSION (`date`)"
 	    _log "******************************************************"
-	    _log "--- kernel ($IMAGE)"
-	    [ -z "$KMODULES" -o "$KMODULES" = yes ] && \
-		_log "--- modules ($MODULES)"
-
-	    _change_state "inited"
-	    _update_autoqa_file
-	    ;;
-	    
-	*inited)
-	    _log "	*** QA initialized"
-	    new_state="update"
+	    new_state="updatetools"
 	    ;;
 	
-	*update)
-	    _update_workarea "$KWORKAREA"
+	*updatetools)
 	    _update_workarea "$WORKAREA"
 	    new_state="cleantools"
 	    ;;
@@ -381,10 +368,17 @@ do
 			|| _fail "	    !!! install $pkg failed"
 	    done
 
+	    new_state="updatekernel"
+	    ;;
+
+	*updatekernel)
+	    _check_kernel
+	    _update_workarea "$KWORKAREA"
 	    new_state="cleankernel"
 	    ;;
 
 	*cleankernel)
+	    _check_kernel
 	    _log "	*** clean kernel"
 	    cd "$KWORKAREA"
 	    make mrproper 2>&1 \
@@ -402,7 +396,7 @@ do
 	    ;;
 	    
 	*reconfig)
-	
+	    _check_kernel
 	    _log "	*** reconfig kernel"
 	    
 	    # we better start from scratch if this fails
@@ -420,7 +414,11 @@ do
 	    ;;
 	    
 	*buildkernel)
+	    _check_kernel
 	    _log "	*** build kernel"
+	    _log "          --- kernel ($IMAGE)"
+	    [ -z "$KMODULES" -o "$KMODULES" = yes ] && \
+            _log "          --- modules ($MODULES)"
 	    
 	    _change_state "cleankernel" ; # we better start from scratch if this fails
 	    
@@ -434,6 +432,7 @@ do
 	    ;;
 
 	*install)
+	    _check_kernel
 	    _log "	*** blat old modules"
 	    _sudo rm -rf $MODULES
 	    
@@ -445,11 +444,7 @@ do
 		ia64)		_ia64_install ;;
 	    esac
 
-	    if [ -z "$KRESTART" -o "$KRESTART" = yes ]; then
-		new_state="restart"
-	    else
-		new_state="done"
-	    fi
+	    new_state="restart"
 	    ;;
 	    
 	*restart)
@@ -565,7 +560,7 @@ do
 	    ;;
 	    
 	*done)
-	    _log "*** QA run complete"
+	    _log "*** requested QA state transitions complete"
 
 	    _success
 	    ;;
@@ -582,6 +577,20 @@ do
 
     _log "    *** state $state done (`date`)"
     [ "$new_state" = "" ] && _fail "    !!! no new state set"
+
+    if [ -n "$stop_state" ]
+    then
+        # remove hyphen prefixes
+	s1=`echo $state | sed 's/.*-//'`
+	s2=`echo $stop_state | sed 's/.*-//'`
+
+	if [ $s1 = $s2 ]
+	then
+	    # we have been requested to stop here and not go on
+	    new_state="done"
+	fi
+    fi
+
     _change_state $new_state
     
 done
