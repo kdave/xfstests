@@ -91,7 +91,7 @@ main(int argc, char **argv)
 	resvsp.l_whence = 0;
 	resvsp.l_start = 0;
 	resvsp.l_len = resvsize;
-	if (ioctl(writefd, XFS_IOC_RESVSP64, &resvsp) < 0) {
+	if (xfsctl(filename, writefd, XFS_IOC_RESVSP64, &resvsp) < 0) {
 		fprintf(stdout, "attempt to reserve %lld bytes for %s "
 		                "using %s failed: %s (%d)\n", 
 				(long long int)resvsize, filename, "XFS_IOC_RESVSP64",

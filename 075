@@ -71,9 +71,13 @@ _do_test()
 	exit
     fi
 
+    _filter_param=`echo "$_param" | sed\
+	-e 's/-N [0-9][0-9]*/-N numops/' \
+	-e 's/-l [0-9][0-9]*/-l filelen/'`
+
     echo ""
     echo "-----------------------------------------------"
-    echo "fsx.$_n : $_param"
+    echo "fsx.$_n : $_filter_param"
     echo "-----------------------------------------------"
 
     if [ "$FSTYP" = "nfs" ]
@@ -99,10 +103,52 @@ _do_test()
     _check_test_fs
 }
 
+_usage()
+{
+    echo "$0: [-l filelen] [-n numops1] [-N numops2]"
+}
+
+_process_args()
+{
+    while getopts "l:n:N:?" c $@
+    do
+        case $c
+        in
+            l)
+                filelen=$OPTARG
+		param_type="$param_type, overidde -l"
+                ;;
+            N)
+                numops2=$OPTARG
+		param_type="$param_type, overidde -N"
+                ;;
+            n)
+                numops1=$OPTARG
+		param_type="$param_type, overidde -n"
+                ;;
+	    ?)
+		_usage
+		exit	
+		;;
+	esac
+    done
+}
+
 
 # real QA test starts here
 _supported_fs xfs udf nfs
 _supported_os IRIX Linux
+
+size10=`expr 10 \* 1024 \* 1024`	# 10 megabytes
+filelen=$size10
+numops1=1000
+numops2=10000
+
+# can override the params here
+_process_args "$@"
+
+echo "Params are for $param_type" >>$seq.full
+echo "Params: n = $numops1 N = $numops2 l = $filelen" >>$seq.full
 
 _setup_testdir
 
@@ -120,12 +166,10 @@ _check_test_fs
 # -S seed: for random # generator (default 1) 0 gets timestamp
 # -x: pre-allocate file space, exercising unwritten extents
 
-size10=`expr 10 \* 1024 \* 1024`	# 10 megabytes
-
-_do_test 0 "-d -N 1000 -S 0"
-_do_test 1 "-d -N 1000 -S 0 -x"
-_do_test 2 "-d -N 25000 -l $size10 -S 0"
-_do_test 3 "-d -N 25000 -l $size10 -S 0 -x"
+_do_test 0 "-d -N $numops1 -S 0"
+_do_test 1 "-d -N $numops1 -S 0 -x"
+_do_test 2 "-d -N $numops2 -l $filelen -S 0"
+_do_test 3 "-d -N $numops2 -l $filelen -S 0 -x"
 
 rm -f $seq.*.fsx{good,log}
 exit 0

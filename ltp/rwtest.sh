@@ -335,15 +335,7 @@ do
 		fi
 		size=${size%%\%*}
 
-		case $(uname) in
-		IRIX*)
-			echo $blke
-		  #sz=$( perl -le 'print int( "$blke" * "$size" / 100 )' )
-		  ;;
-		*)
-		  #sz=$(expr \( $blks '*' $size \) / 100)
-		  ;;
-		esac
+		sz=$(expr \( $blks '*' $size \) / 100)
 
 		if [[ $sz -gt $max ]]
 		then
