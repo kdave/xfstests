@@ -246,8 +246,8 @@ spawn_kid(
 	char		*action)
 {
 	pid_t	pid;
-	char	sidbuf[sizeof(dm_sessid_t)];
-	char	tokenbuf[sizeof(dm_token_t)];
+	char	sidbuf[10];
+	char	tokenbuf[10];
 
 	pid = fork();
 	if (pid == 0) {
