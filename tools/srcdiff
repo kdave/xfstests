@@ -73,9 +73,24 @@ sub straightdiff {
 	}
 }
 
+#
+# xfstests directory m4 directory is a repository of all of the
+# custom m4 macros used in the packages we look after.
+#
+sub m4macrodiff {
+	my ( $package ) = @_;
+
+	foreach (`ls cmd/$package/m4/*.m4`) {
+		my $m4 = `basename $_`;
+		chomp($m4);
+		straightdiff $m4, "cmd/$package/m4", "cmd/xfstests/m4";
+	}
+}
+
 my $first = shift @pkglist;
 foreach (@pkglist) {
 	print "\n=== Checking $_ package ===\n";
+	m4macrodiff $_;
 	straightdiff 'buildrules', "cmd/$first/include", "cmd/$_/include";
 	straightdiff 'buildmacros', "cmd/$first/include", "cmd/$_/include";
 	straightdiff 'Makefile', "cmd/$first/build", "cmd/$_/build";
