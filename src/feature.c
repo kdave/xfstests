@@ -33,6 +33,7 @@
 /*
  * Test for filesystem features on given mount point or device
  *   -c  test for 32bit chown support (via libc)
+ *   -t  test for working rlimit/ftruncate64 (via libc)
  *   -q  test for quota support (kernel compile option)
  *   -u  test for user quota enforcement support (mount option)
  *   -g  test for group quota enforcement support (mount option)
@@ -43,6 +44,8 @@
 
 #include <libxfs.h>
 #include <sys/quota.h>
+#include <sys/resource.h>
+#include <signal.h>
 #include <xqm.h>
 
 int verbose = 0;
@@ -52,6 +55,7 @@ usage(void)
 {
 	fprintf(stderr, "Usage: feature [-v] -<q|u|g|U|G> <filesystem>\n");
 	fprintf(stderr, "       feature [-v] -c <file>\n");
+	fprintf(stderr, "       feature [-v] -t <file>\n");
 	exit(1);
 }
 
@@ -93,6 +97,44 @@ haschown32(char *filename)
 }
 
 int
+hastruncate64(char *filename)
+{
+	struct rlimit64 rlimit64;
+	off64_t	bigoff = 4294967307;	/* > 2^32 */
+	struct stat64 bigst;
+	int fd;
+
+	getrlimit64(RLIMIT_FSIZE, &rlimit64);
+	rlimit64.rlim_cur = RLIM64_INFINITY;
+	setrlimit64(RLIMIT_FSIZE, &rlimit64);
+
+	signal(SIGXFSZ, SIG_IGN);
+
+	if ((fd = open(filename, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)) < 0) {
+		fprintf(stderr, "open failed on ");
+		perror(filename);
+		return(1);
+	}
+
+	if (ftruncate64(fd, bigoff) < 0)
+		return(1);
+
+	if (fstat64(fd, &bigst) < 0) {
+		fprintf(stderr, "fstat64 failed on ");
+		perror(filename);
+		return(1);
+	}
+
+	if (verbose)
+		fprintf(stderr, "fstat64 on %s gave sz=%lld (truncsz=%lld)\n",
+			filename, bigst.st_size, bigoff);
+
+	if (bigst.st_size != bigoff)
+		return(1);
+	return(0);
+}
+
+int
 hasxfsquota(int type, int q, char *device)
 {
 	fs_quota_stat_t	qstat;
@@ -125,6 +167,7 @@ main(int argc, char **argv)
 {
 	int	c;
 	int	cflag = 0;
+	int	tflag = 0;
 	int	gflag = 0;
 	int	Gflag = 0;
 	int	qflag = 0;
@@ -132,10 +175,13 @@ main(int argc, char **argv)
 	int	Uflag = 0;
 	char	*fs;
 
-	while ((c = getopt(argc, argv, "cgGquUv")) != EOF) {
+	while ((c = getopt(argc, argv, "ctgGquUv")) != EOF) {
 		switch (c) {
 		case 'c':
 			cflag++;
+			break;
+		case 't':
+			tflag++;
 			break;
 		case 'g':
 			gflag++;
@@ -160,7 +206,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!cflag && !uflag && !gflag && !qflag && !Uflag && !Gflag)
+	if (!cflag && !tflag && !uflag && !gflag && !qflag && !Uflag && !Gflag)
 		usage();
 	if (optind != argc-1)
 		usage();
@@ -168,6 +214,8 @@ main(int argc, char **argv)
 
 	if (cflag)
 		return(haschown32(fs));
+	if (tflag)
+		return(hastruncate64(fs));
 	if (qflag)
 		return(hasxfsquota(0, 0, fs));
 	if (gflag)
