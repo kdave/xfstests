@@ -58,6 +58,11 @@ _cleanup()
     rm -f symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9} symlink_self empty_file
 }
 
+_touch()
+{
+    touch $@ 2>&1 | sed -e "s/creating \`//g" -e "s/'//g"
+}
+
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
@@ -67,7 +72,7 @@ _cleanup()
 cd $TEST_DIR
 
 o=empty_file
-touch $o
+_touch $o
 for f in symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9}
 do
     ln -s $o $f
@@ -78,10 +83,10 @@ ln -s symlink_self symlink_self
 
 echo "*** touch deep symlinks"
 echo ""
-touch symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9}
+_touch symlink_{0,1,2,3}{0,1,2,3,4,5,6,7,8,9}
 echo ""
 echo "*** touch recusive symlinks"
 echo ""
-touch symlink_self
+_touch symlink_self
 
 exit
