@@ -1,11 +1,12 @@
 AC_DEFUN([AC_PACKAGE_NEED_UUID_H],
-  [ AC_CHECK_HEADERS(uuid.h)
-    if test $ac_cv_header_uuid_h = no; then
-	AC_CHECK_HEADERS(uuid/uuid.h,, [
+  [ AC_CHECK_HEADERS([uuid.h sys/uuid.h uuid/uuid.h])
+    if test $ac_cv_header_uuid_h = no -a \
+	    $ac_cv_header_sys_uuid_h = no -a \
+	    $ac_cv_header_uuid_uuid_h = no; then
 	echo
 	echo 'FATAL ERROR: could not find a valid UUID header.'
 	echo 'Install the Universally Unique Identifiers development package.'
-	exit 1])
+	exit 1
     fi
   ])
 
