@@ -214,6 +214,8 @@ _scratch_xfs_repair()
     SCRATCH_OPTIONS=""
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -r$SCRATCH_RTDEV"
     [ "$USE_BIG_LOOPFS" = yes ] && SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
     $XFS_REPAIR_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
@@ -648,20 +650,21 @@ USE_REMOUNT=0
 
 _check_xfs_filesystem()
 {
-    if [ $# -ne 1 -a $# -ne 2 -a $# -ne 3 ]; then
-	echo "Usage: _check_fs device [logdevice [rtdevice]]" 1>&2
+    if [ $# -ne 3 ]
+    then
+	echo "Usage: _check_fs device <logdev>|none <rtdev>|none" 1>&2
 	exit 1
     fi
-    
+
     device=$1
-    if [ $# -eq 2 -a "$2" != "" ]; then
+    if [ "$2" != "none" ]; then
        	extra_log_options="-l$2"
         extra_mount_options="-ologdev=$2"
     fi
-    if [ $# -eq 3 -a "$3" != "" ]; then
+
+    if [ "$3" != "none" ]; then
        	extra_rt_options="-r$3"
-       	extra_log_options="-l$2"
-        extra_mount_options="-ologdev=$2 -ortdev=$3"
+        extra_mount_options=$extra_mount_options" -ortdev=$3"
     fi
 
     [ "$FSTYP" != xfs ] && return 0
@@ -781,10 +784,11 @@ _check_udf_filesystem()
 
 _check_test_fs()
 {
-    TEST_LOG=""
+    TEST_LOG="none"
+    TEST_RT="none"
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
         TEST_LOG="$TEST_LOGDEV"
-    TEST_RT=""
+
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ] && \
         TEST_RT="$TEST_RTDEV"
 
@@ -795,10 +799,11 @@ _check_scratch_fs()
 {
     case $FSTYP in
     xfs)
-	SCRATCH_LOG=""
+	SCRATCH_LOG="none"
+	SCRATCH_RT="none"
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 	    SCRATCH_LOG="$SCRATCH_LOGDEV"
-	SCRATCH_RT=""
+
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
 	    SCRATCH_RT="$SCRATCH_RTDEV"
 

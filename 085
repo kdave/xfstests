@@ -52,21 +52,11 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
+. ./common.log
 
 # real QA test starts here
 _supported_fs xfs
 _supported_os IRIX Linux
-
-_do_logprint()
-{
-    xfs_logprint -t $SCRATCH_DEV | tee -a $seq.full >$tmp.logprint
-    if grep -q "<DIRTY>" $tmp.logprint; then
-	echo "dirty log"
-    fi
-    if grep -q "<CLEAN>" $tmp.logprint; then
-	echo "clean log"
-    fi
-}
 
 rm -f $seq.full
 rm -f $tmp.log
@@ -91,7 +81,7 @@ echo "unmount"
 umount $SCRATCH_MNT
 
 echo "logprint after going down..."
-_do_logprint
+_print_logstate
 
 # curious if FS consistent at start
 if false; then
@@ -111,7 +101,7 @@ echo "unmount"
 umount $SCRATCH_MNT
 
 echo "logprint after mount and replay..."
-_do_logprint
+_print_logstate
 
 if _check_scratch_fs; then
     echo "filesystem is checked ok"
