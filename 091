@@ -1,0 +1,104 @@
+#! /bin/sh
+# FS QA Test No. 091
+#
+# fsx exercising direct IO -- sub-block sizes and concurrent buffered IO
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux IRIX
+
+run_fsx()
+{
+	echo fsx $@ | sed -e "s/ $bsize / BSIZE /g" -e "s/ $psize / PSIZE /g"
+	rm -f $TEST_DIR/junk
+	$here/ltp/fsx $@ $TEST_DIR/junk > $tmp.stdout 2> $tmp.stderr
+	if [ $? -ne 0 ]; then
+		cat $tmp.stdout
+		cat $tmp.stderr
+		exit 1
+	fi
+}
+
+psize=`$here/src/feature -p`
+bsize=512
+# 2.4 Linux kernels support bsize aligned direct I/O only
+kernel=`uname -r  | sed -e 's/\(2\..\).*/\1/'`
+[ "$HOSTOS" = "Linux" -a "$kernel" = "2.4" ] && bsize=$psize
+
+# fsx usage:
+# 
+# -N numops: total # operations to do 
+# -l flen: the upper bound on file size 
+# -o oplen: the upper bound on operation size (64k default)
+# -r readbdy: $psize would make reads page aligned (on i386)
+# -t truncbdy: $psize would make truncates page aligned (on i386)
+# -w writebdy: $psize would make writes page aligned (on i386)
+# 
+# -Z: O_DIRECT (use -R, -W, -r and -w too)
+# -R: mapped read operations DISabled
+# -W: mapped write operations DISabled
+
+#run_fsx -N 10000            -l 500000 -r $psize -t $psize -w $psize -Z -R -W
+ run_fsx -N 10000            -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
+ run_fsx -N 10000  -o 8192   -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
+#run_fsx -N 10000  -o 16384  -l 500000 -r $psize -t $psize -w $psize -Z -R -W
+ run_fsx -N 10000  -o 32768  -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
+#run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $psize -w $psize -Z -R -W
+ run_fsx -N 10000  -o 8192   -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
+#run_fsx -N 10000  -o 16384  -l 500000 -r $psize -t $psize -w $psize -Z -R -W
+ run_fsx -N 10000  -o 32768  -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
+#run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $psize -w $psize -Z -W
+ run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $bsize -w $bsize -Z -W
+
+# Commented out calls above are less likely to pick up issues, so
+# save time by commenting them out (leave 'em for manual testing).
+
+status=0
+exit
