@@ -123,6 +123,46 @@ create_filled_acl(void)
     return acl;
 }
 
+void
+test_acl_get_qualifier(void)
+{
+    struct acl_entry ace;
+    uid_t *uidp;
+
+    printf("*** test out acl_get_qualifier ***\n");
+
+    /* simple ace */
+    ace.ae_tag = ACL_USER;
+    ace.ae_id = 1;
+    ace.ae_perm = 1;
+
+    /* make sure we can get uid and free it */
+    uidp = acl_get_qualifier(&ace); 
+    printf("uid = %d\n", *uidp);
+    acl_free(uidp);
+
+    /* change to another valid tag with a qualifier */
+    ace.ae_tag = ACL_GROUP;
+    uidp = acl_get_qualifier(&ace); 
+    printf("uid = %d\n", *uidp);
+    acl_free(uidp);
+
+    /* let's get some errors */
+
+    ace.ae_tag = ACL_USER_OBJ;
+    uidp = acl_get_qualifier(&ace); 
+    if (uidp == NULL)
+	printf("uidp is NULL: %s\n", strerror(errno));
+    else
+	printf("Error: uidp is NOT NULL\n");
+
+    uidp = acl_get_qualifier(NULL); 
+    if (uidp == NULL)
+	printf("uidp is NULL: %s\n", strerror(errno));
+    else
+	printf("Error: uidp is NOT NULL\n");
+}
+
 int
 main(int argc, char **argv)
 {
@@ -224,6 +264,8 @@ main(int argc, char **argv)
          *       It is simplest to choose ids not in /etc/passwd /etc/group
          *       which is done already in a script. 
          */
+
+	test_acl_get_qualifier();
 
 	return 0;
 }
