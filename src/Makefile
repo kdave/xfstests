@@ -33,7 +33,7 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-TARGETS = alloc bstat devzero dirstress fault feature fsstress \
+TARGETS = alloc acl_get bstat devzero dirstress fault feature fsstress \
 	  fill fill2 holes ioctl loggen lstat64 nametest permname \
 	  randholes truncfile usemem runas
 ifeq ($(HAVE_DB), true)
@@ -79,3 +79,7 @@ bstat:		$(HFILES) $(BSTAT_OBJECTS)
 LOGGEN_OBJECTS = loggen.o $(LIBXFS)
 loggen:		$(HFILES) $(LOGGEN_OBJECTS)
 		$(CCF) -o $@ $(LDFLAGS) $(LOGGEN_OBJECTS) $(LDLIBS)
+
+ACL_OBJECTS = acl_get.o $(LIBACL)	
+acl_get:	$(HFILES) $(ACL_OBJECTS)
+		$(CCF) -o $@ $(LDFLAGS) $(ACL_OBJECTS) $(LDLIBS)
