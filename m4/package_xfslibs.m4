@@ -2,8 +2,8 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
   [ AC_CHECK_HEADERS([xfs/libxfs.h])
     if test "$ac_cv_header_xfs_libxfs_h" != "yes"; then
         echo
-        echo 'FATAL ERROR: XFS header <xfs/libxfs.h> does not exist.'
-        echo 'Install the XFS programs (xfsprogs) development package.'
+        echo 'FATAL ERROR: cannot find a valid <xfs/libxfs.h> header file.'
+        echo 'Install or upgrade the XFS development package.'
         echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     fi
@@ -13,8 +13,8 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_HANDLE_H],
   [ AC_CHECK_HEADERS([xfs/handle.h])
     if test "$ac_cv_header_xfs_handle_h" != "yes"; then
         echo
-        echo 'FATAL ERROR: XFS header <xfs/handle.h> does not exist.'
-        echo 'Install the XFS programs (xfsprogs) development package.'
+        echo 'FATAL ERROR: cannot find a valid <xfs/handle.h> header file.'
+        echo 'Install or upgrade the XFS development package.'
         echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
     fi
@@ -24,8 +24,8 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
   [ AC_CHECK_LIB(xfs, libxfs_init,, [
         echo
         echo 'FATAL ERROR: could not find a valid XFS base library.'
-        echo 'Install the XFS programs (xfsprogs) library package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
+        echo 'Install or upgrade the XFS library package.'
+        echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
         exit 1
     ])
     libxfs="-lxfs"
@@ -39,7 +39,7 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
   [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
         echo
         echo 'FATAL ERROR: could not find a current XFS handle library.'
-        echo 'Install the XFS programs (xfsprogs) library package.'
+        echo 'Install or upgrade the XFS library package.'
         echo 'Alternatively, run "make install-lib" from the xfsprogs source.'
         exit 1
     ])
