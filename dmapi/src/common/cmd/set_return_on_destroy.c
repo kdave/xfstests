@@ -40,12 +40,14 @@
 Test program used to test the DMAPI function dm_set_return_on_destroy().  The
 command line is:
 
-	set_return_on_destroy [-s sid] pathname [attr]
+	set_return_on_destroy [-F] [-s sid] {pathname|fshandle} [attr]
 
 where pathname is the name of a file which resides in the filesystem of
 interest.  attr is the name of the DMAPI attribute; if none is specified,
 then set-return-on-destroy will be disabled for the filesystem.
 sid is the session ID whose attribute you are interested in setting.
+
+Use -F if you want the program to find the fshandle based on the pathname.
 
 ----------------------------------------------------------------------------*/
 
@@ -61,7 +63,7 @@ char	*Progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage:\t%s [-s sid] pathname [attr]\n", Progname);
+	fprintf(stderr, "usage:\t%s [-F] [-s sid] {pathname|fshandle} [attr]\n", Progname);
 	exit(1);
 }
 
@@ -79,6 +81,7 @@ main(
 	size_t	 	hlen;
 	char		*name;
 	int		opt;
+	int		Fflag = 0;
 
 	if (Progname = strrchr(argv[0], '/')) {
 		Progname++;
@@ -88,10 +91,13 @@ main(
 
 	/* Crack and validate the command line options. */
 
-	while ((opt = getopt(argc, argv, "s:")) != EOF) {
+	while ((opt = getopt(argc, argv, "Fs:")) != EOF) {
 		switch (opt) {
 		case 's':
 			sid = atol(optarg);
+			break;
+		case 'F':
+			Fflag++;
 			break;
 		case '?':
 			usage();
@@ -112,12 +118,25 @@ main(
 	if (sid == DM_NO_SESSION)
 		find_test_session(&sid);
 
+	if (opaque_to_handle(pathname, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", pathname);
+		exit(1);
+	}
+
 	/* Get the file's handle. */
 
-	if (dm_path_to_fshandle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get filesystem handle for file %s, %s\n",
-			pathname, strerror(errno));
-		exit(1);
+	if (Fflag) {
+		void *fshanp;
+		size_t fshlen;
+
+		if (dm_handle_to_fshandle(hanp, hlen, &fshanp, &fshlen)) {
+			fprintf(stderr, "can't get filesystem handle for file %s, %s\n",
+				pathname, strerror(errno));
+			exit(1);
+		}
+		dm_handle_free(hanp, hlen);
+		hanp = fshanp;
+		hlen = fshlen;
 	}
 
 	if (dm_set_return_on_destroy(sid, hanp, hlen, DM_NO_TOKEN,
