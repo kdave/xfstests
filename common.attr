@@ -98,9 +98,16 @@ _filter_aces()
 	    }
 	}
 	/^user/ { if ($2 in idlist) sub($2, idlist[$2]); print; next}
+	/^u/ { if ($2 in idlist) sub($2, idlist[$2]); print; next}
 	/^default:user/ { if ($3 in idlist) sub($3, idlist[$3]); print; next}
 	{print}
     '
+}
+
+_filter_aces_notypes()
+{
+    tr '\[' '\012' | tr ']' '\012' | tr ',' '\012' | _filter_aces|\
+    sed -e 's/u:/user:/' -e 's/g:/group:/' -e 's/o:/other:/' -e 's/m:/mask:/'
 }
 
 # test if acl code will work
@@ -122,26 +129,6 @@ _acl_requirements()
       cd $here
       _notrun "requires kernel ACL support"
     fi
-}
-
-# filter user ace names to user ids
-#
-_filter_aces()
-{
-    tr '\[' '\012' |\
-    tr ']' '\012' |\
-    tr ',' '\012' |\
-    $AWK_PROG '
-	BEGIN {
-	    FS=":"
-	    while ( getline <"/etc/passwd" > 0 ) {
-		idlist[$1] = $3 
-	    }
-	}
-	/^u/ { if ($2 in idlist) sub($2, idlist[$2]); print; next}
-	{print}
-    ' |\
-    sed -e 's/u:/user:/' -e 's/g:/group:/' -e 's/o:/other:/' -e 's/m:/mask:/'
 }
 
 _list_acl()
