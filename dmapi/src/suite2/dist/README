@@ -1,0 +1,463 @@
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+                           DMAPI Test Suite 
+                          Informational File
+                          ------------------
+
+I) Getting Started
+
+   A) Extracting from DMAPI_test.cpio
+
+      1) Create a new directory for storing the tests.  We will refer to 
+         this as the "base" directory.  The base directory can be
+         located anywhere; it does NOT need to be in a DMAPI filesystem.
+
+      2) Move the archive file DMAPI_test.cpio to the base directory
+         and execute the following command to extract from the archive:
+ 
+            cat DMAPI_test.cpio | cpio -icd
+
+      3) There should now be several files and subdirectories in the base
+         directory, including the file "file_list".  Read this file for a
+         complete listing of which files should be present in which
+         directories.  Compare "file_list" with the output of "ls -Rpl" 
+         to be sure that you have the necessary files.
+
+      4) The base directory contains the files and programs that are of
+         immediate use for testing.  The "bindir" subdirectory contains
+         the test programs and datafiles.  The "lib" and "src" subdirectories
+         contain C libraries and source code for the C programs. 
+
+   B) Checking the Existence and Version of DMAPI
+ 
+      The program check_dmapi can verify that you have the correct
+      version of DMAPI installed.  Note: it can only be run as root.
+      Execute this command (from the "base" directory):
+ 
+      bindir/check_dmapi
+ 
+      It should report that you have a current version of DMAPI.  If it
+      does not, it will also suggest which components of your DMAPI are 
+      not current, and where to find a patch to update them.
+
+   C) Configuration
+
+      1) Creating the Test Directories
+
+         a) The Test Filesystem
+ 
+            Mount a DMAPI filesystem, or use an existing one.
+            This filesystem's mount info MUST be listed in /etc/fstab.
+ 
+            Write down the path to this filesystem's mountpoint, and label
+            it as "m_main" for future use.
+ 
+         b) The Main Test Directory
+            
+            Create a new directory in the "m_main" filesystem. 
+ 
+            Write down the path to this directory.  Note ONLY the part
+            that comes AFTER "m_main".  Label this as "d_name".
+ 
+            EXAMPLE: You have a DMAPI filesystem /dmi_main  
+                     You name the test directory /dmi_main/test_dir
+            "m_main" is /dmi_main 
+            "d_name" is /test_dir
+ 
+         c) The Cross-NFS Test Directories 
+ 
+            For NFS tests, all you must do is create two empty directories
+            (one for nfs2, one for nfs3). They do NOT need to be in a 
+            DMAPI filesystem.  
+ 
+            Your main test directory will be mounted across NFS, into these
+            two directories.  Normally, the tests will do this automatically.
+            However, if you need to do this mount manually, the command
+            would look like this example:
+ 
+            mount -t nfs2 localhost:/dmi_main /dmi_nfs2
+ 
+            Write down the paths to these nfs2 and nfs3 test directories.
+            Label them "m_nfs2" and "m_nfs3" respectively.
+ 
+         c) The Realtime Test Filesystem and Directory
+ 
+            If you wish to test realtime i/o, you'll need a filesystem 
+            mounted with a realtime partition, and a directory in that
+            filesystem.  
+ 
+            Label the path to the filesystem mountpoint as "m_rt".
+            Label the path to the test directory as "d_rt".
+ 
+      2) Configuring menu_test
+ 
+         The Korn-shell script named menu_test is an interface to the
+         other test programs.  At the beginning of the script, there
+         is a "configuration section", in which is sets several variables
+         for use in the rest of the script.  
+         
+         Open menu_test in any text editor and change the following
+         variable assignments in the configuration section:
+ 
+         a) base_dir:
+            Set this to the pathname of your "base" directory 
+            (where you un-archived "DMAPI_test.cpio").
+ 
+         b) p_user:
+            Tests that do not run as root will run as this "primary" user.
+            Set this to any username. 
+ 
+         c) m_main:
+            The mountpoint of the main test filesystem.
+            Set this to the value of "m_main" that you wrote down above.  
+  
+         d) d_name:  
+            m_main concatenated with d_name is the main test directory path.
+            Set this to the value for "d_name" that you wrote down above.
+ 
+         e) m_nfs2:  
+            The mountpoint of the nfs2 test filesystem.
+            Set this to the value of "m_nfs2" that you wrote down above.
+ 
+         f) m_nfs2:   
+            The mountpoint of the nfs3 test filesystem.
+            Set this to the value of "m_nfs3" that you wrote down above.
+ 
+         g) m_rt:   
+            The mountpoint of the realtime test filesystem.
+            Set this to the value of "m_rt" that you wrote down above.
+ 
+         h) d_rt:   
+            The path to the realtime test directory.
+            Set this to the value of "d_rt" that you wrote down above.
+ 
+      3) Configuring "DMAPI_aliases"
+ 
+         This is an optional alternative to the menu interface. It runs
+         as a Korn shell "dot" script and creates an alias to each test. 
+         It was made for those who wish to run tests directly from the
+         command line.
+ 
+         DMAPI_aliases has exactly the same configuration section as
+         menu_test.  If you wish to use DMAPI_aliases, make the same
+         changes to its configuration section. 
+ 
+II) Running the Tests
+
+   A) Using "menu_test" to run tests
+
+      1) You must be superuser, using the Korn shell, to run menu_test.
+         You also must have adjusted the variables in menu_test's 
+         "configuration section", as was explained above.
+
+      2) menu_test is (surprise!) menu based.  Choose options by entering
+         their numbers.    
+ 
+      3) The names of the menu options explain which DMAPI functions
+         or DMAPI events are being tested.  Some of the options, labeled
+         accordingly, run more than one test programs.
+
+      4) See section SECTION# for a list of the test scripts and programs,
+         and a brief explanation of each script or program's function.  
+
+   B) Using "DMAPI_aliases" to run tests   
+
+      1) NOTE: The aliases in DMAPI_aliases are meant to be used by
+         those who are familiar with the test programs and wish to run
+         them more directly.  [Designer's note: I included the alias
+         file more out of nostalgia than necessity.]
+      
+      2) You should be superuser, using the Korn shell, to run DMAPI_aliases.
+         You also must have adjusted the variables in DMAPI_aliases's 
+         "configuration section", as was explained above.
+
+      3) DMAPI_aliases should be invoked as a Korn shell "dot" script:
+
+         . ./DMAPI_aliases 
+
+         It sets an alias for each test program; each alias begins with
+         the characters "do_" and is followed by some appropriate name.
+         Read DMAPI_aliases, or execute "alias | grep do", to 
+
+   C) Running tests directly
+
+      1) For the VERY adventurous, all the tests in the "bindir" directory
+         can be run directly from the command line.  Only some of the files
+         in "bindir" are test scripts/programs.  Read section III for a list 
+         of function tests and section IV for a list of run_test (.dat)
+         testfiles.
+
+      2) Running a test program without parameters will produce a list of
+         correct options.  (The exception to this is check_dmapi, which 
+         normally has no parameters.  check_dmapi takes only one option,
+         [-v] for verbose output.)
+
+      3) It is suggested that you read a program's source before running
+         it directly.  (The source of the C programs is included in the
+         "src" directory.)  Specificually, in each source file, an initial
+         comment explains the program's options/parameters in detail.
+
+III) DMAPI Function tests:
+     
+     This section offers a terse description of the DMAPI function tests.
+     For those tests written in C, the source code is given in the "src" 
+     directory.  The ksh scripts can, of course, be read directly.
+     In all cases except check_dmapi, running the program without
+     parameters will produce a list of correct options. 
+  
+   A) check_dmapi
+      Written in: C 
+      Test of: presence (and correct version) of DMAPI library and kernel.  
+      Options: [-v] flag for verbose output.
+ 
+   B) test_dmattr
+      Written in: C 
+      Test of: dm_get_dmattr, dm_set_dmattr, dm_remove_dmattr.
+
+   C) test_efault
+      Written in: C 
+      Test of: various bad function calls that should generate EFAULT,
+               according to the DMAPI specification.
+
+   D) test_eventlist
+      Written in: C 
+      Test of: dm_get_eventlist, dm_set_eventlist.
+
+   E) test_fileattr
+      Written in: C 
+      Test of: dm_get_fileattr, dm_set_fileattr,
+               dm_get_dirattrs, dm_get_bulkattr.
+
+   F) test_hole
+      Written in: C 
+      Test of: dm_probe_hole, dm_punch_hole.
+
+   G) test_invis
+      Written in: C 
+      Test of: dm_read_invis, dm_write_invis.
+
+   H) test_region
+      Written in:  C 
+      Test of: dm_get_region, dm_set,region.
+
+   I) test_rights
+      Written in: C 
+      Test of: various bad function calls that should generate EACCES,
+               and other conditions pertaining to DMAPI rights.
+
+   J) test_allocinfo_1
+      Written in: ksh
+      Test of: dm_get_allocinfo.  
+
+   K) test_allocinfo_2
+      Written in: ksh
+      Test of: dm_get_allocinfo.
+
+IV) DMAPI Event tests and the "run_test" ksh script
+
+   A) How to use the "run_test" script
+
+      1) A quick description of run_test's behavior:
+         run_test invokes a DMAPI daemon (as a ksh coprocess).  It then
+         reads a "testfile", which contains a description of the test.    
+
+      2) You must be superuser, using the Korn shell, to execute run_test.
+
+      3) Executing run_test without parameters will produce a list of
+         correct options.  For a much more in-depth explanation of the 
+         options to run_test, read its own initial comment.      
+
+   B) The existing .dat testfiles
+
+     1) fail.dat
+      2) main.dat
+      3) nfs.dat
+      4) old_nfs3.dat
+      5) pending.dat
+      6) pending_nfs.dat
+      7) realtime.dat
+      8) smallq.dat
+      9) standard.dat
+     10) standard_nfs.dat
+
+   C) How to write ".dat" testfiles
+      
+      1) Overview
+
+         A testfile contains a complete description of a DMAPI event test.
+         Testfiles are divided into sections: the first two contain
+         test initialization, while the remaining sections each contain ONE
+         command, followed by a list of expected events.
+
+         The following is a description of testfile syntax.  If you wish to 
+         fully understand testfile syntax, PLEASE examine the existing
+         testfiles and the "run_test" script.
+
+      2) Event information variables
+         
+         a) From the daemon, "run_test" gets information about DMAPI events.
+            This information is stored in event information variables.  
+
+         b) NOTE: event information variables are not persistant. 
+            After "run_test" has compared the expected and actual events
+            for a command, and before it executes the next command, it
+            unsets the values of all these variables.
+
+         c) Most of these variables are arrays, indexed by the number of
+            the event (starting with 0). For example, if the initial event
+            is a read event, then we have "event[0]" set to "read", and
+            "file_handle[0]" set to the handle of whatever file was read.
+
+         d) "event_count" is a special variable.  It holds the number of
+            events that were generated by the most recent command.   
+
+         e) These are all the event information variables:
+
+            contents event event_count fs_handle handle length
+            offset media_designator mode mountpoint_handle
+            mountpoint_path msg_str name new_name new_parent
+            parent_handle ret_code root_handle sequence token  
+            tries_left unmount_mode
+
+         f) PLEASE examine the run_test script to see which variables 
+            are set by which events.  (The scheme corresponds, roughly, 
+            to the "Event Types" section of the DMAPI specification.)
+
+      3) Testfile section 1:  List of required files
+
+         a) A testfile's first section is a list of the files it requires.   
+            If these files are not present in the "bindir" directory, 
+            "run_test" will abort the test and inform the user of which 
+            files are missing.  
+         
+         b) Each line of this section may contain ANY NUMBER of filenames.
+
+         c) Lines beginning with // will be treated as comments.  The
+            entirety of such lines will be ignored.
+          
+         d) The last line of this section should begin with three hyphens
+            ---  Other characters on that line will be ignored. 
+
+      4) Testfile section 2:  Initialization commands
+         
+         a) A testfile's second section consists of a list of commands.
+            "run_test" will execute these commands before starting the
+            DMAPI daemon.  Any necessary initialization should be done 
+            here. 
+
+         b) Each line of this section should be ONE shell command.
+
+         c) Lines beginning with // will be treated as comments.  
+            The entirety of such lines will be ignored.
+          
+         d) The last line of this section should begin with three hyphens
+            "---"  Other characters on that line will be ignored.
+
+      5) Testfile sections 3 and on:  Individual tests
+
+         a) The remaining sections of a testfile consist of a single
+            shell command, followed by descriptions of events that should
+            be generated by the command.  
+            
+         b) Comments
+
+            1) Comments are valid ONLY before the command. 
+
+            2) Lines beginning with // will be treated as comments.  
+               The entirety of such lines will be ignored.
+
+            3) Lines beginning with @@ will be treated as "print" comments.
+               Such lines will not be parsed, but they will be printed to
+               standard output during the test.  This is useful for
+               describing what each test does.
+
+         c) Valid grammar for the command itself
+
+            1) Standard command syntax: 
+               This should be ONE shell command, on a line by itself.  
+               
+            2) Alternate command syntax:
+
+               A) run_as_root:  
+                  If the test is preceeded by the metacommand "run_as_root"
+                  (on a line by itself) then the command will be run as
+                  root rather than as "p_user".  The command should still
+                  be one command on a line by itself.
+
+               B) run_without_test:
+                  If the test is preceeded by the metacommand 
+                  "run_without_test" (on a line by itself), then ALL
+                  subsequent lines in the section will be executed as
+                  commands, and NO testing will be performed.  Note that
+                  the commands will be executed as root.  This is useful
+                  for re-initialization sections during a test.
+
+         d) Valid grammar for the "expected events" lines
+
+            1) [variable_name] [value]
+               This specifies that the variable [variable_name] should be
+               set to [value].  
+
+            2) [variable_name_1] matches [variable_name_2]
+               This specifies that both variables should be set to 
+               the same value.  A list of valid variables
+
+            3) [variable_name] store_in [string]
+               This specifies that the contents of [variable_name] 
+               should be stored in a variable named [string].
+               The variable [string] can then be referenced as a
+               variable in later tests.
+   
+               EXAMPLE: if two commands deal with the file "foobar",
+               you might want to check that they both use the same handle.
+               In the first section, write
+                "handle[0] store_in old_handle_0" 
+               In the second section, write
+                "old_handle_0 matches handle[0]" 
+
+            4) failure
+               This specifies that the command is expected to fail
+               (return some non-zero exit status).  If "failure"
+               is not specified, the command is expected to succeed.
+            
+         e) The last line of these sections should begin with three
+            hyphens "---".  Other characters on that line will be ignored.
+ 
+      6) Sending messages to the DMAPI daemon
+
+
+      7) Other "helper functions" for testfiles 
+
+
+
+
+

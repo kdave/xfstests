@@ -1,0 +1,323 @@
+//
+// Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+// 
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+// 
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// 
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement
+// or the like.  Any license provided herein, whether implied or
+// otherwise, applies only to this software file.  Patent licenses, if
+// any, provided herein do not apply to combinations of this program with
+// other software, or any other product whatsoever.
+// 
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+// 
+// Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+// Mountain View, CA  94043, or:
+// 
+// http://www.sgi.com 
+// 
+// For further information regarding this notice, see: 
+// 
+// http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+// This test will use the following files:
+//
+ctf stf ls_to_copy ctest.c
+fcntl open_test truncate rd wf mmap_cp
+read_invis write_invis
+set_region set_return_on_destroy 
+--------------------------------------------
+// These setup commands are run before the daemon starts.
+// They reset the file structure of the test directory
+// to a known state.
+//
+rm $real_dir/???
+rm $real_dir/mmap_cp_testfile
+$1/ctf $1 $real_dir
+$1/stf $1 $real_dir/l??
+rm $real_dir/ctest.c
+cp $1/ctest.c $real_dir
+chown $lname $real_dir/l??
+chown $lname $real_dir/ctest.c
+$1/set_return_on_destroy $real_dir test
+--------------------------------------------
+@@  Memory-mapped copying test: (1 of 3)
+@@
+$1/mmap_cp $2/ll1 $2/mmap_cp_testfile
+event_count 3
+event[0] create
+event[1] postcreate
+event[2] read
+--------------------------------------------
+@@  Memory-mapped copying test: (2 of 3)
+@@
+$1/mmap_cp $2/ll1 $2/mmap_cp_testfile
+event_count 1
+event[0] read
+--------------------------------------------
+@@  Memory-mapped copying test: (3 of 3)
+@@
+$1/mmap_cp $2/ll1 $2/ll2
+event_count 2
+event[0] read
+event[1] write
+--------------------------------------------
+@@  Preunmount/unmount test 
+@@     (note: if you abort before the next test, the 
+@@      filesystem will remain unmounted)
+@@
+run_as_root
+umount $3
+event_count 2
+event[0] preunmount
+event[1] unmount
+fs_handle[0] matches fs_handle[1]
+fs_handle[0] store_in fsh
+root_handle[0] store_in rh
+unmount_mode[0] NOFORCE
+unmount_mode[1] NOFORCE
+--------------------------------------------
+@@  Mount test  
+@@     (Note: assorted settings will be restored in next tests)
+@@
+run_as_root
+mount $3
+event_count 1
+event[0] mount
+fs_handle[0] matches fsh
+mountpoint_handle[0] <BAD_HANDLE_hlen_0>
+mountpoint_path[0] /dmitest
+mode[0] 0
+root_handle matches rh 
+--------------------------------------------
+@@  (after remount: restoring event dispositions on fs)
+@@
+run_as_root
+$1/send_msg reset_fs
+event_count 1
+event[0] user
+msg_str[0] reset_fs
+--------------------------------------------
+@@  (after remount: restoring managed regions on files
+@@   and setting destroy events to return "test" attribute)
+@@
+run_without_test
+$1/stf $1 $real_dir/l??
+$1/set_return_on_destroy $real_dir test
+-------------------------------------------
+@@ Standard i/o tests (1 of 26):  open
+@@
+$1/open_test $2/ls0 o_rdwr
+event_count 1
+event[0] read
+--------------------------------------------
+@@ Standard i/o tests (2 of 26):  open/trunc
+@@
+$1/open_test $2/ls1 o_rdwr o_trunc
+event_count 2
+event[0] truncate
+event[1] attribute
+--------------------------------------------
+@@ Standard i/o tests (3 of 26):  open/trunc/create
+@@
+$1/open_test $2/ls2 o_rdwr o_trunc o_creat
+event_count 1
+event[0] truncate
+--------------------------------------------
+@@ Standard i/o tests (4 of 26):  open/create
+@@
+$1/open_test $2/ls3 o_rdwr o_creat
+event_count 1
+event[0] read
+--------------------------------------------
+@@ Standard i/o tests (5 of 26):  new file
+@@
+$1/open_test $2/LS3 o_rdwr o_creat
+event_count 2
+event[0] create
+event[1] postcreate
+--------------------------------------------
+@@ Standard i/o tests (6 of 26):  append #1
+@@
+echo j >> $2/ls4
+event_count 1
+event[0] write
+file_handle[0] store_in ls4temp
+--------------------------------------------
+@@ Standard i/o tests (7 of 26):  append #2
+@@
+echo j >> $2/ls4
+event_count 1
+event[0] write
+file_handle[0] matches ls4temp
+--------------------------------------------
+@@ Standard i/o tests (8 of 26):  remove
+@@
+/bin/rm $2/ls4
+event_count 3
+event[0] remove
+event[1] destroy
+event[2] postremove
+name[1] test
+contents[1] 123456789abcdefghijklmnopqrstuvwxyz
+--------------------------------------------
+@@ Standard i/o tests (9 of 26):  link
+@@
+ln $2/ls5 $2/LS5
+event_count 2
+event[0] link
+event[1] postlink
+--------------------------------------------
+@@ Standard i/o tests (10 of 26):  deleting link
+@@
+/bin/rm $2/LS5
+event_count 2
+event[0] remove
+event[1] postremove
+--------------------------------------------
+@@ Standard i/o tests (11 of 26):  return_on_destroy #1
+@@
+run_without_test
+$1/set_return_on_destroy $real_dir
+--------------------------------------------
+@@ Standard i/o tests (12 of 26):  return_on_destroy #2
+@@
+/bin/rm $2/ls5
+event_count 3
+event[0] remove
+event[1] destroy
+event[2] postremove
+name[1] <NONE>
+contents[1] <NONE>
+--------------------------------------------
+@@ Standard i/o tests (13 of 26)
+@@
+$1/fcntl f_freesp -o 99999 -l 199999 $2/ls6
+event_count 2
+event[0] truncate
+event[1] attribute
+--------------------------------------------
+@@ Standard i/o tests (14 of 26)
+@@
+$1/fcntl f_freesp -o 1000 -l 10000 $2/ls6
+event_count 2
+event[0] truncate
+event[1] attribute
+--------------------------------------------
+@@ Standard i/o tests (15 of 26) truncate #1
+@@
+$1/truncate $2/ls7 99999
+event_count 2
+event[0] truncate
+event[1] attribute
+--------------------------------------------
+@@ Standard i/o tests (16 of 26) truncate #2
+@@
+$1/truncate $2/ls7 1000
+event_count 2
+event[0] truncate
+event[1] attribute
+--------------------------------------------
+@@ Standard i/o tests (17 of 26) execute
+@@
+$2/ls8 -l $real_dir
+event[0] read
+event[1] read
+event[2] read
+event[3] read
+event[4] read
+offset[0] 0
+length[0] 29604
+file_handle[0] matches file_handle[1]
+file_handle[0] matches file_handle[2]
+file_handle[0] matches file_handle[3]
+--------------------------------------------
+@@ Standard i/o tests (18 of 26) symlink
+@@
+ln -s $2/junk $2/symlink
+event_count 2
+event[0] symlink
+event[1] postsymlink
+--------------------------------------------
+@@ Standard i/o tests (19 of 26) deleting symlink
+@@
+/bin/rm $2/symlink
+event_count 3
+event[0] remove
+event[1] destroy
+event[2] postremove
+--------------------------------------------
+@@ Standard i/o tests (20 of 26) mkdir
+@@
+mkdir $2/unlikely-named-test-dir
+event_count 2
+event[0] create
+event[1] postcreate
+--------------------------------------------
+@@ Standard i/o tests (21 of 26) rmdir
+@@
+rmdir $2/unlikely-named-test-dir
+event_count 3
+event[0] remove
+event[1] destroy
+event[2] postremove
+--------------------------------------------
+@@ Standard i/o tests (22 of 26) rename
+@@
+mv $2/ls8 $2/LS8
+event_count 2
+event[0] rename
+event[1] postrename
+--------------------------------------------
+@@ Standard i/o tests (23 of 26) copy (new)
+@@
+cp $2/ls9 $2/LS9
+event_count 9
+event[0] create
+event[1] postcreate
+event[2] attribute
+event[3] read
+event[4] read
+event[5] read
+event[6] read
+event[7] read
+event[8] attribute
+--------------------------------------------
+@@ Standard i/o tests (24 of 26) copy (onto old)
+@@
+cp $2/LS9 $2/ls9
+event_count 5
+event[0] truncate
+event[1] write
+event[2] write
+event[3] write
+event[4] write
+--------------------------------------------
+@@ Standard i/o tests (25 of 26) memory-mapped i/o
+@@
+// Note to self: don't check event_count
+//
+cc -o $2/ll0 $2/ctest.c
+event[0] truncate
+event[1] write
+event[2] attribute
+event[3] read
+event[4] write
+--------------------------------------------
+@@ Standard i/o tests (26 of 26) executing
+@@
+$2/ll0
+event[0] read
+event[1] read
+event[2] read
+event[3] read
+event[4] read

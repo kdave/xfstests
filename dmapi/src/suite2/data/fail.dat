@@ -1,0 +1,118 @@
+//
+// Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+// 
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+// 
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// 
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement
+// or the like.  Any license provided herein, whether implied or
+// otherwise, applies only to this software file.  Patent licenses, if
+// any, provided herein do not apply to combinations of this program with
+// other software, or any other product whatsoever.
+// 
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+// 
+// Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+// Mountain View, CA  94043, or:
+// 
+// http://www.sgi.com 
+// 
+// For further information regarding this notice, see: 
+// 
+// http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+// This test will use the following files:
+//
+ctf stf ls_to_copy ctest.c
+fcntl open_test truncate rd wf 
+set_region set_return_on_destroy 
+--------------------------------------------
+// These setup commands are run before the daemon starts.
+// They reset the file structure of the test directory
+// to a known state, and they ensure that the NFS
+//
+rm $real_dir/???
+$1/ctf $1 $real_dir
+$1/stf $1 $real_dir/l??
+rm $real_dir/ctest.c
+cp $1/ctest.c $real_dir
+chown $lname $real_dir/*
+$1/set_return_on_destroy $real_dir test
+rmdir $real_dir/fail_tempdir/fail_subdir
+rm $real_dir/fail_tempdir/*
+rmdir $real_dir/fail_tempdir
+mkdir $real_dir/fail_tempdir
+mkdir $real_dir/fail_tempdir/fail_subdir
+echo "Temporary file" > $real_dir/fail_tempdir/temp_file
+chown root $real_dir/fail_tempdir
+--------------------------------------------
+@@ Failure checks (1 of 8):  symlink
+@@
+ln -s $2/fail_tempdir/temp_file $2/fail_tempdir/failed_symlink
+event_count 2
+event[0] symlink
+event[1] postsymlink
+ret_code[1] 13
+failure
+--------------------------------------------
+@@ Failure checks (2 of 8):  link
+@@
+ln $2/fail_tempdir/temp_file $2/fail_tempdir/failed_link
+event_count 2
+event[0] link
+event[1] postlink
+ret_code[1] 13
+failure
+--------------------------------------------
+@@ Failure checks (3 of 8):  mkdir
+@@
+mkdir $2/fail_tempdir/failed_subdir
+event_count 2
+event[0] create
+event[1] postcreate
+ret_code[1] 13
+failure
+--------------------------------------------
+@@ Failure checks (4 of 8):  rmdir
+@@
+rmdir $2/fail_tempdir/fail_subdir
+event_count 2
+event[0] remove
+event[1] postremove
+ret_code[1] 13
+failure
+--------------------------------------------
+@@ Failure checks (5 of 8):  open
+@@
+$1/open_test $2/fail_tempdir/temp_file o_rdwr
+event_count 0
+failure
+--------------------------------------------
+@@ Failure checks (6 of 8):  open/create
+@@
+$1/open_test $2/fail_tempdir/temp_file o_rdwr o_creat
+event_count 0
+failure
+--------------------------------------------
+@@ Failure checks (7 of 8):  open/truncate
+@@
+$1/open_test $2/fail_tempdir/temp_file o_rdwr o_trunc
+event_count 0
+failure
+--------------------------------------------
+@@ Failure checks (8 of 8):  remove
+@@
+rm -f $2/fail_tempdir/temp_file
+event_count 2
+event[0] remove
+event[1] postremove
+ret_code[1] 13
+failure

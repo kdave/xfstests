@@ -1,0 +1,62 @@
+The files in this directory comprise a simple HSM example that uses 
+the DMAPI. These files are distributed in the hope that they will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  These programs
+have been tested on an SGI platform (as of April 1995) and found
+to be suitably functional; however, there is no guarantee that they
+do, in fact, provide the functationality that is advertised. This
+is a long winded way of saying they probably have bugs; if you 
+find 'em, fix 'em. 
+
+Okay, now that we have the disclaimers out of the way, here are the details.
+
+	migfind
+	=======
+This will find all files of a specified size, and print out the handles.
+It is normally used like this:
+	migfind -s 800k /migfs >& cand_file
+
+This example will find all files greater than 800K in the /migfs filesystem,
+and put the handles (converted to ascii) in the file 'cand_file'. The output
+consists of three fields per line:
+	handle length		filehandle		file size in bytes
+
+	migout
+	======
+migout reads a list of handles as created by migfind, and migrates
+the files data. The data is stored in files that are located in 
+another directory. The usage is
+	migout /dmapi_fs/stagedir < cand_file
+
+This will all the files specified by handle in 'cand_file', and
+put their data in files located under the directory /dmapi_fs/stagedir'.
+The staging directory must be on a filesystem that supports
+the dmapi; the reason for this is to allow for a simplification
+in the code that stores the location of the data as a DM attribute
+(file handles are easier than path names).
+
+	migin
+	=====
+This daemon waits for DMAPI events and dispatches worker bees
+to actually stage the data in. The usage is:
+	migin -l dmapi_log /migfs
+migin will fork/exec a 'wbee' to either bring the data back from
+the staging directory, or to invalidate the file.
+
+
+Other programs:
+There are a couple of other programs in this directory. 
+
+	mrmean
+	======
+Simplist cleanup/debugging tool that will print information about
+the active sessions. If desired, it can also respond to outstanding
+events and destroy sessions that may have been left around from
+a process exiting unexpectedly.
+
+	mls
+	===
+Simple ls type program to display information about a file, such
+as the managed region info, allocation info, event lists, and
+file handle.
+

@@ -1,0 +1,100 @@
+#!/bin/ksh
+
+#
+# Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+
+#       Dump the same holey file using both xfs_bmap and 
+#       dump_allocinfo (a C wrapper for get_allocinfo).
+#	Run awk on the xfs_bmap output, since xfs_bmap
+#       gives specific block allocation info that get_allocinfo
+#       does not.  Then diff the two outputs.
+
+if [[ $# != 2 ]]
+then	print "USAGE:  ${0##*/} bindir testdir"
+	exit 1
+fi
+
+# Check bindir for needed programs.
+if [[ ! ( -r "$1/wf" ) ]]
+then print "Aborting: necessary program wf is not in $1/."
+     if [[ ! ( -r "$1/dump_allocinfo" ) ]]
+     then print "          necessary program dump_allocinfo is also missing."
+     fi
+     exit 1
+fi
+if [[ ! ( -r "$1/dump_allocinfo" ) ]]
+then print "Aborting: necessary program dump_allocinfo is not in $1/."
+     exit 1
+fi
+
+print "Comparison test (get_allocinfo vs. xfs_bmap) beginning..."
+
+typeset -i offset
+typeset -i length
+typeset -i count
+
+RANDOM=$SECONDS
+offset=0
+length=$RANDOM
+count=100
+filename=DMAPI_test_allocinfo
+
+# Create a random holey file
+while (( count > 0 ))
+do 
+	$1/wf -l $length -L $offset -b 512 $2/$filename > /dev/null
+	(( offset = RANDOM * 512 + offset + length )) 
+	(( length = RANDOM ))
+	(( count = count - 1 ))
+done
+
+# Get output from xfs_bmap
+xfs_bmap $2/DMAPI_test_allocinfo > $2/$filename.xfs
+
+# Get output from dump_allocinfo (DMAPI)
+$1/dump_allocinfo $2/DMAPI_test_allocinfo > $2/$filename.da
+	
+# Alter xfs_bmap ouput to match get_allocinfo
+awk '{ if (NR > 1)
+	if ($3 == "hole") 
+		print $1, $2, $3
+ 	else
+		print $1, $2, "resv"
+}' $2/DMAPI_test_allocinfo.xfs > $2/$filename.ok
+
+# Compare the ouput
+diff -w $2/$filename.ok $2/$filename.da
+
+# Remove the test file
+rm $2/$filename*
+
+print "Test complete."

@@ -1,0 +1,106 @@
+//
+// Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+// 
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+// 
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// 
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement
+// or the like.  Any license provided herein, whether implied or
+// otherwise, applies only to this software file.  Patent licenses, if
+// any, provided herein do not apply to combinations of this program with
+// other software, or any other product whatsoever.
+// 
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+// 
+// Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+// Mountain View, CA  94043, or:
+// 
+// http://www.sgi.com 
+// 
+// For further information regarding this notice, see: 
+// 
+// http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+// This test will use the following files:
+//
+ctf stf ls_to_copy ctest.c
+fcntl open_test truncate rd wf mmap_cp
+read_invis write_invis
+set_region set_return_on_destroy 
+--------------------------------------------
+// These setup commands are run before the daemon starts.
+// They reset the file structure of the test directory
+// to a known state.
+//
+rm $real_dir/???
+$1/ctf $1 $real_dir
+$1/stf $1 $real_dir/l??
+rm $real_dir/ctest.c
+cp $1/ctest.c $real_dir
+chown $lname $real_dir/l??
+chown $lname $real_dir/ctest.c
+$1/set_return_on_destroy $real_dir test
+print 
+print "Please resize your DMAPI event queue to hold about 2 to 10 events."
+--------------------------------------------
+@@ Slow i/o test:  Do 10 open_tests
+@@
+run_without_test
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+$1/open_test $2/ls0 o_rdwr &
+--------------------------------------------
+@@ Slow i/o test:  Append ten bytes to ls1
+@@
+run_without_test
+echo J >> $2/ls1 &
+echo a >> $2/ls1 &
+echo y >> $2/ls1 &
+echo w >> $2/ls1 &
+echo a >> $2/ls1 &
+echo s >> $2/ls1 &
+echo h >> $2/ls1 &
+echo e >> $2/ls1 &
+echo r >> $2/ls1 &
+echo e >> $2/ls1 &
+--------------------------------------------
+@@ Slow i/o test:  Do one more, then stand back and wait!
+@@ 
+$1/open_test $2/ls0 o_rdwr 
+event_count 21
+event[0] read
+event[1] read
+event[2] read
+event[3] read
+event[4] read
+event[5] read
+event[6] read
+event[7] read
+event[8] read
+event[9] read
+event[10] write
+event[11] write
+event[12] write
+event[13] write
+event[14] write
+event[15] write
+event[16] write
+event[17] write
+event[18] write
+event[19] write
+event[20] read

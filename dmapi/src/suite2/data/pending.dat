@@ -1,0 +1,90 @@
+//
+// Copyright (c) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+// 
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+// 
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// 
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement
+// or the like.  Any license provided herein, whether implied or
+// otherwise, applies only to this software file.  Patent licenses, if
+// any, provided herein do not apply to combinations of this program with
+// other software, or any other product whatsoever.
+// 
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+// 
+// Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+// Mountain View, CA  94043, or:
+// 
+// http://www.sgi.com 
+// 
+// For further information regarding this notice, see: 
+// 
+// http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+
+// This test will use the following files:
+//
+ctf stf ls_to_copy set_region
+--------------------------------------------
+// These setup commands are run before the daemon starts.
+// They reset the file structure of the test directory
+// to a known state.
+//
+rm $real_dir/???
+$1/ctf $1 $real_dir
+$1/stf $1 $real_dir/l??
+chown $lname $real_dir/l??
+--------------------------------------------
+@@ Pending test (1 of 5):
+@@
+// Run "pending" for the next 3 events,
+// so that a non-blocking open_test
+// will see EAGAIN three times before
+// it can finish.
+//
+run_as_root
+$1/send_msg pending_3
+event_count 1
+event[0] user
+msg_str[0] pending_3
+--------------------------------------------
+@@ Pending test (2 of 5):
+@@    (should fail)
+@@
+$1/open_test $2/ls1 o_rdwr o_nonblock
+event_count 1
+event[0] pending
+tries_left[0] 2
+failure
+--------------------------------------------
+@@ Pending test (3 of 5):
+@@    (should fail)
+@@
+$1/open_test $2/ls1 o_rdwr o_ndelay
+event_count 1
+event[0] pending
+tries_left[0] 1
+failure
+--------------------------------------------
+@@ Pending test (4 of 5):
+@@    (should fail)
+@@
+$1/open_test $2/ls1 o_rdwr o_nonblock o_ndelay
+event_count 1
+event[0] pending
+tries_left[0] 0
+failure
+--------------------------------------------
+@@ Pending test (5 of 5):
+@@    (should succeed)
+@@
+$1/open_test $2/ls1 o_rdwr o_nonblock
+event_count 1
+event[0] read
