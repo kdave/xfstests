@@ -43,13 +43,15 @@
 Test program used to test the DMAPI function dm_read_invis().  The
 command line is:
 
-	read_invis [-o offset] [-l length] [-s sid] pathname
+	read_invis [-o offset] [-l length] [-s sid] [-c char] {pathname|handle}
 
 where:
 'offset' is the offset of the start of the write (0 is the default),
 'length' is the length of the write in bytes (1 is the default),
 'sid' is the session ID whose events you you are interested in.
 'pathname' is the name of the file to be written.
+'char' is ignored--it just allows read_invis and write_invis to have
+    interchangeable commandlines without having to fuss with the params.
 
 ----------------------------------------------------------------------------*/
 
@@ -67,7 +69,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage:\t%s [-o offset] [-l length] "
-		"[-s sid] pathname\n", Progname);
+		"[-s sid] [-c char] {pathname|handle}\n", Progname);
 	exit(1);
 }
 
@@ -78,7 +80,7 @@ main(
 	char	**argv)
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
-	char		*pathname = NULL;
+	char		*object = NULL;
 	dm_off_t	offset = 0;
 	dm_size_t	length = 1;
 	char		*bufp = NULL;
@@ -97,16 +99,23 @@ main(
 
 	/* Crack and validate the command line options. */
 
-	while ((opt = getopt(argc, argv, "o:l:s:")) != EOF) {
+	while ((opt = getopt(argc, argv, "o:l:s:c:")) != EOF) {
 		switch (opt) {
 		case 'o':
-			offset = atol(optarg);
+			sscanf(optarg, "%lld", &offset);
 			break;
 		case 'l':
-			length = atol(optarg);
+			sscanf(optarg, "%llu", &length);
 			break;
 		case 's':
 			sid = atol(optarg);
+			break;
+		case 'c':
+			/* This is a no-op, it just allows read_invis
+			 * and write_invis to have interchangeable
+			 * commandlines, without having to fuss with
+			 * the params.
+			 */
 			break;
 		case '?':
 			usage();
@@ -114,7 +123,7 @@ main(
 	}
 	if (optind + 1 != argc)
 		usage();
-	pathname = argv[optind];
+	object = argv[optind];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -125,8 +134,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s\n", pathname);
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 

@@ -41,7 +41,7 @@
 Test program used to test the DMAPI function dm_write_invis().  The
 command line is:
 
-	write_invis [-c char] [-o offset] [-l length] [-s sid] pathname
+	write_invis [-c char] [-o offset] [-l length] [-s sid] {pathname|handle}
 
 where:
 'char' is the character to use as a repeated pattern ('X' is the default),
@@ -68,7 +68,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage:\t%s [-c char] [-o offset] [-l length] "
-		"[-s sid] pathname\n", Progname);
+		"[-s sid] {pathname|handle}\n", Progname);
 	exit(1);
 }
 
@@ -79,7 +79,7 @@ main(
 	char	**argv)
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
-	char		*pathname = NULL;
+	char		*object = NULL;
 	dm_off_t	offset = 0;
 	dm_size_t	length = 1;
 	u_char		ch = 'X';
@@ -104,10 +104,10 @@ main(
 			ch = *optarg;
 			break;
 		case 'o':
-			offset = atol(optarg);
+			sscanf(optarg, "%lld", &offset);
 			break;
 		case 'l':
-			length = atol(optarg);
+			sscanf(optarg, "%llu", &length);
 			break;
 		case 's':
 			sid = atol(optarg);
@@ -118,7 +118,7 @@ main(
 	}
 	if (optind + 1 != argc)
 		usage();
-	pathname = argv[optind];
+	object = argv[optind];
 
 	if (dm_init_service(&name) == -1)  {
 		fprintf(stderr, "Can't initialize the DMAPI\n");
@@ -129,8 +129,8 @@ main(
 
 	/* Get the file's handle. */
 
-	if (dm_path_to_handle(pathname, &hanp, &hlen)) {
-		fprintf(stderr, "can't get handle for file %s\n", pathname);
+	if (opaque_to_handle(object, &hanp, &hlen)) {
+		fprintf(stderr, "can't get handle for %s\n", object);
 		exit(1);
 	}
 
