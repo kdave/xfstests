@@ -64,22 +64,18 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 # prelim
 rm -f $seq.full $tmp.*
 _require_scratch
-_clear_opts
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 # do a simple quota test to ensure DQUOT data is happening
-mkfs="-lversion=1"
-mnt="-ousrquota,grpquota"
-_mkfs_log $mkfs
-_create_log $mnt
+export MKFS_OPTIONS="-lversion=1"
+export MOUNT_OPTIONS="-ousrquota,grpquota"
+_mkfs_log
+_create_log
 _check_log
 _print_transaction_inode 2
 _cmp_output $seq.ugquota.trans_inode $filtered
 
 # got thru it all so we may have success
-if [ ! -e $tmp.error ]; then
-    status=0
-fi
-
+status=0
 exit

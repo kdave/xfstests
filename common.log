@@ -56,6 +56,13 @@ _full()
     echo ""            >>$seq.full
 }
 
+_echofull()
+{
+    echo ""            | tee -a $seq.full      
+    echo "*** $* ***"  | tee -a $seq.full
+    echo ""            | tee -a $seq.full
+}
+
 # Handle the operations which get split over Log Record
 # boundaries.
 # Oper (379)..... flags: CONTINUE
@@ -205,10 +212,21 @@ _check_log()
         | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
 }
 
+_print_logstate()
+{
+    _scratch_xfs_logprint -t | tee -a $seq.full >$tmp.logprint
+    if grep -q "<DIRTY>" $tmp.logprint; then
+	echo "dirty log"
+    fi
+    if grep -q "<CLEAN>" $tmp.logprint; then
+	echo "clean log"
+    fi
+}
+
 _print_operation()
 {
-    raw=$fulldir/op.mnt$mnt.mkfs$mkfs$sync_suffix.raw
-    filtered=$fulldir/op.mnt$mnt.mkfs$mkfs$sync_suffix.filtered
+    raw=$fulldir/op.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
+    filtered=$fulldir/op.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
 
     echo "### xfs_logprint output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -c  2>&1 \
@@ -228,8 +246,8 @@ _print_operation()
 _print_transaction_inode()
 {
     _start=$1
-    raw=$fulldir/trans_inode.mnt$mnt.mkfs$mkfs$sync_suffix.raw
-    filtered=$fulldir/trans_inode.mnt$mnt.mkfs$mkfs$sync_suffix.filtered
+    raw=$fulldir/trans_inode.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
+    filtered=$fulldir/trans_inode.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
 
     echo "### xfs_logprint -t -i -s START output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -t -i -s $_start 2>&1 \
@@ -241,8 +259,8 @@ _print_transaction_inode()
 _print_transaction_buf()
 {
     _start=$1
-    raw=$fulldir/trans_buf.mnt$mnt.mkfs$mkfs$sync_suffix.raw
-    filtered=$fulldir/trans_buf.mnt$mnt.mkfs$mkfs$sync_suffix.filtered
+    raw=$fulldir/trans_buf.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.raw
+    filtered=$fulldir/trans_buf.mnt$MOUNT_OPTIONS.mkfs$MKFS_OPTIONS$sync_suffix.filtered
 
     echo "### xfs_logprint -t -b -s START output ###" | tee $raw >$filtered
     _scratch_xfs_logprint -t -b -s $_start 2>&1 \
@@ -253,24 +271,16 @@ _print_transaction_buf()
 
 _mkfs_log()
 {
-    typeset _mkfs_opts
-    _mkfs_opts=$1
-
     # create the FS
     _full "mkfs"
-    extra_ops="-lsize=2000b $_mkfs_opts"
-    _scratch_mkfs_xfs $extra_ops >$tmp.mkfs0 2>&1
-    [ $? -ne 0 ] && \
-	_notrun "Cannot mkfs for this test using MKFS_OPTIONS specified: $MKFS_OPTIONS $extra_ops"
-    cat $tmp.mkfs0 >>$seq.full
+    extra_ops="-lsize=2000b"
+    _scratch_mkfs_xfs $extra_ops >>$seq.full 2>&1
+    if [ $? -ne 0 ] ; then 
+	_echofull "Cannot mkfs for this test using option specified: $MKFS_OPTIONS $extra_ops"
+	return 1
+    fi	
 
-    # check the mkfs settings
-    _filter_mkfs <$tmp.mkfs0 2>$tmp.mkfs
-    source $tmp.mkfs
-    [ $dbsize -eq 4096 ] \
-	|| _notrun "Logprint test, tailored to 4K blocks ($dbsize in use)"
-    [ $isize -eq 256 ] \
-	|| _notrun "Logprint test, tailored to 256b inodes ($isize in use)"
+    return 0
 }
 
 
@@ -279,14 +289,13 @@ _mkfs_log()
 #
 _create_log()
 {
-    typeset _mnt_opts
-
-    _mnt_opts=$1
-
     # mount the FS
     _full " mount"
-    _scratch_mount $_mnt_opts >>$seq.full 2>&1 \
-	|| _fail "mount failed: $_mnt_opts $MOUNT_OPTIONS"
+    _scratch_mount >>$seq.full 2>&1
+    if [ $? -ne 0 ] ; then 
+	_echofull "mount failed: $MOUNT_OPTIONS"
+	return 1
+    fi
 
     # generate some log traffic - but not too much - life gets a little
     # more complicated if the log wraps around. This traffic is
@@ -295,9 +304,13 @@ _create_log()
 	
     # unmount the FS
     _full "umount"
-    umount $SCRATCH_DEV >>$seq.full 2>&1 \
-	|| _fail "umount failed"
+    umount $SCRATCH_DEV >>$seq.full 2>&1
+    if [ $? -ne 0 ] ; then 
+	_echofull "umount failed"
+	return 1
+    fi
 
+    return 0
 }
 
 #
@@ -305,14 +318,13 @@ _create_log()
 #
 _create_log_sync()
 {
-    typeset _mnt_opts
-
-    _mnt_opts=$1
-
     # mount the FS
     _full " mount"
-    _scratch_mount $_mnt_opts >>$seq.full 2>&1 \
-	|| _fail "mount failed: $_mnt_opts $MOUNT_OPTIONS"
+    _scratch_mount >>$seq.full 2>&1
+    if [ $? -ne 0 ] ; then 
+	_echofull "mount failed: $MOUNT_OPTIONS"
+	return 1
+    fi
 
     # generate some log traffic - but not too much
     # add some syncs to get the log flushed to disk 
@@ -323,8 +335,11 @@ _create_log_sync()
 	
     # unmount the FS
     _full "umount"
-    umount $SCRATCH_DEV >>$seq.full 2>&1 \
-	|| _fail "umount failed"
+    umount $SCRATCH_DEV >>$seq.full 2>&1
+    if [ $? -ne 0 ] ; then 
+	_echofull "umount failed"
+	return 1
+    fi
 
 }
 
@@ -332,45 +347,8 @@ _cmp_output()
 {
     echo "*** compare logprint: $1 with $2"
     if ! diff $1 $2 >/dev/null; then
-	echo "FAILED: logprint output $1 differs to $2"
-	touch $tmp.error
+	_fail "logprint output $1 differs to $2"
     fi
-}
-
-_clear_opts()
-{
-    # clear opts
-    # - remove the log options in mkfs
-    # - remove the log options in mount
-    # - remove the quota options in mount
-    # leave any other options given
-    # fix up removals when remaining -o or comma:
-    #   "-o blah," -> "-o blah"
-    #   "-o blah, -x woof" -> "-o blah -x woof"
-    #   "-x woof -o   " -> "-x woof"   
-    #   "-x woof -o  -y wow" -> "-x woof -y wow"   
-    MKFS_OPTIONS=`echo $MKFS_OPTIONS | sed -e 's/-l[ ]*[^ $]*//g'`
-    MOUNT_OPTIONS=`echo $MOUNT_OPTIONS |\
-	    sed \
-		-e 's/logbsize=[^ ,]*,*//g' \
-		-e 's/logbufs=[^ ,]*,*//g' \
-		-e 's/usrquota,*//g'        \
-		-e 's/grpquota,*//g'        \
-		-e 's/quota,*//g'           \
-		-e 's/uqnoenforce,*//g'     \
-		-e 's/gqnoenforce,*//g'     \
-		-e 's/\(-o[^-,]*\), *$/\1/g'    \
-		-e 's/\(-o[^-,]*\), *-/\1 -/g'  \
- 		-e 's/-o *$//g'		    \
-		-e 's/-o *-/-/g'	    \
-		`
-	
-    # export opts
-    export MKFS_OPTIONS
-    export MOUNT_OPTIONS
-    echo "MKFS_OPTIONS = $MKFS_OPTIONS" >>$seq.full
-    echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seq.full
-
 }
 
 #
@@ -432,8 +410,7 @@ _cmp_op_output()
     diff $1 $2 >$filtered.diff
     if ! _process_op_diff $filtered.diff
     then
-	echo "FAILED: logprint output $1 differs to $2 considering splits"
-	touch $tmp.error
+	_fail "logprint output $1 differs to $2 considering splits"
     fi
 }
 

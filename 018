@@ -64,7 +64,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 # prelim
 rm -f $seq.full $tmp.*
 _require_scratch
-_clear_opts
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
@@ -82,25 +81,26 @@ EOF
 cat $tmp.seq.params \
 | while read mkfs mnt restofline
 do
-    if [ "$mkfs" != "#" ]; then 
-	_mkfs_log $mkfs
-	_create_log $mnt
-	_check_log
-
-	_print_operation
-	_cmp_op_output $seq.op $filtered
-
-	_print_transaction_inode 2
-	_cmp_output $seq.trans_inode $filtered
-
-	_print_transaction_buf 2
-	_cmp_output $seq.trans_buf $filtered
+    if [ "$mkfs" = "#" ]; then 
+	continue
     fi
+    export MKFS_OPTIONS=$mkfs
+    export MOUNT_OPTIONS=$mnt
+    _mkfs_log
+    _create_log
+    _check_log
+
+    _print_operation
+    _cmp_op_output $seq.op $filtered
+
+    _print_transaction_inode 2
+    _cmp_output $seq.trans_inode $filtered
+
+    _print_transaction_buf 2
+    _cmp_output $seq.trans_buf $filtered
 done
 
 # got thru it all so we may have success
-if [ ! -e $tmp.error ]; then
-    status=0
-fi
+status=0
 
 exit

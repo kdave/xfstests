@@ -1,10 +1,12 @@
 #! /bin/sh
-# XFS QA Test No. 082
+# XFS QA Test No. 086
 #
-# Test out the v2 stripe logs with logprint
+# To test log replay with version 2 logs
+# Initially keep this simple with just creates.
+# In another qa test we can do more e.g. use fsstress.
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -44,42 +46,33 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 . ./common.log
 
-_cleanup()
-{
-    _cleanup_logfiles
-    rm -f $tmp.*
-    echo "*** unmount"
-    umount $SCRATCH_MNT 2>/dev/null
-}
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
 # real QA test starts here
-
-# prelim
 rm -f $seq.full $tmp.*
 _require_scratch
+
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
 
 cat >$tmp.seq.params <<EOF
-# mkfs-opt             mount-opt            start-blk
-  -lversion=2          -ologbsize=32k       2
-  -lversion=2,su=4096  -ologbsize=32k       8
-  -lversion=2,su=32768 -ologbsize=32k       64
+# mkfs-opt             mount-opt
+  -lversion=2          -ologbsize=32k
+  -lversion=2,su=4096  -ologbsize=32k
+  -lversion=2,su=32768 -ologbsize=32k
 #
 # expect following line to fail
 #
-  -lversion=2,su=36864 -ologbsize=32k       72
+  -lversion=2,su=36864 -ologbsize=32k
 #
 # following is not a power of 2 BBs 
 #
-  -lversion=2,su=5120  -ologbsize=32k       10
+  -lversion=2,su=5120  -ologbsize=32k
 EOF
 
 # Do the work for various log params which
@@ -90,47 +83,80 @@ EOF
 #
 for s in sync nosync ; do
     cat $tmp.seq.params \
-    | while read mkfs mnt start restofline
+    | while read mkfs mnt restofline
     do
 	if [ "$mkfs" = "#" ]; then 
 	    continue
 	fi
-	echo "--- mkfs=$mkfs, mnt=$mnt, start=$start, sync=$s ---"
+
+	echo "--- mkfs=$mkfs, mnt=$mnt, sync=$s ---"
 	export MOUNT_OPTIONS=$mnt
 	export MKFS_OPTIONS=$mkfs
+
+	# mkfs the FS
+	_echofull "mkfs"
 	if ! _mkfs_log; then
-	    continue
-	fi	
-	if [ $s = "sync" ]; then
-	    _create_log_sync
-	else
-	    _create_log
-	fi
-	if [ $? -ne 0 ]; then
+	    _echofull "mkfs failed: $MKFS_OPTIONS"
 	    continue
 	fi
-	_check_log
 
-	sync_suffix=".$s"
-
-	if [ $s = "sync" ]; then
-	    # if sync then we have chance of DATA FORK EXTENTS items
-	    # not hanging around very long due to inode syncing to disk
-	    # (see comment in xfs_iflush_int())
-	    # and this is to hard to reconcile in the op output
-	    :
-	else
-	    _print_operation
-	    _cmp_op_output $seq.op $filtered
+	# mount the FS
+	_echofull "mount"
+	if ! _scratch_mount >>$seq.full 2>&1; then
+	    _echofull "mount failed: $MOUNT_OPTIONS"
+	    continue
 	fi
 
-	_print_transaction_inode $start
-	_cmp_output $seq.trans_inode $filtered
+	# create the metadata
+	if [ $s = "sync" ]; then
+	    # generate some log traffic - but not too much
+	    # add some syncs to get the log flushed to disk 
+	    for file in $SCRATCH_MNT/{0,1,2,3,4,5,6,7,8,9}{0,1,2,3,4,5,6,7,8,9}; do
+		touch $file
+		sync
+	    done
+	else
+	    # generate some log traffic - but not too much - life gets a little
+	    # more complicated if the log wraps around. This traffic is
+	    # pretty much arbitary, but could probably be made better than this.
+	    touch $SCRATCH_MNT/{0,1,2,3,4,5,6,7,8,9}{0,1,2,3,4,5,6,7,8,9}
+	fi
 
-	_print_transaction_buf $start
-	_cmp_output $seq.trans_buf $filtered
+	# check before on what FS should look like
+	_echofull "ls $SCRATCH_MNT"
+	ls $SCRATCH_MNT
+
+	_echofull "godown"
+	src/godown -v -f $SCRATCH_MNT >> $seq.full
+
+	_echofull "unmount"
+	umount $SCRATCH_DEV >>$seq.full 2>&1 \
+	    || _fail "umount failed"
+
+	_echofull "logprint after going down..."
+	_print_logstate
+
+	_echofull "mount with replay"
+	_scratch_mount >>$seq.full 2>&1 \
+	    || _fail "mount failed: $MOUNT_OPTIONS"
+
+	# check on what FS looks like after log recovery
+	_echofull "ls $SCRATCH_MNT"
+	ls $SCRATCH_MNT
+
+	_echofull "unmount"
+	umount $SCRATCH_MNT
+
+	_echofull "logprint after mount and replay..."
+	_print_logstate
+
+	if _check_scratch_fs; then
+	    _echofull "filesystem is checked ok"
+	else
+	    _echofull "filesystem is NOT ok"
+	fi
     done
 done
 
-status=0
+status=0 
 exit
