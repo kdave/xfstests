@@ -1,0 +1,107 @@
+#! /bin/sh
+# XFS QA Test No. 078
+#
+# Check several growfs corner cases
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+
+_cleanup()
+{
+	umount $LOOP_MNT 2>/dev/null
+	rmdir $LOOP_MNT
+}
+trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_require_loop
+
+LOOP_DEV=$tmp.fs
+LOOP_MNT=$tmp.mnt
+
+# real QA test starts here
+echo "*** create loop mount point"
+rm -f $LOOP_MNT 2>/dev/null
+mkdir $LOOP_MNT || _fail "cannot create loopback mount point"
+
+_grow_loop()
+{
+	original=$1
+	new_size=$2
+	bsize=$3
+
+	echo
+	echo "=== GROWFS (from $original to $new_size, $bsize blocksize)"
+	echo
+
+	echo "*** mkfs loop file (size=$original)"
+	/sbin/mkfs.xfs -bsize=$bsize -dfile,name=$LOOP_DEV,size=$original \
+		| _filter_mkfs 2>/dev/null
+
+	echo "*** extend loop file"
+	xfs_io -c "pwrite $new_size $bsize" $LOOP_DEV 
+	echo "*** mount loop filesystem"
+	mount -t xfs -o loop $LOOP_DEV $LOOP_MNT
+
+	echo "*** grow loop filesystem"
+	xfs_growfs $LOOP_MNT | _filter_mkfs 2>/dev/null
+
+	echo "*** unmount and check"
+	umount $LOOP_MNT
+	_check_filesystem $LOOP_DEV
+	rm -f $LOOP_DEV
+}
+
+# Wes' problem sizes...
+_grow_loop 168024b 1376452608 4096
+
+# Some other blocksize cases...
+_grow_loop 168024b 1376452608 2048
+_grow_loop 168024b 1376452608 512
+_grow_loop 168024b 168025b 1024 
+
+echo "*** all done"
+status=0
+exit
