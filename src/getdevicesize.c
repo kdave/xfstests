@@ -44,9 +44,6 @@
 #ifndef BLKGETSIZE64
 # define BLKGETSIZE64   _IOR(0x12,114,size_t)
 #endif
-#ifndef BLKSSZGET
-# define BLKSSZGET	_IO(0x12,104)
-#endif
 
 int main(int argc, char **argv)
 {
