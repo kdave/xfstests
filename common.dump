@@ -722,12 +722,15 @@ _create_dumpdir_hardlinks()
 #
 # Filter for ls
 # Filter out dates on symlinks and char devices
+# Filter out size on directories because this can differ
+# when transitioning to long inode numbers (ie. 64 bits).
 #
 _ls_filter()
 {
   $AWK_PROG '
         /^l/ { date = $8; sub(date,"DATE"); print}
         /^c/ { date = $9; sub(date,"DATE"); print}
+        /^d/ { size = $5; sub(size,"SIZE"); print}
         {print}' \
   | sed -e 's/total [0-9][0-9]*/total TOTAL/'
 }
