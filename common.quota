@@ -125,6 +125,33 @@ _qmount()
     [ -x /usr/sbin/quot ] && quot $SCRATCH_MNT >>$seq.full 2>&1
 }
 
+_qsetup()
+{
+    # setup exactly what it is we'll be testing
+    enforce=1
+    if src/feature -u $SCRATCH_DEV
+    then
+	type=u ; eval `_choose_uid`; ln -s $seq.usrquota $seq.out
+    elif src/feature -g $SCRATCH_DEV
+    then
+	type=g ; eval `_choose_gid`; ln -s $seq.grpquota $seq.out
+    elif src/feature -U $SCRATCH_DEV
+    then
+	type=u ; eval `_choose_uid`; ln -s $seq.uqnoenforce $seq.out
+	enforce=0
+    elif src/feature -G $SCRATCH_DEV
+    then
+	type=g ; eval `_choose_gid`; ln -s $seq.gqnoenforce $seq.out
+	enforce=0
+    else
+	_notrun "No quota support at mount time"
+    fi
+
+    echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
+    echo "and using type=$type id=$id" >>$seq.full
+}
+
+
 #-----------------------------------------------------------------------------------
 #
 # wrappers for Linux/IRIX differences
