@@ -39,6 +39,7 @@
 #include <math.h>
 #define XFS_ERRTAG_MAX		17
 #define XFS_IDMODULO_MAX	32
+#define XFS_PROJIDMODULO_MAX	16
 
 /* was (getpagesize()*32) BUT want it to be same
  * on all platforms
@@ -52,6 +53,7 @@ typedef enum {
 	OP_BULKSTAT,
 	OP_BULKSTAT1,
 	OP_CHOWN,
+	OP_CHPROJ,
 	OP_CREAT,
 	OP_DREAD,
 	OP_DWRITE,
@@ -131,6 +133,7 @@ void	attr_set_f(int, long);
 void	bulkstat_f(int, long);
 void	bulkstat1_f(int, long);
 void	chown_f(int, long);
+void	chproj_f(int, long);
 void	creat_f(int, long);
 void	dread_f(int, long);
 void	dwrite_f(int, long);
@@ -161,6 +164,7 @@ opdesc_t	ops[] = {
 	{ OP_BULKSTAT, "bulkstat", bulkstat_f, 1, 0 },
 	{ OP_BULKSTAT1, "bulkstat1", bulkstat1_f, 1, 0 },
 	{ OP_CHOWN, "chown", chown_f, 3, 1 },
+	{ OP_CHPROJ, "chproj", chproj_f, 1, 1 },
 	{ OP_CREAT, "creat", creat_f, 4, 1 },
 	{ OP_DREAD, "dread", dread_f, 4, 0 },
 	{ OP_DWRITE, "dwrite", dwrite_f, 4, 1 },
@@ -1619,6 +1623,38 @@ chown_f(int opno, long r)
 	if (v)
 		printf("%d/%d: chown %s %d/%d %d\n", procid, opno, f.path, (int)u, (int)g, e);
 	free_pathname(&f);
+}
+
+void
+chproj_f(int opno, long r)
+{
+	int		fd;
+	int		e;
+	pathname_t	f;
+	int		nbits;
+	uint		p;
+	int		v;
+
+	init_pathname(&f);
+	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
+		append_pathname(&f, ".");
+	fd = open_path(&f, O_RDWR);
+	e = fd < 0 ? errno : 0;
+	check_cwd();
+
+	p = (uid_t)random();
+	e = MIN(idmodulo, XFS_PROJIDMODULO_MAX);
+	nbits = (int)(random() % e);
+	p &= (1 << nbits) - 1;
+#if defined(__sgi__)
+	e = fchproj(fd, p);
+#else
+	e = xfsctl(f.path, fd, XFS_IOC_SETPROJID, &p);
+#endif
+	if (v)
+		printf("%d/%d: chproj %s %u %d\n", procid, opno, f.path, p, e);
+	free_pathname(&f);
+	close(fd);
 }
 
 void
