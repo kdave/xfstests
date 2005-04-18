@@ -83,7 +83,7 @@ main(int argc, char **argv)
 	int		total = 0;
 	int		fsfd;
 	int		i;
-	__s64		last = 0;
+	__u64		last = 0;
 	char		*name;
 	int		nent;
 	int		debug = 0;

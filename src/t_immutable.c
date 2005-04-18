@@ -571,7 +571,7 @@ static int test_immutable(const char *dir)
 	  }
 	  close(fd);
      }
-     if (!getuid) {
+     if (!getuid()) {
 	  if (chmod(path, 0777) == -1) {
 	       fprintf(stderr, "chmod(%s, 0777) failed: %s\n", path, strerror(errno));
 	       fail++;
@@ -1519,7 +1519,7 @@ static int test_append(const char *dir)
 	  }
 	  close(fd);
      }
-     if (!getuid) {
+     if (!getuid()) {
 	  if (chmod(path, 0777) == -1) {
 	       fprintf(stderr, "chmod(%s, 0777) failed: %s\n", path, strerror(errno));
 	       fail++;
