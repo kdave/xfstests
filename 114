@@ -1,0 +1,459 @@
+#! /bin/sh
+# FS QA Test No. 114
+#
+# Test some parent ptr stuff
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+#
+# http://www.sgi.com
+#
+# For further information regarding this notice, see:
+#
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@crackle.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# Example output:
+#
+# ~/attr -Fl a/b/c/d/foo
+# Attribute "0000000000180080 0000000000000001" has a 3 byte value for a/b/c/d/foo
+#
+# ~/attr -Fg "0000000000180080 0000000000000001" a/b/c/d/foo
+# Attribute "0000000000180080 0000000000000001" had a 3 byte value for a/b/c/d/foo:
+# foo
+#
+# ~/attr -Pg "0000000000180080 0000000000000001" a/b/c/d/foo
+# Attribute "0000000000180080 0000000000000001" had a 12 byte value for a/b/c/d/foo:
+# /a/b/c/d/foo
+#
+
+
+_print_names()
+{
+	typeset path
+	path=$1
+
+	echo ""
+	echo "Print out hardlink names for given path, $path"
+	echo ""
+
+	# get out the ea name
+	attr -Fl $path | tee $tmp.attr1
+	cat $tmp.attr1 |\
+	sed -e 's/"//g' |\
+	nawk >$tmp.attr2 '/^Attribute/ { print $2, $3; next }'
+
+	while read ino cnt; do
+		eaname="$ino $cnt"
+
+		# use the ea name to get the filename value
+		attr -Fg "$eaname" $path
+
+		# use the ea name to get the pathname value
+		attr -Pg "$eaname" $path
+	done < $tmp.attr2
+}
+
+_test_create()
+{
+	echo ""
+	echo "Testing create"
+	echo ""
+
+	# Test out some creations
+	cd $SCRATCH_MNT
+	touch file1
+
+	mkdir dir2
+	touch dir2/file2
+
+	mkdir dir2/dir3
+	touch dir2/dir3/file3
+
+	mkdir dir2/dir3/dir4
+
+	p=dir2/dir3/dir4/file4
+	touch $p
+
+	_print_names $p >>$here/$seq.full
+
+	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$p
+}
+
+_get_ea_fields()
+{
+	# get out the ea name components for all the hardlinks
+	attr -Fl $1 |\
+	tee -a $here/$seq.full |\
+	sed -e 's/"//g' |\
+	nawk '/^Attribute/ { print $2, $3; next }'
+}
+
+_parent_path()
+{
+	# given: abc/def/ghi/jkl
+	# want:  abc/def/ghi
+	child=$1
+	parent=`echo $child | sed -e 's#/[^/]*$##'`
+
+	# issue of path starting with '/' or not
+        # relatives paths wouldn't and we need to handle this
+	if [ $child = $parent ]; then
+		echo ""
+	else
+		echo $parent
+	fi
+}
+
+#
+# Go thru each component of the hierarchy and compare 
+# inode# from "stat -i" with the ino from the parent EA name
+#
+# So I need to be given a path and go thru compenent by component.
+# e.g. a/b/c/d/e
+# Need to look at: a a/b a/b/c a/b/c/d
+#
+# Also need to do this for all the hardlinks
+#
+_check_parentinos_path()
+{
+        mntpt=$1
+	path=$2
+	parent="$path"
+
+        # representing all the hard links for a particular path
+
+	_get_ea_fields $path |\
+	while read parent_ino cnt; do
+
+		while [ "$parent" != "$mntpt" ]; do
+			# compare paths
+			eaname="$parent_ino $cnt"
+			eavalue=`attr -qPg "$eaname" $parent`
+			parentrel=`echo $parent | sed -e "s#^$mntpt##"`
+			if [ "$eavalue" = "$parentrel" ]; then
+				echo "EA path $eavalue matches on path"
+			else
+				$verbose && echo "EA path mismatch on $parentrel: $eavalue"
+				break # maybe wrong hardlink
+			fi
+
+			# compare parent_ino from ea-name with parent-ino from
+			# actual parent dir using stat
+
+			parent=`_parent_path $parent`
+			parent_ino_dec=`printf "%d" 0x$parent_ino` # decimal version (not hex)
+			stat_ino=`stat -iq $parent`
+
+			if [ "$parent_ino_dec" = "$stat_ino" ]; then
+				echo "parent ino $parent_ino_dec matches"
+			else
+				echo "parent ino mismatch on $parent: EA=$parent_ino_dec stat=$stat_ino"
+			fi
+
+
+			# go onto next subdir up the path
+			line=`_get_ea_fields $parent`
+			parent_ino=`echo $line | cut -f1 -d' '`  # 1st field
+			cnt=`echo $line | cut -f2 -d' '`         # 2nd field
+		done
+	done
+}
+
+_test_symlink()
+{
+	echo ""
+	echo "Testing symlink"
+	echo ""
+
+	d=sym1/sym2/sym3
+	f=$d/sym4_f
+
+	mkdir -p $d
+        ln -s $f symlink1
+	ln symlink1 hlink1
+	ln symlink1 hlink2
+	ln symlink1 hlink3
+	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/symlink1
+	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink1
+	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink2
+	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink3
+}
+
+#
+# create hardlinks from the same dir
+# and some from different dirs
+#
+# test out removing hardlinks too
+#
+_test_hardlink()
+{
+	echo ""
+	echo "Testing hardlink"
+	echo ""
+
+	d=dir2/dir3/dir4
+	d2=dir2/dir5/dir6
+	mkdir -p $d
+	mkdir -p $d2
+	p=$d/file4
+	touch $p
+
+	# create hardlinks
+	paths="$d/l1 $d/l2 $d/l3 $d2/l4 $d2/l5 $d2/l6"
+	for x in $paths; do
+		ln $p $x
+	done
+
+	_print_names $p >>$here/$seq.full
+
+	echo ""
+	echo "print out names and check after created hardlinks"
+	echo ""
+	for x in $paths; do
+		_print_names $x | tee -a $here/$seq.full
+		_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$x
+	done
+
+	echo ""
+	echo "now try removing half of the hardlinks"
+	echo ""
+	paths="$d/l1 $d/l2 $d/l3 $d2/l4 $d2/l5 $d2/l6"
+	i=0
+	for x in $paths; do
+		i=`expr $i + 1`
+		j=`expr $i % 2`
+		if [ $j -eq 0 ]; then
+			echo "rm'ing $x"
+			rm $x
+		fi
+	done
+
+	echo ""
+	echo "print out names and check after removed hardlinks"
+	echo ""
+	for x in $paths; do
+		if [ -e $x ]; then 
+echo "looking at $x"
+			_print_names $x | tee -a $here/$seq.full
+			_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$x
+		fi
+	done
+
+}
+
+#
+# in dir, file1 to file2 where file2 does not exist
+# in dir, file1 to file2 where file2 does exist 
+# dir/file1 to dir2/file2 where file2 does not exist
+# dir/file1 to dir2/file2 where file2 does exist
+# dir to dir2 where dir2 does not exist
+# dir to dir/dir3 - not allowed
+#
+#
+_test_rename()
+{
+	echo ""
+	echo "Testing rename"
+	echo ""
+
+	echo ""
+	echo "1. in dir, file1 to file2 where file2 does not exist" 
+	echo ""
+	d1=$SCRATCH_MNT/ren1/ren2/ren3/ren4
+	mkdir -p $d1
+	p1=$d1/f1
+	p2=$d1/f2
+	touch $p1
+	mv $p1 $p2
+	_check_parentinos_path $SCRATCH_MNT $p2
+
+	echo ""
+	echo "2. in dir, file1 to file2 where file2 does exist" 
+	echo ""
+	touch $p1
+	mv $p1 $p2
+	_check_parentinos_path $SCRATCH_MNT $p2
+
+	echo ""
+	echo "3. dir/file1 to dir2/file2 where file2 does not exist"
+	echo ""
+	d2=$SCRATCH_MNT/ren1/ren2/ren3/ren5
+	mkdir -p $d2
+	p3=$d2/f3
+	touch $p1
+	mv $p1 $p3
+	_check_parentinos_path $SCRATCH_MNT $p3
+
+	echo ""
+	echo "4. dir/file1 to dir2/file2 where file2 does exist"
+	echo ""
+	d2=$SCRATCH_MNT/ren1/ren2/ren3/ren5
+	p3=$d2/f3
+	touch $p1
+	mv $p1 $p3
+	_check_parentinos_path $SCRATCH_MNT $p3
+
+	echo ""
+	echo "5. dir to dir2 where dir2 does not exist"
+	echo ""
+	d3=$SCRATCH_MNT/ren1/ren2/ren3/ren6
+	mv $d1 $d3
+	_check_parentinos_path $SCRATCH_MNT $d3
+}
+
+_filter_num()
+{
+	tee -a $seq.full |\
+	sed -e 's/[0-9][0-9]* inodes/I inodes/g' \
+	    -e 's/[0-9][0-9]* paths/P paths/g' \
+	    -e 's/seed = [0-9][0-9]*/seed = S/'
+}
+
+
+_test_fsstress()
+{
+	echo ""
+	echo "Testing fsstress"
+	echo ""
+
+	out=$SCRATCH_MNT/fsstress.$$
+	count=1000
+	args="-z \
+-f rmdir=10 -f link=10 -f creat=10 \
+-f mkdir=10 -f rename=30 -f unlink=10 \
+-f symlink=10 \
+-n $count -d $out -p 3"
+
+	echo "ltp/fsstress $args" | sed -e "s#$out#outdir#"
+	if ! $here/ltp/fsstress $args | _filter_num
+	then
+		echo "    fsstress $args returned $?"
+		cat $tmp.out | tee -a $here/$seq.full
+		status=1
+	fi
+
+	xfs_repair_ipaths -n $SCRATCH_MNT | _filter_num
+	xfs_check_ipaths $SCRATCH_MNT | _filter_num
+}
+
+
+_test_dirstress()
+{
+	echo ""
+	echo "Testing dirstress"
+	echo ""
+
+	out=$SCRATCH_MNT/dirstress.$$
+	count=1000
+
+	if ! mkdir $out
+	then
+	    echo "!! couldn't mkdir $out"
+	    status=1
+	    exit
+	fi
+
+	args="-d $out -f $count -k -p 3 -n 1"
+	echo "src/dirstress $args" | sed -e "s#$out#outdir#"
+	if ! $here/src/dirstress $args >$tmp.out 2>&1 | _filter_num
+	then
+		echo "    dirstress failed"
+		echo "*** dirstress $args" | tee -a $here/$seq.full
+		cat $tmp.out >>$here/$seq.full
+		status=1
+		exit
+	fi
+
+	args="-d $out -f $count -k -p 3 -n 5"
+	echo "src/dirstress $args" | sed -e "s#$out#outdir#"
+	if ! $here/src/dirstress $args >$tmp.out 2>&1 | _filter_num
+	then
+		echo "    dirstress failed"
+		echo "*** dirstress $args" | tee -a $here/$seq.full
+		cat $tmp.out >>$here/$seq.full
+		status=1
+		exit
+	fi
+
+	xfs_repair_ipaths -n $SCRATCH_MNT | _filter_num
+	xfs_check_ipaths $SCRATCH_MNT | _filter_num
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_supported_fs xfs
+_supported_os IRIX
+
+_require_scratch
+
+rm -f $here/$seq.full
+
+echo "mkfs"
+export MKFS_OPTIONS="$MKFS_OPTIONS -i paths=1"
+_scratch_mkfs_xfs >>$here/$seq.full 2>&1 \
+    || _fail "mkfs scratch failed"
+
+echo "mount"
+_scratch_mount >>$here/$seq.full 2>&1 \
+    || _fail "mount failed: $MOUNT_OPTIONS"
+
+# real QA test starts here
+
+verbose=false
+
+# initial testing with scripting and modified attr(1)
+# in order to test parent EAs
+_test_create
+_test_hardlink
+_test_rename
+_test_symlink
+
+# stress testing with verification by parent checking programs
+_test_fsstress
+_test_dirstress
+
+# success, all done
+status=0
+exit
