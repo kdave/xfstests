@@ -157,19 +157,15 @@ main(
 
 	if (storefile) {
 		ssize_t sret;
-		off_t	lret;
+		size_t len;
 
 		if ((storefd = open(storefile, O_RDONLY)) == -1) {
 			fprintf(stderr, "unable to open store file for read (%s), errno = %d\n", storefile, errno);
 			exit(1);
 		}
-		lret = lseek(storefd, offset, SEEK_SET);
-		if (lret < 0) {
-			fprintf(stderr, "unable to lseek(%s) to offset %lld, errno = %d\n",
-				storefile, (long long)lret, errno);
-			exit(1);
-		}
-		sret = read(storefd, bufp, length);
+
+		len = length;
+		sret = read(storefd, bufp, len);
 		if (sret < 0) {
 			fprintf(stderr, "unable to read store file (%s), errno = %d\n", storefile, errno);
 			exit(1);
