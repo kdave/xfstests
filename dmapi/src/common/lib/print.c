@@ -47,10 +47,10 @@
    * Define some standard formats for the printf statements below.
    */
 
-#define HDR  "%s: token=%d sequence=%d\n"
-#define VALS "\t%-15s %s\n"
-#define VALD "\t%-15s %d\n"
-#define VALLLD "\t%-15s %lld\n"
+#define HDR  "type=%s token=%d sequence=%d\n"
+#define VALS "\t%s=%s\n"
+#define VALD "\t%s=%d\n"
+#define VALLLD "\t%s=%lld\n"
 
 
 /*
@@ -204,7 +204,7 @@ print_one_data_event(
 	}
 
 	printf(VALS VALLLD VALLLD,
-		"file handle",	handle,
+		"file_handle",	handle,
 		"offset", msg_de->de_offset,
 		"length", msg_de->de_length);
 
