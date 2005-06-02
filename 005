@@ -55,7 +55,9 @@ _cleanup()
 
 _touch()
 {
-    touch $@ 2>&1 | grep -q 'Too many levels of symbolic links'
+    # On IRIX: Too many symbolic links in path name traversal
+    # On Linux: Too many levels of symbolic links
+    touch $@ 2>&1 | tee -a $here/$seq.full | grep -q 'Too many.*symbolic links'
     if [ $? -eq 0 ]; then
 	echo "ELOOP returned.  Good."
     else
@@ -68,6 +70,7 @@ _touch()
 . ./common.filter
 
 # real QA test starts here
+rm -f $here/$seq.full
 _supported_fs xfs udf nfs
 
 # IRIX UDF does not support symlinks
