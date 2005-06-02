@@ -51,8 +51,12 @@ _cleanup()
     cd /
     # we might get here with a RO FS
     mount -o remount,rw $TEST_DEV >/dev/null 2>&1
-    # now kill!
-    rm -rf $testdir/fsstress.$$.*
+    # now remove fsstress directory.
+    # N.B. rm(1) on IRIX can find problems when building up a long pathname
+    # such that what it has is greater the 1024 chars and will 
+    # stop and complain - so get rid of complaint
+    # Ref. pv#935754
+    rm -rf $testdir/fsstress.$$.* 2>&1 | grep -v 'Path too long'
     _cleanup_testdir
 }
 
