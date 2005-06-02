@@ -1,0 +1,137 @@
+#! /bin/sh
+# FS QA Test No. 107
+#
+# Project quota
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+#
+# http://www.sgi.com
+#
+# For further information regarding this notice, see:
+#
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+filter_xfs_quota()
+{
+	perl -ne "
+s,$target,[TARGET],;
+s,$tmp.projects,[PROJECTS_FILE],;
+s,$SCRATCH_MNT,[SCR_MNT],;
+s,$SCRATCH_DEV,[SCR_DEV],;
+s/Inode: \#\d+ \(0 blocks, 0 extents\)/Inode: #[INO] (0 blocks, 0 extents)/;
+s/Inode: \#\d+ \(\d+ blocks, \d+ extents\)/Inode: #[INO] (X blocks, Y extents)/;
+	print;"
+}
+
+_supported_fs xfs
+_supported_os Linux #IRIX
+_require_scratch
+_require_quota
+
+# real QA test starts here
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+cat $tmp.mkfs >$seq.full
+. $tmp.mkfs
+
+# setup a default run
+[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS="-o pquota"
+
+_qmount
+src/feature -p $SCRATCH_MNT && _notrun "Cannot run without project quota"
+
+echo "### create projects file"
+rm -f $tmp.projects
+target=$SCRATCH_MNT/project
+echo "6:$target" | tee -a $seq.full > $tmp.projects
+
+echo "### populate filesystem"
+mkdir $target		|| exit
+FSSTRESS_AVOID="$FSSTRESS_AVOID -fmknod=0 -fsymlink=0"
+ltp/fsstress -s 0xfeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
+ltp/fsstress -s 0xbabe -m8 -z -p4 -n500 -fchproj=250 -fchown=250 -d $target
+
+QARGS="-x -D $tmp.projects -P /dev/null $SCRATCH_MNT"
+
+echo "### initial report"
+xfs_quota -c 'quot -p' -c 'quota -ip 6' $QARGS | filter_xfs_quota
+
+echo "### check the project, should give warnings"
+xfs_quota -c 'project -c 6' $QARGS | filter_xfs_quota
+
+echo "### recursively setup the project"
+xfs_quota -c 'project -s 6' $QARGS | filter_xfs_quota
+xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+
+echo "### check the project, should give no warnings now"
+xfs_quota -c 'project -c 6' $QARGS | filter_xfs_quota
+
+echo "### deny a hard link - wrong project ID"
+rm -f $SCRATCH_MNT/outer $target/inner
+xfs_io -f -c 'chproj 789' $SCRATCH_MNT/outer
+ln $SCRATCH_MNT/outer $target/inner 2>/dev/null
+if [ $? -eq 0 ]; then
+	echo hard link succeeded
+	ls -ld $SCRATCH_MNT/outer $target/inner
+else
+	echo hard link failed
+fi
+xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+
+echo "### allow a hard link - right project ID"
+xfs_io -c 'chproj 6' $SCRATCH_MNT/outer
+ln $SCRATCH_MNT/outer $target/inner
+if [ $? -eq 0 ]; then
+	echo hard link succeeded
+else
+	echo hard link failed
+	ls -ld $SCRATCH_MNT/outer $target/inner
+fi
+xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+
+echo "### recursively clear the project"
+xfs_quota -c 'project -C 6' $QARGS | filter_xfs_quota
+#no output...
+xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+
+status=0
+exit

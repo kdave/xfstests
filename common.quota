@@ -41,8 +41,7 @@ _require_quota()
 {
     src/feature -q $TEST_DEV
     [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS quota"
-    [ -x /usr/etc/quotaon -o -x /sbin/quotaon -o -x /usr/sbin/quotaon ] || \
-	_notrun "Quota user tools not installed"
+    [ -x /usr/sbin/xfs_quota ] || _notrun "Quota user tools not installed"
 }
 
 # create a file as a specific user (uid)
@@ -89,6 +88,16 @@ _choose_gid()
 	/etc/group
 }
 
+_choose_prid()
+{
+    if [ ! -f /etc/projid ]; then
+	echo 0
+	return
+    fi
+    perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[1],$a[0] }' \
+	/etc/projid
+}
+
 #
 # filter to get the guts out
 # and make linux and irix similar
@@ -122,7 +131,6 @@ _qmount()
     umount $SCRATCH_DEV >/dev/null 2>&1
     _scratch_mount || _fail "qmount failed"
     chmod ugo+rwx $SCRATCH_MNT
-    [ -x /usr/sbin/quot ] && quot $SCRATCH_MNT >>$seq.full 2>&1
 }
 
 _qsetup()
@@ -135,6 +143,9 @@ _qsetup()
     elif src/feature -g $SCRATCH_DEV
     then
 	type=g ; eval `_choose_gid`; ln -s $seq.grpquota $seq.out
+    elif src/feature -p $SCRATCH_DEV
+    then
+	type=p ; eval `_choose_prid`; ln -s $seq.prjquota $seq.out
     elif src/feature -U $SCRATCH_DEV
     then
 	type=u ; eval `_choose_uid`; ln -s $seq.uqnoenforce $seq.out
@@ -142,6 +153,10 @@ _qsetup()
     elif src/feature -G $SCRATCH_DEV
     then
 	type=g ; eval `_choose_gid`; ln -s $seq.gqnoenforce $seq.out
+	enforce=0
+    elif src/feature -P $SCRATCH_DEV
+    then
+	type=p ; eval `_choose_prid`; ln -s $seq.pqnoenforce $seq.out
 	enforce=0
     else
 	_notrun "No quota support at mount time"
