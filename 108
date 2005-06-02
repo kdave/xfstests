@@ -69,12 +69,12 @@ test_files()
 {
 	echo; echo "### create files, setting up ownership (type=$type)"
 	rm -f $SCRATCH_MNT/{buffer,direct,mmap}
-	xfs_io -fc "chproj $prid" $SCRATCH_MNT/{buffer,direct,mmap}
+	$XFS_IO_PROG -fc "chproj $prid" $SCRATCH_MNT/{buffer,direct,mmap}
 	chown $uid $SCRATCH_MNT/{buffer,direct,mmap}
 	chgrp $gid $SCRATCH_MNT/{buffer,direct,mmap}
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
 		$here/src/lstat64 $file | head -3 | filter_scratch
-		xfs_io -c lsproj $file
+		$XFS_IO_PROG -c lsproj $file
 	done
 }
 
@@ -82,11 +82,11 @@ test_accounting()
 {
 	echo "### some controlled buffered, direct and mmapd IO (type=$type)"
 	echo "--- initiating parallel IO..." >>$seq.full
-	xfs_io -c 'pwrite -b 1m 0 16m' -c 'fsync' \
+	$XFS_IO_PROG -c 'pwrite -b 1m 0 16m' -c 'fsync' \
 					$SCRATCH_MNT/buffer >>$seq.full 2>&1 &
-	xfs_io -c 'pwrite -b 1m 0 16m' -d \
+	$XFS_IO_PROG -c 'pwrite -b 1m 0 16m' -d \
 					$SCRATCH_MNT/direct >>$seq.full 2>&1 &
-	xfs_io -c 't 16m' -c 'mm -rw 0 16m' -c 'mw 0 16m' -c 'ms -s' \
+	$XFS_IO_PROG -c 't 16m' -c 'mm -rw 0 16m' -c 'mw 0 16m' -c 'ms -s' \
 					$SCRATCH_MNT/mmap   >>$seq.full 2>&1 &
 	wait
 	echo "--- completed parallel IO ($type)" >>$seq.full

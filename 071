@@ -85,16 +85,16 @@ write_block()
 
     echo "Writing $bytes bytes, offset is $words (direct=$direct)" | _filter_io
     echo "Writing $bytes bytes at $location $words (direct=$direct)" >>$seq.full
-    xfs_io -c "pwrite $offset 512" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
+    $XFS_IO_PROG -c "pwrite $offset 512" $flags $SCRATCH_MNT/$seq \
+	2>&1 | _filter_off $offset | _filter_$XFS_IO_PROG | tee -a $seq.full
     xfs_bmap -v $SCRATCH_MNT/$seq >>$seq.full
 
     echo "Reading $bytes bytes (direct=$direct)" | _filter_io
     echo "Reading $bytes bytes at $location (direct=$direct)" >>$seq.full
-    xfs_io -c "pread $offset $bytes" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
+    $XFS_IO_PROG -c "pread $offset $bytes" $flags $SCRATCH_MNT/$seq \
+	2>&1 | _filter_off $offset | _filter_$XFS_IO_PROG | tee -a $seq.full
 
-    xfs_io -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full
+    $XFS_IO_PROG -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full
 
     echo | tee -a $seq.full
 }
@@ -103,7 +103,7 @@ write_block()
 _supported_fs xfs
 _supported_os IRIX Linux
 
-[ -x /usr/sbin/xfs_io ] || _notrun "xfs_io executable not found"
+[ -x $XFS_IO_PROG ] || _notrun "$XFS_IO_PROG executable not found"
 
 _require_scratch
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -139,7 +139,7 @@ fi
 # boundary (and stash xfs_bmap output), before moving onto
 # each new test point.
 
-xfs_io -c "truncate 0" -f $SCRATCH_MNT/$seq
+$XFS_IO_PROG -c "truncate 0" -f $SCRATCH_MNT/$seq
 
 oneTB=`echo 1024 \* 1024 \* 1024 \* 1024 | bc`
 count=`expr $upperbound - 1`
