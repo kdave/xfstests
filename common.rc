@@ -816,6 +816,13 @@ _check_test_fs()
         TEST_RT="$TEST_RTDEV"
 
     _check_xfs_filesystem $TEST_DEV $TEST_LOG $TEST_RT
+
+    # check for ipath consistency
+    if $XFS_GROWFS_PROG -n $TEST_DIR | grep -q 'inode-paths=1'; then
+	# errors go to stderr
+	xfs_check_ipaths $TEST_DIR >/dev/null
+	xfs_repair_ipaths -n $TEST_DIR >/dev/null
+    fi
 }
 
 _check_scratch_fs()
