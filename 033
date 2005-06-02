@@ -74,6 +74,19 @@ _check_root_inos()
 	_check_repair $1 "inode $rsumino"
 }
 
+#
+# pv#909621
+# IRIX checks for valid user and group ids as we have a 
+# limit of MAXID
+# As it is unsigned on Linux, this test is not done
+# (i.e. -1 is a valid id on Linux but not on IRIX)
+# So we make the output the same for both OS's.
+#
+_filter_bad_ids()
+{
+	egrep -v 'bad user id 0xffffffff|bad group id 0xffffffff'
+}
+
 # real QA test starts here
 _supported_fs xfs
 _supported_os IRIX Linux
@@ -100,7 +113,7 @@ umount $SCRATCH_DEV
 
 # rootino, rbmino, and rsumino are now set (lets blow em away!)
 _check_root_inos 0
-_check_root_inos -1
+_check_root_inos -1 | _filter_bad_ids
 
 # success, all done
 status=0
