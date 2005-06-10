@@ -146,8 +146,7 @@ loggen_unmount(int count)
     INT_SET(head->h_cycle_data[0],  ARCH_CONVERT, 0xb0c0d0d0);
     INT_SET(head->h_fmt,            ARCH_CONVERT, param_fmt);
     
-    ASSIGN_ANY_LSN(head->h_tail_lsn,    
-            param_tail_cycle, param_tail_block, ARCH_CONVERT);
+    ASSIGN_ANY_LSN_DISK(head->h_tail_lsn, param_tail_cycle, param_tail_block);
 
     memcpy(head->h_fs_uuid,  param_uuid, sizeof(uuid_t));
 
@@ -163,8 +162,8 @@ loggen_unmount(int count)
     memcpy(op+1, &magic, sizeof(magic));
     
     while (count--) {
-        ASSIGN_ANY_LSN(head->h_lsn,         
-                param_cycle, param_block++, ARCH_CONVERT);
+        ASSIGN_ANY_LSN_DISK(head->h_lsn,         
+                param_cycle, param_block++);
         
         loggen_write();
     }
@@ -214,8 +213,8 @@ loggen_empty(int count)
     INT_SET(head->h_cycle_data[0],  ARCH_CONVERT, 0xb0c0d0d0);
     INT_SET(head->h_fmt,            ARCH_CONVERT, param_fmt);
     
-    ASSIGN_ANY_LSN(head->h_tail_lsn,    
-            param_tail_cycle, param_tail_block, ARCH_CONVERT);
+    ASSIGN_ANY_LSN_DISK(head->h_tail_lsn,    
+            param_tail_cycle, param_tail_block);
 
     memcpy(head->h_fs_uuid,  param_uuid, sizeof(uuid_t));
 
@@ -265,8 +264,8 @@ loggen_empty(int count)
     INT_SET(op5->oh_res2,           ARCH_CONVERT, 0);
 
     while (count--) {
-        ASSIGN_ANY_LSN(head->h_lsn,         
-                param_cycle, param_block++, ARCH_CONVERT);
+        ASSIGN_ANY_LSN_DISK(head->h_lsn,         
+                param_cycle, param_block++);
         
         loggen_write();
     }
