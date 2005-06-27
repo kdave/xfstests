@@ -35,8 +35,11 @@
 #
 #
 
-# check have root/toolroot set
 error=false
+
+# Do initial checks
+
+# check have root/toolroot set
 if [ -z "$TOOLROOT" ]; then
 	echo "TOOLROOT needs to be set to a populated IRIX toolroot"
 	error=true
@@ -45,6 +48,25 @@ if [ -z "$ROOT" ]; then
 	echo "ROOT needs to be set to a populated IRIX root"
 	error=true
 fi 
+
+# check we have c compiler license
+if ! grep -iq '^feature cc' /var/flexlm/license.dat; then
+	echo "Unable to find cc license for IRIX"
+	echo "Get license: http://www.csd.sgi.com/prod/software/swl/keyrequest.html"
+	error=true
+fi
+
+# check we have dev.sw.lib installed
+# needed by ld32 even though we have $ROOT
+if versions dev.sw.lib | grep -q dev.sw.lib; then
+	:
+else
+	echo "dev.sw.lib is not installed"
+	echo "Install from irix-6.5-development-libraries-1/dist"
+	error=true
+fi
+
+# any check failures then exit out
 $error && exit 1
 
 # root/toolroot paths
@@ -74,7 +96,7 @@ $error && exit 1
 # force a full configure
 if [ $# -eq 1 ]; then
 	if [ $1 = "-f" ]; then
-		rm -f configure include/builddefs
+		rm -f config.cache configure include/builddefs
 		shift
 	fi
 fi
