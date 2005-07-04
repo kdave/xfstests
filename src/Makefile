@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
 # 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of version 2 of the GNU General Public License as
@@ -37,12 +37,18 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	nametest permname randholes runas truncfile usemem \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
-	godown resvtest writemod 
+	godown resvtest writemod
 
 LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize
 
+IRIX_TARGETS = open_unlink
+
 ifeq ($(PKG_PLATFORM),linux)
 TARGETS += $(LINUX_TARGETS)
+endif
+
+ifeq ($(PKG_PLATFORM),irix)
+TARGETS += $(IRIX_TARGETS)
 endif
 
 ifeq ($(HAVE_DB), true)
@@ -101,4 +107,8 @@ fill2: fill2.o
 
 runas: runas.o 
 	$(LINKTEST)  -lgen
+
+open_unlink: open_unlink.o $(LIBHANDLE)
+	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
+
 endif

@@ -1,6 +1,6 @@
-# aclocal.m4 generated automatically by aclocal 1.6.3 -*- Autoconf -*-
+# generated automatically by aclocal 1.7.5 -*- Autoconf -*-
 
-# Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002
+# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002
 # Free Software Foundation, Inc.
 # This file is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,
@@ -418,6 +418,19 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
     test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
         libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
     test -f /usr/lib/libhandle.la && libhdl="/usr/lib/libhandle.la"
+    AC_SUBST(libhdl)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_IRIX_LIBHANDLE],
+  [ 
+    AC_MSG_CHECKING([libhandle.a for IRIX])
+    libhdl="`pwd`/../irix/libhandle/libhandle.a"
+    if ! test -f $libhdl; then
+	echo 'no'
+        echo 'FATAL ERROR: could not find IRIX XFS handle library.'
+        exit 1
+    fi
+    echo 'yes'
     AC_SUBST(libhdl)
   ])
 
