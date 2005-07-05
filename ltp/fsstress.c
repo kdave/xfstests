@@ -1628,6 +1628,9 @@ chown_f(int opno, long r)
 void
 chproj_f(int opno, long r)
 {
+#if !defined(__sgi__)
+	struct fsxattr	fsx;
+#endif
 	int		fd;
 	int		e;
 	pathname_t	f;
@@ -1649,7 +1652,10 @@ chproj_f(int opno, long r)
 #if defined(__sgi__)
 	e = fchproj(fd, p);
 #else
-	e = xfsctl(f.path, fd, XFS_IOC_SETPROJID, &p);
+	if ((e = xfsctl(f.path, fd, XFS_IOC_FSGETXATTR, &fsx)) == 0) {
+		fsx.fsx_projid = p;
+		e = xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &fsx);
+	}
 #endif
 	if (v)
 		printf("%d/%d: chproj %s %u %d\n", procid, opno, f.path, p, e);
