@@ -44,6 +44,27 @@ _require_quota()
     [ -x /usr/sbin/xfs_quota ] || _notrun "Quota user tools not installed"
 }
 
+#
+# checks that the XFS project quota support in the kernel is enabled.
+# 
+_require_prjquota()
+{
+    src/feature -p $TEST_DEV
+    [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS project quotas"
+}
+
+#
+# checks for user nobody in /etc/passwd and /etc/group.
+#
+_require_nobody()
+{
+    grep -q '^nobody' /etc/passwd
+    [ $? -ne 0 ] && _notrun "/etc/passwd does not contain user nobody."
+
+    grep -q '^nobody' /etc/group
+    [ $? -ne 0 ] && _notrun "/etc/group does not contain user nobody."
+}
+
 # create a file as a specific user (uid)
 # takes filename, id, type (u/g), blocksize, blockcount
 # 
@@ -78,14 +99,12 @@ EOF
 
 _choose_uid()
 {
-    perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }' \
-	/etc/passwd
+    grep '^nobody' /etc/passwd | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
 }
 
 _choose_gid()
 {
-    perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }' \
-	/etc/group
+    grep '^nobody' /etc/group | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
 }
 
 _choose_prid()
