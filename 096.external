@@ -1,0 +1,53 @@
+QA output created by 096
+
+# su too big but must be a multiple of fs block size too
+--- mkfs=-l version=2,su=262656 ---
+log stripe unit (262656) must be a multiple of the block size (4096)
+
+
+# test log stripe greater than LR size
+--- mkfs=-l version=2,su=266240 ---
+log stripe unit (266240 bytes) is too large (maximum is 256KiB)
+log stripe unit adjusted to 32KiB
+meta-data=DEV isize=256    agcount=N, agsize=N blks
+data     =                       bsize=4096   blocks=N, imaxpct=25
+         =                       sunit=0      swidth=0 blks, unwritten=1
+naming   =version 2              bsize=4096
+log      =LOG                    bsize=4096   blocks=N, version=2
+         =                       sunit=8 blks
+realtime =none                   extsz=65536  blocks=N, rtextents=0
+
+
+# same test but get log stripe from data stripe
+--- mkfs=-l version=2 -d su=266240,sw=1 ---
+meta-data=DEV isize=256    agcount=N, agsize=N blks
+data     =                       bsize=4096   blocks=N, imaxpct=25
+         =                       sunit=65     swidth=65 blks, unwritten=1
+naming   =version 2              bsize=4096
+log      =LOG                    bsize=4096   blocks=N, version=2
+         =                       sunit=0 blks
+realtime =none                   extsz=65536  blocks=N, rtextents=0
+
+
+# test out data stripe
+--- mkfs=-d su=266240,sw=1 ---
+meta-data=DEV isize=256    agcount=N, agsize=N blks
+data     =                       bsize=4096   blocks=N, imaxpct=25
+         =                       sunit=65     swidth=65 blks, unwritten=1
+naming   =version 2              bsize=4096
+log      =LOG                    bsize=4096   blocks=N, version=1
+         =                       sunit=0 blks
+realtime =none                   extsz=65536  blocks=N, rtextents=0
+
+
+# test out data stripe the same but using sunit & swidth
+--- mkfs=-d sunit=520,swidth=520 ---
+meta-data=DEV isize=256    agcount=N, agsize=N blks
+data     =                       bsize=4096   blocks=N, imaxpct=25
+         =                       sunit=65     swidth=65 blks, unwritten=1
+naming   =version 2              bsize=4096
+log      =LOG                    bsize=4096   blocks=N, version=1
+         =                       sunit=0 blks
+realtime =none                   extsz=65536  blocks=N, rtextents=0
+
+
