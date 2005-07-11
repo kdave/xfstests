@@ -140,19 +140,19 @@ _scratch_mount()
 
 _test_mount()
 {
-    _test_options mount 
+    _test_options mount
     _mount -t $FSTYP $TEST_OPTIONS $MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
 }
 
 _scratch_mkfs_options()
 {
-    _scratch_options mkfs 
+    _scratch_options mkfs
     echo $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
 }
 
 _scratch_mkfs_xfs()
 {
-    _scratch_options mkfs 
+    _scratch_options mkfs
 
     $MKFS_XFS_PROG $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
     mkfs_status=$?
@@ -278,7 +278,7 @@ _need_to_be_root()
 
 
 #
-# _df_device : get an IRIX style df line for a given device 
+# _df_device : get an IRIX style df line for a given device
 #
 #       - returns "" if not mounted
 #       - returns fs type in field two (ala IRIX)
@@ -293,9 +293,9 @@ _df_device()
 	echo "Usage: _df_device device" 1>&2
 	exit 1
     fi
-    
+
     $DF_PROG 2>/dev/null | $AWK_PROG -v what=$1 '
-        match($1,what) && NF==1 { 
+        match($1,what) && NF==1 {
             v=$1
             getline
             print v, $0
@@ -323,11 +323,11 @@ _df_dir()
 	echo "Usage: _df_dir device" 1>&2
 	exit 1
     fi
-    
+
     $DF_PROG $1 2>/dev/null | $AWK_PROG -v what=$1 '
-        NR == 2 && NF==1 { 
+        NR == 2 && NF==1 {
             v=$1
-            getline 
+            getline
             print v, $0;
             exit 0
         }
@@ -349,7 +349,7 @@ _used()
 	echo "Usage: _used device" 1>&2
 	exit 1
     fi
-    
+
     _df_device $1 | $AWK_PROG '{ sub("%", "") ; print $6 }'
 }
 
@@ -362,7 +362,7 @@ _fs_type()
 	echo "Usage: _fs_type device" 1>&2
 	exit 1
     fi
-    
+
     _df_device $1 | $AWK_PROG '{ print $2 }'
 }
 
@@ -379,11 +379,10 @@ _fs_options()
 	echo "Usage: _fs_options device" 1>&2
 	exit 1
     fi
-    
+
     $AWK_PROG -v dev=$1 '
         match($1,dev) { print $4 }
     ' </proc/mounts
-    
 }
 
 # returns device number if a file is a block device
@@ -395,7 +394,7 @@ _is_block_dev()
 	echo "Usage: _is_block_dev dev" 1>&2
 	exit 1
     fi
-    
+
     [ -b $1 ] && src/lstat64 $1 | $AWK_PROG '/Device type:/ { print $9 }'
 }
 
@@ -445,7 +444,7 @@ _do()
 }
 
 # bail out, setting up .notrun file
-# 
+#
 _notrun()
 {
     echo "$*" >$seq.notrun
@@ -455,7 +454,7 @@ _notrun()
 }
 
 # just plain bail out
-# 
+#
 _fail()
 {
     echo "$*" | tee -a $here/$seq.full
@@ -495,7 +494,7 @@ _supported_os()
 }
 
 # this test needs a scratch partition - check we're ok & unmount it
-# 
+#
 _require_scratch()
 {
     case "$FSTYP" in
@@ -504,7 +503,6 @@ _require_scratch()
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
-		 
 		 if [ "`_is_block_dev $SCRATCH_DEV`" = "`_is_block_dev $TEST_DEV`" ]
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
@@ -522,13 +520,12 @@ _require_scratch()
 		 ;;
     esac
 
-    
     # mounted?
     if _mount | grep -q $SCRATCH_DEV
-    then 
+    then
         # if it's mounted, make sure its on $SCRATCH_MNT
         if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
-        then 
+        then
             echo "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
             exit 1
         fi
@@ -541,12 +538,12 @@ _require_scratch()
     fi
 }
 
-# this test needs a logdev 
-# 
+# this test needs a logdev
+#
 _require_logdev()
 {
     [ -z "$SCRATCH_LOGDEV" -o ! -b "$SCRATCH_LOGDEV" ] && \
-        _notrun "This test requires a valid \$SCRATCH_LOGDEV" 
+        _notrun "This test requires a valid \$SCRATCH_LOGDEV"
     [ "$USE_EXTERNAL" != yes ] && \
         _notrun "This test requires USE_EXTERNAL to be enabled"
 
@@ -555,7 +552,7 @@ _require_logdev()
 }
 
 # this test requires loopback device support
-# 
+#
 _require_loop()
 {
     if [ "$HOSTOS" != "Linux" ]
@@ -573,7 +570,7 @@ _require_loop()
 }
 
 # this test requires that (large) loopback device files are not in use
-# 
+#
 _require_nobigloopfs()
 {
     [ "$USE_BIG_LOOPFS" = yes ] && \
@@ -582,7 +579,7 @@ _require_nobigloopfs()
 
 # this test requires that a realtime subvolume is in use, and
 # that the kernel supports realtime as well.
-# 
+#
 _require_realtime()
 {
     [ "$USE_EXTERNAL" = yes ] || \
@@ -592,14 +589,14 @@ _require_realtime()
 }
 
 # this test requires that a specified command (executable) exists
-# 
+#
 _require_command()
 {
     [ -x "$1" ] || _notrun "$1 utility required, skipped this test"
 }
 
 # this test requires that external log/realtime devices are not in use
-# 
+#
 _require_nonexternal()
 {
     [ "$USE_EXTERNAL" = yes ] && \
@@ -615,9 +612,9 @@ _xfs_mounted()
 	echo "Usage: _xfs_mounted device" 1>&2
 	exit 1
     fi
-    
+
     device=$1
-    
+
     if _mount | grep $device | $AWK_PROG '
         /type xfs/  { print $3 ; exit 0 }
         END         { exit 1 }
@@ -640,7 +637,7 @@ _remount()
     fi
     device=$1
     mode=$2
-    
+
     if ! mount -o remount,$mode $device
     then
         echo "_remount: failed to remount filesystem on $device as $mode"
@@ -648,7 +645,7 @@ _remount()
     fi
 }
 
-# run xfs_check and friends on a FS. 
+# run xfs_check and friends on a FS.
 #
 # if the filesystem is mounted, it's either remounted ro before being
 # checked or it's unmounted and then remounted
@@ -681,11 +678,11 @@ _check_xfs_filesystem()
 
     type=`_fs_type $device`
     ok=1
-    
+
     if [ "$type" = "xfs" ]
     then
-        # mounted... 
-        
+        # mounted...
+
         if [ $USE_REMOUNT -eq 0 ]
         then
             mountpoint=`_xfs_mounted $device`
@@ -700,26 +697,26 @@ _check_xfs_filesystem()
     if [ $? -ne 0 -a "$HOSTOS" = "Linux" ]
     then
         echo "_check_xfs_filesystem: filesystem on $device has dirty log (see $seq.full)"
-        
+
         echo "_check_xfs_filesystem: filesystem on $device has dirty log"   >>$here/$seq.full
         echo "*** xfs_logprint -t output ***"                   >>$here/$seq.full
         cat $tmp.logprint                                       >>$here/$seq.full
         echo "*** end xfs_logprint output"                      >>$here/$seq.full
-        
+
         ok=0
     fi
 
     $XFS_CHECK_PROG $testoption $extra_log_options $device 2>&1 |\
-	 _fix_malloc >$tmp.fs_check 
+	 _fix_malloc >$tmp.fs_check
     if [ -s $tmp.fs_check ]
     then
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent (c) (see $seq.full)"
-        
+
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
         echo "*** xfs_check output ***"                         >>$here/$seq.full
         cat $tmp.fs_check                                       >>$here/$seq.full
         echo "*** end xfs_check output"                         >>$here/$seq.full
-        
+
         ok=0
     fi
     # repair doesn't scale massively at this stage, optionally skip it for now
@@ -728,16 +725,16 @@ _check_xfs_filesystem()
     if [ $? -ne 0 ]
     then
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent (r) (see $seq.full)"
-        
+
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
         echo "*** xfs_repair -n output ***"                     >>$here/$seq.full
         cat $tmp.repair | _fix_malloc                           >>$here/$seq.full
         echo "*** end xfs_repair output"                        >>$here/$seq.full
-        
+
         ok=0
     fi
     rm -f $tmp.fs_check $tmp.logprint $tmp.repair
- 
+
     if [ $ok -eq 0 ]
     then
         echo "*** mount output ***"                             >>$here/$seq.full
@@ -745,7 +742,7 @@ _check_xfs_filesystem()
         echo "*** end mount output"                             >>$here/$seq.full
     elif [ "$type" = "xfs" ]
     then
-        # mounted... 
+        # mounted...
         if [ $USE_REMOUNT -eq 0 ]
         then
             if ! _mount -t xfs $extra_mount_options $device $mountpoint
@@ -757,13 +754,13 @@ _check_xfs_filesystem()
             _remount $device rw
         fi
     fi
-    
+
     [ $ok -eq 0 ] && exit 1
-    return 0    
+    return 0
 }
 
-# Filter the knowen errors the UDF Verifier reports. 
-_udf_test_known_error_filter() 
+# Filter the knowen errors the UDF Verifier reports.
+_udf_test_known_error_filter()
 {
 	egrep -v "PVD  60  Error: Interchange Level: 1, Maximum Interchange Level: 0|FSD  28  Error: Interchange Level: 1, Maximum Interchange Level: 1,|PVD  72  Warning: Volume Set Identifier: \"\*IRIX UDF\",|Warning: [0-9]+ unused blocks NOT marked as unallocated."
 
@@ -781,14 +778,14 @@ _check_udf_filesystem()
 
     if [ ! -x $here/src/udf_test ]
     then
-	echo "udf_test not installed, please download and build the Philips" 
+	echo "udf_test not installed, please download and build the Philips"
 	echo "UDF Verification Software from http://www.extra.research.philips.com/udf/."
 	echo "Then copy the udf_test binary to $here/src/."
 	echo "If you do not wish to run udf_test then set environment variable DISABLE_UDF_TEST"
 	echo "to 1."
 	return
     fi
-	
+
     device=$1
     if [ $# -eq 2 ];
     then
@@ -904,7 +901,7 @@ _setup_xfs_testdir()
 {
     [ "$FSTYP" != "xfs" ] \
 	&& _fail "setup_xfs_testdir: \$FSTYP ($FSTYP) is not xfs"
-    
+
     testdir=$TEST_DIR
 }
 
@@ -916,17 +913,17 @@ _setup_udf_scratchdir()
 	&& _notrun "this test requires a valid \$SCRATCH_DEV"
     [ -z "$SCRATCH_MNT" ] \
 	&& _notrun "this test requires a valid \$SCRATCH_MNT"
-    
+
     # mounted?
     if _mount | grep -q $SCRATCH_DEV
-    then 
+    then
         # if it's mounted, make sure its on $TEST_RW_DIR
         if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
-        then 
+        then
             _fail "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
         fi
     	$UMOUNT_PROG $SCRATCH_DEV
-    fi 
+    fi
 
     _scratch_mkfs
     _scratch_mount
@@ -942,17 +939,17 @@ _setup_nfs_scratchdir()
 	&& _notrun "this test requires a valid host fs for \$SCRATCH_DEV"
     [ -z "$SCRATCH_MNT" ] \
 	&& _notrun "this test requires a valid \$SCRATCH_MNT"
-    
+
     # mounted?
     if _mount | grep -q $SCRATCH_DEV
-    then 
+    then
         # if it's mounted, make sure its on $SCRATCH_MNT
         if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
-        then 
+        then
             _fail "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
         fi
     	$UMOUNT_PROG $SCRATCH_DEV
-    fi 
+    fi
 
     _scratch_mkfs
     _scratch_mount
@@ -961,9 +958,9 @@ _setup_nfs_scratchdir()
 }
 
 #
-# Warning for UDF and NFS this function calls _setup_udf_scratchdir and 
-# _setup_udf_scratchdir. This is done because testdir is a persistent 
-# XFS only partition. 
+# Warning for UDF and NFS this function calls _setup_udf_scratchdir and
+# _setup_udf_scratchdir. This is done because testdir is a persistent
+# XFS only partition.
 #
 _setup_testdir()
 {
@@ -980,7 +977,7 @@ _setup_testdir()
     *)
 	_fail "\$FSTYP is not xfs, udf or nfs"
 	;;
-    esac    
+    esac
 }
 
 _cleanup_testdir()
@@ -1001,51 +998,14 @@ _cleanup_testdir()
     *)
 	_fail "\$FSTYP is not xfs, udf or nfs"
 	;;
-    esac    
+    esac
 }
-
-################################################################################
-
-if [ "$iam" != new -a "$iam" != bench ]
-then
-    # make some further configuration checks here
-
-    if [ "$TEST_DEV" = ""  ]
-    then
-        echo "common.rc: Error: \$TEST_DEV is not set"
-        exit 1
-    fi
-    
-    # if $TEST_DEV is not mounted, mount it now as XFS
-    if [ -z "`_fs_type $TEST_DEV`" ]
-    then
-        # $TEST_DEV is not mounted
-        if ! _test_mount
-        then
-            echo "common.rc: retrying test device mount with external set"
-            [ "$USE_EXTERNAL" != "yes" ] && export USE_EXTERNAL=yes
-            if ! _test_mount
-            then
-                echo "common.rc: could not mount $TEST_DEV on $TEST_DIR"
-                exit 1
-            fi
-        fi
-    fi
-    
-    if [ "`_fs_type $TEST_DEV`" != "xfs" ]
-    then
-        echo "common.rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED XFS filesystem"
-        $DF_PROG $TEST_DEV
-        exit 1
-    fi
-
-fi
 
 _link_out_file()
 {
    if [ -z "$1" ]; then
       echo Error must pass \$seq.
-      exit	
+      exit
    fi
    rm -f $1
    if [ "`uname`" == "IRIX64" ] || [ "`uname`" == "IRIX" ]; then
@@ -1057,11 +1017,6 @@ _link_out_file()
       exit
    fi
 }
-
-# Populate a filesystem with inodes for performance experiments
-# 
-# usage: populate [-v] [-n ndirs] [-f nfiles] [-d depth] [-r root] [-s size]
-# 
 
 _die()
 {
@@ -1077,7 +1032,7 @@ _nfiles()
                 file=f$f
                 touch $file
                 if [ $size -gt 0 ]; then
-                    dd if=/dev/zero of=$file bs=1024 count=$size 
+                    dd if=/dev/zero of=$file bs=1024 count=$size
                 fi
                 f=`expr $f + 1`
         done
@@ -1106,7 +1061,10 @@ _descend()
         done
 }
 
-
+# Populate a filesystem with inodes for performance experiments
+#
+# usage: populate [-v] [-n ndirs] [-f nfiles] [-d depth] [-r root] [-s size]
+#
 _populate_fs()
 {
 
@@ -1137,8 +1095,59 @@ _populate_fs()
     cd $here
 
     [ $verbose = true ] && echo done
-
 }
+
+# query whether the given file has the given inode flag set
+#
+_test_inode_flag()
+{
+    flag=$1
+    file=$2
+
+    if which $XFS_IO_PROG >/dev/null; then
+        if $XFS_IO_PROG -r -c 'lsattr -v' "$file" | fgrep -q "$flag" ; then
+	    return 0
+        fi
+    fi
+    return 1
+}
+
+
+################################################################################
+
+if [ "$iam" != new -a "$iam" != bench ]
+then
+    # make some further configuration checks here
+
+    if [ "$TEST_DEV" = ""  ]
+    then
+        echo "common.rc: Error: \$TEST_DEV is not set"
+        exit 1
+    fi
+
+    # if $TEST_DEV is not mounted, mount it now as XFS
+    if [ -z "`_fs_type $TEST_DEV`" ]
+    then
+        # $TEST_DEV is not mounted
+        if ! _test_mount
+        then
+            echo "common.rc: retrying test device mount with external set"
+            [ "$USE_EXTERNAL" != "yes" ] && export USE_EXTERNAL=yes
+            if ! _test_mount
+            then
+                echo "common.rc: could not mount $TEST_DEV on $TEST_DIR"
+                exit 1
+            fi
+        fi
+    fi
+
+    if [ "`_fs_type $TEST_DEV`" != "xfs" ]
+    then
+        echo "common.rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED XFS filesystem"
+        $DF_PROG $TEST_DEV
+        exit 1
+    fi
+fi
 
 # make sure this script returns success
 /bin/true
