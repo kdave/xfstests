@@ -1,0 +1,79 @@
+#! /bin/sh
+# FS QA Test No. 116
+#
+# pv#940491
+# Test out resetting of sb_qflags when mounting with no quotas after
+# having mounted with quotas.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
+# 
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+# 
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# 
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+# 
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write the Free Software Foundation, Inc., 59
+# Temple Place - Suite 330, Boston MA 02111-1307, USA.
+# 
+# Contact information: Silicon Graphics, Inc., 1600 Amphitheatre Pkwy,
+# Mountain View, CA  94043, or:
+# 
+# http://www.sgi.com 
+# 
+# For further information regarding this notice, see: 
+# 
+# http://oss.sgi.com/projects/GenInfo/SGIGPLNoticeExplan/
+#-----------------------------------------------------------------------
+#
+# creator
+owner=fsgqa@snap.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_require_scratch
+
+mkfs.xfs -f $SCRATCH_DEV >/dev/null 2>&1
+mount -o uquota $SCRATCH_DEV $SCRATCH_MNT
+umount $SCRATCH_MNT
+xfs_db -r -c sb -c print $SCRATCH_DEV | grep qflags
+mount $SCRATCH_DEV $SCRATCH_MNT
+umount $SCRATCH_MNT
+xfs_db -r -c sb -c print $SCRATCH_DEV | grep qflags
+
+
+# success, all done
+status=0
+exit
