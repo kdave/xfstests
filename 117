@@ -1,0 +1,102 @@
+#! /bin/sh
+# FS QA Test No. 117
+#
+# Attempt to cause filesystem corruption with serial fsstresses doing 
+# extended attributes writes.  
+#  
+#-----------------------------------------------------------------------
+#  Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Silicon Graphics, Inc., 1500 Crittenden Lane,
+#  Mountain View, CA 94043, USA, or: http://www.sgi.com
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajones@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# seed for fsstress known to cause curruptions
+seed=1122413794
+
+ITERATIONS=10
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs 
+_supported_os IRIX Linux
+
+_setup_testdir
+_require_scratch
+
+rm -f $seq.full
+umount $SCRATCH_DEV >/dev/null 2>&1
+echo "*** MKFS ***"                         >>$seq.full
+echo ""                                     >>$seq.full
+_scratch_mkfs_xfs                           >>$seq.full 2>&1 \
+    || _fail "mkfs failed"
+_scratch_mount                              >>$seq.full 2>&1 \
+    || _fail "mount failed"
+
+mkdir -p $SCRATCH_MNT/fsstress 
+
+echo
+echo Running fsstress in serial:
+i=0
+while [ $i -lt $ITERATIONS ]; do
+    echo fsstress iteration: $i | tee -a $seq.full
+    $here/ltp/fsstress \
+	-d $SCRATCH_MNT/fsstress \
+	-f allocsp=0 \
+	-f freesp=0 \
+	-f bulkstat=0 \
+	-f bulkstat1=0 \
+	-f resvsp=0 \
+	-f unresvsp=0 \
+	-f attr_set=100 \
+	-f attr_remove=100 \
+        -s $seed \
+	-S -p 1 -n 1000 >>$seq.full 2>&1
+
+    i=`expr $i + 1`
+done
+
+cd /
+umount $SCRATCH_MNT
+echo 
+echo Checking filesystem
+_check_scratch_fs
+_scratch_mount
+
+status=$?
+exit
