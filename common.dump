@@ -1290,8 +1290,8 @@ _do_invutil()
 #
 _check_quota()
 {
-    usermsg=$1 
-    groupmsg=$2 
+    usermsg=$1
+    groupmsg=$2
     uquota=0
     gquota=0 
     $here/src/feature -U $SCRATCH_DEV && uquota=1
@@ -1318,10 +1318,10 @@ _check_quota()
 			{ print }
 	END {
 		if (uquota && !found_uquota) {
-		    print "Missing: ", usermsg
+		    print "Missing user quota msg:", usermsg
 		}
 		if (gquota && !found_gquota) {
-		    print "Missing: ", groupmsg
+		    print "Missing group quota msg:", groupmsg
 		}
 	}
     '
@@ -1353,10 +1353,19 @@ _check_quota_entries()
 # xfsrestore: user quota information written to ...'
 # xfsrestore: group quota information written to ...'
 #
+# If on IRIX then look for:
+# xfsrestore: use 'edquota' to restore quotas
+#
 _check_quota_dumprestore()
 {
-   _check_quota 'user quota information' \
-                'group quota information'
+    if [ "$HOSTOS" == "IRIX" ]; then
+	_check_quota 'user quota information' \
+		     'group quota information' |\
+	sed "/xfsrestore:.*use 'edquota' to restore quotas/d"
+    else
+	_check_quota 'user quota information' \
+		     'group quota information'
+    fi
 }
 
 #
