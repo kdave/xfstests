@@ -238,7 +238,7 @@ void	dcache_purge(int);
 void	del_from_flist(int, int);
 int	dirid_to_name(char *, int);
 void	doproc(void);
-void	fent_to_name(pathname_t *, flist_t *, fent_t *);
+int	fent_to_name(pathname_t *, flist_t *, fent_t *);
 void	fix_parent(int, int);
 void	free_pathname(pathname_t *);
 int	generate_fname(fent_t *, int, pathname_t *, int *, int *);
@@ -471,6 +471,7 @@ append_pathname(pathname_t *name, char *str)
 
 	len = strlen(str);
 #ifdef DEBUG
+	/* attempting to append to a dir a zero length path */
 	if (len && *str == '/' && name->len == 0) {
 		fprintf(stderr, "fsstress: append_pathname failure\n");
 		chdir(homedir);
@@ -635,6 +636,12 @@ dcache_purge(int dirid)
 		*dcp = -1;
 }
 
+/*
+ * Delete the item from the list by
+ * moving last entry over the deleted one;
+ * unless deleted entry is the last one.
+ * Input: which file list array and which slot in array
+ */
 void
 del_from_flist(int ft, int slot)
 {
@@ -709,23 +716,43 @@ doproc(void)
 	}
 }
 
-void
+/*
+ * build up a pathname going thru the file entry and all
+ * its parent entries
+ * Return 0 on error, 1 on success;
+ */
+int
 fent_to_name(pathname_t *name, flist_t *flp, fent_t *fep)
 {
 	char	buf[MAXNAMELEN];
 	int	i;
 	fent_t	*pfep;
+	int	e;
 
 	if (fep == NULL)
-		return;
+		return 0;
+
+	/* build up parent directory name */
 	if (fep->parent != -1) {
 		pfep = dirid_to_fent(fep->parent);
-		fent_to_name(name, &flist[FT_DIR], pfep);
+#ifdef DEBUG
+		if (pfep == NULL) {
+			fprintf(stderr, "%d: fent-id = %d: can't find parent id: %d\n",
+				procid, fep->id, fep->parent);
+		} 
+#endif
+		if (pfep == NULL)
+			return 0;
+		e = fent_to_name(name, &flist[FT_DIR], pfep);
+		if (!e)
+			return 0;
 		append_pathname(name, "/");
 	}
+
 	i = sprintf(buf, "%c%x", flp->tag, fep->id);
 	namerandpad(fep->id, buf, i);
 	append_pathname(name, buf);
+	return 1;
 }
 
 void
@@ -754,6 +781,11 @@ free_pathname(pathname_t *name)
 	}
 }
 
+/*
+ * Generate a filename of type ft.
+ * If we have a fep which should be a directory then use it
+ * as the parent path for this new filename i.e. prepend with it.
+ */
 int
 generate_fname(fent_t *fep, int ft, pathname_t *name, int *idp, int *v)
 {
@@ -762,15 +794,22 @@ generate_fname(fent_t *fep, int ft, pathname_t *name, int *idp, int *v)
 	int	id;
 	int	j;
 	int	len;
+	int	e;
 
+	/* create name */
 	flp = &flist[ft];
 	len = sprintf(buf, "%c%x", flp->tag, id = nameseq++);
 	namerandpad(id, buf, len);
+
+	/* prepend fep parent dir-name to it */
 	if (fep) {
-		fent_to_name(name, &flist[FT_DIR], fep);
+		e = fent_to_name(name, &flist[FT_DIR], fep);
+		if (!e)
+			return 0;
 		append_pathname(name, "/");
 	}
 	append_pathname(name, buf);
+
 	*idp = id;
 	*v = verbose;
 	for (j = 0; !*v && j < ilistlen; j++) {
@@ -782,22 +821,35 @@ generate_fname(fent_t *fep, int ft, pathname_t *name, int *idp, int *v)
 	return 1;
 }
 
+/*
+ * Get file 
+ * Input: "which" to choose the file-types eg. non-directory
+ * Input: "r" to choose which file
+ * Output: file-list, file-entry, name for the chosen file.
+ * Output: verbose if chosen file is on the ilist.
+ */
 int
 get_fname(int which, long r, pathname_t *name, flist_t **flpp, fent_t **fepp,
 	  int *v)
 {
-	int	c;
+	int	totalsum = 0; /* total number of matching files */
+	int	partialsum = 0; /* partial sum of matching files */
 	fent_t	*fep;
 	flist_t	*flp;
 	int	i;
 	int	j;
 	int	x;
+	int	e = 1; /* success */
 
-	for (i = 0, c = 0, flp = flist; i < FT_nft; i++, flp++) {
+	/*
+	 * go thru flist and add up number of files for each
+	 * category that matches with <which>.
+	 */
+	for (i = 0, flp = flist; i < FT_nft; i++, flp++) {
 		if (which & (1 << i))
-			c += flp->nfiles;
+			totalsum += flp->nfiles;
 	}
-	if (c == 0) {
+	if (totalsum == 0) {
 		if (flpp)
 			*flpp = NULL;
 		if (fepp)
@@ -805,17 +857,37 @@ get_fname(int which, long r, pathname_t *name, flist_t **flpp, fent_t **fepp,
 		*v = verbose;
 		return 0;
 	}
-	x = (int)(r % c);
-	for (i = 0, c = 0, flp = flist; i < FT_nft; i++, flp++) {
+
+	/*
+	 * Now we have possible matches between 0..totalsum-1.
+	 * And we use r to help us choose which one we want,
+	 * which when bounded by totalsum becomes x.
+	 */ 
+	x = (int)(r % totalsum);
+	for (i = 0, flp = flist; i < FT_nft; i++, flp++) {
 		if (which & (1 << i)) {
-			if (x < c + flp->nfiles) {
-				fep = &flp->fents[x - c];
-				if (name)
-					fent_to_name(name, flp, fep);
+			if (x < partialsum + flp->nfiles) {
+
+				/* found the matching file entry */
+				fep = &flp->fents[x - partialsum];
+
+				/* fill-in what we were asked for */
+				if (name) {
+					e = fent_to_name(name, flp, fep);
+#ifdef DEBUG
+					if (!e) {
+						fprintf(stderr, "%d: failed to get path for entry:"
+								" id=%d,parent=%d\n", 	
+							procid, fep->id, fep->parent);
+					}
+#endif
+				}
 				if (flpp)
 					*flpp = flp;
 				if (fepp)
 					*fepp = fep;
+
+				/* turn on verbose if its an ilisted file */
 				*v = verbose;
 				for (j = 0; !*v && j < ilistlen; j++) {
 					if (ilist[j] == fep->id) {
@@ -823,17 +895,16 @@ get_fname(int which, long r, pathname_t *name, flist_t **flpp, fent_t **fepp,
 						break;
 					}
 				}
-				return 1;
+				return e;
 			}
-			c += flp->nfiles;
+			partialsum += flp->nfiles;
 		}
 	}
 #ifdef DEBUG
 	fprintf(stderr, "fsstress: get_fname failure\n");
 	abort();
 #endif
-        return -1;
-	/* NOTREACHED */
+        return 0;
 }
 
 void
@@ -1313,6 +1384,7 @@ usage(void)
 	printf("   -e errtg         specifies error injection stuff\n");
 	printf("   -f op_name=freq  changes the frequency of option name to freq\n");
 	printf("                    the valid operation names are:\n");
+	printf("   -i filenum       get verbose output for this nth file object\n");
 	show_ops(-1, "                        ");
 	printf("   -m modulo        uid/gid modulo for chown/chgrp (default 32)\n");
 	printf("   -n nops          specifies the no. of operations per process (default 1)\n");
@@ -1693,7 +1765,7 @@ creat_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, &flist[FT_DIR], fep);
 			printf("%d/%d: creat - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -1716,9 +1788,11 @@ creat_f(int opno, long r)
 		add_to_flist(type, id, parid);
 		close(fd);
 	}
-	if (v)
+	if (v) {
 		printf("%d/%d: creat %s x:%d %d %d\n", procid, opno, f.path,
 			extsize ? a.fsx_extsize : 0, e, e1);
+		printf("%d/%d: creat add id=%d,parent=%d\n", procid, opno, id, parid);
+	}
 	free_pathname(&f);
 }
 
@@ -2046,7 +2120,7 @@ link_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&l, &flist[FT_DIR], fep);
+			(void)fent_to_name(&l, &flist[FT_DIR], fep);
 			printf("%d/%d: link - no filename from %s\n",
 				procid, opno, l.path);
 		}
@@ -2058,9 +2132,11 @@ link_f(int opno, long r)
 	check_cwd();
 	if (e == 0)
 		add_to_flist(flp - flist, id, parid);
-	if (v)
+	if (v) {
 		printf("%d/%d: link %s %s %d\n", procid, opno, f.path, l.path,
 			e);
+		printf("%d/%d: link add id=%d,parent=%d\n", procid, opno, id, parid);
+	}
 	free_pathname(&l);
 	free_pathname(&f);
 }
@@ -2085,7 +2161,7 @@ mkdir_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, &flist[FT_DIR], fep);
 			printf("%d/%d: mkdir - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -2096,8 +2172,10 @@ mkdir_f(int opno, long r)
 	check_cwd();
 	if (e == 0)
 		add_to_flist(FT_DIR, id, parid);
-	if (v)
+	if (v) {
 		printf("%d/%d: mkdir %s %d\n", procid, opno, f.path, e);
+		printf("%d/%d: mkdir add id=%d,parent=%d\n", procid, opno, id, parid);
+	}
 	free_pathname(&f);
 }
 
@@ -2121,7 +2199,7 @@ mknod_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, &flist[FT_DIR], fep);
 			printf("%d/%d: mknod - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -2132,8 +2210,10 @@ mknod_f(int opno, long r)
 	check_cwd();
 	if (e == 0)
 		add_to_flist(FT_DEV, id, parid);
-	if (v)
+	if (v) {
 		printf("%d/%d: mknod %s %d\n", procid, opno, f.path, e);
+		printf("%d/%d: mknod add id=%d,parent=%d\n", procid, opno, id, parid);
+	}
 	free_pathname(&f);
 }
 
@@ -2234,6 +2314,7 @@ rename_f(int opno, long r)
 	int		v;
 	int		v1;
 
+	/* get an existing path for the source of the rename */
 	init_pathname(&f);
 	if (!get_fname(FT_ANYm, r, &f, &flp, &fep, &v1)) {
 		if (v1)
@@ -2241,17 +2322,21 @@ rename_f(int opno, long r)
 		free_pathname(&f);
 		return;
 	}
+
+	/* get an existing directory for the destination parent directory name */
 	if (!get_fname(FT_DIRm, random(), NULL, NULL, &dfep, &v))
 		parid = -1;
 	else
 		parid = dfep->id;
 	v |= v1;
+
+	/* generate a new path using an existing parent directory in name */
 	init_pathname(&newf);
 	e = generate_fname(dfep, flp - flist, &newf, &id, &v1);
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&f, &flist[FT_DIR], dfep);
+			(void)fent_to_name(&f, &flist[FT_DIR], dfep);
 			printf("%d/%d: rename - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -2269,9 +2354,16 @@ rename_f(int opno, long r)
 		del_from_flist(flp - flist, fep - flp->fents);
 		add_to_flist(flp - flist, id, parid);
 	}
-	if (v)
+	if (v) {
 		printf("%d/%d: rename %s to %s %d\n", procid, opno, f.path,
 			newf.path, e);
+		if (e == 0) {
+			printf("%d/%d: rename del entry: id=%d,parent=%d\n",
+				procid, opno, fep->id, fep->parent);
+			printf("%d/%d: rename add entry: id=%d,parent=%d\n",
+				procid, opno, id, parid);
+		}
+	}
 	free_pathname(&newf);
 	free_pathname(&f);
 }
@@ -2347,8 +2439,12 @@ rmdir_f(int opno, long r)
 	check_cwd();
 	if (e == 0)
 		del_from_flist(FT_DIR, fep - flist[FT_DIR].fents);
-	if (v)
+	if (v) {
 		printf("%d/%d: rmdir %s %d\n", procid, opno, f.path, e);
+		if (e == 0)
+			printf("%d/%d: rmdir del entry: id=%d,parent=%d\n",
+				procid, opno, fep->id, fep->parent);
+	}
 	free_pathname(&f);
 }
 
@@ -2397,7 +2493,7 @@ symlink_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, &flist[FT_DIR], fep);
 			printf("%d/%d: symlink - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -2416,8 +2512,10 @@ symlink_f(int opno, long r)
 	if (e == 0)
 		add_to_flist(FT_SYM, id, parid);
 	free(val);
-	if (v)
+	if (v) {
 		printf("%d/%d: symlink %s %d\n", procid, opno, f.path, e);
+		printf("%d/%d: symlink add id=%d,parent=%d\n", procid, opno, id, parid);
+	}
 	free_pathname(&f);
 }
 
@@ -2487,8 +2585,12 @@ unlink_f(int opno, long r)
 	check_cwd();
 	if (e == 0)
 		del_from_flist(flp - flist, fep - flp->fents);
-	if (v)
+	if (v) {
 		printf("%d/%d: unlink %s %d\n", procid, opno, f.path, e);
+		if (e == 0)
+			printf("%d/%d: unlink del entry: id=%d,parent=%d\n",
+				procid, opno, fep->id, fep->parent);
+	}
 	free_pathname(&f);
 }
 
