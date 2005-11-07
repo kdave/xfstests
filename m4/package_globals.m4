@@ -27,12 +27,12 @@ AC_DEFUN([AC_PACKAGE_GLOBALS],
     malloc_lib="$MALLOCLIB"
     AC_SUBST(malloc_lib)
 
-    PKG_USER=${INSTALL_USER:-'root'}
-    pkg_user="$PKG_USER"
+    pkg_user=`id -u`
+    test -z "$INSTALL_USER" || pkg_user="$INSTALL_USER"
     AC_SUBST(pkg_user)
 
-    PKG_GROUP=${INSTALL_GROUP:-'root'}
-    pkg_group="$PKG_GROUP"
+    pkg_group=`id -g`
+    test -z "$INSTALL_GROUP" || pkg_group="$INSTALL_GROUP"
     AC_SUBST(pkg_group)
 
     pkg_distribution=`uname -s`

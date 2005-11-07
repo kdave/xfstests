@@ -65,3 +65,36 @@ AC_DEFUN([AC_HAVE_SENDFILE],
 	AC_MSG_RESULT(no))
     AC_SUBST(have_sendfile)
   ])
+
+#
+# Check if we have a getmntent libc call (IRIX, Linux)
+#
+AC_DEFUN([AC_HAVE_GETMNTENT],
+  [ AC_MSG_CHECKING([for getmntent ])
+    AC_TRY_COMPILE([
+#include <stdio.h>
+#include <mntent.h>
+    ], [
+         getmntent(0);
+    ], have_getmntent=yes
+       AC_MSG_RESULT(yes),
+       AC_MSG_RESULT(no))
+    AC_SUBST(have_getmntent)
+  ])
+
+#
+# Check if we have a getmntinfo libc call (FreeBSD, Mac OS X)
+#
+AC_DEFUN([AC_HAVE_GETMNTINFO],
+  [ AC_MSG_CHECKING([for getmntinfo ])
+    AC_TRY_COMPILE([
+#include <sys/param.h>
+#include <sys/ucred.h>
+#include <sys/mount.h>
+    ], [
+         getmntinfo(0, 0);
+    ], have_getmntinfo=yes
+       AC_MSG_RESULT(yes),
+       AC_MSG_RESULT(no))
+    AC_SUBST(have_getmntinfo)
+  ])
