@@ -1,16 +1,16 @@
 #!/usr/bin/perl -w
 use strict;
-# 
+#
 # srcdiff is used to compare current user level code with the current
 # kernel code and advise of any differences between files which are
 # sharing some or all of their content.
-# 
+#
 # There are two classes of sharing which we will check - header files
 # in the include directory, which must be exactly the same (use diff)
 # and source files which contain routines which must be exactly the
 # same (but the userland file is always a subset of the kernel file,
 # and hence a more flexible mechanism to "diff" is required).
-# 
+#
 # NB: to cross check that srcdiff is finding all the functions in the
 #     user source file, providing you have "mkproto" installed, you
 #     can "cd xfsprogs/libxfs" and cut&paste this in a bourne shell:
@@ -21,7 +21,7 @@ use strict;
 #     > echo $file
 #     > done
 # (compare this to "srcdiff | fgrep Total:")
-# 
+#
 
 die "WORKAREA not set" unless defined $ENV{'WORKAREA'};
 die "KWORKAREA not set" unless defined $ENV{'KWORKAREA'};
@@ -77,7 +77,6 @@ sub straightdiff {
 		if ($? != 0)	{ printf("FAILED\n(%s/%s differs to %s/%s)\n",
 					 $prefix1, $file, $prefix2, $file); }
 		else		{ print "ok\n"; }
-	
 	} elsif ($? != 0) {
 	        printf("\t%-35s ... FAILED\n(%s/%s differs to %s/%s)\n",
 			$file, $prefix1, $file, $prefix2, $file);
@@ -115,14 +114,14 @@ foreach (@difflist) {
 straightdiff 'dmapi_kern.h', 'dmapi/include', "$dmworkarea";
 straightdiff 'dmapi.h', 'dmapi/include', "$dmworkarea";
 
-# 
+#
 # setstate
 # Implements a tri-state FSA, see comments for state transitions
 #  (knows about the way the XFS kernel code is written, & makes
 #   some assumptions so as to not need to parse generic C code).
 # Accepts one line at a time from a source file, picking out the
 #   function bodies so they can be subsequently compared.
-# 
+#
 
 my $line;	# line number in current source file
 my $state;	# current FSA state
@@ -246,12 +245,12 @@ sub functiondiff {
 	print "\n=== Checking $file routines ===\n" unless ($quiet);
 
 	# iterate over user funcs, match up to kernel funcs
-	# 
+	#
 	my @user = listfuncs "$prefix1/$file";
 	my %kern = hashfuncs "$prefix2/$file";
 
 	foreach my $userfunc (@user) {
-		
+
 		$userfunc =~ m/^([xfs|xlog]\w+)\s*\(/;
 		next unless (defined($1));
 		$name = $1;
@@ -261,7 +260,7 @@ sub functiondiff {
 			if ($userfunc ne $kern{$name}) {
 	                        print "\n=== $file routines ===\n"
                                     if (!$found++ && $quiet);
-                                    
+
 			        printf("\t%-35s ... ", $name);
 				print "FAILED\n";
 				diffme $userfunc, $kern{$name};
@@ -282,7 +281,7 @@ sub functiondiff {
 
 # xfsprogs/{libxfs,libxlog}/* fs/xfs/*
 my @funclist = qw(
-	xfs_alloc.c  xfs_alloc_btree.c  xfs_attr_leaf.c
+	xfs_alloc.c  xfs_alloc_btree.c  xfs_attr.c  xfs_attr_leaf.c
 	xfs_bmap.c  xfs_bmap_btree.c  xfs_btree.c  xfs_da_btree.c
 	xfs_dir.c  xfs_dir2.c  xfs_dir2_block.c  xfs_dir2_data.c
 	xfs_dir2_leaf.c  xfs_dir2_node.c  xfs_dir2_sf.c
