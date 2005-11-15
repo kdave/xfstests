@@ -24,45 +24,25 @@ _cleanup()
     rm -f $tmp.*
 }
 
-# Example output:
-#
-# ~/attr -Fl a/b/c/d/foo
-# Attribute "0000000000180080 0000000000000001" has a 3 byte value for a/b/c/d/foo
-#
-# ~/attr -Fg "0000000000180080 0000000000000001" a/b/c/d/foo
-# Attribute "0000000000180080 0000000000000001" had a 3 byte value for a/b/c/d/foo:
-# foo
-#
-# ~/attr -Pg "0000000000180080 0000000000000001" a/b/c/d/foo
-# Attribute "0000000000180080 0000000000000001" had a 12 byte value for a/b/c/d/foo:
-# /a/b/c/d/foo
-#
 
+_check_paths()
+{
+	_path=$1 # might want to only check this path
+
+	echo ""
+	echo "Check parent"
+	if ! xfs_io -x -c 'parent -c' $SCRATCH_MNT | _filter_num; then
+		exit 1
+	fi
+}
 
 _print_names()
 {
-	typeset path
-	path=$1
-
 	echo ""
-	echo "Print out hardlink names for given path, $path"
+	echo "Print out hardlink names for given path, $1"
 	echo ""
 
-	# get out the ea name
-	attr -Fl $path | tee $tmp.attr1
-	cat $tmp.attr1 |\
-	sed -e 's/"//g' |\
-	nawk >$tmp.attr2 '/^Attribute/ { print $2, $3; next }'
-
-	while read ino cnt; do
-		eaname="$ino $cnt"
-
-		# use the ea name to get the filename value
-		attr -Fg "$eaname" $path
-
-		# use the ea name to get the pathname value
-		attr -Pg "$eaname" $path
-	done < $tmp.attr2
+	xfs_io -x -c parent $1 | awk '/p_ino.*=/ {$3 = "inodeXXX"; print; next} {print}' 
 }
 
 _test_create()
@@ -86,89 +66,10 @@ _test_create()
 	p=dir2/dir3/dir4/file4
 	touch $p
 
-	_print_names $p >>$here/$seq.full
+	#_print_names $p >>$here/$seq.full
+	_print_names $p | tee -a $here/$seq.full
 
-	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$p
-}
-
-_get_ea_fields()
-{
-	# get out the ea name components for all the hardlinks
-	attr -Fl $1 |\
-	tee -a $here/$seq.full |\
-	sed -e 's/"//g' |\
-	nawk '/^Attribute/ { print $2, $3; next }'
-}
-
-_parent_path()
-{
-	# given: abc/def/ghi/jkl
-	# want:  abc/def/ghi
-	child=$1
-	parent=`echo $child | sed -e 's#/[^/]*$##'`
-
-	# issue of path starting with '/' or not
-        # relatives paths wouldn't and we need to handle this
-	if [ $child = $parent ]; then
-		echo ""
-	else
-		echo $parent
-	fi
-}
-
-#
-# Go thru each component of the hierarchy and compare 
-# inode# from "stat -i" with the ino from the parent EA name
-#
-# So I need to be given a path and go thru compenent by component.
-# e.g. a/b/c/d/e
-# Need to look at: a a/b a/b/c a/b/c/d
-#
-# Also need to do this for all the hardlinks
-#
-_check_parentinos_path()
-{
-        mntpt=$1
-	path=$2
-	parent="$path"
-
-        # representing all the hard links for a particular path
-
-	_get_ea_fields $path |\
-	while read parent_ino cnt; do
-
-		while [ "$parent" != "$mntpt" ]; do
-			# compare paths
-			eaname="$parent_ino $cnt"
-			eavalue=`attr -qPg "$eaname" $parent`
-			parentrel=`echo $parent | sed -e "s#^$mntpt##"`
-			if [ "$eavalue" = "$parentrel" ]; then
-				echo "EA path $eavalue matches on path"
-			else
-				$verbose && echo "EA path mismatch on $parentrel: $eavalue"
-				break # maybe wrong hardlink
-			fi
-
-			# compare parent_ino from ea-name with parent-ino from
-			# actual parent dir using stat
-
-			parent=`_parent_path $parent`
-			parent_ino_dec=`printf "%d" 0x$parent_ino` # decimal version (not hex)
-			stat_ino=`stat -iq $parent`
-
-			if [ "$parent_ino_dec" = "$stat_ino" ]; then
-				echo "parent ino $parent_ino_dec matches"
-			else
-				echo "parent ino mismatch on $parent: EA=$parent_ino_dec stat=$stat_ino"
-			fi
-
-
-			# go onto next subdir up the path
-			line=`_get_ea_fields $parent`
-			parent_ino=`echo $line | cut -f1 -d' '`  # 1st field
-			cnt=`echo $line | cut -f2 -d' '`         # 2nd field
-		done
-	done
+	_check_paths $SCRATCH_MNT/$p
 }
 
 _test_symlink()
@@ -185,10 +86,10 @@ _test_symlink()
 	ln symlink1 hlink1
 	ln symlink1 hlink2
 	ln symlink1 hlink3
-	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/symlink1
-	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink1
-	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink2
-	_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/hlink3
+	_check_paths $SCRATCH_MNT/symlink1
+	_check_paths $SCRATCH_MNT/hlink1
+	_check_paths $SCRATCH_MNT/hlink2
+	_check_paths $SCRATCH_MNT/hlink3
 }
 
 #
@@ -223,8 +124,9 @@ _test_hardlink()
 	echo ""
 	for x in $paths; do
 		_print_names $x | tee -a $here/$seq.full
-		_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$x
+		_check_paths $SCRATCH_MNT/$x
 	done
+
 
 	echo ""
 	echo "now try removing half of the hardlinks"
@@ -245,9 +147,8 @@ _test_hardlink()
 	echo ""
 	for x in $paths; do
 		if [ -e $x ]; then 
-echo "looking at $x"
 			_print_names $x | tee -a $here/$seq.full
-			_check_parentinos_path $SCRATCH_MNT $SCRATCH_MNT/$x
+			_check_paths $SCRATCH_MNT/$x
 		fi
 	done
 
@@ -277,14 +178,14 @@ _test_rename()
 	p2=$d1/f2
 	touch $p1
 	mv $p1 $p2
-	_check_parentinos_path $SCRATCH_MNT $p2
+	_check_paths $p2
 
 	echo ""
 	echo "2. in dir, file1 to file2 where file2 does exist" 
 	echo ""
 	touch $p1
 	mv $p1 $p2
-	_check_parentinos_path $SCRATCH_MNT $p2
+	_check_paths $p2
 
 	echo ""
 	echo "3. dir/file1 to dir2/file2 where file2 does not exist"
@@ -294,7 +195,7 @@ _test_rename()
 	p3=$d2/f3
 	touch $p1
 	mv $p1 $p3
-	_check_parentinos_path $SCRATCH_MNT $p3
+	_check_paths $p3
 
 	echo ""
 	echo "4. dir/file1 to dir2/file2 where file2 does exist"
@@ -303,19 +204,19 @@ _test_rename()
 	p3=$d2/f3
 	touch $p1
 	mv $p1 $p3
-	_check_parentinos_path $SCRATCH_MNT $p3
+	_check_paths $p3
 
 	echo ""
 	echo "5. dir to dir2 where dir2 does not exist"
 	echo ""
 	d3=$SCRATCH_MNT/ren1/ren2/ren3/ren6
 	mv $d1 $d3
-	_check_parentinos_path $SCRATCH_MNT $d3
+	_check_paths $d3
 }
 
 _filter_num()
 {
-	tee -a $seq.full |\
+	tee -a $here/$seq.full |\
 	sed -e 's/[0-9][0-9]* inodes/I inodes/g' \
 	    -e 's/[0-9][0-9]* paths/P paths/g' \
 	    -e 's/seed = [0-9][0-9]*/seed = S/'
@@ -344,8 +245,7 @@ _test_fsstress()
 		status=1
 	fi
 
-	xfs_repair_ipaths -n $SCRATCH_MNT | _filter_num
-	xfs_check_ipaths $SCRATCH_MNT | _filter_num
+	_check_paths
 }
 
 
@@ -387,8 +287,7 @@ _test_dirstress()
 		exit
 	fi
 
-	xfs_repair_ipaths -n $SCRATCH_MNT | _filter_num
-	xfs_check_ipaths $SCRATCH_MNT | _filter_num
+	_check_paths
 }
 
 # get standard environment, filters and checks
@@ -399,15 +298,16 @@ _supported_fs xfs
 _supported_os IRIX
 
 _require_scratch
+_need_to_be_root
 
 rm -f $here/$seq.full
 
 echo "mkfs"
 _scratch_mkfs_xfs >>$here/$seq.full 2>&1 \
     || _fail "mkfs scratch failed"
-export MKFS_OPTIONS="$MKFS_OPTIONS -i paths=1"
+export MKFS_OPTIONS="$MKFS_OPTIONS -i parent=1"
 _scratch_mkfs_xfs >>$here/$seq.full 2>&1 \
-    || _notrun "i_paths not supported"
+    || _notrun "parent inodes not supported"
 
 echo "mount"
 _scratch_mount >>$here/$seq.full 2>&1 \
@@ -417,8 +317,6 @@ _scratch_mount >>$here/$seq.full 2>&1 \
 
 verbose=false
 
-# initial testing with scripting and modified attr(1)
-# in order to test parent EAs
 _test_create
 _test_hardlink
 _test_rename
