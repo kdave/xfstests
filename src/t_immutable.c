@@ -41,13 +41,11 @@
 #include <xfs/libxfs.h>
 #include <xfs/handle.h>
 #include <xfs/jdm.h>
-#include <ext2fs/ext2_fs.h>
 
-
-#define XFS_XFLAG_IMMUTABLE     0x00000008
-#define XFS_XFLAG_APPEND        0x00000010
+#define EXT2_SUPER_MAGIC	0xEF53
 #define EXT2_IMMUTABLE_FL       0x00000010
 #define EXT2_APPEND_FL          0x00000020
+#define EXT2_IOC_SETFLAGS	_IOW('f', 2, long)
 
 extern const char *__progname;
 
@@ -86,7 +84,7 @@ static int fsetflag(const char *path, int fd, int on, int immutable)
      } else if (stfs.f_type == EXT2_SUPER_MAGIC) {
 	  if (on)
 	       e2flags |= e2fl;
-	  else 
+	  else
 	       e2flags &= ~e2fl;
 	  if (ioctl(fd, EXT2_IOC_SETFLAGS, &e2flags) < 0) {
 	       close(fd);
@@ -586,7 +584,7 @@ static int test_immutable(const char *dir)
 
      asprintf(&linkpath, "%s/immutable.d/file.link", dir);
      errno = 0;
-     if (link(path, linkpath) != -1) { 
+     if (link(path, linkpath) != -1) {
 	  fprintf(stderr, "link(%s, %s) did not fail\n", path, linkpath);
 	  fail++;
 	  unlink(linkpath);
@@ -639,7 +637,7 @@ static int test_immutable(const char *dir)
 		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not fail\n", path, (long long int)st.st_rdev);
 		    fail++;
 		    unlink(path);
-	       } else if (errno != EACCES) { 
+	       } else if (errno != EACCES) {
 		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) did not set errno == EACCESS\n", path, (long long int)st.st_rdev);
 		    fail++;
 	       }
@@ -657,7 +655,7 @@ static int test_immutable(const char *dir)
 	  fprintf(stderr, "mkdir(%s, 0777) did not set errno == EACCES\n", path);
           fail++;
      }
-     
+
      free(path);
      asprintf(&path, "%s/immutable.d/dir/newfile-%d", dir, getuid());
      if ((fd = open(path, O_RDWR|O_CREAT, 0666)) == -1) {
@@ -818,7 +816,7 @@ static int test_immutable(const char *dir)
      } else if (errno != EPERM) {
           fprintf(stderr, "rmdir(%s) did not set errno == EPERM\n", path);
           fail++;
-     }     
+     }
 
      free(path);
      return fail;
@@ -1534,7 +1532,7 @@ static int test_append(const char *dir)
 
      asprintf(&linkpath, "%s/append-only.d/file.link-%d", dir, getuid());
      errno = 0;
-     if (link(path, linkpath) == -1) { 
+     if (link(path, linkpath) == -1) {
 	  fprintf(stderr, "link(%s, %s) failed: %s\n", path, linkpath, strerror(errno));
 	  fail++;
      } else if (unlink(linkpath) != -1) {
@@ -1591,7 +1589,7 @@ static int test_append(const char *dir)
 	       if (mknod(path, S_IFCHR|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH, st.st_rdev) == -1) {
 		    fprintf(stderr, "mknod(%s, S_IFCHR|0666, %lld) failed: %s\n", path, (long long int)st.st_rdev, strerror(errno));
 		    fail++;
-	       } else if (unlink(path) != -1) { 
+	       } else if (unlink(path) != -1) {
 		    fprintf(stderr, "unlink(%s) did not fail\n", path);
 		    fail++;
 	       }
@@ -1607,7 +1605,7 @@ static int test_append(const char *dir)
 	  fprintf(stderr, "rmdir(%s) did not fail\n", path);
           fail++;
      }
-     
+
      free(path);
      asprintf(&path, "%s/append-only.d/newdir-%d/newfile-%d", dir, getuid(), getuid());
      if ((fd = open(path, O_RDWR|O_CREAT, 0666)) == -1) {
@@ -1633,7 +1631,7 @@ static int test_append(const char *dir)
           } else
                chown(path, 0, 0);
      }
-     
+
      free(path);
      asprintf(&path, "%s/append-only.d/dir/newfile-%d", dir, getuid());
      if ((fd = open(path, O_RDWR|O_CREAT, 0666)) == -1) {
@@ -1790,7 +1788,7 @@ static int test_append(const char *dir)
      } else if (errno != EPERM) {
           fprintf(stderr, "rmdir(%s) did not set errno == EPERM\n", path);
           fail++;
-     }  
+     }
 
      free(path);
      return fail;
@@ -1873,7 +1871,7 @@ static int check_test_area(const char *dir)
                   __progname, path);
           return 1;
      }
-      
+
      free(path);
      asprintf(&path, "%s/append-only.d/file", dir);
      if (stat(path, &st) == -1) {
@@ -1928,7 +1926,7 @@ static int create_test_area(const char *dir)
      if (getuid()) {
 	  fprintf(stderr, "%s: you are not root, go away.\n", __progname);
 	  return 1;
-     }	  
+     }
 
      if (stat(dir, &st) == 0) {
 	  fprintf(stderr, "%s: Test area directory %s must not exist for test area creation.\n",
@@ -1949,35 +1947,35 @@ static int create_test_area(const char *dir)
      }
      free(path);
 
-     asprintf(&path, "%s/empty-immutable.d", dir); 
+     asprintf(&path, "%s/empty-immutable.d", dir);
      if (mkdir(path, 0777) != 0) {
           fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
      free(path);
 
-     asprintf(&path, "%s/append-only.d", dir); 
+     asprintf(&path, "%s/append-only.d", dir);
      if (mkdir(path, 0777) != 0) {
           fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
      free(path);
 
-     asprintf(&path, "%s/empty-append-only.d", dir); 
+     asprintf(&path, "%s/empty-append-only.d", dir);
      if (mkdir(path, 0777) != 0) {
           fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
      free(path);
 
-     asprintf(&path, "%s/immutable.d/dir", dir); 
+     asprintf(&path, "%s/immutable.d/dir", dir);
      if (mkdir(path, 0777) != 0) {
           fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
      free(path);
 
-     asprintf(&path, "%s/append-only.d/dir", dir); 
+     asprintf(&path, "%s/append-only.d/dir", dir);
      if (mkdir(path, 0777) != 0) {
           fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2030,7 +2028,7 @@ static int create_test_area(const char *dir)
           close(fd);
           return 1;
      }
-     close(fd); 
+     close(fd);
      free(path);
 
      asprintf(&path, "%s/append-only.f", dir);
@@ -2095,7 +2093,7 @@ static int create_test_area(const char *dir)
      close(fd);
      free(path);
 
-     asprintf(&path, "%s/empty-immutable.d", dir); 
+     asprintf(&path, "%s/empty-immutable.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2105,10 +2103,10 @@ static int create_test_area(const char *dir)
           close(fd);
           return 1;
      }
-     close(fd); 
+     close(fd);
      free(path);
 
-     asprintf(&path, "%s/append-only.d", dir); 
+     asprintf(&path, "%s/append-only.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2134,10 +2132,10 @@ static int create_test_area(const char *dir)
           close(fd);
           return 1;
      }
-     close(fd); 
+     close(fd);
      free(path);
 
-     asprintf(&path, "%s/empty-append-only.d", dir); 
+     asprintf(&path, "%s/empty-append-only.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2147,7 +2145,7 @@ static int create_test_area(const char *dir)
           close(fd);
           return 1;
      }
-     close(fd); 
+     close(fd);
      free(path);
      return 0;
 }
@@ -2175,44 +2173,44 @@ static int remove_test_area(const char *dir)
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
 	  err = 1;
-     } else { 
+     } else {
 	  if (fsetflag(path, fd, 0, 1))
 	       perror("fsetflag");
 	  close(fd);
      }
      free(path);
 
-     asprintf(&path, "%s/empty-immutable.d", dir); 
+     asprintf(&path, "%s/empty-immutable.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
-	  err = 1;	  
+	  err = 1;
      } else {
 	  if (fsetflag(path, fd, 0, 1))
 	       perror("fsetflag");
-     
+
 	  close(fd);
      }
      free(path);
 
-     asprintf(&path, "%s/append-only.d", dir); 
+     asprintf(&path, "%s/append-only.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
 	  err = 1;
      } else {
 	  if (fsetflag(path, fd, 0, 0))
 	       perror("fsetflag");
-	  close(fd); 
+	  close(fd);
      }
      free(path);
 
-     asprintf(&path, "%s/empty-append-only.d", dir); 
+     asprintf(&path, "%s/empty-append-only.d", dir);
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
 	  err = 1;
      } else {
 	  if (fsetflag(path, fd, 0, 0))
 	       perror("fsetflag");
-	  close(fd); 
+	  close(fd);
      }
      free(path);
 
@@ -2224,7 +2222,7 @@ static int remove_test_area(const char *dir)
 	  if (fsetflag(path, fd, 0, 0))
 	       perror("fsetflag");
 
-	  close(fd); 
+	  close(fd);
      }
      free(path);
 
@@ -2235,7 +2233,7 @@ static int remove_test_area(const char *dir)
      } else {
 	  if (fsetflag(path, fd, 0, 1))
 	       perror("fsetflag");
-	  close(fd); 
+	  close(fd);
      }
      free(path);
 
@@ -2316,7 +2314,7 @@ int main(int argc, char **argv)
 	  puts("PASS.");
 
      if (!getuid() && !failed) {
-	  if (setgroups(0, NULL) != 0) 
+	  if (setgroups(0, NULL) != 0)
 	       perror("setgroups");
 	  if (setgid(65534) != 0)
 	       perror("setgid");
@@ -2328,7 +2326,7 @@ int main(int argc, char **argv)
 	       failed = 1;
 	  } else
 	       puts("PASS.");
-	  
+
 	  printf("testing append-only as non-root...");
 	  if ((ret = test_append(argv[argc-1])) != 0) {
 	       printf("FAILED! (%d tests failed)\n", ret);
