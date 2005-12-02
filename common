@@ -1,6 +1,6 @@
 ##/bin/sh 
 #
-# Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
 #
 # common procedures for QA scripts
 #
@@ -34,6 +34,7 @@ showme=false
 sortme=false
 expunge=true
 have_test_arg=false
+randomize=false
 rm -f $tmp.list $tmp.tmp $tmp.sed
 
 export FSTYP=xfs
@@ -117,7 +118,7 @@ check options
     -q			quick [deprecated]
     -T			output timestamps
     -x group[,group...]	exclude tests from these groups
-    -r 			randomize order
+    -r 			randomize test order
 '
 	    exit 0
 	    ;;
@@ -153,6 +154,10 @@ check options
 
 	-n)	# show me, don't do it
 	    showme=true
+	    xpand=false
+	    ;;
+        -r)	# randomize test order
+	    randomize=true
 	    xpand=false
 	    ;;
 
@@ -247,6 +252,11 @@ fi
 #
 list=`sort $tmp.list`
 rm -f $tmp.list $tmp.tmp $tmp.sed
+
+if $randomize
+then
+    list=`echo $list | awk -f randomize.awk`
+fi
 
 case "$FSTYP" in
     xfs)
