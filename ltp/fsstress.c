@@ -39,7 +39,6 @@ typedef enum {
 	OP_BULKSTAT,
 	OP_BULKSTAT1,
 	OP_CHOWN,
-	OP_CHPROJ,
 	OP_CREAT,
 	OP_DREAD,
 	OP_DWRITE,
@@ -55,6 +54,7 @@ typedef enum {
 	OP_RENAME,
 	OP_RESVSP,
 	OP_RMDIR,
+	OP_SETXATTR,
 	OP_STAT,
 	OP_SYMLINK,
 	OP_SYNC,
@@ -119,7 +119,6 @@ void	attr_set_f(int, long);
 void	bulkstat_f(int, long);
 void	bulkstat1_f(int, long);
 void	chown_f(int, long);
-void	chproj_f(int, long);
 void	creat_f(int, long);
 void	dread_f(int, long);
 void	dwrite_f(int, long);
@@ -135,6 +134,7 @@ void	readlink_f(int, long);
 void	rename_f(int, long);
 void	resvsp_f(int, long);
 void	rmdir_f(int, long);
+void	setxattr_f(int, long);
 void	stat_f(int, long);
 void	symlink_f(int, long);
 void	sync_f(int, long);
@@ -150,7 +150,6 @@ opdesc_t	ops[] = {
 	{ OP_BULKSTAT, "bulkstat", bulkstat_f, 1, 0 },
 	{ OP_BULKSTAT1, "bulkstat1", bulkstat1_f, 1, 0 },
 	{ OP_CHOWN, "chown", chown_f, 3, 1 },
-	{ OP_CHPROJ, "chproj", chproj_f, 1, 1 },
 	{ OP_CREAT, "creat", creat_f, 4, 1 },
 	{ OP_DREAD, "dread", dread_f, 4, 0 },
 	{ OP_DWRITE, "dwrite", dwrite_f, 4, 1 },
@@ -166,6 +165,7 @@ opdesc_t	ops[] = {
 	{ OP_RENAME, "rename", rename_f, 2, 1 },
 	{ OP_RESVSP, "resvsp", resvsp_f, 1, 1 },
 	{ OP_RMDIR, "rmdir", rmdir_f, 1, 1 },
+	{ OP_SETXATTR, "setxattr", setxattr_f, 1, 1 },
 	{ OP_STAT, "stat", stat_f, 1, 0 },
 	{ OP_SYMLINK, "symlink", symlink_f, 2, 1 },
 	{ OP_SYNC, "sync", sync_f, 1, 0 },
@@ -1684,11 +1684,9 @@ chown_f(int opno, long r)
 }
 
 void
-chproj_f(int opno, long r)
+setxattr_f(int opno, long r)
 {
-#if !defined(__sgi__)
 	struct fsxattr	fsx;
-#endif
 	int		fd;
 	int		e;
 	pathname_t	f;
@@ -1707,16 +1705,12 @@ chproj_f(int opno, long r)
 	e = MIN(idmodulo, XFS_PROJIDMODULO_MAX);
 	nbits = (int)(random() % e);
 	p &= (1 << nbits) - 1;
-#if defined(__sgi__)
-	e = fchproj(fd, p);
-#else
 	if ((e = xfsctl(f.path, fd, XFS_IOC_FSGETXATTR, &fsx)) == 0) {
 		fsx.fsx_projid = p;
 		e = xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &fsx);
 	}
-#endif
 	if (v)
-		printf("%d/%d: chproj %s %u %d\n", procid, opno, f.path, p, e);
+		printf("%d/%d: setxattr %s %u %d\n", procid, opno, f.path, p, e);
 	free_pathname(&f);
 	close(fd);
 }
