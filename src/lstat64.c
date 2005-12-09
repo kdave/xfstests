@@ -16,6 +16,7 @@
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
  
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,24 +46,51 @@ timesince(long timesec)
 			d_since, h_since, m_since, s_since);
 }
 
+void
+usage(void)
+{
+	fprintf(stderr, "Usage: lstat64 [-t] filename ...\n");
+	exit(1);
+}
+
 int
 main(int argc, char **argv)
 {
 	struct stat64	sbuf;
 	char		mode[10];
-	int		i;
+	int		i, c;
+	int		terse_flag = 0;
+
+	while ((c = getopt(argc, argv, "t")) != EOF) {
+		switch (c) {
+			case 't':
+				terse_flag = 1;
+				break;
+
+			case '?':
+				usage();
+		}
+	}
+	if (optind == argc) {
+		usage();
+	}
 
 	time(&timebuf);
 
-	for (i = 1; i < argc; i++) {
+	for (i = optind; i < argc; i++) {
 
 		if( lstat64(argv[i], &sbuf) < 0) {
 			perror(argv[i]);
 			continue;
 		}
 
-		printf("  File: \"%s\"\n", argv[i]);
-		printf("  Size: %-10llu", (unsigned long long)sbuf.st_size);
+		if (terse_flag) {
+			printf("%s %llu ", argv[i], (unsigned long long)sbuf.st_size);
+		}
+		else {
+			printf("  File: \"%s\"\n", argv[i]);
+			printf("  Size: %-10llu", (unsigned long long)sbuf.st_size);
+		}
 
 		strcpy(mode,"----------");
 		if (sbuf.st_mode & (S_IEXEC>>6))
@@ -90,39 +118,53 @@ main(int argc, char **argv)
 		if (sbuf.st_mode & S_ISUID)
 			mode[3] = 's';
 
-		printf("   Filetype: ");
+		if (!terse_flag)
+			printf("   Filetype: ");
 		switch (sbuf.st_mode & S_IFMT) {
 		case S_IFSOCK:	
-			puts("Socket");
+			if (!terse_flag)
+				puts("Socket");
 			mode[0] = 's';
 			break;
 		case S_IFDIR:	
-			puts("Directory");
+			if (!terse_flag)
+				puts("Directory");
 			mode[0] = 'd';
 			break;
 		case S_IFCHR:	
-			puts("Character Device");
+			if (!terse_flag)
+				puts("Character Device");
 			mode[0] = 'c';
 			break;
 		case S_IFBLK:	
-			puts("Block Device");
+			if (!terse_flag)
+				puts("Block Device");
 			mode[0] = 'b';
 			break;
 		case S_IFREG:	
-			puts("Regular File");
+			if (!terse_flag)
+				puts("Regular File");
 			mode[0] = '-';
 			break;
 		case S_IFLNK:	
-			puts("Symbolic Link");
+			if (!terse_flag)
+				puts("Symbolic Link");
 			mode[0] = 'l';
 			break;
 		case S_IFIFO:	
-			puts("Fifo File");
+			if (!terse_flag)
+				puts("Fifo File");
 			mode[0] = 'f';
 			break;
 		default:	
-			puts("Unknown");
+			if (!terse_flag)
+				puts("Unknown");
 			mode[0] = '?';
+		}
+
+		if (terse_flag) {
+			printf("%s %d,%d\n", mode, (int)sbuf.st_uid, (int)sbuf.st_gid);
+			continue;
 		}
 
 		printf("  Mode: (%04o/%s)", (unsigned int)(sbuf.st_mode & 07777), mode);
@@ -149,10 +191,6 @@ main(int argc, char **argv)
 
 		if (i+1 < argc)
 			printf("\n");
-	}
-	if (i == 1) {
-		fprintf(stderr, "Usage: lstat64 filename...\n");
-		exit(1);
 	}
 	exit(0);
 }

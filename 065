@@ -26,24 +26,22 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.dump
 
-# IRIX "ls -s" uses a block size of 512, for consistincy on linux use
-# ls --block-size=512 -s <file>
-[ $HOSTOS == Linux ] && LS_BLOCKSIZE="--block-size=512"
-
-_my_ls_filter()
+#
+# list recursively the directory
+#
+# e.g. lstat output: src/lstat64 31056 -rwxr-xr-x 38403,0
+# Don't print out sizes of directories - which can vary - overwrite with XXX.
+#
+_list_dir()
 {
-    #
-    # Print size and fname.
-    # The size is significant since we add to the file as part
-    # of a file change for the incremental.
-    #
-    # Filter out the housekeeping files of xfsrestore
-    # Filter out toplevel "dumpdir/$" report.
-    grep -v total | grep -v "^$" | sed "s/^[ \t]*//g" | \
-    sed -e 's/.*dumpdir/dumpdir/' |\
-    egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree|dumpdir/$|dumpdir:$' |\
-    egrep -v "$restore_dir:"
-}
+    __dir=$1
+    find $__dir  -exec $here/src/lstat64 -t {} \; |\
+    sed -e 's/.*dumpdir/dumpdir/' -e '/^dumpdir /d' |\
+    sed -e 's/.*restoredir/restoredir/' -e '/^restoredir /d' |\
+    egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree' |\
+    awk '$3 ~ /^d/ { $2 = "XXX" } {print}' |\
+    sort
+} 
 
 # real QA test starts here
 _supported_fs xfs
@@ -144,7 +142,7 @@ while [ $i -le $num_dumps ]; do
     _stable_fs
 
     echo "Listing of what files we have at level $i:"
-    ls -sRF $LS_BLOCKSIZE $dump_dir | _my_ls_filter | tee $tmp.ls.$i
+    _list_dir $dump_dir	| tee $tmp.ls.$i
 
     dump_file=$tmp.df.level$i
     _do_dump_file -l $i
@@ -168,9 +166,8 @@ while [ $i -le $num_dumps ]; do
     echo ""
     echo "restoring from df.level$i"
     _do_restore_file_cum -l $i
-    echo "ls -sRF restore_dir"
-    ls -sRF $LS_BLOCKSIZE $restore_dir | _my_ls_filter |\
-    _check_quota_file | tee $tmp.restorals.$i
+    echo "list restore_dir"
+    _list_dir $restore_dir | _check_quota_file | tee $tmp.restorals.$i
     i=`expr $i + 1`
 done
 
