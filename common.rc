@@ -671,6 +671,7 @@ _check_xfs_filesystem()
        	extra_rt_options="-r$3"
         extra_mount_options=$extra_mount_options" -ortdev=$3"
     fi
+    extra_mount_options=$extra_mount_options" $MOUNT_OPTIONS"
 
     [ "$FSTYP" != xfs ] && return 0
     testoption=""
@@ -1067,7 +1068,6 @@ _descend()
 #
 _populate_fs()
 {
-
     here=`pwd`
     dirs=5          # ndirs in each subdir till leaves
     size=0          # sizeof files in K
@@ -1087,7 +1087,6 @@ _populate_fs()
         r)      root=$OPTARG;;
         esac
     done
-
 
     _descend $root $depth
     wait
@@ -1110,6 +1109,21 @@ _test_inode_flag()
         fi
     fi
     return 1
+}
+
+# query the given files extsize allocator hint in bytes (if any)
+#
+_test_inode_extsz()
+{
+    file=$1
+    blocks=""
+
+    if which $XFS_IO_PROG >/dev/null; then
+	blocks=`$XFS_IO_PROG -r -c 'stat' "$file" | \
+		awk '/^xattr.extsize =/ { print $3 }'`
+    fi
+    [ -z "$blocks" ] && blocks="0"
+    echo $blocks
 }
 
 

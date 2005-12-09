@@ -40,17 +40,23 @@ _do_test()
     _n="$1"
     _holes="$2"
     _param="$3"
-    
+
     out=$testdir/randholes.$$.$_n
     echo ""
     echo "randholes.$_n : $_param" | _filter
     echo "------------------------------------------"
     if $here/src/randholes $_param $out >$tmp.out
     then
-        # quick check - how many holes did we get?
-        count=`xfs_bmap $out | egrep -c ': hole'`
-        # blocks can end up adjacent, therefore number of holes varies
-        _within_tolerance "holes" $count $_holes 10% -v
+	# only check if we're not allocating in huge chunks (extsz flag)
+	if _test_inode_flag extsize $out || _test_inode_flag realtime $out
+	then
+		echo "holes is in range"
+	else
+		# quick check - how many holes did we get?
+	        count=`xfs_bmap $out | egrep -c ': hole'`
+		# blocks can end up adjacent, therefore number of holes varies
+		_within_tolerance "holes" $count $_holes 10% -v
+	fi
     else
         echo "    randholes returned $? - see $seq.out.full"
         echo "--------------------------------------"       >>$here/$seq.out.full

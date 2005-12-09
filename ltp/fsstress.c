@@ -21,15 +21,19 @@
 #ifdef HAVE_ATTR_XATTR_H
 #include <attr/xattr.h>
 #endif
+#ifdef HAVE_ATTR_ATTRIBUTES_H
+#include <attr/attributes.h>
+#endif
+
+#ifndef HAVE_ATTR_LIST
+#define attr_list(path, buf, size, flags, cursor) (errno = -ENOSYS, -1)
+#endif
 
 #include <math.h>
 #define XFS_ERRTAG_MAX		17
-#define XFS_IDMODULO_MAX	32
-#define XFS_PROJIDMODULO_MAX	16
+#define XFS_IDMODULO_MAX	31	/* user/group IDs (1 << x)  */
+#define XFS_PROJIDMODULO_MAX	16	/* project IDs (1 << x)     */
 
-/* was (getpagesize()*32) BUT want it to be same
- * on all platforms
- */
 #define FILELEN_MAX		(32*4096)
 
 typedef enum {
@@ -208,11 +212,7 @@ int		verbose = 0;
 
 void	add_to_flist(int, int, int);
 void	append_pathname(pathname_t *, char *);
-#ifdef HAVE_LIBATTR
-int	attr_list_path(pathname_t *, char *, const int, int);
-#else
 int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
-#endif
 int	attr_remove_path(pathname_t *, const char *, int);
 int	attr_set_path(pathname_t *, const char *, const char *, const int, int);
 void	check_cwd(void);
@@ -343,13 +343,13 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 	}
-        
+
         if (!dirname) {
             /* no directory specified */
             if (!nousage) usage();
             exit(1);
         }
-        
+
 	(void)mkdir(dirname, 0777);
 	if (chdir(dirname) < 0) {
 		perror(dirname);
@@ -474,37 +474,24 @@ int
 attr_list_path(pathname_t *name,
 	       char *buffer,
 	       const int buffersize,
-	       int flags
-#ifndef HAVE_LIBATTR
-	       , attrlist_cursor_t *cursor
-#endif
-	       )
+	       int flags,
+	       attrlist_cursor_t *cursor)
 {
 	char		buf[MAXNAMELEN];
 	pathname_t	newname;
 	int		rval;
 
-#ifdef ATTR_DONTFOLLOW
 	if (flags != ATTR_DONTFOLLOW) {
 		errno = EINVAL;
 		return -1;
 	}
-#endif
 
-#ifdef HAVE_LIBATTR
-	rval = llistxattr(name->path, buffer, buffersize);
-#else
 	rval = attr_list(name->path, buffer, buffersize, flags, cursor);
-#endif
 	if (rval >= 0 || errno != ENAMETOOLONG)
 		return rval;
 	separate_pathname(name, buf, &newname);
 	if (chdir(buf) == 0) {
-#ifdef HAVE_LIBATTR
-		rval = attr_list_path(&newname, buffer, buffersize, flags);
-#else
 		rval = attr_list_path(&newname, buffer, buffersize, flags, cursor);
-#endif
 		chdir("..");
 	}
 	free_pathname(&newname);
@@ -1462,9 +1449,7 @@ attr_remove_f(int opno, long r)
 	attrlist_t		*alist;
 	char			*aname;
 	char			buf[4096];
-#ifndef HAVE_LIBATTR
 	attrlist_cursor_t	cursor;
-#endif
 	int			e;
 	int			ent;
 	pathname_t		f;
@@ -1476,16 +1461,10 @@ attr_remove_f(int opno, long r)
 	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
 	total = 0;
-#ifndef HAVE_LIBATTR
 	bzero(&cursor, sizeof(cursor));
-#endif
 	do {
 		bzero(buf, sizeof(buf));
-#ifdef HAVE_LIBATTR
-		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
-#else
 		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
-#endif
 		check_cwd();
 		if (e)
 			break;
@@ -1500,18 +1479,12 @@ attr_remove_f(int opno, long r)
 		return;
 	}
 	which = (int)(random() % total);
-#ifndef HAVE_LIBATTR
 	bzero(&cursor, sizeof(cursor));
-#endif
 	ent = 0;
 	aname = NULL;
 	do {
 		bzero(buf, sizeof(buf));
-#ifdef HAVE_LIBATTR
-		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW);
-#else
 		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
-#endif
 		check_cwd();
 		if (e)
 			break;
@@ -1527,7 +1500,7 @@ attr_remove_f(int opno, long r)
 	if (aname == NULL) {
 		if (v)
 			printf(
-			"%d/%d: attr_remove - name %d not found at %s\n",	
+			"%d/%d: attr_remove - name %d not found at %s\n",
 				procid, opno, which, f.path);
 		free_pathname(&f);
 		return;
@@ -1588,7 +1561,7 @@ bulkstat_f(int opno, long r)
 	t = malloc(nent * sizeof(*t));
 	fd = open(".", O_RDONLY);
 	total = 0;
-    
+
         bsr.lastip=&last;
         bsr.icount=nent;
         bsr.ubuffer=t;
@@ -1701,10 +1674,12 @@ setxattr_f(int opno, long r)
 	e = fd < 0 ? errno : 0;
 	check_cwd();
 
-	p = (uid_t)random();
+	/* project ID */
+	p = (uint)random();
 	e = MIN(idmodulo, XFS_PROJIDMODULO_MAX);
 	nbits = (int)(random() % e);
 	p &= (1 << nbits) - 1;
+
 	if ((e = xfsctl(f.path, fd, XFS_IOC_FSGETXATTR, &fsx)) == 0) {
 		fsx.fsx_projid = p;
 		e = xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &fsx);
@@ -1736,9 +1711,12 @@ creat_f(int opno, long r)
 	else
 		parid = fep->id;
 	init_pathname(&f);
-	type = rtpct ? ((random() % 100) > rtpct ? FT_REG : FT_RTF) : FT_REG;
-	if (type == FT_RTF)
+	e1 = (random() % 100);
+	type = rtpct ? ((e1 > rtpct) ? FT_REG : FT_RTF) : FT_REG;
+	if (type == FT_RTF)	/* rt always gets an extsize */
 		extsize = (random() % 10) + 1;
+	else if (e1 < 10)	/* one-in-ten get an extsize */
+		extsize = random() % 1024;
 	else
 		extsize = 0;
 	e = generate_fname(fep, type, &f, &id, &v);
@@ -1759,9 +1737,14 @@ creat_f(int opno, long r)
 	if (fd >= 0) {
 		if (extsize &&
 		    xfsctl(f.path, fd, XFS_IOC_FSGETXATTR, &a) >= 0) {
-			a.fsx_xflags |= XFS_XFLAG_REALTIME;
-			a.fsx_extsize =
-				geom.rtextsize * geom.blocksize * extsize;
+			if (type == FT_RTF) {
+				a.fsx_xflags |= XFS_XFLAG_REALTIME;
+				a.fsx_extsize = extsize *
+						geom.rtextsize * geom.blocksize;
+			} else if (extsize) {
+				a.fsx_xflags |= XFS_XFLAG_EXTSIZE;
+				a.fsx_extsize = extsize * geom.blocksize;
+			}
 			if (xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &a) < 0)
 				e1 = errno;
 		}

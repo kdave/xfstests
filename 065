@@ -2,7 +2,7 @@
 # FS QA Test No. 065
 #
 # Testing incremental dumps and cumulative restores with
-# "adding, deleting, renaming, linking, and unlinking files and 
+# "adding, deleting, renaming, linking, and unlinking files and
 #  directories".
 # Do different operations for each level.
 #
@@ -26,7 +26,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.dump
 
-# IRIX "ls -s" uses a block size of 512, for consistincy on linux use 
+# IRIX "ls -s" uses a block size of 512, for consistincy on linux use
 # ls --block-size=512 -s <file>
 [ $HOSTOS == Linux ] && LS_BLOCKSIZE="--block-size=512"
 
@@ -42,7 +42,7 @@ _my_ls_filter()
     grep -v total | grep -v "^$" | sed "s/^[ \t]*//g" | \
     sed -e 's/.*dumpdir/dumpdir/' |\
     egrep -v 'housekeeping|dirattr|dirextattr|namreg|state|tree|dumpdir/$|dumpdir:$' |\
-    egrep -v "$restore_dir:" 
+    egrep -v "$restore_dir:"
 }
 
 # real QA test starts here
@@ -56,9 +56,11 @@ _supported_os IRIX Linux
 umount $SCRATCH_DEV 2>/dev/null
 _scratch_mount
 $here/src/feature -U $SCRATCH_DEV && \
-	_notrun "Quota enabled, test needs controlled xfsdump output"
+	_notrun "UQuota enabled, test needs controlled xfsdump output"
 $here/src/feature -G $SCRATCH_DEV && \
-	_notrun "Quota enabled, test needs controlled xfsdump output"
+	_notrun "GQuota enabled, test needs controlled xfsdump output"
+$here/src/feature -P $SCRATCH_DEV && \
+	_notrun "PQuota enabled, test needs controlled xfsdump output"
 umount $SCRATCH_DEV
 
 #
@@ -95,11 +97,11 @@ while [ $i -le $num_dumps ]; do
 	    ;;
 	1)
 	    # deleting
-	    rm addedfile2 
-	    rmdir addeddir2 
+	    rm addedfile2
+	    rmdir addeddir2
 	    rm -rf addeddir3
 	    ;;
-	2) 
+	2)
 	    # renaming
 	    mv addedfile1 addedfile2 # rename to previous existing file
 	    mv addeddir4/addedfile5 addeddir4/addedfile4
@@ -108,7 +110,7 @@ while [ $i -le $num_dumps ]; do
 	    ;;
 	3)
 	    # linking
-	    ln addedfile0 linkfile0 
+	    ln addedfile0 linkfile0
 	    ln addedfile0 linkfile0_1  # have a 2nd link to file
 	    ln addedfile2 linkfile2
 	    ln addeddir6/addedfile4 linkfile64
@@ -123,18 +125,18 @@ while [ $i -le $num_dumps ]; do
 	5)  # link first - then onto 6)
 	    rm -rf *
 	    echo 'add6' >addedfile6
-	    ln addedfile6 linkfile6_1 
-	    ln addedfile6 linkfile6_2 
-	    ln addedfile6 linkfile6_3 
+	    ln addedfile6 linkfile6_1
+	    ln addedfile6 linkfile6_2
+	    ln addedfile6 linkfile6_3
 	    ;;
 	6)  # then move the inode that the links point to
-      	    mv addedfile6 addedfile6_mv 
+      	    mv addedfile6 addedfile6_mv
 	    rm linkfile6_1
 	    rm linkfile6_2
 	    rm linkfile6_3
 	    ln addedfile6_mv linkfile6_mv_1
-	    ln addedfile6_mv linkfile6_mv_2 
-	    ln addedfile6_mv linkfile6_mv_3 
+	    ln addedfile6_mv linkfile6_mv_2
+	    ln addedfile6_mv linkfile6_mv_3
 	    ;;
     esac
     cd $here
@@ -146,7 +148,7 @@ while [ $i -le $num_dumps ]; do
 
     dump_file=$tmp.df.level$i
     _do_dump_file -l $i
-    i=`expr $i + 1`	
+    i=`expr $i + 1`
 done
 
 echo "Look at what files are contained in the inc. dump"
@@ -156,7 +158,7 @@ while [ $i -le $num_dumps ]; do
     echo "restoring from df.level$i"
     dump_file=$tmp.df.level$i
     _do_restore_toc
-    i=`expr $i + 1`	
+    i=`expr $i + 1`
 done
 
 echo "Do the cumulative restores"
@@ -169,7 +171,7 @@ while [ $i -le $num_dumps ]; do
     echo "ls -sRF restore_dir"
     ls -sRF $LS_BLOCKSIZE $restore_dir | _my_ls_filter |\
     _check_quota_file | tee $tmp.restorals.$i
-    i=`expr $i + 1`	
+    i=`expr $i + 1`
 done
 
 echo ""
@@ -179,7 +181,7 @@ while [ $i -le $num_dumps ]; do
     echo "Comparing ls of FS with restored FS at level $i"
     diff -s $tmp.ls.$i $tmp.restorals.$i | sed "s#$tmp#TMP#g"
     echo ""
-    i=`expr $i + 1`	
+    i=`expr $i + 1`
 done
 
 

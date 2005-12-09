@@ -58,14 +58,14 @@ inohard=10
 # and iosize.  What we want to test is that the limit is enforced
 # (ie. blksize less than limit but not unduly less - ~85% is kind)
 # nowadays we actually get much closer to the limit before EDQUOT.
-# 
+#
 _filter_and_check_blocks()
 {
 	perl -npe '
 		if (/^'$name'\s+([-|+]){2}\s+(\d+)/ && '$enforce') {
 			$maximum = '$blkhard';
 			$minimum = '$blkhard' * 85/100;
-			if ($2 < $minimum || $2 > $maximum) {
+			if (($2 < $minimum || $2 > $maximum) && '$noextsz') {
 				printf(" URK - %d is out of range! [%d,%d] \n",
 					$2, $minimum, $maximum);
 			}
@@ -88,6 +88,14 @@ if [ $HOSTOS = "Linux" ]; then
 else
     QUOTA_FS=$SCRATCH_MNT
 fi
+
+# Figure out whether we're doing large allocations
+# (bail out if they're so large they stuff the test up)
+_test_inode_flag extsz-inherit $SCRATCH_MNT
+noextsz=$?
+extsize=`_test_inode_extsz $SCRATCH_MNT`
+[ $extsize -ge 512000 ] && \
+	_notrun "Extent size hint is too large ($extsize bytes)"
 
 _qsetup
 
@@ -137,7 +145,6 @@ echo "ls -l $SCRATCH_MNT" >>$seq.full
 ls -l $SCRATCH_MNT >>$seq.full
 _qmount
 _repquota -$type $QUOTA_FS | _filter_and_check_blocks
-
 
 # success, all done
 status=0

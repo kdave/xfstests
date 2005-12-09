@@ -17,7 +17,7 @@ owner=dxm@sgi.com
 # start bit by bit to force wiping of stale blocks near the end of the
 # log. Check the block after the log ends to check for corruption
 #
-# assumptions : 
+# assumptions :
 #    - given we're only touching a single inode, the block after the
 #      log which is in the middle ag should never be touched.
 #      if it changes, we assume the log is writing over it
@@ -63,9 +63,9 @@ _log_traffic()
 {
     count=$1
     echo "*** generate log traffic"
-    
+
     out=$SCRATCH_MNT/$$.tmp
-    
+
     echo "   *** mount"
     if ! _scratch_mount
     then
@@ -75,18 +75,20 @@ _log_traffic()
 
     # having any quota enabled (acct/enfd) means extra log traffic - evil!
     $here/src/feature -U $SCRATCH_DEV && \
-		_notrun "Quota are enabled, test needs controlled log traffic"
+		_notrun "UQuota are enabled, test needs controlled log traffic"
     $here/src/feature -G $SCRATCH_DEV && \
-		_notrun "Quota are enabled, test needs controlled log traffic"
- 
+		_notrun "GQuota are enabled, test needs controlled log traffic"
+    $here/src/feature -P $SCRATCH_DEV && \
+		_notrun "PQuota are enabled, test needs controlled log traffic"
+
     echo "   *** fiddle"
     while [ $count -ge 0 ]
     do
-        touch $out 
+        touch $out
         rm $out
         let "count = count - 1"
     done
-    
+
     echo "   *** unmount"
     if ! umount $SCRATCH_DEV
     then
@@ -119,7 +121,7 @@ _log_sunit()
     else
         expr $lsunit \* $dbsize
     fi
-}    
+}
 
 _after_log()
 {

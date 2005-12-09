@@ -2,6 +2,8 @@
 # FS QA Test No. 106
 #
 # Exercise basic xfs_quota functionality (user/group/project quota)
+# Use of "sync" mount option here is an attempt to get deterministic
+# allocator behaviour.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
@@ -35,13 +37,17 @@ cat $tmp.mkfs >$seq.full
 . $tmp.mkfs
 
 # setup a default run
-[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS="-o uquota"
+if [ -z "$MOUNT_OPTIONS" ]; then
+	export MOUNT_OPTIONS="-o pquota,sync"
+else
+	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o sync"
+fi
 
 # initial populate
 _qmount
 target=$SCRATCH_MNT/target
-ltp/fsstress -s 0xdeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
-ltp/fsstress -s 0xdeed -m8 -z -p4 -n1000 -fchproj=500 -fchown=500 -d $target
+$FSSTRESS_PROG -s 0xdeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
+$FSSTRESS_PROG -s 0xdeed -m8 -z -p4 -n1000 -fsetxattr=500 -fchown=500 -d $target
 
 # also use space, to be able to go over/under limits easily
 uid=255
@@ -167,19 +173,19 @@ test_xfs_quota()
 }
 
 # real QA test starts here
-export MOUNT_OPTIONS="-ouquota"
+export MOUNT_OPTIONS="-ouquota,sync"
 _qmount
 type=u
 id=$uid
 test_xfs_quota | filter_xfs_quota
 
-export MOUNT_OPTIONS="-ogquota"
+export MOUNT_OPTIONS="-ogquota,sync"
 _qmount
 type=g
 id=$gid
 test_xfs_quota | filter_xfs_quota
 
-export MOUNT_OPTIONS="-opquota"
+export MOUNT_OPTIONS="-opquota,sync"
 _qmount
 type=p
 id=$prid

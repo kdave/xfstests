@@ -12,6 +12,13 @@ LDIRT = $(TARGETS)
 LCFLAGS = -DXFS
 IFLAG = -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
 
+ifeq ($(HAVE_ATTR_LIST), true)
+LCFLAGS += -DHAVE_ATTR_LIST
+endif
+ifeq ($(PKG_PLATFORM),irix)
+LCFLAGS += -DHAVE_ATTR_LIST
+endif
+
 ifeq ($(HAVE_AIO), true)
 TARGETS += aio-stress
 LCFLAGS += -DAIO
@@ -20,7 +27,7 @@ endif
 
 default: $(TARGETS)
 
-include $(BUILDRULES) 
+include $(BUILDRULES)
 LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
 doio: doio.c $(LIBTEST)

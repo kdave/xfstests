@@ -1,7 +1,9 @@
 #! /bin/sh
 # FS QA Test No. 107
 #
-# Project quota
+# Project quota.
+# Use of "sync" mount option here is an attempt to get deterministic
+# allocator behaviour.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
@@ -47,7 +49,11 @@ cat $tmp.mkfs >$seq.full
 . $tmp.mkfs
 
 # setup a default run
-[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS="-o pquota"
+if [ -z "$MOUNT_OPTIONS" ]; then
+	export MOUNT_OPTIONS="-o pquota,sync"
+else
+	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o sync"
+fi
 
 _qmount
 src/feature -p $SCRATCH_MNT && _notrun "Cannot run without project quota"
@@ -60,8 +66,8 @@ echo "6:$target" | tee -a $seq.full > $tmp.projects
 echo "### populate filesystem"
 mkdir $target		|| exit
 FSSTRESS_AVOID="$FSSTRESS_AVOID -fmknod=0 -fsymlink=0"
-ltp/fsstress -s 0xfeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
-ltp/fsstress -s 0xbabe -m8 -z -p4 -n500 -fchproj=250 -fchown=250 -d $target
+$FSSTRESS_PROG -s 0xfeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
+$FSSTRESS_PROG -s 0xbabe -m8 -z -p4 -n500 -fsetxattr=250 -fchown=250 -d $target
 
 QARGS="-x -D $tmp.projects -P /dev/null $SCRATCH_MNT"
 

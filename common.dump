@@ -1,6 +1,6 @@
 #/bin/sh
 #
-# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2002,2005 Silicon Graphics, Inc.  All Rights Reserved.
 #
 # Functions useful for xfsdump/xfsrestore tests
 #
@@ -13,7 +13,7 @@ if [ -n "$DEBUGDUMP" ]; then
   _restore_debug=-v4
   _invutil_debug=-d
 fi
- 
+
 # Use dump/restore in qa directory for debugging
 PATH="$here:$PATH"
 export PATH
@@ -61,7 +61,7 @@ have_mtvariable=false
 _mt()
 {
     op=$1
-    if _isrmt; then  
+    if _isrmt; then
 	# REMOTE
 	_rmtdev=`echo $dumptape | $AWK_PROG -F: '{print $2}'`
 
@@ -84,12 +84,12 @@ _check_onl()
 {
     _limit=10
     i=0
-    while [ $i -lt $_limit ]; do  
+    while [ $i -lt $_limit ]; do
         echo "Checking online..." >>$here/$seq.full
 	if _mt status >$tmp.status 2>&1; then
-	    break; 
+	    break;
 	else
-	    sleep 2 
+	    sleep 1
 	fi
 	i=`expr $i + 1`
     done
@@ -99,10 +99,10 @@ _check_onl()
 	echo "ERROR: mt -f $dumptape failed"
 	cat $tmp.status
 
-	echo "mt -f $dumptape failed" >$seq.notrun 
+	echo "mt -f $dumptape failed" >$seq.notrun
 	status=$NOTRUNSTS
 	exit
-    fi 
+    fi
 
 
     if egrep -i 'onl|ready' $tmp.status | grep -iv 'not ready' >/dev/null; then
@@ -111,7 +111,7 @@ _check_onl()
 	echo "ERROR: $dumptape is not online"
 	cat $tmp.status
 
-	echo "dumptape, $dumptape, is not online" >$seq.notrun 
+	echo "dumptape, $dumptape, is not online" >$seq.notrun
 	status=$NOTRUNSTS
 	exit
     fi
@@ -122,12 +122,12 @@ _wait_tape()
     echo "Wait for tape, $dumptape, ..." >>$here/$seq.full
 
     i=0
-    while [ $i -lt 20 ]; do  
+    while [ $i -lt 20 ]; do
         echo "Checking status..." >>$here/$seq.full
 	if _mt status 2>&1 | tee -a $here/$seq.full | egrep -i "onl|ready" >/dev/null; then
-	    break; 
+	    break;
 	else
-	    sleep 2 
+	    sleep 1
 	fi
 	i=`expr $i + 1`
     done
@@ -145,7 +145,7 @@ _rewind()
 }
 
 #
-# Do a custom erase because: 
+# Do a custom erase because:
 # (i) some machines don't support it
 # (ii) some machines take forever to do it
 #
@@ -181,7 +181,7 @@ _set_variable()
 	# LOCAL
 	echo "Put scsi tape driver into variable block size mode"
 	mt -f $dumptape setblk 0
-    fi	
+    fi
 }
 
 _require_tape()
@@ -190,7 +190,7 @@ _require_tape()
 
     if [ -z "$dumptape" ]; then
         echo "This test requires a dump tape - none was specified"
-	echo "No dump tape specified" >$seq.notrun 
+	echo "No dump tape specified" >$seq.notrun
 	status=$NOTRUNSTS
 	exit
     fi
@@ -207,7 +207,7 @@ _wipe_fs()
     _scratch_mount >>$here/$seq.full || _fail "mount failed"
 }
 
-# 
+#
 # Cleanup created dirs and files
 # Called by trap
 #
@@ -255,7 +255,7 @@ _stable_fs()
 }
 
 #
-# Run fsstress to create a mixture of 
+# Run fsstress to create a mixture of
 # files,dirs,links,symlinks
 #
 # Pinched from test 013.
@@ -281,7 +281,7 @@ _create_dumpdir_stress()
     if ! $here/ltp/fsstress $_param -s 1 $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
     then
         echo "    fsstress (count=$_count) returned $? - see $here/$seq.full"
-        
+
         echo "--------------------------------------"       >>$here/$here/$seq.full
         echo "output from fsstress:"                        >>$here/$here/$seq.full
         echo "--------------------------------------"       >>$here/$here/$seq.full
@@ -376,7 +376,7 @@ _mk_fillconfig_ea()
     cat <<End-of-File >$tmp.config
 # pathname	size    user    group    perm   name value namespace
 #
-smalll		10	$nobody	$nobody  777    attr1 some_text   user 
+smalll		10	$nobody	$nobody  777    attr1 some_text   user
 biggg		102400	$nobody	$nobody  777    attr2 some_text2  root
 sub/smalll	10	$nobody	$nobody  777    attr3 some_text3  user
 sub/biggg	102400	$nobody	$nobody  777    attr4 some_text4  root
@@ -411,7 +411,7 @@ End-of-File
 _mk_fillconfig_xattr()
 {
     cat <<End-of-File >$tmp.config
-# pathname	size    user    group    perm   name 
+# pathname	size    user    group    perm   name
 #
 xflag_realtime	10	$nobody $nobody  777    XFS_XFLAG_REALTIME
 xflag_prealloc	10	$nobody $nobody  777    XFS_XFLAG_PREALLOC
@@ -443,7 +443,7 @@ _do_create_dumpdir_fill()
     do
 	if [ $nbytes = "d" ]; then
 	    # create a directory
-	    dir=$file	
+	    dir=$file
 	    if [ ! -d $dir ]
 	    then
 		if mkdir $dir
@@ -520,7 +520,7 @@ _create_dumpdir_largefile()
     POSIXLY_CORRECT=yes \
     dd if=/dev/zero of=$_largefile bs=1 seek=$_largesize count=10 2>&1
     _stable_fs
-}	
+}
 
 _create_dumpdir_fill()
 {
@@ -528,7 +528,7 @@ _create_dumpdir_fill()
     _mk_fillconfig1
     _do_create_dumpdir_fill
     _stable_fs
-}	
+}
 
 _create_dumpdir_fill2()
 {
@@ -536,7 +536,7 @@ _create_dumpdir_fill2()
     _mk_fillconfig2
     _do_create_dumpdir_fill
     _stable_fs
-}	
+}
 
 _create_dumpdir_fill_perm()
 {
@@ -544,7 +544,7 @@ _create_dumpdir_fill_perm()
     _mk_fillconfig_perm
     _do_create_dumpdir_fill
     _stable_fs
-}	
+}
 
 _create_dumpdir_fill_ea()
 {
@@ -552,7 +552,7 @@ _create_dumpdir_fill_ea()
     _mk_fillconfig_ea
     _do_create_dumpdir_fill
     _stable_fs
-}	
+}
 
 
 #
@@ -565,8 +565,8 @@ _append_dumpdir_fill()
     cat <<End-of-File >$tmp.config
 # pathname
 #
-small	
-sub/big	
+small
+sub/big
 #
 sub/a
 sub/c
@@ -621,7 +621,7 @@ _do_create_dump_symlinks()
 	fi
 	ln -s $file $file-link
 	if [ -n "$perms2" ]; then
-	    umask $omask	
+	    umask $omask
 	fi
 
 	if [ -n "$owner" -a -n "$group" ]; then
@@ -643,7 +643,7 @@ _do_create_dump_symlinks()
 _mk_symlink_config()
 {
     cat <<End-of-File >$tmp.config
-# path	size	owner1	group1	owner2	group2	perm1	perm2 
+# path	size	owner1	group1	owner2	group2	perm1	perm2
 #
 a	0	$nobody	$nobody	daemon	sys	124	421
 b	0	daemon	sys	bin	bin	347	743
@@ -658,14 +658,14 @@ _create_dumpdir_symlinks()
     _mk_symlink_config
     _do_create_dump_symlinks
     _stable_fs
-}	
+}
 
 #
 # create hardlinks of form $_fname, $_fname_h1 $_fname_h2 ...
 #
 _create_hardlinks()
 {
-    _fname=$1	
+    _fname=$1
     _numlinks=$2
 
     touch $_fname
@@ -750,10 +750,10 @@ _filter_devchar()
 	}
 	{ print }
     '
-}    
+}
 
 
-# 
+#
 # Filter out the non-deterministic dump msgs from
 # xfsdump and xfsrestore
 #
@@ -841,7 +841,7 @@ _dir_filter()
 }
 
 #
-# Note: requires a space between option letter and argument 
+# Note: requires a space between option letter and argument
 #
 _parse_args()
 {
@@ -853,7 +853,7 @@ _parse_args()
         in
         -f)
             [ -z "$2" ] && _fail "missing argument for -f"
-	    dumptape=$2	
+	    dumptape=$2
 	    shift
             ;;
         -L)
@@ -900,7 +900,7 @@ _do_dump_sub()
 
     echo "Dumping to tape..."
     opts="$_dump_debug$dump_args -s $dump_sdir -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
+    echo "xfsdump $opts" | _dir_filter
     xfsdump $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -913,7 +913,7 @@ _do_dump()
 
     echo "Dumping to tape..."
     opts="$_dump_debug$dump_args -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
+    echo "xfsdump $opts" | _dir_filter
     xfsdump $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -928,7 +928,7 @@ _do_dump_min()
     echo "Dumping to tape..."
     onemeg=1048576
     opts="$_dump_debug$dump_args -m -b $onemeg -l0 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
+    echo "xfsdump $opts" | _dir_filter
     xfsdump $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -942,7 +942,7 @@ _do_dump_file()
 
     echo "Dumping to file..."
     opts="$_dump_debug$dump_args -f $dump_file -M $media_label -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
+    echo "xfsdump $opts" | _dir_filter
     xfsdump $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -964,7 +964,7 @@ _do_dump_multi_file()
 
     echo "Dumping to files..."
     opts="$_dump_debug$dump_args $multi_args -L $session_label $SCRATCH_MNT"
-    echo "xfsdump $opts" | _dir_filter  
+    echo "xfsdump $opts" | _dir_filter
     xfsdump $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -998,7 +998,7 @@ _do_restore()
 
     echo "Restoring from tape..."
     opts="$_restore_debug -f $dumptape  -L $session_label $restore_dir"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     xfsrestore $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -1013,7 +1013,7 @@ _do_restore_min()
     echo "Restoring from tape..."
     onemeg=1048576
     opts="$_restore_debug -m -b $onemeg -f $dumptape  -L $session_label $restore_dir"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     xfsrestore $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -1027,7 +1027,7 @@ _do_restore_file()
 
     echo "Restoring from file..."
     opts="$_restore_debug -f $dump_file  -L $session_label $restore_dir"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     xfsrestore $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -1044,7 +1044,7 @@ _do_restore_file_cum()
 
     echo "Restoring cumumlative from file..."
     opts="$_restore_debug -f $dump_file -r $restore_dir"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     xfsrestore $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -1084,7 +1084,7 @@ _do_restore_multi_file()
 
     echo "Restoring from file..."
     opts="$_restore_debug $multi_args -L $session_label $restore_dir"
-    echo "xfsrestore $opts" | _dir_filter  
+    echo "xfsrestore $opts" | _dir_filter
     xfsrestore $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
 }
 
@@ -1100,7 +1100,7 @@ _do_dump_restore()
     echo "xfsdump|xfsrestore ..."
     restore_opts="$_restore_debug - $restore_dir"
     dump_opts="$_dump_debug$dump_args -s $dump_sdir - $SCRATCH_MNT"
-    echo "xfsdump $dump_opts | xfsrestore $restore_opts" | _dir_filter  
+    echo "xfsdump $dump_opts | xfsrestore $restore_opts" | _dir_filter
     xfsdump $dump_opts 2>$tmp.dump.mlog | xfsrestore $restore_opts 2>&1 | tee -a $here/$seq.full | _dump_filter
     _dump_filter <$tmp.dump.mlog
 }
@@ -1122,7 +1122,6 @@ _ls_compare_sub()
     | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -bcs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
-   
 }
 
 #
@@ -1245,7 +1244,7 @@ _dump_inventory()
 
 #
 # Do the xfsinvutil cmd with debug and filters
-# Need to set variable: "$middate" to the invutil date 
+# Need to set variable: "$middate" to the invutil date
 #
 _do_invutil()
 {
@@ -1263,13 +1262,25 @@ _check_quota()
 {
     usermsg=$1
     groupmsg=$2
+    projectmsg=$3
     uquota=0
-    gquota=0 
+    gquota=0
+    pquota=0
     $here/src/feature -U $SCRATCH_DEV && uquota=1
     $here/src/feature -G $SCRATCH_DEV && gquota=1
+    $here/src/feature -P $SCRATCH_DEV && pquota=1
 
-    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v full=$here/$seq.full \
-              -v usermsg="$usermsg" -v groupmsg="$groupmsg" '
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v pquota=$pquota \
+	      -v full=$here/$seq.full -v usermsg="$usermsg" \
+	      -v groupmsg="$groupmsg" -v projectmsg="$projectmsg" '
+	$0 ~ projectmsg {
+			print "Found project quota:", $0 >>full
+			found_pquota = 1
+			if (!pquota) {
+			    print "Found extra:", $0
+			}
+			next
+	}
 	$0 ~ groupmsg {
 			print "Found group quota:", $0 >>full
 			found_gquota = 1
@@ -1294,25 +1305,31 @@ _check_quota()
 		if (gquota && !found_gquota) {
 		    print "Missing group quota msg:", groupmsg
 		}
+		if (pquota && !found_pquota) {
+		    print "Missing project quota msg:", projectmsg
+		}
 	}
     '
 }
 
 #
-# xfsrestore: 3 directories and 40 entries processed 
-#   $5 = 40 
-#   num entries needs to be reduced by num quota file(s) 
+# xfsrestore: 3 directories and 40 entries processed
+#   $5 = 40
+#   num entries needs to be reduced by num quota file(s)
 #
 _check_quota_entries()
 {
     uquota=0
-    gquota=0 
+    gquota=0
+    pquota=0
     $here/src/feature -U $SCRATCH_DEV && uquota=1
     $here/src/feature -G $SCRATCH_DEV && gquota=1
-    $AWK_PROG -v uquota=$uquota -v gquota=$gquota '
-	/entries processed/ { 
+    $here/src/feature -P $SCRATCH_DEV && pquota=1
+    $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v pquota=$pquota '
+	/entries processed/ {
 		if (uquota) $5--
 		if (gquota) $5--
+		if (pquota) $5--
 	}
 	{print}'
 }
@@ -1321,8 +1338,10 @@ _check_quota_entries()
 # Look for:
 # xfsdump: saving user quota information for: SCRATCH_MNT
 # xfsdump: saving group quota information for: SCRATCH_MNT
+# xfsdump: saving project quota information for: SCRATCH_MNT
 # xfsrestore: user quota information written to ...'
 # xfsrestore: group quota information written to ...'
+# xfsrestore: project quota information written to ...'
 #
 # If on IRIX then look for:
 # xfsrestore: use 'edquota' to restore quotas
@@ -1331,11 +1350,13 @@ _check_quota_dumprestore()
 {
     if [ "$HOSTOS" == "IRIX" ]; then
 	_check_quota 'user quota information' \
-		     'group quota information' |\
+		     'group quota information' \
+		     'project quota information' | \
 	sed "/xfsrestore:.*use 'edquota' to restore quotas/d"
     else
 	_check_quota 'user quota information' \
-		     'group quota information'
+		     'group quota information' \
+		     'project quota information'
     fi
 }
 
@@ -1343,11 +1364,13 @@ _check_quota_dumprestore()
 # Look for:
 # Only in RESTORE_DIR: xfsdump_quotas
 # Only in RESTORE_DIR: xfsdump_quotas_group
+# Only in RESTORE_DIR: xfsdump_quotas_project
 #
 _check_quota_diff()
 {
    _check_quota 'Only in RESTORE_DIR: xfsdump_quotas' \
-       'Only in RESTORE_DIR: xfsdump_quotas_group' 
+	'Only in RESTORE_DIR: xfsdump_quotas_group' \
+	'Only in RESTORE_DIR: xfsdump_quotas_proj'
 }
 
 #
@@ -1358,7 +1381,7 @@ _check_quota_diff()
 #
 _check_quota_file()
 {
-   _check_quota 'xfsdump_quotas' 'xfsdump_quotas_group'
+   _check_quota 'xfsdump_quotas' 'xfsdump_quotas_group' 'xfsdump_quotas_proj'
 }
 
 
