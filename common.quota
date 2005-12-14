@@ -1,14 +1,15 @@
 ##/bin/sh
 #
-# Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2001,2005 Silicon Graphics, Inc.
+# All Rights Reserved.
 #
 # Functions useful for quota tests
 #
 
-# 
+#
 # checks that the XFS quota support in the kernel is enabled
 # and that we have valid quota user tools installed.
-# 
+#
 _require_quota()
 {
     src/feature -q $TEST_DEV
@@ -18,11 +19,11 @@ _require_quota()
 
 #
 # checks that the XFS project quota support in the kernel is enabled.
-# 
+#
 _require_prjquota()
 {
     src/feature -p $TEST_DEV
-    [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS project quotas"
+    [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
 }
 
 #
@@ -39,16 +40,20 @@ _require_nobody()
 
 # create a file as a specific user (uid)
 # takes filename, id, type (u/g), blocksize, blockcount
-# 
+#
 _file_as_id()
 {
     [ $# != 5 ] && _notrun "broken call to _file_as_id in test $seq"
 
-    if [ $3 = u ]
-    then
+    if [ $3 = p ]; then
+	size=`expr $4 \* $5`;
+	echo xfs_io -f -c "chproj $2" -c "pwrite -b $4 0 $size" $1 >>$seq.full
+	$XFS_IO_PROG -f -c "chproj $2" -c "pwrite -b $4 0 $size" $1 \
+		>>$seq.full 2>&1
+	return
+    elif [ $3 = u ]; then
 	magik='$>'	# perlspeak for effective uid
-    elif [ $3 = g ]
-    then
+    elif [ $3 = g ]; then
 	magik='$)'	# perlspeak for effective gid
     else
 	_notrun "broken type in call to _file_as_id in test $seq"
@@ -87,34 +92,6 @@ _choose_prid()
     fi
     perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[1],$a[0] }' \
 	/etc/projid
-}
-
-#
-# filter to get the guts out
-# and make linux and irix similar
-#
-_filter_repquota()
-{
-    tee -a $seq.full | $AWK_PROG '
-	/File limits/ {
-		gotit = 1
-	}
-	gotit==1 {
-		sub(/Disk/, "Block") 
-		gsub(/timeleft/, "grace")
-		gsub(/[.]0 /,"")
-		sub(/- /, "* ")
-		sub(/[+] /, "* ")
-		gsub(/1week/,"7days")
-		gsub(/NOT STARTED/,"")
-		gsub(/[ \t]+/, " ")
-		if ($0 ~ / [-+]/)
-		    $1 = "name"
-		if ($0 !~ /^$/)
-		    print
-		next
-	}
-    ' | sed -e '/-----------------/d'
 }
 
 _qmount()
@@ -156,65 +133,6 @@ _qsetup()
     echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
     echo "and using type=$type id=$id" >>$seq.full
 }
-
-
-#-----------------------------------------------------------------------------------
-#
-# wrappers for Linux/IRIX differences
-#
-_setquota()
-{
-    _opt_type=$1
-    _id=$2
-    _bsoft=$3
-    _bhard=$4
-    _isoft=$5
-    _ihard=$6
-    _fs=$7
-
-    [ $# -eq 7 ] || _fail "_setquota failed with wrong # args: $*"
-
-    if [ $HOSTOS = "Linux" ]; then
-	echo "setquota $_opt_type $_id $_bsoft $_bhard $_isoft $_ihard $_fs" >>$seq.full
-	setquota $_opt_type $_id $_bsoft $_bhard $_isoft $_ihard $_fs
-    else
-	# IRIX
-        if [ $_opt_type = "-u" ]; then
-		_opt_type=""
-		id_param="uid"
-	else 
-		id_param="gid"
-	fi
-	echo "/usr/etc/edquota $_opt_type -f $_fs -l $id_param=$_id,bsoft=$_bsoft,bhard=$_bhard,isoft=$_isoft,ihard=$_ihard" >>$seq.full
-	/usr/etc/edquota $_opt_type -f $_fs -l $id_param=$_id,bsoft=$_bsoft,bhard=$_bhard,isoft=$_isoft,ihard=$_ihard
-    fi
-}
-
-_quota()
-{
-    echo "quota $*" >>$seq.full
-    if [ $HOSTOS = "Linux" ]; then
-	quota $*
-    else
-        # clear -u
-        args=`echo $*|sed -e 's/-u//'`
-	quota -v $args
-    fi
-}
-
-_repquota()
-{
-    echo "repquota $*" >>$seq.full
-    if [ $HOSTOS = "Linux" ]; then
-	repquota $*
-    else
-        # clear -u
-        args=`echo $*|sed -e 's/-u//'`
-	repquota -v $args
-    fi
-}
-
-#-----------------------------------------------------------------------------------
 
 # make sure this script returns success
 /bin/true

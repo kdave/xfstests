@@ -62,6 +62,8 @@ if src/feature -U $SCRATCH_DEV ; then
 	type=u; eval `_choose_uid`
 elif src/feature -G $SCRATCH_DEV ; then
 	type=g; eval `_choose_gid`
+elif src/feature -P $SCRATCH_DEV ; then
+	type=p; eval `_choose_prid`
 else
 	_notrun "No quota support at mount time"
 fi
@@ -70,37 +72,25 @@ fi
 _file_as_id $SCRATCH_MNT/foo $id $type $dbsize 220
 sync
 
-# Irix uses filesystem name and Linux uses device of filesystem
-if [ $HOSTOS = "Linux" ]; then
-    QUOTA_FS=$SCRATCH_DEV
-else
-    QUOTA_FS=$SCRATCH_MNT
-fi
-
 # set limit at 1001 (1k) blocks
 bsoft=1001
 bhard=1001
 isoft=10
 ihard=10
-_setquota -$type $id $bsoft $bhard $isoft $ihard $QUOTA_FS
+xfs_quota -x \
+	-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
+	-c "limit -$type isoft=$isoft ihard=$ihard $id" \
+	$SCRATCH_DEV
 
-_filter_quota()
-{
-    perl -ne '
-	if (m[^\s*'$QUOTA_FS'\s+(\d+)\s+(\d+)\s+(\d+)] ||
-		($next == 1 && m,^\s+(\d+)\s+(\d+)\s+(\d+),)) {
+# cross check blks, softblks, hardblks <-> quota, xfs_db
+xfs_quota -c "quota -$type -birnN $id" $SCRATCH_DEV |
+			tr -s '[:space:]' | tee -a $seq.full | perl -ne '
+	if (m[^\s*'$SCRATCH_DEV'\s+(\d+)\s+(\d+)\s+(\d+)]) {
 		print "used_blocks=", $1, "\n";
 		print "soft_blocks=", $2, "\n";
 		print "hard_blocks=", $3, "\n";
 		$next = 0;
-	}
-	elsif (m[^\s*'$QUOTA_FS']) {		# devfs (long) names
-		$next = 1;
-	}' | LC_COLLATE=POSIX sort
-}
-
-# cross check blks, softblks, hardblks <-> quota, xfs_db
-_quota -$type $id | tee -a $seq.full | _filter_quota >$tmp.quota
+	}' | LC_COLLATE=POSIX sort >$tmp.quota
 
 echo ===quota output >> $seq.full
 cat $tmp.quota >> $seq.full
@@ -124,8 +114,8 @@ echo ===xfs_db output >> $seq.full
 cat $tmp.xfs_db >> $seq.full
 [ ! -s $tmp.xfs_db ] && echo "warning: xfs_db output file is empty"
 
-echo Comparing out of quota and xfs_db
-diff $tmp.quota $tmp.xfs_db 
+echo Comparing out of xfs_quota and xfs_db
+diff $tmp.quota $tmp.xfs_db
 [ $? -eq 0 ] && echo OK.
 
 # success, all done

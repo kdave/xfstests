@@ -48,10 +48,15 @@ _require_quota
 # setup a default run
 [ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS="-o uquota"
 
-blksoft=100
-blkhard=500
-inosoft=4
-inohard=10
+bsoft=100
+bhard=500
+isoft=4
+ihard=10
+
+_filter_report()
+{
+	tr -s '[:space:]' | sed -e "s/^\#$id /[NAME] /g" -e "s/^#0 /[ROOT] /g"
+}
 
 # The actual point at which limit enforcement takes place for the
 # hard block limit is variable depending on filesystem blocksize,
@@ -59,19 +64,19 @@ inohard=10
 # (ie. blksize less than limit but not unduly less - ~85% is kind)
 # nowadays we actually get much closer to the limit before EDQUOT.
 #
-_filter_and_check_blocks()
+_filter_and_check_blks()
 {
 	perl -npe '
-		if (/^'$name'\s+([-|+]){2}\s+(\d+)/ && '$enforce') {
-			$maximum = '$blkhard';
-			$minimum = '$blkhard' * 85/100;
-			if (($2 < $minimum || $2 > $maximum) && '$noextsz') {
-				printf(" URK - %d is out of range! [%d,%d] \n",
-					$2, $minimum, $maximum);
+		if (/^\#'$id'\s+(\d+)/ && '$enforce') {
+			$maximum = '$bhard';
+			$minimum = '$bhard' * 85/100;
+			if (($1 < $minimum || $1 > $maximum) && '$noextsz') {
+				printf(" URK %d: %d is out of range! [%d,%d]\n",
+					'$id', $1, $minimum, $maximum);
 			}
-			s/^('$name'\s+[-|+][-|+]\s+)(\d+)/\1 OK/g;
+			s/^(\#'$id'\s+)(\d+)/\1 =OK=/g;
 		}
-	' | _filter_repquota
+	' | _filter_report
 }
 
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -81,13 +86,6 @@ cat $tmp.mkfs >>$seq.full
 . $tmp.mkfs
 
 _qmount
-
-# Irix uses filesystem name and Linux uses device of filesystem
-if [ $HOSTOS = "Linux" ]; then
-    QUOTA_FS=$SCRATCH_DEV
-else
-    QUOTA_FS=$SCRATCH_MNT
-fi
 
 # Figure out whether we're doing large allocations
 # (bail out if they're so large they stuff the test up)
@@ -104,28 +102,31 @@ echo "and using type=$type id=$id" >>$seq.full
 
 echo
 echo "*** report no quota settings" | tee -a $seq.full
-_repquota -$type $QUOTA_FS | _filter_repquota
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
 echo
 echo "*** report initial settings" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/initme $id $type 1024 0
 echo "ls -l $SCRATCH_MNT" >>$seq.full
 ls -l $SCRATCH_MNT >>$seq.full
-_setquota -$type $id $blksoft $blkhard $inosoft $inohard $QUOTA_FS
-_repquota -$type $QUOTA_FS | _filter_repquota
+xfs_quota -x \
+	-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
+	-c "limit -$type isoft=$isoft ihard=$ihard $id" \
+	$SCRATCH_DEV
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
 echo
 echo "*** push past the soft inode limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
 _file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 _qmount
-_repquota -$type $QUOTA_FS | _filter_repquota
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
 echo
 echo "*** push past the soft block limit" | tee -a $seq.full
 _file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 _qmount
-_repquota -$type $QUOTA_FS | _filter_repquota
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
 echo
 # Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -135,7 +136,7 @@ do
 	_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 done
 _qmount
-_repquota -$type $QUOTA_FS | _filter_repquota
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
 echo
 # Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -144,7 +145,7 @@ _file_as_id $SCRATCH_MNT/softie $id $type 1024 540
 echo "ls -l $SCRATCH_MNT" >>$seq.full
 ls -l $SCRATCH_MNT >>$seq.full
 _qmount
-_repquota -$type $QUOTA_FS | _filter_and_check_blocks
+xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_and_check_blks
 
 # success, all done
 status=0
