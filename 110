@@ -1,0 +1,72 @@
+#! /bin/sh
+# FS QA Test No. 108
+#
+# Incorrect dir2 freetab warning case from Masanori Tsuda.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+
+# real QA test starts here
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+
+STR1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+STR2=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+STR3=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+#------------------------------------------------
+# Free Block No. | Data Entry No. (Start - End) |
+#       1        |     10000001 - 10030599      |
+#       2        |     10030600 - 10061199      |
+#       3        |     10061200 - 10091799      |
+#------------------------------------------------
+# 15 Data Entries / 1 Data Block                |
+#------------------------------------------------
+
+_scratch_mount
+mkdir -p $SCRATCH_MNT/test
+
+I=10000001
+E=10030600
+while [ $I -le $E ]
+do
+    echo > $SCRATCH_MNT/test/${STR1}${STR2}${STR3}${I}
+    I=`expr $I + 1`
+    [ `expr $I % 1000` -eq 0 ] && echo "Created $I/$E"
+done
+
+sync
+
+I=10030585
+E=10030599
+while [ $I -le $E ]
+do
+    rm $SCRATCH_MNT/test/${STR1}${STR2}${STR3}${I} &
+    I=`expr $I + 1`
+done
+
+_check_scratch_fs
+
+status=0
+exit
