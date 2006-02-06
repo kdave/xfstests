@@ -4,7 +4,7 @@ AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
         echo
         echo 'FATAL ERROR: sys/acl.h does not exist.'
         echo 'Install the access control lists (acl) development package.'
-        echo 'Alternatively, run "make install-lib" from the acl source.'
+        echo 'Alternatively, run "make install-dev" from the acl source.'
         exit 1
     fi
   ])
@@ -15,7 +15,7 @@ AC_DEFUN([AC_PACKAGE_NEED_ACL_LIBACL_H],
         echo
         echo 'FATAL ERROR: acl/libacl.h does not exist.'
         echo 'Install the access control lists (acl) development package.'
-        echo 'Alternatively, run "make install-lib" from the acl source.'
+        echo 'Alternatively, run "make install-dev" from the acl source.'
         exit 1
     fi
   ])
