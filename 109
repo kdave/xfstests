@@ -1,0 +1,99 @@
+#! /bin/sh
+# FS QA Test No. 108
+#
+# ENOSPC deadlock case from Asano Masahiro.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=nathans@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux XFS
+_require_scratch
+
+populate()
+{
+	# "faststart" lets us effectively skip (re-)population
+	[ "X$faststart" != "X" ] && rm -f $SCRATCH_MNT/F*
+
+	# create many small files using most available space
+	echo "creating small files..."
+	i=0
+	while [ $i -le $files -a "X$faststart" = "X" ]; do
+		file=$SCRATCH_MNT/f$i
+		xfs_io -f -d -c 'pwrite -b 64k 0 64k' $file >/dev/null
+		i=`expr $i + 1`
+	done
+
+	# remove every second file, freeing up lots of space
+	echo "removing small files..."
+	i=1
+	while [ $i -le $files -a "X$faststart" = "X" ]; do
+		rm $SCRATCH_MNT/f$i
+		i=`expr $i + 2`
+	done
+
+	echo "flushing changes via umount/mount."
+	umount $SCRATCH_DEV
+	_scratch_mount
+}
+
+allocate()
+{
+	# now try to hit the deadlock
+	echo "starting parallel allocators..."
+	i=0
+	while [ $i -le 10 ]; do
+		file=$SCRATCH_MNT/F$i
+		{
+			j=0
+			while [ $j -lt 100 ]; do
+				xfs_io -f -c 'pwrite -b 64k 0 16m' $file \
+					>/dev/null 2>&1
+				rm $file
+				j=`expr $j + 1`
+			done
+		} &
+		i=`expr $i + 1`
+	done
+
+	wait
+	echo "all done!"
+}
+
+# real QA test starts here
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mount
+
+# see if faststart is possible (and requested)
+files=2000
+faststart=""
+if [ -n "$FASTSTART" -a -f $SCRATCH_MNT/f0 ]; then
+	faststart="-N"	# causes us to skip the mkfs step
+fi
+umount $SCRATCH_DEV
+
+_scratch_mkfs_xfs -dsize=160m,agcount=4 $faststart | _filter_mkfs 2>$tmp.mkfs
+cat $tmp.mkfs >>$seq.full
+_scratch_mount
+
+populate
+allocate
+status=0
+exit

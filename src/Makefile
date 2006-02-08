@@ -9,7 +9,7 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	nametest permname randholes runas truncfile usemem \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
-	godown resvtest writemod makeextents
+	godown resvtest writemod makeextents itrash
 
 LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize
 
@@ -66,6 +66,9 @@ fstest:	fstest.o
 resvtest: resvtest.o
 	$(LINKTEST)
 
+itrash:	itrash.o
+	$(LINKTEST)
+
 #scaleread: scaleread.o $(LDLIBS)
 #	$(LINKTEST)
 
@@ -74,10 +77,10 @@ acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 
 
 ifeq ($(PKG_PLATFORM),irix)
-fill2: fill2.o 
+fill2: fill2.o
 	$(LINKTEST)  -lgen
 
-runas: runas.o 
+runas: runas.o
 	$(LINKTEST)  -lgen
 
 open_unlink: open_unlink.o $(LIBHANDLE)
