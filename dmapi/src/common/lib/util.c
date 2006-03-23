@@ -181,6 +181,9 @@ atohan(
 		if (i == HANDLE_LEN){
 			return(EBADF);
 		}
+		if( ! (isxdigit(*handle_str) && (isxdigit(*(handle_str +1))))) {
+			return(EBADF);
+		}
 		cur_char[0] = *handle_str;
 		cur_char[1] = *(handle_str + 1);
 		cur_char[2] = '\0';
