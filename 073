@@ -21,15 +21,21 @@ _cleanup()
 	cd /
 	umount $SCRATCH_MNT 2>/dev/null
 	umount $tmp.loop 2>/dev/null
-	[ -d $tmp.loop ] && rmdir $tmp.loop
-	[ -d $tmp.source_dir ] && rmdir $tmp.source_dir
-	rm -f $tmp.* /var/tmp/xfs_copy.log.*
+	#[ -d $tmp.loop ] && rmdir $tmp.loop
+	#[ -d $tmp.source_dir ] && rmdir $tmp.source_dir
+	#rm -f $tmp.* /var/tmp/xfs_copy.log.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _filter_copy()
 {
-	sed -e "s,$1,<FSIMAGE1>,g" -e "s,$2,<FSIMAGE2>,g"
+	sed -e "s,$1,<DEVIMAGE>,g" -e "s,$2,<FSIMAGE1>,g" \
+	    -e "s,$3,<DEVIMAGE>,g" -e "s,$4,<FSIMAGE2>,g"
+}
+
+_filter_path()
+{
+	sed -e "s,$1,<MNTPATH>,g" | LC_COLLATE=POSIX sort
 }
 
 _populate_scratch()
@@ -71,24 +77,18 @@ _verify_copy()
 	diff -Naur $source_dir $target_dir
 
 	echo comparing new image directories to old
-	find $source_dir \
-		| _filter_copy $source_dir '#' \
-		| LC_COLLATE=POSIX sort \
-		> $tmp.manifest1
-	find $target_dir \
-		| _filter_copy $target_dir '#' \
-		| LC_COLLATE=POSIX sort \
-		> $tmp.manifest2
+	find $source_dir | _filter_path $source_dir > $tmp.manifest1
+	find $target_dir | _filter_path $target_dir > $tmp.manifest2
 	[ -s $tmp.manifest1 ] || echo no directory output
 	diff -u $tmp.manifest1 $tmp.manifest2
 
 	echo comparing new image geometry to old
 	xfs_info $source_dir \
-		| _filter_copy $source_dir '#' \
+		| _filter_copy $source $source_dir '/dev/loop.' '#' \
 		| tr -s ' ' \
 		> $tmp.geometry1
 	xfs_info $target_dir \
-		| _filter_copy $target_dir '#' \
+		| _filter_copy $target $target_dir '/dev/loop.' '#' \
 		| tr -s ' ' \
 		> $tmp.geometry2
 	[ -s $tmp.geometry1 ] || echo no geometry output
@@ -114,7 +114,7 @@ _supported_os Linux
 _require_scratch
 _require_loop
 
-_scratch_mkfs_xfs -dsize=41m | _filter_mkfs 2>/dev/null
+_scratch_mkfs_xfs -dsize=41m,agcount=2 | _filter_mkfs 2>/dev/null
 _scratch_mount 2>/dev/null || _fail "initial scratch mount failed"
 
 echo
@@ -124,12 +124,12 @@ umount $SCRATCH_MNT 2>/dev/null
 
 echo
 echo === copying scratch device to single target
-xfs_copy $SCRATCH_DEV $tmp.image | _filter_copy $tmp.image
+xfs_copy $SCRATCH_DEV $tmp.image | _filter_copy '#' $tmp.image '#' '#'
 _verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo
 echo === copying scratch device to single target, duplicate UUID
-xfs_copy -d $SCRATCH_DEV $tmp.image | _filter_copy $tmp.image
+xfs_copy -d $SCRATCH_DEV $tmp.image | _filter_copy '#' $tmp.image '#' '#'
 _verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo 
@@ -140,13 +140,13 @@ mkdir $tmp.source_dir
 mount -t xfs -o loop $tmp.source $tmp.source_dir
 cp -a $here $tmp.source_dir
 mount -t xfs -o remount,ro $tmp.source $tmp.source_dir
-xfs_copy $tmp.source $tmp.image | _filter_copy $tmp.image
+xfs_copy $tmp.source $tmp.image | _filter_copy '#' $tmp.image '#' '#'
 _verify_copy $tmp.image $tmp.source $tmp.source_dir
 
 echo
 echo === copying scratch device to multiple targets
 xfs_copy -L$tmp.log -b $SCRATCH_DEV $tmp.image1 $tmp.image2 \
-	| _filter_copy $tmp.image1 $tmp.image2
+	| _filter_copy '#' $tmp.image1 '#' $tmp.image2
 _verify_copy $tmp.image1 $SCRATCH_DEV $SCRATCH_MNT
 _verify_copy $tmp.image2 $SCRATCH_DEV $SCRATCH_MNT
 
