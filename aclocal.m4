@@ -1,7 +1,7 @@
-# generated automatically by aclocal 1.7.5 -*- Autoconf -*-
+# generated automatically by aclocal 1.9.6 -*- Autoconf -*-
 
-# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002
-# Free Software Foundation, Inc.
+# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+# 2005  Free Software Foundation, Inc.
 # This file is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,
 # with or without modifications, as long as this notice is preserved.
@@ -10,6 +10,147 @@
 # but WITHOUT ANY WARRANTY, to the extent permitted by law; without
 # even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 # PARTICULAR PURPOSE.
+
+AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
+  [ AC_CHECK_HEADERS([sys/acl.h])
+    if test "$ac_cv_header_sys_acl_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: sys/acl.h does not exist.'
+        echo 'Install the access control lists (acl) development package.'
+        echo 'Alternatively, run "make install-dev" from the acl source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ACL_LIBACL_H],
+  [ AC_CHECK_HEADERS([acl/libacl.h])
+    if test "$ac_cv_header_acl_libacl_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: acl/libacl.h does not exist.'
+        echo 'Install the access control lists (acl) development package.'
+        echo 'Alternatively, run "make install-dev" from the acl source.'
+        exit 1
+    fi
+  ])
+
+
+AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
+  [ AC_CHECK_LIB(acl, acl_init,, [
+	echo
+	echo 'FATAL ERROR: could not find a valid Access Control List library.'
+	echo 'Install either the libacl (rpm) or the libacl1 (deb) package.'
+	echo 'Alternatively, run "make install-lib" from the acl source.'
+        exit 1
+    ])
+    libacl="-lacl"
+    test -f `pwd`/../acl/libacl/libacl.la && \
+        libacl="`pwd`/../acl/libacl/libacl.la"
+    test -f /usr/lib/libacl.la && libacl="/usr/lib/libacl.la"
+    AC_SUBST(libacl)
+  ])
+
+AC_DEFUN([AC_PACKAGE_WANT_AIO],
+  [ AC_CHECK_HEADERS(libaio.h, [ have_aio=true ], [ have_aio=false ])
+    AC_SUBST(have_aio)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTR_XATTR_H],
+  [ AC_CHECK_HEADERS([attr/xattr.h])
+    if test "$ac_cv_header_attr_xattr_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: attr/xattr.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-dev" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTR_ERROR_H],
+  [ AC_CHECK_HEADERS([attr/error_context.h])
+    if test "$ac_cv_header_attr_error_context_h" != "yes"; then
+        echo
+        echo 'FATAL ERROR: attr/error_context.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-dev" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_H],
+  [ have_attributes_h=false
+    AC_CHECK_HEADERS([attr/attributes.h sys/attributes.h], [have_attributes_h=true], )
+    if test "$have_attributes_h" = "false"; then
+        echo
+        echo 'FATAL ERROR: attributes.h does not exist.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-dev" from the attr source.'
+        exit 1
+    fi
+  ])
+
+AC_DEFUN([AC_PACKAGE_WANT_ATTRLIST_LIBATTR],
+  [ AC_CHECK_LIB(attr, attr_list, [have_attr_list=true], [have_attr_list=false])
+    AC_SUBST(have_attr_list)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
+  [ AC_CHECK_LIB(attr, getxattr,, [
+        echo
+        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    ])
+    libattr="-lattr"
+    test -f `pwd`/../attr/libattr/libattr.la && \
+        libattr="`pwd`/../attr/libattr/libattr.la"
+    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    AC_SUBST(libattr)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
+  [ AC_CHECK_LIB(attr, attr_get,, [
+        echo
+        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
+        echo 'Install the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-lib" from the attr source.'
+        exit 1
+    ])
+    libattr="-lattr"
+    test -f `pwd`/../attr/libattr/libattr.la && \
+        libattr="`pwd`/../attr/libattr/libattr.la"
+    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    AC_SUBST(libattr)
+  ])
+
+AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_MACROS],
+  [ AC_MSG_CHECKING([macros in attr/attributes.h])
+    AC_TRY_LINK([
+#include <sys/types.h>
+#include <attr/attributes.h>],
+    [ int x = ATTR_SECURE; ], [ echo ok ], [
+        echo
+	echo 'FATAL ERROR: could not find a current attributes header.'
+        echo 'Upgrade the extended attributes (attr) development package.'
+        echo 'Alternatively, run "make install-dev" from the attr source.'
+	exit 1 ])
+  ])
+
+AC_DEFUN([AC_PACKAGE_WANT_NDBM],
+  [ AC_CHECK_HEADERS(ndbm.h, [ have_db=true ], [ have_db=false ])
+    libgdbm=""
+    AC_SUBST(libgdbm)
+    AC_SUBST(have_db)
+  ])
+
+AC_DEFUN([AC_PACKAGE_WANT_GDBM],
+  [ AC_CHECK_HEADERS([gdbm/ndbm.h], [ have_db=true ], [ have_db=false ])
+    if test $have_db = true -a -f /usr/lib/libgdbm.a; then
+	libgdbm="/usr/lib/libgdbm.a"
+    fi
+    AC_SUBST(libgdbm)
+    AC_SUBST(have_db)
+  ])
 
 # 
 # Generic macro, sets up all of the global packaging variables.
@@ -40,12 +181,12 @@ AC_DEFUN([AC_PACKAGE_GLOBALS],
     malloc_lib="$MALLOCLIB"
     AC_SUBST(malloc_lib)
 
-    PKG_USER=${INSTALL_USER:-'root'}
-    pkg_user="$PKG_USER"
+    pkg_user=`id -u`
+    test -z "$INSTALL_USER" || pkg_user="$INSTALL_USER"
     AC_SUBST(pkg_user)
 
-    PKG_GROUP=${INSTALL_GROUP:-'root'}
-    pkg_group="$PKG_GROUP"
+    pkg_group=`id -g`
+    test -z "$INSTALL_GROUP" || pkg_group="$INSTALL_GROUP"
     AC_SUBST(pkg_group)
 
     pkg_distribution=`uname -s`
@@ -170,7 +311,7 @@ AC_DEFUN([AC_PACKAGE_UTILITIES],
 
     dnl .. and what version is rpm
     rpm_version=0
-    test -x "$RPM" && rpm_version=`$RPM --version \
+    test -n "$RPM" && test -x "$RPM" && rpm_version=`$RPM --version \
                         | awk '{print $NF}' | awk -F. '{V=1; print $V}'`
     AC_SUBST(rpm_version)
     dnl At some point in rpm 4.0, rpm can no longer build rpms, and
@@ -210,142 +351,6 @@ AC_DEFUN([AC_PACKAGE_NEED_UUIDCOMPARE],
 	libuuid="-luuid"
     fi
     AC_SUBST(libuuid)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
-  [ AC_CHECK_HEADERS([sys/acl.h])
-    if test "$ac_cv_header_sys_acl_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: sys/acl.h does not exist.'
-        echo 'Install the access control lists (acl) development package.'
-        echo 'Alternatively, run "make install-dev" from the acl source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ACL_LIBACL_H],
-  [ AC_CHECK_HEADERS([acl/libacl.h])
-    if test "$ac_cv_header_acl_libacl_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: acl/libacl.h does not exist.'
-        echo 'Install the access control lists (acl) development package.'
-        echo 'Alternatively, run "make install-dev" from the acl source.'
-        exit 1
-    fi
-  ])
-
-
-AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
-  [ AC_CHECK_LIB(acl, acl_init,, [
-	echo
-	echo 'FATAL ERROR: could not find a valid Access Control List library.'
-	echo 'Install either the libacl (rpm) or the libacl1 (deb) package.'
-	echo 'Alternatively, run "make install-lib" from the acl source.'
-        exit 1
-    ])
-    libacl="-lacl"
-    test -f `pwd`/../acl/libacl/libacl.la && \
-        libacl="`pwd`/../acl/libacl/libacl.la"
-    test -f /usr/lib/libacl.la && libacl="/usr/lib/libacl.la"
-    AC_SUBST(libacl)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTR_XATTR_H],
-  [ AC_CHECK_HEADERS([attr/xattr.h])
-    if test "$ac_cv_header_attr_xattr_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: attr/xattr.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-dev" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTR_ERROR_H],
-  [ AC_CHECK_HEADERS([attr/error_context.h])
-    if test "$ac_cv_header_attr_error_context_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: attr/error_context.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-dev" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_H],
-  [ have_attributes_h=false
-    AC_CHECK_HEADERS([attr/attributes.h sys/attributes.h], [have_attributes_h=true], )
-    if test "$have_attributes_h" = "false"; then
-        echo
-        echo 'FATAL ERROR: attributes.h does not exist.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-dev" from the attr source.'
-        exit 1
-    fi
-  ])
-
-AC_DEFUN([AC_PACKAGE_WANT_ATTRLIST_LIBATTR],
-  [ AC_CHECK_LIB(attr, attr_list, [have_attr_list=true], [have_attr_list=false])
-    AC_SUBST(have_attr_list)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
-  [ AC_CHECK_LIB(attr, getxattr,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    ])
-    libattr="-lattr"
-    test -f `pwd`/../attr/libattr/libattr.la && \
-        libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
-    AC_SUBST(libattr)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
-  [ AC_CHECK_LIB(attr, attr_get,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
-        echo 'Install the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-lib" from the attr source.'
-        exit 1
-    ])
-    libattr="-lattr"
-    test -f `pwd`/../attr/libattr/libattr.la && \
-        libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
-    AC_SUBST(libattr)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_ATTRIBUTES_MACROS],
-  [ AC_MSG_CHECKING([macros in attr/attributes.h])
-    AC_TRY_LINK([
-#include <sys/types.h>
-#include <attr/attributes.h>],
-    [ int x = ATTR_SECURE; ], [ echo ok ], [
-        echo
-	echo 'FATAL ERROR: could not find a current attributes header.'
-        echo 'Upgrade the extended attributes (attr) development package.'
-        echo 'Alternatively, run "make install-dev" from the attr source.'
-	exit 1 ])
-  ])
-
-AC_DEFUN([AC_PACKAGE_WANT_NDBM],
-  [ AC_CHECK_HEADERS(ndbm.h, [ have_db=true ], [ have_db=false ])
-    libgdbm=""
-    AC_SUBST(libgdbm)
-    AC_SUBST(have_db)
-  ])
-
-AC_DEFUN([AC_PACKAGE_WANT_GDBM],
-  [ AC_CHECK_HEADERS([gdbm/ndbm.h], [ have_db=true ], [ have_db=false ])
-    if test $have_db = true -a -f /usr/lib/libgdbm.a; then
-	libgdbm="/usr/lib/libgdbm.a"
-    fi
-    AC_SUBST(libgdbm)
-    AC_SUBST(have_db)
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
@@ -449,10 +454,5 @@ AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
         echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
         exit 1
       ])
-  ])
-
-AC_DEFUN([AC_PACKAGE_WANT_AIO],
-  [ AC_CHECK_HEADERS(libaio.h, [ have_aio=true ], [ have_aio=false ])
-    AC_SUBST(have_aio)
   ])
 

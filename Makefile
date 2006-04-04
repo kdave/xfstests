@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2006 Silicon Graphics, Inc.  All Rights Reserved.
 #
 
 TOPDIR = .
@@ -36,7 +36,7 @@ $(CONFIGURE):
 	./configure
 
 aclocal.m4::
-	aclocal --acdir=$(TOPDIR)/m4 --output=$@
+	aclocal --acdir=`pwd`/m4 --output=$@
 
 install install-dev install-lib:
 

@@ -32,6 +32,7 @@ AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
     libacl="-lacl"
     test -f `pwd`/../acl/libacl/libacl.la && \
         libacl="`pwd`/../acl/libacl/libacl.la"
-    test -f /usr/lib/libacl.la && libacl="/usr/lib/libacl.la"
+    test -f ${libexecdir}${libdirsuffix}/libacl.la && \
+	libacl="${libexecdir}${libdirsuffix}/libacl.la"
     AC_SUBST(libacl)
   ])

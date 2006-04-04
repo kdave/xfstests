@@ -48,7 +48,8 @@ AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
     libattr="-lattr"
     test -f `pwd`/../attr/libattr/libattr.la && \
         libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    test -f ${libexecdir}${libdirsuffix}/libattr.la && \
+	libattr="${libexecdir}${libdirsuffix}/libattr.la"
     AC_SUBST(libattr)
   ])
 
@@ -63,7 +64,8 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
     libattr="-lattr"
     test -f `pwd`/../attr/libattr/libattr.la && \
         libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    test -f ${libexecdir}${libdirsuffix}/libattr.la && \
+	libattr="${libexecdir}${libdirsuffix}/libattr.la"
     AC_SUBST(libattr)
   ])
 

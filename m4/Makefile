@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2003-2006 Silicon Graphics, Inc.  All Rights Reserved.
 #
 
 TOPDIR = ..
@@ -21,7 +21,8 @@ LSRCFILES = \
 	package_uuiddev.m4 \
 	package_xfslibs.m4 \
 	general_headers.m4 \
-	visibility_hidden.m4
+	visibility_hidden.m4 \
+	multilib.m4
 
 default: 
 

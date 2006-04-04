@@ -20,6 +20,7 @@ AC_DEFUN([AC_PACKAGE_NEED_MAKEHANDLE_LIBDM],
     libdm="-ldm"
     test -f `pwd`/../dmapi/libdm/libdm.la && \
         libdm="`pwd`/../dmapi/libdm/libdm.la"
-    test -f /usr/lib/libdm.la && libdm="/usr/lib/libdm.la"
+    test -f ${libexecdir}${libdirsuffix}/libdm.la && \
+	libdm="${libexecdir}${libdirsuffix}/libdm.la"
     AC_SUBST(libdm)
   ])
