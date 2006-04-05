@@ -19,7 +19,7 @@ AC_DEFUN([AC_PACKAGE_GLOBALS],
     debug_build="$DEBUG"
     AC_SUBST(debug_build)
 
-    OPTIMIZER=${OPTIMIZER:-'-g'}	dnl  -O2
+    OPTIMIZER=${OPTIMIZER:-'-g -O2'}
     opt_build="$OPTIMIZER"
     AC_SUBST(opt_build)
 
