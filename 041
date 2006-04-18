@@ -37,7 +37,7 @@ _supported_os IRIX Linux
 
 _require_scratch
 _require_nobigloopfs
-
+umount $SCRATCH_DEV 2>/dev/null
 
 _fill()
 {
@@ -48,11 +48,12 @@ _fill()
 
 _do_die_on_error=message_only
 rm -f $seq.full
-#agsize=16
 agsize=32
 echo -n "Make $agsize megabyte filesystem on SCRATCH_DEV and mount... "
 _do "_scratch_mkfs_xfs -dsize=${agsize}m,agcount=1"
+[ $? -ne 0 ] && exit
 _do "_scratch_mount"
+[ $? -ne 0 ] && exit
 echo "done"
 
 # full allocation group -> partial; partial -> expand partial + new partial;
