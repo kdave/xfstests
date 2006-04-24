@@ -11,6 +11,50 @@
 # even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 # PARTICULAR PURPOSE.
 
+# The AC_MULTILIB macro was extracted and modified from 
+# gettext-0.15's AC_LIB_PREPARE_MULTILIB macro in the lib-prefix.m4 file
+# so that the correct paths can be used for 64-bit libraries.
+#
+dnl Copyright (C) 2001-2005 Free Software Foundation, Inc.
+dnl This file is free software; the Free Software Foundation
+dnl gives unlimited permission to copy and/or distribute it,
+dnl with or without modifications, as long as this notice is preserved.
+dnl From Bruno Haible.
+
+dnl AC_MULTILIB creates a variable libdirsuffix, containing
+dnl the suffix of the libdir, either "" or "64".
+dnl Only do this if the given enable parameter is "yes".
+AC_DEFUN([AC_MULTILIB],
+[
+  dnl There is no formal standard regarding lib and lib64. The current
+  dnl practice is that on a system supporting 32-bit and 64-bit instruction
+  dnl sets or ABIs, 64-bit libraries go under $prefix/lib64 and 32-bit
+  dnl libraries go under $prefix/lib. We determine the compiler's default
+  dnl mode by looking at the compiler's library search path. If at least
+  dnl of its elements ends in /lib64 or points to a directory whose absolute
+  dnl pathname ends in /lib64, we assume a 64-bit ABI. Otherwise we use the
+  dnl default, namely "lib".
+  enable_lib64="$1"
+  libdirsuffix=""
+  searchpath=`(LC_ALL=C $CC -print-search-dirs) 2>/dev/null | sed -n -e 's,^libraries: ,,p' | sed -e 's,^=,,'`
+  if test "$enable_lib64" = "yes" -a -n "$searchpath"; then
+    save_IFS="${IFS= 	}"; IFS=":"
+    for searchdir in $searchpath; do
+      if test -d "$searchdir"; then
+        case "$searchdir" in
+          */lib64/ | */lib64 ) libdirsuffix=64 ;;
+          *) searchdir=`cd "$searchdir" && pwd`
+             case "$searchdir" in
+               */lib64 ) libdirsuffix=64 ;;
+             esac ;;
+        esac
+      fi
+    done
+    IFS="$save_IFS"
+  fi
+  AC_SUBST(libdirsuffix)
+])
+
 AC_DEFUN([AC_PACKAGE_NEED_SYS_ACL_H],
   [ AC_CHECK_HEADERS([sys/acl.h])
     if test "$ac_cv_header_sys_acl_h" != "yes"; then
@@ -45,7 +89,8 @@ AC_DEFUN([AC_PACKAGE_NEED_ACLINIT_LIBACL],
     libacl="-lacl"
     test -f `pwd`/../acl/libacl/libacl.la && \
         libacl="`pwd`/../acl/libacl/libacl.la"
-    test -f /usr/lib/libacl.la && libacl="/usr/lib/libacl.la"
+    test -f ${libexecdir}${libdirsuffix}/libacl.la && \
+	libacl="${libexecdir}${libdirsuffix}/libacl.la"
     AC_SUBST(libacl)
   ])
 
@@ -104,7 +149,8 @@ AC_DEFUN([AC_PACKAGE_NEED_GETXATTR_LIBATTR],
     libattr="-lattr"
     test -f `pwd`/../attr/libattr/libattr.la && \
         libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    test -f ${libexecdir}${libdirsuffix}/libattr.la && \
+	libattr="${libexecdir}${libdirsuffix}/libattr.la"
     AC_SUBST(libattr)
   ])
 
@@ -119,7 +165,8 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
     libattr="-lattr"
     test -f `pwd`/../attr/libattr/libattr.la && \
         libattr="`pwd`/../attr/libattr/libattr.la"
-    test -f /usr/lib/libattr.la && libattr="/usr/lib/libattr.la"
+    test -f ${libexecdir}${libdirsuffix}/libattr.la && \
+	libattr="${libexecdir}${libdirsuffix}/libattr.la"
     AC_SUBST(libattr)
   ])
 
@@ -145,8 +192,8 @@ AC_DEFUN([AC_PACKAGE_WANT_NDBM],
 
 AC_DEFUN([AC_PACKAGE_WANT_GDBM],
   [ AC_CHECK_HEADERS([gdbm/ndbm.h], [ have_db=true ], [ have_db=false ])
-    if test $have_db = true -a -f /usr/lib/libgdbm.a; then
-	libgdbm="/usr/lib/libgdbm.a"
+    if test $have_db = true -a -f ${libexecdir}${libdirsuffix}/libgdbm.a; then
+	libgdbm="${libexecdir}${libdirsuffix}/libgdbm.a"
     fi
     AC_SUBST(libgdbm)
     AC_SUBST(have_db)
@@ -397,7 +444,8 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
     libxfs="-lxfs"
     test -f `pwd`/../xfsprogs/libxfs/libxfs.la && \
         libxfs="`pwd`/../xfsprogs/libxfs/libxfs.la"
-    test -f /usr/lib/libxfs.la && libxfs="/usr/lib/libxfs.la"
+    test -f ${libexecdir}${libdirsuffix}/libxfs.la && \
+	libxfs="${libexecdir}${libdirsuffix}/libxfs.la"
     AC_SUBST(libxfs)
   ])
 
@@ -412,7 +460,8 @@ AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
     libhdl="-lhandle"
     test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
         libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
-    test -f /usr/lib/libhandle.la && libhdl="/usr/lib/libhandle.la"
+    test -f ${libexecdir}${libdirsuffix}/libhandle.la && \
+	libhdl="${libexecdir}${libdirsuffix}/libhandle.la"
     AC_SUBST(libhdl)
   ])
 
@@ -427,7 +476,8 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
     libhdl="-lhandle"
     test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
         libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
-    test -f /usr/lib/libhandle.la && libhdl="/usr/lib/libhandle.la"
+    test -f ${libexecdir}${libdirsuffix}/libhandle.la && \
+	libhdl="${libexecdir}${libdirsuffix}/libhandle.la"
     AC_SUBST(libhdl)
   ])
 

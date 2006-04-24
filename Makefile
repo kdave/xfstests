@@ -33,7 +33,10 @@ endif
 $(CONFIGURE):
 	autoheader
 	autoconf
-	./configure
+	./configure \
+                --libexecdir=/usr/lib \
+                --enable-lib64=yes
+
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
