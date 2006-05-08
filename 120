@@ -1,0 +1,87 @@
+#!/bin/sh
+# FS QA Test No. 120
+#
+# Test noatime mount option.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux IRIX
+
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+function _compare_access_times()
+{
+	original_access_time="`cat $tmp.out | sed -n '5p'|awk '{ print substr($0,0,32)}'`"
+	accessed_time="`src/lstat64 $1 | sed -n '5p'| awk '{ print substr($0,0,32)}'`"
+	echo "*** compare access times ***"
+	if [ "$original_access_time" != "$accessed_time" ]
+		then
+		echo "*** file access time updated on $2 (unexpected) ***"
+		cat $tmp.out
+		echo "---------------------------------------------------"
+		src/lstat64 $1
+		mount | grep $SCRATCH_MNT
+	fi
+
+}
+
+if ! mount -o noatime $SCRATCH_DEV $SCRATCH_MNT >$tmp.out 2>&1
+then
+    cat $tmp.out
+    echo "!!! mount failed"
+    exit
+fi
+
+#executable file
+echo "*** copying file ***"
+cp src/lstat64 $SCRATCH_MNT
+src/lstat64 $SCRATCH_MNT/lstat64 >$tmp.out
+sleep 5
+echo "*** executing file ***"
+$SCRATCH_MNT/lstat64 $SCRATCH_MNT/lstat64 >/dev/null
+_compare_access_times $SCRATCH_MNT/lstat64 "executing file"
+
+#reading file
+echo "*** creating file ***"
+touch $SCRATCH_MNT/testfile
+src/lstat64 $SCRATCH_MNT/testfile >$tmp.out
+sleep 5
+echo "*** reading file ***"
+cat $SCRATCH_MNT/testfile >/dev/null
+_compare_access_times $SCRATCH_MNT/testfile "reading file"
+
+#writing file
+echo "*** creating file ***"
+touch $SCRATCH_MNT/testfile2
+src/lstat64 $SCRATCH_MNT/testfile2 >$tmp.out
+sleep 5
+echo "*** writing to file ***"
+echo "asdf" >> $SCRATCH_MNT/testfile2
+_compare_access_times $SCRATCH_MNT/testfile2 "writing file"
+
+
+umount $SCRATCH_MNT
+
+# success, all done
+status=0
+exit
