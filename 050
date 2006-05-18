@@ -2,8 +2,7 @@
 # FS QA Test No. 050
 #
 # Exercises basic XFS quota functionality
-#	MOUNT_OPTIONS env var switches the test type (uid/gid/acct/enfd)
-# 	options are:  (-o) uquota, gquota, uqnoenforce, gqnoenforce
+#       uquota, gquota, uqnoenforce, gqnoenforce, pquota, pqnoenforce
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
@@ -27,7 +26,6 @@ status=1	# failure is the default!
 _cleanup()
 {
 	cd /
-	echo; echo "*** unmount"
 	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
 }
@@ -38,20 +36,18 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _supported_fs xfs
 _supported_os Linux IRIX
 
-rm -f $seq.out
+
 cp /dev/null $seq.full
 chmod a+rwx $seq.full	# arbitrary users will write here
 
 _require_scratch
 _require_quota
 
-# setup a default run
-[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS="-o uquota"
-
 bsoft=100
 bhard=500
 isoft=4
 ihard=10
+
 
 _filter_report()
 {
@@ -79,73 +75,149 @@ _filter_and_check_blks()
 	' | _filter_report
 }
 
-_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-cat $tmp.mkfs >>$seq.full
+_exercise()
+{
+	_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+	cat $tmp.mkfs >>$seq.full
 
-# keep the blocksize and data size for dd later
-. $tmp.mkfs
+	# keep the blocksize and data size for dd later
+	. $tmp.mkfs
 
-_qmount
+	
+	_qmount
 
-# Figure out whether we're doing large allocations
-# (bail out if they're so large they stuff the test up)
-_test_inode_flag extsz-inherit $SCRATCH_MNT
-noextsz=$?
-extsize=`_test_inode_extsz $SCRATCH_MNT`
-[ $extsize -ge 512000 ] && \
-	_notrun "Extent size hint is too large ($extsize bytes)"
 
-_qsetup
+	# Figure out whether we're doing large allocations
+	# (bail out if they're so large they stuff the test up)
+	_test_inode_flag extsz-inherit $SCRATCH_MNT
+	noextsz=$?
+	extsize=`_test_inode_extsz $SCRATCH_MNT`
+	[ $extsize -ge 512000 ] && \
+		_notrun "Extent size hint is too large ($extsize bytes)"
 
-echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
-echo "and using type=$type id=$id" >>$seq.full
+	_qsetup
 
-echo
-echo "*** report no quota settings" | tee -a $seq.full
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
+	echo "and using type=$type id=$id" >>$seq.full
 
-echo
-echo "*** report initial settings" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/initme $id $type 1024 0
-echo "ls -l $SCRATCH_MNT" >>$seq.full
-ls -l $SCRATCH_MNT >>$seq.full
-xfs_quota -x \
-	-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
-	-c "limit -$type isoft=$isoft ihard=$ihard $id" \
-	$SCRATCH_DEV
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	echo
+	echo "*** report no quota settings" | tee -a $seq.full
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
-echo
-echo "*** push past the soft inode limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
-_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
-_qmount
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	echo
+	echo "*** report initial settings" | tee -a $seq.full
+	_file_as_id $SCRATCH_MNT/initme $id $type 1024 0
+	echo "ls -l $SCRATCH_MNT" >>$seq.full
+	ls -l $SCRATCH_MNT >>$seq.full
+	xfs_quota -D $tmp.projects -P $temp.projid -x \
+		-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
+		-c "limit -$type isoft=$isoft ihard=$ihard $id" \
+		$SCRATCH_DEV
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
-echo
-echo "*** push past the soft block limit" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
-_qmount
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	echo
+	echo "*** push past the soft inode limit" | tee -a $seq.full
+	_file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
+	_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
+	_qmount
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	
+	echo
+	echo "*** push past the soft block limit" | tee -a $seq.full
+	_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
+	_qmount
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	
+	echo
+	# Note: for quota accounting (not enforcement), EDQUOT is not expected
+	echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
+	for i in 1 2 3 4 5 6 7 8 9 10 11 12
+	do
+		_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
+	done
+	_qmount
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
 
-echo
-# Note: for quota accounting (not enforcement), EDQUOT is not expected
-echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
-for i in 1 2 3 4 5 6 7 8 9 10 11 12
-do
-	_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
-done
-_qmount
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	echo
+	# Note: for quota accounting (not enforcement), EDQUOT is not expected
+	echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
+	_file_as_id $SCRATCH_MNT/softie $id $type 1024 540
+	echo "ls -l $SCRATCH_MNT" >>$seq.full
+	ls -l $SCRATCH_MNT >>$seq.full
+	_qmount
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_and_check_blks
 
-echo
-# Note: for quota accounting (not enforcement), EDQUOT is not expected
-echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
-_file_as_id $SCRATCH_MNT/softie $id $type 1024 540
-echo "ls -l $SCRATCH_MNT" >>$seq.full
-ls -l $SCRATCH_MNT >>$seq.full
-_qmount
-xfs_quota -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_and_check_blks
+	echo
+	echo "*** unmount"
+	umount $SCRATCH_MNT
+
+}
+
+
+#ensures only one quota mount option is specified
+_qmount_option()
+{
+	#replace any user defined quota options
+	export MOUNT_OPTIONS=`echo $MOUNT_OPTIONS \
+	| sed -e 's/uquota/$q_opt/g' \
+		-e 's/gquota/$q_opt/g' \
+		-e 's/pquota/$q_opt/g' \
+		-e 's/quota/$q_opt/g' \
+		-e 's/uqnoenforce/$q_opt/g' \
+		-e 's/gqnoenforce/$q_opt/g' \
+		-e 's/pqnoenforce/$q_opt/g' \
+		-e 's/qnoenforce/$q_opt/g' \
+	| sed 's/$q_opt/'$1'/g'`
+
+	#check $q_opt is in new mount options
+	echo $MOUNT_OPTIONS | grep "$1" > /dev/null 2>&1
+	[ "$?" -eq 0 ] || export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $1"
+}
+
+cat >$tmp.projects <<EOF 
+1:/mnt/scratch
+EOF
+
+cat >$tmp.projid <<EOF
+root:0
+scrach:1
+EOF
+
+projid_file="$tmp.projid"
+
+echo "*** user"
+if [ "$HOSTOS" == "IRIX" ]
+then
+	_qmount_option "quota"
+else
+	_qmount_option "uquota"
+fi
+_exercise
+
+echo "*** group"
+_qmount_option "gquota"
+_exercise
+
+echo "*** uqnoenforce" 
+if [ "$HOSTOS" == "IRIX" ]
+then
+	_qmount_option "qnoenforce"
+else
+	_qmount_option "uqnoenforce"
+fi
+_exercise
+
+echo "*** gqnoenforce" 
+_qmount_option "gqnoenforce"
+_exercise
+
+echo "*** pquota" 
+_qmount_option "pquota"
+_exercise
+
+echo "*** pqnoenforce" 
+_qmount_option "pqnoenforce"
+_exercise
 
 # success, all done
 status=0

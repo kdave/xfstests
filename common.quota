@@ -86,12 +86,15 @@ _choose_gid()
 
 _choose_prid()
 {
-    if [ ! -f /etc/projid ]; then
+    if [ $projid_file == "" ]; then
+	projid_file=/etc/projid
+    fi
+    if [ ! -f $projid_file ]; then
 	echo 0
 	return
     fi
     perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[1],$a[0] }' \
-	/etc/projid
+	$projid_file
 }
 
 _qmount()
@@ -107,24 +110,36 @@ _qsetup()
     enforce=1
     if src/feature -u $SCRATCH_DEV
     then
-	type=u ; eval `_choose_uid`; ln -s $seq.usrquota $seq.out
+	type=u ; 
+	eval `_choose_uid`
+	[ ! -f $seq.out ] && ln -s $seq.usrquota $seq.out
     elif src/feature -g $SCRATCH_DEV
     then
-	type=g ; eval `_choose_gid`; ln -s $seq.grpquota $seq.out
+	type=g
+	eval `_choose_gid`
+	[ ! -f $seq.out ] && ln -s $seq.grpquota $seq.out
     elif src/feature -p $SCRATCH_DEV
     then
-	type=p ; eval `_choose_prid`; ln -s $seq.prjquota $seq.out
+	type=p
+	eval `_choose_prid`
+	[ ! -f $seq.out ] && ln -s $seq.prjquota $seq.out
     elif src/feature -U $SCRATCH_DEV
     then
-	type=u ; eval `_choose_uid`; ln -s $seq.uqnoenforce $seq.out
+	type=u
+	eval `_choose_uid`
+	[ ! -f $seq.out ] && ln -s $seq.uqnoenforce $seq.out
 	enforce=0
     elif src/feature -G $SCRATCH_DEV
     then
-	type=g ; eval `_choose_gid`; ln -s $seq.gqnoenforce $seq.out
+	type=g
+	eval `_choose_gid`
+	[ ! -f $seq.out ] && ln -s $seq.gqnoenforce $seq.out
 	enforce=0
     elif src/feature -P $SCRATCH_DEV
     then
-	type=p ; eval `_choose_prid`; ln -s $seq.pqnoenforce $seq.out
+	type=p
+	eval `_choose_prid`
+	[ ! -f $seq.out ] && ln -s $seq.pqnoenforce $seq.out
 	enforce=0
     else
 	_notrun "No quota support at mount time"
