@@ -84,37 +84,25 @@ _supported_os IRIX Linux
 _require_nobigloopfs
 _require_scratch
 
-MKFSV1="-p $tmp.proto -n version=1"
-MKFSV2="-p $tmp.proto -n version=2"
-
 # sanity test - default + one root directory entry
 # Note: must do this proto/mkfs now for later inode size calcs
 _create_proto 0
-echo "=== version 1, one entry"
-_scratch_mkfs_xfs $MKFSV1 >$tmp.mkfs0 2>&1
+echo "=== one entry (shortform)"
+_scratch_mkfs_xfs -p $tmp.proto >$tmp.mkfs0 2>&1
 _filter_mkfs <$tmp.mkfs0 >/dev/null 2>$tmp.mkfs
 . $tmp.mkfs
-_check_repair
-echo "=== version 2, one entry (shortform)"
-_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # block-form root directory & repeat
 _create_proto 20
-echo "=== version 1, twenty entries"
-_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
-_check_repair
-echo "=== version 2, twenty entries (block form)"
-_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+echo "=== twenty entries (block form)"
+_scratch_mkfs_xfs -p $tmp.proto | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # leaf-form root directory & repeat
 _create_proto 1000
-echo "=== version 1, thousand entries"
-_scratch_mkfs_xfs $MKFSV1 | _filter_mkfs >/dev/null 2>&1
-_check_repair
-echo "=== version 2, thousand entries (leaf form)"
-_scratch_mkfs_xfs $MKFSV2 | _filter_mkfs >/dev/null 2>&1
+echo "=== thousand entries (leaf form)"
+_scratch_mkfs_xfs -p $tmp.proto | _filter_mkfs >/dev/null 2>&1
 _check_repair
 
 # success, all done
