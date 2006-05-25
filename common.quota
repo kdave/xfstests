@@ -34,8 +34,8 @@ _require_nobody()
     grep -q '^nobody' /etc/passwd
     [ $? -ne 0 ] && _notrun "/etc/passwd does not contain user nobody."
 
-    grep -q '^nobody' /etc/group
-    [ $? -ne 0 ] && _notrun "/etc/group does not contain user nobody."
+    egrep -q '^no(body|group)' /etc/group
+    [ $? -ne 0 ] && _notrun "/etc/group does not contain nobody/nogroup."
 }
 
 # create a file as a specific user (uid)
@@ -81,7 +81,7 @@ _choose_uid()
 
 _choose_gid()
 {
-    grep '^nobody' /etc/group | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
+    egrep '^no(body|group)' /etc/group | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
 }
 
 _choose_prid()
@@ -110,7 +110,7 @@ _qsetup()
     enforce=1
     if src/feature -u $SCRATCH_DEV
     then
-	type=u ; 
+	type=u ;
 	eval `_choose_uid`
 	[ ! -f $seq.out ] && ln -s $seq.usrquota $seq.out
     elif src/feature -g $SCRATCH_DEV

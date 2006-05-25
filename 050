@@ -83,9 +83,7 @@ _exercise()
 	# keep the blocksize and data size for dd later
 	. $tmp.mkfs
 
-	
 	_qmount
-
 
 	# Figure out whether we're doing large allocations
 	# (bail out if they're so large they stuff the test up)
@@ -121,13 +119,13 @@ _exercise()
 	_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 	_qmount
 	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
-	
+
 	echo
 	echo "*** push past the soft block limit" | tee -a $seq.full
 	_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 	_qmount
 	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
-	
+
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
 	echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
@@ -174,8 +172,8 @@ _qmount_option()
 	[ "$?" -eq 0 ] || export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $1"
 }
 
-cat >$tmp.projects <<EOF 
-1:/mnt/scratch
+cat >$tmp.projects <<EOF
+1:$SCRATCH_MNT
 EOF
 
 cat >$tmp.projid <<EOF
@@ -198,7 +196,7 @@ echo "*** group"
 _qmount_option "gquota"
 _exercise
 
-echo "*** uqnoenforce" 
+echo "*** uqnoenforce"
 if [ "$HOSTOS" == "IRIX" ]
 then
 	_qmount_option "qnoenforce"
@@ -207,15 +205,15 @@ else
 fi
 _exercise
 
-echo "*** gqnoenforce" 
+echo "*** gqnoenforce"
 _qmount_option "gqnoenforce"
 _exercise
 
-echo "*** pquota" 
+echo "*** pquota"
 _qmount_option "pquota"
 _exercise
 
-echo "*** pqnoenforce" 
+echo "*** pqnoenforce"
 _qmount_option "pqnoenforce"
 _exercise
 
