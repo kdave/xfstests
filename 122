@@ -1,0 +1,148 @@
+#! /bin/sh
+# FS QA Test No. 122
+#
+# pv#952498
+# Keep an eye on some of the xfs type sizes
+# Motivation from differing ondisk types for 32 and 64 bit word versions.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment
+. ./common.rc
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+cprog=$tmp.get_structs.c
+oprog=$tmp.get_structs
+
+cat >$cprog <<EOF
+#include <stdio.h>
+#include <xfs/libxlog.h>
+EOF
+
+cat >$tmp.ignore <<EOF
+xfs_buf_cancel_t
+xfs_swapext_t
+xfs_dirops_t
+xfs_efi_log_item_t
+xfs_efd_log_item_t
+xfs_iocore_t
+xfs_ihash_t
+xfs_chashlist_t
+xfs_chash_t
+xfs_iptr_t
+xfs_dmops_t
+xfs_qmops_t
+xfs_ioops_t
+xfs_mod_sb_t
+xfs_dqtrx_t
+xfs_dqtrxops_t
+xfs_ail_entry_t
+xfs_item_ops_t
+xfs_log_busy_slot_t
+xfs_log_busy_chunk_t
+xfs_inode_log_format_t
+xfs_efi_log_format_t
+xfs_efd_log_format_t
+xfs_perag_busy_t
+xfs_perag_t
+xfs_alloc_arg_t
+xfs_attr_list_context_t
+xfs_attr_sf_sort_t
+xfs_bmbt_irec_t
+xfs_bmap_free_item_t
+xfs_bmap_free_t
+xfs_bmalloca_t
+xfs_btree_cur_t
+xfs_buf_log_item_t
+xfs_da_args_t
+xfs_dabuf_t
+xfs_da_state_blk_t
+xfs_da_state_path_t
+xfs_da_state_t
+xfs_dinode_t
+xfs_dir2_block_t
+xfs_dir2_data_entry_t
+xfs_dir2_data_union_t
+xfs_dir2_data_t
+xfs_dir2_put_args_t
+xfs_dir_put_args_t
+xfs_dir_sf_sort_t
+xfs_extent_t
+xfs_flock64_t
+xfs_fsop_geom_v1_t
+xfs_growfs_data_t
+xfs_growfs_rt_t
+xfs_bstime_t
+xfs_bstat_t
+xfs_fsop_bulkreq_t
+xfs_inogrp_t
+xfs_fsop_handlereq_t
+xfs_fsop_setdm_handlereq_t
+xfs_fsop_attrlist_handlereq_t
+xfs_attr_multiop_t
+xfs_fsop_attrmulti_handlereq_t
+xfs_imap_t
+xfs_ifork_t
+xfs_inode_t
+xfs_inode_log_item_t
+xfs_log_iovec_t
+xfs_log_callback_t
+xfs_mount_t
+xfs_sb_t
+xfs_log_item_t
+xfs_log_item_desc_t
+xfs_log_item_chunk_t
+xfs_trans_t
+xfs_dirent_t
+xfs_fsop_getparents_handlereq_t
+EOF
+
+echo 'int main(int argc, char *argv[]) {' >>$cprog
+
+#
+# Printfs of typedef sizes
+#
+cat /usr/include/xfs/xfs*.h | indent |\
+sed -e 's/__attribute__ *[(][(]packed[)][)]//' |\
+tee shit |\
+egrep '} *xfs_.*_t' |\
+egrep -v -f $tmp.ignore |\
+awk '{sub(/[;,]/,"",$2); print "printf(\"sizeof(", $2, ") = %d\\n\", sizeof(", $2, "));"}' \
+>>$cprog
+
+#
+# Look at offsets of key ones which differ in lengths
+#
+
+# xfs_sb_t
+cat /usr/include/xfs/xfs*.h | indent |\
+awk '
+   /typedef struct xfs_sb/ { structon = 1; next }
+   structon && $2 ~ /^sb_/ { sub(/[;,]/,"",$2)
+                             print "printf(\"offsetof(xfs_sb_t,", $2, ") = %d\\n\", offsetof(xfs_sb_t,", $2, "));"; next} 
+   structon && /}/ { structon = 0; next}
+'>>$cprog 
+
+echo 'return 0; }' >>$cprog
+
+# create and run program
+cc -o $oprog $cprog
+eval $oprog
+
+status=0
