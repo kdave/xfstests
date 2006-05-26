@@ -1,0 +1,89 @@
+#! /bin/sh
+# FS QA Test No. 121
+#
+# To test log replay for the unlinked list.
+# So we create unlinked and still referenced inodes
+# and make sure that no clearing of the unlinked AGI buckets
+# are happening. 
+# See pv#953263.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.log
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+rm -f $seq.full
+rm -f $tmp.log
+
+_require_scratch
+
+echo "mkfs"
+_scratch_mkfs_xfs >>$seq.full 2>&1 \
+    || _fail "mkfs scratch failed"
+
+echo "mount"
+_scratch_mount >>$seq.full 2>&1 \
+    || _fail "mount failed: $MOUNT_OPTIONS"
+
+# num_files must be greater than 64 (XFS_AGI_UNLINKED_BUCKETS)
+# so that there will be at least one linked list from one of
+# the 64 buckets, so that we can decode a di_next_unlinked field 
+num_files=200
+delay=5
+echo "open and unlink $num_files files"
+src/multi_open_unlink $SCRATCH_MNT/test_file $num_files $delay &
+
+# time to create and unlink all the files
+sleep 3
+
+echo "godown"
+src/godown -v -f $SCRATCH_MNT >> $seq.full
+
+# time for multi_open_unlink to exit out after its delay
+# so we have no references and can unmount
+sleep 3
+
+echo "unmount"
+umount $SCRATCH_MNT
+
+echo "logprint after going down..."
+_print_logstate
+
+echo "mount with replay"
+_scratch_mount $mnt >>$seq.full 2>&1 \
+    || _fail "mount failed: $mnt $MOUNT_OPTIONS"
+
+echo "godown"
+src/godown -v -f $SCRATCH_MNT >> $seq.full
+
+echo "unmount"
+umount $SCRATCH_MNT
+
+echo "logprint after going down..."
+_print_logstate
+
+echo "logprint to check for CLEAR_AGI_BUCKET..."
+xfs_logprint -t $SCRATCH_DEV | grep CLEAR
+
+# success, all done
+status=0
+exit
