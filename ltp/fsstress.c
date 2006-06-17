@@ -1713,11 +1713,13 @@ creat_f(int opno, long r)
 	init_pathname(&f);
 	e1 = (random() % 100);
 	type = rtpct ? ((e1 > rtpct) ? FT_REG : FT_RTF) : FT_REG;
+#ifdef NOTYET
 	if (type == FT_RTF)	/* rt always gets an extsize */
 		extsize = (random() % 10) + 1;
 	else if (e1 < 10)	/* one-in-ten get an extsize */
 		extsize = random() % 1024;
 	else
+#endif
 		extsize = 0;
 	e = generate_fname(fep, type, &f, &id, &v);
 	v |= v1;
