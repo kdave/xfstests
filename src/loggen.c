@@ -29,6 +29,14 @@
 #include <xfs/xfs_log.h>
 #include <xfs/xfs_log_priv.h>
 
+#ifndef ASSIGN_ANY_LSN_DISK
+#define ASSIGN_ANY_LSN_DISK(lsn,cycle,block)  \
+    { \
+	INT_SET(((uint *)&(lsn))[0], ARCH_CONVERT, (cycle)); \
+	INT_SET(((uint *)&(lsn))[1], ARCH_CONVERT, (block)); \
+    }
+#endif
+
 void
 usage(void)
 {

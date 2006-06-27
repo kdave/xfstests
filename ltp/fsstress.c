@@ -1659,6 +1659,7 @@ chown_f(int opno, long r)
 void
 setxattr_f(int opno, long r)
 {
+#ifdef XFS_XFLAG_EXTSIZE
 	struct fsxattr	fsx;
 	int		fd;
 	int		e;
@@ -1688,6 +1689,7 @@ setxattr_f(int opno, long r)
 		printf("%d/%d: setxattr %s %u %d\n", procid, opno, f.path, p, e);
 	free_pathname(&f);
 	close(fd);
+#endif
 }
 
 void
@@ -1743,9 +1745,11 @@ creat_f(int opno, long r)
 				a.fsx_xflags |= XFS_XFLAG_REALTIME;
 				a.fsx_extsize = extsize *
 						geom.rtextsize * geom.blocksize;
+#ifdef NOTYET
 			} else if (extsize) {
 				a.fsx_xflags |= XFS_XFLAG_EXTSIZE;
 				a.fsx_extsize = extsize * geom.blocksize;
+#endif
 			}
 			if (xfsctl(f.path, fd, XFS_IOC_FSSETXATTR, &a) < 0)
 				e1 = errno;
