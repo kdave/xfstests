@@ -10,7 +10,7 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
 	godown resvtest writemod makeextents itrash \
-	multi_open_unlink
+	multi_open_unlink dmiperf
 
 LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize
 
@@ -78,6 +78,9 @@ multi_open_unlink: multi_open_unlink.o
 
 acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
+
+dmiperf: dmiperf.o $(LIBATTR)
+	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
 
 ifeq ($(PKG_PLATFORM),irix)
