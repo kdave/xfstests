@@ -1,6 +1,6 @@
 ##/bin/sh
 #-----------------------------------------------------------------------
-#  Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
+#  Copyright (c) 2000-2006 Silicon Graphics, Inc.  All Rights Reserved.
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
@@ -79,10 +79,13 @@ _mkfs_opts()
 
 
 # we need common.config
-if ! . ./common.config
+if [ "$iam" != "check" ]
 then
-    echo "$iam: failed to source common.config"
-    exit 1
+    if ! . ./common.config
+        then
+        echo "$iam: failed to source common.config"
+        exit 1
+    fi
 fi
 
 # make sure we have a standard umask
@@ -98,7 +101,7 @@ _scratch_options()
     type=$1
     SCRATCH_OPTIONS=""
 
-    if [ $FSTYP != "xfs" ]; then
+    if [ "$FSTYP" != "xfs" ]; then
         return
     fi
 
@@ -124,7 +127,7 @@ _test_options()
     type=$1
     TEST_OPTIONS=""
 
-    if [ $FSTYP != "xfs" ]; then
+    if [ "$FSTYP" != "xfs" ]; then
         return
     fi
 
@@ -822,6 +825,10 @@ _check_udf_filesystem()
 
 _check_test_fs()
 {
+    if [ "$FSTYP" != "xfs" ]; then
+        return
+    fi
+
     TEST_LOG="none"
     TEST_RT="none"
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
