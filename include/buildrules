@@ -35,15 +35,15 @@ $(LTLIBRARY) : $(SUBDIRS) $(LTOBJECTS)
 	$(LTCOMPILE) -c $<
 endif
 
-ifdef LINGUAS
+ifdef POTHEAD
 %.pot: $(XGETTEXTFILES)
-	xgettext --omit-header --language=C --keyword=_ -o $@ $(XGETTEXTFILES)
+	$(XGETTEXT) --language=C --keyword=_ -o $@ $(XGETTEXTFILES)
 
-%.po:
-	$(MSGMERGE) -o $@.tmpo $@ $(PKG_NAME).pot
-	@if ! diff $@.tmpo $@ >/dev/null; then \
-		echo "$@ is out of date, see $@.tmpo"; \
-	fi
+# Generate temp .po files, to check whether translations need updating.
+# Not by default, due to gettext output differences between versions.
+%.po: $(POTHEAD)
+#	$(MSGMERGE) -o $@.tmpo $@ $(POTHEAD)
+#	if ! diff $@.tmpo $@ >/dev/null; then echo "$@ dated, see $@.tmpo"; fi
 
 %.mo: %.po
 	$(MSGFMT) -o $@ $<
@@ -58,20 +58,28 @@ $(_FORCE):
 
 .PHONY : depend
 
-depend : $(CFILES) $(HFILES)
-	$(SUBDIRS_MAKERULE)
-	touch .dep
-	$(MAKEDEPEND) $(DEPENDFLAGS) -f - -- $(CFLAGS) -- $(CFILES) | \
+DEPENDSCRIPT := $(MAKEDEPEND) $(DEPENDFLAGS) -f - -- $(CFLAGS) -- $(CFILES) | \
 	$(SED) -e 's,`pwd`,$(TOPDIR),g' \
 	    -e 's,  */[^ ]*,,g' \
 	    -e '/^[^ ]*: *$$/d' \
-	    -e '/^#.*/d' -e '/^ *$$/d' \
-	> .dep
+	    -e '/^ *$$/d'
+
+ifdef LTLIBRARY
+DEPENDSCRIPT := $(DEPENDSCRIPT) | $(SED) -e 's,^\([^:]*\)\.o,\1.lo,'
+endif
+
+depend : $(CFILES) $(HFILES)
+	$(SUBDIRS_MAKERULE)
+	$(DEPENDSCRIPT) > .dep
 	test -s .dep || rm -f .dep
 
 # Include dep, but only if it exists
 ifeq ($(shell test -f .dep && echo .dep), .dep)
 include .dep
 else
+ifdef LTLIBRARY
+$(LTOBJECTS): $(HFILES)
+else
 $(OBJECTS): $(HFILES)
+endif
 endif
