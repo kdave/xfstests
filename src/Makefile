@@ -12,7 +12,8 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	godown resvtest writemod makeextents itrash \
 	multi_open_unlink dmiperf
 
-LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize
+LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
+	preallo_rw_pattern_writer ftrunc trunc fs_perms testx looptest locktest
 
 IRIX_TARGETS = open_unlink
 
@@ -82,6 +83,29 @@ acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 dmiperf: dmiperf.o $(LIBATTR)
 	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
+preallo_rw_pattern_reader: 
+	$(CC) -DREAD iopat.c -o preallo_rw_pattern_reader
+
+preallo_rw_pattern_writer: 
+	$(CC) -DWRITE iopat.c -o preallo_rw_pattern_writer
+
+ftrunc: ftrunc.o
+	$(LINKTEST)
+
+trunc: trunc.o
+	$(LINKTEST)
+
+fs_perms: fs_perms.o
+	$(LINKTEST)
+	
+testx: testx.o
+	$(LINKTEST)
+
+looptest: looptest.o
+	$(LINKTEST)
+
+locktest: locktest.o
+	$(LINKTEST)
 
 ifeq ($(PKG_PLATFORM),irix)
 fill2: fill2.o

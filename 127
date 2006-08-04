@@ -1,0 +1,111 @@
+#! /bin/sh
+# FSQA Test No. 127
+#
+# fsx tests modified from CXFSQA tests
+#   - fsx_00_lite
+#   - fsx_05_lite_mmap
+#   - fsx_10_std, 
+#   - fsx_15_std_mmap 
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+FSX_FILE_SIZE=262144
+FSX_ARGS="-q -l $FSX_FILE_SIZE -o 65536 -S 191110531 -N 100000"
+
+_fsx_lite_nommap()
+{
+    echo "=== FSX Light Mode, No Memory Mapping ==="
+    dd if=/dev/zero of=$testdir/fsx_lite_nommap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
+    if ! ltp/fsx $FSX_ARGS -L -R -W $testdir/fsx_lite_nommap > $tmp.output 2>&1
+    then
+        echo "ltp/fsx $FSX_ARGS -L -R -W $testdir/fsx_lite_nommap"
+        cat $tmp.output
+        return 1
+    fi
+    cat $tmp.output
+    return 0
+}
+
+_fsx_lite_mmap()
+{
+    echo "=== FSX Light Mode, Memory Mapping ==="
+    dd if=/dev/zero of=$testdir/fsx_lite_mmap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
+    if ! ltp/fsx $FSX_ARGS -L $testdir/fsx_lite_mmap > $tmp.output 2>&1
+    then
+    	echo "ltp/fsx $FSX_ARGS -L fsx_lite_mmap"
+	cat $tmp.output
+	return 1
+    fi
+    cat $tmp.output
+    return 0
+}
+
+_fsx_std_nommap()
+{
+    echo "=== FSX Standard Mode, No Memory Mapping ==="
+    if ! ltp/fsx $FSX_ARGS -R -W $testdir/fsx_std_nommap > $tmp.output 2>&1
+    then
+        echo "ltp/fsx $FSX_ARGS -R -W fsx_std_nommap"
+        cat $tmp.output
+        return 1
+    fi
+    cat $tmp.output
+    return 0
+}
+
+_fsx_std_mmap()
+{
+    echo "=== FSX Standard Mode, Memory Mapping ==="
+    if ! ltp/fsx $FSX_ARGS $testdir/fsx_std_mmap > $tmp.output 2>&1
+    then
+    	echo "ltp/fsx $FSX_ARGS fsx_std_mmap"
+	cat $tmp.output
+	return 1
+    fi
+    cat $tmp.output
+    return 0
+}
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux
+
+_require_user
+_setup_testdir
+
+_fsx_lite_nommap 
+_fsx_lite_mmap
+
+_fsx_std_nommap
+_fsx_std_mmap
+
+#flush cache after write
+FSX_ARGS="-f $FSX_ARGS"
+_fsx_std_nommap
+_fsx_std_mmap
+
+
+status=0
+_cleanup
+exit

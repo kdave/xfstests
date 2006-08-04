@@ -1,0 +1,64 @@
+#! /bin/sh
+# FSQA Test No. 126
+#
+# tests various file permission options modified from CXFSQA test fs_perms
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux
+
+_require_user
+_setup_testdir
+
+QA_FS_PERMS=$here/src/fs_perms
+
+cd $testdir
+cp $here/src/testx ./testx.file
+
+# file_perm owner_uid owner_gid tester_uid tester_gid perm_to_test expected_result pass=1
+$QA_FS_PERMS 001 99 99 12 100 x 1
+$QA_FS_PERMS 010 99 99 200 99 x 1
+$QA_FS_PERMS 100 99 99 99 500 x 1
+$QA_FS_PERMS 002 99 99 12 100 w 1
+$QA_FS_PERMS 020 99 99 200 99 w 1
+$QA_FS_PERMS 200 99 99 99 500 w 1
+$QA_FS_PERMS 004 99 99 12 100 r 1
+$QA_FS_PERMS 040 99 99 200 99 r 1
+$QA_FS_PERMS 400 99 99 99 500 r 1
+$QA_FS_PERMS 000 99 99 99 99 r 1
+$QA_FS_PERMS 000 99 99 99 99 w 1
+$QA_FS_PERMS 000 99 99 99 99 x 1
+$QA_FS_PERMS 010 99 99 99 500 x 1
+$QA_FS_PERMS 100 99 99 200 99 x 1
+$QA_FS_PERMS 020 99 99 99 500 w 1
+$QA_FS_PERMS 200 99 99 200 99 w 1
+$QA_FS_PERMS 040 99 99 99 500 r 1
+$QA_FS_PERMS 400 99 99 200 99 r 1
+
+status=0
+_cleanup
+exit

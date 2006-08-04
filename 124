@@ -1,0 +1,71 @@
+#! /bin/sh
+# FSQA Test No. 124
+#
+# Test preallocated_rw_pattern_test modified from CXFSQA test preallocated_rw_pattern_test
+#
+# pat stands for pattern.  First 8 bytes contains the 64-bit number 0,
+# second is 1, ..., until last 8 bytes (1048568-1048575) contain 131071.
+# patw preallocates the file and then writes the pattern, patr checks it
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajones@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux
+
+_setup_testdir
+_require_scratch
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+# Run preallo_rw_pattern on both test and scratch partitions
+for TESTFILE in $testdir/rw_pattern.tmp $SCRATCH_MNT/rw_pattern.tmp
+  do
+  count=1
+  while (( count < 101 ))
+    do
+    src/preallo_rw_pattern_writer $TESTFILE
+    src/preallo_rw_pattern_reader $TESTFILE
+    if (test $? -ne 0) then
+	echo Read/Write Pattern Test FAILED.
+	_cleanup
+	exit 1
+    fi
+    rm $TESTFILE
+    ((count=count+1))
+  done #done for count of  100
+done
+
+if (test $? -eq 0 ) then
+    status=0
+fi
+
+umount $SCRATCH_DEV
+
+_check_test_fs
+_check_scratch_fs
+
+exit 

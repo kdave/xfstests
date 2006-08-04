@@ -1,0 +1,218 @@
+#! /bin/sh
+# FSQA Test No. 132
+#
+# xfs_io aligned vector rw created from CXFSQA test 
+# unixfile_vector_aligned_rw
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+common_line_filter()
+{
+    perl -ne 'if (/.*:(.*)/) {
+        if ( "$last_line" ne "$1" ) { print $_; $first_match=1; }
+        elsif ( $first_match==1 ) { print "*\n"; $first_match=0; }
+        $last_line="$1";
+    }
+    else {
+        print $_
+    }'
+}
+
+_filter_xfs_io()
+{
+    common_line_filter | sed -e "s/[0-9/.]* [GMKiBbytes]*, [0-9]* ops\; [0-9/:. sec]* ([0-9/.]* [GMKiBbytes]*\/sec and [0-9/.]* ops\/sec)/XXX Bytes, X ops\; XX:XX:XX.X (XXX YYY\/sec and XXX ops\/sec)/"
+}
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux IRIX
+
+_setup_testdir
+_require_scratch
+_require_user
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+xfs_io -f -t -c "pwrite -S 0x63 0 512" \
+    -c "pwrite -S 0x64 512 512" \
+    -c "pwrite -S 0x65 1024 512" \
+    -c "pwrite -S 0x66 1536 512" \
+    -c "pwrite -S 0x67 2048 512" \
+    -c "pwrite -S 0x68 2560 512" \
+    -c "pwrite -S 0x69 3072 512" \
+    -c "pwrite -S 0x6A 3584 512" \
+    -c "pread -v 0 512" \
+    -c "pread -v 512 512" \
+    -c "pread -v 1024 512" \
+    -c "pread -v 1536 512" \
+    -c "pread -v 2048 512" \
+    -c "pread -v 2560 512" \
+    -c "pread -v 3072 512" \
+    -c "pread -v 3584 512" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x63 4096 1024" \
+    -c "pwrite -S 0x6B 5120 1024" \
+    -c "pwrite -S 0x6C 6144 1024" \
+    -c "pwrite -S 0x6D 7168 1024" \
+    -c "pread -v 0 1024" \
+    -c "pread -v 1024 1024" \
+    -c "pread -v 2048 1024" \
+    -c "pread -v 3072 1024" \
+    -c "pread -v 4096 1024" \
+    -c "pread -v 5120 1024" \
+    -c "pread -v 6144 1024" \
+    -c "pread -v 7168 1024" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x6E 8192 2048" \
+    -c "pwrite -S 0x6F 10240 2048" \
+    -c "pread -v 0 2048" \
+    -c "pread -v 2048 2048" \
+    -c "pread -v 4096 2048" \
+    -c "pread -v 6144 2048" \
+    -c "pread -v 8192 2048" \
+    -c "pread -v 10240 2048" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x70 12288 4096" \
+    -c "pread -v 0 4096" \
+    -c "pread -v 4096 4096" \
+    -c "pread -v 8192 4096" \
+    -c "pread -v 12288 4096" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x71 16384 8192" \
+    -c "pwrite -S 0x72 24576 8192" \
+    -c "pread -v 0 8192" \
+    -c "pread -v 8192 8192" \
+    -c "pread -v 8192 8192" \
+    -c "pread -v 16384 8192" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x73 32768 16384" \
+    -c "pwrite -S 0x74 49152 16384" \
+    -c "pread -v 0 16384" \
+    -c "pread -v 16384 16384" \
+    -c "pread -v 32768 16384" \
+    -c "pread -v 49152 16384" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x75 65536 32768" \
+    -c "pwrite -S 0x76 98304 32768" \
+    -c "pread -v 0 32768" \
+    -c "pread -v 32768 32768" \
+    -c "pread -v 65536 32768" \
+    -c "pread -v 98304 32768" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x76 131072 65536" \
+    -c "pwrite -S 0x77 196608 65536" \
+    -c "pread -v 0 65536" \
+    -c "pread -v 65536 65536" \
+    -c "pread -v 131072 65536" \
+    -c "pread -v 196608 65536" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x76 262144 131072" \
+    -c "pwrite -S 0x77 393216 131072" \
+    -c "pread -v 0 131072" \
+    -c "pread -v 131072 131072" \
+    -c "pread -v 262144 131072" \
+    -c "pread -v 393216 131072" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x76 524288 524288" \
+    -c "pwrite -S 0x77 1048576 524288" \
+    -c "pread -v 0 524288" \
+    -c "pread -v 524288 524288" \
+    -c "pread -v 1048576 524288" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x32 1048576 1048576" \
+    -c "pwrite -S 0x33 2097152 1048576" \
+    -c "pwrite -S 0x34 3145728 1048576" \
+    -c "pwrite -S 0x35 4194304 1048576" \
+    -c "pwrite -S 0x36 5242880 1048576" \
+    -c "pwrite -S 0x37 6291456 1048576" \
+    -c "pwrite -S 0x38 7340032 1048576" \
+    -c "pwrite -S 0x39 8388608 1048576" \
+    -c "pread -v 0 1048576" \
+    -c "pread -v 1048576 1048576" \
+    -c "pread -v 2097152 1048576" \
+    -c "pread -v 3145728 1048576" \
+    -c "pread -v 4194304 1048576" \
+    -c "pread -v 5242880 1048576" \
+    -c "pread -v 6291456 1048576" \
+    -c "pread -v 7340032 1048576" \
+    -c "pread -v 8388608 1048576" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x32 1048576 1048576" \
+    -c "pwrite -S 0x33 2097152 1048576" \
+    -c "pwrite -S 0x34 3145728 1048576" \
+    -c "pwrite -S 0x35 4194304 1048576" \
+    -c "pwrite -S 0x36 5242880 1048576" \
+    -c "pwrite -S 0x37 6291456 1048576" \
+    -c "pwrite -S 0x38 7340032 1048576" \
+    -c "pwrite -S 0x39 8388608 1048576" \
+    -c "pwrite -S 0x3A 9437184 1048576" \
+    -c "pread -v 0 1048576" \
+    -c "pread -v 1048576 1048576" \
+    -c "pread -v 2097152 1048576" \
+    -c "pread -v 3145728 1048576" \
+    -c "pread -v 4194304 1048576" \
+    -c "pread -v 5242880 1048576" \
+    -c "pread -v 6291456 1048576" \
+    -c "pread -v 7340032 1048576" \
+    -c "pread -v 8388608 1048576" \
+    -c "pread -v 9437184 1048576" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+xfs_io -f -c "pwrite -S 0x92 10485760 10485760" \
+    -c "pwrite -S 0x93 20971520 10485760" \
+    -c "pwrite -S 0x94 31457280 10485760" \
+    -c "pwrite -S 0x95 41943040 10485760" \
+    -c "pwrite -S 0x96 52428800 10485760" \
+    -c "pwrite -S 0x97 62914560 10485760" \
+    -c "pwrite -S 0x98 73400320 10485760" \
+    -c "pwrite -S 0x99 83886080 10485760" \
+    -c "pwrite -S 0x9A 94371840 10485760" \
+    -c "pread -v 0 10485760" \
+    -c "pread -v 10485760 10485760" \
+    -c "pread -v 20971520 10485760" \
+    -c "pread -v 31457280 10485760" \
+    -c "pread -v 41943040 10485760" \
+    -c "pread -v 52428800 10485760" \
+    -c "pread -v 62914560 10485760" \
+    -c "pread -v 73400320 10485760" \
+    -c "pread -v 83886080 10485760" \
+    -c "pread -v 94371840 10485760" \
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+
+status=0
+exit 

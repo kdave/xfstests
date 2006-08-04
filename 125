@@ -1,0 +1,61 @@
+#! /bin/sh
+# FSQA Test No. 125
+#
+# ftruncate test, modified from CXFSQA tests cxfs_ftrunc and cxfs_trunc
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ajones@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux
+
+_require_user
+
+_setup_testdir
+
+TESTDIR=$testdir/ftrunc
+TESTFILE=$TESTDIR/ftrunc.tmp
+
+[ -d $TESTDIR ] && rm -r $TESTDIR
+mkdir $TESTDIR
+
+# ftrunc must be run as a mortal user.
+touch $TESTFILE
+
+chmod a+rw $TESTDIR
+chmod a+rw $TESTFILE
+
+su $qa_user -c "$here/src/ftrunc -f $TESTFILE"
+
+if [ "$?" != "0" ];  then
+    echo src/ftrunc returned non 0 status!
+fi
+
+src/trunc -f $TESTFILE
+if (test $? -eq 0 ) then
+    status=0
+fi
+
+exit

@@ -84,7 +84,8 @@ unsigned long	simulatedopcount = 0;	/* -b flag */
 int	closeprob = 0;			/* -c flag */
 int	debug = 0;			/* -d flag */
 unsigned long	debugstart = 0;		/* -D flag */
-int	do_fsync = 0;			/* -f flag */
+int	flush = 0;			/* -f flag */
+int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
 int	sizechecks = 1;			/* -n flag disables them */
 int	maxoplen = 64 * 1024;		/* -o flag */
@@ -107,6 +108,9 @@ int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
 int	aio = 0;
 
+int page_size;
+int page_mask;
+int mmap_mask;
 #ifdef AIO
 int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
 #define READ 0
@@ -413,6 +417,34 @@ check_trunc_hack(void)
 	ftruncate(fd, 0);
 }
 
+void
+doflush(unsigned offset, unsigned size)
+{
+	unsigned pg_offset;
+	unsigned map_size;
+	char    *p;
+
+	if (o_direct == O_DIRECT)
+		return;
+
+	pg_offset = offset & mmap_mask;
+	map_size  = pg_offset + size;
+
+	if ((p = (char *)mmap(0, map_size, PROT_READ | PROT_WRITE,
+			      MAP_FILE | MAP_SHARED, fd,
+			      (off_t)(offset - pg_offset))) == (char *)-1) {
+		prterr("doflush: mmap");
+		report_failure(202);
+	}
+	if (msync(p, map_size, MS_INVALIDATE) != 0) {
+		prterr("doflush: msync");
+		report_failure(203);
+	}
+	if (munmap(p, map_size) != 0) {
+		prterr("doflush: munmap");
+		report_failure(204);
+	}
+}
 
 void
 doread(unsigned offset, unsigned size)
@@ -591,6 +623,9 @@ dowrite(unsigned offset, unsigned size)
 			prt("fsync() failed: %s\n", strerror(errno));
 			report_failure(152);
 		}
+	}
+	if (flush) {
+		doflush(offset, size);
 	}
 }
 
@@ -834,6 +869,7 @@ usage(void)
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
+	-f flush and invalidate cache after I/O\n\
 	-l flen: the upper bound on file size (default 262144)\n\
 	-m startop:endop: monitor (print debug output) specified byte range (default 0:infinity)\n\
 	-n: no verifications of file size\n\
@@ -844,11 +880,13 @@ usage(void)
 	-s style: 1 gives smaller truncates (default 0)\n\
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
-	-x: preallocate file space before starting, XFS only (default 0)\n"
+	-x: preallocate file space before starting, XFS only (default 0)\n\
+	-y synchronize changes to a file\n"
+
 #ifdef AIO
-	"-A: Use the AIO system calls\n"
+"	-A: Use the AIO system calls\n"
 #endif
-	"-D startingop: debug output starting at specified operation\n\
+"	-D startingop: debug output starting at specified operation\n\
 	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
@@ -979,9 +1017,14 @@ main(int argc, char **argv)
 	goodfile[0] = 0;
 	logfile[0] = 0;
 
+	page_size = getpagesize();
+	page_mask = page_size - 1;
+	mmap_mask = page_mask;
+	
+
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dl:m:no:p:qr:s:t:w:xAD:LN:OP:RS:WZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:LN:OP:RS:WZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -1006,7 +1049,7 @@ main(int argc, char **argv)
 			debug = 1;
 			break;
 		case 'f':
-			do_fsync = 1;
+			flush = 1;
 			break;
 		case 'l':
 			maxfilelen = getnum(optarg, &endp);
@@ -1063,6 +1106,9 @@ main(int argc, char **argv)
 			break;
 		case 'x':
 			prealloc = 1;
+			break;
+		case 'y':
+			do_fsync = 1;
 			break;
 		case 'A':
 		        aio = 1;

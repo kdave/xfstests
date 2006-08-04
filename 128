@@ -1,0 +1,55 @@
+#! /bin/sh
+# FSQA Test No. 128
+#
+# Test nosuid mount option modified from CXFSQA test mount_option_nosuid
+#
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs udf nfs
+_supported_os Linux
+
+_setup_testdir
+_require_scratch
+_require_user
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount "-o nosuid"
+
+mkdir $SCRATCH_MNT/nosuid
+cp `which ls` $SCRATCH_MNT
+chmod 700 $SCRATCH_MNT/nosuid
+chmod 4755 $SCRATCH_MNT/ls
+
+su - $qa_user -c "$SCRATCH_MNT/ls $SCRATCH_MNT/nosuid >/dev/null 2>&1"
+if [ $? -eq 0 ] ; then
+	echo "Error: we shouldn't be able to ls the directory"
+fi
+umount $SCRATCH_DEV
+
+status=0
+exit 
