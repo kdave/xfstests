@@ -169,6 +169,7 @@ loggen_empty(int count)
     xlog_rec_header_t       *head;
     xlog_op_header_t        *op1, *op2, *op3, *op4, *op5;
     xfs_trans_header_t      *trans;
+    xfs_buf_log_format_t    blfs;
     xfs_buf_log_format_t    *blf;
     int                     *data;
     char                    *p;
@@ -236,12 +237,13 @@ loggen_empty(int count)
     INT_SET(op3->oh_flags,          ARCH_CONVERT, 0);
     INT_SET(op3->oh_res2,           ARCH_CONVERT, 0);
     /* an empty buffer too */
-    blf->blf_type       = XFS_LI_BUF;
-    blf->blf_size       = 2;
-    blf->blf_flags      = XFS_BLI_CANCEL;
-    blf->blf_blkno      = 1;
-    blf->blf_map_size   = 1;
-    blf->blf_data_map[0]= 0;
+    blfs.blf_type       = XFS_LI_BUF;
+    blfs.blf_size       = 2;
+    blfs.blf_flags      = XFS_BLI_CANCEL;
+    blfs.blf_blkno      = 1;
+    blfs.blf_map_size   = 1;
+    blfs.blf_data_map[0]= 0;
+    memcpy(blf, &blfs, sizeof(blfs));
     /* commit */
     INT_SET(op4->oh_tid,            ARCH_CONVERT, 0xb0c0d0d0);
     INT_SET(op4->oh_len,            ARCH_CONVERT, sizeof(int));
