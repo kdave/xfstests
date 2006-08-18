@@ -39,18 +39,17 @@ _require_nobody()
 }
 
 # create a file as a specific user (uid)
-# takes filename, id, type (u/g), blocksize, blockcount
+# takes filename, id, type (u/g/p), blocksize, blockcount
 #
 _file_as_id()
 {
     [ $# != 5 ] && _notrun "broken call to _file_as_id in test $seq"
 
+    parent=`dirname $1`
     if [ $3 = p ]; then
-	size=`expr $4 \* $5`;
-	echo xfs_io -f -c "chproj $2" -c "pwrite -b $4 0 $size" $1 >>$seq.full
-	$XFS_IO_PROG -f -c "chproj $2" -c "pwrite -b $4 0 $size" $1 \
-		>>$seq.full 2>&1
-	return
+	echo PARENT: xfs_io -r -c "chproj $2" -c "chattr +P" $parent >>$seq.full
+	$XFS_IO_PROG -r -c "chproj $2" -c "chattr +P" $parent >>$seq.full 2>&1
+	magik='$>'	# (irrelevent, above set projid-inherit-on-parent)
     elif [ $3 = u ]; then
 	magik='$>'	# perlspeak for effective uid
     elif [ $3 = g ]; then
@@ -72,6 +71,11 @@ _file_as_id()
 EOF
 # for debugging the above euid change, try... [need write in cwd]
 #	exec "dd if=/dev/zero of=$1 bs=$4 count=$5 >>$seq.full 2>&1";
+
+    if [ $3 = p ]; then
+	echo PARENT: xfs_io -r -c "chproj 0" -c "chattr -P" $parent >>$seq.full
+	$XFS_IO_PROG -r -c "chproj 0" -c "chattr -P" $parent >>$seq.full 2>&1
+    fi
 }
 
 _choose_uid()
