@@ -56,7 +56,6 @@ INSTALL_LTLIB = \
 	cd $(TOPDIR)/$(LIBNAME)/.libs; \
 	../$(INSTALL) -m 755 -d $(PKG_LIB_DIR); \
 	../$(INSTALL) -m 644 -T so_dot_version $(LIBNAME).lai $(PKG_LIB_DIR); \
-	test "$(PKG_DISTRIBUTION)" = debian || \
 	../$(INSTALL) -T so_dot_current $(LIBNAME).lai $(PKG_LIB_DIR)
 endif
 
@@ -144,10 +143,12 @@ DIST_MAKERULE = \
 SOURCE_MAKERULE = \
 	@test -z "$$DIR" && DIR="."; \
 	for f in $(SRCFILES) ""; do \
-	    if test ! -z "$$f"; then $(ECHO) $$DIR/$$f; fi;\
+	    test -z "$$f" && break; \
+	    test -L "$$f" || $(ECHO) $$DIR/$$f; \
 	done; \
-	for d in `echo $(SUBDIRS)` ; do \
-	    if test -d "$$d" -a ! -z "$$d"; then \
+	for d in `echo $(SUBDIRS)` ""; do \
+	    test -z "$$d" && break; \
+	    if test -d "$$d"; then \
 		$(MAKEF) DIR=$$DIR/$$d -C $$d $@ || exit $$?; \
 	    fi; \
 	done
