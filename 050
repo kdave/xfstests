@@ -104,7 +104,7 @@ _exercise()
 
 	echo
 	echo "*** report no quota settings" | tee -a $seq.full
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report | LC_COLLATE=POSIX sort -r
 
 	echo
 	echo "*** report initial settings" | tee -a $seq.full
@@ -115,20 +115,20 @@ _exercise()
 		-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
 		-c "limit -$type isoft=$isoft ihard=$ihard $id" \
 		$SCRATCH_DEV
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report | LC_COLLATE=POSIX sort -r
 
 	echo
 	echo "*** push past the soft inode limit" | tee -a $seq.full
 	_file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
 	_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report | LC_COLLATE=POSIX sort -r
 
 	echo
 	echo "*** push past the soft block limit" | tee -a $seq.full
 	_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report | LC_COLLATE=POSIX sort -r
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -138,7 +138,7 @@ _exercise()
 		_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 	done
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_report | LC_COLLATE=POSIX sort -r
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -147,7 +147,7 @@ _exercise()
 	echo "ls -l $SCRATCH_MNT" >>$seq.full
 	ls -l $SCRATCH_MNT >>$seq.full
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_and_check_blks
+	xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -birnN -$type" $SCRATCH_DEV | _filter_and_check_blks | LC_COLLATE=POSIX sort -r
 
 	echo
 	echo "*** unmount"
