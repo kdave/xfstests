@@ -172,7 +172,7 @@ main(
 	  sprintf(command, "cp %s %s \n", ls_path, test_file); 
 	  system(command);
 	}
-
+	sleep(1);
 	/* SET loop */
 	for (i=0; i < num_iter; i++) {
 	  sprintf(test_file, "%s/DMAPI_attribute_test_file.%d", 
