@@ -68,13 +68,19 @@ echo "xfs_db for $SCRATCH_DEV" >>$seq.full
 cat $tmp.xfs_db >>$seq.full
 
 # check the 'blocks' field from freesp command is OK
+# since 2.6.18, df does not report the 4 blocks per AG that cannot
+# be allocated, hence we check for that exact mismatch.
 perl -ne '
 	    BEGIN	{ $avail ='$avail' * 512;
 			  $answer="(no xfs_db free blocks line?)" }
 	    /free blocks (\d+)$/	|| next;
 	    $freesp = $1 * '$dbsize';
 	    if ($freesp == $avail)	{ $answer = "yes"; }
-	    else			{ $answer = "no ($freesp != $avail)"; }
+	    else {
+		$avail = $avail + (('$agcount' + 1) * '$dbsize' * 4);
+		if ($freesp == $avail)	{ $answer = "yes"; }
+		else			{ $answer = "no ($freesp != $avail)"; }
+	    }
 	    END	{ print "$answer\n" }
 	' <$tmp.xfs_db >$tmp.ans
 ans="`cat $tmp.ans`"
