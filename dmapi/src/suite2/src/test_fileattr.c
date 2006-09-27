@@ -271,6 +271,10 @@ main(
 	    else if (Vflag) {
 	      fprintf(stderr, "report: set #%d was successful.\n", i);
 	    }
+            if (dm_sync_by_handle(sid, hanp, hlen, DM_NO_TOKEN)) {
+              fprintf(stderr, "dm_sync_by_handle failed on pass #%d; %s.\n",
+                        i, strerror(errno));
+            }
 	  }
 	}
 	
