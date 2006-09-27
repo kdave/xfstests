@@ -237,7 +237,7 @@ main(
 	  stat_arr[i].dt_uid=(uid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_gid=(gid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_mode=(mode_t)((rand()%4096)+32768);
-	  stat_arr[i].dt_size=(dm_off_t)(rand()+rand()*0x10000);
+          stat_arr[i].dt_size=((dm_off_t)(rand()+rand()*0x10000)) & 0x3FFFFFFFFFFFF; /* 1 TB max */
 	}	
 
 	/*-----------------------------------------------------*\
