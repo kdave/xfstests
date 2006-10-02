@@ -325,8 +325,8 @@ main(
                             statbuf.st_size : (1000000*(dm_off_t)(ch));
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
 			     offset, 1, bufp)==-1){
-	    printf("Error invis-writing %s at byte %u million: %s\n", 
-		   (u_char *)bufp, (unsigned int)ch, ERR_NAME);
+	    printf("Error invis-writing 0x%x at byte 0x%x million: %s\n", 
+		   *(u_char *)bufp, (unsigned int)ch, ERR_NAME);
 	  }
 	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 offset, 1, bufp)==-1){
