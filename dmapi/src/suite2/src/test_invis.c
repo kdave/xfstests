@@ -245,7 +245,7 @@ main(
 	      /* Be sure the buffer is filled with the test char */
 	      error_reported = 0;
 	      for (k=0; k<i; k++){
-		if (((char *)bufp)[k] == ch) {
+		if (((u_char *)bufp)[k] == ch) {
 		  if (Vflag) printf(".");
 		}
 		else {
