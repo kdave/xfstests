@@ -136,7 +136,7 @@ main(
 	
 	/* Get a random character for read/write tests */
 	srand((unsigned int)time(NULL));
-	ch = (char)rand(); 
+	ch = (u_char)rand(); 
 
 	printf("Invisible read/write tests beginning...\n");
 	
@@ -316,23 +316,30 @@ main(
 
 	  /* Try writing a character waaaaaay up in the millions range */
 	  sprintf(bufp, "%c", ch);
+          if (stat(test_file, &statbuf)){
+           fprintf(stdout, 
+                    "Error: unable to stat the test file; %s \n", 
+                    test_file);
+          }
+          dm_off_t offset = ((1000000*(dm_off_t)(ch)) > statbuf.st_size) ? 
+                            statbuf.st_size : (1000000*(dm_off_t)(ch));
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
-			     (1000000*(unsigned int)(ch)), 1, bufp)==-1){
+			     offset, 1, bufp)==-1){
 	    printf("Error invis-writing %s at byte %u million: %s\n", 
-		   (char*)bufp, (unsigned int)ch, ERR_NAME);
+		   (u_char *)bufp, (unsigned int)ch, ERR_NAME);
 	  }
 	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
-				 (1000000*(unsigned int)(ch)), 1, bufp)==-1){
+				 offset, 1, bufp)==-1){
 	    printf("Error invis-reading at byte %u million: %s\n",
 		   (unsigned int)ch, ERR_NAME);
 	  }
-	  else if (((char*)bufp)[0]!=ch) {
+	  else if (((u_char *)bufp)[0]!=ch) {
 	    printf("Error: wanted to read %c and instead got %s.\n",
-		   ch, (char*)bufp);
+		   ch, (u_char *)bufp);
 	  }
 	  else if (Vflag) {
-	    printf("Report: \"%c\" was written and \"%s\" was read "
-		   "at byte %d million.\n", ch, (char*)bufp, ch);
+	    printf("Report: \"0x%x\" was written and \"0x%x\" was read "
+		   "at byte %d million.\n", ch, *(u_char *)bufp, ch);
 	  }
 
 #ifdef __sgi
@@ -341,21 +348,21 @@ main(
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
 			     2147840000, 1, bufp)==-1){
 	    printf("Error invis-writing %s at 2 gigabytes: %s\n", 
-		   (char*)bufp, ERR_NAME);
+		   (u_char *)bufp, ERR_NAME);
 	  }
 	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
 				 2147840000, 1, bufp)==-1){
 	    printf("Error invis-reading at 2 gigabytes: %s\n",
 		   ERR_NAME);
 	  }
-	  else if (((char*)bufp)[0]!=ch) {
+	  else if (((u_char *)bufp)[0]!=ch) {
 	    printf("Error: wanted to read %c and instead got %s.\n",
-		   ch, (char*)bufp);
+		   ch, (u_char *)bufp);
 	  }
 	  else if (Vflag) {
-	    printf("Report: \"%c\" was written and \"%s\" was read "
+	    printf("Report: \"0x%x\" was written and \"0x%x\" was read "
 		   "at 2147840000 bytes\n\t(a bit over 2 gigabytes).\n", 
-		   ch, (char*)bufp);
+		   ch, *(u_char *)bufp);
 	  }
 #endif
 
