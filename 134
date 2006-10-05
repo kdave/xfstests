@@ -53,7 +53,13 @@ chmod a+rwx $seq.full	# arbitrary users will write here
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
 
-if ! _scratch_mount "-o pquota" >$tmp.out 2>&1
+#if pquota's already in mount options then we dont need to enable
+[ `echo $MOUNT_OPTIONS | grep -c gquota` -eq 0 -a `echo $MOUNT_OPTIONS | grep -c gquota` -eq 0 ] &&\
+    EXTRA_MOUNT_OPTIONS="-o pquota"
+[ `echo $MOUNT_OPTIONS | grep -c gquota` -gt 0 -o `echo $MOUNT_OPTIONS | grep -c gquota` -gt 0 ] &&\
+    _notrun "Can't run with group quotas enabled"
+
+if ! _scratch_mount "$EXTRA_MOUNT_OPTIONS" >$tmp.out 2>&1
 then
     cat $tmp.out
     echo "!!! mount failed"
