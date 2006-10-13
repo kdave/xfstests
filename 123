@@ -27,9 +27,23 @@ _cleanup()
     _cleanup_testdir
 }
 
+
+_filter_user_do()
+{
+        perl -ne "
+s,.*Permission\sdenied.*,Permission denied,;
+s,.*no\saccess\sto\stty.*,,;
+s,.*no\sjob\scontrol\sin\sthis\sshell.*,,;
+s,^\s*$,,;
+        print;"
+}
+
+
+
+
 _user_do()
 {
-    echo $1 | su -s /bin/sh - $qa_user | sed -e "s#.*Permission denied.*#Permission denied#g"
+    echo "/bin/sh '$1'" | su - $qa_user | _filter_user_do 
 }
 
 # get standard environment, filters and checks
@@ -47,7 +61,6 @@ _setup_testdir
 echo foo > $testdir/data_coherency.txt
 # check basic appending to a file
 echo bar >> $testdir/data_coherency.txt
-
 
 # try append
 _user_do "echo goo 2>&1 >> $testdir/data_coherency.txt" 
