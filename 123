@@ -17,12 +17,13 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
+my_test_subdir=$testdir/123subdir
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
     cd $testdir
-    rm data_coherency.txt
+    rm -rf $my_test_subdir
     cd /
     _cleanup_testdir
 }
@@ -43,7 +44,7 @@ s,^\s*$,,;
 
 _user_do()
 {
-    echo "/bin/sh '$1'" | su - $qa_user | _filter_user_do 
+    echo $1 | /bin/sh "su $qa_user 2>&1" | _filter_user_do
 }
 
 # get standard environment, filters and checks
@@ -58,23 +59,26 @@ _require_user
 
 _setup_testdir
 
-echo foo > $testdir/data_coherency.txt
+# create subdir with required permissions
+mkdir -m 755 $my_test_subdir
+
+echo foo > $my_test_subdir/data_coherency.txt
 # check basic appending to a file
-echo bar >> $testdir/data_coherency.txt
+echo bar >> $my_test_subdir/data_coherency.txt
 
 # try append
-_user_do "echo goo 2>&1 >> $testdir/data_coherency.txt" 
+_user_do "echo goo >> $my_test_subdir/data_coherency.txt" 
 
 # try overwrite 
-_user_do "echo goo 2>&1 > $testdir/data_coherency.txt" 
+_user_do "echo goo > $my_test_subdir/data_coherency.txt" 
 
 # try delete
-_user_do "rm $testdir/data_coherency.txt 2>&1" 
+_user_do "rm $my_test_subdir/data_coherency.txt" 
 
 # try move
-_user_do "mv $testdir/data_coherency.txt $testdir/data_coherency2.txt 2>&1" 
+_user_do "mv $my_test_subdir/data_coherency.txt $my_test_subdir/data_coherency2.txt" 
 
-cat $testdir/data_coherency.txt
+cat $my_test_subdir/data_coherency.txt
 
 
 exit
