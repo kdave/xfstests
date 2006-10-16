@@ -32,15 +32,24 @@ _supported_fs xfs
 _supported_os Linux IRIX
 
 _setup_testdir
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
 
 _umount_mount()
 {
     CWD=`pwd`
     cd /
-    umount $SCRATCH_MNT
+    # pipe error into /dev/null, in case not mounted (after _require_scratch)
+    umount $SCRATCH_MNT 2>/dev/null
     _scratch_mount
     cd "$CWD"
 }
+
+
+
+_umount_mount
+
+cd $SCRATCH_MNT
 
 # create file with async I/O
 xfs_io -f -c 'pwrite -b 4k -S 0x12 0 4k' async_file > /dev/null
