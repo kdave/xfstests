@@ -24,6 +24,7 @@
 
 char *progname;
 __uint64_t num_holes = 1000;
+__uint64_t curr_holes;
 int verbose_opt = 0;
 char *filename;
 int status_num = 100;
@@ -31,6 +32,10 @@ int wsync;
 int preserve;
 unsigned int blocksize;
 __uint64_t fileoffset;
+
+#define JUMP_SIZE (128 * 1024)
+#define NUMHOLES_TO_SIZE(i) (i * JUMP_SIZE)
+#define SIZE_TO_NUMHOLES(s) (s / JUMP_SIZE)
 
 void
 usage(void)
@@ -50,7 +55,7 @@ main(int argc, char *argv[])
 	__uint64_t offset;
 	int blocksize = 512;
 	unsigned char *buffer = NULL;
-
+	struct stat stat;
 
 	progname = argv[0];
 
@@ -101,9 +106,35 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	for (i = 0; i < num_holes; i++) {
+	if (fstat(fd, &stat) < 0) {
+		perror("stat");
+		return 1;
+	}
+	if (preserve) {
+		curr_holes = SIZE_TO_NUMHOLES(stat.st_size);
+		if (num_holes < curr_holes) {
+			/* we need to truncate back */
+			if (ftruncate(fd, NUMHOLES_TO_SIZE(num_holes)) < 0) {
+				perror("ftruncate");
+				return 1;
+			}
+			if (verbose_opt) {
+				printf("truncating back to %lu\n", NUMHOLES_TO_SIZE(num_holes));
+			}
+			return 0;
+		}
+	}
+	else {
+		curr_holes = 0;
+	}
+	if (curr_holes != 0 && verbose_opt) {
+		printf("creating %lu more holes\n", num_holes - curr_holes);
+	}
+		
+	/* create holes by seeking and writing */
+	for (i = curr_holes; i < num_holes; i++) {
 
-		offset = i * 128 * 1024 + fileoffset;
+		offset = NUMHOLES_TO_SIZE(i) + fileoffset;
 
 		if (lseek64(fd, offset, SEEK_SET) < 0) {
 			perror("lseek");
@@ -116,7 +147,7 @@ main(int argc, char *argv[])
 		}
 
 		if (verbose_opt && ((i+1) % status_num == 0)) {
-			printf("seeked and wrote %llu times\n", i+1);
+			printf("seeked and wrote %lu times\n", i+1);
 		}
 	}
 

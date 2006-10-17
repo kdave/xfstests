@@ -1,0 +1,174 @@
+#! /bin/sh
+# FS QA Test No. 135
+#
+# Test the attr2 code
+# Let's look, xfs_db, at the inode and its literal area for the
+# extents and the attributes 
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@puffy.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+_notrun "Need to fix up filtering before checkin" 
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os IRIX Linux
+_require_scratch
+
+export MKFS_OPTIONS="-i size=512,attr=2"
+_scratch_mkfs_xfs
+_scratch_mount
+
+file=$SCRATCH_MNT/file
+touch $file
+inum=`ls -i $file | awk '{print $1}'`
+echo "inum=$inum"
+
+add_eas()
+{
+    start=$1
+    end=$2
+    echo ""; echo "** add $start..$end EAs **"
+    i=$start
+    while [ $i -le $end ]; do 
+	attr -s name.$i -V value $file >/dev/null
+	i=`expr $i + 1`
+    done
+}
+
+rm_eas()
+{
+    start=$1
+    end=$2
+    echo ""; echo "** rm $start..$end EAs **"
+    i=$start
+    while [ $i -le $end ]; do 
+	attr -r name.$i $file >/dev/null
+	i=`expr $i + 1`
+    done
+}
+
+do_extents()
+{
+    num=$1
+    echo ""; echo "** $num extents **"
+    src/makeextents -v -p -w -n $num $file
+}
+
+_print_inode()
+{
+    #sync
+    #sleep 2
+    umount $SCRATCH_MNT
+    xfs_db -r -c "inode $inum" -c "print" $SCRATCH_DEV |\
+    awk '
+	/nextents/ { print; next }
+	/naextents/ { print; next }
+	/u\./ { print; next }
+	/a\./ { print; next }
+	/forkoff/ { printf("core.forkoff = %d (%d bytes)\n", $3, $3*8); next }
+	/format/ { print; next }
+	/size/ { print; next }
+    '
+    _scratch_mount
+}
+
+# main
+
+_print_inode
+
+add_eas 1 1
+_print_inode
+
+add_eas 2 2
+_print_inode
+
+add_eas 3 4
+_print_inode
+
+add_eas 5 8
+_print_inode
+
+add_eas 9 16
+_print_inode
+
+add_eas 17 20
+_print_inode
+
+add_eas 21 21
+_print_inode
+
+add_eas 22 22
+_print_inode
+
+add_eas 23 23
+_print_inode
+
+add_eas 24 24
+_print_inode
+
+add_eas 25 25
+_print_inode
+
+add_eas 26 30
+_print_inode
+
+add_eas 31 35
+_print_inode
+
+rm_eas 1 34
+_print_inode
+
+# now do the extents
+
+#build up
+j=1
+while [ $j -le 30 ]; do
+    do_extents $j
+    _print_inode
+    j=`expr $j + 2`
+done
+
+#scale down
+j=30
+while [ $j -ge 1 ]; do
+    do_extents $j
+    _print_inode
+    j=`expr $j - 2`
+done
+
+#build up
+j=1
+while [ $j -le 30 ]; do
+    do_extents $j
+    _print_inode
+    j=`expr $j + 2`
+done
+
+# success, all done
+status=0
+exit
