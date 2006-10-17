@@ -17,7 +17,7 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=0	# success is the default!
-my_test_subdir=$testdir/123subdir
+
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
@@ -44,7 +44,12 @@ s,^\s*$,,;
 
 _user_do()
 {
-    echo $1 | /bin/sh "su $qa_user 2>&1" | _filter_user_do
+    if [ "$HOSTOS" == "IRIX" ]
+	then
+	echo $1 | /bin/sh "su $qa_user 2>&1" | _filter_user_do
+    else
+	echo $1 | su $qa_user 2>&1 | _filter_user_do
+    fi
 }
 
 # get standard environment, filters and checks
@@ -58,6 +63,7 @@ _supported_os Linux IRIX
 _require_user
 
 _setup_testdir
+my_test_subdir=$testdir/123subdir
 
 # create subdir with required permissions
 mkdir -m 755 $my_test_subdir
