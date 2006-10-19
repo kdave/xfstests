@@ -261,7 +261,7 @@ spawn_kid(
 				WORKER_BEE, WORKER_BEE, action, sidbuf,
 				tokenbuf);
 		}
-		execlp(WORKER_BEE, WORKER_BEE, action, "-s", sidbuf, 
+		execlp("./"WORKER_BEE, WORKER_BEE, action, "-s", sidbuf, 
 			"-t", tokenbuf, NULL);
 		errno_msg("execlp of worker bee failed");
 		(void)dm_respond_event(sid, token, DM_RESP_ABORT, 

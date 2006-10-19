@@ -33,8 +33,8 @@
 #include <getopt.h>
 
 #define NUMLEN	16		/* arbitrary max len of input size */
-#define MAX_K   (((u_int)LONG_MAX + 1) / 1024)
-#define MAX_M   (((u_int)LONG_MAX + 1) / (1024*1024))
+#define MAX_K   (((u_int)LONG_MAX) / 1024)
+#define MAX_M   (((u_int)LONG_MAX) / (1024*1024))
 
 
 
