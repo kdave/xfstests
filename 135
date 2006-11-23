@@ -60,14 +60,20 @@ xfs_io -f -s -c 'pwrite -b 4k -S 0x34 0 4k' sync_file > /dev/null
 # create file with sync I/O
 xfs_io -f -d -c 'pwrite -b 4k -S 0x56 0 4k' direct_file > /dev/null
 
+# create file, truncate and then dirty again
+xfs_io -f -c 'pwrite -b 4k -S 0x78 0 4k' trunc_file > /dev/null
+xfs_io -c 'truncate 2k' trunc_file > /dev/null
+xfs_io -c 'pwrite 1k 0 1k' trunc_file > /dev/null
+
 _umount_mount
 
 # check file size and contents
 od -Ad -x async_file
 od -Ad -x sync_file
 od -Ad -x direct_file
+od -Ad -x trunc_file
 
-rm -f async_file sync_file direct_file
+rm -f async_file sync_file direct_file trunc_file
 
 status=0
 exit 
