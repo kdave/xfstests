@@ -32,7 +32,7 @@ _cleanup()
 
 # real QA test starts here
 
-_notrun "Need to fix up filtering before checkin" 
+#_notrun "Need to fix up filtering before checkin" 
 
 # Modify as appropriate.
 _supported_fs xfs
@@ -47,6 +47,11 @@ file=$SCRATCH_MNT/file
 touch $file
 inum=`ls -i $file | awk '{print $1}'`
 echo "inum=$inum"
+
+_filter()
+{
+    sed -e "s#$tmp#TMP#g"
+}
 
 add_eas()
 {
@@ -81,8 +86,6 @@ do_extents()
 
 _print_inode()
 {
-    #sync
-    #sleep 2
     umount $SCRATCH_MNT
     xfs_db -r -c "inode $inum" -c "print" $SCRATCH_DEV |\
     awk '
@@ -97,77 +100,245 @@ _print_inode()
     _scratch_mount
 }
 
+_print_inode_u()
+{
+    umount $SCRATCH_MNT
+    xfs_db -r -c "inode $inum" -c "print u" $SCRATCH_DEV
+    _scratch_mount
+}
+
+_print_inode_a()
+{
+    umount $SCRATCH_MNT
+    xfs_db -r -c "inode $inum" -c "print a" $SCRATCH_DEV
+    _scratch_mount
+}
+
+
+_test_add_eas()
+{
+	_print_inode
+
+	add_eas 1 1
+	_print_inode
+
+	add_eas 2 2
+	_print_inode
+
+	add_eas 3 4
+	_print_inode
+
+	add_eas 5 8
+	_print_inode
+
+	add_eas 9 16
+	_print_inode
+
+	add_eas 17 20
+	_print_inode
+
+	add_eas 21 21
+	_print_inode
+
+	add_eas 22 22
+	_print_inode
+
+	add_eas 23 23
+	_print_inode
+
+	add_eas 24 24
+	_print_inode
+
+	add_eas 25 25
+	_print_inode
+
+	add_eas 26 30
+	_print_inode
+
+	add_eas 31 35
+	_print_inode
+
+	rm_eas 1 34
+	_print_inode
+}
+
+_test_add_extents()
+{
+	# now do the extents
+
+	#build up
+	j=1
+	while [ $j -le 30 ]; do
+	    do_extents $j
+	    _print_inode
+	    j=`expr $j + 2`
+	done
+
+	#scale down
+	j=30
+	while [ $j -ge 1 ]; do
+	    do_extents $j
+	    _print_inode
+	    j=`expr $j - 2`
+	done
+
+	#build up
+	j=1
+	while [ $j -le 30 ]; do
+	    do_extents $j
+	    _print_inode
+	    j=`expr $j + 2`
+	done
+}
+
+#
+# Using a nested loop,
+# for various number of data extents,
+# try adding EAs and then removing EAs
+# Check that when we play with the EAs that we don't mess with the extents
+#
+_test_extents_eas()
+{
+	# now do the EAs with the extents
+
+	extents_max=400
+	extents_inc=10
+	EAs_max=100
+	EAs_inc=5
+	for i in `seq 1 $extents_inc $extents_max`; do
+	    do_extents $i
+	    echo "--- extents: $i ---"
+	    _print_inode
+	    _print_inode_u > $tmp.u1
+	    for j in `seq 1 $EAs_inc $EAs_max`; do
+		k=`expr $j + $EAs_inc - 1`
+		add_eas $j $k
+	    done
+	    # should have same extents
+	    _print_inode
+	    _print_inode_u > $tmp.u2
+            rm_eas 1 $EAs_max
+	    _print_inode_u > $tmp.u3
+
+	    echo ""
+	    echo "*** Extent differences before and after EAs added ***"
+	    diff -s $tmp.u1 $tmp.u2 | _filter
+	    echo ""
+	    if ! diff $tmp.u1 $tmp.u2 >/dev/null; then 
+		echo "Data extents magically changed"
+		exit
+	    fi
+
+	    echo ""
+	    echo "*** Extent differences before and after EAs removed ***"
+	    diff -s $tmp.u2 $tmp.u3 | _filter
+	    echo ""
+	    if ! diff $tmp.u2 $tmp.u3 >/dev/null; then 
+		echo "Data extents magically changed"
+		exit
+	    fi
+	done
+}
+
+#
+# The counterpart of _test_extents_eas
+# with the nested loops reversed.
+# For various number of EAs, try adding extents
+# Check that when we play with the data extents that we don't mess with the EAs
+#
+_test_eas_extents()
+{
+	# now do the EAs with the extents
+
+	extents_max=400
+	extents_inc=10
+	EAs_max=100
+	EAs_inc=5
+	for j in `seq 1 $EAs_inc $EAs_max`; do
+
+	    k=`expr $j + $EAs_inc - 1`
+	    add_eas $j $k
+	    echo "--- EAs: $j ---"
+
+	    _print_inode
+	    _print_inode_a > $tmp.a1
+	    for i in `seq 1 $extents_inc $extents_max`; do
+		do_extents $i
+	    done
+
+	    # should have same EAs
+	    _print_inode
+	    _print_inode_a > $tmp.a2
+	    >$file 
+	    _print_inode_a > $tmp.a3
+
+	    echo ""
+	    echo "*** EA differences before and after extents added ***"
+	    diff -s $tmp.a1 $tmp.a2 | _filter
+	    echo ""
+	    if ! diff $tmp.a1 $tmp.a2 >/dev/null; then 
+		echo "EAs magically changed"
+		exit
+	    fi
+
+	    echo ""
+	    echo "*** EA differences before and after extents removed ***"
+	    diff -s $tmp.a2 $tmp.a3 | _filter
+	    echo ""
+	    if ! diff $tmp.a2 $tmp.a3 >/dev/null; then 
+		echo "EAs magically changed"
+		exit
+	    fi
+	done
+}
+
+#
+# test to see how we go 
+
+#
+# test to ensure it fits a max sf EA
+#
+# literal part of inode starts at offset 100 (decimal)
+# for 512 bytes inode that gives 412 bytes of literal area
+#
+# min btree root (numrecs=3) => 3 * 16 + (4 or 8)
+# for 8 byte alignment => 56 bytes
+# => 512 - 156 = 356 bytes 
+#
+# SF EA of form
+#   totsize: 2 bytes
+#   count:   1 byte
+#   nlen:    1 byte
+#   vlen:    1 byte
+#   flags:   1 byte
+#   name:    nlen
+#   value:   vlen
+#
+# => 6+nlen+vlen
+#
+# for nlen=4 "name"
+# vlen = 356 - (6+4) = 346
+# 
+#
+_test_initial_sf_ea()
+{
+	rm $file
+	touch $file
+	vlen=402
+	vlen=300
+	dd if=/dev/zero bs=1 count=$vlen | attr -s name $file
+	_print_inode
+}
+
 # main
 
-_print_inode
+_test_add_eas
+_test_add_extents
+_test_extents_eas
+_test_eas_extents
+#_test_initial_sf_ea
 
-add_eas 1 1
-_print_inode
-
-add_eas 2 2
-_print_inode
-
-add_eas 3 4
-_print_inode
-
-add_eas 5 8
-_print_inode
-
-add_eas 9 16
-_print_inode
-
-add_eas 17 20
-_print_inode
-
-add_eas 21 21
-_print_inode
-
-add_eas 22 22
-_print_inode
-
-add_eas 23 23
-_print_inode
-
-add_eas 24 24
-_print_inode
-
-add_eas 25 25
-_print_inode
-
-add_eas 26 30
-_print_inode
-
-add_eas 31 35
-_print_inode
-
-rm_eas 1 34
-_print_inode
-
-# now do the extents
-
-#build up
-j=1
-while [ $j -le 30 ]; do
-    do_extents $j
-    _print_inode
-    j=`expr $j + 2`
-done
-
-#scale down
-j=30
-while [ $j -ge 1 ]; do
-    do_extents $j
-    _print_inode
-    j=`expr $j - 2`
-done
-
-#build up
-j=1
-while [ $j -le 30 ]; do
-    do_extents $j
-    _print_inode
-    j=`expr $j + 2`
-done
+# do a test with a variety of sized EAs
 
 # success, all done
 status=0
