@@ -1,0 +1,92 @@
+#! /bin/sh
+# FSQA Test No. 133
+#
+# Test for NULL files problem
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=lachlan@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux IRIX
+
+_setup_testdir
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+# create files
+i=1;
+while [ $i -lt 1000 ]
+do
+	file=$SCRATCH_MNT/$i
+	xfs_io -f -c "pwrite -b 64k -S 0xff 0 64k" $file > /dev/null
+	i=`expr $i + 1`
+done
+
+# give the system a chance to write something out
+sleep 10
+
+src/godown $SCRATCH_MNT
+
+umount $SCRATCH_MNT
+_scratch_mount
+
+# check file size and contents
+i=1;
+while [ $i -lt 1000 ]
+do
+	file=$SCRATCH_MNT/$i
+	# if file does not exist, the create was not logged, skip it
+	if [ -e $file ]
+	then
+		# if file size is zero it cannot be corrupt, skip it
+		if [ -s $file ]
+		then
+			# if file has non-zero size but no extents then it's contents will be NULLs, bad.
+			if xfs_bmap $file | grep 'no extents' > /dev/null
+			then
+				echo corrupt file $file - non-zero size but no extents
+			elif xfs_bmap $file | grep 'hole' > /dev/null
+			then
+				echo corrupt file $file - contains holes
+			else
+				for byte in `od -td1 -w16 -v $file | tr -s ' ' | cut -d ' ' -f 2-17`
+				do
+					# each byte in the file must not be 0
+					if [ $byte -eq 0 ]
+					then
+						echo corrupt file $file - NULLs found
+						break;
+					fi
+				done
+			fi
+		fi
+		rm -f $file
+	fi
+	i=`expr $i + 1`
+done
+
+status=0
+exit 
