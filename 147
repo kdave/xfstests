@@ -1,0 +1,45 @@
+#! /bin/sh
+# FSQA Test No. 142
+#
+# Dmapi get/set_region
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dmapi
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_dmapi_scratch_mount
+
+mkdir -p $SCRATCH_MNT/dmapi
+
+# run DMAPI test using verbose output
+${DMAPI_QASUITE2_DIR}src/test_region -v $DMAPI_LS_TO_COPY_PATH $SCRATCH_MNT
+
+status=0
+exit 

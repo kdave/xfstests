@@ -15,7 +15,7 @@ LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
 
-SUBDIRS = include lib ltp src m4
+SUBDIRS = include lib ltp src m4 dmapi
 
 default: $(CONFIGURE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
@@ -36,7 +36,7 @@ $(CONFIGURE):
 	./configure \
                 --libexecdir=/usr/lib \
                 --enable-lib64=yes
-
+	cd $(TOPDIR)/dmapi/ ; ./configure
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@

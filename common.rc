@@ -93,7 +93,7 @@ umask 022
 
 _mount()
 {
-	$MOUNT_PROG `echo $* | _mount_ops_minus_o_comma_replace`
+    $MOUNT_PROG `_mount_ops_filter $*`
 }
 
 _scratch_options()
@@ -147,20 +147,30 @@ _test_options()
 	TEST_OPTIONS="$TEST_OPTIONS ${log_opt}logdev=$TEST_LOGDEV"
 }
 
-_mount_ops_minus_o_comma_replace()
+_mount_ops_filter()
 {
-	# irix is fussy about how it is fed its mount options
-	# - multiple -o's are not allowed
-	# - no spaces between comma delimitered options
-	
-	# this sed script replaces all -o's (except the first) with a comma
-	# not required for linux, but won't hurt
-	sed -e 's/[[:space:]]*-o[[:space:]]*/UnIqUe/1; s/[[:space:]]*-o[[:space:]]*/,/g; s/UnIqUe/ -o /1'
+    params="$*"
+    
+    #handle dmapi mtpt option correctly
+    let "last_index=$#-1"
+    [ $last_index -gt 0 ] && shift $last_index
+    FS_ESCAPED=`echo $1 | $SED_PROG -e 's/\\//\\\\\\//g'`
+    params="`echo $params | \
+            $PERL_PROG -ne "s/mtpt=[^,|^\n|^\s]*/mtpt=$FS_ESCAPED\1\2/; print;"`"
+    
+    # irix is fussy about how it is fed its mount options
+    # - multiple -o's are not allowed
+    # - no spaces between comma delimitered options
+    
+    # this sed script replaces all -o's (except the first) with a comma
+    # not required for linux, but won't hurt
+    echo $params | sed -e 's/[[:space:]]*-o[[:space:]]*/UnIqUe/1; s/[[:space:]]*-o[[:space:]]*/,/g; s/UnIqUe/ -o /1'
 }
 
 _scratch_mount_options()
 {
     _scratch_options mount
+
     echo $SCRATCH_OPTIONS $MOUNT_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
 }
 
@@ -172,7 +182,7 @@ _scratch_mount()
 _test_mount()
 {
     _test_options mount
-    _mount -t $FSTYP $TEST_OPTIONS $MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
+    _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $* $TEST_DEV $TEST_DIR
 }
 
 _scratch_mkfs_options()
