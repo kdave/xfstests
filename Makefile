@@ -3,7 +3,7 @@
 #
 
 TOPDIR = .
-HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs && echo yes || echo no)
+HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs -a -f $(TOPDIR)/dmapi/Makefile && echo yes || echo no)
 
 ifeq ($(HAVE_BUILDDEFS), yes)
 include $(TOPDIR)/include/builddefs
