@@ -21,6 +21,7 @@ rm -f $seq.full
 
 # get standard environment, filters and checks
 . ./common.rc
+. ./common.repair
 . ./common.filter
 
 # link correct .out file
@@ -28,14 +29,15 @@ _link_out_file $seq.out
 
 _check_repair()
 {
-	_scratch_xfs_repair >$tmp.0 2>&1
+	echo "Repairing, round 0" >> $seq.full
+	_scratch_xfs_repair 2>&1 | _filter_repair | tee -a $seq.full >$tmp.0
 	for i in 1 2 3 4
 	do
 		echo "Repairing, iteration $i" | tee -a $seq.full
-		_scratch_xfs_repair 2>&1 | tee -a $seq.full >$tmp.$i
+		_scratch_xfs_repair 2>&1 | _filter_repair >$tmp.$i
 		diff $tmp.0 $tmp.$i >> $seq.full
 		if [ $? -ne 0 ]; then
-			echo "ERROR: repair round $i differs (see $seq.full)"
+			echo "ERROR: repair round $i differs to round 0 (see $seq.full)" | tee -a $seq.full
 			break
 		fi
 		# echo all interesting stuff...
