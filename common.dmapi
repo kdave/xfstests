@@ -13,15 +13,17 @@ DMAPI_QASUITE2_DIR=$here/dmapi/src/suite2/
 DMAPI_LS_TO_COPY_PATH=$DMAPI_QASUITE2_DIR/bindir/ls_to_copy
 
 _dmapi_scratch_mount () {
-    if [ `lsmod | grep -c dmapi` -gt 0 ] ; then
-        if [ `echo "$MOUNT_OPTIONS" | grep -c dmapi` -gt 0 -o \
-            `echo "$MOUNT_OPTIONS" | grep -c dmi` -gt 0 ] ; then
-            #already got dmapi options set
-            _scratch_mount
-        else
-            _scratch_mount "-o dmapi,mtpt=$SCRATCH_MNT"
-        fi
+    if [ `echo "$MOUNT_OPTIONS" | grep -c dmapi` -gt 0 -o \
+        `echo "$MOUNT_OPTIONS" | grep -c dmi` -gt 0 ] ; then
+        #already got dmapi options set
+        _scratch_mount
+        dmapi_mount_result=$?
     else
-        _notrun "DMAPI modules not loaded"
+        _scratch_mount "-o dmapi,mtpt=$SCRATCH_MNT"
+        dmapi_mount_result=$?
+    fi
+
+    if [ $dmapi_mount_result -ne 0 ] ; then
+        _notrun "Assuming DMAPI modules are not loaded"
     fi
 }
