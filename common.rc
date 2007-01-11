@@ -151,20 +151,20 @@ _mount_ops_filter()
 {
     params="$*"
     
-    #handle dmapi mtpt option correctly
-    let "last_index=$#-1"
+    #get mount point to handle dmapi mtpt option correctly
+    last_index=`expr $# - 1`
     [ $last_index -gt 0 ] && shift $last_index
-    FS_ESCAPED=`echo $1 | $SED_PROG -e 's/\\//\\\\\\//g'`
-    params="`echo $params | \
-            $PERL_PROG -ne "s/mtpt=[^,|^\n|^\s]*/mtpt=$FS_ESCAPED\1\2/; print;"`"
+    FS_ESCAPED=$1
     
     # irix is fussy about how it is fed its mount options
     # - multiple -o's are not allowed
     # - no spaces between comma delimitered options
-    
-    # this sed script replaces all -o's (except the first) with a comma
+    # the sed script replaces all -o's (except the first) with a comma
     # not required for linux, but won't hurt
-    echo $params | sed -e 's/[[:space:]]*-o[[:space:]]*/UnIqUe/1; s/[[:space:]]*-o[[:space:]]*/,/g; s/UnIqUe/ -o /1'
+    
+    echo $params | sed -e 's/[[:space:]]*-o[[:space:]]*/UnIqUe/1; s/[[:space:]]*-o[[:space:]]*/,/g; s/UnIqUe/ -o /1' \
+        | $PERL_PROG -ne "s#mtpt=[^,|^\n|^\s]*#mtpt=$FS_ESCAPED\1\2#; print;"
+
 }
 
 _scratch_mount_options()
