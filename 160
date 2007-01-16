@@ -1,0 +1,67 @@
+#! /bin/sh
+# FSQA Test No. 160
+#
+# Change and view DMAPI access rights.
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dmapi
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux IRIX
+
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_dmapi_scratch_mount
+
+touch $SCRATCH_MNT/dmapi_test
+
+echo "***create session"
+eval `${DMAPI_QASUITE1_DIR}../simple/dm_create_session`
+
+echo "***create user event"
+token="`${DMAPI_QASUITE1_DIR}cmd/create_userevent -s $newsid ACCESS_RIGHT_EVENT | perl -ne 'if (/token ([0-9]+)/) { print $1; } '`"
+[ $? -ne 0 ] && echo "failed to create user event"
+
+echo "*** query & up/downgrade right"
+${DMAPI_QASUITE1_DIR}cmd/query_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+
+${DMAPI_QASUITE1_DIR}cmd/request_right -s $newsid $token $SCRATCH_MNT/dmapi_test DM_RIGHT_SHARED
+${DMAPI_QASUITE1_DIR}cmd/query_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+
+${DMAPI_QASUITE1_DIR}cmd/upgrade_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+${DMAPI_QASUITE1_DIR}cmd/query_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+
+${DMAPI_QASUITE1_DIR}cmd/downgrade_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+${DMAPI_QASUITE1_DIR}cmd/query_right -s $newsid $token $SCRATCH_MNT/dmapi_test
+
+echo "*** respond to event"
+${DMAPI_QASUITE1_DIR}cmd/respond_event $newsid $token 1 0
+
+echo "*** destroy session"
+${DMAPI_QASUITE1_DIR}../simple/dm_destroy_session -s $newsid
+
+status=0
+exit 

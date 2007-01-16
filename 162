@@ -1,0 +1,73 @@
+#! /bin/sh
+# FSQA Test No. 162
+#
+# Placing holds on objects
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=allanr@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dmapi
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux IRIX
+
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_dmapi_scratch_mount
+
+qa_file=$SCRATCH_MNT/dmapi_hole_file
+touch $qa_file
+
+echo "***create session"
+eval `${DMAPI_QASUITE1_DIR}../simple/dm_create_session`
+
+echo "***create user event"
+token="`${DMAPI_QASUITE1_DIR}cmd/create_userevent -s $newsid OBJECT_HOLD_EVENT | perl -ne 'if (/token ([0-9]+)/) { print $1; } '`"
+[ $? -ne 0 ] && echo "failed to create user event"
+
+echo "***check hold"
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_query -s $newsid $token $qa_file
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_hold -s $newsid $token $qa_file
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_query -s $newsid $token $qa_file
+
+echo "***check holding an object thats already held"
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_hold -s $newsid $token $qa_file 2>/dev/null
+[ $? -eq 0 ] && echo "obj_ref_hold should have failed"
+
+echo "***release object"
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_rele -s $newsid $token $qa_file
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_query -s $newsid $token $qa_file
+
+echo "***release object with no hold"
+${DMAPI_QASUITE1_DIR}cmd/obj_ref_rele -s $newsid $token $qa_file 2>/dev/null
+[ $? -eq 0 ] && echo "obj_ref_rele should have failed"
+
+echo "***respond to user event"
+${DMAPI_QASUITE1_DIR}cmd/respond_event $newsid $token 1 0
+[ $? -ne 0 ] && echo "1st respond_event failed."
+
+${DMAPI_QASUITE1_DIR}../simple/dm_destroy_session -s $newsid
+
+status=0
+exit 
