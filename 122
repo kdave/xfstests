@@ -28,6 +28,21 @@ _supported_fs xfs
 _supported_os Linux
 _require_command /usr/bin/indent
 
+# filter out known changes to xfs type sizes
+_type_size_filter()
+{
+	# lazy SB adds __be32 agf_btreeblks - pv960372
+	if [ "$($MKFS_XFS_PROG 2>&1 | grep -c lazy-count )" == "0" ]; then
+		perl -ne '
+s/sizeof\( xfs_agf_t \) = 60/sizeof( xfs_agf_t ) = <SIZE>/;
+		print;'
+	else
+		perl -ne '
+s/sizeof\( xfs_agf_t \) = 64/sizeof( xfs_agf_t ) = <SIZE>/;
+		print;'
+	fi
+}
+
 cprog=$tmp.get_structs.c
 oprog=$tmp.get_structs
 
@@ -144,6 +159,6 @@ echo 'return 0; }' >>$cprog
 
 # create and run program
 cc -o $oprog $cprog
-eval $oprog | LC_COLLATE=POSIX sort
+eval $oprog | LC_COLLATE=POSIX sort | _type_size_filter
 
 status=0
