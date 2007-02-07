@@ -38,11 +38,15 @@ _filter_sid_list()
 
 _check_sids()
 {
-    ${DMAPI_QASUITE1_DIR}../simple/dm_getall_sessions | grep "$@" > /dev/null
-    if [ $? -ne 0 ] ; then
-        echo "ERROR: SID(s) not created"
-        ${DMAPI_QASUITE1_DIR}../simple/dm_getall_sessions >>$seq.full
-    fi
+	for i in $@; do
+		CHECKED_SID=`${DMAPI_QASUITE1_DIR}../simple/dm_getall_sessions \
+			| perl -ne "if (/^sids.*[\"|\s]($i)[\"|\s].*/) {print \$1} ;"`
+		if [ -z "$CHECKED_SID" ] ; then
+			echo "ERROR: SID(s) not created"
+			${DMAPI_QASUITE1_DIR}../simple/dm_getall_sessions >>$seq.full
+			return
+		fi
+	done
 }
 
 # get standard environment, filters and checks
@@ -67,18 +71,18 @@ _dm_create_session
 sid3=$newsid
 
 echo "*** check 3 sessions exist"
-_check_sids "$sid1 $sid2 $sid3"
+_check_sids $sid1 $sid2 $sid3
 
 echo "*** destroy first session"
 ${DMAPI_QASUITE1_DIR}../simple/dm_destroy_session -s $sid1
 
 #should fail
 echo "*** check first session no longer exists"
-_check_sids "$sid1"
+_check_sids $sid1
 
 #should still remain
 echo "*** check last 2 session exist"
-_check_sids "$sid2 $sid3"
+_check_sids $sid2 $sid3
 
 echo "*** query"
 ${DMAPI_QASUITE1_DIR}../simple/dm_query_session -s $sid2
@@ -88,10 +92,10 @@ ${DMAPI_QASUITE1_DIR}../simple/dm_destroy_session -s $sid2
 ${DMAPI_QASUITE1_DIR}../simple/dm_destroy_session -s $sid3
 
 echo "*** check second session no longer exists"
-_check_sids "$sid2"
+_check_sids $sid2
 
 echo "*** check third session no longer exists"
-_check_sids "$sid3"
+_check_sids $sid3
 
 status=0
 exit 
