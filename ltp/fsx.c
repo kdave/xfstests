@@ -153,16 +153,20 @@ warn(const char * fmt, ...)  {
 	va_end(ap);
 }
 
+#define BUF_SIZE 1024
+
 void
 prt(char *fmt, ...)
 {
 	va_list args;
+	char buffer[BUF_SIZE];
 
 	va_start(args, fmt);
-	vfprintf(stdout, fmt, args);
-	if (fsxlogf)
-		vfprintf(fsxlogf, fmt, args);
+	vsnprintf(buffer, BUF_SIZE, fmt, args);
 	va_end(args);
+	fprintf(stdout, buffer);
+	if (fsxlogf)
+		fprintf(fsxlogf, buffer);
 }
 
 void
