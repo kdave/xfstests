@@ -51,19 +51,21 @@ rm -f $seq.full
 agsize=32
 echo -n "Make $agsize megabyte filesystem on SCRATCH_DEV and mount... "
 _scratch_mkfs_xfs -dsize=${agsize}m,agcount=1 2>&1 >/dev/null || _fail "mkfs failed"
+bsize=`_scratch_mkfs_xfs -dsize=${agsize}m,agcount=1 2>&1 | _filter_mkfs 2>&1 \
+		| perl -ne 'if (/dbsize=(\d+)/) {print $1;}'`
+onemeginblocks=`expr 1048576 / $bsize`
 _scratch_mount || _fail "mount failed"
 
 echo "done"
 
 # full allocation group -> partial; partial -> expand partial + new partial;
 # partial -> expand partial; partial -> full
-# 17 -> 33 -> 35 -> 48 megabytes, converted to fs blocks below
-# for size in 4352 8448 8960 12288
-# 33 -> 67 -> 75 -> 96 converted to fs blocks:
-for size in 8448 17512 19200 24576
+# cycle through 33m -> 67m -> 75m -> 96m
+for size in 33 67 75 96
 do
+    grow_size=`expr $size \* $onemeginblocks`
     _fill $SCRATCH_MNT/fill_$size
-    _do "Grow filesystem to $size blocks" "xfs_growfs -D ${size} $SCRATCH_MNT"
+    _do "Grow filesystem to ${size}m" "xfs_growfs -D $grow_size $SCRATCH_MNT"
     echo -n "Flush filesystem... "
     _do "umount $SCRATCH_MNT"
     _do "_scratch_mount"
@@ -73,7 +75,7 @@ do
       echo "fail (see $seq.full)"
       _do "cat $tmp.manifest"
       _do "ls -altrR $SCRATCH_MNT"
-      _do "dd if=$SCRATCH_DEV bs=4096 count=$size | gzip -9 > $seq.fsimage.gz"
+      _do "dd if=$SCRATCH_DEV bs=4096 count=$grow_size | gzip -9 > $seq.fsimage.gz"
       status=1 ; exit
     fi
     echo "done"
