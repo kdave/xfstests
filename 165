@@ -1,0 +1,124 @@
+#! /bin/sh
+# FS QA Test No. 165
+#
+# Test out prealloc, direct writes and buffered read
+# Some experimentation when looking at 
+#   pv#962014 - DMF 3.7 reading incorrect data 
+# Doesn't actually reproduce the problem but it tried to :-)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@puffy.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+#
+# Filter out these lines partially
+# From:
+#   40 KiB, 10 ops; 0.0000 sec (4.070 MiB/sec and 1041.9923 ops/sec)
+# To:
+#   40 KiB, 10 ops
+#
+_filter_io()
+{
+    tee -a $seq.full | sed 's/ops;.*/ops/'
+}
+
+#
+# <    1: [8..79]:         6552..6623        0 (6552..6623)        72
+# >    1: [8..79]:         202544..202615    0 (202544..202615)    72
+#
+#
+_filter_bmap()
+{
+    tee -a $seq.full |\
+    awk '$3 ~ /hole/ { print $1, $2, $3; next }
+         {print $1, $2}'
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os IRIX Linux
+
+# io tests 
+testfile=$TEST_DIR/file.$seq
+rm -f $testfile
+rm -f $seq.full
+len=4
+end=`expr 10 \* $len`
+
+# Other test...
+#xfs_io -f -c "resvsp ${off}k ${end}k" $testfile
+
+# write the initial file
+xfs_io -f -c "pwrite 0  ${end}k" $testfile | _filter_io
+
+
+off=0
+while [ $off -le $end ]
+do
+	offset=${off}k
+	length=${len}k
+
+	xfs_io -c "unresvsp $offset $length" -c "bmap -vp" $testfile | _filter_bmap
+
+	off=`expr $off + $len` # skip over 1
+	off=`expr $off + $len`
+done
+
+off=0
+while [ $off -le $end ]
+do
+	offset=${off}k
+	length=${len}k
+	bufsize=${len}k
+	echo ""
+	echo "*** offset = $offset ***"
+	echo ""
+
+	# prealloc and write
+	xfs_io -d -c "resvsp $offset $length" -c "pwrite -b $bufsize $offset $length" $testfile | _filter_io
+
+	# Other tests...
+	#xfs_io -c "resvsp $offset $length" $testfile
+	#xfs_bmap -v -p $testfile
+	#xfs_io -d -c "pwrite -b $bufsize $offset $length" $testfile
+	#xfs_bmap -v -p $testfile
+
+	xfs_io -r -c "pread -v -b $bufsize $offset $length" $testfile >$tmp.$off &
+
+	# Other tests...
+	#xfs_io -r -c "pread -v -b $bufsize $offset $length" $testfile
+        #sleep 5
+
+	off=`expr $off + $len` # skip over 1
+	off=`expr $off + $len`
+done
+
+wait
+cat $tmp.* | _filter_io
+
+# success, all done
+status=0
+exit
