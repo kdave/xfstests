@@ -3,7 +3,7 @@
 #
 
 TOPDIR = .
-HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs -a -f $(TOPDIR)/dmapi/Makefile && echo yes || echo no)
+HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs && echo yes || echo no)
 
 ifeq ($(HAVE_BUILDDEFS), yes)
 include $(TOPDIR)/include/builddefs
@@ -11,15 +11,16 @@ endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
+DMAPI_MAKEFILE = dmapi/Makefile
 LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
 
 SUBDIRS = include lib ltp src m4 dmapi
 
-default: $(CONFIGURE) new remake check $(TESTS)
+default: $(CONFIGURE) $(DMAPI_MAKEFILE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
-	$(MAKE) -C . $@
+	$(MAKE) $@
 else
 	$(SUBDIRS_MAKERULE)
 endif
@@ -36,6 +37,8 @@ $(CONFIGURE):
 	./configure \
                 --libexecdir=/usr/lib \
                 --enable-lib64=yes
+
+$(DMAPI_MAKEFILE):
 	cd $(TOPDIR)/dmapi/ ; ./configure
 
 aclocal.m4::
