@@ -153,5 +153,33 @@ _qsetup()
     echo "and using type=$type id=$id" >>$seq.full
 }
 
+#
+# Ensures only the given quota mount option is used
+#
+_qmount_option()
+{
+	# Replace any user defined quota options
+	# with the quota option that we want.
+	# Simplest to do this rather than delete existing ones first because
+	# of the variety of commas and spaces and multiple -o's
+	# that we'd have to cater for. Doesn't matter if we have duplicates.
+	# Use "QUOTA" string so that we don't have any substring confusion
+	# thanks to "quota" which will match with "uquota" and "gquota" etc.
+	export MOUNT_OPTIONS=`echo $MOUNT_OPTIONS \
+	| sed   -e 's/uquota/QUOTA/g'      \
+		-e 's/gquota/QUOTA/g'      \
+		-e 's/pquota/QUOTA/g'      \
+		-e 's/quota/QUOTA/g'       \
+		-e 's/uqnoenforce/QUOTA/g' \
+		-e 's/gqnoenforce/QUOTA/g' \
+		-e 's/pqnoenforce/QUOTA/g' \
+		-e 's/qnoenforce/QUOTA/g'  \
+		-e "s/QUOTA/$1/g"`
+
+	# Ensure we have the given quota option - duplicates are fine
+	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $1"
+	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seq.full
+}
+
 # make sure this script returns success
 /bin/true
