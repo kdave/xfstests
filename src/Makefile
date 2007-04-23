@@ -12,8 +12,9 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	godown resvtest writemod makeextents itrash \
 	multi_open_unlink dmiperf
 
-LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
-	preallo_rw_pattern_writer ftrunc trunc fs_perms testx looptest locktest
+LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize \
+	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
+	fs_perms testx looptest locktest unwritten_mmap
 
 IRIX_TARGETS = open_unlink
 

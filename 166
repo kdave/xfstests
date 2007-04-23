@@ -1,0 +1,54 @@
+#! /bin/sh
+# FSQA Test No. 166
+#
+# ->page-mkwrite test - unwritten extents and mmap
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dgc@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_filter_blocks()
+{
+    $AWK_PROG '/[0-9]/ { print $1, $2, "XX..YY", "AG", "(AA..BB)", $6, $7 }'
+}
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_setup_testdir
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+TEST_FILE=$SCRATCH_MNT/test_file
+TEST_PROG=$here/src/unwritten_mmap
+FILE_SIZE=131072
+
+rm -f $TEST_FILE
+$TEST_PROG $FILE_SIZE $TEST_FILE
+
+xfs_bmap -vp $TEST_FILE | _filter_blocks
+
+status=0
+exit
