@@ -194,10 +194,25 @@ _scratch_mkfs_options()
 
 _scratch_mkfs_xfs()
 {
+    # extra mkfs options can be added by tests
+    local extra_mkfs_options=$*
+
     _scratch_options mkfs
 
-    $MKFS_XFS_PROG $SCRATCH_OPTIONS $MKFS_OPTIONS $* $SCRATCH_DEV
-    mkfs_status=$?
+    $MKFS_XFS_PROG $SCRATCH_OPTIONS $MKFS_OPTIONS $extra_mkfs_options $SCRATCH_DEV
+    local mkfs_status=$?
+
+    # a mkfs failure may be caused by conflicts between
+    # $MKFS_OPTIONS and $extra_mkfs_options
+
+    if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
+        echo "** mkfs failed with extra mkfs options added to \"$MKFS_OPTIONS\" by test $seq **" \
+            >>$here/$seq.full
+        echo "** attempting to mkfs using only test $seq options: $extra_mkfs_options **" \
+            >>$here/$seq.full
+        $MKFS_XFS_PROG $SCRATCH_OPTIONS $extra_mkfs_options $SCRATCH_DEV
+        mkfs_status=$?
+    fi
 
     if [ "$USE_BIG_LOOPFS" = yes ]; then
 	[ -z "$RETAIN_AG_BYTES" ] && RETAIN_AG_BYTES=0
