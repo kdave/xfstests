@@ -1,0 +1,74 @@
+#! /bin/sh
+# FSQA Test No. 168
+#
+# Check for DMAPI destroy events when removing files without attributes
+# See PV960928 for details
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ddiss@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dmapi
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_dmapi_scratch_mount
+
+qa_file_noattr=$SCRATCH_MNT/dmapi_file_noattr
+qa_file_withattr=$SCRATCH_MNT/dmapi_file_withattr
+
+# run dmapi print_event in background to capture events triggered during test
+${DMAPI_QASUITE1_DIR}cmd/print_event $SCRATCH_MNT > $tmp.print_event_out 2>&1 &
+dmapi_print_event_pid=$!
+
+# enable DMAPI set_return_on_destroy for $SCRATCH_MNT
+${DMAPI_COMMON_DIR}cmd/set_return_on_destroy -F $SCRATCH_MNT ATTR_NAME_1
+
+echo "# create file"
+touch $qa_file_noattr
+echo "# remove file"
+rm -f $qa_file_noattr
+
+echo "# create file"
+touch $qa_file_withattr
+echo "# set dmapi attributes on file"
+${DMAPI_QASUITE1_DIR}cmd/set_dmattr $qa_file_withattr ATTR_NAME_1 ATTR_VALUE_1
+echo "# remove file"
+rm -f $qa_file_withattr
+
+# kill off background dmapi print_event process
+kill $dmapi_print_event_pid
+# give dmapi print_event time to finish writing out any events not yet output
+wait
+
+# dmapi destroy events are asyncronous,  don't rely on fixed ordering of events
+# in print_event output, use sort.
+echo "# here comes the dmapi print_event filtered and sorted output"
+cat $tmp.print_event_out | tee -a $here/$seq.full | _filter_dmapi_print_event | LC_COLLATE=POSIX sort
+rm $tmp.print_event_out
+
+status=0
+exit
