@@ -10,7 +10,7 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
 	godown resvtest writemod makeextents itrash \
-	multi_open_unlink dmiperf
+	multi_open_unlink dmiperf unwritten_sync
 
 LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize \
 	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
@@ -106,6 +106,9 @@ looptest: looptest.o
 	$(LINKTEST)
 
 locktest: locktest.o
+	$(LINKTEST)
+
+unwritten_sync: unwritten_sync.o
 	$(LINKTEST)
 
 ifeq ($(PKG_PLATFORM),irix)

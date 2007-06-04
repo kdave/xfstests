@@ -1,0 +1,65 @@
+#! /bin/sh
+# FSQA Test No. 167
+#
+# unwritten extent conversion test
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dgc@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+rm -f $seq.full
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	killall -q -TERM fsstress 2> /dev/null
+	_cleanup_testdir
+}
+
+workout()
+{
+	procs=100
+	nops=15000
+	$FSSTRESS_PROG -d $SCRATCH_MNT -p $procs -n $nops $FSSTRESS_AVOID \
+		>>$seq.full &
+	sleep 2
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_setup_testdir
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+TEST_FILE=$SCRATCH_MNT/test_file
+TEST_PROG=$here/src/unwritten_sync
+LOOPS=100
+
+echo "*** test unwritten extent conversion under heavy I/O"
+
+workout
+
+rm -f $TEST_FILE
+$TEST_PROG $LOOPS $TEST_FILE
+killall -q -TERM fsstress 2> /dev/null
+
+echo "     *** test done"
+
+status=0
+exit
