@@ -72,8 +72,18 @@ _check_repair()
 {
 	value=$1
 	structure="$2"
+
+	#ensure the filesystem has been dirtied since last repair
+	_scratch_mount
+	POSIXLY_CORRECT=yes \
+	dd if=/bin/sh of=$SCRATCH_MNT/sh 2>&1 |_filter_dd
+	sync
+	rm -f $SCRATCH_MNT/sh
+	umount $SCRATCH_MNT
+
 	_zero_position $value "$structure"
 	_scratch_xfs_repair 2>&1 | _filter_repair
+
 	# some basic sanity checks...
 	_check_scratch_fs
 	_scratch_mount                                      #mount
