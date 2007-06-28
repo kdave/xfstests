@@ -1,0 +1,168 @@
+##/bin/sh
+#
+# Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# Core of filestreams tests.
+#
+
+_do_stream()
+{
+        local directory_name=$1
+        local files=$2
+        local file_size=$3
+        local bsize=$4
+	local iflag=$5
+	local dio=$6
+
+        local count=`expr $file_size / $bsize`
+        mkdir $directory_name
+	if [ "$iflag" = "1" ]; then
+		$XFS_IO_PROG -x -c "chattr +S" $directory_name \
+			|| _fail "chattr of filestream flag"
+	fi
+        cd $directory_name
+        local i=1
+	local oflags=""
+	if [ "$dio" = "1" ]; then
+		oflags="oflag=direct"
+	fi
+        while [ $i -le $files ]; do
+                dd if=/dev/zero of=frame-${i} $oflags \
+                        bs=$bsize count=$count >/dev/null 2>&1
+                i=`expr $i + 1`
+        done
+}
+
+_filter_agno()
+{
+        # the ag number is in column 4 of xfs_bmap output
+        perl -ne '
+                $ag = (split /\s+/)[4] ;
+		if ($ag =~ /\d+/) {print "$ag "} ;
+        '
+}
+
+_get_stream_ags()
+{
+        local directory_name=$1
+        local stream_ags=`xfs_bmap -vp ${directory_name}/* | _filter_agno`
+        echo $stream_ags
+}
+
+_check_for_dupes()
+{
+        # check for duplicate numbers between two space seperated vars
+        local num_str_one=$1
+        local num_str_two=$2
+
+        local this_num_one
+        local this_num_two
+        for this_num_one in $num_str_one; do
+                for this_num_two in $num_str_two; do
+                        if [ "$this_num_one" == "$this_num_two" ]; then
+				echo "duplicate AG $this_num_one found" \
+					>> $here/$seq.full
+				return 1
+			fi
+                done
+        done
+        return 0
+}
+
+rm -f $here/$seq.full
+
+# test that filestreams are available
+umount $SCRATCH_MNT > /dev/null 2>&1
+
+_scratch_mkfs_xfs > /dev/null 2>&1 \
+	|| _fail "mkfs failed"
+
+_scratch_mount "-o filestreams" \
+	|| _notrun "filestreams mount not available"
+
+sync
+umount $SCRATCH_MNT > /dev/null 2>&1
+
+_test_streams() {
+
+	echo "# testing $* ...."
+	local agcount="$1"
+	local agsize="$2" # in MB
+	local stream_count="$3"
+	local stream_files="$4"
+	local stream_file_size=`expr $5 \* 1024 \* 1024`
+	local use_iflag="$6"
+	local use_directio="$7"
+	local expected_result="$8"
+
+	local size=`expr $agsize \* 1024 \* 1024 \* $agcount`
+	_scratch_mkfs_xfs -dsize=$size,agcount=$agcount >/dev/null 2>&1 \
+		|| _fail "mkfs failed"
+
+	if [ "$use_iflag" = "0" ]; then
+		# mount using filestreams mount option
+		_scratch_mount "-o filestreams" \
+			|| _notrun "filestreams mount not available"
+	else
+		# test will set inode flag
+		_scratch_mount
+	fi
+
+
+	cd $SCRATCH_MNT
+
+	# start four streams, each writing 24m (8 x 3m files)
+	echo "# streaming"
+	stream_pids=""
+	stream_index=1
+	while [ $stream_index -le $stream_count ]; do
+		_do_stream stream${stream_index}-dir $stream_files \
+			$stream_file_size 1048576 $use_iflag $use_directio &
+		stream_pids="$stream_pids $!"
+		stream_index=`expr $stream_index + 1`
+	done
+
+	# wait for streams to finish
+	# XXX wait here not needed? -dgc
+	wait $stream_pids
+
+	# sync the buffered streams out in parallel
+	echo "# sync AGs..."
+	stream_pids=""
+	stream_index=1
+	while [ $stream_index -le $stream_count ]; do
+		_get_stream_ags stream${stream_index}-dir > /dev/null 2>&1 &
+		stream_pids="$stream_pids $!"
+		stream_index=`expr $stream_index + 1`
+	done
+
+	# wait for streams to finish
+	wait $stream_pids
+
+	# confirm streams are in seperate AGs
+	echo "# checking stream AGs..."
+	ags_seen=""
+	stream_index=1
+	while [ $stream_index -le $stream_count ]; do
+		_get_stream_ags stream${stream_index}-dir > $tmp.${stream_index} &
+		this_stream_ags=`_get_stream_ags stream${stream_index}-dir`
+		echo "stream $stream_index AGs: $this_stream_ags" >> $here/$seq.full
+		_check_for_dupes "$ags_seen" "$this_stream_ags"
+		if [ $? -ne 0 ]; then
+			if [ "$expected_result" = "fail" ]; then
+				echo "+ expected failure, matching AGs"
+				expected_result="failed"
+				break
+			else
+				_fail "- failed, streams with matching AGs"
+			fi
+		fi
+		ags_seen="$ags_seen $this_stream_ags"
+		stream_index=`expr $stream_index + 1`
+	done
+	if [ "$expected_result" != "failed" ]; then
+		echo "+ passed, streams are in seperate AGs"
+	fi
+	cd $here
+	umount $SCRATCH_MNT
+}

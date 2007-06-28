@@ -1,0 +1,48 @@
+#! /bin/sh
+# FSQA Test No. 172
+#
+# Check the filestreams allocator is doing its job.
+# Multi-file data streams should always write into seperate AGs.
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dgc@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+        cd /
+        rm -rf ${SCRATCH_MNT}/stream*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_require_scratch
+
+. ./common.filestreams
+
+# test reaper works by setting timeout low. Expected to fail
+# for buffered, succeed for direct I/O.
+echo 50 > /proc/sys/fs/xfs/filestream_centisecs
+_test_streams 8 16 4 8 3 1 0 fail
+_test_streams 64 16 20 10 1 0 1
+
+status=0
+exit
+
