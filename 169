@@ -1,0 +1,95 @@
+#! /bin/sh
+# FSQA Test No. 169
+#
+# Test for file size consistency with append followed by umount/mount
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=ddiss@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+rm -f $seq.full
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+_show_wrote_and_stat_only()
+{
+	# filer out xfs_io bits we are interested in
+	perl -ne '
+		if (/^wrote/) { print } ;
+		if (/^stat\.size/) { print } ;
+	'
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+_scratch_mkfs_xfs >>$seq.full 2>&1 \
+	|| _fail "mkfs scratch failed"
+
+_scratch_mount >>$seq.full 2>&1 \
+    || _fail "mount failed: $MOUNT_OPTIONS"
+
+echo "# creating new file for io"
+touch $SCRATCH_MNT/testfile
+
+echo "# appending 15k to new file, sync every 5k"
+xfs_io -a -c "pwrite 0 5k" -c "fsync" \
+	-c "pwrite 5k 5k" -c "fsync" \
+	-c "pwrite 10k 5k" -c "fsync" -c "stat" \
+	$SCRATCH_MNT/testfile \
+	| _show_wrote_and_stat_only
+
+echo "# unmounting scratch"
+umount $SCRATCH_MNT>>$seq.full 2>&1 \
+    || _fail "unmount failed"
+
+echo "# mounting scratch"
+_scratch_mount >>$seq.full 2>&1 \
+    || _fail "mount failed: $MOUNT_OPTIONS"
+
+echo "# stating file to confirm correct size"
+xfs_io -r -c "stat" $SCRATCH_MNT/testfile \
+	| _show_wrote_and_stat_only
+
+echo "# appending 10 bytes to new file, sync at 5 bytes"
+xfs_io -f -c "pwrite 0 5" -c s -c "pwrite 5 5" \
+	-c "stat" $SCRATCH_MNT/nextfile \
+	| _show_wrote_and_stat_only
+
+echo "# unmounting scratch"
+umount $SCRATCH_MNT>>$seq.full 2>&1 \
+    || _fail "unmount failed"
+
+echo "# mounting scratch"
+_scratch_mount >>$seq.full 2>&1 \
+    || _fail "mount failed: $MOUNT_OPTIONS"
+
+echo "# stating file to confirm correct size"
+xfs_io -r -c "stat" $SCRATCH_MNT/nextfile \
+    | _show_wrote_and_stat_only
+
+# success, all done
+status=0
+exit
+
