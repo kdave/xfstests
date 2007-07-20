@@ -21,8 +21,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-        cd /
-        rm -rf ${SCRATCH_MNT}/stream*
+	cd /
+	rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -37,8 +37,11 @@ _require_scratch
 
 . ./common.filestreams
 
+_check_filestreams_support || _notrun "filestreams not available"
+
 # test number of streams greater than AGs. Expected to fail.
-echo 6000 > /proc/sys/fs/xfs/filestream_centisecs
+_set_stream_timeout_centisecs 6000
+
 _test_streams 8 32 65 3 1 1 0 fail
 _test_streams 8 32 65 3 1 0 1 fail
 

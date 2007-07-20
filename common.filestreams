@@ -5,6 +5,39 @@
 # Core of filestreams tests.
 #
 
+_check_filestreams_support()
+{
+	local irix_timeout_sysvar="xfs_mfstream_timeout"
+	local linux_timeout_procvar="/proc/sys/fs/xfs/filestream_centisecs"
+	local streams_avail=""
+	if [ "$HOSTOS" == "IRIX" ]; then
+		# check for the filestreams timeout systune variable in irix
+		streams_avail=`systune $irix_timeout_sysvar 2>&1 |
+			perl -ne 'if (/'$irix_timeout_sysvar'\s+=\s+\d+/) {print "true"}'`
+	else
+		# check for the filestreams timeout proc entry in linux
+		[ -f $linux_timeout_procvar ] && streams_avail="true"
+	fi
+
+	if [ "$streams_avail" == "true" ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+_set_stream_timeout_centisecs()
+{
+	local new_timeout_csecs=$1
+	local irix_timeout_sysvar="xfs_mfstream_timeout"
+	local linux_timeout_procvar="/proc/sys/fs/xfs/filestream_centisecs"
+	if [ "$HOSTOS" == "IRIX" ]; then
+		echo y | systune -r $irix_timeout_sysvar $new_timeout_csecs >/dev/null
+	else
+		echo $new_timeout_csecs > $linux_timeout_procvar
+	fi
+}
+
 _do_stream()
 {
         local directory_name=$1
@@ -14,9 +47,8 @@ _do_stream()
 	local iflag=$5
 	local dio=$6
 
-        local count=`expr $file_size / $bsize`
         mkdir $directory_name
-	if [ "$iflag" = "1" ]; then
+	if [ "$iflag" = "1" -a "$HOSTOS" != "IRIX" ]; then
 		$XFS_IO_PROG -x -c "chattr +S" $directory_name \
 			|| _fail "chattr of filestream flag"
 	fi
@@ -24,11 +56,12 @@ _do_stream()
         local i=1
 	local oflags=""
 	if [ "$dio" = "1" ]; then
-		oflags="oflag=direct"
+		oflags="-d"
 	fi
         while [ $i -le $files ]; do
-                dd if=/dev/zero of=frame-${i} $oflags \
-                        bs=$bsize count=$count >/dev/null 2>&1
+		$XFS_IO_PROG -f -c \
+			"pwrite $oflags -i /dev/zero -b $bsize 0 ${file_size}" \
+			frame-${i} >/dev/null
                 i=`expr $i + 1`
         done
 }
@@ -69,20 +102,6 @@ _check_for_dupes()
         return 0
 }
 
-rm -f $here/$seq.full
-
-# test that filestreams are available
-umount $SCRATCH_MNT > /dev/null 2>&1
-
-_scratch_mkfs_xfs > /dev/null 2>&1 \
-	|| _fail "mkfs failed"
-
-_scratch_mount "-o filestreams" \
-	|| _notrun "filestreams mount not available"
-
-sync
-umount $SCRATCH_MNT > /dev/null 2>&1
-
 _test_streams() {
 
 	echo "# testing $* ...."
@@ -93,28 +112,28 @@ _test_streams() {
 	local stream_file_size=`expr $5 \* 1024 \* 1024`
 	local use_iflag="$6"
 	local use_directio="$7"
-	local expected_result="$8"
+	local expected_result="$8"	# "fail" if failure is expected
 
 	local size=`expr $agsize \* 1024 \* 1024 \* $agcount`
 	_scratch_mkfs_xfs -dsize=$size,agcount=$agcount >/dev/null 2>&1 \
 		|| _fail "mkfs failed"
 
-	if [ "$use_iflag" = "0" ]; then
+	if [ "$use_iflag" = "0" -o "$HOSTOS" == "IRIX" ]; then
 		# mount using filestreams mount option
 		_scratch_mount "-o filestreams" \
-			|| _notrun "filestreams mount not available"
+			|| _fail "filestreams mount failed"
 	else
 		# test will set inode flag
-		_scratch_mount
+		_scratch_mount || _fail "mount failed"
 	fi
-
 
 	cd $SCRATCH_MNT
 
-	# start four streams, each writing 24m (8 x 3m files)
+	# start $stream_count streams
+	# each stream writes ($stream_files x $stream_file_size)M
 	echo "# streaming"
-	stream_pids=""
-	stream_index=1
+	local stream_pids=""
+	local stream_index=1
 	while [ $stream_index -le $stream_count ]; do
 		_do_stream stream${stream_index}-dir $stream_files \
 			$stream_file_size 1048576 $use_iflag $use_directio &
@@ -127,42 +146,62 @@ _test_streams() {
 	wait $stream_pids
 
 	# sync the buffered streams out in parallel
+	# _get_stream_ags does a xfs_bmap which syncs delayed allocations
 	echo "# sync AGs..."
-	stream_pids=""
+	local ag_sync_pids=""
 	stream_index=1
 	while [ $stream_index -le $stream_count ]; do
 		_get_stream_ags stream${stream_index}-dir > /dev/null 2>&1 &
-		stream_pids="$stream_pids $!"
+		ag_sync_pids="$ag_sync_pids $!"
 		stream_index=`expr $stream_index + 1`
 	done
 
-	# wait for streams to finish
-	wait $stream_pids
+	# wait for syncs to finish
+	wait $ag_sync_pids
 
 	# confirm streams are in seperate AGs
 	echo "# checking stream AGs..."
-	ags_seen=""
+	local this_stream_ags=""
+	local ags_seen=""
+	local num_streams_with_matching_ags=0
 	stream_index=1
 	while [ $stream_index -le $stream_count ]; do
-		_get_stream_ags stream${stream_index}-dir > $tmp.${stream_index} &
 		this_stream_ags=`_get_stream_ags stream${stream_index}-dir`
 		echo "stream $stream_index AGs: $this_stream_ags" >> $here/$seq.full
 		_check_for_dupes "$ags_seen" "$this_stream_ags"
 		if [ $? -ne 0 ]; then
-			if [ "$expected_result" = "fail" ]; then
-				echo "+ expected failure, matching AGs"
-				expected_result="failed"
-				break
-			else
-				_fail "- failed, streams with matching AGs"
-			fi
+			# this stream is not in seperate AGs to previous streams
+			num_streams_with_matching_ags=`expr $num_streams_with_matching_ags + 1`
 		fi
 		ags_seen="$ags_seen $this_stream_ags"
 		stream_index=`expr $stream_index + 1`
 	done
-	if [ "$expected_result" != "failed" ]; then
-		echo "+ passed, streams are in seperate AGs"
+
+	_cleanup_streams_umount
+	if [ "$expected_result" != "fail" ]; then
+		if [ $num_streams_with_matching_ags -eq 0 ]; then
+			# all streams in seperate AGs, as expected
+			echo "+ passed, streams are in seperate AGs"
+		else
+			# streams with matching AGs, should be seperate
+			_fail "- failed, $num_streams_with_matching_ags streams with matching AGs"
+		fi
+	else
+		# expecting streams to have overlapped
+		if [ $num_streams_with_matching_ags -eq 0 ]; then
+			# all streams in seperate AGs, should have overlapped
+			_fail "- streams are in seperate AGs, expected _matching_"
+		else
+			# streams with matching AGs, as expected
+			echo "+ expected failure, matching AGs"
+		fi
 	fi
-	cd $here
-	umount $SCRATCH_MNT
+	return 0
+}
+
+_cleanup_streams_umount()
+{
+	cd /
+	rm -rf ${SCRATCH_MNT}/stream*
+	umount $SCRATCH_DEV 2>/dev/null
 }

@@ -16,13 +16,14 @@ echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
+rm -f $seq.full
 status=1    # failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-        cd /
-        rm -rf ${SCRATCH_MNT}/stream*
+	cd /
+	rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -37,13 +38,16 @@ _require_scratch
 
 . ./common.filestreams
 
+_check_filestreams_support || _notrun "filestreams not available"
+
 # test large numbers of files, single I/O per file, 120s timeout
 # Get close to filesystem full.
 # 128 = ENOSPC
 # 120 = 93.75% full, gets repeatable failures
 # 112 = 87.5% full, should reliably succeed but doesn't *FIXME*
 # 100 = 78.1% full, should reliably succeed
-echo 12000 > /proc/sys/fs/xfs/filestream_centisecs
+_set_stream_timeout_centisecs 12000
+
 _test_streams 64 16 8 100 1 1 0
 _test_streams 64 16 8 100 1 1 1
 _test_streams 64 16 8 100 1 0 0
