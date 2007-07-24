@@ -40,30 +40,38 @@ _set_stream_timeout_centisecs()
 
 _do_stream()
 {
-        local directory_name=$1
-        local files=$2
-        local file_size=$3
-        local bsize=$4
+	local directory_name=$1
+	local files=$2
+	local file_size=$3
+	local bsize=$4
 	local iflag=$5
 	local dio=$6
+	local blocks_in_file=`expr $file_size / $bsize`
 
-        mkdir $directory_name
+	mkdir $directory_name
 	if [ "$iflag" = "1" -a "$HOSTOS" != "IRIX" ]; then
 		$XFS_IO_PROG -x -c "chattr +S" $directory_name \
 			|| _fail "chattr of filestream flag"
 	fi
-        cd $directory_name
-        local i=1
-	local oflags=""
-	if [ "$dio" = "1" ]; then
-		oflags="-d"
+	cd $directory_name
+
+	local dd_cmd=""
+	if [ "$HOSTOS" == "IRIX" ]; then
+		# for irix use lmdd
+		dd_cmd="lmdd"
+		[ "$dio" = "1" ] && dd_cmd="$dd_cmd odirect=1"
+	else
+		# for linux use dd
+		dd_cmd="dd"
+		[ "$dio" = "1" ] && dd_cmd="$dd_cmd oflag=direct"
 	fi
-        while [ $i -le $files ]; do
-		$XFS_IO_PROG -f -c \
-			"pwrite $oflags -i /dev/zero -b $bsize 0 ${file_size}" \
-			frame-${i} >/dev/null
-                i=`expr $i + 1`
-        done
+	dd_cmd="$dd_cmd if=/dev/zero bs=${bsize} count=${blocks_in_file}"
+
+	local i=1
+	while [ $i -le $files ]; do
+		$dd_cmd of=frame-${i} 2>&1 | grep -v records | grep -v secs
+		i=`expr $i + 1`
+	done
 }
 
 _filter_agno()
