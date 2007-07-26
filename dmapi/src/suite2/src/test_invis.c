@@ -313,6 +313,7 @@ main(
 		  test_file);
 	}
 	else {
+	  dm_off_t offset;
 
 	  /* Try writing a character waaaaaay up in the millions range */
 	  sprintf(bufp, "%c", ch);
@@ -321,7 +322,7 @@ main(
                     "Error: unable to stat the test file; %s \n", 
                     test_file);
           }
-          dm_off_t offset = ((1000000*(dm_off_t)(ch)) > statbuf.st_size) ? 
+          offset = ((1000000*(dm_off_t)(ch)) > statbuf.st_size) ? 
                             statbuf.st_size : (1000000*(dm_off_t)(ch));
 	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
 			     offset, 1, bufp)==-1){
