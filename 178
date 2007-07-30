@@ -1,0 +1,84 @@
+#! /bin/sh
+# FS QA Test No. 178
+#
+# Reproduce PV#:967665
+# Test if mkfs.xfs wipes old AG headers when using -f option
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=mohamedb@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+# dd the 1st sector then repair
+_dd_repair_check() 
+{
+	#dd first sector
+	dd if=/dev/zero of=$1 bs=$2 count=1 2>&1 | _filter_dd
+	#xfs_repair
+	_scratch_xfs_repair 2>&1 | _filter_repair 
+	#check repair
+	if _check_scratch_fs; then
+        	echo "repair passed"
+	else
+	        echo "repair failed!"
+	fi
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.repair
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs 
+_supported_os Linux
+
+# From the PV
+# o Summary of testing:
+#    1. mkfs.xfs a default filesystem, note agcount value.
+#    2. dd zero first sector and repair and verify.
+#    3. mkfs.xfs overriding agcount to a smaller value 
+#             (ie. each AG is bigger)
+#    4. dd zero first sector, repair and verify.
+#          -> old mkfs.xfs will cause repair to incorrectly
+#             fix filesystem, new mkfs.xfs will be fine.
+
+_require_scratch
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs \
+        || _fail "mkfs failed!"
+
+# By executing the followint tmp file, will get on the mkfs options stored in 
+# variables
+. $tmp.mkfs
+
+[ $agcount -le 2 ] && _notrun "Test requires more than 2 AGs."
+
+_dd_repair_check $SCRATCH_DEV $sectsz
+
+# smaller AGCOUNT
+let "agcount=$agcount-2"
+_scratch_mkfs_xfs -dagcount=$agcount >/dev/null 2>&1 \
+        || _fail "mkfs failed!"
+
+_dd_repair_check $SCRATCH_DEV $sectsz
+
+# success, all done
+status=0
+exit
