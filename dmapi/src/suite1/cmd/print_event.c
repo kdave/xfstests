@@ -1151,7 +1151,7 @@ finish_responding(
 {
   int		error = 0;
   u_int		nbytes, ntokens = 0, ret_ntokens, i;
-  dm_token_t	*tokenbuf = NULL;
+  dm_token_t	*tokenbuf = NULL, *tokenptr;
   size_t	buflen, ret_buflen;
   char		*msgbuf = NULL;
   dm_eventmsg_t	*msg;
@@ -1173,14 +1173,16 @@ finish_responding(
    * If we're already using the returned size, double it and try again.
    */
   do {
+    dm_token_t *tmpbuf;
     ntokens = (ntokens != ret_ntokens) ? ret_ntokens : ntokens*2;
     nbytes = ntokens * (sizeof(dm_token_t) + sizeof(dm_vardata_t));
-    tokenbuf = malloc(nbytes);
-    if (tokenbuf == NULL) {
+    tmpbuf = realloc(tokenbuf, nbytes);
+    if (tmpbuf == NULL) {
       err_msg("Can't malloc %d bytes for tokenbuf\n", nbytes);
       error = 1;
       goto out;
     }
+    tokenbuf = tmpbuf;
     error = dm_getall_tokens(sid, ntokens, tokenbuf, &ret_ntokens);
   } while (error && errno == E2BIG);
 
@@ -1189,25 +1191,28 @@ finish_responding(
     goto out;
   }
 
+  tokenptr = tokenbuf;
   for (i = 0; i < ret_ntokens; i++) {
     if (Verbose)
-      err_msg("Responding to outstanding event for token %d\n",(int)*tokenbuf);
+      err_msg("Responding to outstanding event for token %d\n",(int)*tokenptr);
 
     /*
      * The E2BIG dance reprise...
      */
     do {
+      char *tmpbuf;
       buflen = (buflen != ret_buflen) ? ret_buflen : buflen * 2;
-      msgbuf = malloc(buflen);
-      if (msgbuf == NULL) {
+      tmpbuf = realloc(msgbuf, buflen);
+      if (tmpbuf == NULL) {
 	err_msg("Can't malloc %d bytes for msgbuf\n", buflen);
 	error = 1;
 	goto out;
       }
-      error = dm_find_eventmsg(sid, *tokenbuf, buflen, msgbuf, &ret_buflen);
+      msgbuf = tmpbuf;
+      error = dm_find_eventmsg(sid, *tokenptr, buflen, msgbuf, &ret_buflen);
     } while (error && errno == E2BIG);
     if (error) {
-      errno_msg("Can't find the event message for token %d", (int)*tokenbuf);
+      errno_msg("Can't find the event message for token %d", (int)*tokenptr);
       goto out;
     }
 
@@ -1219,7 +1224,7 @@ finish_responding(
       msg = DM_STEP_TO_NEXT(msg, dm_eventmsg_t *);
     }
 
-    tokenbuf++;
+    tokenptr++;
   }
 
  out:

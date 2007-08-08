@@ -311,11 +311,11 @@ setup_dmapi(dm_sessid_t	 *sidp)
 	char	*cp;
 
 	if (dm_init_service(&cp) == -1)  {
-		err_msg("%s/%d: Can't init dmapi", __FILE__, __LINE__);
+		err_msg("%s/%d: Can't init dmapi\n", __FILE__, __LINE__);
 		return(1);
 	}
 	if (strcmp(cp, DM_VER_STR_CONTENTS)) {
-		err_msg("%s/%d: Compiled for a different version", __FILE__, __LINE__);
+		err_msg("%s/%d: Compiled for a different version\n", __FILE__, __LINE__);
 		return(1);
 	}
 
@@ -372,7 +372,7 @@ save_filedata(
 	retval = 0;
 	filebuf = malloc(CHUNKSIZE);
 	if (filebuf == NULL) {
-		err_msg("%s/%d: Can't alloc memory for file buffer", __FILE__, __LINE__);
+		err_msg("%s/%d: Can't alloc memory for file buffer\n", __FILE__, __LINE__);
 		goto out;
 	}
 
@@ -476,7 +476,7 @@ restore_filedata(
 
 	filebuf = malloc(CHUNKSIZE);
 	if (filebuf == NULL) {
-		err_msg("%s/%d: Can't alloc memory for file buffer", __FILE__, __LINE__);
+		err_msg("%s/%d: Can't alloc memory for file buffer\n", __FILE__, __LINE__);
 		goto out;
 	}
 

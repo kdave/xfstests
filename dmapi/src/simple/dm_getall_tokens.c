@@ -73,7 +73,7 @@ main( int argc, char **argv )
 
 	printf("tokens=\"");
 	for( i = 0; i < rnelem; i++ ){
-		printf("%d ", (int)(tokenbuf+i));
+		printf("%d ", (int)*(tokenbuf+i));
 	}
 	printf("\"\n");
 	exit(0);
