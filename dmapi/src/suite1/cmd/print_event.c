@@ -532,6 +532,7 @@ handle_message(
     }
     if (msg_ds->ds_attrname.an_chars[0] != '\0') {
       strncpy(attrname, (char *)msg_ds->ds_attrname.an_chars, sizeof(attrname));
+      attrname[DM_ATTR_NAME_SIZE] = '\0';  /* terminate the string */
     } else {
       strcpy(attrname, "<NONE>");
     }
