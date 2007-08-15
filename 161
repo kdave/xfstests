@@ -24,9 +24,10 @@ _cleanup()
     _cleanup_testdir
 }
 
-_filter_qa_file()
+_filter_get_allocinfo()
 {
-    sed -e "s#$qa_file#QA_FILE#"
+    $SED_PROG -e "s#$qa_file#QA_FILE#g" \
+	      -e "s#18014398509481983\|34359738367#MAX_FILE_BLOCKS#g"
 }
 
 # get standard environment, filters and checks
@@ -46,9 +47,10 @@ qa_file=$SCRATCH_MNT/dmapi_hole_file
 
 dd if=/dev/zero bs=1024k count=3 of=$qa_file
 
-${DMAPI_QASUITE1_DIR}cmd/get_allocinfo $qa_file | _filter_qa_file
+${DMAPI_QASUITE1_DIR}cmd/get_allocinfo $qa_file | _filter_get_allocinfo
 ${DMAPI_QASUITE1_DIR}cmd/probe_hole -o 1048576 -l 0 $qa_file
-${DMAPI_QASUITE1_DIR}cmd/get_allocinfo $qa_file | _filter_qa_file
+${DMAPI_QASUITE1_DIR}cmd/punch_hole -o 1048576 -l 0 $qa_file
+${DMAPI_QASUITE1_DIR}cmd/get_allocinfo $qa_file | _filter_get_allocinfo
 
 status=0
 exit 
