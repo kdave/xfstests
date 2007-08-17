@@ -1,0 +1,164 @@
+##/bin/sh
+#
+# Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# common functions for excersizing hole punches with extent size hints etc.
+
+# source dmap_scratch_mount etc.
+. ./common.dmapi
+
+_spawn_test_file() {
+	echo "# spawning test file with $*"
+	local blksize=$1
+	local file_size=`expr $2 \* $blksize`
+	local extent_size_hint=`expr $3 \* $blksize`
+	local test_file=$4
+	local reserve_space=$5
+
+	if [ $extent_size_hint -ne 0 ]; then
+		echo "+ setting extent size hint to $extent_size_hint"
+		$XFS_IO_PROG -f \
+		-c "extsize $extent_size_hint" \
+		$test_file
+	fi
+	# print extent size hint for $test_file
+	$XFS_IO_PROG -f \
+	-c "extsize" \
+	$test_file
+
+	if [ "$reserve_space" == "noresv" ]; then
+		echo "+ not using resvsp at file creation"
+		$XFS_IO_PROG -f \
+		-c "truncate $file_size" \
+		$test_file
+	else
+		$XFS_IO_PROG -f \
+		-c "truncate $file_size" \
+		-c "resvsp 0 $file_size" \
+		$test_file
+	fi
+}
+
+_do_punch() {
+	echo "# punching with $*"
+	# punch or bite the ear off $test_file to create a hole
+	local blksize=$1
+	local punch_offset=`expr $2 \* $blksize`
+	local punch_size=`expr $3 \* $blksize`
+	local punch_type=$4		# u for unresvsp, d for dm_punch
+	local test_file=$5
+
+	if [ "$punch_type" == "u" ]; then
+		echo "+ hole punch using unresvsp"
+		$XFS_IO_PROG -f \
+		-c "unresvsp $punch_offset $punch_size" \
+		$test_file
+	fi
+	if [ "$punch_type" == "d" ]; then
+		echo "+ hole punch using dmapi punch_hole"
+		${DMAPI_QASUITE1_DIR}cmd/punch_hole -o $punch_offset -l $punch_size \
+			${SCRATCH_MNT}/$test_file
+	fi
+}
+
+_do_write() {
+	echo "# writing with $*"
+	local blksize=$1
+	local write_offset=`expr $2 \* $blksize`
+	local write_size=`expr $3 \* $blksize`
+	local test_file=$4
+
+	$XFS_IO_PROG -f \
+	-c "pwrite $write_offset $write_size" \
+	$test_file >/dev/null
+}
+
+_do_bmap() {
+	echo "# showing file state $*"
+	local test_file=$1
+
+	$XFS_IO_PROG -f \
+	-c "bmap -vvp" \
+	$test_file
+}
+
+_test_punch() {
+	echo "# testing $* ..."
+	local blksize=$1
+	# all points and sizes below are in terms of filesystem blocks
+	local extsize_hint_blks=$2		# extent size hint in FS blocks, 0=do not set
+	local file_size_blks=$3			# the file size in blocks
+	local punch_points_blks=( $4 )	# array of places to punch holes in the file
+	local punch_sizes_blks=( $5 )	# array of size of each punch in blocks
+	local punch_types=( $6	)		# array of u=unresvsp or d=dm_punch
+	local write_points_blks=( $7 )	# array of places to pwrite in the file
+	local write_sizes_blks=( $8 )	# array of size of each write
+
+	local punch_write_order=( $9 )	# array of punch/write operation order
+									# e.g. "w p w w p" means: do 1st write...
+									# then 1st punch, 2nd & 3rd write, 2nd punch
+	local resvsp=${10}				# if "noresv" then don't resvsp on file create
+	local filename=punch_test_file
+
+	cd /
+	umount $SCRATCH_MNT >/dev/null 2>&1
+
+	_scratch_mkfs_xfs -bsize=$blksize >/dev/null 2>&1 \
+		|| _fail "mkfs failed"
+
+	local this_punch_type=""
+	local dmap_punch_used=0
+	for this_punch_type in "${punch_types[@]}"; do
+		[ "$this_punch_type" == "d" ] && dmap_punch_used=1
+	done
+	if [ $dmap_punch_used -ne 0 ]; then
+		# a punch type of dm_punch has been specified, do a dmapi mount
+		echo "+ mounting with dmapi enabled"
+		_dmapi_scratch_mount
+	else
+		# only unresvsp punch type is used, just do a normal mount
+		_scratch_mount || _fail "mount failed"
+	fi
+
+	cd $SCRATCH_MNT
+
+	# check a size is specified for each punch
+	[ ${#punch_points_blks[*]} -eq ${#punch_sizes_blks[*]} ] \
+		|| _fail "num punch points given does not equal num punch sizes"
+
+	# check a type is specified for each punch
+	[ ${#punch_points_blks[*]} -eq ${#punch_types[*]} ] \
+		|| _fail "num punch points given does not equal num punch types"
+
+	# check a size is specified for each write
+	[ ${#write_points_blks[*]} -eq ${#write_sizes_blks[*]} ] \
+		|| _fail "num write points given does not equal num write sizes"
+
+	# check punch_write_order operations match number of punches + writes
+	local total_pw_operations=`expr ${#punch_points_blks[*]} + ${#write_points_blks[*]}`
+	[ $total_pw_operations -eq ${#punch_write_order[*]} ] \
+		|| _fail "punch_write_order ops doesn't match number of punches + writes"
+
+	# create the file and setup extent size hint
+	_spawn_test_file $blksize $file_size_blks $extsize_hint_blks $filename $resvsp
+
+	# do the writes and punches
+	local operation=""
+	local punch_index=0
+	local write_index=0
+	for operation in "${punch_write_order[@]}"; do
+		if [ "$operation" == "p" ]; then
+			_do_punch $blksize ${punch_points_blks[$punch_index]} \
+				${punch_sizes_blks[$punch_index]} ${punch_types[$punch_index]} \
+				$filename
+			punch_index=`expr $punch_index + 1`
+		fi
+		if [ "$operation" == "w" ]; then
+			_do_write $blksize ${write_points_blks[$write_index]} \
+				${write_sizes_blks[$write_index]} $filename
+			write_index=`expr $write_index + 1`
+		fi
+		sync
+		_do_bmap $filename		# print out the state of the file
+	done
+}
