@@ -1,0 +1,52 @@
+#! /bin/sh
+# FSQA Test No. 175
+#
+# Hole punching with extsize hints, holes may not reported by xfs_bmap.
+# This is not good for certain backup apps, as they rely on the hole
+# being visible in the file so later on they know where to migrate
+# back the data from the tape.
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2007 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+owner=ddiss@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+rm -f $seq.full
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp/*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.punch
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+# _test_punch args: blksize extsize_hint filesize "pp1 pp2 pp3" \
+# 					"ps1 ps2 ps3" "pt1 pt2 pt3" "wp1 wp2" "ws1 ws2" \
+#					"w p p w p" resvsp
+
+echo "-- test dmpunch-hole without an extent size hint --"
+_test_punch 4096 0 256 "240" "16" "d" "0" "256" "w p" noresv
+
+echo
+echo "-- this time use a 4k (one block) extent size hint --"
+_test_punch 4096 1 256 "240" "16" "d" "0" "256" "w p" noresv
+
+status=0
+exit
