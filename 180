@@ -1,5 +1,5 @@
 #! /bin/sh
-# FSQA Test No. 179
+# FSQA Test No. 180
 #
 # Test for NULL files problem
 # test inode size is on disk after sync
@@ -44,11 +44,11 @@ _check_files()
 	while [ $i -lt 1000 ]
 	do
 		file=$SCRATCH_MNT/$i
-		# if file does not exist, the create was not logged, skip it
+		# if file is missing then sync failed
 		if [ -e $file ]
 		then
-			# if file size is zero then fsync failed
-			if [ -s $file ]
+			# if file size is not 32k then sync failed
+			if [ `stat -c %s $file` -eq 32768 ]
 			then
 				# if file has non-zero size but no extents then it's contents will be NULLs, bad.
 				if xfs_bmap $file | grep 'no extents' > /dev/null
@@ -58,8 +58,10 @@ _check_files()
 					rm -f $file
 				fi
 			else
-				echo file $file has zero size - sync failed
+				echo file $file has incorrect size - sync failed
 			fi
+		else
+			echo file $file missing - sync failed
 		fi
 		i=`expr $i + 1`
 	done
