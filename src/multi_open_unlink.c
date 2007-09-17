@@ -24,34 +24,59 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <attr/attributes.h>
+
+#define MAX_EA_NAME 30
 
 /*
  * multi_open_unlink path_prefix num_files sleep_time
- * e.g.  
+ * e.g.
  *   $ multi_open_unlink file 100 60
  *   Creates 100 files: file.1, file.2, ..., file.100
- *   unlinks them all but doesn't close them all until after 60 seconds. 
+ *   unlinks them all but doesn't close them all until after 60 seconds.
  */
+
+void
+usage(char *prog)
+{
+	fprintf(stderr, "Usage: %s [-e num-eas] [-f path_prefix] [-n num_files] [-s sleep_time] [-v ea-valuesize] \n", prog);
+	exit(1);
+}
 
 int
 main(int argc, char *argv[])
 {
-	char *given_path;
+	char *given_path = "file";
 	char path[PATH_MAX];
 	char *prog = argv[0];
-	int sleep_time;
-	int num_files;
+	int sleep_time = 60;
+	int num_files = 100;
+	int num_eas = 0;
+	int value_size = ATTR_MAX_VALUELEN;
 	int fd = -1;
-	int i;
+	int i,j,c;
 
-	if (argc != 4) {
-		fprintf(stderr, "Usage: %s path_prefix num_files sleep_time\n", prog);
-		return 1;
+	while ((c = getopt(argc, argv, "e:f:n:s:v:")) != EOF) {
+		switch (c) {
+			case 'e':   /* create eas */
+				num_eas = atoi(optarg);
+				break;
+			case 'f':   /* file prefix */
+				given_path = optarg;
+				break;
+			case 'n':   /* number of files */
+				num_files = atoi(optarg);
+				break;
+			case 's':   /* sleep time */
+				sleep_time = atoi(optarg);
+				break;
+			case 'v':  /* value size on eas */
+				value_size = atoi(optarg);
+				break;
+			case '?':
+				usage(prog);
+		}
 	}
-
-	given_path = argv[1];
-	num_files = atoi(argv[2]);
-	sleep_time = atoi(argv[3]);
 
         /* create and unlink a bunch of files */
 	for (i = 0; i < num_files; i++) {
@@ -69,8 +94,33 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
+		/* set the EAs */
+		for (j = 0; j < num_eas; j++) {
+			int sts;
+			char *attrvalue;
+			char attrname[MAX_EA_NAME];
+			int flags = 0;
+
+			snprintf(attrname, MAX_EA_NAME, "user.name.%d", j);
+
+			attrvalue = calloc(value_size, 1);
+			if (attrvalue == NULL) {
+				fprintf(stderr, "%s: failed to create EA value of size %d on path \"%s\": %s\n",
+					prog, value_size, path, strerror(errno));
+				return 1;
+			}
+
+			sts = attr_set(path, attrname, attrvalue, value_size, flags);
+			if (sts == -1) {
+				fprintf(stderr, "%s: failed to create EA \"%s\" of size %d on path \"%s\": %s\n",
+					prog, attrname, value_size, path, strerror(errno));
+				return 1;
+			}
+		}
+
 		if (unlink(path) == -1) {
-			fprintf(stderr, "%s: failed to unlink \"%s\": %s\n", prog, path, strerror(errno));
+			fprintf(stderr, "%s: failed to unlink \"%s\": %s\n",
+				prog, path, strerror(errno));
 			return 1;
 		}
 	}

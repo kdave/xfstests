@@ -74,7 +74,7 @@ itrash:	itrash.o
 	$(LINKTEST)
 
 multi_open_unlink: multi_open_unlink.o
-	$(LINKTEST)
+	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
 #scaleread: scaleread.o $(LDLIBS)
 #	$(LINKTEST)
@@ -85,10 +85,10 @@ acl_get: acl_get.o $(LIBACL) $(LIBATTR)
 dmiperf: dmiperf.o $(LIBATTR)
 	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
-preallo_rw_pattern_reader: 
+preallo_rw_pattern_reader:
 	$(CC) -DREAD iopat.c -o preallo_rw_pattern_reader
 
-preallo_rw_pattern_writer: 
+preallo_rw_pattern_writer:
 	$(CC) -DWRITE iopat.c -o preallo_rw_pattern_writer
 
 ftrunc: ftrunc.o
@@ -99,7 +99,7 @@ trunc: trunc.o
 
 fs_perms: fs_perms.o
 	$(LINKTEST)
-	
+
 testx: testx.o
 	$(LINKTEST)
 
