@@ -230,10 +230,17 @@ main(
 	/* Fill in the dm_stat blocks with lots of junk...
 	 */
 	for (i=0; i<num_files; i++) {
-	  stat_arr[i].dt_atime=(time_t)(rand()+rand()*0x10000);
-	  stat_arr[i].dt_mtime=(time_t)(rand()+rand()*0x10000);
-	  stat_arr[i].dt_ctime=(time_t)(rand()+rand()*0x10000);
-	  stat_arr[i].dt_dtime=(time_t)(rand()+rand()*0x10000);
+	  /*
+	   * XFS inode timestamp t_sec is a 32 bit signed value. rand() only
+	   * returns 15 bits of random number, and so the rand()*0x10000 is
+	   * really a rand() << 16 to populate the upper 16 bits of
+	   * the timestamp.IOWs, linux does not need this but irix does.
+	   */
+	  stat_arr[i].dt_atime=((time_t)(rand()+rand()*0x10000) & 0x7FFFFFFF);
+	  stat_arr[i].dt_mtime=((time_t)(rand()+rand()*0x10000) & 0x7FFFFFFF);
+	  stat_arr[i].dt_ctime=((time_t)(rand()+rand()*0x10000) & 0x7FFFFFFF);
+	  stat_arr[i].dt_dtime=((time_t)(rand()+rand()*0x10000) & 0x7FFFFFFF);
+
 	  stat_arr[i].dt_uid=(uid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_gid=(gid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_mode=(mode_t)((rand()%4096)+32768);
