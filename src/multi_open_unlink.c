@@ -24,7 +24,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef  sgi
+#include <sys/attributes.h>
+#else
 #include <attr/attributes.h>
+#endif
 
 #define MAX_EA_NAME 30
 
