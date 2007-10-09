@@ -19,11 +19,6 @@ status=1
 
 trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common.rc
-. ./common.filter
-
-
 _cleanup()
 {
     cd /
@@ -37,6 +32,11 @@ _cleanup()
 . ./common.rc
 . ./common.filter
 
+# loop devices are available in Linux only
+_supported_fs xfs
+_supported_os Linux
+
+# Must have loop device  
 _require_loop
 
 LOOP_DEV=$TEST_DIR/$seq.fs
@@ -48,7 +48,7 @@ _filter_io()
 }
 
 # real QA test starts here
-_supported_fs xfs
+
 echo "*** create loop mount point"
 rm -f $LOOP_MNT 2>/dev/null
 mkdir $LOOP_MNT || _fail "cannot create loopback mount point"
@@ -58,6 +58,7 @@ _grow_loop()
 	original=$1
 	new_size=$2
 	bsize=$3
+	check=$4
 
 	echo
 	echo "=== GROWFS (from $original to $new_size, $bsize blocksize)"
@@ -73,21 +74,59 @@ _grow_loop()
 	mount -t xfs -o loop $LOOP_DEV $LOOP_MNT
 
 	echo "*** grow loop filesystem"
-	xfs_growfs $LOOP_MNT | _filter_mkfs 2>/dev/null
+	#xfs_growfs $LOOP_MNT 2>&1 | grep -e "^data" #| _filter_growfs 2>/dev/null
+	xfs_growfs $LOOP_MNT 2>&1 |  _filter_growfs 2>&1
 
-	echo "*** unmount and check"
+	echo "*** unmount"
 	umount $LOOP_MNT
-	_check_xfs_filesystem $LOOP_DEV none none
+
+	# Large grows takes forever to check..
+	if [ "$check" -gt "0" ] 
+	then
+		echo "*** check"
+		 _check_xfs_filesystem $LOOP_DEV none none
+	fi
+
 	rm -f $LOOP_DEV
 }
 
 # Wes' problem sizes...
-_grow_loop 168024b 1376452608 4096
+_grow_loop 168024b 1376452608 4096 1
 
 # Some other blocksize cases...
-_grow_loop 168024b 1376452608 2048
-_grow_loop 168024b 1376452608 512
-_grow_loop 168024b 688230400 1024 
+_grow_loop 168024b 1376452608 2048 1
+_grow_loop 168024b 1376452608 512 1
+_grow_loop 168024b 688230400 1024 1
+
+
+# Other corner cases suggested by dgc
+# also the following doesn't check if the filesystem is consistent.
+#  - grow 1TB by 1.5TB (control)
+_grow_loop 1t 2500g 4096 0
+
+#  - grow 1TB by 2.5TB (grow by > 2TB)
+_grow_loop 1t 3500g 4096 0
+
+#  - grow 1TB by 3.5TB (grow past 4TB)
+_grow_loop 1t 4500g 4096 0
+
+#  - grow 1TB by 4.5TB (grow by > 4TB)
+_grow_loop 1t 5500g 4096 0
+
+#  - grow 1TB by 7.5TB (grow past 8TB)
+_grow_loop 1t 8500g 4096 0
+
+#  - grow 1TB by 8.5TB (grow by > 8TB)
+_grow_loop 1t 9500g 4096 0
+
+#  - grow 1TB by 14.5TB (grow by > 8TB)
+_grow_loop 1t 15500g 4096 0
+
+#  - grow 1TB by 15TB (grow to 16TB)
+_grow_loop 1t 16000g 4096 0
+
+# It would be nice to go on, but this would require a totally new test in order
+# to take care of 64-bit machines.
 
 echo "*** all done"
 status=0
