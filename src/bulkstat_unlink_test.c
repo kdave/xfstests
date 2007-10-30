@@ -1,5 +1,5 @@
 /*
- * $Id: bulkstat_unlink_test.c,v 1.2 2007/10/26 16:05:04 xaiki.longdrop.melbourne.sgi.com Exp $
+ * $Id: bulkstat_unlink_test.c,v 1.3 2007/10/30 03:07:42 mohamedb.longdrop.melbourne.sgi.com Exp $
  * Test bulkstat doesn't returned unlinked inodes.
  * Mark Goodwin <markgw@sgi.com> Fri Jul 20 09:13:57 EST 2007
  */
@@ -49,7 +49,6 @@ main(int argc, char *argv[])
 
 
 	iterations = atoi(argv[optind++]);
-	iterations = atoi(argv[optind++]);
 	nfiles     = atoi(argv[optind++]);
 	stride     = atoi(argv[optind++]);
 
@@ -75,13 +74,13 @@ main(int argc, char *argv[])
 		a.ocount = &count;
 
 		if (mkdir(dirname, 0755) < 0) {
-			printf("Warning (%s,%d), mkdir failed.\n", __FILE__, __LINE__);
+			printf("Warning (%s,%d), mkdir(%s) failed.\n", __FILE__, __LINE__, dirname);
 			perror(dirname);
 			exit(1);
 		}
 
 		if ((fd[nfiles] = open(dirname, O_RDONLY)) < 0) {
-			printf("Warning (%s,%d), open failed.\n", __FILE__, __LINE__);
+			printf("Warning (%s,%d), open(%s) failed.\n", __FILE__, __LINE__, dirname);
 			perror(dirname);
 			exit(1);
 		}
@@ -98,7 +97,7 @@ main(int argc, char *argv[])
 		for (i=0; i < nfiles; i++) { /* Open the files */
 			sprintf(fname, "%s/file%06d", dirname, i);
 			if ((fd[i] = open(fname, O_RDWR | O_CREAT | O_TRUNC, 0644)) < 0) {
-				printf("Warning (%s,%d), open failed.\n", __FILE__, __LINE__);
+				printf("Warning (%s,%d), open(%s) failed.\n", __FILE__, __LINE__, fname);
 				perror(fname);
 				exit(1);
 			}
