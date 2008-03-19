@@ -36,7 +36,7 @@ _cleanup()
 _supported_fs xfs
 _supported_os Linux
 
-# Must have loop device  
+# Must have loop device
 _require_loop
 
 LOOP_DEV=$TEST_DIR/$seq.fs
@@ -59,13 +59,19 @@ _grow_loop()
 	new_size=$2
 	bsize=$3
 	check=$4
+	agsize=$5
+
+	dparam="file,name=$LOOP_DEV,size=$original"
+	if [ -n "$agsize" ]; then
+		dparam="$dparam,agsize=$agsize"
+	fi
 
 	echo
 	echo "=== GROWFS (from $original to $new_size, $bsize blocksize)"
 	echo
 
 	echo "*** mkfs loop file (size=$original)"
-	/sbin/mkfs.xfs -bsize=$bsize -dfile,name=$LOOP_DEV,size=$original \
+	$MKFS_XFS_PROG -b size=$bsize -d $dparam \
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
@@ -75,13 +81,13 @@ _grow_loop()
 
 	echo "*** grow loop filesystem"
 	#xfs_growfs $LOOP_MNT 2>&1 | grep -e "^data" #| _filter_growfs 2>/dev/null
-	xfs_growfs $LOOP_MNT 2>&1 |  _filter_growfs 2>&1
+	$XFS_GROWFS_PROG $LOOP_MNT 2>&1 |  _filter_growfs 2>&1
 
 	echo "*** unmount"
 	umount $LOOP_MNT
 
 	# Large grows takes forever to check..
-	if [ "$check" -gt "0" ] 
+	if [ "$check" -gt "0" ]
 	then
 		echo "*** check"
 		 _check_xfs_filesystem $LOOP_DEV none none
@@ -95,7 +101,7 @@ _grow_loop 168024b 1376452608 4096 1
 
 # Some other blocksize cases...
 _grow_loop 168024b 1376452608 2048 1
-_grow_loop 168024b 1376452608 512 1
+_grow_loop 168024b 1376452608 512 1 16m
 _grow_loop 168024b 688230400 1024 1
 
 
