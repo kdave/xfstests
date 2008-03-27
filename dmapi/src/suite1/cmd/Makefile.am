@@ -15,6 +15,7 @@ DM_TARGS = \
 	set_dmattr \
 	remove_dmattr \
 	probe_hole \
+	probe_punch_xfsctl_hole \
 	punch_hole \
 	get_fileattr \
 	sync_by_handle \
