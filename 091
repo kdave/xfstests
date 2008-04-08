@@ -43,9 +43,19 @@ run_fsx()
 
 psize=`$here/src/feature -s`
 bsize=512
-# 2.4 Linux kernels support bsize aligned direct I/O only
 kernel=`uname -r  | sed -e 's/\(2\..\).*/\1/'`
+
+# 2.4 Linux kernels support bsize aligned direct I/O only
 [ "$HOSTOS" = "Linux" -a "$kernel" = "2.4" ] && bsize=$psize
+
+# 2.6 Linux kernels support sector aligned direct I/O only
+if [ "$HOSTOS" = "Linux" -a "$kernel" = "2.6" ]; then
+	xfs_info $TEST_DIR | _filter_mkfs 2> $tmp.info
+	if [ $? -eq 0 ]; then
+		source $tmp.info
+		bsize=$sectsz
+	fi
+fi
 
 # fsx usage:
 # 
