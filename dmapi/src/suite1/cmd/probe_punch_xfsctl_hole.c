@@ -176,6 +176,7 @@ main(
 				strerror(errno));
 			exit(1);
 		}
+		fprintf(stdout, "roffp is %lld, rlenp is %lld\n", roffp, rlenp);
 		break;
 	case METHOD_DMAPI_PUNCH:
 		if (dm_punch_hole(sid, hanp, hlen, DM_NO_TOKEN, offset, length)) {
@@ -185,7 +186,6 @@ main(
 		}
 		break;			
 	}
-	fprintf(stdout, "roffp is %lld, rlenp is %lld\n", roffp, rlenp);
 	dm_handle_free(hanp, hlen);
 	
 	return 0;
