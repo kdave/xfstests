@@ -1,0 +1,166 @@
+#! /bin/sh
+# FS QA Test No. 186
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# Test out:
+# pv#979606: xfs bug in going from attr2 back to attr1
+#
+# Test bug in going from attr2 back to attr1 where xfs
+# (due to xfs_attr_shortform_bytesfit)
+# would reset the di_forkoff to the m_offset instead of
+# leaving the di_forkoff alone as was intended.
+#
+# We create enough dirents to push us past m_attroffset,
+# and create an EA so we have a fork offset
+# and then turn on attr1 and add one more EA which
+# will write over the shortform dirents.
+#
+#
+# creator
+owner=tes@emu.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+_create_dirents()
+{
+	start_num=$1
+	end_num=$2
+	cd $fork_dir
+	for i in `seq $start_num $end_num`; do
+		touch file.$i
+	done
+}
+
+_create_eas()
+{
+	start_num=$1
+	end_num=$2
+	for i in `seq $start_num $end_num`; do
+		setfattr -n user.$i -v 0xbabe $fork_dir
+	done
+}
+
+_rmv_eas()
+{
+	start_num=$1
+	end_num=$2
+	for i in `seq $start_num $end_num`; do
+		setfattr -x user.$i $fork_dir
+	done
+}
+
+_filter_inode()
+{
+	tee -a $seq.full | egrep '^u.sfdir2|^a.sfattr|core.forkoff' |\
+	egrep -v 'inumber|parent'
+}
+
+_filter_version()
+{
+	tee -a $seq.full | tr ',' '\n' | grep ATTR
+}
+
+_print_inode()
+{
+	echo ""
+	echo "================================="
+	$XFS_DB_PROG -c "version" $SCRATCH_DEV 2>&1 | _filter_version
+	$XFS_DB_PROG -c "inode $inum" -c p $SCRATCH_DEV 2>&1 | _filter_inode
+	echo "================================="
+}
+
+_do_eas()
+{
+	echo ""
+	_scratch_mount
+	if [ $1 = "-r" ]; then 
+		echo "*** remove EAs start $2 end $3 ***"
+		_rmv_eas $2 $3
+	else
+		echo "*** create EAs start $2 end $3 ***"
+		_create_eas $2 $3
+	fi
+	echo ""
+	cd /; $UMOUNT_PROG $SCRATCH_MNT
+	_print_inode
+}
+
+_do_dirents()
+{
+	num=`expr $2 - $1 + 1`
+	echo ""
+	echo "*** create $num dirents ***"
+	echo ""
+	_scratch_mount
+	_create_dirents $1 $2
+	cd /; $UMOUNT_PROG $SCRATCH_MNT
+	_print_inode
+}
+
+_changeto_attr1()
+{
+	echo ""
+	echo "Try setting attr1 by db"
+	echo ""
+	$XFS_DB_PROG -x -c "version attr1" $SCRATCH_DEV | _filter_version
+}
+
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+rm -f $seq.full
+
+_scratch_mkfs -i attr=2,size=512 >/dev/null 2>&1
+
+# set inum to root dir ino
+# we'll add in dirents and EAs into the root directory
+eval `$XFS_DB_PROG -r -c 'sb 0' -c 'p rootino' $SCRATCH_DEV | $SED_PROG 's/ //g'`
+inum=$rootino
+fork_dir=$SCRATCH_MNT
+_print_inode
+
+# add enough dirents to be inline but more
+# than will fit for m_attroffset for 512b inodes
+# for attr2 this is not a problem
+_do_dirents 1 25 
+
+# add 1 ea so we get our forkoff happening 
+_do_eas -c 1 1
+
+# now change back to attr1 where forkoff is constant now
+_changeto_attr1
+
+# now add another EA
+# for a bug in xfs_add_shortform_bytesfit
+# where it resets the forkoff to m_attroffset>>3 instead of 
+# leaving as di_forkoff
+# If it resets to m_attroffset which is in the middle of
+# the dirents then they will get corrupted
+_do_eas -c 2 2
+
+# success, all done
+status=0
+exit
