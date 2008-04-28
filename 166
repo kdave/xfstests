@@ -17,6 +17,7 @@ here=`pwd`
 tmp=/tmp/$$
 status=1    # failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
+rm -f $seq.full
 
 _cleanup()
 {
@@ -39,9 +40,14 @@ _filter_blocks()
 		unwritten2 = ((1048576/512) / 2) - 2 * written_size
 	}
 
-	if ($7) {
-		size = "RIGHT"
-		flags = "GOOD"
+	/* is the extent unwritten? */
+	unwritten_ext = 0;
+	if ($7 >= 10000)
+		unwritten_ext = 1;
+
+	size = "RIGHT"
+	flags = "GOOD"
+	if (unwritten_ext) {
 		if (unwritten1) {
 			if ($6 != unwritten1)
 				size = "WRONG"
@@ -49,11 +55,7 @@ _filter_blocks()
 		} else if ($6 != unwritten2) {
 			size = "WRONG"
 		}
-		if ($7 < 10000)
-			flags = "BAD"
 	} else {
-		size = "RIGHT"
-		flags = "GOOD"
 		if ($6 != written_size)
 			size = "WRONG"
 	}
@@ -77,6 +79,7 @@ FILE_SIZE=1048576
 rm -f $TEST_FILE
 $TEST_PROG $FILE_SIZE $TEST_FILE
 
+xfs_bmap -vp $TEST_FILE >> $seq.full
 xfs_bmap -vp $TEST_FILE | _filter_blocks
 
 status=0
