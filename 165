@@ -68,10 +68,10 @@ len=4
 end=`expr 10 \* $len`
 
 # Other test...
-#xfs_io -f -c "resvsp ${off}k ${end}k" $testfile
+#$XFS_IO_PROG -f -c "resvsp ${off}k ${end}k" $testfile
 
 # write the initial file
-xfs_io -f -c "pwrite 0  ${end}k" $testfile | _filter_io
+$XFS_IO_PROG -f -c "pwrite 0  ${end}k" $testfile | _filter_io
 
 
 off=0
@@ -80,7 +80,7 @@ do
 	offset=${off}k
 	length=${len}k
 
-	xfs_io -c "unresvsp $offset $length" -c "bmap -vp" $testfile | _filter_bmap
+	$XFS_IO_PROG -c "unresvsp $offset $length" -c "bmap -vp" $testfile | _filter_bmap
 
 	off=`expr $off + $len` # skip over 1
 	off=`expr $off + $len`
@@ -97,18 +97,18 @@ do
 	echo ""
 
 	# prealloc and write
-	xfs_io -d -c "resvsp $offset $length" -c "pwrite -b $bufsize $offset $length" $testfile | _filter_io
+	$XFS_IO_PROG -d -c "resvsp $offset $length" -c "pwrite -b $bufsize $offset $length" $testfile | _filter_io
 
 	# Other tests...
-	#xfs_io -c "resvsp $offset $length" $testfile
+	#$XFS_IO_PROG -c "resvsp $offset $length" $testfile
 	#xfs_bmap -v -p $testfile
-	#xfs_io -d -c "pwrite -b $bufsize $offset $length" $testfile
+	#$XFS_IO_PROG -d -c "pwrite -b $bufsize $offset $length" $testfile
 	#xfs_bmap -v -p $testfile
 
-	xfs_io -r -c "pread -v -b $bufsize $offset $length" $testfile >$tmp.$off &
+	$XFS_IO_PROG -r -c "pread -v -b $bufsize $offset $length" $testfile >$tmp.$off &
 
 	# Other tests...
-	#xfs_io -r -c "pread -v -b $bufsize $offset $length" $testfile
+	#$XFS_IO_PROG -r -c "pread -v -b $bufsize $offset $length" $testfile
         #sleep 5
 
 	off=`expr $off + $len` # skip over 1
