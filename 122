@@ -45,6 +45,7 @@ s/sizeof\( xfs_agf_t \) = 64/sizeof( xfs_agf_t ) = <SIZE>/;
 
 cprog=$tmp.get_structs.c
 oprog=$tmp.get_structs
+progout=$tmp.output
 
 cat >$cprog <<EOF
 #include <stdio.h>
@@ -160,6 +161,18 @@ echo 'return 0; }' >>$cprog
 
 # create and run program
 cc -o $oprog $cprog
-eval $oprog | LC_COLLATE=POSIX sort | _type_size_filter
+$oprog | _type_size_filter > $progout
+
+#
+# add addition sizes and xfs_sb_t fields that don't exist in the version
+# being tested.
+#
+
+# xfsprogs 2.9.8: sb_bad_features2 in pv 978822
+if [ $XFSPROGS_VERSION -lt 20908 ]; then
+	echo 'offsetof(xfs_sb_t, sb_bad_features2 ) = 204' >>$progout
+fi
+
+LC_COLLATE=POSIX sort $progout
 
 status=0
