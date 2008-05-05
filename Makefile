@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2006 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2008 Silicon Graphics, Inc.  All Rights Reserved.
 #
 
 TOPDIR = .
@@ -16,13 +16,16 @@ LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
 
-SUBDIRS = include lib ltp src m4 dmapi
+SUBDIRS = include lib ltp src m4
 
 default: $(CONFIGURE) $(DMAPI_MAKEFILE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
 	$(MAKE) $@
 else
 	$(SUBDIRS_MAKERULE)
+	# automake doesn't always support "default" target 
+	# so do dmapi make explicitly with "all"
+	cd $(TOPDIR)/dmapi; make all
 endif
 
 ifeq ($(HAVE_BUILDDEFS), yes)
