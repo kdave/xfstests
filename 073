@@ -3,8 +3,17 @@
 #
 # Test xfs_copy
 #
+# HACK WARNING:
+#
+# Due to the severe brokenness of mount's handling of loopback devices, we
+# hardcode the loop devices we use for this test. This enables us to clean up
+# the pieces when we remount the loop device because mount loses all trace of
+# the fact this is a loop device. Hence to enable us to unmount the hosting
+# filesystem, we need to manually tear down the relevant loop device. If
+# mount ever gets fixed then this hack can be removed.
+#
 #-----------------------------------------------------------------------
-# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2000-2003,2008 Silicon Graphics, Inc.  All Rights Reserved.
 #-----------------------------------------------------------------------
 #
 # creator
@@ -16,14 +25,22 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# don't put fs images in /tmp
+imgs=$TEST_DIR/$$
+
 _cleanup()
 {
 	cd /
 	umount $SCRATCH_MNT 2>/dev/null
-	umount $tmp.loop 2>/dev/null
-	[ -d $tmp.loop ] && rmdir $tmp.loop
-	[ -d $tmp.source_dir ] && rm -rf $tmp.source_dir
-	rm -f $tmp.* /var/tmp/xfs_copy.log.*
+	umount $imgs.loop 2>/dev/null
+	[ -d $imgs.loop ] && rmdir $imgs.loop
+	[ -d $imgs.source_dir ] && rm -rf $imgs.source_dir
+	rm -f $imgs.* $tmp.* /var/tmp/xfs_copy.log.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -51,9 +68,10 @@ _populate_scratch()
 _verify_copy()
 {
 	target=$1
-	target_dir=$tmp.loop
+	target_dir=$imgs.loop
 	source=$2
 	source_dir=$3
+	loop=`losetup -sf`
 
 	[ $source = $SCRATCH_DEV ] && _scratch_mount
 
@@ -63,7 +81,8 @@ _verify_copy()
 	echo mounting new image on loopback
 	rmdir $target_dir 2>/dev/null
 	mkdir $target_dir
-	mount -t xfs -o loop $target $target_dir 2>/dev/null
+
+	mount -t xfs -o loop=$loop $target $target_dir 2>/dev/null
 	if [ $? -ne 0 ]; then
 		echo retrying mount with nouuid option
 		mount -t xfs -o loop -o nouuid $target $target_dir
@@ -96,12 +115,9 @@ _verify_copy()
 
 	echo unmounting and removing new image
 	umount $source $target
+	losetup -d $loop > /dev/null 2>&1
 	rm -f $target
 }
-
-# get standard environment, filters and checks
-. ./common.rc
-. ./common.filter
 
 
 # real QA test starts here
@@ -124,31 +140,39 @@ umount $SCRATCH_MNT 2>/dev/null
 
 echo
 echo === copying scratch device to single target
-xfs_copy $SCRATCH_DEV $tmp.image | _filter_copy '#' $tmp.image '#' '#'
-_verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
+xfs_copy $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+_verify_copy $imgs.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo
 echo === copying scratch device to single target, duplicate UUID
-xfs_copy -d $SCRATCH_DEV $tmp.image | _filter_copy '#' $tmp.image '#' '#'
-_verify_copy $tmp.image $SCRATCH_DEV $SCRATCH_MNT
+xfs_copy -d $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+_verify_copy $imgs.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo 
 echo === copying scratch device to single target, large ro device
-/sbin/mkfs.xfs -dfile,name=$tmp.source,size=100g | _filter_mkfs 2>/dev/null
-rmdir $tmp.source_dir 2>/dev/null
-mkdir $tmp.source_dir
-mount -t xfs -o loop $tmp.source $tmp.source_dir
-cp -a $here $tmp.source_dir
-mount -t xfs -o remount,ro $tmp.source $tmp.source_dir
-xfs_copy $tmp.source $tmp.image | _filter_copy '#' $tmp.image '#' '#'
-_verify_copy $tmp.image $tmp.source $tmp.source_dir
+/sbin/mkfs.xfs -dfile,name=$imgs.source,size=100g | _filter_mkfs 2>/dev/null
+rmdir $imgs.source_dir 2>/dev/null
+mkdir $imgs.source_dir
+
+loop2=`losetup -sf`
+mount -t xfs -o loop=$loop2 $imgs.source $imgs.source_dir
+cp -a $here $imgs.source_dir
+mount -t xfs -o remount,ro $imgs.source $imgs.source_dir
+xfs_copy $imgs.source $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+_verify_copy $imgs.image $imgs.source $imgs.source_dir
+
+# HACK WARNING:
+#
+# We're done with the nested loop mount, now we have to clean
+# up the pieces that mount is incapable of doing.
+losetup -d $loop2 > /dev/null 2>&1
 
 echo
 echo === copying scratch device to multiple targets
-xfs_copy -L$tmp.log -b $SCRATCH_DEV $tmp.image1 $tmp.image2 \
-	| _filter_copy '#' $tmp.image1 '#' $tmp.image2
-_verify_copy $tmp.image1 $SCRATCH_DEV $SCRATCH_MNT
-_verify_copy $tmp.image2 $SCRATCH_DEV $SCRATCH_MNT
+xfs_copy -L$imgs.log -b $SCRATCH_DEV $imgs.image1 $imgs.image2 \
+	| _filter_copy '#' $imgs.image1 '#' $imgs.image2
+_verify_copy $imgs.image1 $SCRATCH_DEV $SCRATCH_MNT
+_verify_copy $imgs.image2 $SCRATCH_DEV $SCRATCH_MNT
 
 # success, all done
 status=0
