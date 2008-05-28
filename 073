@@ -71,7 +71,6 @@ _verify_copy()
 	target_dir=$imgs.loop
 	source=$2
 	source_dir=$3
-	loop=`losetup -sf`
 
 	[ $source = $SCRATCH_DEV ] && _scratch_mount
 
@@ -82,7 +81,7 @@ _verify_copy()
 	rmdir $target_dir 2>/dev/null
 	mkdir $target_dir
 
-	mount -t xfs -o loop=$loop $target $target_dir 2>/dev/null
+	mount -t xfs -o loop $target $target_dir 2>/dev/null
 	if [ $? -ne 0 ]; then
 		echo retrying mount with nouuid option
 		mount -t xfs -o loop -o nouuid $target $target_dir
@@ -114,6 +113,7 @@ _verify_copy()
 	diff -u $tmp.geometry1 $tmp.geometry2
 
 	echo unmounting and removing new image
+	loop=`mount | grep $target | grep -o -e 'loop=.*[^),]' | grep -o -e '/.*$'`
 	umount $source $target
 	losetup -d $loop > /dev/null 2>&1
 	rm -f $target
@@ -154,8 +154,8 @@ echo === copying scratch device to single target, large ro device
 rmdir $imgs.source_dir 2>/dev/null
 mkdir $imgs.source_dir
 
-loop2=`losetup -sf`
-mount -t xfs -o loop=$loop2 $imgs.source $imgs.source_dir
+mount -t xfs -o loop $imgs.source $imgs.source_dir
+loop2=`mount | grep $imgs.source | grep -o -e 'loop=.*[^),]' | grep -o -e '/.*$'`
 cp -a $here $imgs.source_dir
 mount -t xfs -o remount,ro $imgs.source $imgs.source_dir
 xfs_copy $imgs.source $imgs.image | _filter_copy '#' $imgs.image '#' '#'
