@@ -69,7 +69,7 @@ main(
 	dm_sessid_t	sid = DM_NO_SESSION;
 	char		*pathname = NULL;
 	char		*ls_path = NULL;
-	dm_off_t	offset = 0;
+	dm_off_t	offset = 0, end;
 	dm_off_t	ex_off = 0;
 	dm_extent_t     extent[20];
 	u_int           nelem;
@@ -162,10 +162,16 @@ main(
 	  exit(1);
 	}
 
+	/*
+	 * The kernel always rounds the offset up to the next block
+	 * size, so we can only probes up to the previous to last block.
+	 */
+	end = (29604 / blocksize) * blocksize;
+
 	/* Check that dm_probe_hole returns an extent from the next
 	 * highest multiple of the block size, to the end of the file
 	 */
-	for (offset = 0; offset < 29604; offset++) { 
+	for (offset = 0; offset < end; offset++) { 
 	  if (dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, offset, length,
 			    &roff, &rlen)) {
 	    fprintf(stdout, "dm_probe_hole failed on pass %lld (%s)\n",
@@ -275,15 +281,10 @@ main(
 		dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, 30000, length,
 			      &roff, &rlen))
 	/*---------------------------------------------------------*/
-#if 0
-	PROBLEM: No error is produced.  
-	off+len >= filesize should produce E2BIG...
-
 	ERRTEST(E2BIG,
 		"probe (to past EOF)",
 		dm_probe_hole(sid, hanp, hlen, DM_NO_TOKEN, 15000, 150000,
 			      &roff, &rlen))
-#endif
         /*---------------------------------------------------------*/
 	SHAREDTEST("probe", hanp, hlen, test_token, 
 		 dm_probe_hole(sid, hanp, hlen, test_token, 
@@ -292,10 +293,18 @@ main(
 	EXCLTEST("punch", hanp, hlen, test_token, 
 		   dm_punch_hole(sid, hanp, hlen, test_token, 0, 0)) 
 	/*---------------------------------------------------------*/
+	/*
+	 * No idea where that EAGAIN should come from, it's never
+	 * returned from the kernel.
+	 *
+	 * 		-- hch
+	 */
+#if 0
 	ERRTEST(EAGAIN,
 		"punch",
 		dm_punch_hole(sid, hanp, hlen, DM_NO_TOKEN,
 			      1, length))	
+#endif
 	/*---------------------------------------------------------*/
 	if ((test_vp = handle_clone(hanp, hlen)) == NULL) {
 	  fprintf(stderr, 
