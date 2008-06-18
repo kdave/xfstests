@@ -160,7 +160,7 @@ main(
 	char		*ls_path;
 	char		*pathname;
 	char            test_file[100];
-	char            command[100];
+	char            command[200];
 	int		num_files=50;
 	dm_stat_t	*stat_arr;
 	dm_stat_t	dmstat;
@@ -244,7 +244,7 @@ main(
 	  stat_arr[i].dt_uid=(uid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_gid=(gid_t)(rand()+rand()*0x10000);
 	  stat_arr[i].dt_mode=(mode_t)((rand()%4096)+32768);
-          stat_arr[i].dt_size=((dm_off_t)(rand()+rand()*0x10000)) & 0x3FFFFFFFFFFFF; /* 1 TB max */
+          stat_arr[i].dt_size=((dm_off_t)(rand()+rand()*0x10000)) & 0x1FFFFFFFFFFULL; /* 1 TB max */
 	}	
 
 	/*-----------------------------------------------------*\
