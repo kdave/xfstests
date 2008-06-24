@@ -1,0 +1,75 @@
+#! /bin/sh
+# FS QA Test No. 188
+#
+# drive the src/nametest program for CI mode
+# which does a heap of open(create)/unlink/stat
+# and checks that error codes make sense with its
+# memory of the files created.
+#
+# All filenames generated map to the same hash
+# value in XFS stressing leaf block traversal in
+# node form directories as well.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=bnaujok@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    rm -rf $SCRATCH_MNT/$seq
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+if [ $XFSPROGS_VERSION -lt 21000 ]; then
+    _notrun "this test requires case-insensitive support"
+fi
+
+_require_scratch
+rm -f $seq.full
+
+_scratch_mkfs -n version=ci >/dev/null 2>&1
+_scratch_mount
+
+status=1 # default failure
+sourcefile=$tmp.ci_nametest
+seed=1
+
+# need to create an input file with a list of filenames on each line
+# do number of files for testing to try each directory format
+
+# start with small number of files and increase by 4x for each run
+max_files=6144
+num_files=6
+
+mkdir $SCRATCH_MNT/$seq
+while [ $num_files -le $max_files ]; do
+  iterations=`expr $num_files \* 10`
+  $here/src/genhashnames $SCRATCH_MNT/$seq/$num_files $num_files $seed >>$sourcefile
+  mkdir $SCRATCH_MNT/$seq/$num_files
+  $here/src/nametest -l $sourcefile -s $seed -i $iterations -z -c
+  num_files=`expr $num_files \* 4`
+done
+
+# success, all done
+status=0
+exit
