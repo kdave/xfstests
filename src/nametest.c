@@ -15,7 +15,7 @@
  * along with this program; if not, write the Free Software Foundation,
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
- 
+
 #include "global.h"
 
 /*
@@ -25,21 +25,21 @@
  *
  * Given an input file of a list of filenames (one per line)
  * It does a number of iterations of operations
- * chosen pseudo-randomly in certain percentages: 
- *   creating (open), 
- *   deleting (unlink) and 
+ * chosen pseudo-randomly in certain percentages:
+ *   creating (open),
+ *   deleting (unlink) and
  *   looking up (stat)
- * on a pseudo-randomly chosen filename (from input file). 
+ * on a pseudo-randomly chosen filename (from input file).
  *
  * The percentage thresholds for operation selection change
- * every <number-of-names> iterations. 
+ * every <number-of-names> iterations.
  * e.g.
  * If had 100 names then:
  * iterations:
- * 1-100:      pct_remove = 33; pct_create = 33;  
+ * 1-100:      pct_remove = 33; pct_create = 33;
  * 101-200:    pct_remove = 60; pct_create = 20;
  * 201-300:    pct_remove = 20; pct_create = 60;
- * 301-400:    pct_remove = 33; pct_create = 33;  
+ * 301-400:    pct_remove = 33; pct_create = 33;
  * 401-500:    pct_remove = 60; pct_create = 20;
  * 501-600:    pct_remove = 20; pct_create = 60;
  * etc...
@@ -53,7 +53,7 @@
  *
  * The operation is done and any error codes are
  * verified considering whether file exists (info.exists)
- * or not. The stat(3) call also compares inode number. 
+ * or not. The stat(3) call also compares inode number.
  */
 
 
@@ -72,6 +72,7 @@ int good_adds, good_rms, good_looks, good_tot;	/* ops that suceeded */
 int bad_adds, bad_rms, bad_looks, bad_tot;	/* ops that failed */
 
 int verbose;
+int mixcase;
 
 int	auto_lookup(struct info *);
 int	auto_create(struct info *);
@@ -82,7 +83,7 @@ void	usage(void);
 void
 usage(void)
 {
-	printf("usage: nametest [-l srcfile] [-i iterations] [-s seed] [-z] [-v]\n");
+	printf("usage: nametest [-l srcfile] [-i iterations] [-s seed] [-z] [-v] [-c]\n");
 	exit(1);
 }
 
@@ -96,17 +97,18 @@ main(int argc, char *argv[])
 	struct info *ip;
 	int seed, linedots;
 
-	linedots = zeroout = verbose = 0;
+	linedots = zeroout = verbose = mixcase = 0;
 	seed = (int)time(NULL) % 1000;
 	iterations = 100000;
 	sourcefile = "input";
-	while ((ch = getopt(argc, argv, "l:i:s:zv")) != EOF) {
+	while ((ch = getopt(argc, argv, "l:i:s:zvc")) != EOF) {
 		switch (ch) {
 		case 'l':	sourcefile = optarg;		break;
 		case 's':	seed = atoi(optarg);		break;
 		case 'i':	iterations = atoi(optarg);	break;
 		case 'z':	zeroout++;			break;
 		case 'v':	verbose++;			break;
+		case 'c':	mixcase++;			break;
 		default:	usage();			break;
 		}
 	}
@@ -137,8 +139,8 @@ main(int argc, char *argv[])
 	 * Allocate space for the info table and fill it in.
 	 */
 
-        /* 
-         * Add up number of lines in file 
+        /*
+         * Add up number of lines in file
          * and replace '\n' by '\0'
          */
 	totalnames = 0;
@@ -152,14 +154,14 @@ main(int argc, char *argv[])
                 printf("no names found in input file\n");
                 return 1;
         }
-        
+
 	table = (struct info *)calloc(totalnames+1, sizeof(struct info));
 	if (table == NULL) {
 		perror("calloc");
 		return 1;
 	}
         /*
-         * Copy over names from file (in <table_data>) into name fields 
+         * Copy over names from file (in <table_data>) into name fields
          * of info structures in <table>.
          */
         ip = table;
@@ -303,13 +305,35 @@ main(int argc, char *argv[])
 	return 0;
 }
 
+char *get_name(struct info *ip)
+{
+	static char path[PATH_MAX];
+	int i;
+	char *p;
+
+	if (!mixcase)
+		return ip->name;
+
+	/* pick a random character to change case in path */
+	strcpy(path, ip->name);
+	p = strrchr(path, '/');
+	if (!p)
+		p = path;
+	p += random() % strlen(p);
+	if (islower(*p))
+		*p = toupper(*p);
+	else
+		*p = tolower(*p);
+	return path;
+}
+
 int
 auto_lookup(struct info *ip)
 {
 	struct stat64 statb;
 	int retval;
 
-	retval = stat64(ip->name, &statb);
+	retval = stat64(get_name(ip), &statb);
 	if (retval >= 0) {
 		good_looks++;
 		retval = 0;
@@ -352,7 +376,7 @@ auto_create(struct info *ip)
 	struct stat64 statb;
 	int retval;
 
-	retval = open(ip->name, O_RDWR|O_EXCL|O_CREAT, 0666);
+	retval = open(get_name(ip), O_RDWR|O_EXCL|O_CREAT, 0666);
 	if (retval >= 0) {
 		close(retval);
 		good_adds++;
@@ -400,7 +424,7 @@ auto_remove(struct info *ip)
 {
 	int retval;
 
-	retval = unlink(ip->name);
+	retval = unlink(get_name(ip));
 	if (retval >= 0) {
 		good_rms++;
 		retval = 0;

@@ -10,7 +10,7 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
 	godown resvtest writemod makeextents itrash \
-	multi_open_unlink dmiperf unwritten_sync
+	multi_open_unlink dmiperf unwritten_sync genhashnames
 
 LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize \
 	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
@@ -51,6 +51,9 @@ truncfile: truncfile.o $(LIBTEST)
 
 dbtest:	dbtest.o $(LIBTEST)
 	$(LINKTEST) $(LIBTEST) $(LIBGDBM) $(LDLIBS)
+
+genhashnames: genhashnames.o
+	$(LINKTEST)
 
 nametest: nametest.o $(LIBTEST)
 	$(LINKTEST) $(LIBTEST) $(LDLIBS)
