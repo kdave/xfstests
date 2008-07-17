@@ -43,6 +43,12 @@ s/sizeof\( xfs_agf_t \) = 64/sizeof( xfs_agf_t ) = <SIZE>/;
 	fi
 }
 
+_attribute_filter()
+{
+	sed -e 's/__attribute__ *[(][(]packed[)][)]//' \
+	    -e 's/__arch_pack//'
+}
+
 cprog=$tmp.get_structs.c
 oprog=$tmp.get_structs
 progout=$tmp.output
@@ -137,7 +143,7 @@ echo 'int main(int argc, char *argv[]) {' >>$cprog
 # Printfs of typedef sizes
 #
 cat /usr/include/xfs/xfs*.h | indent |\
-sed -e 's/__attribute__ *[(][(]packed[)][)]//' |\
+_attribute_filter |\
 tee $seq.full |\
 egrep '} *xfs_.*_t' |\
 egrep -v -f $tmp.ignore |\
