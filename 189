@@ -1,0 +1,181 @@
+#! /bin/sh
+# FS QA Test No. 189
+#
+# Test remount behaviour
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+tag="added by qa $seq"
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	_putback_scratch_fstab
+	rm -f $tmp.*
+}
+
+_scratch_filter()
+{
+	sed -e "s#$SCRATCH_DEV#SCRATCH_DEV#" \
+	    -e "s#$SCRATCH_MNT#SCRATCH_MNT#"
+}
+
+_check_mount()
+{
+	# assumes that we don't have extra ops in fstab
+	_mount | grep $SCRATCH_MNT | _scratch_filter
+}
+
+#
+# mount(8) adds all options from mtab and fstab to the mount command
+# line.  So the filesystem either must not reject any option at all
+# if it can't change it, or compare the value on the command line
+# to the existing state and only reject it if it would change
+# something that can't be changed.
+#
+# Test this behaviour by mounting a filesystem read-only with a non-
+# default option and then try to remount it rw.
+#
+# note that mount(8) doesn't add the options when specifying both the
+# device node and mount point, so test out the various mounting
+# alternatives
+#
+_test_remount_rw()
+{
+	# use filestreams as a hopefully never default option
+	echo
+	echo "try remount ro,filestreams -> rw,filestreams"
+	echo
+	_scratch_mount -o ro,filestreams
+	[ $? -eq 0 ] || echo "ro,filestreams mount failed unexpectedly"
+	_check_mount
+
+	for dev_mnt in $SCRATCH_DEV $SCRATCH_MNT "$SCRATCH_DEV $SCRATCH_MNT"; do
+		echo "mounting given: $dev_mnt" | _scratch_filter
+		_mount -o remount,rw $dev_mnt
+		[ $? -eq 0 ] || echo "remount rw failed"
+		_check_mount
+	done
+
+	umount $SCRATCH_MNT
+
+	echo
+	echo "try remount ro,noattr2 -> rw,attr2"
+	echo
+	_scratch_mount -o ro,noattr2
+	[ $? -eq 0 ] || echo "ro,noattr2 mount failed unexpectedly"
+	_check_mount
+
+	for dev_mnt in $SCRATCH_DEV $SCRATCH_MNT "$SCRATCH_DEV $SCRATCH_MNT"; do
+		echo "mounting given: $dev_mnt" | _scratch_filter
+		_mount -o remount,rw,attr2 $dev_mnt
+		[ $? -eq 0 ] || echo "remount rw,attr2 failed"
+		_check_mount
+	done
+
+	umount $SCRATCH_MNT
+}
+
+#
+# barrier is the only option we can change besides ro<->rw which is partially
+# handled by the VFS and tested elsewhere.  Make sure mount accepts going
+# from barrier (which also is the default) to nobarrier and back.
+#
+_test_remount_barrier()
+{
+	echo
+	echo "Do remount barrier tests"
+	echo
+
+	# mention barrier explicitly even if it's currently the default just to be sure
+	_scratch_mount -o barrier
+	[ $? -eq 0 ] || echo "mount failed unexpectedly!"
+	_check_mount
+
+	_scratch_mount -o remount,nobarrier
+	[ $? -eq 0 ] || _fail "remount nobarrier failed"
+	_check_mount
+
+	_scratch_mount -o remount,barrier
+	[ $? -eq 0 ] || _fail "remount barrier failed"
+	_check_mount
+
+	umount $SCRATCH_MNT
+}
+
+
+#
+# Example fstab entry
+# /dev/sdb2            /mnt/scratch1        xfs       defaults 0 0
+#
+_add_scratch_fstab()
+{
+	# comment out any existing SCRATCH_DEV
+	$SED_PROG -i "s;$SCRATCH_DEV;#$SCRATCH_DEV;" /etc/fstab
+
+	# add our fstab entry
+	echo "$SCRATCH_DEV $SCRATCH_MNT xfs defaults 0 0 # $tag" >> /etc/fstab
+}
+
+_modify_scratch_fstab()
+{
+	opts=$1
+
+	# modify our fstab entry that we added
+	# modify opts by looking for last word which has non-space chars
+	$SED_PROG -i "s; [^ ]* 0 0 # $tag; $opts 0 0 # $tag;" /etc/fstab
+}
+
+_putback_scratch_fstab()
+{
+	# uncomment out any existing SCRATCH_DEV
+	$SED_PROG -i "s;#$SCRATCH_DEV;$SCRATCH_DEV;" /etc/fstab
+
+	# remove the one we added at the end
+	$SED_PROG -i "/# $tag/d" /etc/fstab
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_need_to_be_root
+_require_scratch
+
+unset SCRATCH_OPTIONS
+unset MOUNT_OPTIONS
+
+_scratch_mkfs_xfs | _filter_mkfs 2>/dev/null
+
+_add_scratch_fstab
+_test_remount_rw
+
+echo
+echo "add noikeep to fstab for scratch"
+_modify_scratch_fstab noikeep # noikeep is not default for non dmapi
+_test_remount_rw
+
+_putback_scratch_fstab
+_test_remount_barrier
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
