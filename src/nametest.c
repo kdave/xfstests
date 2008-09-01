@@ -17,6 +17,7 @@
  */
 
 #include "global.h"
+#include <ctype.h>
 
 /*
  * nametest.c
@@ -308,7 +309,6 @@ main(int argc, char *argv[])
 char *get_name(struct info *ip)
 {
 	static char path[PATH_MAX];
-	int i;
 	char *p;
 
 	if (!mixcase)
