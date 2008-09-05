@@ -1,0 +1,62 @@
+$ rm -rf d
+$ mkdir d
+$ cd d
+
+$ mkdir e
+
+$ nfs4acl --set 'owner@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw-------
+$ rm e/f
+
+$ nfs4acl --set 'group@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw-rw----
+$ rm e/f
+
+$ nfs4acl --set 'everyone@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw-rw-rw-
+$ rm e/f
+
+$ nfs4acl --set 'owner@:rwx:f:allow root:rx:f:deny root:rx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw-------
+$ rm e/f
+
+$ nfs4acl --set 'owner@:rwx::allow everyone@:w:fi:deny everyone@:rwx:fi:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -r--r--r--
+$ rm e/f
+
+$ nfs4acl --set 'owner@:rwx::allow root:rx:fi:deny root:rx:fi:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> ----------
+$ rm e/f
+
+$ nfs4acl --set 'owner@:rx:fi:allow group@:rwx:fi:deny everyone@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw----rw-
+$ rm e/f
+
+$ nfs4acl --set 'owner@:rx:fi:allow root:rwx:fi:deny everyone@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -rw-rw-rw-
+$ rm e/f
+
+$ nfs4acl --set 'everyone@:w:fi:deny root:rx:fi:allow everyone@:rwx:f:allow' e
+$ touch e/f
+$ ls -l e/f | cut -d ' ' -f 1
+> -r--r--r--
+$ rm e/f
+
+$ cd ..
+$ rm -rf d

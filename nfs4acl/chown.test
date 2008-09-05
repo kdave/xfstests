@@ -1,0 +1,63 @@
+$ mkdir d
+$ cd d
+
+$ whoami
+> root
+
+$ id -Gn daemon
+> daemon bin
+
+$ touch a
+
+Chown and chgrp with no take ownership permission fails:
+	$ su daemon
+	$ chown daemon a
+	> chown: changing ownership of `a': Operation not permitted
+	$ chgrp daemon a
+	> chgrp: changing group of `a': Operation not permitted
+	$ nfs4acl --set 'daemon:rwo::allow' a
+	> a: Operation not permitted
+
+Add the take_ownership permission. This is reflected in the file masks; the
+file mode cannot show this though:
+	$ su
+	$ nfs4acl --set 'daemon:rwo::allow' a
+
+Chown and chgrp to an arbitrary other user or group fails:
+	$ su daemon
+	$ chown root a
+	> chown: changing ownership of `a': Operation not permitted
+	$ chgrp root a
+	> chgrp: changing group of `a': Operation not permitted
+
+Changing the mode makes that an upper bound of the permissions granted, even
+when the file mode stays the same:
+	$ su
+	$ ls -l a | cut -d ' ' -f1
+	> -rw-rw----
+	$ chmod 660 a
+
+Chown and chgrp to the same user or a group the process is in now fails
+because the masks now do not grant change_ownership access:
+	$ su daemon
+	$ chown daemon a
+	> chown: changing ownership of `a': Operation not permitted
+	$ chgrp daemon a
+	> chgrp: changing group of `a': Operation not permitted
+	$ chgrp bin a
+	> chgrp: changing group of `a': Operation not permitted
+
+Add back change_ownership:
+	$ su
+	$ nfs4acl --set 'daemon:rwo::allow' a
+
+Now, chgrp to one of the groups the process is in and chown to the same user
+succeeds:
+	$ su daemon
+	$ chgrp daemon a
+	$ chgrp bin a
+	$ chown daemon a
+
+$ su
+$ cd ..
+$ rm -rf d

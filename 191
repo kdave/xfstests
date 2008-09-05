@@ -1,0 +1,62 @@
+#!/bin/sh
+# FS QA Test No. 191
+#
+# To call into the nfs4acl qa suite of Andreas Gruenbacher.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Silicon Graphics, Inc.  All Rights Reserved.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=tes@emu.melbourne.sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_scratch_mkfs_xfs -i nfs4acl 1>$tmp.mkfs 2>$seq.full
+if [ $? -ne 0 ]
+then
+	_notrun "no mkfs support for NFS v4 ACLs"
+fi
+
+_scratch_mount 2>/dev/null
+if [ $? -ne 0 ]
+then
+	_notrun "no kernel mount support for NFS v4 ACLs"
+fi
+
+set_prog_path nfs4acl >>$seq.full
+if [ $? -ne 0 ]
+then
+	_notrun "no nfs4acl utility found"
+fi
+
+cd $SCRATCH_MNT
+for file in $here/nfs4acl/*.test
+do
+	print_file=`echo $file | sed 's/.*nfs4acl/nfs4acl/'`
+	echo ""
+	echo "*** $print_file ***"
+	echo ""
+	$here/nfs4acl/run $file
+done
+
+# success, all done
+status=0
+exit

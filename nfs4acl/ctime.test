@@ -1,0 +1,36 @@
+$ mkdir d
+$ cd d
+
+$ whoami
+> root
+
+$ touch a b
+$ sleep 1
+
+Without write access, the ctime cannot be changed.
+	$ su bin
+	$ touch a
+	> touch: cannot touch `a': Permission denied
+
+With write access, the ctime can be set to the current time, but not to
+any other time:
+	$ su
+	$ nfs4acl --set 'bin:rw::allow' a
+
+	$ su bin
+	$ touch a
+	$ [ b -ot a ] || echo 'b should be older than a'
+	$ touch -r b a
+	> touch: setting times of `a': Operation not permitted
+
+With set_attributes access, the ctime can be set to an arbitrary time:
+	$ su
+	$ nfs4acl --set 'bin:rwt::allow' a
+
+	$ su bin
+	$ touch -r b a
+	$ [ b -ot a -o a -ot b ] && echo 'a should be as old as b'
+
+$ su
+$ cd ..
+$ rm -rf d
