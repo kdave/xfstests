@@ -3,8 +3,7 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
     if test "$ac_cv_header_xfs_libxfs_h" != "yes"; then
         echo
         echo 'FATAL ERROR: cannot find a valid <xfs/libxfs.h> header file.'
-        echo 'Install or upgrade the XFS development package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
+        echo 'Run "make install-qa" from the xfsprogs source.'
         exit 1
     fi
   ])
@@ -93,8 +92,8 @@ AC_DEFUN([AC_PACKAGE_NEED_IRIX_LIBHANDLE],
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
-  [ AC_MSG_CHECKING([xfsctl from xfs/libxfs.h])
-    AC_TRY_LINK([#include <xfs/libxfs.h>], [ int x = xfsctl(0, 0, 0, 0); ],
+  [ AC_MSG_CHECKING([xfsctl from xfs/xfs.h])
+    AC_TRY_LINK([#include <xfs/xfs.h>], [ int x = xfsctl(0, 0, 0, 0); ],
       [ echo ok ],
       [ echo
         echo 'FATAL ERROR: cannot find required macros in the XFS headers.'

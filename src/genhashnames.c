@@ -12,7 +12,6 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include <xfs/libxfs.h>
 
 #define rol32(x,y) (((x) << (y)) | ((x) >> (32 - (y))))
 

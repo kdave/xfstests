@@ -130,34 +130,34 @@ loggen_unmount(int count)
      * way things end up on disk.
      */
 
-    INT_SET(head->h_magicno,        ARCH_CONVERT, XLOG_HEADER_MAGIC_NUM);
-    INT_SET(head->h_cycle,          ARCH_CONVERT, param_cycle);
-    INT_SET(head->h_version,        ARCH_CONVERT, 1);
-    INT_SET(head->h_len,            ARCH_CONVERT, 20);
-    INT_SET(head->h_chksum,         ARCH_CONVERT, 0);
-    INT_SET(head->h_prev_block,     ARCH_CONVERT, -1);
-    INT_SET(head->h_num_logops,     ARCH_CONVERT, 1);
-    INT_SET(head->h_cycle_data[0],  ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(head->h_fmt,            ARCH_CONVERT, param_fmt);
-    
-    ASSIGN_ANY_LSN_DISK(head->h_tail_lsn, param_tail_cycle, param_tail_block);
+    head->h_magicno = cpu_to_be32(XLOG_HEADER_MAGIC_NUM);
+    head->h_cycle = cpu_to_be32(param_cycle);
+    head->h_version = cpu_to_be32(1);
+    head->h_len = cpu_to_be32(20);
+    head->h_chksum = cpu_to_be32(0);
+    head->h_prev_block = cpu_to_be32(-1);
+    head->h_num_logops = cpu_to_be32(1);
+    head->h_cycle_data[0] = cpu_to_be32(0xb0c0d0d0);
+    head->h_fmt = cpu_to_be32(param_fmt);
+
+    head->h_tail_lsn = cpu_to_be64(xlog_assign_lsn(param_tail_cycle,
+							param_tail_block));
 
     memcpy(head->h_fs_uuid,  param_uuid, sizeof(uuid_t));
 
     /* now a log unmount op */
-    INT_SET(op->oh_tid,             ARCH_CONVERT, param_cycle);
-    INT_SET(op->oh_len,             ARCH_CONVERT, sizeof(magic));
-    INT_SET(op->oh_clientid,        ARCH_CONVERT, XFS_LOG);
-    INT_SET(op->oh_flags,           ARCH_CONVERT, XLOG_UNMOUNT_TRANS);
-    INT_SET(op->oh_res2,            ARCH_CONVERT, 0);
+    op->oh_tid = cpu_to_be32(param_cycle);
+    op->oh_len = cpu_to_be32(sizeof(magic));
+    op->oh_clientid = XFS_LOG;
+    op->oh_flags = XLOG_UNMOUNT_TRANS;
+    op->oh_res2 = cpu_to_be16(0);
 
     /* and the data for this op */
 
     memcpy(op+1, &magic, sizeof(magic));
     
     while (count--) {
-        ASSIGN_ANY_LSN_DISK(head->h_lsn,         
-                param_cycle, param_block++);
+	head->h_lsn = cpu_to_be64(xlog_assign_lsn(param_cycle, param_block++));
         
         loggen_write();
     }
@@ -195,47 +195,47 @@ loggen_empty(int count)
      * way things end up on disk.
      */
 
-    INT_SET(head->h_magicno,        ARCH_CONVERT, XLOG_HEADER_MAGIC_NUM);
-    INT_SET(head->h_cycle,          ARCH_CONVERT, param_cycle);
-    INT_SET(head->h_version,        ARCH_CONVERT, 1);
-    INT_SET(head->h_len,            ARCH_CONVERT, 5*sizeof(xlog_op_header_t) +
+    head->h_magicno        = cpu_to_be32(XLOG_HEADER_MAGIC_NUM);
+    head->h_cycle          = cpu_to_be32(param_cycle);
+    head->h_version        = cpu_to_be32(1);
+    head->h_len            = cpu_to_be32(5*sizeof(xlog_op_header_t) +
                                                     sizeof(xfs_trans_header_t)+
                                                     sizeof(xfs_buf_log_format_t)+
                                                     sizeof(int));
-    INT_SET(head->h_chksum,         ARCH_CONVERT, 0);
-    INT_SET(head->h_prev_block,     ARCH_CONVERT, -1);
-    INT_SET(head->h_num_logops,     ARCH_CONVERT, 5);
-    INT_SET(head->h_cycle_data[0],  ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(head->h_fmt,            ARCH_CONVERT, param_fmt);
+    head->h_chksum         = cpu_to_be32(0);
+    head->h_prev_block     = cpu_to_be32(-1);
+    head->h_num_logops     = cpu_to_be32(5);
+    head->h_cycle_data[0]  = cpu_to_be32(0xb0c0d0d0);
+    head->h_fmt            = cpu_to_be32(param_fmt);
     
-    ASSIGN_ANY_LSN_DISK(head->h_tail_lsn,    
-            param_tail_cycle, param_tail_block);
+    head->h_tail_lsn = cpu_to_be64(xlog_assign_lsn(param_tail_cycle,
+							param_tail_block));
 
-    memcpy(head->h_fs_uuid,  param_uuid, sizeof(uuid_t));
+    memcpy(head->h_fs_uuid, param_uuid, sizeof(uuid_t));
 
     /* start */
-    INT_SET(op1->oh_tid,            ARCH_CONVERT, 1);
-    INT_SET(op1->oh_len,            ARCH_CONVERT, 0);
-    INT_SET(op1->oh_clientid,       ARCH_CONVERT, XFS_TRANSACTION);
-    INT_SET(op1->oh_flags,          ARCH_CONVERT, XLOG_START_TRANS);
-    INT_SET(op1->oh_res2,           ARCH_CONVERT, 0);
+    op1->oh_tid            = cpu_to_be32(1);
+    op1->oh_len            = cpu_to_be32(0);
+    op1->oh_clientid       = XFS_TRANSACTION;
+    op1->oh_flags          = XLOG_START_TRANS;
+    op1->oh_res2           = cpu_to_be16(0);
     /* dummy */
-    INT_SET(op2->oh_tid,            ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(op2->oh_len,            ARCH_CONVERT, sizeof(xfs_trans_header_t));
-    INT_SET(op2->oh_clientid,       ARCH_CONVERT, XFS_TRANSACTION);
-    INT_SET(op2->oh_flags,          ARCH_CONVERT, 0);
-    INT_SET(op2->oh_res2,           ARCH_CONVERT, 0);
+    op2->oh_tid            = cpu_to_be32(0xb0c0d0d0);
+    op2->oh_len            = cpu_to_be32(sizeof(xfs_trans_header_t));
+    op2->oh_clientid       = XFS_TRANSACTION;
+    op2->oh_flags          = 0;
+    op2->oh_res2           = cpu_to_be16(0);
     /* dummy transaction - this stuff doesn't get endian converted */
     trans->th_magic     = XFS_TRANS_MAGIC;
     trans->th_type      = XFS_TRANS_DUMMY1;
     trans->th_tid       = 0;
     trans->th_num_items = 1;
     /* buffer */
-    INT_SET(op3->oh_tid,            ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(op3->oh_len,            ARCH_CONVERT, sizeof(xfs_buf_log_format_t));
-    INT_SET(op3->oh_clientid,       ARCH_CONVERT, XFS_TRANSACTION);
-    INT_SET(op3->oh_flags,          ARCH_CONVERT, 0);
-    INT_SET(op3->oh_res2,           ARCH_CONVERT, 0);
+    op3->oh_tid            = cpu_to_be32(0xb0c0d0d0);
+    op3->oh_len            = cpu_to_be32(sizeof(xfs_buf_log_format_t));
+    op3->oh_clientid       = XFS_TRANSACTION;
+    op3->oh_flags          = 0;
+    op3->oh_res2           = cpu_to_be16(0);
     /* an empty buffer too */
     blfs.blf_type       = XFS_LI_BUF;
     blfs.blf_size       = 2;
@@ -245,23 +245,22 @@ loggen_empty(int count)
     blfs.blf_data_map[0]= 0;
     memcpy(blf, &blfs, sizeof(blfs));
     /* commit */
-    INT_SET(op4->oh_tid,            ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(op4->oh_len,            ARCH_CONVERT, sizeof(int));
-    INT_SET(op4->oh_clientid,       ARCH_CONVERT, XFS_TRANSACTION);
-    INT_SET(op4->oh_flags,          ARCH_CONVERT, 0);
-    INT_SET(op4->oh_res2,           ARCH_CONVERT, 0);
+    op4->oh_tid            = cpu_to_be32(0xb0c0d0d0);
+    op4->oh_len            = cpu_to_be32(sizeof(int));
+    op4->oh_clientid       = XFS_TRANSACTION;
+    op4->oh_flags          = 0;
+    op4->oh_res2           = cpu_to_be16(0);
     /* and the data */
     *data=*(int*)(char*)"FISH"; /* this won't get written (I hope) */
     /* commit */
-    INT_SET(op5->oh_tid,            ARCH_CONVERT, 0xb0c0d0d0);
-    INT_SET(op5->oh_len,            ARCH_CONVERT, 0);
-    INT_SET(op5->oh_clientid,       ARCH_CONVERT, XFS_TRANSACTION);
-    INT_SET(op5->oh_flags,          ARCH_CONVERT, XLOG_COMMIT_TRANS);
-    INT_SET(op5->oh_res2,           ARCH_CONVERT, 0);
+    op5->oh_tid            = cpu_to_be32(0xb0c0d0d0);
+    op5->oh_len            = cpu_to_be32(0);
+    op5->oh_clientid       = XFS_TRANSACTION;
+    op5->oh_flags          = XLOG_COMMIT_TRANS;
+    op5->oh_res2           = cpu_to_be16(0);
 
     while (count--) {
-        ASSIGN_ANY_LSN_DISK(head->h_lsn,         
-                param_cycle, param_block++);
+        head->h_lsn = cpu_to_be64(xlog_assign_lsn(param_cycle, param_block++));
         
         loggen_write();
     }
