@@ -91,6 +91,34 @@ _test_remount_rw()
 }
 
 #
+# make sure we really can write to a filesystem after remount,rw
+#
+_test_remount_write()
+{
+	echo
+	echo "try touching file after remount ro -> rw with options"
+	echo
+	_scratch_mount
+	[ $? -eq 0 ] || echo "mount (1) failed unexpectedly"
+
+	touch $SCRATCH_MNT/foobar
+	[ $? -eq 0 ] || echo "touch (1) failed unexpectedly"
+
+	umount $SCRATCH_MNT
+
+	_scratch_mount -o ro
+	[ $? -eq 0 ] || echo "mount (2) failed unexpectedly"
+
+	_mount -o remount,rw,filestreams $SCRATCH_MNT
+	[ $? -eq 0 ] || echo "remount failed unexpectedly"
+
+	touch $SCRATCH_MNT/foobar
+	[ $? -eq 0 ] || echo "touch (2) failed unexpectedly"
+
+	umount $SCRATCH_MNT
+}
+
+#
 # barrier is the only option we can change besides ro<->rw which is partially
 # handled by the VFS and tested elsewhere.  Make sure mount accepts going
 # from barrier (which also is the default) to nobarrier and back.
@@ -167,6 +195,7 @@ _scratch_mkfs_xfs | _filter_mkfs 2>/dev/null
 
 _add_scratch_fstab
 _test_remount_rw
+_test_remount_write
 
 echo
 echo "add noikeep to fstab for scratch"
