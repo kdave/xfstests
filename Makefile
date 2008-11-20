@@ -25,7 +25,9 @@ else
 	$(SUBDIRS_MAKERULE)
 	# automake doesn't always support "default" target 
 	# so do dmapi make explicitly with "all"
+ifeq ($(HAVE_DMAPI), true)
 	cd $(TOPDIR)/dmapi; make all
+endif
 endif
 
 ifeq ($(HAVE_BUILDDEFS), yes)

@@ -99,6 +99,11 @@ AC_DEFUN([AC_PACKAGE_WANT_AIO],
     AC_SUBST(have_aio)
   ])
 
+AC_DEFUN([AC_PACKAGE_WANT_DMAPI],
+  [ AC_CHECK_HEADERS(sys/dmapi/dmapi.h, [ have_dmapi=true ], [ have_dmapi=false ])
+    AC_SUBST(have_dmapi)
+  ])
+
 AC_DEFUN([AC_PACKAGE_NEED_ATTR_XATTR_H],
   [ AC_CHECK_HEADERS([attr/xattr.h])
     if test "$ac_cv_header_attr_xattr_h" != "yes"; then
