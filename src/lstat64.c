@@ -57,7 +57,6 @@ int
 main(int argc, char **argv)
 {
 	struct stat64	sbuf;
-	char		mode[10];
 	int		i, c;
 	int		terse_flag = 0;
 
@@ -78,6 +77,7 @@ main(int argc, char **argv)
 	time(&timebuf);
 
 	for (i = optind; i < argc; i++) {
+		char *mode = "----------";
 
 		if( lstat64(argv[i], &sbuf) < 0) {
 			perror(argv[i]);
@@ -92,7 +92,6 @@ main(int argc, char **argv)
 			printf("  Size: %-10llu", (unsigned long long)sbuf.st_size);
 		}
 
-		strcpy(mode,"----------");
 		if (sbuf.st_mode & (S_IEXEC>>6))
 			mode[9] = 'x';
 		if (sbuf.st_mode & (S_IWRITE>>6))
