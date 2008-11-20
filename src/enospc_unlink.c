@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 	memset(ptr, 0xffffffff, sz);
 
 	for (i = 0; i < count; i++) {
-		fd = open(argv[1], O_CREAT|O_WRONLY);
+		fd = open(argv[1], O_CREAT|O_WRONLY, 0666);
 		if (fd < 0) {
 			perror(argv[1]);
 			exit(1);

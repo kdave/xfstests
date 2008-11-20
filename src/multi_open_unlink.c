@@ -92,7 +92,7 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		fd = open(path, O_RDWR|O_CREAT|O_EXCL);
+		fd = open(path, O_RDWR|O_CREAT|O_EXCL, 0666);
 		if (fd == -1) {
 			fprintf(stderr, "%s: failed to create \"%s\": %s\n", prog, path, strerror(errno));
 			return 1;

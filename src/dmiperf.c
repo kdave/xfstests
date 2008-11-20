@@ -203,7 +203,7 @@ mkfile(char *name, char *attr)
 	ssize_t		wrote, wsize;
 	off64_t		bytes = fsize;
 
-	if ((fd = open(name, O_WRONLY | O_CREAT | O_EXCL | O_DIRECT)) < 0) {
+	if ((fd = open(name, O_WRONLY | O_CREAT | O_EXCL | O_DIRECT, 0666)) < 0) {
 		perror("open");
 		exit(1);
 	}
