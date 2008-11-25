@@ -74,7 +74,7 @@ main(int argc, char **argv)
 
 	path = argv[optind];
 
-	if ((fd = open(path, oflags)) < 0) {
+	if ((fd = open(path, oflags, 0600)) < 0) {
 		fprintf(stderr,
 			"error opening \"%s\": %s\n",
 			path, strerror(errno));
