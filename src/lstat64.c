@@ -77,7 +77,7 @@ main(int argc, char **argv)
 	time(&timebuf);
 
 	for (i = optind; i < argc; i++) {
-		char *mode = "----------";
+		char mode[] = "----------";
 
 		if( lstat64(argv[i], &sbuf) < 0) {
 			perror(argv[i]);
