@@ -54,10 +54,13 @@ _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
 
 #if pquota's already in mount options then we dont need to enable
-[ `echo $MOUNT_OPTIONS | grep -c gquota` -eq 0 -a `echo $MOUNT_OPTIONS | grep -c gquota` -eq 0 ] &&\
-    EXTRA_MOUNT_OPTIONS="-o pquota"
-[ `echo $MOUNT_OPTIONS | grep -c gquota` -gt 0 -o `echo $MOUNT_OPTIONS | grep -c gquota` -gt 0 ] &&\
+
+# we can't run with group quotas
+if ( `echo $MOUNT_OPTIONS | grep -q gquota` || `echo $MOUNT_OPTIONS | grep -q grpquota` )
+then
     _notrun "Can't run with group quotas enabled"
+fi
+EXTRA_MOUNT_OPTIONS="-o pquota"
 
 if ! _scratch_mount "$EXTRA_MOUNT_OPTIONS" >$tmp.out 2>&1
 then
