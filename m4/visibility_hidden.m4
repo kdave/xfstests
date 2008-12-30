@@ -17,6 +17,6 @@ EOF
 		  rm -f conftest.[cs]
 		  ])
    if test $libc_cv_visibility_attribute = yes; then
-     AC_DEFINE(HAVE_VISIBILITY_ATTRIBUTE)
+     AC_DEFINE(HAVE_VISIBILITY_ATTRIBUTE, [], [GCC supports visibility attributes])
    fi
   ])
