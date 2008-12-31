@@ -1,0 +1,86 @@
+#! /bin/sh
+# FS QA Test No. 196
+#
+# Make sure renames accross project boundaries are properly rejected
+# and that we don't use the wrong lock flags internally.
+#
+# Based on a report and testcase from Arkadiusz Miskiewicz <arekm@maven.pl>
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_quota
+
+#
+# Setup temporary replacements for /etc/projects and /etc/projid
+#
+cat >$tmp.projects <<EOF
+42:$SCRATCH_MNT/t
+EOF
+
+cat >$tmp.projid <<EOF
+answer:42
+EOF
+
+#
+# And make sure we always use our replacements
+#
+quota_cmd="xfs_quota -D $tmp.projects -P $tmp.projid"
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+_qmount_option "pquota"
+_qmount
+
+#
+# Create the project root
+#
+mkdir $SCRATCH_MNT/t
+
+$quota_cmd -x -c 'project -s answer' $SCRATCH_MNT >/dev/null 2>&1
+$quota_cmd -x -c 'limit -p bhard=100m answer' $SCRATCH_MNT
+
+touch $SCRATCH_MNT/test
+
+#
+# Try renaming a file into the project.  This should fail.
+#
+# We repeat this a couple thousand times as a single rename couldn't
+# always trigger the wrong unlock flags bug we had in older kernels.
+#
+for i in `seq 1 2000`; do
+    src/rename test t/test
+done
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
