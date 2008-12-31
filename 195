@@ -1,0 +1,75 @@
+#! /bin/sh
+# FS QA Test No. 195
+#
+# Make sure the chattr dump flag gets picked up by xfsdump without a sync
+#
+# http://oss.sgi.com/bugzilla/show_bug.cgi?id=340
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	rm -rf $TEST_DIR/d
+	rm -f $TEST_DIR/dumpfile
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+#
+# Perform a level 0 dump that respects the chattr dump exclude flag,
+# and grep the output for the inode number we expect / do not expect
+# to be skipped
+#
+# Only dump a subtree so we get away with a single partition for
+# the subtree to be dumped and the dump file.
+#
+_do_dump()
+{
+	xfsdump -l 0 -s d -F  \
+		-L prova -M prova \
+		-f $TEST_DIR/dumpfile -e -v excluded_files=debug $TEST_DIR \
+		| grep "ino $inum" \
+		| sed -e 's/xfsdump: pruned ino [0-9]*, owner 0, estimated size 0: skip flag set/xfsdump: pruned ino NNN, owner 0, estimated size 0: skip flag set/'
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_user
+
+echo "Preparing subtree"
+mkdir $TEST_DIR/d
+touch $TEST_DIR/d/t
+inum=`stat --format "%i" $TEST_DIR/d/t`
+
+echo "No dump exclude flag set (should not be skipped)"
+_do_dump
+
+echo "Dump exclude flag set, but no sync yet (should be skipped)"
+chattr +d $TEST_DIR/d/t
+_do_dump
+
+echo "Dump exclude flag set, after sync (should be skipped)"
+sync
+_do_dump
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
