@@ -1,0 +1,50 @@
+#! /bin/sh
+# FS QA Test No. 197
+#
+# Check that d_off can be represented in a 32 bit long type without
+# truncation.  Note that this test will always succeed on a 64 bit
+# systems where there is no smaller off_t.
+#
+# Based on a testcase from John Stanley <jpsinthemix@verizon.net>.
+#
+# http://oss.sgi.com/bugzilla/show_bug.cgi?id=808
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	rm -rf $TEST_DIR/ttt
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+
+mkdir $TEST_DIR/ttt
+for n in {1..168}; do
+    touch $TEST_DIR/ttt/$n;
+done
+src/t_dir_offset $TEST_DIR/ttt
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
