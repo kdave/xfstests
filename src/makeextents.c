@@ -119,7 +119,9 @@ main(int argc, char *argv[])
 				return 1;
 			}
 			if (verbose_opt) {
-				printf("truncating back to %lu\n", NUMHOLES_TO_SIZE(num_holes));
+				printf("truncating back to %llu\n",
+				       (unsigned long long)
+					NUMHOLES_TO_SIZE(num_holes));
 			}
 			return 0;
 		}
@@ -128,7 +130,8 @@ main(int argc, char *argv[])
 		curr_holes = 0;
 	}
 	if (curr_holes != 0 && verbose_opt) {
-		printf("creating %lu more holes\n", num_holes - curr_holes);
+		printf("creating %llu more holes\n",
+			(unsigned long long)num_holes - curr_holes);
 	}
 		
 	/* create holes by seeking and writing */
@@ -147,7 +150,8 @@ main(int argc, char *argv[])
 		}
 
 		if (verbose_opt && ((i+1) % status_num == 0)) {
-			printf("seeked and wrote %lu times\n", i+1);
+			printf("seeked and wrote %llu times\n",
+				(unsigned long long)i + 1);
 		}
 	}
 

@@ -23,6 +23,8 @@
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define O_DIRECT	040000
 
@@ -65,10 +67,10 @@ while((c=getopt(argc,argv,"f:"))!=EOF) {
 		}
 	}
 
-	err = posix_memalign(&buf, ALIGNMENT, BUFSIZE);
+	err = posix_memalign((void **)&buf, ALIGNMENT, BUFSIZE);
 	if (err < 0) perror("posix_memalign failed");
 
-	err = posix_memalign(&goodbuf, ALIGNMENT, BUFSIZE);
+	err = posix_memalign((void **)&goodbuf, ALIGNMENT, BUFSIZE);
 	if (err < 0) perror("posix_memalign failed");
 
 	err = unlink(filename);

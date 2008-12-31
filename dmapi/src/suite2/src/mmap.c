@@ -41,6 +41,7 @@
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
+#include <stdlib.h>
 
 
 char * Progname;

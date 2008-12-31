@@ -797,7 +797,7 @@ main(int argc, char *argv[])
     int		c;
     struct sockaddr_in	myAddr;
     struct linger	noLinger = {1, 0};
-    char	*host;
+    char	*host = NULL;
     char	*endnum;
     int		errflag = 0;
     char	*p;

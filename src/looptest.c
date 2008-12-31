@@ -28,8 +28,6 @@
  
 /* dxm - 28/2/2 */
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <malloc.h>

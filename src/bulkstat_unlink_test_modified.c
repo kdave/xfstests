@@ -160,9 +160,10 @@ main(int argc, char *argv[])
 		    if ((ret[i].bs_ino == inodelist[j]) &&
 			(ret[i].bs_gen == genlist[j])) {
 			/* oops, the same inode with old gen number */
-			printf("Unlinked inode %ld with generation %d "
+			printf("Unlinked inode %llu with generation %d "
 			       "returned by bulkstat\n",
-				inodelist[j], genlist[j]);
+				(unsigned long long)inodelist[j],
+				 genlist[j]);
 			exit(1);
 		    }
 		    if ((ret[i].bs_ino == inodelist[j])) {

@@ -164,7 +164,7 @@ main(int argc, char *argv[])
 				for (j=0; j < nfiles; j += stride) {
 					if (ret[i].bs_ino == inodelist[j]) {
 						/* oops ... */
-						printf("failed. Unlinked inode %ld returned by bulkstat\n", inodelist[j]);
+						printf("failed. Unlinked inode %llu returned by bulkstat\n", (unsigned long long)inodelist[j]);
 						exit(1);
 					}
 				}
