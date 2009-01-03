@@ -1,0 +1,49 @@
+Summary: XFS regression test suite
+Name: @pkg_name@
+Version: @pkg_version@
+Release: @pkg_release@
+Distribution: @pkg_distribution@
+Packager: Silicon Graphics, Inc. <http://www.sgi.com/>
+BuildRoot: @build_root@
+BuildRequires:  autoconf, xfsprogs-devel, e2fsprogs-devel
+BuildREquires:  libacl-devel, libattr-devel, libaio-devel
+Requires:       bash, xfsprogs, xfsdump, perl, acl, attr, bind-utils
+Requires:       bc, indent, quota
+Source: @pkg_name@-@pkg_version@.src.tar.gz
+License: GPL2+
+Vendor: Silicon Graphics, Inc.
+URL: http://oss.sgi.com/projects/xfs/
+Group: System Environment/Base
+
+%description
+The XFS regression test suite.  Also includes some support for
+acl, attr, dmapi, udf, and nfs testing.  Contains around 200 specific tests
+for userspace & kernelspace.
+
+%prep
+if [ -f .census ] ; then
+   if [ ! -d ${RPM_PACKAGE_NAME}-${RPM_PACKAGE_VERSION} ] ; then
+      ln -s . ${RPM_PACKAGE_NAME}-${RPM_PACKAGE_VERSION}
+   fi
+else
+%setup
+INSTALL_USER=root
+INSTALL_GROUP=root
+export INSTALL_USER INSTALL_GROUP
+@make@ configure
+fi
+
+%build
+@make@
+
+%install
+DIST_ROOT="$RPM_BUILD_ROOT"
+DIST_INSTALL=`pwd`/install.manifest
+export DIST_ROOT DIST_INSTALL
+@make@ install DIST_MANIFEST="$DIST_INSTALL"
+@make@ -C build/rpm rpmfiles DIST_MANIFEST="$DIST_INSTALL"
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files -f build/rpm/rpmfiles
