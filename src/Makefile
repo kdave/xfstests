@@ -126,3 +126,9 @@ open_unlink: open_unlink.o $(LIBHANDLE)
 	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
 
 endif
+
+install:
+	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src
+	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src
+	$(INSTALL) -m 755 fill2attr fill2fs fill2fs_check scaleread.sh $(PKG_LIB_DIR)/src
+	$(INSTALL) -m 644 dumpfile $(PKG_LIB_DIR)/src

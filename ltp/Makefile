@@ -49,3 +49,8 @@ ifeq ($(HAVE_AIO), true)
 aio-stress: aio-stress.c
 	$(LINKTEST) $(LIBAIO) $(LDLIBS)
 endif
+
+install:
+	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/ltp
+	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/ltp
+

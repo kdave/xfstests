@@ -62,7 +62,21 @@ $(DMAPI_MAKEFILE):
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
 
-install install-dev install-lib:
+install: default $(addsuffix -install,$(SUBDIRS))
+	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)
+	$(INSTALL) -m 755 check $(PKG_LIB_DIR)
+	$(INSTALL) -m 755 [0-9]?? $(PKG_LIB_DIR)
+	$(INSTALL) -m 755 run.* $(PKG_LIB_DIR)
+	$(INSTALL) -m 644 group $(PKG_LIB_DIR)
+	$(INSTALL) -m 644 randomize.awk $(PKG_LIB_DIR)
+	$(INSTALL) -m 644 [0-9]??.* $(PKG_LIB_DIR)
+	$(INSTALL) -m 644 common* $(PKG_LIB_DIR)
+
+# Nothing.
+install-dev install-lib:
+
+%-install:
+	$(MAKE) -C $* install
 
 realclean distclean: clean
 	rm -f $(LDIRT) $(CONFIGURE)
