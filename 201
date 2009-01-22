@@ -1,0 +1,87 @@
+#! /bin/sh
+# FS QA Test No. 201
+#
+# Test out the infamout xfs_btree_delrec corruption.
+#
+# Only happens on 32-bit kernels without CONFIG_LBD, but it should be harmless
+# to run this everywhere.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2001 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+do_pwrite()
+{
+	offset=`expr $1 \* 512`
+	end=`expr $2 \* 512`
+	length=`expr $end - $offset`
+
+	xfs_io -d -f $file -c "pwrite $offset $length" >/dev/null
+}
+
+
+
+_cleanup()
+{
+	umount $SCRATCH_MNT
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+file=$SCRATCH_MNT/f
+
+_require_scratch
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+# Create a fragmented file
+do_pwrite 30792 31039
+do_pwrite 30320 30791
+do_pwrite 29688 30319
+do_pwrite 29536 29687
+do_pwrite 27216 29535
+do_pwrite 24368 27215
+do_pwrite 21616 24367
+do_pwrite 20608 21615
+do_pwrite 19680 20607
+do_pwrite 19232 19679
+do_pwrite 17840 19231
+do_pwrite 16928 17839
+do_pwrite 15168 16927
+do_pwrite 14048 15167
+do_pwrite 12152 14047
+do_pwrite 11344 12151
+do_pwrite 8792 11343
+do_pwrite 6456 8791
+do_pwrite 5000 6455
+do_pwrite 1728 4999
+do_pwrite 0 1727
+
+sync
+sync
+
+# and truncate it again
+> $SCRATCH_MNT/bigfile
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
