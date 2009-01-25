@@ -1,0 +1,42 @@
+#! /bin/sh
+# FS QA Test No. 202
+#
+# Test out the xfs_repair -o force_geometry option on single-AG filesystems.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+echo "== Creating single-AG filesystem =="
+_scratch_mkfs_xfs -d agcount=1 >/dev/null 2>&1
+
+echo "== Trying to repair it (should fail) =="
+xfs_repair $SCRATCH_DEV
+
+echo "== Trying to repair it with -o force_geometry =="
+xfs_repair -o force_geometry $SCRATCH_DEV
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
