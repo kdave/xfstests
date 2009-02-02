@@ -58,10 +58,10 @@ genhashnames: genhashnames.o
 nametest: nametest.o $(LIBTEST)
 	$(LINKTEST) $(LIBTEST) $(LDLIBS)
 
-bstat: bstat.o $(LIBHANDLE)
+bstat: bstat.o
 	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
 
-t_immutable: t_immutable.o $(LIBHANDLE) $(LIBACL)
+t_immutable: t_immutable.o
 	$(LINKTEST) $(LIBACL) $(LIBHANDLE) $(LDLIBS)
 
 loggen:	loggen.o
@@ -82,17 +82,17 @@ multi_open_unlink: multi_open_unlink.o
 #scaleread: scaleread.o $(LDLIBS)
 #	$(LINKTEST)
 
-acl_get: acl_get.o $(LIBACL) $(LIBATTR)
+acl_get: acl_get.o
 	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
 
-dmiperf: dmiperf.o $(LIBATTR)
+dmiperf: dmiperf.o
 	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
 preallo_rw_pattern_reader:
-	$(CC) -DREAD iopat.c -o preallo_rw_pattern_reader
+	$(CC) $(GCFLAGS) $(LDFLAGS) -DREAD iopat.c -o preallo_rw_pattern_reader
 
 preallo_rw_pattern_writer:
-	$(CC) -DWRITE iopat.c -o preallo_rw_pattern_writer
+	$(CC) $(GCFLAGS) $(LDFLAGS) -DWRITE iopat.c -o preallo_rw_pattern_writer
 
 ftrunc: ftrunc.o
 	$(LINKTEST)
