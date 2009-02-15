@@ -1,8 +1,10 @@
 #! /bin/sh
 # FS QA Test No. 199
 #
-# Check that a filesystem first mounted read-only and then remounted
-# performs the features2 fixup properly.
+# Check that the features2 location fixups work correctly.  We check both
+# a regular read-write mount of a filesystem and the case where the
+# filesystem is first mounted read-only and then later remounted read-write,
+# which is the usual case for the root filesystem.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2008 Christoph Hellwig.
@@ -51,8 +53,20 @@ xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print bad_features2'
 echo "Clearing features2:"
 xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
 
+_scratch_mount
+umount $SCRATCH_MNT
+echo "Features 2 after mount rw:"
+xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print features2'
+
+#
+# Clear the normal flags again for the second rount.
+#
+echo "Clearing features2:"
+xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
+
 #
 # And print the flags after a mount ro and remount rw
+#
 _scratch_mount -o ro
 _scratch_mount -o remount,rw
 umount $SCRATCH_MNT
