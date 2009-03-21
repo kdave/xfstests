@@ -1,0 +1,71 @@
+#! /bin/sh
+# FS QA Test No. 203
+#
+# Test out reallocation of the extent array in xfs_io.
+# Based on a testcase from Tomasz Majkowski <moosh009@gmail.com>.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_write_holes()
+{
+	file=$1
+	holes=$2
+	let writes=$holes+1
+
+	offset=0
+	for i in `seq 0 $writes`; do
+		xfs_io -f $file -c "pwrite -q $offset 1"
+		let offset=$offset+0x100000
+	done
+}
+
+#       0: [0..7]: 104..111
+#       1: [8..2047]: hole
+_filter_bmap()
+{
+	awk '$3 ~ /hole/ { print $1, $2, $3; next }
+             {print $1, $2; next}'
+}
+
+_cleanup()
+{
+	rm -f $TEST_DIR/hole_file*
+	rm -f $TEST_DIR/r??
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+
+for i in 10 14 15 16 17 28 29 30 31; do
+        rm -f $TEST_DIR/hole_file
+	_write_holes $TEST_DIR/hole_file${i} ${i}
+done
+
+for i in 10 14 15 16 17 28 29 30 31; do
+        xfs_bmap $TEST_DIR/hole_file${i} | _filter_bmap
+	echo
+done
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
