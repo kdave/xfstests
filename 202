@@ -20,6 +20,7 @@ status=1	# failure is the default!
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
+. ./common.repair
 
 # real QA test starts here
 _supported_fs xfs
@@ -31,10 +32,10 @@ echo "== Creating single-AG filesystem =="
 _scratch_mkfs_xfs -d agcount=1 >/dev/null 2>&1
 
 echo "== Trying to repair it (should fail) =="
-xfs_repair $SCRATCH_DEV
+_scratch_xfs_repair
 
 echo "== Trying to repair it with -o force_geometry =="
-xfs_repair -o force_geometry $SCRATCH_DEV
+_scratch_xfs_repair -o force_geometry 2>&1 | _filter_repair
 
 # success, all done
 echo "*** done"
