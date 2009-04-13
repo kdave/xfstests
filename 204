@@ -1,0 +1,41 @@
+#! /bin/sh
+# FS QA Test No. 204
+#
+# Test out ENOSPC flushiung on small filesystems.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009 Christoph Hellwig.
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+_scratch_mkfs_xfs -d size=104m >/dev/null
+_scratch_mount
+
+for i in `seq 1 22500`; do
+    echo -n > $SCRATCH_MNT/$i
+    echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i
+done
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0
