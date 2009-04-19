@@ -1,0 +1,66 @@
+#! /bin/sh
+# FS QA Test No. 203
+#
+# Test out ENOSPC flushiung on small filesystems.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009 Dave Chinner
+#-----------------------------------------------------------------------
+#
+# creator
+owner=david@fromorbit.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+_scratch_mkfs_xfs -d size=16m -b size=512 >/dev/null
+_scratch_mount
+
+# on a 16MB filesystem, there's 32768x512byte blocks. used is:
+#	- 4944 in the log,
+#	- 32+1 for the root inode cluster
+#	- 4 for the AG header
+#	- 2 for free space btrees
+#	- 4 for the AGFL
+#	- min(%5, 1024) = 1024 blocks for the reserve pool
+#	- about 15 blocks I can't account for right now.
+# That leaves ~26,745 blocks free to use.
+#
+# Writing the following three files fill the fs almost exactly.
+#
+# $ df -k /mnt/scratch
+# Filesystem           1K-blocks      Used Available Use% Mounted on
+# /dev/ubdc                13912     13908         4 100% /mnt/scratch
+#
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=512 count=25000 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred2 bs=512 count=500 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred3 bs=512 count=245 2>&1 | _filter_dd
+rm -f $SCRATCH_MNT/fred*
+
+echo "*** one file"
+# now try a single file of that size
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=512 count=26745 2>&1 | _filter_dd
+#rm -f $SCRATCH_MNT/fred*
+
+echo "*** one file, a few bytes at a time"
+# now try a single file of that size
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=15 count=$[26745/15*512] 2>&1 | _filter_dd
+
+# success, all done
+echo "*** done"
+rm -f $seq.full
+status=0

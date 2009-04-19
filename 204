@@ -1,7 +1,7 @@
 #! /bin/sh
-# FS QA Test No. 202
+# FS QA Test No. 204
 #
-# Test out the xfs_repair -o force_geometry option on single-AG filesystems.
+# Test out ENOSPC flushiung on small filesystems.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2009 Christoph Hellwig.
@@ -20,7 +20,6 @@ status=1	# failure is the default!
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
-. ./common.repair
 
 # real QA test starts here
 _supported_fs xfs
@@ -28,14 +27,13 @@ _supported_os Linux
 
 _require_scratch
 
-echo "== Creating single-AG filesystem =="
-_scratch_mkfs_xfs -d agcount=1 >/dev/null 2>&1
+_scratch_mkfs_xfs -d size=104m >/dev/null
+_scratch_mount
 
-echo "== Trying to repair it (should fail) =="
-_scratch_xfs_repair
-
-echo "== Trying to repair it with -o force_geometry =="
-_scratch_xfs_repair -o force_geometry 2>&1 | _filter_repair
+for i in `seq 1 22500`; do
+    echo -n > $SCRATCH_MNT/$i
+    echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i
+done
 
 # success, all done
 echo "*** done"

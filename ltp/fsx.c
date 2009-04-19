@@ -962,6 +962,7 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 	static struct timespec ts;
 	struct iocb *iocbs[] = { &iocb };
 	int ret;
+	long res;
 
 	if (rw == READ) {
 		io_prep_pread(&iocb, fd, buf, len, offset);
@@ -976,21 +977,49 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 		fprintf(stderr, "errcode=%d\n", ret);
 		fprintf(stderr, "aio_rw: io_submit failed: %s\n",
 				strerror(ret));
-		return(-1);
+		goto out_error;
 	}
 
 	ret = io_getevents(io_ctx, 1, 1, &event, &ts);
 	if (ret != 1) {
-		fprintf(stderr, "errcode=%d\n", ret);
-		fprintf(stderr, "aio_rw: io_getevents failed: %s\n",
-				 strerror(ret));
-		return -1;
+		if (ret == 0)
+			fprintf(stderr, "aio_rw: no events available\n");
+		else {
+			fprintf(stderr, "errcode=%d\n", -ret);
+			fprintf(stderr, "aio_rw: io_getevents failed: %s\n",
+				 	strerror(-ret));
+		}
+		goto out_error;
 	}
 	if (len != event.res) {
-		fprintf(stderr, "bad read length: %lu instead of %u\n",
-				event.res, len);
+		/*
+		 * The b0rked libaio defines event.res as unsigned.
+		 * However the kernel strucuture has it signed,
+		 * and it's used to pass negated error value.
+		 * Till the library is fixed use the temp var.
+		 */
+		res = (long)event.res;
+		if (res >= 0)
+			fprintf(stderr, "bad io length: %lu instead of %u\n",
+					res, len);
+		else {
+			fprintf(stderr, "errcode=%d\n", -res);
+			fprintf(stderr, "aio_rw: async io failed: %s\n",
+					strerror(-res));
+			ret = res;
+			goto out_error;
+		}
+
 	}
 	return event.res;
+
+out_error:
+	/*
+	 * The caller expects error return in traditional libc
+	 * convention, i.e. -1 and the errno set to error.
+	 */
+	errno = -ret;
+	return -1;
 }
 
 int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)

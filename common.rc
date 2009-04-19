@@ -152,7 +152,7 @@ _mount_ops_filter()
     params="$*"
     
     #get mount point to handle dmapi mtpt option correctly
-    last_index=`expr $# - 1`
+    let last_index=$#-1
     [ $last_index -gt 0 ] && shift $last_index
     FS_ESCAPED=$1
     
@@ -266,6 +266,14 @@ _scratch_xfs_logprint()
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
         SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
     $XFS_LOGPRINT_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_check()
+{
+    SCRATCH_OPTIONS=""
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        SCRATCH_OPTIONS="-l $SCRATCH_LOGDEV"
+    $XFS_CHECK_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
 _scratch_xfs_repair()
@@ -1114,11 +1122,11 @@ _nfiles()
         while [ $f -lt $1 ]
         do
                 file=f$f
-                touch $file
+                echo > $file
                 if [ $size -gt 0 ]; then
                     dd if=/dev/zero of=$file bs=1024 count=$size
                 fi
-                f=`expr $f + 1`
+		let f=$f+1
         done
 }
 
@@ -1132,7 +1140,7 @@ _descend()
         _nfiles $files           # files for this dir
 
         [ $depth -eq 0 ] && return
-        deep=`expr $depth - 1`  # go 1 down
+	let deep=$depth-1 # go 1 down
 
         [ $verbose = true ] && echo "descending, depth from leaves = $deep"
 
@@ -1140,7 +1148,7 @@ _descend()
         while [ $d -lt $dirs ]
         do
                 _descend d$d $deep &
-                d=`expr $d + 1`
+		let d=$d+1
                 wait
         done
 }
