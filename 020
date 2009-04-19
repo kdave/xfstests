@@ -35,7 +35,7 @@ _filter()
 
 _attr()
 {
-    attr $* 2>$tmp.err >$tmp.out
+    $ATTR_PROG $* 2>$tmp.err >$tmp.out
     exit=$?
     _filter $tmp.out
     _filter $tmp.err 1>&2
@@ -44,7 +44,7 @@ _attr()
 
 _getfattr()
 {
-    getfattr $* 2>$tmp.err >$tmp.out
+    $GETFATTR_PROG $* 2>$tmp.err >$tmp.out
     exit=$?
     _filter $tmp.out
     _filter $tmp.err 1>&2
@@ -68,8 +68,8 @@ _attr_list()
 _supported_fs xfs udf
 _supported_os Linux
 
-[ -x /usr/bin/attr ] || _notrun "attr is not installed"
-[ -x /usr/bin/getfattr ] || _notrun "getfattr is not installed"
+[ -x $ATTR_PROG ] || _notrun "attr is not installed"
+[ -x $GETFATTR_PROG ] || _notrun "getfattr is not installed"
 
 _setup_testdir
 
@@ -107,7 +107,7 @@ echo "*** add lots of attributes"
 v=0
 while [ $v -lt 1000 ]
 do
-    echo "value_$v" | attr -s "attribute_$v" $testfile >>$seq.full
+    echo "value_$v" | $ATTR_PROG -s "attribute_$v" $testfile >>$seq.full
     if [ $? -ne 0 ]
     then
         echo "!!! failed to add \"attribute_$v\""
@@ -119,7 +119,7 @@ done
 
 echo "*** check"
 # don't print it all out...
-getfattr --absolute-names $testfile \
+$GETFATTR_PROG --absolute-names $testfile \
     | tee -a $seq.full \
     | $AWK_PROG '
     	/^#/ { next }
@@ -131,7 +131,7 @@ echo "*** remove lots of attributes"
 v=0
 while [ $v -lt 1000 ]
 do
-    if ! attr -r "attribute_$v" $testfile >>$seq.full
+    if ! $ATTR_PROG -r "attribute_$v" $testfile >>$seq.full
     then
         echo "!!! failed to remove \"attribute_$v\""
         exit 1
