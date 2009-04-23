@@ -125,7 +125,7 @@ _supported_fs xfs
 _supported_os Linux
 
 [ "$USE_EXTERNAL" = yes ] && _notrun "Cannot xfs_copy with external devices"
-[ -x $XFS_COPY_PROG ] || _notrun "xfs_copy binary not yet installed"
+[ -x /usr/sbin/xfs_copy ] || _notrun "xfs_copy binary not yet installed"
 
 _require_scratch
 _require_loop
@@ -140,12 +140,12 @@ umount $SCRATCH_MNT 2>/dev/null
 
 echo
 echo === copying scratch device to single target
-$XFS_COPY_PROG $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+xfs_copy $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
 _verify_copy $imgs.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo
 echo === copying scratch device to single target, duplicate UUID
-$XFS_COPY_PROG -d $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+xfs_copy -d $SCRATCH_DEV $imgs.image | _filter_copy '#' $imgs.image '#' '#'
 _verify_copy $imgs.image $SCRATCH_DEV $SCRATCH_MNT
 
 echo 
@@ -158,7 +158,7 @@ mount -t xfs -o loop $imgs.source $imgs.source_dir
 loop2=`mount | grep $imgs.source | grep -o -e 'loop=.*[^),]' | grep -o -e '/.*$'`
 cp -a $here $imgs.source_dir
 mount -t xfs -o remount,ro $imgs.source $imgs.source_dir
-$XFS_COPY_PROG $imgs.source $imgs.image | _filter_copy '#' $imgs.image '#' '#'
+xfs_copy $imgs.source $imgs.image | _filter_copy '#' $imgs.image '#' '#'
 _verify_copy $imgs.image $imgs.source $imgs.source_dir
 
 # HACK WARNING:
@@ -169,7 +169,7 @@ losetup -d $loop2 > /dev/null 2>&1
 
 echo
 echo === copying scratch device to multiple targets
-$XFS_COPY_PROG -L$imgs.log -b $SCRATCH_DEV $imgs.image1 $imgs.image2 \
+xfs_copy -L$imgs.log -b $SCRATCH_DEV $imgs.image1 $imgs.image2 \
 	| _filter_copy '#' $imgs.image1 '#' $imgs.image2
 _verify_copy $imgs.image1 $SCRATCH_DEV $SCRATCH_MNT
 _verify_copy $imgs.image2 $SCRATCH_DEV $SCRATCH_MNT

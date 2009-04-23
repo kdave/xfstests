@@ -59,7 +59,7 @@ _cleanup()
 _supported_fs xfs udf
 _supported_os Linux
 
-[ -x $CHACL_PROG ] || _notrun "chacl executable not found"
+[ -x /usr/bin/chacl ] || _notrun "chacl executable not found"
 [ -x $runas ] || _notrun "$runas executable not found"
 
 rm -f $seq.full
@@ -98,25 +98,25 @@ _acl_ls file1
 echo ""
 echo "--- Test get and set of ACL ---"
 echo "Note: Old interface gave an empty ACL - now output an ACL"
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
 echo "Try using single colon separator"
 echo "Note: Old interface FAILed because of single colon - new one allows it" 
-$CHACL_PROG u::r--,g::rwx,o:rw- file1 2>&1
+chacl u::r--,g::rwx,o:rw- file1 2>&1
 echo "Expect to PASS" 
-$CHACL_PROG u::r--,g::rwx,o::rw- file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::r--,g::rwx,o::rw- file1 2>&1
+chacl -l file1 | _acl_filter_id
 
 echo ""
 echo "--- Test sync of ACL with std permissions ---"
 _acl_ls file1
 chmod u+w file1
 _acl_ls file1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
 
 echo ""
 echo "--- Test owner permissions ---"
-$CHACL_PROG u::r-x,g::---,o::--- file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::r-x,g::---,o::--- file1 2>&1
+chacl -l file1 | _acl_filter_id
 # change to owner
 echo "Expect to PASS" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
@@ -125,8 +125,8 @@ $runas -u $acl2 -g $acl2 ./file1 2>&1
 
 echo ""
 echo "--- Test group permissions ---"
-$CHACL_PROG u::---,g::r-x,o::--- file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::---,g::r-x,o::--- file1 2>&1
+chacl -l file1 | _acl_filter_id
 echo "Expect to FAIL - acl1 is owner" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to PASS - acl2 matches group" 
@@ -138,8 +138,8 @@ $runas -u $acl3 -g $acl3 ./file1 2>&1
 
 echo ""
 echo "--- Test other permissions ---"
-$CHACL_PROG u::---,g::---,o::r-x file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::---,g::---,o::r-x file1 2>&1
+chacl -l file1 | _acl_filter_id
 echo "Expect to FAIL - acl1 is owner" 
 $runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to FAIL - acl2 is in group" 
@@ -157,12 +157,12 @@ echo "=== Test Extended ACLs ==="
 echo ""
 echo "--- Test adding a USER ACE ---"
 echo "Expect to FAIL as no MASK provided"
-$CHACL_PROG u::---,g::---,o::---,u:$acl2:r-x file1 2>&1 | _acl_filter_id
+chacl u::---,g::---,o::---,u:$acl2:r-x file1 2>&1 | _acl_filter_id
 echo "Ensure that ACL has not been changed"
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
 echo "Expect to PASS - USER ACE matches user"
-$CHACL_PROG u::---,g::---,o::---,u:$acl2:r-x,m::rwx file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::---,g::---,o::---,u:$acl2:r-x,m::rwx file1 2>&1
+chacl -l file1 | _acl_filter_id
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to FAIL - USER ACE does not match user"
 $runas -u $acl3 -g $acl3 ./file1 2>&1
@@ -170,11 +170,11 @@ $runas -u $acl3 -g $acl3 ./file1 2>&1
 echo ""
 echo "--- Test adding a GROUP ACE ---"
 echo "Expect to FAIL as no MASK provided"
-$CHACL_PROG u::---,g::---,o::---,g:$acl2:r-x file1 2>&1 | _acl_filter_id
+chacl u::---,g::---,o::---,g:$acl2:r-x file1 2>&1 | _acl_filter_id
 echo "Ensure that ACL has not been changed"
-$CHACL_PROG -l file1 | _acl_filter_id
-$CHACL_PROG u::---,g::---,o::---,g:$acl2:r-x,m::rwx file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
+chacl u::---,g::---,o::---,g:$acl2:r-x,m::rwx file1 2>&1
+chacl -l file1 | _acl_filter_id
 echo "Expect to PASS - GROUP ACE matches group"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to PASS - GROUP ACE matches sup group"
@@ -188,18 +188,18 @@ echo ""
 echo "--- Test MASK ---"
 
 # group
-$CHACL_PROG u::---,g::---,o::---,g:$acl2:r-x,m::-w- file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl u::---,g::---,o::---,g:$acl2:r-x,m::-w- file1 2>&1
+chacl -l file1 | _acl_filter_id
 echo "Expect to FAIL as MASK prohibits execution"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 
 # user
-$CHACL_PROG u::---,g::---,o::---,u:$acl2:r-x,m::-w- file1 2>&1
+chacl u::---,g::---,o::---,u:$acl2:r-x,m::-w- file1 2>&1
 echo "Expect to FAIL as MASK prohibits execution"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 
 # user
-$CHACL_PROG u::---,g::---,o::---,u:$acl2:r-x,m::r-x file1 2>&1
+chacl u::---,g::---,o::---,u:$acl2:r-x,m::r-x file1 2>&1
 echo "Expect to PASS as MASK allows execution"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 
@@ -208,11 +208,11 @@ $runas -u $acl2 -g $acl2 ./file1 2>&1
 echo ""
 echo "--- Test ACE priority ---"
 
-$CHACL_PROG o::rwx,g::rwx,u:$acl1:rwx,u::---,m::rwx file1 2>&1
+chacl o::rwx,g::rwx,u:$acl1:rwx,u::---,m::rwx file1 2>&1
 echo "Expect to FAIL as should match on owner"
 $runas -u $acl1 -g $acl2 ./file1 2>&1
 
-$CHACL_PROG o::---,g::---,u:$acl2:rwx,u::---,m::rwx file1 2>&1
+chacl o::---,g::---,u:$acl2:rwx,u::---,m::rwx file1 2>&1
 echo "Expect to PASS as should match on user"
 $runas -u $acl2 -g $acl2 ./file1 2>&1
 
@@ -223,8 +223,8 @@ echo ""
 echo "=== Test can read ACLs without access permissions ==="
 # This was a bug in kernel code where syscred wasn't being used
 # to override the capabilities
-$CHACL_PROG o::---,g::---,u::--- file1 2>&1
-$CHACL_PROG -l file1 | _acl_filter_id
+chacl o::---,g::---,u::--- file1 2>&1
+chacl -l file1 | _acl_filter_id
 
 #-------------------------------------------------------
 
@@ -234,20 +234,20 @@ echo "=== Test Default ACLs ==="
 umask 0
 
 mkdir acldir
-$CHACL_PROG -b "u::rwx,g::rwx,o::rwx" "u::r-x,g::r--,o::---" acldir 2>&1
-$CHACL_PROG -l acldir | _acl_filter_id
+chacl -b "u::rwx,g::rwx,o::rwx" "u::r-x,g::r--,o::---" acldir 2>&1
+chacl -l acldir | _acl_filter_id
 cd acldir
 
 touch file2
 _acl_ls file2
-$CHACL_PROG -l file2 | _acl_filter_id
+chacl -l file2 | _acl_filter_id
 
 #ensure that umask is not having an effect 
 #so set it and see
 umask 722
 touch file3
 _acl_ls file3
-$CHACL_PROG -l file3 | _acl_filter_id
+chacl -l file3 | _acl_filter_id
 
 cd ..
 umask 022
@@ -257,17 +257,17 @@ umask 022
 
 echo ""
 echo "=== Removing ACLs ==="
-$CHACL_PROG -l file1 | _acl_filter_id
-$CHACL_PROG -l acldir | _acl_filter_id
-$CHACL_PROG -l acldir/file2 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
+chacl -l acldir | _acl_filter_id
+chacl -l acldir/file2 | _acl_filter_id
 echo "Remove ACLs..."
-$CHACL_PROG -R file1
-$CHACL_PROG -B acldir
-$CHACL_PROG -R acldir/file2
+chacl -R file1
+chacl -B acldir
+chacl -R acldir/file2
 echo "Note: Old interface would mean empty ACLs - now we show mode ACLs" 
-$CHACL_PROG -l file1 | _acl_filter_id
-$CHACL_PROG -l acldir | _acl_filter_id
-$CHACL_PROG -l acldir/file2 | _acl_filter_id
+chacl -l file1 | _acl_filter_id
+chacl -l acldir | _acl_filter_id
+chacl -l acldir/file2 | _acl_filter_id
 
 
 #-------------------------------------------------------
@@ -302,15 +302,15 @@ echo "Note: Old interface gave more informative error msgs"
 
 touch file1
 set -x
-$CHACL_PROG u file1
-$CHACL_PROG u: file1
-$CHACL_PROG u:rumpledumpleunknownuser file1
-$CHACL_PROG u:rumpledumpleunknownuser: file1
-$CHACL_PROG g:rumpledumpleunknowngrp file1
-$CHACL_PROG g:rumpledumpleunknowngrp: file1
-$CHACL_PROG o:user1:rwx file1
-$CHACL_PROG m:user1:rwx file1
-$CHACL_PROG a::rwx file1
+chacl u file1
+chacl u: file1
+chacl u:rumpledumpleunknownuser file1
+chacl u:rumpledumpleunknownuser: file1
+chacl g:rumpledumpleunknowngrp file1
+chacl g:rumpledumpleunknowngrp: file1
+chacl o:user1:rwx file1
+chacl m:user1:rwx file1
+chacl a::rwx file1
 set +x
 
 #-------------------------------------------------------
@@ -329,23 +329,23 @@ acl4=`_create_n_aces 16` # Andreas G. libacl size for initial get
 acl5=`_create_n_aces 17` # 1 over A.G. libacl initial size
 
 echo "1 below xfs acl max"
-$CHACL_PROG $acl1 largeaclfile
+chacl $acl1 largeaclfile
 getfacl largeaclfile | _filter_aces
 
 echo "xfs acl max"
-$CHACL_PROG $acl2 largeaclfile
+chacl $acl2 largeaclfile
 getfacl largeaclfile | _filter_aces
 
 echo "1 above xfs acl max"
-$CHACL_PROG $acl3 largeaclfile
+chacl $acl3 largeaclfile
 getfacl largeaclfile | _filter_aces
 
 echo "use 16 aces"
-$CHACL_PROG $acl4 largeaclfile
+chacl $acl4 largeaclfile
 getfacl largeaclfile | _filter_aces
 
 echo "use 17 aces"
-$CHACL_PROG $acl5 largeaclfile
+chacl $acl5 largeaclfile
 getfacl largeaclfile | _filter_aces
 
 #-------------------------------------------------------
