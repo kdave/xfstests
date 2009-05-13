@@ -298,7 +298,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		if (size_by_seek == (off_t)-1)
 			prterr("save_buffer: lseek eof");
 		else if (bufferlength > size_by_seek) {
-			warn("save_buffer: .fsxgood file too short... will save 0x%qx bytes instead of 0x%qx\n", (unsigned long long)size_by_seek,
+			warn("save_buffer: .fsxgood file too short... will save 0x%llx bytes instead of 0x%llx\n", (unsigned long long)size_by_seek,
 			     (unsigned long long)bufferlength);
 			bufferlength = size_by_seek;
 		}
@@ -313,7 +313,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		if (byteswritten == -1)
 			prterr("save_buffer write");
 		else
-			warn("save_buffer: short write, 0x%x bytes instead of 0x%qx\n",
+			warn("save_buffer: short write, 0x%x bytes instead of 0x%llx\n",
 			     (unsigned)byteswritten,
 			     (unsigned long long)bufferlength);
 	}
@@ -397,7 +397,7 @@ check_size(void)
 	}
 	size_by_seek = lseek(fd, (off_t)0, SEEK_END);
 	if (file_size != statbuf.st_size || file_size != size_by_seek) {
-		prt("Size error: expected 0x%qx stat 0x%qx seek 0x%qx\n",
+		prt("Size error: expected 0x%llx stat 0x%llx seek 0x%llx\n",
 		    (unsigned long long)file_size,
 		    (unsigned long long)statbuf.st_size,
 		    (unsigned long long)size_by_seek);
@@ -750,12 +750,12 @@ writefileimage()
 		if (iret == -1)
 			prterr("writefileimage: write");
 		else
-			prt("short write: 0x%x bytes instead of 0x%qx\n",
+			prt("short write: 0x%x bytes instead of 0x%llx\n",
 			    iret, (unsigned long long)file_size);
 		report_failure(172);
 	}
 	if (lite ? 0 : ftruncate(fd, file_size) == -1) {
-	        prt("ftruncate2: %qx\n", (unsigned long long)file_size);
+	        prt("ftruncate2: %llx\n", (unsigned long long)file_size);
 		prterr("writefileimage: ftruncate");
 		report_failure(173);
 	}
