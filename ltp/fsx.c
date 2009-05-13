@@ -294,7 +294,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 		exit(67);
 	}
 	if (lite) {
-		off_t size_by_seek = lseek(fd, (off_t)0, L_XTND);
+		off_t size_by_seek = lseek(fd, (off_t)0, SEEK_END);
 		if (size_by_seek == (off_t)-1)
 			prterr("save_buffer: lseek eof");
 		else if (bufferlength > size_by_seek) {
@@ -395,7 +395,7 @@ check_size(void)
 		prterr("check_size: fstat");
 		statbuf.st_size = -1;
 	}
-	size_by_seek = lseek(fd, (off_t)0, L_XTND);
+	size_by_seek = lseek(fd, (off_t)0, SEEK_END);
 	if (file_size != statbuf.st_size || file_size != size_by_seek) {
 		prt("Size error: expected 0x%qx stat 0x%qx seek 0x%qx\n",
 		    (unsigned long long)file_size,
@@ -1256,7 +1256,7 @@ main(int argc, char **argv)
 
 	if (lite) {
 		off_t ret;
-		file_size = maxfilelen = lseek(fd, (off_t)0, L_XTND);
+		file_size = maxfilelen = lseek(fd, (off_t)0, SEEK_END);
 		if (file_size == (off_t)-1) {
 			prterr(fname);
 			warn("main: lseek eof");
