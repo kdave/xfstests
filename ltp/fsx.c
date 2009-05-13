@@ -589,7 +589,7 @@ dowrite(unsigned offset, unsigned size)
 	gendata(original_buf, good_buf, offset, size);
 	if (file_size < offset + size) {
 		if (file_size < offset)
-			bzero(good_buf + file_size, offset - file_size);
+			memset(good_buf + file_size, '\0', offset - file_size);
 		file_size = offset + size;
 		if (lite) {
 			warn("Lite file size bug in fsx!");
@@ -656,7 +656,7 @@ domapwrite(unsigned offset, unsigned size)
 	gendata(original_buf, good_buf, offset, size);
 	if (file_size < offset + size) {
 		if (file_size < offset)
-			bzero(good_buf + file_size, offset - file_size);
+			memset(good_buf + file_size, '\0', offset - file_size);
 		file_size = offset + size;
 		if (lite) {
 			warn("Lite file size bug in fsx!");
@@ -718,7 +718,7 @@ dotruncate(unsigned size)
 	log4(OP_TRUNCATE, size, (unsigned)file_size, 0);
 
 	if (size > file_size)
-		bzero(good_buf + file_size, size - file_size);
+		memset(good_buf + file_size, '\0', size - file_size);
 	file_size = size;
 
 	if (testcalls <= simulatedopcount)
@@ -1274,10 +1274,10 @@ main(int argc, char **argv)
 		original_buf[i] = random() % 256;
 	good_buf = (char *) malloc(maxfilelen + writebdy);
 	good_buf = round_up(good_buf, writebdy, 0);
-	bzero(good_buf, maxfilelen);
+	memset(good_buf, '\0', maxfilelen);
 	temp_buf = (char *) malloc(maxoplen + readbdy);
 	temp_buf = round_up(temp_buf, readbdy, 0);
-	bzero(temp_buf, maxoplen);
+	memset(temp_buf, '\0', maxoplen);
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
 
