@@ -9,6 +9,8 @@
  *	Rewritten 8/98 by Conrad Minshall.
  *
  *	Small changes to work under Linux -- davej.
+ *
+ *	Checks for mmap last-page zero fill.
  */
 
 #include "global.h"
@@ -504,6 +506,33 @@ doread(unsigned offset, unsigned size)
 
 
 void
+check_eofpage(char *s, unsigned offset, char *p, int size)
+{
+	unsigned long last_page, should_be_zero;
+
+	if (offset + size <= (file_size & ~page_mask))
+		return;
+	/*
+	 * we landed in the last page of the file
+	 * test to make sure the VM system provided 0's 
+	 * beyond the true end of the file mapping
+	 * (as required by mmap def in 1996 posix 1003.1)
+	 */
+	last_page = ((unsigned long)p + (offset & page_mask) + size) & ~page_mask;
+
+	for (should_be_zero = last_page + (file_size & page_mask);
+	     should_be_zero < last_page + page_size;
+	     should_be_zero++)
+		if (*(char *)should_be_zero) {
+			prt("Mapped %s: non-zero data past EOF (0x%llx) page offset 0x%x is 0x%04x\n",
+			    s, file_size - 1, should_be_zero & page_mask,
+			    short_at(should_be_zero));
+			report_failure(205);
+		}
+}
+
+
+void
 domapread(unsigned offset, unsigned size)
 {
 	unsigned pg_offset;
@@ -547,6 +576,9 @@ domapread(unsigned offset, unsigned size)
 		report_failure(190);
 	}
 	memcpy(temp_buf, p + pg_offset, size);
+
+	check_eofpage("Read", offset, p, size);
+
 	if (munmap(p, map_size) != 0) {
 		prterr("domapread: munmap");
 		report_failure(191);
@@ -696,6 +728,9 @@ domapwrite(unsigned offset, unsigned size)
 		prterr("domapwrite: msync");
 		report_failure(203);
 	}
+
+	check_eofpage("Write", offset, p, size);
+
 	if (munmap(p, map_size) != 0) {
 		prterr("domapwrite: munmap");
 		report_failure(204);
