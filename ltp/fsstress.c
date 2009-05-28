@@ -477,7 +477,7 @@ attr_list_path(pathname_t *name,
 	       int flags,
 	       attrlist_cursor_t *cursor)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -501,7 +501,7 @@ attr_list_path(pathname_t *name,
 int
 attr_remove_path(pathname_t *name, const char *attrname, int flags)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -521,7 +521,7 @@ int
 attr_set_path(pathname_t *name, const char *attrname, const char *attrvalue,
 	      const int valuelength, int flags)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -556,7 +556,7 @@ check_cwd(void)
 int
 creat_path(pathname_t *name, mode_t mode)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -697,7 +697,7 @@ doproc(void)
 int
 fent_to_name(pathname_t *name, flist_t *flp, fent_t *fep)
 {
-	char	buf[MAXNAMELEN];
+	char	buf[NAME_MAX + 1];
 	int	i;
 	fent_t	*pfep;
 	int	e;
@@ -762,7 +762,7 @@ free_pathname(pathname_t *name)
 int
 generate_fname(fent_t *fep, int ft, pathname_t *name, int *idp, int *v)
 {
-	char	buf[MAXNAMELEN];
+	char	buf[NAME_MAX + 1];
 	flist_t	*flp;
 	int	id;
 	int	j;
@@ -890,7 +890,7 @@ init_pathname(pathname_t *name)
 int
 lchown_path(pathname_t *name, uid_t owner, gid_t group)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -909,8 +909,8 @@ lchown_path(pathname_t *name, uid_t owner, gid_t group)
 int
 link_path(pathname_t *name1, pathname_t *name2)
 {
-	char		buf1[MAXNAMELEN];
-	char		buf2[MAXNAMELEN];
+	char		buf1[NAME_MAX + 1];
+	char		buf2[NAME_MAX + 1];
 	int		down1;
 	pathname_t	newname1;
 	pathname_t	newname2;
@@ -964,7 +964,7 @@ link_path(pathname_t *name1, pathname_t *name2)
 int
 lstat64_path(pathname_t *name, struct stat64 *sbuf)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1000,7 +1000,7 @@ make_freq_table(void)
 int
 mkdir_path(pathname_t *name, mode_t mode)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1019,7 +1019,7 @@ mkdir_path(pathname_t *name, mode_t mode)
 int
 mknod_path(pathname_t *name, mode_t mode, dev_t dev)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1040,7 +1040,7 @@ namerandpad(int id, char *buf, int i)
 {
 	int		bucket;
 	static int	buckets[] =
-				{ 2, 4, 8, 16, 32, 64, 128, MAXNAMELEN - 1 };
+				{ 2, 4, 8, 16, 32, 64, 128, NAME_MAX };
 	int		padlen;
 	int		padmod;
 
@@ -1060,7 +1060,7 @@ namerandpad(int id, char *buf, int i)
 int
 open_path(pathname_t *name, int oflag)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1079,7 +1079,7 @@ open_path(pathname_t *name, int oflag)
 DIR *
 opendir_path(pathname_t *name)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	DIR		*rval;
 
@@ -1120,7 +1120,7 @@ process_freq(char *arg)
 int
 readlink_path(pathname_t *name, char *lbuf, size_t lbufsiz)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1139,8 +1139,8 @@ readlink_path(pathname_t *name, char *lbuf, size_t lbufsiz)
 int
 rename_path(pathname_t *name1, pathname_t *name2)
 {
-	char		buf1[MAXNAMELEN];
-	char		buf2[MAXNAMELEN];
+	char		buf1[NAME_MAX + 1];
+	char		buf2[NAME_MAX + 1];
 	int		down1;
 	pathname_t	newname1;
 	pathname_t	newname2;
@@ -1194,7 +1194,7 @@ rename_path(pathname_t *name1, pathname_t *name2)
 int
 rmdir_path(pathname_t *name)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1267,7 +1267,7 @@ show_ops(int flag, char *lead_str)
 int
 stat64_path(pathname_t *name, struct stat64 *sbuf)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1286,7 +1286,7 @@ stat64_path(pathname_t *name, struct stat64 *sbuf)
 int
 symlink_path(const char *name1, pathname_t *name)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
         
@@ -1310,7 +1310,7 @@ symlink_path(const char *name1, pathname_t *name)
 int
 truncate64_path(pathname_t *name, off64_t length)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
@@ -1329,7 +1329,7 @@ truncate64_path(pathname_t *name, off64_t length)
 int
 unlink_path(pathname_t *name)
 {
-	char		buf[MAXNAMELEN];
+	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 

@@ -34,7 +34,6 @@
 #include <attr/attributes.h>
 #endif
 
-#define MAXNAMELEN 256
 #ifndef sgi
 typedef unsigned int uint_t;
 #endif
@@ -92,7 +91,7 @@ main(int argc, char **argv)
 	uint_t		cursize;
 	int		i;
 	int		j;
-	char		name[MAXNAMELEN];
+	char		name[NAME_MAX + 1];
 	char		attr[DMFATTRLEN];
 	double		stime;
 
@@ -168,8 +167,8 @@ main(int argc, char **argv)
 	minchars = hexchars(lastsize - 1);
 	if (nchars < minchars)
 		nchars = minchars;
-	else if (nchars >= MAXNAMELEN)
-		nchars = MAXNAMELEN - 1;
+	else if (nchars >= NAME_MAX + 1)
+		nchars = NAME_MAX;
 	if (ndirs > MAX_DIR_COUNT)
 		ndirs = MAX_DIR_COUNT;
 	if (ndirs < MIN_DIR_COUNT)

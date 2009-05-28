@@ -25,9 +25,6 @@
 #include <lib/hsm.h>
 
 #include <string.h>
-#ifdef linux
-#define MAXNAMELEN 256
-#endif
 
   /*
    * Define some standard formats for the printf statements below.
@@ -96,7 +93,7 @@ print_one_mount_event(
 	char		hans1[HANDLE_STR], hans2[HANDLE_STR], hans3[HANDLE_STR];
 	void		*namp1, *namp2;
 	size_t		nlen1, nlen2;
-	char		nams1[MAXNAMELEN], nams2[MAXNAMELEN];
+	char		nams1[NAME_MAX + 1], nams2[NAME_MAX + 1];
 	mode_t		mode;
 
 #if	VERITAS_21
@@ -207,7 +204,7 @@ print_one_message(
 	void		*hanp1, *hanp2, *namp1, *namp2;
 	u_int		hlen1, hlen2, nlen1, nlen2;
 	char		hans1[HANDLE_STR], hans2[HANDLE_STR];
-	char		nams1[MAXNAMELEN], nams2[MAXNAMELEN];
+	char		nams1[NAME_MAX + 1], nams2[NAME_MAX + 1];
 
 	/***** USER EVENTS *****/
 

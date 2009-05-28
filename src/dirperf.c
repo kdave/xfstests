@@ -28,7 +28,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#define MAXNAMELEN 256
 #ifndef __sgi__
 typedef unsigned int uint_t;
 #endif
@@ -81,7 +80,7 @@ main(int argc, char **argv)
 	DIR		*dirp;
 	int		i;
 	int		j;
-	char		name[MAXNAMELEN];
+	char		name[NAME_MAX + 1];
 	struct stat	stb;
 	double		stime;
 
@@ -150,8 +149,8 @@ main(int argc, char **argv)
 	minchars = hexchars(lastsize - 1);
 	if (nchars < minchars)
 		nchars = minchars;
-	else if (nchars >= MAXNAMELEN)
-		nchars = MAXNAMELEN - 1;
+	else if (nchars >= NAME_MAX + 1)
+		nchars = NAME_MAX;
 	if (ndirs > MAX_DIR_COUNT)
 		ndirs = MAX_DIR_COUNT;
 	if (ndirs < MIN_DIR_COUNT)
