@@ -988,15 +988,6 @@ _check_testdir()
     esac
 }
 
-
-_setup_xfs_testdir()
-{
-    [ "$FSTYP" != "xfs" ] \
-	&& _fail "setup_xfs_testdir: \$FSTYP ($FSTYP) is not xfs"
-
-    testdir=$TEST_DIR
-}
-
 _setup_udf_scratchdir()
 {
     [ "$FSTYP" != "udf" ] \
@@ -1050,16 +1041,17 @@ _setup_nfs_scratchdir()
 }
 
 #
-# Warning for UDF and NFS this function calls _setup_udf_scratchdir and
-# _setup_udf_scratchdir. This is done because testdir is a persistent
-# XFS only partition.
+# Warning for UDF and NFS:
+# this function calls _setup_udf_scratchdir and _setup_udf_scratchdir
+# which actually uses the scratch dir for the test dir.
+#
+# This was done because testdir was intended to be a persistent
+# XFS only partition.  This should eventually change, and treat
+# at least local filesystems all the same.
 #
 _setup_testdir()
 {
     case $FSTYP in
-    xfs)
-	_setup_xfs_testdir
-	;;
     udf)
 	_setup_udf_scratchdir
 	;;
@@ -1067,7 +1059,7 @@ _setup_testdir()
 	_setup_nfs_scratchdir
 	;;
     *)
-	_fail "\$FSTYP is not xfs, udf or nfs"
+	testdir=$TEST_DIR
 	;;
     esac
 }
@@ -1075,10 +1067,6 @@ _setup_testdir()
 _cleanup_testdir()
 {
     case $FSTYP in
-    xfs)
-	# do nothing, testdir is $TEST_DIR
-	:
-	;;
     udf)
 	# umount testdir as it is $SCRATCH_MNT which could be used by xfs next
 	[ -n "$testdir" ] && $UMOUNT_PROG $testdir
@@ -1088,7 +1076,8 @@ _cleanup_testdir()
 	[ -n "$testdir" ] && $UMOUNT_PROG $testdir
 	;;
     *)
-	_fail "\$FSTYP is not xfs, udf or nfs"
+	# do nothing, testdir is $TEST_DIR
+	:
 	;;
     esac
 }
