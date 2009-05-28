@@ -8,7 +8,8 @@
 tmp=/tmp/$$
 status=0
 needwrap=true
-try=0
+n_try=0
+try=""
 n_bad=0
 bad=""
 notrun=""
@@ -86,7 +87,7 @@ END	{ if (NR > 0) {
 	if [ -f $tmp.expunged ]
 	then
 	    notrun=`wc -l <$tmp.expunged | sed -e 's/  *//g'`
-	    try=`expr $try - $notrun`
+	    n_try=`expr $n_try - $notrun`
 	    list=`echo "$list" | sed -f $tmp.expunged`
 	fi
 
@@ -95,20 +96,26 @@ END	{ if (NR > 0) {
 	echo $list | fmt | sed -e 's/^/    /' >>check.log
 	$interrupt && echo "Interrupted!" >>check.log
         
+        if [ ! -z "$n_try" -a $n_try != 0 ]
+	then
+	    echo "Ran:$try"
+	fi
+
 	if [ ! -z "$notrun" ]
 	then
 	    echo "Not run:$notrun"
 	    echo "Not run:$notrun" >>check.log
 	fi
+
         if [ ! -z "$n_bad" -a $n_bad != 0 ]
 	then
 	    echo "Failures:$bad"
-	    echo "Failed $n_bad of $try tests"
+	    echo "Failed $n_bad of $n_try tests"
 	    echo "Failures:$bad" | fmt >>check.log
-	    echo "Failed $n_bad of $try tests" >>check.log
+	    echo "Failed $n_bad of $n_try tests" >>check.log
 	else
-	    echo "Passed all $try tests"
-	    echo "Passed all $try tests" >>check.log
+	    echo "Passed all $n_try tests"
+	    echo "Passed all $n_try tests" >>check.log
 	fi
 	needwrap=false
     fi
@@ -281,7 +288,11 @@ do
 	n_bad=`expr $n_bad + 1`
 	quick=false
     fi
-    [ -f $seq.notrun ] || try=`expr $try + 1`
+    if [ ! -f $seq.notrun ]
+    then
+	try="$try $seq"
+	n_try=`expr $n_try + 1`
+    fi
     
     seq="after_$seq"
     _check_test_fs
