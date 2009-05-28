@@ -18,20 +18,6 @@
 
 #include "global.h"
 
-/* These should be in libxfs.h */
-#ifndef XFS_IOC_GOINGDOWN
-#define XFS_IOC_GOINGDOWN           _IOR ('X', 125, __uint32_t)
-#endif
-#ifndef XFS_FSOP_GOING_FLAGS_DEFAULT
-#define XFS_FSOP_GOING_FLAGS_DEFAULT    0x0     /* going down */
-#endif
-#ifndef XFS_FSOP_GOING_FLAGS_LOGFLUSH
-#define XFS_FSOP_GOING_FLAGS_LOGFLUSH    0x1     /* flush log */
-#endif
-#ifndef XFS_FSOP_GOING_FLAGS_NOLOGFLUSH
-#define XFS_FSOP_GOING_FLAGS_NOLOGFLUSH  0x2     /* don't flush log */
-#endif
-
 static char *xprogname;
 
 

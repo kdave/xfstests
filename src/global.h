@@ -26,6 +26,10 @@
 #include <../../xfsprogs/include/irix.h>
 #endif
 
+#ifdef HAVE_XFS_XFS_H
+#include <xfs/xfs.h>
+#endif
+
 #ifdef HAVE_XFS_LIBXFS_H
 #include <xfs/libxfs.h>
 #endif

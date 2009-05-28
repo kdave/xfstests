@@ -18,7 +18,7 @@
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <xfs/libxfs.h>
+#include <xfs/xfs.h>
 struct xfs_flock64 f;
 
 int main(int argc, char **argv)

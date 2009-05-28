@@ -38,7 +38,7 @@
 #include <libgen.h>
 #include <sys/acl.h>
 #include <attr/xattr.h>
-#include <xfs/libxfs.h>
+#include <xfs/xfs.h>
 #include <xfs/handle.h>
 #include <xfs/jdm.h>
 
@@ -46,6 +46,10 @@
 #define EXT2_IMMUTABLE_FL       0x00000010
 #define EXT2_APPEND_FL          0x00000020
 #define EXT2_IOC_SETFLAGS	_IOW('f', 2, long)
+
+#ifndef XFS_SUPER_MAGIC
+#define XFS_SUPER_MAGIC 0x58465342
+#endif
 
 extern const char *__progname;
 
