@@ -49,6 +49,10 @@ _mount_opts()
     nfs)
 	export MOUNT_OPTIONS=$NFS_MOUNT_OPTIONS
 	;;
+    ext2|ext3|ext4)
+	# acls & xattrs aren't turned on by default on ext$FOO
+	export MOUNT_OPTIONS="-o acl,user_xattr $EXT_MOUNT_OPTIONS"
+	;;
     *)
 	;;
     esac
@@ -585,7 +589,7 @@ _require_scratch()
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
 		 ;;
-	nfs*|ext2|ext3|reiserfs)
+	nfs*|ext2|ext3|ext4|reiserfs)
 		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
 		 if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]
 		 then
