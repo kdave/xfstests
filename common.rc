@@ -53,6 +53,14 @@ _mount_opts()
 	# acls & xattrs aren't turned on by default on ext$FOO
 	export MOUNT_OPTIONS="-o acl,user_xattr $EXT_MOUNT_OPTIONS"
 	;;
+    reiserfs)
+	# acls & xattrs aren't turned on by default on reiserfs
+	export MOUNT_OPTIONS="-o acl,user_xattr $REISERFS_MOUNT_OPTIONS"
+	;;
+    gfs2)
+	# acls aren't turned on by default on gfs2
+	export MOUNT_OPTIONS="-o acl $GFS2_MOUNT_OPTIONS"
+	;;
     *)
 	;;
     esac
@@ -71,6 +79,12 @@ _mkfs_opts()
 	;;
     nfs)
 	export MKFS_OPTIONS=$NFS_MKFS_OPTIONS
+	;;
+    reiserfs)
+	export MKFS_OPTIONS="$REISERFS_MKFS_OPTIONS -q"
+	;;
+    gfs2)
+	export MKFS_OPTIONS="$GFS2_MKFS_OPTIONS -O -p lock_nolock"
 	;;
     *)
 	;;
@@ -589,7 +603,7 @@ _require_scratch()
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
 		 ;;
-	nfs*|ext2|ext3|ext4|reiserfs)
+	nfs*|ext2|ext3|ext4|reiserfs|gfs2|btrfs)
 		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
 		 if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]
 		 then
