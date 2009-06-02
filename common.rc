@@ -707,28 +707,28 @@ _require_user()
     [ "$?" == "0" ] || _notrun "$qa_user user not defined."
 }
 
-# check that a FS is mounted as XFS. if so, return mount point
+# check that a FS on a device is mounted
+# if so, return mount point
 #
-_xfs_mounted()
+_is_mounted()
 {
     if [ $# -ne 1 ]
     then
-	echo "Usage: _xfs_mounted device" 1>&2
+	echo "Usage: _is_mounted device" 1>&2
 	exit 1
     fi
 
     device=$1
 
-    if _mount | grep "$device " | $AWK_PROG '
-        /type xfs/  { print $3 ; exit 0 }
-        END         { exit 1 }
+    if _mount | grep "$device " | $AWK_PROG -v pattern="type $FSTYP" '
+        pattern        { print $3 ; exit 0 }
+        END            { exit 1 }
     '
     then
-        echo "_xfs_mounted: $device is not a mounted XFS FS"
+        echo "_is_mounted: $device is not a mounted $FSTYP FS"
         exit 1
     fi
 }
-
 
 # remount a FS to a new mode (ro or rw)
 #
@@ -749,13 +749,111 @@ _remount()
     fi
 }
 
-# run xfs_check and friends on a FS.
+# Run the appropriate repair/check on a filesystem
 #
 # if the filesystem is mounted, it's either remounted ro before being
 # checked or it's unmounted and then remounted
 #
 
+# If set, we remount ro instead of unmounting for fsck
 USE_REMOUNT=0
+
+_umount_or_remount_ro()
+{
+    if [ $# -ne 1 ]
+    then
+	echo "Usage: _umount_or_remount_ro <device>" 1>&2
+	exit 1
+    fi
+
+    device=$1
+    mountpoint=`_is_mounted $device`
+
+    if [ $USE_REMOUNT -eq 0 ]; then
+        $UMOUNT_PROG $device
+    else
+        _remount $device ro
+    fi
+    echo "$mountpoint"
+}
+
+_mount_or_remount_rw()
+{
+    if [ $# -ne 3 ]
+    then
+	echo "Usage: _mount_or_remount_rw <opts> <device> <mountpoint>" 1>&2
+	exit 1
+    fi
+    mount_opts=$1
+    device=$2
+    mountpoint=$3
+
+    if [ $USE_REMOUNT -eq 0 ]
+    then
+        if ! _mount -t $FSTYP $mount_opts $device $mountpoint
+        then
+            echo "!!! failed to remount $device on $mountpoint"
+            return 0 # ok=0
+        fi
+    else
+        _remount $device rw
+    fi
+
+    return 1 # ok=1
+}
+
+# Check a generic filesystem in no-op mode; this assumes that the
+# underlying fsck program accepts "-n" for a no-op (check-only) run,
+# and that it will still return an errno for corruption in this mode.
+#
+# Filesystems which don't support this will need to define their
+# own check routine.
+#
+_check_generic_filesystem()
+{
+    device=$1
+
+    # If type is set, we're mounted
+    type=`_fs_type $device`
+    ok=1
+
+    if [ "$type" = "$FSTYP" ]
+    then
+        # mounted ...
+        mountpoint=`_umount_or_remount_ro $device`
+    fi
+
+    fsck -t $FSTYP -n $device >$tmp.fsck 2>&1
+    if [ $? -ne 0 ]
+    then
+        echo "_check_generic_filesystem: filesystem on $device is inconsistent (see $seq.full)"
+
+        echo "_check_generic filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
+        echo "*** fsck.$FSTYP output ***"                     >>$here/$seq.full
+        cat $tmp.fsck                                         >>$here/$seq.full
+        echo "*** end fsck.$FSTYP output"                     >>$here/$seq.full
+
+        ok=0
+    fi
+    rm -f $tmp.fsck
+
+    if [ $ok -eq 0 ]
+    then
+        echo "*** mount output ***"                             >>$here/$seq.full
+        _mount                                                  >>$here/$seq.full
+        echo "*** end mount output"                             >>$here/$seq.full
+    elif [ "$type" = "$FSTYP" ]
+    then
+	# was mounted ...
+	_mount_or_remount_rw "$MOUNT_OPTIONS" $device $mountpoint
+	ok=$?
+    fi
+
+    [ $ok -eq 0 ] && exit 1
+    return 0
+}
+
+# run xfs_check and friends on a FS.
 
 _check_xfs_filesystem()
 {
@@ -787,15 +885,8 @@ _check_xfs_filesystem()
 
     if [ "$type" = "xfs" ]
     then
-        # mounted...
-
-        if [ $USE_REMOUNT -eq 0 ]
-        then
-            mountpoint=`_xfs_mounted $device`
-            $UMOUNT_PROG $device
-        else
-            _remount $device ro
-        fi
+        # mounted ...
+        mountpoint=`_umount_or_remount_ro $device`
     fi
 
     $XFS_LOGPRINT_PROG -t $extra_log_options $device 2>&1 \
@@ -848,17 +939,7 @@ _check_xfs_filesystem()
         echo "*** end mount output"                             >>$here/$seq.full
     elif [ "$type" = "xfs" ]
     then
-        # mounted...
-        if [ $USE_REMOUNT -eq 0 ]
-        then
-            if ! _mount -t xfs $extra_mount_options $device $mountpoint
-            then
-                echo "!!! failed to remount $device on $mountpoint"
-                ok=0
-            fi
-        else
-            _remount $device rw
-        fi
+	_mount_or_remount_rw "$extra_mount_options" $device $mountpoint
     fi
 
     [ $ok -eq 0 ] && exit 1
@@ -908,12 +989,8 @@ _check_udf_filesystem()
 
 }
 
-_check_test_fs()
+_check_xfs_test_fs()
 {
-    if [ "$FSTYP" != "xfs" ]; then
-        return
-    fi
-
     TEST_LOG="none"
     TEST_RT="none"
     [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
@@ -930,6 +1007,24 @@ _check_test_fs()
 	xfs_check_ipaths $TEST_DIR >/dev/null
 	xfs_repair_ipaths -n $TEST_DIR >/dev/null
     fi
+}
+
+_check_test_fs()
+{
+    case $FSTYP in
+    xfs)
+	_check_xfs_test_fs
+	;;
+    nfs)
+	# no way to check consistency for nfs
+	;;
+    udf)
+	# do nothing for now
+	;;
+    *)
+	_check_generic_filesystem $TEST_DEV
+	;;
+    esac
 }
 
 _check_scratch_fs()
@@ -953,6 +1048,7 @@ _check_scratch_fs()
 	# Don't know how to check an NFS filesystem, yet.
 	;;
     *)
+	_check_generic_filesystem $SCRATCH_DEV
 	;;
     esac
 }
@@ -985,25 +1081,6 @@ _full_platform_details()
      kernel=`uname -r`
      platform=`uname -m`
      echo "$os/$platform $host $kernel"
-}
-
-_check_testdir()
-{
-    case $FSTYP in
-    xfs)
-	_check_test_fs
-	;;
-    udf)
-	_cleanup_testdir
-	_check_scratch_fs
-	_scratch_mount
-	;;
-    nfs*)
-	# Don't know how to check an NFS filesystem, yet.
-	;;
-    *)
-	;;
-    esac
 }
 
 _setup_udf_scratchdir()
