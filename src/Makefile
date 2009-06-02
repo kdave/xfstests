@@ -12,10 +12,14 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	godown resvtest writemod makeextents itrash rename \
 	multi_open_unlink dmiperf unwritten_sync genhashnames
 
-LINUX_TARGETS = loggen xfsctl bstat t_mtab getdevicesize \
+LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize \
 	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
 	fs_perms testx looptest locktest unwritten_mmap \
 	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset
+
+ifeq ($(HAVE_LIBXFS), true)
+LINUX_TARGETS += loggen
+endif
 
 IRIX_TARGETS = open_unlink
 

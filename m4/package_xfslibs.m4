@@ -8,14 +8,9 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_XFS_H],
     fi
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_XFS_LIBXFS_H],
-  [ AC_CHECK_HEADERS([xfs/libxfs.h])
-    if test "$ac_cv_header_xfs_libxfs_h" != "yes"; then
-        echo
-        echo 'FATAL ERROR: cannot find a valid <xfs/libxfs.h> header file.'
-        echo 'Run "make install-qa" from the xfsprogs source.'
-        exit 1
-    fi
+AC_DEFUN([AC_PACKAGE_WANT_LIBXFS_H],
+  [ AC_CHECK_HEADERS([xfs/libxfs.h], [ have_libxfs=true ], [ have_libxfs=false ])
+    AC_SUBST(have_libxfs)
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_XFS_XQM_H],
