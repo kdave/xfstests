@@ -13,6 +13,14 @@ AC_DEFUN([AC_PACKAGE_WANT_LIBXFS_H],
     AC_SUBST(have_libxfs)
   ])
 
+AC_DEFUN([AC_PACKAGE_WANT_XLOG_ASSIGN_LSN],
+  [
+    AC_CHECK_DECL(xlog_assign_lsn,
+      [ have_xlog_assign_lsn=true ], [ have_xlog_assign_lsn=false ],
+      [[#include <xfs/libxfs.h>]])
+    AC_SUBST(have_have_xlog_assign_lsn)
+  ])
+
 AC_DEFUN([AC_PACKAGE_NEED_XFS_XQM_H],
   [ AC_CHECK_HEADERS([xfs/xqm.h])
     if test "$ac_cv_header_xfs_xqm_h" != "yes"; then
