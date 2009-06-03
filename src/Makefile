@@ -39,10 +39,14 @@ ifeq ($(PKG_PLATFORM),linux)
 TARGETS += t_immutable
 endif
 
+ifeq ($(HAVE_AIO), true)
+SUBDIRS += aio-dio-regress
+endif
+
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 
-default: $(TARGETS)
+default: $(TARGETS) $(SUBDIRS)
 
 include $(BUILDRULES)
 LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
