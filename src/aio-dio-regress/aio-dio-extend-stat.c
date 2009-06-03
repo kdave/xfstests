@@ -46,7 +46,7 @@
 
 #define BUFSIZE 1024
 
-static unsigned char buf[BUFSIZE] __attribute((aligned (512)));
+static unsigned char buf[BUFSIZE] __attribute((aligned (4096)));
 
 /* 
  * this was arbitrarily chosen to take about two seconds on a dual athlon in a

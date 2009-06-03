@@ -54,7 +54,7 @@
 /* This test never survived to 180 seconds on a single spindle */
 #define SECONDS 200
 
-static unsigned char buf[GINORMOUS] __attribute((aligned (512)));
+static unsigned char buf[GINORMOUS] __attribute((aligned (4096)));
 
 #define fail(fmt , args...) do {\
 	printf(fmt , ##args);	\
