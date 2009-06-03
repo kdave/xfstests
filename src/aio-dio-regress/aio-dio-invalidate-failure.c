@@ -141,6 +141,7 @@ int main(int argc, char **argv)
 	dio_pid = fork();
 	if (dio_pid < 0) {
 		kill(buffered_pid, SIGKILL);
+		waitpid(buffered_pid, NULL, 0);
 		fail("fork failed: %d\n", errno);
 	}
 
@@ -157,14 +158,21 @@ int main(int argc, char **argv)
 		/* if we timed out then we're done */
 		kill(buffered_pid, SIGKILL);
 		kill(dio_pid, SIGKILL);
+
+		waitpid(buffered_pid, NULL, 0);
+		waitpid(dio_pid, NULL, 0);
+
 		printf("ran for %d seconds without error, passing\n", SECONDS);
 		exit(0);
 	}
 
-	if (pid == dio_pid)
+	if (pid == dio_pid) {
 		kill(buffered_pid, SIGKILL);
-	else
+		waitpid(buffered_pid, NULL, 0);
+	} else {
 		kill(dio_pid, SIGKILL);
+		waitpid(dio_pid, NULL, 0);
+	}
 
 	/* 
 	 * pass on the child's pass/fail return code or fail if the child 
