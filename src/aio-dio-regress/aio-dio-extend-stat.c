@@ -28,8 +28,6 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <errno.h>
-#include <sys/ioctl.h>
-#include <linux/fs.h>
 
 #ifndef O_DIRECT
 #define O_DIRECT         040000 /* direct disk access hint */
@@ -47,7 +45,6 @@
  */
 
 #define BUFSIZE 1024
-int bufsize;
 
 static unsigned char buf[BUFSIZE] __attribute((aligned (4096)));
 
@@ -73,71 +70,25 @@ struct io_event ioevents[MAX_AIO_EVENTS];
 
 volatile int submittedSize = 0; //synchronization
 
-int get_sector_size(dev_t dev)
-{
-	int fd, sector_size;
-	char *nodename = "bogus_node";
-	
-	if (mknod(nodename, S_IFBLK|0600, dev) != 0) {
-		if (errno == EPERM)
-			printf("This test requires root priviledges\n");
-		fail("mknod failed with %d\n", errno);
-	}
-
-	fd = open(nodename, O_RDONLY);
-	if (fd < 0)
-		fail("failed to open device node: %d\n", errno);
-
-	if (ioctl(fd, BLKSSZGET, &sector_size) < 0)
-		fail("BLKSSZGET failed: %d\n", errno);
-	close(fd);
-	unlink(nodename);
-
-	return sector_size;
-}
-
 int main(int argc, char **argv)
 {
 	pthread_t thread_read; 
 	pthread_t thread_write;
 	int i;
 	int ret;
-	int sector_size;
-	struct stat st;
 
 	if (argc != 2)
 		fail("only arg should be file name\n");
+
+	for (i = 0; i < BUFSIZE; ++i)
+		buf[i] = 'A' + (char)(i % ('Z'-'A'+1));
+
+	buf[BUFSIZE-1] = '\n';
 
 	handle = open(argv[1], O_CREAT | O_TRUNC | O_DIRECT | O_RDWR, 0600); 
 	if (handle == -1) 
 		fail("failed to open test file %s, errno: %d\n",
 			argv[1], errno);
-
-	if (fstat(handle, &st) == -1)
-		fail("initial stat of empty file failed with %d\n", errno);
-
-	sector_size = get_sector_size(st.st_dev);
-	if (sector_size < 0)
-		fail("failed to retrieve the sector size of the device\n");
-
-	/*
-	 * When this test was written, it used a buffer size of 1024 bytes.  It is
-	 * not clear to me at this time whether that was significant.  It may have
-	 * been easier to trigger the problem when writing less than the file system
-	 * block size, for example, or less than the system page size.  To try to
-	 * limit this change in scope to those platforms that have a device with a
-	 * larger underlying sector size, the following bogosity is used.  ;-)
-	 * -JEM
-	 */
-	if (sector_size > 512)
-		bufsize = sector_size;
-	else
-		bufsize = BUFSIZE;
-
-	for (i = 0; i < bufsize; ++i)
-		buf[i] = 'A' + (char)(i % ('Z'-'A'+1));
-
-	buf[bufsize-1] = '\n';
 
 	memset(&ctxp, 0, sizeof(ctxp));
 	ret = io_setup(MAX_AIO_EVENTS, &ctxp);
@@ -155,8 +106,8 @@ int main(int argc, char **argv)
 		iocbs[i]->aio_lio_opcode = IO_CMD_PWRITE;
 		iocbs[i]->aio_reqprio = 0;
 		iocbs[i]->u.c.buf = buf;
-		iocbs[i]->u.c.nbytes = bufsize;
-		iocbs[i]->u.c.offset = bufsize*i;
+		iocbs[i]->u.c.nbytes = BUFSIZE;
+		iocbs[i]->u.c.offset = BUFSIZE*i;
 	}
 
 	pthread_create(&thread_read, NULL, (void*)&fun_read, NULL);
@@ -189,19 +140,20 @@ void fun_read(void *ptr)
 
 		n -= r;
 		for (i = 0; i < r; ++i) {
-			struct io_event *event = &ioevents[i];
-			if (event->res != bufsize)
-				fail("error in block: expected %d bytes, "
-				     "received %ld\n", bufsize,
-				     event->obj->u.c.nbytes);
+			if (ioevents[i].obj->u.c.nbytes != BUFSIZE)
+				fail("error in block: expacted %d bytes, "
+				     "receiced %ld\n", BUFSIZE,
+				     ioevents[i].obj->u.c.nbytes);
 
-			exSize = event->obj->u.c.offset + event->obj->u.c.nbytes;
+			exSize = ioevents[i].obj->u.c.offset +
+				 ioevents[i].obj->u.c.nbytes;
 			fstat(handle, &filestat);
 			if (filestat.st_size < exSize)
 				fail("write of %lu bytes @%llu finished, "
 				     "expected filesize at least %llu, but "
-				     "got %ld\n", event->obj->u.c.nbytes,
-				     event->obj->u.c.offset, exSize, filestat.st_size);
+				     "got %ld\n", ioevents[i].obj->u.c.nbytes,
+				     ioevents[i].obj->u.c.offset, exSize,
+				     filestat.st_size);
 		}
 	}
 }
