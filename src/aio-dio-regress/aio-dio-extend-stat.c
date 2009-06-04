@@ -44,7 +44,7 @@
  * in 2.6.20.  This test should fail on 2.6.19.
  */
 
-#define BUFSIZE 1024
+#define BUFSIZE 4096
 
 static unsigned char buf[BUFSIZE] __attribute((aligned (4096)));
 
@@ -67,8 +67,6 @@ int  handle = 0;
 io_context_t ctxp;
 struct iocb *iocbs[MAX_AIO_EVENTS];
 struct io_event ioevents[MAX_AIO_EVENTS];
-
-volatile int submittedSize = 0; //synchronization
 
 int main(int argc, char **argv)
 {
@@ -140,20 +138,19 @@ void fun_read(void *ptr)
 
 		n -= r;
 		for (i = 0; i < r; ++i) {
-			if (ioevents[i].obj->u.c.nbytes != BUFSIZE)
-				fail("error in block: expacted %d bytes, "
-				     "receiced %ld\n", BUFSIZE,
-				     ioevents[i].obj->u.c.nbytes);
+			struct io_event *event = &ioevents[i];
+			if (event->res != BUFSIZE)
+				fail("error in block: expected %d bytes, "
+				     "received %ld\n", BUFSIZE,
+				     event->obj->u.c.nbytes);
 
-			exSize = ioevents[i].obj->u.c.offset +
-				 ioevents[i].obj->u.c.nbytes;
+			exSize = event->obj->u.c.offset + event->obj->u.c.nbytes;
 			fstat(handle, &filestat);
 			if (filestat.st_size < exSize)
 				fail("write of %lu bytes @%llu finished, "
 				     "expected filesize at least %llu, but "
-				     "got %ld\n", ioevents[i].obj->u.c.nbytes,
-				     ioevents[i].obj->u.c.offset, exSize,
-				     filestat.st_size);
+				     "got %ld\n", event->obj->u.c.nbytes,
+				     event->obj->u.c.offset, exSize, filestat.st_size);
 		}
 	}
 }
