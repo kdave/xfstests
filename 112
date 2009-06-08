@@ -66,6 +66,15 @@ _do_test()
     echo "fsx.$_n : $_filter_param"
     echo "-----------------------------------------------"
 
+    if [ "$FSTYP" != "xfs" ]
+    then
+        if [ "$_n" = "1" -o "$_n" = "3" ]
+        then
+            # HACK: only xfs handles preallocation (-x) so just skip this test
+            return
+        fi
+    fi
+
     # This cd and use of -P gets full debug on $here (not TEST_DEV)
     cd $out
     if ! $here/ltp/fsx $_param -P $here $seq.$_n >/dev/null
@@ -113,7 +122,7 @@ _process_args()
 
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 
 [ -x $here/ltp/aio-stress ] || \
