@@ -69,7 +69,7 @@ _filter_xfs_io()
 }
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _setup_testdir
@@ -79,7 +79,7 @@ _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 echo "End-of-file zeroing with direct I/O"
-xfs_io -f -d -t -c "pwrite -S 0x63 0 65536" \
+xfs_io -F -f -d -t -c "pwrite -S 0x63 0 65536" \
     -c "truncate 1" \
     -c "pwrite -S 0x41 65536 65536" \
     -c "pread -v 0 131072" \
@@ -87,46 +87,46 @@ xfs_io -f -d -t -c "pwrite -S 0x63 0 65536" \
 
 echo
 echo "Basic Block Hole test"
-xfs_io -f -t -c "truncate 8192" \
+xfs_io -F -f -t -c "truncate 8192" \
     -c "pread -v 5000 3000" \
     $SCRATCH_MNT/blackhole | _filter_xfs_io
 
 echo
 echo "Test buffered and direct IO coherency"
-xfs_io -f -t -c "pwrite -S 0x41 8000 1000" \
+xfs_io -F -f -t -c "pwrite -S 0x41 8000 1000" \
     -c "pwrite -S 0x57 4000 1000" \
     $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
 
-xfs_io -d -c "pwrite -S 0x78 20480 4096"\
+xfs_io -F -d -c "pwrite -S 0x78 20480 4096"\
     -c "pwrite -S 0x79 4096 4096"\
     $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
 
-xfs_io -c "pread -v 0 9000"\
+xfs_io -F -c "pread -v 0 9000"\
     $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
 
 echo
 echo "Test direct read and write"
-xfs_io -f -d -t -c "pwrite -S 0x78 0 65536"\
+xfs_io -F -f -d -t -c "pwrite -S 0x78 0 65536"\
     -c "pread -v 0 65536"\
     -c "pwrite -S 0x46 65536 6553600"\
     -c "pread -v 0 6619136"\
     $SCRATCH_MNT/direct_io | _filter_xfs_io
 
-xfs_io -d -c "pread -v 0 6619136"\
+xfs_io -F -d -c "pread -v 0 6619136"\
     $SCRATCH_MNT/direct_io | _filter_xfs_io
 
-xfs_io -f -d -t -c "pwrite -S 0x61 0 65536"\
+xfs_io -F -f -d -t -c "pwrite -S 0x61 0 65536"\
     -c "pread -v 0 65536"\
     -c "pwrite -S 0x62 65536 131072"\
     -c "pread -v 0 131072"\
     $SCRATCH_MNT/async_direct_io | _filter_xfs_io
 
-xfs_io -d -c "pread -v 0 131072"\
+xfs_io -F -d -c "pread -v 0 131072"\
     $SCRATCH_MNT/async_direct_io | _filter_xfs_io
 
 echo
 echo "FSB Edge test"
-xfs_io -f -t -c "truncate 131072"\
+xfs_io -F -f -t -c "truncate 131072"\
     -c "pwrite -S 0x5F 0 131072"\
     -c "truncate 0"\
     -c "truncate 131072"\
@@ -138,10 +138,10 @@ echo
 echo "Open Trunk test (O_TRUNC)"
 for n in 0 1 2 3 4
 do
-    xfs_io -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
+    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
 
     echo "Test" > $SCRATCH_MNT/$n
-    xfs_io -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
+    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
     cat $SCRATCH_MNT/$n
 done
 echo "DONE"
@@ -149,14 +149,14 @@ echo "DONE"
 echo
 echo "Append test"
 echo "append to me" > $SCRATCH_MNT/append
-xfs_io -a -c "pwrite -S 0x61 0 10" \
+xfs_io -F -a -c "pwrite -S 0x61 0 10" \
     -c "pread -v 0 24"\
     $SCRATCH_MNT/append | _filter_xfs_io
 
 echo
 echo "Small Vector Async"
 echo "abcdefghijklmnopqrstuvwxyz" > $SCRATCH_MNT/small_vector_async
-xfs_io -f -c "pread -v 0 1"\
+xfs_io -F -f -c "pread -v 0 1"\
     -c "pread -v 1 1"\
     -c "pread -v 2 1"\
     -c "pread -v 3 1"\
@@ -215,7 +215,7 @@ xfs_io -f -c "pread -v 0 1"\
 echo
 echo "Small Vector Sync"
 echo "abcdefghijklmnopqrstuvwxyz" > $SCRATCH_MNT/small_vector_async
-xfs_io -f -s -c "pread -v 0 1"\
+xfs_io -F -f -s -c "pread -v 0 1"\
     -c "pread -v 1 1"\
     -c "pread -v 2 1"\
     -c "pread -v 3 1"\
