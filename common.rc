@@ -593,7 +593,14 @@ _supported_os()
 _require_scratch()
 {
     case "$FSTYP" in
-	xfs|udf)
+	nfs*)
+		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
+		 if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]
+		 then
+		     _notrun "this test requires a valid \$SCRATCH_DEV"
+		 fi
+		 ;;
+	*)
 		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
@@ -602,16 +609,6 @@ _require_scratch()
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
-		 ;;
-	nfs*|ext2|ext3|ext4|reiserfs|gfs2|btrfs)
-		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
-		 if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]
-		 then
-		     _notrun "this test requires a valid \$SCRATCH_DEV"
-		 fi
-		 ;;
-	*)
-		 _notrun "\$FSTYP ($FSTYP) unknown or not specified"
 		 ;;
     esac
 
