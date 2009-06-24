@@ -1,0 +1,84 @@
+#! /bin/sh
+# FS QA Test No. 213
+#
+# Check some unwritten extent boundary conditions, fallocate version.
+#
+# Based on xfs-specific test 072
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2009 Red Hat, Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@sandeen.net
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+here=`pwd`
+tmp=$TEST_DIR/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+# generic, but xfs_io's fallocate must work
+_supported_fs generic
+# only Linux supports fallocate
+_supported_os Linux
+
+[ -n "$XFS_IO_PROG" ] || _notrun "xfs_io executable not found"
+
+rm -f $seq.full
+
+_require_xfs_io_falloc
+
+# check there's enough freespace on $TEST_DIR ... (1GiB + 1MiB)
+avail=`df -P $TEST_DIR | awk 'END {print $4}'`
+[ "$avail" -ge 1049600 ] || _notrun "Test device is too small ($avail KiB)"
+
+echo Silence is golden
+
+# reserve 1GiB, truncate at 100bytes
+$XFS_IO_PROG -F -f -c 'falloc 0 1g' -c 'truncate 100' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+# reserve 1GiB, truncate at 1GiB
+$XFS_IO_PROG -F -f -c 'falloc 0 1g' -c 'truncate 1g' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+# reserve 1GiB, truncate at 2GiB
+$XFS_IO_PROG -F -f -c 'falloc 0 1g' -c 'truncate 2g' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+# reserve 1GiB, 1GiB hole, reserve 1MiB, truncate at 3GiB
+$XFS_IO_PROG -F -f -c 'falloc 0 1g' -c 'falloc 2g 1m' -c 'truncate 3g' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+# success, all done
+status=0
+exit

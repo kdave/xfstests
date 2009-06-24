@@ -704,6 +704,18 @@ _require_user()
     [ "$?" == "0" ] || _notrun "$qa_user user not defined."
 }
 
+# check that xfs_io, glibc, kernel, and filesystem all (!) support
+# fallocate
+#
+_require_xfs_io_falloc()
+	testio=`$XFS_IO_PROG -F -f -c "falloc 0 1m" $TEST_DIR/$tmp.io 2>&1`
+	rm -f $TEST_DIR/$tmp.io 2>&1 > /dev/null
+	echo $testio | grep -q "not found" && \
+		_notrun "xfs_io fallocate support is missing"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "xfs_io fallocate command failed (old kernel/wrong fs?)"
+}
+
 # check that a FS on a device is mounted
 # if so, return mount point
 #
