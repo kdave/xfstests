@@ -51,23 +51,6 @@ _cleanup()
 . ./common.rc
 . ./common.filter
 
-common_line_filter()
-{
-    perl -ne 'if (/.*:(.*)/) {
-        if ( "$last_line" ne "$1" ) { print "$_"; $first_match=1; }
-        elsif ( $first_match==1 ) { print "*\n"; $first_match=0; }
-        $last_line="$1";
-    }
-    else {
-        print $_; $last_line=$_;
-    }'
-}
-
-_filter_xfs_io()
-{
-    common_line_filter | sed -e "s/[0-9/.]* [GMKiBbytes]*, [0-9]* ops\; [0-9/:. sec]* ([inf0-9/.]* [EPGMKiBbytes]*\/sec and [inf0-9/.]* ops\/sec)/XXX Bytes, X ops\; XX:XX:XX.X (XXX YYY\/sec and XXX ops\/sec)/"
-}
-
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux IRIX
@@ -83,26 +66,26 @@ xfs_io -F -f -d -t -c "pwrite -S 0x63 0 65536" \
     -c "truncate 1" \
     -c "pwrite -S 0x41 65536 65536" \
     -c "pread -v 0 131072" \
-    $SCRATCH_MNT/eof-zeroing_direct | _filter_xfs_io
+    $SCRATCH_MNT/eof-zeroing_direct | _filter_xfs_io_unique
 
 echo
 echo "Basic Block Hole test"
 xfs_io -F -f -t -c "truncate 8192" \
     -c "pread -v 5000 3000" \
-    $SCRATCH_MNT/blackhole | _filter_xfs_io
+    $SCRATCH_MNT/blackhole | _filter_xfs_io_unique
 
 echo
 echo "Test buffered and direct IO coherency"
 xfs_io -F -f -t -c "pwrite -S 0x41 8000 1000" \
     -c "pwrite -S 0x57 4000 1000" \
-    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
+    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io_unique
 
 xfs_io -F -d -c "pwrite -S 0x78 20480 4096"\
     -c "pwrite -S 0x79 4096 4096"\
-    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
+    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io_unique
 
 xfs_io -F -c "pread -v 0 9000"\
-    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io
+    $SCRATCH_MNT/buff_direct_coherency | _filter_xfs_io_unique
 
 echo
 echo "Test direct read and write"
@@ -110,19 +93,19 @@ xfs_io -F -f -d -t -c "pwrite -S 0x78 0 65536"\
     -c "pread -v 0 65536"\
     -c "pwrite -S 0x46 65536 6553600"\
     -c "pread -v 0 6619136"\
-    $SCRATCH_MNT/direct_io | _filter_xfs_io
+    $SCRATCH_MNT/direct_io | _filter_xfs_io_unique
 
 xfs_io -F -d -c "pread -v 0 6619136"\
-    $SCRATCH_MNT/direct_io | _filter_xfs_io
+    $SCRATCH_MNT/direct_io | _filter_xfs_io_unique
 
 xfs_io -F -f -d -t -c "pwrite -S 0x61 0 65536"\
     -c "pread -v 0 65536"\
     -c "pwrite -S 0x62 65536 131072"\
     -c "pread -v 0 131072"\
-    $SCRATCH_MNT/async_direct_io | _filter_xfs_io
+    $SCRATCH_MNT/async_direct_io | _filter_xfs_io_unique
 
 xfs_io -F -d -c "pread -v 0 131072"\
-    $SCRATCH_MNT/async_direct_io | _filter_xfs_io
+    $SCRATCH_MNT/async_direct_io | _filter_xfs_io_unique
 
 echo
 echo "FSB Edge test"
@@ -132,16 +115,16 @@ xfs_io -F -f -t -c "truncate 131072"\
     -c "truncate 131072"\
     -c "pwrite -S 0x61 65535 2"\
     -c "pread -v 0 131072"\
-    $SCRATCH_MNT/fsb_edge_test | _filter_xfs_io
+    $SCRATCH_MNT/fsb_edge_test | _filter_xfs_io_unique
 
 echo
 echo "Open Trunk test (O_TRUNC)"
 for n in 0 1 2 3 4
 do
-    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
+    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io_unique
 
     echo "Test" > $SCRATCH_MNT/$n
-    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io
+    xfs_io -F -f -t -c "pread -v 0 100" $SCRATCH_MNT/$n | _filter_xfs_io_unique
     cat $SCRATCH_MNT/$n
 done
 echo "DONE"
@@ -151,7 +134,7 @@ echo "Append test"
 echo "append to me" > $SCRATCH_MNT/append
 xfs_io -F -a -c "pwrite -S 0x61 0 10" \
     -c "pread -v 0 24"\
-    $SCRATCH_MNT/append | _filter_xfs_io
+    $SCRATCH_MNT/append | _filter_xfs_io_unique
 
 echo
 echo "Small Vector Async"
@@ -210,7 +193,7 @@ xfs_io -F -f -c "pread -v 0 1"\
     -c "pread -v 10000000004 4"\
     -c "pread -v 10000000008 4"\
     -c "pread -v 10000000012 4"\
-    $SCRATCH_MNT/small_vector_async | _filter_xfs_io
+    $SCRATCH_MNT/small_vector_async | _filter_xfs_io_unique
 
 echo
 echo "Small Vector Sync"
@@ -269,7 +252,7 @@ xfs_io -F -f -s -c "pread -v 0 1"\
     -c "pread -v 10000000004 4"\
     -c "pread -v 10000000008 4"\
     -c "pread -v 10000000012 4"\
-    $SCRATCH_MNT/small_vector_async | _filter_xfs_io
+    $SCRATCH_MNT/small_vector_async | _filter_xfs_io_unique
 
 status=0
 exit

@@ -192,5 +192,27 @@ _filter_dd()
     '
 }
 
+common_line_filter()
+{
+    perl -ne 'if (/.*:(.*)/) {
+        if ( "$last_line" ne "$1" ) { print "$_"; $first_match=1; }
+        elsif ( $first_match==1 ) { print "*\n"; $first_match=0; }
+        $last_line="$1";
+    }
+    else {
+        print $_; $last_line=$_;
+    }'
+}
+
+_filter_xfs_io()
+{
+    sed -e "s/[0-9/.]* [GMKiBbytes]*, [0-9]* ops\; [0-9/:. sec]* ([inf0-9/.]* [EPGMKiBbytes]*\/sec and [inf0-9/.]* ops\/sec)/XXX Bytes, X ops\; XX:XX:XX.X (XXX YYY\/sec and XXX ops\/sec)/"
+}
+
+_filter_xfs_io_unique()
+{
+    common_line_filter | _filter_xfs_io
+}
+
 # make sure this script returns success
 /bin/true

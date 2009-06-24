@@ -43,23 +43,6 @@ _cleanup()
 . ./common.rc
 . ./common.filter
 
-common_line_filter()
-{
-    perl -ne 'if (/.*:(.*)/) {
-        if ( "$last_line" ne "$1" ) { print $_; $first_match=1; }
-        elsif ( $first_match==1 ) { print "*\n"; $first_match=0; }
-        $last_line="$1";
-    }
-    else {
-        print $_
-    }'
-}
-
-_filter_xfs_io()
-{
-    common_line_filter | sed -e "s/[0-9/.]* [GMKiBbytes]*, [0-9]* ops\; [0-9/:. sec]* ([inf0-9/.]* [EPGMKiBbytes]*\/sec and [inf0-9/.]* ops\/sec)/XXX Bytes, X ops\; XX:XX:XX.X (XXX YYY\/sec and XXX ops\/sec)/"
-}
-
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux IRIX
@@ -86,7 +69,7 @@ xfs_io -F -f -t -c "pwrite -S 0x63 0 512" \
     -c "pread -v 2560 512" \
     -c "pread -v 3072 512" \
     -c "pread -v 3584 512" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x63 4096 1024" \
     -c "pwrite -S 0x6B 5120 1024" \
@@ -100,7 +83,7 @@ xfs_io -F -f -c "pwrite -S 0x63 4096 1024" \
     -c "pread -v 5120 1024" \
     -c "pread -v 6144 1024" \
     -c "pread -v 7168 1024" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x6E 8192 2048" \
     -c "pwrite -S 0x6F 10240 2048" \
@@ -110,14 +93,14 @@ xfs_io -F -f -c "pwrite -S 0x6E 8192 2048" \
     -c "pread -v 6144 2048" \
     -c "pread -v 8192 2048" \
     -c "pread -v 10240 2048" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x70 12288 4096" \
     -c "pread -v 0 4096" \
     -c "pread -v 4096 4096" \
     -c "pread -v 8192 4096" \
     -c "pread -v 12288 4096" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x71 16384 8192" \
     -c "pwrite -S 0x72 24576 8192" \
@@ -125,7 +108,7 @@ xfs_io -F -f -c "pwrite -S 0x71 16384 8192" \
     -c "pread -v 8192 8192" \
     -c "pread -v 8192 8192" \
     -c "pread -v 16384 8192" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x73 32768 16384" \
     -c "pwrite -S 0x74 49152 16384" \
@@ -133,7 +116,7 @@ xfs_io -F -f -c "pwrite -S 0x73 32768 16384" \
     -c "pread -v 16384 16384" \
     -c "pread -v 32768 16384" \
     -c "pread -v 49152 16384" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x75 65536 32768" \
     -c "pwrite -S 0x76 98304 32768" \
@@ -141,7 +124,7 @@ xfs_io -F -f -c "pwrite -S 0x75 65536 32768" \
     -c "pread -v 32768 32768" \
     -c "pread -v 65536 32768" \
     -c "pread -v 98304 32768" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x76 131072 65536" \
     -c "pwrite -S 0x77 196608 65536" \
@@ -149,7 +132,7 @@ xfs_io -F -f -c "pwrite -S 0x76 131072 65536" \
     -c "pread -v 65536 65536" \
     -c "pread -v 131072 65536" \
     -c "pread -v 196608 65536" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x76 262144 131072" \
     -c "pwrite -S 0x77 393216 131072" \
@@ -157,14 +140,14 @@ xfs_io -F -f -c "pwrite -S 0x76 262144 131072" \
     -c "pread -v 131072 131072" \
     -c "pread -v 262144 131072" \
     -c "pread -v 393216 131072" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x76 524288 524288" \
     -c "pwrite -S 0x77 1048576 524288" \
     -c "pread -v 0 524288" \
     -c "pread -v 524288 524288" \
     -c "pread -v 1048576 524288" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x32 1048576 1048576" \
     -c "pwrite -S 0x33 2097152 1048576" \
@@ -183,7 +166,7 @@ xfs_io -F -f -c "pwrite -S 0x32 1048576 1048576" \
     -c "pread -v 6291456 1048576" \
     -c "pread -v 7340032 1048576" \
     -c "pread -v 8388608 1048576" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x32 1048576 1048576" \
     -c "pwrite -S 0x33 2097152 1048576" \
@@ -204,7 +187,7 @@ xfs_io -F -f -c "pwrite -S 0x32 1048576 1048576" \
     -c "pread -v 7340032 1048576" \
     -c "pread -v 8388608 1048576" \
     -c "pread -v 9437184 1048576" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 xfs_io -F -f -c "pwrite -S 0x92 10485760 10485760" \
     -c "pwrite -S 0x93 20971520 10485760" \
@@ -225,7 +208,7 @@ xfs_io -F -f -c "pwrite -S 0x92 10485760 10485760" \
     -c "pread -v 73400320 10485760" \
     -c "pread -v 83886080 10485760" \
     -c "pread -v 94371840 10485760" \
-    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io
+    $SCRATCH_MNT/aligned_vector_rw | _filter_xfs_io_unique
 
 status=0
 exit
