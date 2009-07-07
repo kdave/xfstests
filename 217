@@ -1,0 +1,89 @@
+#! /bin/sh
+# FS QA Test No. 217
+#
+# large log size mkfs test - ensure the log size scaling works
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2008 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dgc@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    _cleanup_testdir
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_setup_testdir
+_require_scratch
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+_require_loop
+LOOP_DEV=$SCRATCH_MNT/test_fs
+LOOP_MNT=$SCRATCH_MNT/test_fs_dir
+
+_do_mkfs()
+{
+	for i in $*; do
+		echo -n "fssize=${i}g "
+		$MKFS_XFS_PROG -f -b size=4096 -l version=2 \
+			-d name=$LOOP_DEV,size=${i}g |grep log
+		mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
+		echo "test write" > $LOOP_MNT/test
+		umount $LOOP_MNT
+	done
+}
+# make large holey file
+$XFS_IO_PROG -f -c "truncate 16383g" $LOOP_DEV
+
+#make loopback mount dir
+mkdir $LOOP_MNT
+
+# test if large logs are supported
+$MKFS_XFS_PROG -f -l size=256m -d name=$LOOP_DEV,size=10g > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+	_notrun "large log sizes not supported by mkfs"
+fi
+
+#
+# walk over "new" sizes supported by recent xfsprogs.
+# Note that the last test is for 16TB-1GB as 32bit platforms only support
+# device slightly smaller than 16TB.
+#
+_do_mkfs 512 1024 2048 4096 8192 16383
+
+status=0
+exit
