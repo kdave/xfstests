@@ -21,14 +21,27 @@
 #
 
 #
-# checks that the XFS quota support in the kernel is enabled
+# checks that the generic quota support in the kernel is enabled
 # and that we have valid quota user tools installed.
 #
 _require_quota()
 {
+    [ -x /usr/bin/quota ] || _notrun "Quota user tools not installed"
+    _scratch_mount "-o usrquota,grpquota"
+    ret=$?
+    umount $SCRATCH_MNT
+    [ $ret -ne 0 ] && _notrun "Installed kernel does not support quota"
+}
+
+#
+# checks that the XFS quota support in the kernel is enabled
+# and that we have valid quota user tools installed.
+#
+_require_xfs_quota()
+{
     src/feature -q $TEST_DEV
     [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS quota"
-    [ -x /usr/sbin/xfs_quota ] || _notrun "Quota user tools not installed"
+    [ -x /usr/sbin/xfs_quota ] || _notrun "XFS quota user tools not installed"
 }
 
 #
