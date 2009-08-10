@@ -1,0 +1,68 @@
+##/bin/sh
+#
+# Copyright (c) 2009 Eric Sandeen
+# All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# Functions useful for defragmentation tests
+#
+
+_require_defrag()
+{
+    case "$FSTYP" in
+    xfs)
+        DEFRAG_PROG=/usr/sbin/xfs_fsr
+	;;
+    ext4)
+        DEFRAG_PROG=/usr/bin/e4defrag
+	;;
+    *)
+        _notrun "defragmentation not supported for fstype \"$FSTYP\""
+	;;
+    esac
+
+    _require_command $DEFRAG_PROG
+    _require_command /usr/sbin/filefrag
+}
+
+_extent_count()
+{
+	filefrag $1 | awk '{print $2}'
+	filefrag -v $1  >> $seq.full 2>&1
+}
+
+# Defrag file, check it, and remove it.
+_defrag()
+{
+	echo -n "Before: "
+	_extent_count $1
+	CSUM_BEFORE=`md5sum $1`
+	STAT_BEFORE=`stat -c "a: %x m: %y c: %z" $1`
+	$DEFRAG_PROG -v $1 >> $seq.full 2>&1
+	_scratch_remount
+	STAT_AFTER=`stat -c "a: %x m: %y c: %z" $1`
+	CSUM_AFTER=`md5sum $1`
+	echo -n "After: "
+	_extent_count $1
+	if [ "$CSUM_BEFORE" != "$CSUM_AFTER" ]; then
+		_fail "file checksum changed post-defrag ($CSUM_BEFORE/$CSUM_AFTER)"
+	fi
+	if [ "$STAT_BEFORE" != "$STAT_AFTER" ]; then
+		_fail "file timestamps changed post-defrag:\n$STAT_BEFORE\n$STAT_AFTER"
+	fi
+	rm -f $1
+}
+
