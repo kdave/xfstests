@@ -1,0 +1,71 @@
+#! /bin/sh
+# FS QA Test No. 220
+#
+# Test that turning quotas off on a mounted filesystem doesn't crash
+# the system.
+#
+# Based on a bug report from Utako Kusaka <u-kusaka@wm.jp.nec.com>.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2009 Christoph Hellwig.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=hch@lst.de
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_DEV >/dev/null 2>&1
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_quota
+
+echo "Silence is golden."
+
+# create scratch filesystem
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+# mount  with quotas enabled
+_scratch_mount -o uquota
+
+# turn off quota
+xfs_quota -x -c off $SCRATCH_DEV
+
+# and unmount (this used to crash)
+umount $SCRATCH_DEV
+
+status=0
+exit $status
