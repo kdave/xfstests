@@ -1,10 +1,10 @@
 #! /bin/sh
 # FS QA Test No. 220
 #
-# Test that turning quotas off on a mounted filesystem doesn't crash
-# the system.
+# Test quota off handling.
 #
-# Based on a bug report from Utako Kusaka <u-kusaka@wm.jp.nec.com>.
+# Based on bug reports from Utako Kusaka <u-kusaka@wm.jp.nec.com> and
+# Ryota Yamauchi <r-yamauchi@vf.jp.nec.com>.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2009 Christoph Hellwig.  All Rights Reserved.
@@ -65,6 +65,20 @@ _scratch_mount -o uquota
 xfs_quota -x -c off $SCRATCH_DEV
 
 # and unmount (this used to crash)
+umount $SCRATCH_DEV
+
+
+# create scratch filesystem
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+# mount  with quotas enabled
+_scratch_mount -o uquota
+
+# turn off quota and remove space allocated to the quota files
+# (this used to give wrong ENOSYS returns in 2.6.31)
+xfs_quota -x -c off -c remove $SCRATCH_DEV
+
+# and unmount again
 umount $SCRATCH_DEV
 
 status=0
