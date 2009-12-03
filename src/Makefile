@@ -135,8 +135,11 @@ open_unlink: open_unlink.o $(LIBHANDLE)
 
 endif
 
-install:
+install: $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src
 	$(INSTALL) -m 755 fill2attr fill2fs fill2fs_check scaleread.sh $(PKG_LIB_DIR)/src
 	$(INSTALL) -m 644 dumpfile $(PKG_LIB_DIR)/src
+
+%-install:
+	$(MAKE) -C $* install

@@ -17,7 +17,7 @@ LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
 
 LIB_SUBDIRS = include lib
-TOOL_SUBDIRS = ltp src src/aio-dio-regress m4
+TOOL_SUBDIRS = ltp src m4
 
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS)
 
