@@ -52,14 +52,7 @@ _supported_os Linux
 
 rm -f $seq.full
 
-testio=`$XFS_IO_PROG -F -f -c "falloc 0 1m" $TEST_DIR/$tmp.io 2>&1`
-
-# Old xfs_io doesn't have fallocate support
-echo $testio | grep -q "not found" && \
-	_notrun "xfs_io fallocate support is missing"
-# Old glibc, old kernels, and some filesystems don't have fallocate support
-echo $testio | grep -q "Operation not supported" && \
-	_notrun "xfs_io fallocate command failed (old kernel? wrong fs?)"
+_require_xfs_io_falloc
 
 # Ok, off we go.
 
@@ -125,6 +118,20 @@ $XFS_IO_PROG -F -f -d				\
 	$TEST_DIR/ouch | _filter_xfs_io_unique
 
 rm -f $TEST_DIR/ouch
+
+# Reported by Ted Ts'o on linux-ext4, 12/31/2009
+# double-allocation on ext4 when fallocating over delalloc blocks
+# Regression due to d21cd8f163ac44b15c465aab7306db931c606908
+
+echo "=== delalloc write 16k; fallocate same range ==="
+# delalloc write 16k, fallocate same range.
+# Should get caught on fsck when we're done.
+
+$XFS_IO_PROG -F -f				\
+	-c "pwrite 0 16k"			\
+	-c "falloc 0 16k"			\
+	-c "fsync"				\
+	$TEST_DIR/ouch2 | _filter_xfs_io_unique
 
 # success, all done
 status=0
