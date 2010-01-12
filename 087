@@ -38,6 +38,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 . ./common.log
+. ./common.quota
 
 _do_meta()
 {
@@ -59,6 +60,7 @@ _supported_os IRIX Linux
 rm -f $seq.full $tmp.*
 _require_scratch
 _require_v2log 
+_require_xfs_quota
 
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -98,7 +100,7 @@ do
 
     # mount the FS
     _echofull "mount"
-    if ! _scratch_mount >>$seq.full 2>&1; then
+    if ! _scratch_mount -o uquota >>$seq.full 2>&1; then
 	_echofull "mount failed: $MOUNT_OPTIONS"
 	continue
     fi
@@ -124,7 +126,7 @@ do
     _scratch_xfs_logprint -n >>$seq.full 2>&1
 
     _echofull "mount with replay"
-    _scratch_mount >>$seq.full 2>&1 \
+    _scratch_mount -o uquota >>$seq.full 2>&1 \
 	|| _fail "mount failed: $MOUNT_OPTIONS"
 
     # check on what FS looks like after log recovery
