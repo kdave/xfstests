@@ -75,19 +75,22 @@ dd if=/dev/zero of=$tmpfile bs=1 seek=19998630180864 count=1 >/dev/null 2>&1 \
 # mkfs slightly smaller than that
 echo "=== mkfs.xfs ==="
 mkfs.xfs -f -bsize=4096 -dagsize=76288719b,size=3905982455b -llazy-count=0 $tmpfile \
-	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g"
+	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
+		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/"
 
 mount -o loop $tmpfile $tmpdir || _fail "!!! failed to loopback mount"
 
 # see what happens when we growfs it
 echo "=== xfs_growfs ==="
 xfs_growfs $tmpdir \
-	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g"
+	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
+		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/"
 
 # and double-check the new geometry
 echo "=== xfs_info ==="
 xfs_info $tmpdir \
-	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g"
+	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
+		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/"
 
 # _cleanup cleans up for us
 
