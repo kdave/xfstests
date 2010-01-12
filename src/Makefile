@@ -15,7 +15,8 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize \
 	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
 	fs_perms testx looptest locktest unwritten_mmap \
-	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset
+	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset \
+	t_futimens
 
 ifeq ($(HAVE_XLOG_ASSIGN_LSN), true)
 LINUX_TARGETS += loggen
