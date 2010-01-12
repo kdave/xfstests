@@ -1,0 +1,57 @@
+#! /bin/sh
+# FS QA Test No. 222
+#
+# xfs_fsr QA tests
+# run xfs_fsr over the test filesystem to give it a wide and varied set of
+# inodes to try to defragment. This is effectively a crash/assert failure
+# test looking for corruption induced by xfs_fsr runs.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Dave Chinner.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=david@fromorbit.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+[ "$XFS_FSR_PROG" = "" ] && _notrun "xfs_fsr not found"
+
+xfs_fsr $TEST_MNT > /dev/null 2>&1
+
+echo "--- silence is golden ---"
+status=0 ; exit
