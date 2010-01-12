@@ -3,15 +3,6 @@
 #
 # Test xfs_copy
 #
-# HACK WARNING:
-#
-# Due to the severe brokenness of mount's handling of loopback devices, we
-# hardcode the loop devices we use for this test. This enables us to clean up
-# the pieces when we remount the loop device because mount loses all trace of
-# the fact this is a loop device. Hence to enable us to unmount the hosting
-# filesystem, we need to manually tear down the relevant loop device. If
-# mount ever gets fixed then this hack can be removed.
-#
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2003,2008 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -51,7 +42,7 @@ _cleanup()
 {
 	cd /
 	umount $SCRATCH_MNT 2>/dev/null
-	umount $imgs.loop 2>/dev/null
+	umount -d $imgs.loop 2>/dev/null
 	[ -d $imgs.loop ] && rmdir $imgs.loop
 	[ -d $imgs.source_dir ] && rm -rf $imgs.source_dir
 	rm -f $imgs.* $tmp.* /var/tmp/xfs_copy.log.*
@@ -127,9 +118,7 @@ _verify_copy()
 	diff -u $tmp.geometry1 $tmp.geometry2
 
 	echo unmounting and removing new image
-	loop=`mount | grep $target | grep -o -e 'loop=.*[^),]' | grep -o -e '/.*$'`
-	umount $source $target
-	losetup -d $loop > /dev/null 2>&1
+	umount -d $source_dir $target_dir
 	rm -f $target
 }
 
