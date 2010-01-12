@@ -58,13 +58,16 @@ _require_xfs_io_falloc
 
 # Ok, off we go.
 
+# We don't remove files after they are written to check
+# for subsequent fs corruption at the end
+rm -f $TEST_DIR/test214-*
+
 # Super-trivial; preallocate a region and read it; get 0s.
 echo "=== falloc & read  ==="
 $XFS_IO_PROG -F -f 		\
 	-c 'falloc 0 4096'	\
 	-c 'pread -v 0 4096'	\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
-rm -f $TEST_DIR/ouch
+	$TEST_DIR/test214-1 | _filter_xfs_io_unique
 
 # Preallocate a chunk, write 1 byte, read it all back.
 # Should get no stale data.  Early ext4 bug.
@@ -74,8 +77,7 @@ $XFS_IO_PROG -F -f 		\
 	-c 'falloc 0 512'	\
 	-c 'pwrite 0 1'		\
 	-c 'pread -v 0 512'	\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
-rm -f $TEST_DIR/ouch
+	$TEST_DIR/test214-2 | _filter_xfs_io_unique
 
 # Same but write in the middle of the region
 echo "=== falloc, write middle, read ==="
@@ -83,8 +85,7 @@ $XFS_IO_PROG -F -f 		\
 	-c 'falloc 0 512'	\
 	-c 'pwrite 256 1'	\
 	-c 'pread -v 0 512'	\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
-rm -f $TEST_DIR/ouch
+	$TEST_DIR/test214-3 | _filter_xfs_io_unique
 
 # Same but write the end of the region
 echo "=== falloc, write end, read ==="
@@ -92,8 +93,7 @@ $XFS_IO_PROG -F -f		\
 	-c 'falloc 0 512'	\
 	-c 'pwrite 511 1'	\
 	-c 'pread -v 0 512'	\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
-rm -f $TEST_DIR/ouch
+	$TEST_DIR/test214-4 | _filter_xfs_io_unique
 
 # Reported by IBM on ext4.
 #
@@ -112,14 +112,12 @@ $XFS_IO_PROG -F -f				\
 	-c 'pwrite -S 0xAA 0x12000 0x10000'	\
 	-c 'fsync'				\
 	-c 'truncate 0x16000'			\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
+	$TEST_DIR/test214-5 | _filter_xfs_io_unique
 
 # now do a direct read and see what's on-disk
 $XFS_IO_PROG -F -f -d				\
 	-c 'pread -v 0 0x16000'			\
-	$TEST_DIR/ouch | _filter_xfs_io_unique
-
-rm -f $TEST_DIR/ouch
+	$TEST_DIR/test214-5 | _filter_xfs_io_unique
 
 # Reported by Ted Ts'o on linux-ext4, 12/31/2009
 # double-allocation on ext4 when fallocating over delalloc blocks
@@ -133,7 +131,20 @@ $XFS_IO_PROG -F -f				\
 	-c "pwrite 0 16k"			\
 	-c "falloc 0 16k"			\
 	-c "fsync"				\
-	$TEST_DIR/ouch2 | _filter_xfs_io_unique
+	$TEST_DIR/test214-6 | _filter_xfs_io_unique
+
+# Another ext4 failure
+
+echo "=== ext4 testcase 2 ==="
+
+$XFS_IO_PROG -F -f \
+        -c "fsync"              \
+        -c "pwrite 551917 41182"        \
+        -c "falloc 917633 392230"       \
+        -c "pwrite 285771 77718"        \
+        -c "pwrite 1136718 104115"      \
+        $TEST_DIR/test214-7 | _filter_xfs_io_unique
+
 
 # success, all done
 status=0
