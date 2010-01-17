@@ -34,6 +34,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    kill $locktest_pid2
+    kill $locktest_pid1
     _cleanup_testdir
 }
 
@@ -60,11 +62,13 @@ fi
 
 # Start the server
 src/locktest -p $PORT $TESTFILE > $testdir/server.out 2>&1 &
+locktest_pid1=$!
 
 sleep 1
 
 # Start the client
 src/locktest -p $PORT -h localhost $TESTFILE > $testdir/client.out 2>&1
+locktest_pid2=$!
 result=$?
 if [ $result -eq 0 ]; then
     echo success!

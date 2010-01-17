@@ -44,6 +44,8 @@
 #define PLATFORM_CLEANUP()  /*no-op*/
 #define LL                  "ll"
 
+extern int h_errno;
+
 #define inet_aton(STRING, INADDRP) \
     (((INADDRP)->s_addr = inet_addr(STRING)) == -1 ? 0 : 1)
 
@@ -937,7 +939,10 @@ main(int argc, char *argv[])
         struct hostent  *servInfo;
 
         if ((servInfo = gethostbyname(host)) == NULL) {
-            perror("gethostbyname");
+	    printf("Couldn't get hostbyname for %s", host);
+	    if (h_errno == HOST_NOT_FOUND)
+		printf(": host not found");
+	    printf("\n");
             exit(1);
             /*NOTREACHED*/
         }
