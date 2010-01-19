@@ -2,6 +2,21 @@
 # Copyright (c) 2000-2008 Silicon Graphics, Inc.  All Rights Reserved.
 #
 
+ifeq ("$(origin V)", "command line")
+  BUILD_VERBOSE = $(V)
+endif
+ifndef BUILD_VERBOSE
+  BUILD_VERBOSE = 0
+endif
+
+ifeq ($(BUILD_VERBOSE),1)
+  Q =
+else
+  Q = @
+endif
+
+MAKEOPTS = --no-print-directory Q=$(Q)
+
 TOPDIR = .
 HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs && echo yes || echo no)
 
@@ -11,10 +26,13 @@ endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
-DMAPI_MAKEFILE = dmapi/Makefile
 LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
 	check.log check.time
+
+ifeq ($(HAVE_DMAPI), true)
+DMAPI_MAKEFILE = dmapi/Makefile
+endif
 
 LIB_SUBDIRS = include lib
 TOOL_SUBDIRS = ltp src m4
@@ -23,13 +41,13 @@ SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS)
 
 default: include/builddefs include/config.h $(DMAPI_MAKEFILE) new remake check $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
-	$(MAKE) $@
+	$(Q)$(MAKE) $(MAKEOPTS) $@
 else
-	$(MAKE) $(SUBDIRS)
+	$(Q)$(MAKE) $(MAKEOPTS) $(SUBDIRS)
 	# automake doesn't always support "default" target 
 	# so do dmapi make explicitly with "all"
 ifeq ($(HAVE_DMAPI), true)
-	$(MAKE) -C $(TOPDIR)/dmapi all
+	$(Q)$(MAKE) $(MAKEOPTS) -C $(TOPDIR)/dmapi all
 endif
 endif
 
@@ -76,7 +94,7 @@ install: default $(addsuffix -install,$(SUBDIRS))
 install-dev install-lib:
 
 %-install:
-	$(MAKE) -C $* install
+	$(MAKE) $(MAKEOPTS) -C $* install
 
 realclean distclean: clean
 	rm -f $(LDIRT) $(CONFIGURE)
