@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -117,6 +118,7 @@ int main(int argc, char **argv)
 	int fd;
 	int fd2;
 	int status;
+	struct sigaction sa;
 
 	if (argc != 2)
 		fail("only arg should be file name");
@@ -150,7 +152,12 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	signal(SIGALRM, alarm_handler);
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = alarm_handler;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGALRM, &sa, NULL) == -1)
+		fail("sigaction: %d\n", errno);
+
 	alarm(SECONDS);
 
 	pid = wait(&status);
