@@ -10,47 +10,32 @@ CFILES = $(TARGETS:=.c)
 HFILES = doio.h
 LDIRT = $(TARGETS)
 LCFLAGS = -DXFS
-IFLAG = -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
+LCFLAGS += -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
 
 ifeq ($(HAVE_ATTR_LIST), true)
 LCFLAGS += -DHAVE_ATTR_LIST
+LLDLIBS += $(LIBATTR)
 endif
 ifeq ($(PKG_PLATFORM),irix)
 LCFLAGS += -DHAVE_ATTR_LIST
+LLDLIBS += $(LIBATTR)
 endif
 
 ifeq ($(HAVE_AIO), true)
 TARGETS += aio-stress
 LCFLAGS += -DAIO
-LIBAIO = -laio -lpthread
+LLDLIBS += -laio -lpthread
 endif
 
 default: $(TARGETS)
 
 include $(BUILDRULES)
-LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
-doio: doio.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(IFLAG)
+$(TARGETS): $(LIBTEST)
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
-fsstress: fsstress.c $(LIBATTR) $(LIBTEST)
-	$(LINKTEST) $(LIBATTR) $(LIBTEST) $(LDLIBS)  $(IFLAG)
-
-fsx: fsx.c
-	$(LINKTEST) $(LIBAIO) $(LDLIBS)  $(IFLAG)
-
-growfiles: growfiles.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)  $(IFLAG)
-
-iogen: iogen.c $(LIBTEST)
-	$(LINKTEST) $(LIBTEST)  $(IFLAG)
-
-ifeq ($(HAVE_AIO), true)
-aio-stress: aio-stress.c
-	$(LINKTEST) $(LIBAIO) $(LDLIBS)
-endif
-
-install:
+install: default
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/ltp
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/ltp
 

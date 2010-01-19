@@ -6,14 +6,15 @@ TARGETS = $(basename $(wildcard *.c))
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 
-LIBAIO = -laio -lpthread
+LLDLIBS = -laio -lpthread
 
 default: $(TARGETS)
 
 include $(BUILDRULES)
 
-$(TARGETS): %: %.c
-	$(CC) -g -Wall $(LIBAIO) -o $@ $*.c
+$(TARGETS):
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
 install:
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src/aio-dio-regress

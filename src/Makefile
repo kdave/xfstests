@@ -18,6 +18,8 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize \
 	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset \
 	t_futimens
 
+LLDLIBS = $(LIBATTR) $(LIBHANDLE) $(LIBACL)
+
 ifeq ($(HAVE_XLOG_ASSIGN_LSN), true)
 LINUX_TARGETS += loggen
 endif
@@ -26,18 +28,17 @@ IRIX_TARGETS = open_unlink
 
 ifeq ($(PKG_PLATFORM),linux)
 TARGETS += $(LINUX_TARGETS)
+TARGETS += t_immutable
 endif
 
 ifeq ($(PKG_PLATFORM),irix)
 TARGETS += $(IRIX_TARGETS)
+LLDLIBS += -lgen
 endif
 
 ifeq ($(HAVE_DB), true)
 TARGETS += dbtest
-endif
-
-ifeq ($(PKG_PLATFORM),linux)
-TARGETS += t_immutable
+LLDLIBS += $(LIBGDBM)
 endif
 
 ifeq ($(HAVE_AIO), true)
@@ -47,96 +48,28 @@ endif
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 
+
 default: $(TARGETS) $(SUBDIRS)
 
+PREALLO_TARGETS = preallo_rw_pattern_reader preallo_rw_pattern_writer
+
 include $(BUILDRULES)
-LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
-
-randholes: randholes.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-truncfile: truncfile.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-dbtest:	dbtest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LIBGDBM) $(LDLIBS)
-
-genhashnames: genhashnames.o
-	$(LINKTEST)
-
-nametest: nametest.o $(LIBTEST)
-	$(LINKTEST) $(LIBTEST) $(LDLIBS)
-
-bstat: bstat.o
-	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
-
-t_immutable: t_immutable.o
-	$(LINKTEST) $(LIBACL) $(LIBHANDLE) $(LDLIBS)
-
-loggen:	loggen.o
-	$(LINKTEST) $(LDLIBS)
-
-fstest:	fstest.o
-	$(LINKTEST)
-
-resvtest: resvtest.o
-	$(LINKTEST)
-
-itrash:	itrash.o
-	$(LINKTEST)
-
-multi_open_unlink: multi_open_unlink.o
-	$(LINKTEST) $(LIBATTR) $(LDLIBS)
-
-#scaleread: scaleread.o $(LDLIBS)
-#	$(LINKTEST)
-
-acl_get: acl_get.o
-	$(LINKTEST) $(LIBACL) $(LIBATTR) $(LDLIBS)
-
-dmiperf: dmiperf.o
-	$(LINKTEST) $(LIBATTR) $(LDLIBS)
 
 preallo_rw_pattern_reader:
-	$(CC) $(GCFLAGS) $(LDFLAGS) -DREAD iopat.c -o preallo_rw_pattern_reader
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) iopat.c -DREAD -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
 preallo_rw_pattern_writer:
-	$(CC) $(GCFLAGS) $(LDFLAGS) -DWRITE iopat.c -o preallo_rw_pattern_writer
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) iopat.c -DWRITE -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
-ftrunc: ftrunc.o
-	$(LINKTEST)
+$(filter-out $(PREALLO_TARGETS), $(TARGETS)): $(LIBTEST)
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
-trunc: trunc.o
-	$(LINKTEST)
+LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
-fs_perms: fs_perms.o
-	$(LINKTEST)
-
-testx: testx.o
-	$(LINKTEST)
-
-looptest: looptest.o
-	$(LINKTEST)
-
-locktest: locktest.o
-	$(LINKTEST)
-
-unwritten_sync: unwritten_sync.o
-	$(LINKTEST)
-
-ifeq ($(PKG_PLATFORM),irix)
-fill2: fill2.o
-	$(LINKTEST)  -lgen
-
-runas: runas.o
-	$(LINKTEST)  -lgen
-
-open_unlink: open_unlink.o $(LIBHANDLE)
-	$(LINKTEST) $(LIBHANDLE) $(LDLIBS)
-
-endif
-
-install: $(addsuffix -install,$(SUBDIRS))
+install: default $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src
 	$(INSTALL) -m 755 fill2attr fill2fs fill2fs_check scaleread.sh $(PKG_LIB_DIR)/src
