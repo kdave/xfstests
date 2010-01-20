@@ -202,7 +202,7 @@ main(int argc, char *argv[])
         
         if ((flags & FLAG_OPENCLOSE) && (flags & FLAG_SEQUENTIAL)) {
             if (flags & FLAG_VERBOSE)
-                printf("seek %" LL "d\n", seek_to);
+                printf("seek %" LL "d\n", (long long)seek_to);
             if (SEEK(f, seek_to, FILE_BEGIN) < 0)
 	        PERROR("SEEK", GET_LAST_ERROR);
         }
@@ -212,7 +212,7 @@ main(int argc, char *argv[])
             
             if (!(flags & FLAG_SEQUENTIAL)) {
                 if (flags & FLAG_VERBOSE)
-                    printf("seek %" LL "d\n", seek_to);
+                    printf("seek %" LL "d\n", (long long)seek_to);
                 if (SEEK(f, seek_to, FILE_BEGIN) < 0)
 	            PERROR("SEEK", GET_LAST_ERROR);
             }
@@ -233,7 +233,7 @@ main(int argc, char *argv[])
             
             if (!(flags & FLAG_SEQUENTIAL) || (flags & FLAG_WRITE)) {
                 if (flags & FLAG_VERBOSE)
-                    printf("seek %" LL "d\n", seek_to);
+                    printf("seek %" LL "d\n", (long long)seek_to);
                 if (SEEK(f, seek_to, FILE_BEGIN) < 0)
 	            PERROR("SEEK", GET_LAST_ERROR);
             }
@@ -279,7 +279,7 @@ main(int argc, char *argv[])
 	    seek_to += bufsize;
 	    if (flags & FLAG_TRUNCATE) {
                 if (flags & FLAG_VERBOSE)
-                    printf("seek %" LL "d\n", seek_to);
+                    printf("seek %" LL "d\n", (long long)seek_to);
                 if (SEEK(f, seek_to, FILE_BEGIN) < 0)
 	            PERROR("SEEK", GET_LAST_ERROR);
 	    }
