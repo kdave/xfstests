@@ -1162,10 +1162,9 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 	/*
 	 * construct auto filename and insert them into filenames space
 	 */
-		
 	for(ind=0;ind<num_auto_files; ind++, num++) {
-		sprintf((char *)filenames+(num*PATH_MAX), "%s.%d",
-			tempnam(auto_dir, auto_file), ind );
+		sprintf((char *)filenames+(num*PATH_MAX), "%s/%s.%d",
+			auto_dir, auto_file, ind);
 	}
 
 	/*
