@@ -31,8 +31,6 @@
  *  worth of data, and the user issued a 4k read, we want to ensure that
  *  the return value is 300, not 4k.
  */
-
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <libaio.h>
