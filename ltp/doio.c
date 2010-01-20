@@ -350,7 +350,7 @@ char	**argv;
 {
 	int	    	    	i, pid, stat, ex_stat;
 	struct sigaction	sa;
-	int omask;
+	sigset_t		block_mask, old_mask;
 	umask(0);		/* force new file modes to known values */
 #if _CRAYMPP
 	Npes = sysconf(_SC_CRAY_NPES);	/* must do this before parse_cmdline */
@@ -434,7 +434,9 @@ char	**argv;
 		Children[i] = -1;
 	}
 
-	omask = sigblock(sigmask(SIGCLD));
+	sigemptyset(&block_mask);
+	sigaddset(&block_mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &block_mask, &old_mask);
 
 	/*
 	 * Fork Nprocs.  This [parent] process is a watchdog, to notify the
