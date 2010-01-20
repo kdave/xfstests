@@ -283,7 +283,7 @@ static int test_immutable(const char *dir)
 
 	  ino = st.st_ino;
 
-	  bulkreq.lastip = &ino;
+	  bulkreq.lastip = (__u64 *)&ino;
 	  bulkreq.icount = 1;
 	  bulkreq.ubuffer = &bstat;
 	  bulkreq.ocount = NULL;
@@ -943,7 +943,7 @@ static int test_append(const char *dir)
 
 	  ino = st.st_ino;
 
-	  bulkreq.lastip = &ino;
+	  bulkreq.lastip = (__u64 *)&ino;
 	  bulkreq.icount = 1;
 	  bulkreq.ubuffer = &bstat;
 	  bulkreq.ocount = NULL;
@@ -1353,7 +1353,7 @@ static int test_append(const char *dir)
 
           ino = st.st_ino;
 
-          bulkreq.lastip = &ino;
+          bulkreq.lastip = (__u64 *)&ino;
           bulkreq.icount = 1;
           bulkreq.ubuffer = &bstat;
           bulkreq.ocount = NULL;

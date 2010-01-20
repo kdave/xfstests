@@ -61,7 +61,7 @@ main(int argc, char *argv[])
 	memset(genlist, 0, nfiles * sizeof(__u32));
 	memset(ret, 0, nfiles * sizeof(xfs_bstat_t));
 	memset(&a, 0, sizeof(xfs_fsop_bulkreq_t));
-	a.lastip = &last_inode;
+	a.lastip = (__u64 *)&last_inode;
 	a.icount = nfiles;
 	a.ubuffer = ret;
 	a.ocount = &count;

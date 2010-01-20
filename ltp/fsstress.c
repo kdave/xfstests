@@ -1550,7 +1550,7 @@ bulkstat_f(int opno, long r)
 {
 	int		count;
 	int		fd;
-	__uint64_t	last;
+	__u64		last;
 	int		nent;
 	xfs_bstat_t	*t;
 	__int64_t	total;
@@ -1583,7 +1583,7 @@ bulkstat1_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	int		good;
-	__uint64_t	ino;
+	__u64		ino;
 	struct stat64	s;
 	xfs_bstat_t	t;
 	int		v;

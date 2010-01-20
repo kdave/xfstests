@@ -68,7 +68,7 @@ main(int argc, char *argv[])
 		printf("Iteration %d ... (%d files)", k, nfiles);
 
 		memset(&a, 0, sizeof(xfs_fsop_bulkreq_t));
-		a.lastip = &last_inode;
+		a.lastip = (__u64 *)&last_inode;
 		a.icount = nfiles;
 		a.ubuffer = ret;
 		a.ocount = &count;
