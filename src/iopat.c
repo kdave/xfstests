@@ -47,12 +47,13 @@ int main(int argc, char **argv)
    read(fd, &x, 1048576);
    for (i = 0; i < 131072; i++) {
       if (x[i] != i) {
-         printf("error: %d %d %d\n",i,8*i,x[i]);
+         printf("error: %d %d %lld\n", i ,8 * i, (long long)x[i]);
 	 exit(1);
       }
    }
 #endif
 
    close(fd);
+   exit(0);
 }
 
