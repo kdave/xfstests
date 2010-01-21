@@ -741,7 +741,7 @@ send_ctl(void)
         if (nwrite < 0)
             perror("send_ctl: write");
         else
-            fprintf(stderr, "send_ctl[%d]: write() returns %d, not %lu as expected\n", 
+            fprintf(stderr, "send_ctl[%d]: write() returns %d, not %zu as expected\n", 
                     ctl.test, nwrite, sizeof(ctl));
         exit(1);
         /*NOTREACHED*/
@@ -756,7 +756,7 @@ void recv_ctl(void)
         if (nread < 0)
             perror("recv_ctl: read");
         else {
-            fprintf(stderr, "recv_ctl[%d]: read() returns %d, not %lu as expected\n", 
+            fprintf(stderr, "recv_ctl[%d]: read() returns %d, not %zu as expected\n", 
                     ctl.test, nread, sizeof(ctl));
 	    fprintf(stderr, "socket might has been closed by other locktest\n");
 	} 
