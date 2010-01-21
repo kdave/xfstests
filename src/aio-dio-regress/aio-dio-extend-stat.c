@@ -149,8 +149,9 @@ void fun_read(void *ptr)
 			if (filestat.st_size < exSize)
 				fail("write of %lu bytes @%llu finished, "
 				     "expected filesize at least %llu, but "
-				     "got %ld\n", event->obj->u.c.nbytes,
-				     event->obj->u.c.offset, exSize, filestat.st_size);
+				     "got %lld\n", event->obj->u.c.nbytes,
+				     event->obj->u.c.offset, exSize,
+				     (long long)filestat.st_size);
 		}
 	}
 }
