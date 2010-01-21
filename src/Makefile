@@ -51,19 +51,9 @@ LDIRT = $(TARGETS)
 
 default: $(TARGETS) $(SUBDIRS)
 
-PREALLO_TARGETS = preallo_rw_pattern_reader preallo_rw_pattern_writer
-
 include $(BUILDRULES)
 
-preallo_rw_pattern_reader:
-	@echo "    [CC]    $@"
-	$(Q)$(LTLINK) iopat.c -DREAD -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
-
-preallo_rw_pattern_writer:
-	@echo "    [CC]    $@"
-	$(Q)$(LTLINK) iopat.c -DWRITE -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
-
-$(filter-out $(PREALLO_TARGETS), $(TARGETS)): $(LIBTEST)
+$(TARGETS): $(LIBTEST)
 	@echo "    [CC]    $@"
 	$(Q)$(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(LIBTEST)
 
