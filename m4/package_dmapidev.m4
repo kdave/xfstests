@@ -9,13 +9,15 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_DMAPI_H],
     fi
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_MAKEHANDLE_LIBDM],
-  [ AC_CHECK_LIB(dm, dm_make_handle,, [
+AC_DEFUN([AC_PACKAGE_WANT_DMAPI],
+  [ AC_CHECK_LIB(dm, dm_make_handle, [ have_dmapi=true ], [
+	have_dmapi=false
         echo
-        echo 'FATAL ERROR: could not find a valid DMAPI base library.'
-        echo 'Install the data migration API (dmapi) library package.'
-        echo 'Alternatively, run "make install" from the dmapi source.'
-        exit 1
+        echo 'WARNING: could not find a valid DMAPI base library.'
+	echo 'If you want DMAPI support please install the data migration'
+	echo 'API (dmapi) library package. Alternatively, run "make install"'
+	echo 'from the dmapi source.'
+	echo
     ])
     libdm="-ldm"
     test -f `pwd`/../dmapi/libdm/libdm.la && \
@@ -23,4 +25,5 @@ AC_DEFUN([AC_PACKAGE_NEED_MAKEHANDLE_LIBDM],
     test -f ${libexecdir}${libdirsuffix}/libdm.la && \
 	libdm="${libexecdir}${libdirsuffix}/libdm.la"
     AC_SUBST(libdm)
+    AC_SUBST(have_dmapi)
   ])
