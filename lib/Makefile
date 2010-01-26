@@ -19,8 +19,10 @@ CFILES = dataascii.c databin.c datapid.c file_lock.c forker.c \
 	str_to_bytes.c tlibio.c write_log.c \
 	random.c
 
-default: $(LTLIBRARY)
+default: ltdepend $(LTLIBRARY)
 
 include $(BUILDRULES)
 
 install install-dev: default
+
+-include .dep

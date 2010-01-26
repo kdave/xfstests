@@ -13,10 +13,11 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	multi_open_unlink dmiperf unwritten_sync genhashnames
 
 LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize \
-	preallo_rw_pattern_reader preallo_rw_pattern_writer ftrunc trunc \
-	fs_perms testx looptest locktest unwritten_mmap \
+	ftrunc trunc fs_perms testx looptest locktest unwritten_mmap \
 	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset \
 	t_futimens
+
+SUBDIRS =
 
 LLDLIBS = $(LIBATTR) $(LIBHANDLE) $(LIBACL)
 
@@ -27,6 +28,7 @@ endif
 IRIX_TARGETS = open_unlink
 
 ifeq ($(PKG_PLATFORM),linux)
+PREALLO_TARGETS = preallo_rw_pattern_reader
 TARGETS += $(LINUX_TARGETS)
 TARGETS += t_immutable
 endif
@@ -49,7 +51,7 @@ CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 
 
-default: $(TARGETS) $(SUBDIRS)
+default: depend $(TARGETS) $(SUBDIRS)
 
 include $(BUILDRULES)
 
@@ -67,3 +69,5 @@ install: default $(addsuffix -install,$(SUBDIRS))
 
 %-install:
 	$(MAKE) -C $* install
+
+-include .dep

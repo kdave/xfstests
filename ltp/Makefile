@@ -27,7 +27,7 @@ LCFLAGS += -DAIO
 LLDLIBS += -laio -lpthread
 endif
 
-default: $(TARGETS)
+default: depend $(TARGETS)
 
 include $(BUILDRULES)
 
@@ -39,3 +39,4 @@ install: default
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/ltp
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/ltp
 
+-include .dep

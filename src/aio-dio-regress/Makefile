@@ -8,7 +8,7 @@ LDIRT = $(TARGETS)
 
 LLDLIBS = -laio -lpthread
 
-default: $(TARGETS)
+default: depend $(TARGETS)
 
 include $(BUILDRULES)
 
@@ -19,3 +19,5 @@ $(TARGETS):
 install:
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src/aio-dio-regress
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src/aio-dio-regress
+
+-include .dep

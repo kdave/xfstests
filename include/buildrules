@@ -8,7 +8,7 @@ include $(TOPDIR)/include/builddefs
 
 clean clobber : $(addsuffix -clean,$(SUBDIRS))
 	$(Q)rm -f $(DIRT)
-	$(Q)rm -fr .libs
+	$(Q)rm -fr .libs .dep
 
 %-clean:
 	@echo "Cleaning $*"
@@ -70,32 +70,16 @@ endif # _BUILDRULES_INCLUDED_
 
 $(_FORCE):
 
-.PHONY : depend
+# dependency build is automatic, relies on gcc -MM to generate.
+.PHONY : depend ltdepend
 
-DEPENDSCRIPT := $(MAKEDEPEND) $(DEPENDFLAGS) -f - -- $(CFLAGS) -- $(CFILES) | \
-	$(SED) -e 's,`pwd`,$(TOPDIR),g' \
-	    -e 's,  */[^ ]*,,g' \
-	    -e '/^[^ ]*: *$$/d' \
-	    -e '/^ *$$/d'
+MAKEDEP := $(MAKEDEPEND) $(CFLAGS)
 
-ifdef LTLIBRARY
-DEPENDSCRIPT := $(DEPENDSCRIPT) | $(SED) -e 's,^\([^:]*\)\.o,\1.lo,'
-endif
+ltdepend: $(CFILES) $(HFILES)
+	@echo "    [DEP]"
+	$(Q)$(MAKEDEP) $(CFILES) | $(SED) -e 's,^\([^:]*\)\.o,\1.lo,' > .dep
 
-depend : $(CFILES) $(HFILES) $(addsuffix -depend,$(SUBDIRS))
-	$(DEPENDSCRIPT) > .dep
-	test -s .dep || rm -f .dep
+depend: $(CFILES) $(HFILES)
+	@echo "    [DEP]"
+	$(Q)$(MAKEDEP) $(CFILES) | $(SED) -e 's,^\([^:]*\)\.o,\1,' > .dep
 
-%-depend:
-	$(MAKE) -C $* depend
-
-# Include dep, but only if it exists
-ifeq ($(shell test -f .dep && echo .dep), .dep)
-include .dep
-else
-ifdef LTLIBRARY
-$(LTOBJECTS): $(HFILES)
-else
-$(OBJECTS): $(HFILES)
-endif
-endif
