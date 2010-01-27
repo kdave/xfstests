@@ -12,10 +12,10 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	godown resvtest writemod makeextents itrash rename \
 	multi_open_unlink dmiperf unwritten_sync genhashnames
 
-LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize \
-	ftrunc trunc fs_perms testx looptest locktest unwritten_mmap \
-	bulkstat_unlink_test bulkstat_unlink_test_modified t_dir_offset \
-	t_futimens
+LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
+	preallo_rw_pattern_writer ftrunc trunc fs_perms testx looptest \
+	locktest unwritten_mmap bulkstat_unlink_test \
+	bulkstat_unlink_test_modified t_dir_offset t_futimens t_immutable
 
 SUBDIRS =
 
@@ -28,9 +28,7 @@ endif
 IRIX_TARGETS = open_unlink
 
 ifeq ($(PKG_PLATFORM),linux)
-PREALLO_TARGETS = preallo_rw_pattern_reader
 TARGETS += $(LINUX_TARGETS)
-TARGETS += t_immutable
 endif
 
 ifeq ($(PKG_PLATFORM),irix)
