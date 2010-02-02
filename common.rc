@@ -726,13 +726,27 @@ _require_user()
 # check that xfs_io, glibc, kernel, and filesystem all (!) support
 # fallocate
 #
-_require_xfs_io_falloc() {
+_require_xfs_io_falloc()
+{
 	testio=`$XFS_IO_PROG -F -f -c "falloc 0 1m" $TEST_DIR/$tmp.io 2>&1`
 	rm -f $TEST_DIR/$tmp.io 2>&1 > /dev/null
 	echo $testio | grep -q "not found" && \
 		_notrun "xfs_io fallocate support is missing"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "xfs_io fallocate command failed (old kernel/wrong fs?)"
+}
+
+# Check that a fs has enough free space (in 1024b blocks)
+#
+_require_fs_space()
+{
+	MNT=$1
+	BLOCKS=$2	# in units of 1024
+	let GB=$BLOCKS/1024/1024
+
+	FREE_BLOCKS=`df -klP $MNT | grep -v Filesystem | awk '{print $4}'`
+	[ $FREE_BLOCKS -lt $BLOCKS ] && \
+		_notrun "This test requires at least ${GB}GB free on $MNT to run"
 }
 
 # check that a FS on a device is mounted
