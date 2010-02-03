@@ -300,9 +300,35 @@ _scratch_mkfs()
         $MKFS_UDF_PROG $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
 	;;
     *)
-	/sbin/mkfs -t $FSTYP -- $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
+	/sbin/mkfs -t $FSTYP -- $MKFS_OPTIONS $* $SCRATCH_DEV
 	;;
     esac
+}
+
+# Emulate an N-data-disk stripe w/ various stripe units
+# _scratch_mkfs_geom <sunit bytes> <swidth multiplier> [optional blocksize]
+_scratch_mkfs_geom()
+{
+    sunit_bytes=$1
+    swidth_mult=$2
+    blocksize=$3
+    [ -z "$blocksize" ] && blocksize=4096
+
+    let sunit_blocks=$sunit_bytes/$blocksize
+    let swidth_blocks=$sunit_blocks*$swidth_mult
+
+    case $FSTYP in
+    xfs)
+	MKFS_OPTIONS="-b size=$blocksize, -d su=$sunit_bytes,sw=$swidth_mult"
+	;;
+    ext4)
+	MKFS_OPTIONS="-b $blocksize -E stride=$sunit_blocks,stripe_width=$swidth_blocks"
+	;;
+    *)
+	_notrun "can't mkfs $FSTYP with geometry"
+	;;
+    esac
+    _scratch_mkfs
 }
 
 _scratch_xfs_db_options()

@@ -1,0 +1,103 @@
+#! /bin/bash
+# FS QA Test No. 223
+#
+# File alignment tests
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Eric Sandeen.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@sandeen.net
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_xfs_io_falloc
+
+rm -f $seq.full
+
+_filter_scratch()
+{
+	sed -e "s,$SCRATCH_MNT,SCRATCH_MNT,g"
+}
+
+BLOCKSIZE=4096
+
+for SUNIT_K in 8 16 32 64 128; do
+	let SUNIT_BYTES=$SUNIT_K*1024
+	let SUNIT_BLOCKS=$SUNIT_BYTES/$BLOCKSIZE
+
+	echo "=== mkfs with su $SUNIT_BLOCKS blocks x 4 ==="
+	_scratch_mkfs_geom $SUNIT_BYTES 4 $BLOCKSIZE &>> $seq.full
+	_scratch_mount
+
+	for SIZE_MULT in 1 2 8 64 256; do
+		let SIZE=$SIZE_MULT*$SUNIT_BYTES
+
+		echo "=== Testing size ${SIZE_MULT}*${SUNIT_K}k on ${SUNIT_K}k stripe ==="
+		for FILE in 1 2 3 4; do
+			xfs_io -F -f -c "falloc 0 $SIZE" \
+				$SCRATCH_MNT/file-$FILE-$SIZE-falloc \
+					&>> $seq.full
+			xfs_io -F -f -c "pwrite 0 $SIZE" \
+				$SCRATCH_MNT/file-$FILE-$SIZE-write \
+					&>> $seq.full
+			src/t_stripealign $SCRATCH_MNT/file-$FILE-$SIZE-falloc \
+				$SUNIT_BLOCKS | _filter_scratch
+			src/t_stripealign $SCRATCH_MNT/file-$FILE-$SIZE-write \
+				$SUNIT_BLOCKS | _filter_scratch
+		done
+	done
+
+	echo "=== Testing size 1g falloc on ${SUNIT_K}k stripe ==="
+	xfs_io -F -f -c "falloc 0 1g" $SCRATCH_MNT/file-1g-falloc &>> $seq.full
+	src/t_stripealign $SCRATCH_MNT/file-1g-falloc $SUNIT_BLOCKS
+
+	rm -f $SCRATCH_MNT/file-1g-falloc | _filter_scratch
+
+	echo "=== Testing size 1073745920 falloc on ${SUNIT_K}k stripe ==="
+	xfs_io -F -f -c "falloc 0 1073745920" \
+		$SCRATCH_MNT/file-1073745920-falloc &>> $seq.full
+	src/t_stripealign $SCRATCH_MNT/file-1073745920-falloc \
+		$SUNIT_BLOCKS | _filter_scratch
+
+	_scratch_unmount
+done
+
+status=0
+exit
