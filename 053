@@ -38,18 +38,17 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.attr
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 
-[ ! -x /bin/chacl -a ! -x /usr/bin/chacl ] && _notrun "chacl command not found"
-
 _require_scratch
+_acl_requirements
 _acl_setup_ids
 _do_die_on_error=y
 test=$SCRATCH_MNT/test
 
 # make filesystem on scratch using the defaults
-_do 'make filesystem on $SCRATCH_DEV' '_scratch_mkfs_xfs'
+_do 'make filesystem on $SCRATCH_DEV' '_scratch_mkfs'
 _do 'mount filesytem' '_scratch_mount'
 
 # create test files and set acls
@@ -84,7 +83,7 @@ list_acls()
 echo "acls before repair:"
 list_acls
 _do 'unmount $SCRATCH_DEV' 'umount $SCRATCH_DEV'
-_do 'repair filesystem' '_scratch_xfs_repair'
+_do 'repair filesystem' '_check_scratch_fs'
 _do 'mount filesytem' '_scratch_mount'
 echo "acls after repair: "
 list_acls
