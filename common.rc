@@ -305,6 +305,29 @@ _scratch_mkfs()
     esac
 }
 
+# Create fs of certain size on scratch device
+# _scratch_mkfs_sized <size in bytes> [optional blocksize]
+_scratch_mkfs_sized()
+{
+    fssize=$1
+    blocksize=$2
+    [ -z "$blocksize" ] && blocksize=4096
+    let blocks=$fssize/$blocksize
+
+    case $FSTYP in
+    xfs)
+	_scratch_mkfs_xfs -d size=$fssize -b size=$blocksize
+	;;
+    ext2|ext3|ext4)
+	/sbin/mkfs.$FSTYP -b $blocksize $SCRATCH_DEV $blocks
+	;;
+    *)
+	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_sized"
+	;;
+    esac
+    _scratch_mkfs
+}
+
 # Emulate an N-data-disk stripe w/ various stripe units
 # _scratch_mkfs_geom <sunit bytes> <swidth multiplier> [optional blocksize]
 _scratch_mkfs_geom()
