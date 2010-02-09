@@ -100,6 +100,9 @@ _mount_opts()
     *)
 	;;
     esac
+    if [ ! -z "$USE_QUOTA" ]; then
+	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o usrquota,grpquota"
+    fi
 }
 
 _mkfs_opts()
@@ -200,6 +203,10 @@ _test_options()
     type=$1
     TEST_OPTIONS=""
 
+    if [ ! -z "$USE_QUOTA" ]; then
+	TEST_OPTIONS="-o usrquota,grpquota"
+    fi
+
     if [ "$FSTYP" != "xfs" ]; then
         return
     fi
@@ -241,6 +248,25 @@ _mount_ops_filter()
 
 }
 
+_setup_quota()
+{
+    mountpoint=$1
+    if [ ! -z "$USE_QUOTA" ]; then
+	case $FSTYP in
+	xfs)
+	    ;;
+	ext*|reiserfs)
+	    quotaoff $mountpoint &>/dev/null
+	    quotacheck -u -g $mountpoint
+	    quotaon $mountpoint
+	    ;;
+	*)
+	    _fail "Don't know how to turn on quota on $FSTYP"
+	    ;;
+	esac
+    fi
+}
+
 _scratch_mount_options()
 {
     _scratch_options mount
@@ -251,6 +277,7 @@ _scratch_mount_options()
 _scratch_mount()
 {
     _mount -t $FSTYP `_scratch_mount_options $*`
+    _setup_quota $SCRATCH_MNT
 }
 
 _scratch_unmount()
@@ -268,6 +295,7 @@ _test_mount()
 {
     _test_options mount
     _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
+    _setup_quota $TEST_DIR
 }
 
 _scratch_mkfs_options()
