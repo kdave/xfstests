@@ -42,7 +42,7 @@ int testsetup(mode_t mode, int cuserId, int cgroupId);
 int testfperm(int userId, int groupId, char* fperm);
 
 int main( int argc, char *argv[]) {
-   char fperm[1];
+   char *fperm;
    int result, exresult=0,  cuserId=0, cgroupId=0, userId=0, groupId=0;
    mode_t mode;
 
@@ -53,7 +53,7 @@ int main( int argc, char *argv[]) {
               cgroupId = atoi(argv[3]);
               userId = atoi(argv[4]);
               groupId = atoi(argv[5]);
-              fperm[0] = *argv[6];
+              fperm = argv[6];
               exresult = atoi(argv[7]);
 	      break;
       default:
@@ -64,7 +64,7 @@ int main( int argc, char *argv[]) {
    testsetup(mode,cuserId,cgroupId);
    result=testfperm(userId,groupId,fperm);
    system("rm test.file");
-   printf("%c a %03o file owned by (%d/%d) as user/group(%d/%d)  ",fperm[0],mode,cuserId,cgroupId,userId,groupId);
+   printf("%s a %03o file owned by (%d/%d) as user/group(%d/%d)  ",fperm,mode,cuserId,cgroupId,userId,groupId);
    if (result == exresult) {
       printf("PASS\n");
       exit(0);
@@ -102,8 +102,7 @@ int testfperm(int userId, int groupId, char* fperm) {
            return(-1);
         }
 
-    switch(tolower(fperm[0])) {
-       case 'x': 
+    if (!strcmp("x", fperm)) {
           PID = fork();
 	  if (PID == 0) {
              execlp("./test.file","test.file",NULL); 
@@ -114,8 +113,7 @@ int testfperm(int userId, int groupId, char* fperm) {
           seteuid(0);
           setegid(0);
 	  return(nuthertmpi);
-
-       default: 
+    } else {
           if((testfile=fopen("test.file",fperm))){
             fclose(testfile);
             seteuid(0);
