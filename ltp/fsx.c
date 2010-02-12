@@ -1038,7 +1038,7 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 			fprintf(stderr, "bad io length: %lu instead of %u\n",
 					res, len);
 		else {
-			fprintf(stderr, "errcode=%d\n", -res);
+			fprintf(stderr, "errcode=%ld\n", -res);
 			fprintf(stderr, "aio_rw: async io failed: %s\n",
 					strerror(-res));
 			ret = res;

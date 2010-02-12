@@ -240,6 +240,7 @@ loggen_empty(int count)
     blfs.blf_type       = XFS_LI_BUF;
     blfs.blf_size       = 2;
     blfs.blf_flags      = XFS_BLI_CANCEL;
+    blfs.blf_len        = 0;
     blfs.blf_blkno      = 1;
     blfs.blf_map_size   = 1;
     blfs.blf_data_map[0]= 0;
