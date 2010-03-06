@@ -25,6 +25,14 @@ ifeq ($(HAVE_XLOG_ASSIGN_LSN), true)
 LINUX_TARGETS += loggen
 endif
 
+ifeq ($(HAVE_FIEMAP), true)
+LINUX_TARGETS += fiemap-tester
+endif
+
+ifeq ($(HAVE_FALLOCATE),yes)
+LCFLAGS += -DHAVE_FALLOCATE
+endif
+
 IRIX_TARGETS = open_unlink
 
 ifeq ($(PKG_PLATFORM),linux)
