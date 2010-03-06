@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test No. 224
+#
+# Delayed allocation at ENOSPC test
+#
+# Derived from a test case from Lachlan McIlroy and improved to
+# reliably trigger a BUG in xfs_get_blocks(). Despite this XFS
+# focus, the test can to run on any filesystem to exercise ENOSPC
+# behaviour.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Dave Chinner.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=david@fromorbit.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	rm -f $tmp.*
+	rm -f $SCRATCH_MNT/testfile.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+
+# make a 1GB filesystem
+_scratch_mkfs_sized `expr 1024 \* 1024 \* 1024` > $seq.full 2>&1
+_scratch_mount >> $seq.full 2>&1
+
+# set the reserved block pool to almost empty for XFS
+if [ "$FSTYP" = "xfs" ]; then
+	xfs_io -x -c "resblks 4" /mnt/scratch/ >> $seq.full 2>&1
+fi
+
+FILES=1000
+for i in `seq 0 1 $FILES`; do
+
+	# set the file size to be 10MB - that way the direct IO will always try
+	# to read at least 10MB even if only 4k was written. This allows
+	# discarded delalloc pages that would have been beyond EOF to be
+	# tripped over.
+        (
+		sleep 5
+		xfs_io -f -c "truncate 10485760" $SCRATCH_MNT/testfile.$i
+		dd if=/dev/zero of=$SCRATCH_MNT/testfile.$i bs=4k conv=notrunc
+	) > /dev/null 2>&1 &
+done
+wait
+
+for i in `seq 0 1 $FILES`; do
+        dd of=/dev/null if=$SCRATCH_MNT/testfile.$i bs=512k iflag=direct > /dev/null 2>&1 &
+done
+wait
+echo "*** Silence is golden ***"
+status=0
+exit
