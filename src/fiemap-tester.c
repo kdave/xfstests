@@ -37,14 +37,10 @@ static void
 usage(void)
 {
 	printf("Usage: fiemap-tester [-m map] [-r number of runs] [-s seed] [-q]");
-#ifdef HAVE_FALLOCATE
 	printf("[-p preallocate (1/0)] ");
-#endif
 	printf("filename\n");
 	printf("  -m map    : generate a file with the map given and test\n");
-#ifdef HAVE_FALLOCATE
 	printf("  -p 0/1    : turn block preallocation on or off\n");
-#endif
 	printf("  -r count  : number of runs to execute (default infinity)\n");
 	printf("  -s seed   : seed for random map generator (default 1)\n");
 	printf("  -q        : be quiet about non-errors\n");
@@ -513,9 +509,10 @@ main(int argc, char **argv)
 		case 'p':
 			prealloc = atoi(optarg);;
 #ifndef HAVE_FALLOCATE
-			if (prealloc)
+			if (prealloc) {
 				printf("Not built with preallocation support\n");
-			usage();
+				usage();
+			}
 #endif
 			break;
 		case 'q':
