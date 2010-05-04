@@ -18,18 +18,16 @@
  
 #include "global.h"
 
-#ifdef HAVE_GDBM_NDBM_H
+#ifdef HAVE_GDBM_NDBM_H_
 #include <gdbm/ndbm.h>
-#else
-#ifdef HAVE_GDBM_H
+#elif HAVE_GDBM_NDBM_H
+#include <gdbm-ndbm.h>
+#elif HAVE_GDBM_H
 #include <gdbm.h>
-#else
-#ifdef HAVE_NDBM_H
+#elif HAVE_NDBM_H
 #include <ndbm.h>
 #else
 bozo!
-#endif
-#endif
 #endif
 
 
@@ -140,11 +138,12 @@ int InitDbmLookup(int howmany)
 
 	sprintf(filename, "%s-%d", DBNAME, (int)getpid());
 	if (debugflg) {
-		printf("dbm_open(%s, O_WRONLY|O_CREAT, 0644)\n", filename);
+		printf("dbm_open(%s, O_RDWR|O_CREAT, 0644)\n", filename);
 		fflush(stdout);
 	}
-	dbm = dbm_open(filename, O_WRONLY|O_CREAT, 0644);
-	if(dbm == NULL) DoSysError("\ndbm_open", (int)dbm);
+	dbm = dbm_open(filename, O_RDWR|O_CREAT, 0644);
+	if(dbm == NULL)
+		DoSysError("\ndbm_open", -1);
 
 	if ((KeyArray = (unsigned short *)calloc( howmany,
 				sizeof(unsigned short))) == NULL)
@@ -191,11 +190,12 @@ int InitDbmLookup(int howmany)
 	}
 	dbm_close(dbm); /* close to eliminate chance of in-memory caching */
 	if (debugflg) {
-		printf("dbm_open(%s, O_RDNLY, 0)\n", filename);
+		printf("dbm_open(%s, O_RDONLY, 0)\n", filename);
 		fflush(stdout);
 	}
 	dbm = dbm_open(filename, O_RDONLY, 0);
-	if(dbm == NULL) DoSysError("\ndbm_open", (int)dbm);
+	if(dbm == NULL)
+		DoSysError("\ndbm_open", -1);
 	return 0;
 }
 
