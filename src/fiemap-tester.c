@@ -402,6 +402,20 @@ check_hole(struct fiemap *fiemap, int fd, __u64 logical_offset, int blocksize)
 	return 0;
 }
 
+static int query_fiemap_count(int fd, int blocks, int blocksize)
+{
+	struct fiemap fiemap = { 0, };
+
+	fiemap.fm_length = blocks * blocksize;
+
+	if (ioctl(fd, FS_IOC_FIEMAP, (unsigned long)&fiemap) < 0) {
+		perror("FIEMAP query ioctl failed");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int
 compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize)
 {
@@ -410,6 +424,9 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize)
 	int blocks_to_map, ret, cur_extent = 0, last_data;
 	__u64 map_start, map_length;
 	int i, c;
+
+	if (query_fiemap_count(fd, blocks, blocksize) < 0)
+		return -1;
 
 	blocks_to_map = (random() % blocks) + 1;
 	fiebuf = malloc(sizeof(struct fiemap) +
