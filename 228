@@ -1,0 +1,79 @@
+#! /bin/bash
+# FS QA Test No. 228
+#
+# Check if fallocate respects RLIMIT_FSIZE
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 IBM Corporation. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=aarora@in.ibm.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+here=`pwd`
+tmp=$TEST_DIR/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15 25
+
+# get standard environment, filters and checks
+. ./common.rc
+
+# real QA test starts here
+# generic, but xfs_io's fallocate must work
+_supported_fs generic
+# only Linux supports fallocate
+_supported_os Linux
+
+[ -n "$XFS_IO_PROG" ] || _notrun "xfs_io executable not found"
+
+rm -f $seq.full
+
+# Sanity check to see if fallocate works
+_require_xfs_io_falloc
+
+# Check if we have good enough space available
+avail=`df -P $TEST_DIR | awk 'END {print $4}'`
+[ "$avail" -ge 104000 ] || _notrun "Test device is too small ($avail KiB)"
+
+# Set the FSIZE ulimit to 100MB and check
+ulimit -f 102400
+flim=`ulimit -f`
+[ "$flim" != "unlimited" ] || _notrun "Unable to set FSIZE ulimit"
+[ "$flim" -eq 102400 ] || _notrun "FSIZE ulimit is not correct (100 MB)"
+
+echo "File size limit is now set to 100 MB."
+echo "Let us try to preallocate 101 MB. This should fail."
+$XFS_IO_PROG -F -f -c 'falloc 0 101m' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+echo "Let us now try to preallocate 50 MB. This should succeed."
+$XFS_IO_PROG -F -f -c 'falloc 0 50m' $TEST_DIR/ouch
+rm -f $TEST_DIR/ouch
+
+echo "Test over."
+# success, all done
+status=0
+exit
