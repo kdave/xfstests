@@ -1,0 +1,155 @@
+#! /bin/bash
+# FS QA Test No. 230
+#
+# Simple quota enforcement test.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Jan Kara.  All Rights Reserved.
+#
+# Based on test 219,
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=jack@suse.cz
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+filter_scratch()
+{
+	perl -ne "
+s,$SCRATCH_MNT,[SCR_MNT],;
+s,$SCRATCH_DEV,[SCR_DEV],;
+	print;"
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux #IRIX
+_require_scratch
+_require_quota
+_require_user
+_need_to_be_root
+
+test_files()
+{
+	echo; echo "### create files, setting up ownership (type=$type)"
+	touch $SCRATCH_MNT/file{1,2} 2>/dev/null
+	chown $qa_user $SCRATCH_MNT/file{1,2} 2>/dev/null
+	chgrp $qa_user $SCRATCH_MNT/file{1,2} 2>/dev/null
+	chmod 777 $SCRATCH_MNT 2>/dev/null
+}
+
+test_enforcement()
+{
+	echo "### some buffered IO (type=$type)"
+	echo "--- initiating IO..." >>$seq.full
+	# Firstly fit below block soft limit
+	echo "Write 900k..."
+	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 900k' -c fsync \
+		$SCRATCH_MNT/file1" 2>&1 >>$seq.full | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# Secondly overcome block soft limit
+	echo "Rewrite 1001k..."
+	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 1001k' -c fsync \
+		$SCRATCH_MNT/file1" 2>&1 >>$seq.full | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# Now try to overcome block hardlimit
+	echo "Write 1000k..."
+	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 1000k' -c fsync \
+		$SCRATCH_MNT/file2" 2>&1 >>$seq.full | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# Now sleep for grace time and check that softlimit got enforced
+	sleep $((grace+1))
+	echo "Write 4096..."
+	su $qa_user -c "$XFS_IO_PROG -F -c 'truncate 0' -c 'pwrite 0 4096' \
+		$SCRATCH_MNT/file2" 2>&1 >>$seq.full | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# And now the softlimit test for inodes
+	# First reset space limits so that we don't have problems with
+	# space reservations on XFS
+	setquota -$type $qa_user 0 0 3 5 $SCRATCH_MNT
+	echo "Touch 3+4"
+	su $qa_user -c "touch $SCRATCH_MNT/file3 $SCRATCH_MNT/file4" \
+		2>&1 >>$seq.full | filter_scratch | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# Try to exceed inode hardlimit
+	echo "Touch 5+6"
+	su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
+		2>&1 >>$seq.full | filter_scratch | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	# Wait and check grace time enforcement
+	rm -f $SCRATCH_MNT/file5 >>$seq.full 2>&1
+	sleep $((grace+1))
+	echo "Touch 5"
+	su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seq.full |
+		filter_scratch | tee -a $seq.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+	echo "--- completed IO ($type)" >>$seq.full
+}
+
+cleanup_files()
+{
+	rm -f $SCRATCH_MNT/file{1,2,3,4,5,6}
+}
+
+# real QA test starts here
+rm -f $seq.full
+
+grace=2
+
+_scratch_mkfs >> $seq.full 2>&1
+_scratch_mount "-o usrquota,grpquota"
+quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+quotaon $SCRATCH_MNT 2>/dev/null
+setquota -u $qa_user 1000 2000 3 5 $SCRATCH_MNT
+setquota -u -t $grace $grace $SCRATCH_MNT
+setquota -g $qa_user 1000 2000 3 5 $SCRATCH_MNT
+setquota -g -t $grace $grace $SCRATCH_MNT
+umount $SCRATCH_DEV
+
+echo; echo "### test user limit enforcement"
+_scratch_mount "-o usrquota"
+quotaon $SCRATCH_MNT 2>/dev/null
+type=u
+test_files
+test_enforcement
+cleanup_files
+umount $SCRATCH_DEV 2>/dev/null
+
+echo; echo "### test group limit enforcement"
+_scratch_mount "-o grpquota"
+quotaon $SCRATCH_MNT 2>/dev/null
+type=g
+test_files
+test_enforcement
+cleanup_files
+umount $SCRATCH_DEV 2>/dev/null
+
+status=0
+exit
