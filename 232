@@ -1,0 +1,115 @@
+#! /bin/bash
+# FSQA Test No. 232
+#
+# Run fsstress with quotas enabled and verify accounted quotas in the end
+#
+# Derived from test 231
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=jack@suse.cz
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+filter_scratch()
+{
+        perl -ne "
+s,$SCRATCH_MNT,[SCR_MNT],;
+s,$SCRATCH_DEV,[SCR_DEV],;
+        print;"
+}
+
+check_usage()
+{
+	quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
+	repquota -u -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.orig
+	quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+	repquota -u -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.checked
+	quotaon -u -g $SCRATCH_MNT 2>/dev/null
+	diff $tmp.orig $tmp.checked
+}
+
+_filter_num()
+{
+	tee -a $here/$seq.full |\
+	sed -e 's/[0-9][0-9]* inodes/I inodes/g' \
+	    -e 's/[0-9][0-9]* paths/P paths/g' \
+	    -e 's/seed = [0-9][0-9]*/seed = S/'
+}
+
+_fsstress()
+{
+	echo ""
+	echo "Testing fsstress"
+	echo ""
+
+	out=$SCRATCH_MNT/fsstress.$$
+	count=2000
+	args="-n $count -d $out -p 7"
+
+	echo "fsstress $args" | tee -a $here/$seq.full | sed -e "s#$out#outdir#"
+	if ! $FSSTRESS_PROG $args | tee -a $here/$seq.full | _filter_num
+	then
+		echo "    fsstress $args returned $?"
+		cat $tmp.out | tee -a $here/$seq.full
+		status=1
+	fi
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_quota
+_need_to_be_root
+
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs >> $seq.full 2>&1
+_scratch_mount "-o usrquota,grpquota"
+chmod 777 $SCRATCH_MNT
+quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+quotaon -u -g $SCRATCH_MNT 2>/dev/null
+
+if ! _fsstress; then
+	umount $SCRATCH_DEV 2>/dev/null
+	exit
+fi
+
+if ! check_usage; then
+	umount $SCRATCH_DEV 2>/dev/null
+	status=1
+	exit
+fi
+
+umount $SCRATCH_DEV 2>/dev/null
+status=0
+exit
