@@ -27,10 +27,11 @@
 _require_quota()
 {
     [ -x /usr/bin/quota ] || _notrun "Quota user tools not installed"
-    _scratch_mount "-o usrquota,grpquota"
-    ret=$?
-    umount $SCRATCH_MNT
-    [ $ret -ne 0 ] && _notrun "Installed kernel does not support quota"
+    if [ $FSTYP = "xfs" ]; then
+	[ -f /proc/fs/xfs/xqmstat ] || _notrun "Installed kernel does not support XFS quota"
+    elif [ $FSTYP != "gfs2" ]; then
+	[ -d /proc/sys/fs/quota ] || _notrun "Installed kernel does not support quota"
+    fi
 }
 
 #
