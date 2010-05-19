@@ -49,10 +49,14 @@ _scratch_mount
 
 loops=16
 
+# Buffer size argument supplied to xfs_io "pwrite" command
+buffer="-b $(expr 512 \* 1024)"
+
 echo "--> $loops buffered 64m writes in a loop"
 for I in `seq 1 $loops`; do
 	echo -n "$I "
-	xfs_io -F -f -c 'pwrite 0 64m' $SCRATCH_MNT/test >> $seq.full
+	xfs_io -F -f \
+		-c "pwrite ${buffer} 0 64m" $SCRATCH_MNT/test >> $seq.full
 	rm -f $SCRATCH_MNT/test
 done
 
@@ -63,7 +67,8 @@ _scratch_mount
 echo "--> $loops direct 64m writes in a loop"
 for I in `seq 1 $loops`; do
 	echo -n "$I "
-	xfs_io -F -f -d -c 'pwrite 0 64m' $SCRATCH_MNT/test >> $seq.full
+	xfs_io -F -f -d \
+		-c "pwrite ${buffer} 0 64m" $SCRATCH_MNT/test >> $seq.full
 	rm -f $SCRATCH_MNT/test 
 done
 
