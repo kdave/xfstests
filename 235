@@ -1,0 +1,83 @@
+#! /bin/bash
+# FS QA Test No. 235
+#
+# Test whether quota gets properly reenabled after remount read-write
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Jan Kara.  All Rights Reserved.
+#
+# Based on test 219,
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=jack@suse.cz
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+filter_scratch()
+{
+	perl -ne "
+s,$SCRATCH_MNT,[SCR_MNT],;
+s,$SCRATCH_DEV,[SCR_DEV],;
+	print;"
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux #IRIX
+_require_scratch
+_require_quota
+_require_user
+_need_to_be_root
+
+# real QA test starts here
+rm -f $seq.full
+
+_scratch_mkfs >> $seq.full 2>&1
+_scratch_mount "-o usrquota,grpquota"
+quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+quotaon $SCRATCH_MNT 2>/dev/null
+
+touch $SCRATCH_MNT/testfile
+chown $qa_user:$qa_user $SCRATCH_MNT/testfile
+
+repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch
+
+mount -o remount,ro $SCRATCH_DEV 2>&1 | tee -a $seq.full | filter_scratch
+touch $SCRATCH_MNT/failed 2>&1 | tee -a $seq.full | filter_scratch
+mount -o remount,rw $SCRATCH_DEV 2>&1 | tee -a $seq.full | filter_scratch
+
+$XFS_IO_PROG -F -c 'pwrite 0 16k' -c 'fsync' \
+			$SCRATCH_MNT/testfile >>$seq.full 2>&1
+repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch
+
+umount $SCRATCH_DEV 2>/dev/null
+
+status=0
+exit
