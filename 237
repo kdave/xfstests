@@ -1,0 +1,80 @@
+#! /bin/bash
+# FS QA Test No. 237
+#
+# Check user B can setfacl a file which belongs to user A
+# See also http://marc.info/?l=linux-btrfs&m=127434445620298&w=2
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 FUJITSU LIMITED. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=shiwh@cn.fujitsu.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+runas=$here/src/runas
+status=1        # FAILure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.attr
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	[ -n "$testdir" ] && rm -rf $testdir/$seq.dir1
+	_cleanup_testdir
+}
+
+# real QA test starts here
+_supported_fs generic
+# only Linux supports fallocate
+_supported_os Linux
+
+[ -x $runas ] || _notrun "$runas executable not found"
+
+rm -f $seq.full
+
+_setup_testdir
+
+_need_to_be_root
+_acl_setup_ids
+_require_acls
+
+# get dir
+cd $testdir
+rm -rf $seq.dir1
+mkdir $seq.dir1
+cd $seq.dir1
+
+touch file1
+chown $acl1.$acl1 file1
+
+echo "Expect to FAIL"
+$runas -u $acl2 -g $acl2 -- `which setfacl` -m u::rwx file1 2>&1
+
+echo "Test over."
+# success, all done
+status=0
+exit
