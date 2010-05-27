@@ -1,0 +1,108 @@
+#! /bin/bash
+# FS QA Test No. 234
+#
+# Stress setquota and setinfo handling.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Jan Kara.  All Rights Reserved.
+#
+# Based on test 219,
+# Copyright (c) 2005 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=jack@suse.cz
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+test_setting()
+{
+	echo; echo "### test limits and info setting"
+	count=2000
+	procs=5
+	idmod=200000
+	seed=$RANDOM
+	RANDOM=$seed
+	echo "Starting test with procs=$procs, idmod=$idmod, and seed=$seed" >>$seq.full
+
+	for (( i = 0; i < $procs; i++ )); do
+		( SETUCOUNT=1; SETGCOUNT=1; SETUIDS[0]=0; SETGIDS[0]=0
+		for (( j = 0; j < $count; j++ )); do
+			OP=$(($RANDOM%22))
+			UG=$(($OP%2))
+			OP=$(($OP/2))
+			if [ $UG -eq 1 ]; then
+				type='u'
+			else
+				type='g'
+			fi
+			if [ $OP -eq 10 ]; then
+				setquota -t -$type $j $j $SCRATCH_MNT
+			elif [ $OP -lt 5 ]; then
+				ID=$((($RANDOM*32768+$RANDOM)%$idmod))
+				if [ $UG -eq 1 ]; then
+					SETUIDS[$SETUCOUNT]=$ID
+					SETUCOUNT=$(($SETUCOUNT+1))
+				else
+					SETGIDS[$SETGCOUNT]=$ID
+					SETGCOUNT=$(($SETGCOUNT+1))
+				fi
+				setquota -$type $ID $j $j $j $j $SCRATCH_MNT
+			else
+				if [ $UG -eq 1 ]; then
+					ID=${SETUIDS[$(($RANDOM%$SETUCOUNT))]}
+				else
+					ID=${SETGIDS[$(($RANDOM%$SETGCOUNT))]}
+				fi
+				setquota -$type $ID 0 0 0 0 $SCRATCH_MNT
+			fi
+		done )&
+	done
+	wait
+	echo "### done with testing"
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux #IRIX
+_require_scratch
+_require_quota
+_need_to_be_root
+
+# real QA test starts here
+rm -f $seq.full
+
+_scratch_mkfs >> $seq.full 2>&1
+_scratch_mount "-o usrquota,grpquota"
+quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+quotaon -u -g $SCRATCH_MNT 2>/dev/null
+test_setting
+umount $SCRATCH_DEV
+
+status=0
+exit
