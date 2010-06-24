@@ -30,15 +30,12 @@ echo "QA output created by $seq"
 
 _cleanup()
 {
-	if [ -a $TEST_DIR/ouch2 ]; then
-		rm -f $TEST_DIR/ouch2
-	fi
-	if [ -a $TEST_DIR/ouch ]; then
-		rm -f $TEST_DIR/ouch
-	fi
+	rm -f $TEST_DIR/ouch*
 }
 
 here=`pwd`
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -47,6 +44,8 @@ here=`pwd`
 _supported_fs generic
 # only Linux supports fallocate
 _supported_os Linux
+
+rm -f $TEST_DIR/ouch*
 
 # create a file and get its ctime
 touch $TEST_DIR/ouch
@@ -64,8 +63,6 @@ if [ $ctime2 -le $ctime ]; then
 	_cleanup
 	exit 1
 fi
-
-_cleanup
 
 echo "Test over."
 # success, all done
