@@ -50,18 +50,6 @@ s,$SCRATCH_DEV,[SCR_DEV],;
         print;"
 }
 
-check_usage()
-{
-	quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
-	repquota -u -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
-		sort >$tmp.orig
-	quotacheck -u -g $SCRATCH_MNT 2>/dev/null
-	repquota -u -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
-		sort >$tmp.checked
-	quotaon -u -g $SCRATCH_MNT 2>/dev/null
-	diff $tmp.orig $tmp.checked
-}
-
 _filter_num()
 {
 	tee -a $here/$seq.full |\
@@ -113,7 +101,7 @@ if ! _fsstress; then
 	exit
 fi
 
-if ! check_usage; then
+if ! _check_quota_usage; then
 	umount $SCRATCH_DEV 2>/dev/null
 	status=1
 	exit

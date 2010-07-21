@@ -49,18 +49,6 @@ s,$SCRATCH_DEV,[SCR_DEV],;
         print;"
 }
 
-check_usage()
-{
-	quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
-	repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch \
-		>$tmp.orig
-	quotacheck -u -g $SCRATCH_MNT 2>/dev/null
-	repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch \
-		>$tmp.checked
-	quotaon -u -g $SCRATCH_MNT 2>/dev/null
-	diff $tmp.orig $tmp.checked
-}
-
 _fsx()
 {
 	tasks=$1
@@ -104,7 +92,7 @@ if ! _fsx 1; then
 	exit
 fi
 
-if ! check_usage; then
+if ! _check_quota_usage; then
 	umount $SCRATCH_DEV 2>/dev/null
 	status=1
 	exit
@@ -116,7 +104,7 @@ if ! _fsx 4; then
 	exit
 fi
 
-if ! check_usage; then
+if ! _check_quota_usage; then
 	umount $SCRATCH_DEV 2>/dev/null
 	status=1
 	exit
@@ -130,7 +118,7 @@ if ! _fsx 1; then
 	exit
 fi
 
-if ! check_usage; then
+if ! _check_quota_usage; then
 	umount $SCRATCH_DEV 2>/dev/null
 	status=1
 	exit

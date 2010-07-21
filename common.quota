@@ -211,5 +211,41 @@ _qmount_option()
 	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seq.full
 }
 
+_check_quota_usage()
+{
+	# Sync to get delalloc to disk
+	sync
+	VFS_QUOTA=0
+	if [ $FSTYP = "ext2" -o $FSTYP = "ext3" -o $FSTYP = "ext4" -o $FSTYP = "reiserfs" ]; then
+		VFS_QUOTA=1
+		quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
+	fi
+	repquota -u -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.user.orig
+	repquota -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.group.orig
+	if [ $VFS_QUOTA -eq 1 ]; then
+		quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+	else
+		# use XFS method to force quotacheck
+		mount -o remount,noquota $SCRATCH_DEV
+		mount -o remount,usrquota,grpquota $SCRATCH_DEV
+	fi
+	repquota -u -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.user.checked
+	repquota -g -n $SCRATCH_MNT  | grep -v "^#0" | filter_scratch |
+		sort >$tmp.group.checked
+	if [ $VFS_QUOTA -eq 1 ]; then
+		quotaon -u -g $SCRATCH_MNT 2>/dev/null
+	fi
+	{
+		echo "Comparing user usage"
+		diff $tmp.user.orig $tmp.user.checked
+	} && {
+		echo "Comparing group usage"
+		diff $tmp.group.orig $tmp.group.checked
+	}
+}
+
 # make sure this script returns success
 /bin/true
