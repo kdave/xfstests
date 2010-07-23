@@ -66,7 +66,8 @@ sig_term_func(int i, siginfo_t *si, void *p)
 /*
  * do async DIO writes to a sparse file
  */
-void aiodio_sparse(char *filename, int align, int writesize, int filesize, int num_aio, int step, int sparse, int direct, int keep)
+void aiodio_sparse(char *filename, int align, int writesize, int startoffset, int filesize,
+			int num_aio, int step, int sparse, int direct, int keep)
 {
 	int fd;
 	void *bufptr;
@@ -110,7 +111,7 @@ void aiodio_sparse(char *filename, int align, int writesize, int filesize, int n
 	/*
 	 * allocate the iocbs array and iocbs with buffers
 	 */
-	offset = 0;
+	offset = startoffset;
 	for (i = 0; i < num_aio; i++) {
 		void *bufptr;
 
@@ -220,9 +221,11 @@ void aiodio_sparse(char *filename, int align, int writesize, int filesize, int n
 		exit(1);
 
 	bufptr = malloc(writesize);
-	for (offset = 0; offset < filesize; offset += step)  {
+	for (offset = startoffset; offset < filesize; offset += step)  {
 		unsigned char *badbuf;
 
+		if (debug)
+			fprintf(stderr, "seek to %ld and read %d\n", offset, writesize);
 		lseek(fd, offset, SEEK_SET);
 		if (read(fd, bufptr, writesize) < writesize) {
 			fprintf(stderr, "short read() at offset %lld\n",
@@ -274,7 +277,7 @@ void dirty_freeblocks(char *filename, int size)
 void usage()
 {
 	fprintf(stderr, "usage: dio_sparse [-n step] [-s filesize]"
-		" [-w writesize] [-r readsize] filename\n");
+		" [-w writesize] [-o startoffset] [-r readsize] filename\n");
 	exit(1);
 }
 
@@ -305,7 +308,7 @@ long long scale_by_kmg(long long value, char scale)
 
 /*
  *	usage:
- * aiodio_sparse [-r readsize] [-w writesize] [-n step] [-a align] [-i num_aio] filename
+ * aiodio_sparse [-r readsize] [-w writesize] [-o startoffset] [-n step] [-a align] [-i num_aio] filename
  */
 
 int main(int argc, char **argv)
@@ -314,6 +317,7 @@ int main(int argc, char **argv)
 	long alignment = 512;
 	int readsize = 65536;
 	int writesize = 65536;
+	int startoffset = 0;
 	int filesize = 100*1024*1024;
 	int num_aio = 16;
 	int step = 5*1024*1024;
@@ -321,7 +325,7 @@ int main(int argc, char **argv)
 	extern char *optarg;
 	extern int optind, optopt, opterr;
 
-	while ((c = getopt(argc, argv, "dr:w:n:a:s:i:DkS")) != -1) {
+	while ((c = getopt(argc, argv, "dr:w:n:o:a:s:i:DkS")) != -1) {
 		char *endp;
 		switch (c) {
 		case 'D':
@@ -360,6 +364,10 @@ int main(int argc, char **argv)
 			step = strtol(optarg, &endp, 0);
 			step = (int)scale_by_kmg((long long)step, *endp);
 			break;
+		case 'o':
+			startoffset = strtol(optarg, &endp, 0);
+			startoffset = (int)scale_by_kmg((long long)startoffset, *endp);
+			break;
 		case '?':
 			usage();
 			break;
@@ -378,7 +386,7 @@ int main(int argc, char **argv)
 	 * Parent write to a hole in a file using async direct i/o
 	 */
 
-	aiodio_sparse(filename, alignment, writesize, filesize, num_aio, step, sparse, direct, keep);
+	aiodio_sparse(filename, alignment, writesize, startoffset, filesize, num_aio, step, sparse, direct, keep);
 
 	return 0;
 }
