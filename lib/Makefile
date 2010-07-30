@@ -25,4 +25,4 @@ include $(BUILDRULES)
 
 install install-dev: default
 
--include .dep
+-include .ltdep

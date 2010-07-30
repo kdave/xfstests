@@ -27,8 +27,8 @@ endif
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
 LSRCFILES = configure configure.in aclocal.m4 README VERSION
-LDIRT = config.log .dep config.status config.cache confdefs.h conftest* \
-	check.log check.time
+LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
+	conftest* check.log check.time
 
 ifeq ($(HAVE_DMAPI), true)
 DMAPI_MAKEFILE = dmapi/Makefile
