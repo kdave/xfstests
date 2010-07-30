@@ -59,11 +59,11 @@ _require_prjquota()
 #
 _require_nobody()
 {
-    grep -q '^nobody' /etc/passwd
-    [ $? -ne 0 ] && _notrun "/etc/passwd does not contain user nobody."
+    _cat_passwd | grep -q '^nobody'
+    [ $? -ne 0 ] && _notrun "password file does not contain user nobody."
 
-    egrep -q '^no(body|group)' /etc/group
-    [ $? -ne 0 ] && _notrun "/etc/group does not contain nobody/nogroup."
+    _cat_group | egrep -q '^no(body|group)'
+    [ $? -ne 0 ] && _notrun "group file does not contain nobody/nogroup."
 }
 
 # create a file as a specific user (uid)
@@ -108,12 +108,12 @@ EOF
 
 _choose_uid()
 {
-    grep '^nobody' /etc/passwd | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
+    _cat_passwd | grep '^nobody' | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
 }
 
 _choose_gid()
 {
-    egrep '^no(body|group)' /etc/group | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
+    _cat_group | egrep '^no(body|group)' | perl -ne '@a = split(/:/); END { printf "id=%d name=%s\n", $a[2],$a[0] }'
 }
 
 _choose_prid()

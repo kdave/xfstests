@@ -793,12 +793,38 @@ _require_nonexternal()
 	_notrun "External device testing in progress, skipped this test"
 }
 
+# indicate whether YP/NIS is active or not
+#
+_yp_active()
+{
+	local dn
+	dn=$(domainname 2>/dev/null)
+	test -n "${dn}" -a "${dn}" != "(none)"
+}
+
+# cat the password file
+#
+_cat_passwd()
+{
+	[ _yp_active ] && ypcat passwd
+	cat /etc/passwd
+}
+
+# cat the group file
+#
+_cat_group()
+{
+	[ _yp_active ] && ypcat group
+	cat /etc/group
+}
+export -f _yp_active _cat_passwd _cat_group
+
 # check for the fsgqa user on the machine
 #
 _require_user()
 {
     qa_user=fsgqa
-    cat /etc/passwd | grep -q $qa_user
+    _cat_passwd | grep -q $qa_user
     [ "$?" == "0" ] || _notrun "$qa_user user not defined."
 }
 
