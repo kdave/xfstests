@@ -1,0 +1,201 @@
+#! /bin/bash
+# FS QA Test No. 242
+#
+# Test XFS_IOC_ZERO_RANGE
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Red Hat.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dchinner@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_test_io_zero()
+{
+	$XFS_IO_PROG -c "zero help" 2>&1 | \
+			grep 'command "zero" not found' > /dev/null
+	echo $?
+}
+
+[ $(_test_io_zero) -eq 0 ] && _notrun "zero command not supported"
+
+die_now()
+{
+	status=1
+	exit
+}
+
+_filter_bmap()
+{
+    awk '$3 ~ /hole/ { print $1, $2, $3; next }
+         $7 ~ /10000/ { print $1, $2, "unwritten"; next }
+         $7 ~ /00000/ {print $1, $2, "data" }'
+}
+
+# test the different corner cases for zeroing a range:
+#
+#	1. into a hole
+#	2. into allocated space
+#	3. into unwritten space
+#	4. hole -> data
+#	5. hole -> unwritten
+#	6. data -> hole
+#	7. data -> unwritten
+#	8. unwritten -> hole
+#	9. unwritten -> data
+#	10. hole -> data -> hole
+#	11. data -> hole -> data
+#	12. unwritten -> data -> unwritten
+#	13. data -> unwritten -> data
+
+testfile=$TEST_DIR/242.$$
+
+echo "	1. into a hole"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	2. into allocated space"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "pwrite 0 20k" -c "fsync" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	3. into unwritten space"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 20k" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	4. hole -> data"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "pwrite 8k 8k" -c "fsync" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	5. hole -> unwritten"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 8k 8k" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	6. data -> hole"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "pwrite 0 8k" -c "fsync" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	7. data -> unwritten"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "pwrite 0 8k" -c "fsync" \
+	-c "resvsp 8k 8k" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	8. unwritten -> hole"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 8k" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	9. unwritten -> data"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 8k" \
+	-c "pwrite 8k 8k" -c "fsync" \
+	-c "zero 4k 8k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	10. hole -> data -> hole"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "pwrite 8k 4k" -c "fsync" \
+	-c "zero 4k 12k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	11. data -> hole -> data"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 20k" \
+	-c "pwrite 0 8k" \
+	-c "pwrite 12k 8k" -c "fsync" \
+	-c "unresvsp 8k 4k" \
+	-c "zero 4k 12k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+echo "	12. unwritten -> data -> unwritten"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 20k" \
+	-c "pwrite 8k 4k" -c "fsync" \
+	-c "zero 4k 12k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+
+echo "	13. data -> unwritten -> data"
+rm -f $testfile
+$XFS_IO_PROG -f -c "truncate 20k" \
+	-c "resvsp 0 20k" \
+	-c "pwrite 0k 8k" -c "fsync" \
+	-c "pwrite 12k 8k" -c "fsync" \
+	-c "zero 4k 12k" \
+	-c "bmap -vp" $testfile | _filter_bmap
+[ $? -ne 0 ] && die_now
+
+status=0 ; exit
