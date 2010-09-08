@@ -1,0 +1,178 @@
+#! /bin/bash
+# FS QA Test No. 243
+#
+# Test to ensure that the EOFBLOCK_FL gets set/unset correctly.
+#
+# As found by Theodore Ts'o:
+# If a 128K file is falloc'ed using the KEEP_SIZE flag, and then
+# write exactly 128K, the EOFBLOCK_FL doesn't get cleared correctly.
+# This is bad since it forces e2fsck to complain about that inode.
+# If you have a large number of inodes that are written with fallocate
+# using KEEP_SIZE, and then fill them up to their expected size,
+# e2fsck will potentially complain about a _huge_ number of inodes.
+# This would also cause a huge increase in the time taken by e2fsck
+# to complete its check.
+#
+# Test scenarios covered:
+# 1. Fallocating X bytes and writing Y (Y<X) (buffered and direct io)
+# 2. Fallocating X bytes and writing Y (Y=X) (buffered and direct io)
+# 3. Fallocating X bytes and writing Y (Y>X) (buffered and direct io)
+#
+# These test cases exercise the normal and edge case conditions using
+# falloc (and KEEP_SIZE).
+#
+# Ref: http://thread.gmane.org/gmane.comp.file-systems.ext4/20682
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Google, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=alal@google.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# Test specific macros.
+BIT_NOT_SET=0   # inode flag - 0x400000 bit is not set.
+BIT_SET=1       # inode flag - 0x400000 bit is set.
+
+# Generic test cleanup function.
+_cleanup()
+{
+  cd /
+  rm -f $tmp.*
+}
+
+# Ext4 uses the EOFBLOCKS_FL bit when fallocating blocks with KEEP_SIZE
+# enabled. The only time this bit should be set is when extending the allocated
+# blocks further than what the i_size represents. In the situations wherein the
+# i_size covers all allocated blocks, this bit should be cleared.
+
+# Checks the state of the sample file in the filesystem and returns whether
+# the inode flag 0x400000 is set or not.
+_check_ext4_eof_flag()
+{
+  # Check whether EOFBLOCK_FL is set.
+  # For ext4 filesystems: use debugfs to check if EOFBLOCKS_FL is set.
+  # Other filesystems: do nothing. The default fsck at the end of the test
+  # should catch any potential errors.
+  if [ "${FSTYP}" == "ext4" ]; then
+    bit_set=1
+
+    # Unmount the ${TEST_DEV}
+    umount ${TEST_DEV}
+
+    # Run debugfs to gather file_parameters - specifically iflags.
+    file_params=`debugfs ${TEST_DEV} -R "stat ${1}" 2>&1 | grep -e Flags:`
+    iflags=${file_params#*Flags: }
+
+    # Ensure that the iflags value was parsed correctly.
+    if [ -z ${iflags} ]; then
+      echo "iFlags value was not parsed successfully." >> $seq.full
+      status=1
+      exit ${status}
+    fi
+
+    # Check if EOFBLOCKS_FL is set.
+    if ((${iflags} & 0x400000)); then
+      echo "EOFBLOCK_FL bit is set." >> $seq.full
+      bit_set=1
+    else
+      echo "EOFBLOCK_FL bit is not set." >> $seq.full
+      bit_set=0
+    fi
+
+    # Check current bit state to expected value.
+    if [ ${bit_set} -ne ${2} ]; then
+      echo "Error: Current bit state incorrect." >> $seq.full
+      status=1
+      exit ${status}
+    fi
+
+    # Mount the ${TEST_DEV}
+    mount ${TEST_DEV} -t ${FSTYP} ${TEST_DIR}
+  fi
+}
+
+# Get standard environment, filters and checks.
+. ./common.rc
+. ./common.filter
+
+# Prerequisites for the test run.
+_supported_fs ext4 xfs btrfs gfs2
+_supported_os Linux
+_require_xfs_io_falloc
+
+# Real QA test starts here.
+rm -f $seq.full
+
+# Begin test cases.
+echo "Test 1: Fallocate 40960 bytes and write 4096 bytes (buffered io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f                    \
+    -c 'falloc -k 0 40960'              \
+    -c 'pwrite 0 4096'                  \
+    ${TEST_DIR}/test_1 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_1 ${BIT_SET}
+
+echo "Test 2: Fallocate 40960 bytes and write 4096 bytes (direct io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f -d                 \
+    -c 'falloc -k 0 40960'              \
+    -c 'pwrite 0 4096'                  \
+    ${TEST_DIR}/test_2 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_2 ${BIT_SET}
+
+echo "Test 3: Fallocate 40960 bytes and write 40960 bytes (buffered io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f                    \
+    -c 'falloc -k 0 40960'              \
+    -c 'pwrite 0 40960'                 \
+    ${TEST_DIR}/test_3 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_3 ${BIT_NOT_SET}
+
+echo "Test 4: Fallocate 40960 bytes and write 40960 bytes (direct io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f -d                 \
+    -c 'falloc -k 0 40960'              \
+    -c 'pwrite 0 40960'                 \
+    ${TEST_DIR}/test_4 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_4 ${BIT_NOT_SET}
+
+echo "Test 5: Fallocate 128k, seek 256k and write 4k block (buffered io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f                    \
+    -c 'falloc -k 0 128k'               \
+    -c 'pwrite 256k 4k'                 \
+    ${TEST_DIR}/test_5 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_5 ${BIT_NOT_SET}
+
+echo "Test 6: Fallocate 128k, seek to 256k and write a 4k block (direct io)." \
+    >> $seq.full
+${XFS_IO_PROG} -F -f -d                 \
+    -c 'falloc -k 0 128k'               \
+    -c 'pwrite 256k 4k'                 \
+    ${TEST_DIR}/test_6 | _filter_xfs_io_unique
+_check_ext4_eof_flag test_6 ${BIT_NOT_SET}
+
+status=0
+exit ${status}
