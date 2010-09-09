@@ -43,7 +43,6 @@ _supported_fs xfs
 _supported_os Linux #IRIX
 _require_scratch
 _require_xfs_quota
-_require_prjquota
 
 # real QA test starts here
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -57,8 +56,10 @@ else
 	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o sync"
 fi
 
-# initial populate
 _qmount
+_require_prjquota $SCRATCH_DEV
+
+# initial populate
 target=$SCRATCH_MNT/target
 $FSSTRESS_PROG -s 0xdeed -m8 -w -p4 -n1000 $FSSTRESS_AVOID -d $target
 $FSSTRESS_PROG -s 0xdeed -m8 -z -p4 -n1000 -fsetxattr=500 -fchown=500 -d $target
