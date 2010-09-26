@@ -1,0 +1,137 @@
+#! /bin/bash
+# FS QA Test No. 244
+#
+# test to verify that proper project quota id is correctly set
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2010 Arkadiusz Miśkiewicz.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=arekm@maven.pl
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.quota
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_quota
+_require_scratch
+
+export MOUNT_OPTIONS="-opquota"
+
+# make fs with no projid32bit
+_scratch_mkfs_xfs -i projid32bit=0 >> $seq.full || _fail "mkfs failed"
+_qmount
+# make sure project quota is supported
+_require_prjquota ${SCRATCH_DEV}
+
+dir=$SCRATCH_MNT/project
+
+status=0
+
+echo "Silence is golden"
+
+# Do testing on filesystem with projid32bit feature disabled
+mkdir $dir
+
+touch $dir/below16bit
+# below 16bit value
+$XFS_QUOTA_PROG -x -c "project -s -p $dir/below16bit 3422" $SCRATCH_DEV \
+		>> $seq.full
+projid=$($XFS_IO_PROG -r -c "lsproj" $dir/below16bit)
+if [ "projid = 3422" != "$projid" ]; then
+	echo "FAIL: projid32bit disabled: returned projid value ($projid)"
+	echo "      doesn't match set one (projid = 3422)"
+	status=1
+fi
+
+# 32bit value, should fail
+touch $dir/over16bit
+if $XFS_QUOTA_PROG -x -c "project -s -p $dir/over16bit 108545" $SCRATCH_DEV \
+		>> $seq.full 2>&1; then
+	echo "FAIL: projid32bit disabled: setting 32bit projid succeeded"
+	echo "      while it should fail"
+	status=1
+fi
+
+# over 32bit value, should fail
+touch $dir/over32bit
+if $XFS_QUOTA_PROG -x -c "project -s -p $dir/over32bit 5344967296" $SCRATCH_DEV >> $seq.full 2>&1; then
+	echo "FAIL: projid32bit disabled: setting over 32bit projid succeeded"
+	echo "      while it should fail"
+	status=1
+fi
+
+#  Do testing on filesystem with projid32bit feature enabled
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs_xfs -i projid32bit=1 >> $seq.full || _fail "mkfs failed"
+_qmount
+mkdir $dir
+
+touch $dir/below16bit
+# below 16bit value, should succeed
+$XFS_QUOTA_PROG -x -c "project -s -p $dir/below16bit 3422" $SCRATCH_DEV \
+		>> $seq.full
+projid=$($XFS_IO_PROG -r -c "lsproj" $dir/below16bit)
+if [ "projid = 3422" != "$projid" ]; then
+	echo "FAIL: projid32bit enabled: returned projid value ($projid)"
+	echo "      doesn't match set one (projid = 3422)"
+	status=1
+fi
+
+# 32bit value, should succeed
+touch $dir/over16bit
+if $XFS_QUOTA_PROG -x -c "project -s -p $dir/over16bit 108545" $SCRATCH_DEV \
+		>> $seq.full 2>&1; then
+	projid=$($XFS_IO_PROG -r -c "lsproj" $dir/over16bit)
+	if [ "projid = 108545" != "$projid" ]; then
+		echo "FAIL: projid32bit enabled: returned projid value ($projid)"
+		echo "      doesn't match set one (projid = 108545)"
+		status=1
+	fi
+else
+	echo "FAIL: projid32bit enabled: setting 32bit projid failed"
+	echo "      while it should succeed"
+	status=1
+fi
+
+# over 32bit value, should fail
+touch $dir/over32bit
+if $XFS_QUOTA_PROG -x -c "project -s -p $dir/over32bit 5344967296" $SCRATCH_DEV \
+		>> $seq.full 2>&1; then
+	echo "FAIL: projid32bit enabled: setting over 32bit projid succeeded"
+	echo "      while it should fail"
+	status=1
+fi
