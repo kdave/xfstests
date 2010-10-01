@@ -63,7 +63,7 @@ for SUNIT_K in 8 16 32 64 128; do
 	let SUNIT_BLOCKS=$SUNIT_BYTES/$BLOCKSIZE
 
 	echo "=== mkfs with su $SUNIT_BLOCKS blocks x 4 ==="
-	_scratch_mkfs_geom $SUNIT_BYTES 4 $BLOCKSIZE &>> $seq.full
+	_scratch_mkfs_geom $SUNIT_BYTES 4 $BLOCKSIZE >> $seq.full 2>&1
 	_scratch_mount
 
 	for SIZE_MULT in 1 2 8 64 256; do
@@ -73,10 +73,10 @@ for SUNIT_K in 8 16 32 64 128; do
 		for FILE in 1 2 3 4; do
 			xfs_io -F -f -c "falloc 0 $SIZE" \
 				$SCRATCH_MNT/file-$FILE-$SIZE-falloc \
-					&>> $seq.full
+					>> $seq.full 2>&1
 			xfs_io -F -f -c "pwrite 0 $SIZE" \
 				$SCRATCH_MNT/file-$FILE-$SIZE-write \
-					&>> $seq.full
+					>> $seq.full 2>&1
 			src/t_stripealign $SCRATCH_MNT/file-$FILE-$SIZE-falloc \
 				$SUNIT_BLOCKS | _filter_scratch
 			src/t_stripealign $SCRATCH_MNT/file-$FILE-$SIZE-write \
@@ -85,7 +85,8 @@ for SUNIT_K in 8 16 32 64 128; do
 	done
 
 	echo "=== Testing size 1g falloc on ${SUNIT_K}k stripe ==="
-	xfs_io -F -f -c "falloc 0 1g" $SCRATCH_MNT/file-1g-falloc &>> $seq.full
+	xfs_io -F -f -c "falloc 0 1g" \
+	    $SCRATCH_MNT/file-1g-falloc >> $seq.full 2>&1
 	src/t_stripealign $SCRATCH_MNT/file-1g-falloc $SUNIT_BLOCKS \
 	    | _filter_scratch
 
@@ -93,7 +94,7 @@ for SUNIT_K in 8 16 32 64 128; do
 
 	echo "=== Testing size 1073745920 falloc on ${SUNIT_K}k stripe ==="
 	xfs_io -F -f -c "falloc 0 1073745920" \
-		$SCRATCH_MNT/file-1073745920-falloc &>> $seq.full
+		$SCRATCH_MNT/file-1073745920-falloc >> $seq.full 2>&1
 	src/t_stripealign $SCRATCH_MNT/file-1073745920-falloc \
 		$SUNIT_BLOCKS | _filter_scratch
 
