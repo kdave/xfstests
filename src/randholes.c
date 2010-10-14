@@ -188,7 +188,7 @@ writeblks(char *fname, int fd, size_t alignment)
 int
 readblks(int fd, size_t alignment)
 {
-	unsigned long offset;
+	__uint64_t offset;
 	char *buffer, *tmp;
 	unsigned int xfer, block, i;
         int err=0;
@@ -208,49 +208,48 @@ readblks(int fd, size_t alignment)
 		perror("lseek");
 		exit(1);
 	}
-	for (offset = 0, block = 0; offset < filesize; offset += xfer) {
+	block = 0;
+	offset = 0;
+	while (offset < filesize) {
 		if ((i = read(fd, buffer, xfer) < xfer)) {
 			if (i < 2)
 				break;
 			perror("read");
 			exit(1);
 		}
-		for (tmp = buffer, i = 0; i < READ_XFER; i++, block++, tmp += blocksize) {
+		tmp = buffer;
+		for (i = 0; i < READ_XFER; i++) {
+			__uint64_t want;
+			__uint64_t first;
+			__uint64_t second;
+
 			if (verbose && ((block % 100) == 0)) {
 				printf("+");
 				fflush(stdout);
 			}
-			if (BITVAL(valid, block) == 0) {
-				if ((*(__uint64_t *)tmp != 0LL) ||
-				    (*(__uint64_t *)(tmp+256) != 0LL)) {
-					printf("mismatched data at offset=%llx, expected 0x%llx, got 0x%llx and 0x%llx\n",
-					       (unsigned long long)fileoffset + block * blocksize,
-					       0LL,
-					       *(unsigned long long *)tmp,
-					       *(unsigned long long *)(tmp+256));
-                                        err++;
-				}
-			} else {
-				if ( (*(__uint64_t *)tmp !=
-				      fileoffset + block * blocksize) ||
-				     (*(__uint64_t *)(tmp+256) !=
-				      fileoffset + block * blocksize) ) {
-					printf("mismatched data at offset=%llx, "
-					       "expected 0x%llx, got 0x%llx and 0x%llx\n",
-					       (unsigned long long)fileoffset + block * blocksize,
-					       (unsigned long long)fileoffset + block * blocksize,
-					       *(unsigned long long *)tmp,
-					       *(unsigned long long *)(tmp+256));
-                                        err++;
-				}
+
+			want = BITVAL(valid, block) ? offset : 0;
+			first = *(__uint64_t *) tmp;
+			second = *(__uint64_t *) (tmp + 256);
+			if (first != want || second != want) {
+				printf("mismatched data at offset=0x%" PRIx64
+					", expected 0x%" PRIx64
+					", got 0x%" PRIx64
+					" and 0x%" PRIx64 "\n",
+					 fileoffset + offset, want,
+					 first, second);
+				err++;
 			}
 			if (verbose > 2) {
 				printf("block %d blocksize %d\n", block,
 				       blocksize);
-				dumpblock((int *)tmp,
-					  fileoffset + block * blocksize,
+				dumpblock((int *)tmp, fileoffset + offset,
 					  blocksize);
 			}
+
+			block++;
+			offset += blocksize;
+			tmp += blocksize;
 		}
 	}
 	if (verbose)
