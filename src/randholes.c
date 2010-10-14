@@ -16,6 +16,8 @@
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
  
+#include <inttypes.h>
+
 #include "global.h"
 
 unsigned char	*valid;	/* Bit-vector array showing which blocks have been written */
@@ -23,7 +25,11 @@ int		nvalid;	/* number of bytes in valid array */
 #define	SETBIT(ARRAY, N)	((ARRAY)[(N)/8] |= (1 << ((N)%8)))
 #define	BITVAL(ARRAY, N)	((ARRAY)[(N)/8] & (1 << ((N)%8)))
 
+#define	DEFAULT_FILESIZE	((__uint64_t) (256 * 1024 * 1024))
+#define	DEFAULT_BLOCKSIZE	512
+
 __uint64_t filesize;
+
 unsigned int blocksize;
 int count;
 int verbose;
@@ -31,7 +37,7 @@ int wsync;
 int direct;
 int alloconly;
 int rt;
-int extsize;
+int extsize;	/* used only for real-time */
 int preserve;
 int test;
 __uint64_t fileoffset;
@@ -50,10 +56,18 @@ void
 usage(char *progname)
 {
 	fprintf(stderr,
-		"usage: %s [-l filesize] [-b blocksize] [-c count]"
-		" [-o write offset] [-s seed] [-x extentsize]"
-		" [-w] [-v] [-d] [-r] [-a] [-p] filename\n",
+		"usage: %s [-l filesize] [-b blocksize] [-c count]\n"
+		"\t\t[-o write_offset] [-s seed] [-r [-x extentsize]]\n"
+		"\t\t[-w] [-v] [-d] [-a] [-p] [-t] filename\n\n",
 		progname);
+	fprintf(stderr, "\tdefault filesize is %" PRIu64 " bytes\n",
+		DEFAULT_FILESIZE);
+	fprintf(stderr, "\tdefault blocksize is %u bytes\n",
+		DEFAULT_BLOCKSIZE);
+	fprintf(stderr, "\tdefault count is %d block-sized writes\n",
+		(int) (DEFAULT_FILESIZE / DEFAULT_BLOCKSIZE));
+	fprintf(stderr, "\tdefault write_offset is %" PRIu64 " bytes\n",
+		(__uint64_t) 0);
 	exit(1);
 }
 
@@ -64,9 +78,9 @@ main(int argc, char *argv[])
 	char *filename = NULL;
         int r;
 
-	filesize = ((__uint64_t)256)*1024*1024;
-	blocksize = 512;
-	count = filesize/blocksize;
+	filesize = DEFAULT_FILESIZE;
+	blocksize = DEFAULT_BLOCKSIZE;
+	count = (int) filesize / blocksize;
 	verbose = 0;
 	wsync = 0;
 	seed = time(NULL);
