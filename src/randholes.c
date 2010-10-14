@@ -271,6 +271,22 @@ readblks(int fd)
 }
 
 int
+direct_setup(char *filename, int fd)
+{
+	if (xfscntl(filename, fd, DIOINFO, &diob) < 0) {
+		perror("xfscntl(FIOINFO)");
+		return 1;
+	}
+	if (blocksize % diob.d_miniosz) {
+		fprintf(stderr, "blocksize %d must be a multiple of "
+			"%d for direct I/O\n", blocksize, diob.d_miniosz);
+		return 1;
+	}
+
+	return 0;
+}
+
+int
 main(int argc, char *argv[])
 {
 	int seed, ch, fd, oflags;
@@ -374,19 +390,9 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (direct) {
-		if (xfscntl(filename, fd, DIOINFO, &diob) < 0) {
-			perror("xfscntl(FIOINFO)");
-			return 1;
-		}
-		if (blocksize % diob.d_miniosz) {
-			fprintf(stderr,
-				"blocksize %d must be a multiple of %d for direct I/O\n",
-				blocksize,
-				diob.d_miniosz);
-			return 1;
-		}
-	}
+	if (direct && direct_setup(filename, fd))
+		return 1;
+
         printf(test?"write (skipped)\n":"write\n");
 	writeblks(filename, fd);
         printf("readback\n");
