@@ -233,17 +233,21 @@ writeblks(char *fname, int fd)
 	int block;
 	struct flock64 fl;
 
-	if (direct)
-		buffer = memalign(diob.d_mem, blocksize);
-	else
-		buffer = malloc(blocksize);
-	if (buffer == NULL) {
-		perror("malloc");
-		exit(1);
+	if (test)
+		buffer = NULL;
+	else {
+		if (direct)
+			buffer = memalign(diob.d_mem, blocksize);
+		else
+			buffer = malloc(blocksize);
+		if (buffer == NULL) {
+			perror("malloc");
+			exit(1);
+		}
+		memset(buffer, 0, blocksize);
 	}
-	memset(buffer, 0, blocksize);
 
-	for (  ; count > 0; count--) {
+	do {
 		if (verbose && ((count % 100) == 0)) {
 			printf(".");
 			fflush(stdout);
@@ -285,23 +289,26 @@ bozo!
 			        perror("lseek");
 			        exit(1);
 		        }
-                }
-		*(__uint64_t *)buffer = *(__uint64_t *)(buffer+256) =
-			fileoffset + offset;
-                if (!test) {
+			/*
+			 * Before writing, record offset at the base
+			 * of the buffer and at offset 256 bytes
+			 * into it.  We'll verify this when we read
+			 * it back in again.
+			 */
+			*(__uint64_t *) buffer = fileoffset + offset;
+			*(__uint64_t *) (buffer + 256) = fileoffset + offset;
+
 		        if (write(fd, buffer, blocksize) < blocksize) {
 			        perror("write");
 			        exit(1);
 		        }
                 }
-                if (test && verbose>1) printf("NOT ");
 		if (verbose > 1) {
-			printf("writing data at offset=%llx, value 0x%llx and 0x%llx\n",
-			       (unsigned long long)(fileoffset + offset),
-			       *(unsigned long long *)buffer,
-			       *(unsigned long long *)(buffer+256));
+			printf("%swriting data at offset=%llx\n",
+				test ? "NOT " : "",
+				(unsigned long long) (fileoffset + offset));
 		}
-	}
+	} while (--count);
 
 	free(buffer);
 }
