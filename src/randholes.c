@@ -249,11 +249,16 @@ writeblks(char *fname, int fd)
 			fflush(stdout);
 		}
 		block = findblock();
-		offset = (__uint64_t)block * blocksize;
+		if (block < 0) {
+		    perror("findblock");
+		    exit(1);
+		}
+
+		offset = (__uint64_t) block * blocksize;
 		if (alloconly) {
                         if (test) continue;
                         
-			fl.l_start = offset;
+			fl.l_start = fileoffset + offset;
 			fl.l_len = blocksize;
 			fl.l_whence = 0;
 
