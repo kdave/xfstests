@@ -46,47 +46,6 @@ _cleanup()
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
-_linux_attr_calls()
-{
-    echo "*** set/get one initially empty attribute"
-    setfattr -h -n $nsp.name $SCRATCH_MNT/$inode
-    getfattr -m $nsp $SCRATCH_MNT/$inode
-
-    echo "*** overwrite empty, set several new attributes"
-    setfattr -h -n $nsp.name -v 0xbabe $SCRATCH_MNT/$inode
-    setfattr -h -n $nsp.name2 -v 0xdeadbeef $SCRATCH_MNT/$inode
-    setfattr -h -n $nsp.name3 -v 0xdeface $SCRATCH_MNT/$inode
-
-    echo "*** fetch several attribute names and values (hex)"
-    getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
-
-    echo "*** fetch several attribute names and values (base64)"
-    getfattr -m $nsp -e base64 $SCRATCH_MNT/$inode
-
-    echo "*** shrink value of an existing attribute"
-    setfattr -h -n $nsp.name2 -v 0xdeaf $SCRATCH_MNT/$inode
-    getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
-
-    echo "*** grow value of existing attribute"
-    setfattr -h -n $nsp.name2 -v 0xdecade $SCRATCH_MNT/$inode
-    getfattr -m $nsp -e hex $SCRATCH_MNT/$inode
-
-    echo "*** set an empty value for second attribute"
-    setfattr -h -n $nsp.name2 $SCRATCH_MNT/$inode
-    getfattr -m $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
-
-    echo "*** overwrite empty value"
-    setfattr -h -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
-    getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
-
-    echo "*** remove attribute"
-    setfattr -h -x $nsp.name2 $SCRATCH_MNT/$inode
-    getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
-
-    echo "*** final list (strings, type=$inode, nsp=$nsp)"
-    getfattr -m '.' -e hex $SCRATCH_MNT/$inode
-}
-
 getfattr()
 {
     $GETFATTR_PROG --absolute-names -dh $@ 2>&1 | _filter_scratch
