@@ -27,11 +27,24 @@
 _require_quota()
 {
     [ -n $QUOTA_PROG ] || _notrun "Quota user tools not installed"
-    if [ $FSTYP = "xfs" ]; then
-	[ -f /proc/fs/xfs/xqmstat ] || _notrun "Installed kernel does not support XFS quota"
-    elif [ $FSTYP != "gfs2" ]; then
-	[ -d /proc/sys/fs/quota ] || _notrun "Installed kernel does not support quota"
-    fi
+
+    case $FSTYP in
+    ext2|ext3|ext4|reiserfs)
+	if [ ! -d /proc/sys/fs/quota ]; then
+	    _notrun "Installed kernel does not support quotas"
+	fi
+	;;
+    gfs2)
+	;;
+    xfs)
+	if [ ! -f /proc/fs/xfs/xqmstat ]; then
+	    _notrun "Installed kernel does not support XFS quotas"
+        fi
+	;;
+    *)
+	_notrun "disk quotas not supported by this filesystem type: $FSTYP"
+	;;
+    esac
 }
 
 #
