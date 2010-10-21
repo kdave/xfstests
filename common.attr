@@ -115,25 +115,30 @@ _filter_aces_notypes()
     sed -e 's/u:/user:/' -e 's/g:/group:/' -e 's/o:/other:/' -e 's/m:/mask:/'
 }
 
-# test if acl code will work
-#
 _require_acls()
 {
-    xfsdir=$TEST_DIR
-    
-
     if [ ! -x /bin/chacl -a ! -x /usr/bin/chacl -a ! -x /sbin/chacl ]; then
     	_notrun "chacl command not found"
     fi
 
-    # test if acl_get syscall is operational
-    # and hence the ACL config has been turned on  
-    touch $xfsdir/syscalltest
-    if chacl -l $xfsdir/syscalltest 2>&1 | tee -a $here/$seq.full | grep 'Function not implemented' >/dev/null
-    then
-      cd $here
-      _notrun "requires kernel ACL support"
+    #
+    # Test if chacl is able to list ACLs on the target filesystems.  On really
+    # old kernels the system calls might not be implemented at all, but the
+    # more common case is that the tested filesystem simply doesn't support
+    # ACLs.
+    #
+    touch $TEST_DIR/syscalltest
+    chacl -l $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
+    cat $TEST_DIR/syscalltest.out >> $here/$seq.full
+
+    if grep -q 'Function not implemented' $TEST_DIR/syscalltest.out; then
+      _notrun "kernel does not support ACLs"
     fi
+    if grep -q 'Operation not supported' $TEST_DIR/syscalltest.out; then
+      _notrun "ACLs not supported by this filesystem type: $FSTYP"
+    fi
+
+    rm -f $TEST_DIR/syscalltest.out
 }
 
 _list_acl()
