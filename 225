@@ -49,13 +49,26 @@ _supported_os Linux
 _setup_testdir
 
 fiemapfile=$TEST_DIR/fiemap.$$
+fiemaplog=$TEST_DIR/fiemap.$$.log
 
 [ -x $here/src/fiemap-tester ] || _notrun "fiemap-tester not built"
 
+_cleanup()
+{
+	rm -f $fiemapfile
+	rm -f $fiemaplog
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
 echo "fiemap run without preallocation"
-$here/src/fiemap-tester -q -p 0 -r 200 $TEST_DIR/fiemapfile
+$here/src/fiemap-tester -q -p 0 -r 200 $fiemapfile 2>&1 | tee $fiemaplog
+
+if grep -q "Operation not supported" $fiemaplog; then
+      _notrun "FIEMAP not supported by this filesystem type: $FSTYP"
+fi
 
 rm -f $fiemapfile
+rm -f $fiemaplog
 rm -f $seq.full
 
 status=0
