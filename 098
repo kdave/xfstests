@@ -80,6 +80,8 @@ _supported_fs udf
 _supported_os IRIX
 
 _require_scratch
+_require_attrs
+
 _setup_testdir
 
 cd $SCRATCH_MNT
@@ -89,131 +91,131 @@ echo "file_contents" >foo
 cat foo
 
 echo "should be no EAs for foo:"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "set EA <noise,woof>:"
-attr -s noise -V woof foo
+${ATTR_PROG} -s noise -V woof foo
 
 echo "set EA <colour,blue>:"
-attr -s colour -V blue foo
+${ATTR_PROG} -s colour -V blue foo
 
 echo "set EA <size,small>:"
-attr -s size -V small foo
+${ATTR_PROG} -s size -V small foo
 
 echo "list the EAs for foo: noise, colour, size" 
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "check the list again for foo"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "unmount the FS and see if EAs are persistent"
 _umount_check_mount
 
 echo "check the list again for foo after umount/mount"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "get the value of the noise EA"
-attr -g noise foo
+${ATTR_PROG} -g noise foo
 
 echo "get the value of the colour EA which was removed earlier"
-attr -g colour foo
+${ATTR_PROG} -g colour foo
 
 echo "get the value of the size EA"
-attr -g size foo
+${ATTR_PROG} -g size foo
 
 echo "remove the colour EA on foo"
-attr -r colour foo
+${ATTR_PROG} -r colour foo
 
 echo "list EAs for foo: noise, size"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "get the value of the noise EA"
-attr -g noise foo
+${ATTR_PROG} -g noise foo
 
 echo "get the value of the colour EA which was removed earlier"
-attr -g colour foo
+${ATTR_PROG} -g colour foo
 
 echo "get the value of the size EA"
-attr -g size foo
+${ATTR_PROG} -g size foo
 
 echo "list all the EAs again: noise, size"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "change the value of the size EA from small to huge"
-attr -s size -V huge foo
+${ATTR_PROG} -s size -V huge foo
 
 echo "get the size EA which should now have value huge"
-attr -g size foo
+${ATTR_PROG} -g size foo
 
 echo "list EAs: noise, size"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "remove the size EA from foo"
-attr -r size foo
+${ATTR_PROG} -r size foo
 
 echo "list EAs: noise (size EA has been removed)"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "get the noise EA: woof"
-attr -g noise foo
+${ATTR_PROG} -g noise foo
 
 echo "try removing non-existent EA named woof"
-attr -r woof foo
+${ATTR_PROG} -r woof foo
 
 echo "try removing already removed EA size"
-attr -r size foo
+${ATTR_PROG} -r size foo
 
 echo "list EAs: noise"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "try removing already removed EA colour"
-attr -r colour foo
+${ATTR_PROG} -r colour foo
 
 echo "list EAs: noise"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "remove remaining EA noise"
-attr -r noise foo
+${ATTR_PROG} -r noise foo
 
 echo "list EAs: should be no EAs left now"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "unmount the FS and see if EAs are persistent"
 _umount_check_mount
 
 echo "list EAs: should still be no EAs left"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo ""
 echo "*** Test out the root namespace ***"
 echo ""
 
 echo "set EA <root:colour,marone>:"
-attr -R -s colour -V marone foo
+${ATTR_PROG} -R -s colour -V marone foo
 
 echo "set EA <user:colour,beige>:"
-attr -s colour -V beige foo
+${ATTR_PROG} -s colour -V beige foo
 
 echo "set EA <user:vomit,pizza>:"
-attr -s vomit -V pizza foo
+${ATTR_PROG} -s vomit -V pizza foo
 
 echo "set EA <root:noise,whack>:"
-attr -R -s noise -V whack foo
+${ATTR_PROG} -R -s noise -V whack foo
 
 echo "list root EAs: <root:colour,noise>:"
-attr -R -l foo
+${ATTR_PROG} -R -l foo
 
 echo "list user EAs: <user:colour,vomit>:"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "get root EA colour: marone"
-attr -R -g colour foo
+${ATTR_PROG} -R -g colour foo
 
 echo "get root EA noise: whack"
-attr -R -g noise foo
+${ATTR_PROG} -R -g noise foo
 
 echo "get root EA vomit which is a user EA => find nothing"
-attr -R -g vomit foo
+${ATTR_PROG} -R -g vomit foo
 
 echo ""
 echo "unmount the FS and see if EAs are persistent"
@@ -221,28 +223,28 @@ echo ""
 _umount_check_mount
 
 echo "get root EA colour: marone"
-attr -R -g colour foo
+${ATTR_PROG} -R -g colour foo
 
 echo "get root EA noise: whack"
-attr -R -g noise foo
+${ATTR_PROG} -R -g noise foo
 
 echo "get user EA vomit: pizza" 
-attr -g vomit foo
+${ATTR_PROG} -g vomit foo
 
 echo "remove the root colour EA"
-attr -R -r colour foo
+${ATTR_PROG} -R -r colour foo
 
 echo "list root EAs: <root:noise>:"
-attr -R -l foo
+${ATTR_PROG} -R -l foo
 
 echo "list user EAs: <user:colour,vomit>:"
-attr -l foo
+${ATTR_PROG} -l foo
 
 echo "remove the final root EA noise"
-attr -R -r noise foo
+${ATTR_PROG} -R -r noise foo
 
 echo "list root EAs: none"
-attr -R -l foo
+${ATTR_PROG} -R -l foo
 
 cd /
 umount $SCRATCH_MNT
