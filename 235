@@ -40,14 +40,6 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.quota
 
-filter_scratch()
-{
-	perl -ne "
-s,$SCRATCH_MNT,[SCR_MNT],;
-s,$SCRATCH_DEV,[SCR_DEV],;
-	print;"
-}
-
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux #IRIX
@@ -67,15 +59,15 @@ quotaon $SCRATCH_MNT 2>/dev/null
 touch $SCRATCH_MNT/testfile
 chown $qa_user:$qa_user $SCRATCH_MNT/testfile
 
-repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch
+repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
 
-mount -o remount,ro $SCRATCH_DEV 2>&1 | tee -a $seq.full | filter_scratch
-touch $SCRATCH_MNT/failed 2>&1 | tee -a $seq.full | filter_scratch
-mount -o remount,rw $SCRATCH_DEV 2>&1 | tee -a $seq.full | filter_scratch
+mount -o remount,ro $SCRATCH_DEV 2>&1 | tee -a $seq.full | _filter_scratch
+touch $SCRATCH_MNT/failed 2>&1 | tee -a $seq.full | _filter_scratch
+mount -o remount,rw $SCRATCH_DEV 2>&1 | tee -a $seq.full | _filter_scratch
 
 $XFS_IO_PROG -F -c 'pwrite 0 16k' -c 'fsync' \
 			$SCRATCH_MNT/testfile >>$seq.full 2>&1
-repquota -u -g $SCRATCH_MNT  | grep -v "^root" | filter_scratch
+repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
 
 umount $SCRATCH_DEV 2>/dev/null
 

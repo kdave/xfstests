@@ -40,14 +40,6 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.quota
 
-filter_scratch()
-{
-	perl -ne "
-s,$SCRATCH_MNT,[SCR_MNT],;
-s,$SCRATCH_DEV,[SCR_DEV],;
-	print;"
-}
-
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux #IRIX
@@ -96,19 +88,19 @@ test_enforcement()
 	setquota -$type $qa_user 0 0 3 5 $SCRATCH_MNT
 	echo "Touch 3+4"
 	su $qa_user -c "touch $SCRATCH_MNT/file3 $SCRATCH_MNT/file4" \
-		2>&1 >>$seq.full | filter_scratch | tee -a $seq.full
+		2>&1 >>$seq.full | _filter_scratch | tee -a $seq.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
 	# Try to exceed inode hardlimit
 	echo "Touch 5+6"
 	su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
-		2>&1 >>$seq.full | filter_scratch | tee -a $seq.full
+		2>&1 >>$seq.full | _filter_scratch | tee -a $seq.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
 	# Wait and check grace time enforcement
 	rm -f $SCRATCH_MNT/file5 >>$seq.full 2>&1
 	sleep $((grace+1))
 	echo "Touch 5"
 	su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seq.full |
-		filter_scratch | tee -a $seq.full
+		_filter_scratch | tee -a $seq.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
 	echo "--- completed IO ($type)" >>$seq.full
 }

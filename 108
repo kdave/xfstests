@@ -37,14 +37,6 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common.filter
 . ./common.quota
 
-filter_scratch()
-{
-	perl -ne "
-s,$SCRATCH_MNT,[SCR_MNT],;
-s,$SCRATCH_DEV,[SCR_DEV],;
-	print;"
-}
-
 # real QA test starts here
 _supported_fs xfs
 _supported_os Linux #IRIX
@@ -59,7 +51,7 @@ test_files()
 	chown $uid $SCRATCH_MNT/{buffer,direct,mmap}
 	chgrp $gid $SCRATCH_MNT/{buffer,direct,mmap}
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
-		$here/src/lstat64 $file | head -3 | filter_scratch
+		$here/src/lstat64 $file | head -3 | _filter_scratch
 		$XFS_IO_PROG -c lsproj $file
 	done
 }
@@ -78,11 +70,11 @@ test_accounting()
 	echo "--- completed parallel IO ($type)" >>$seq.full
 
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
-		$here/src/lstat64 $file | head -3 | filter_scratch
+		$here/src/lstat64 $file | head -3 | _filter_scratch
 	done
-	xfs_quota -c "quota -hnb -$type $id" $QARGS | filter_scratch
-	xfs_quota -c "quota -hni -$type $id" $QARGS | filter_scratch
-	xfs_quota -c "quota -hnr -$type $id" $QARGS | filter_scratch
+	xfs_quota -c "quota -hnb -$type $id" $QARGS | _filter_scratch
+	xfs_quota -c "quota -hni -$type $id" $QARGS | _filter_scratch
+	xfs_quota -c "quota -hnr -$type $id" $QARGS | _filter_scratch
 }
 
 export MOUNT_OPTIONS="-opquota"
