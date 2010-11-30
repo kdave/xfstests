@@ -48,6 +48,14 @@ _cleanup()
 	rm -rf $dir
 }
 
+# According to the rename(2) manpage you can get either EEXIST or ENOTEMPTY as an
+# error for trying to rename a non-empty directory, so just catch the error for
+# ENOTMEMPTY and replace it with the EEXIST output so that either result passes
+_filter_directory_not_empty()
+{
+	sed -e "s,Directory not empty,File exists,g"
+}
+ 
 trap "_cleanup ; exit \$status" 0 1 2 3 15
 
 
@@ -59,7 +67,7 @@ touch $dir/aa/1
 mkdir $dir/ab/aa
 touch $dir/ab/aa/2
 
-mv $dir/ab/aa/ $dir 2>&1 | _filter_test_dir
+mv $dir/ab/aa/ $dir 2>&1 | _filter_test_dir | _filter_directory_not_empty
 
 status=0
 exit $status
