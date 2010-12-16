@@ -1,0 +1,58 @@
+#! /bin/bash
+# FS QA Test No. 248
+#
+# Test for pwrite hang problem when writing from mmaped buffer of the same page 
+#
+#-----------------------------------------------------------------------
+#    Copyright (c) 2010 Intel Corporation
+#
+#    This program is free software; you can redistribute it and/or modify it
+#    under the terms of the GNU General Public License as published by the Free
+#    Software Foundation; version 2 of the License
+#
+#    This program is distributed in the hope that it will be useful, but
+#    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+#    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+#    for more details.
+#
+#    You should have received a copy of the GNU General Public License along
+#    with this program; if not, write to the Free Software Foundation, Inc., 59
+#    Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=xin.zhong@intel.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.* $TESTFILE
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+
+TESTFILE=$TEST_DIR/test_file
+TEST_PROG=$here/src/pwrite_mmap_blocked
+
+$TEST_PROG $TESTFILE
+
+# success, all done
+status=0
+exit
