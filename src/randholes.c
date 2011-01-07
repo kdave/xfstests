@@ -208,6 +208,16 @@ writeblks(char *fname, int fd, size_t alignment)
 		memset(buffer, 0, blocksize);
 	}
 
+	/*
+	 * Avoid allocation patterns being perturbed by different speculative
+	 * preallocation beyond EOF configurations by first truncating the file
+	 * to the expected maximum file size.
+	 */
+	if (ftruncate(fd, filesize) < 0) {
+		perror("ftruncate");
+		exit(EXIT_FAILURE);
+	}
+
 	do {
 		if (verbose && ((count % 100) == 0)) {
 			printf(".");

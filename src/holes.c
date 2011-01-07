@@ -79,6 +79,17 @@ main(int argc, char *argv[])
 		perror("open");
 		return 1;
 	}
+
+	/*
+	 * Avoid allocation patterns being perturbed by different speculative
+	 * preallocation beyond EOF configurations by first truncating the file
+	 * to the expected maximum file size.
+	 */
+	if (ftruncate(fd, filesize) < 0) {
+		perror("ftruncate");
+		exit(EXIT_FAILURE);
+	}
+
 	for (i = 0; i < count; i++) {
 		writeblks(fd, filesize, blocksize, interleave, i, rev);
 	}
