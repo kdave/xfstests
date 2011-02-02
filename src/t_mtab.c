@@ -263,6 +263,7 @@ update_mtab (void)
 int main(int argc, char **argv)
 {
 	int i, stop = 100000;
+	FILE *fout = NULL;
 
 	if (argc > 1)
 		stop = atoi(argv[1]);
@@ -270,6 +271,11 @@ int main(int argc, char **argv)
 	for (i = 0; i < stop; i++) {
 		update_mtab();
 	}
-	printf("completed %d iterations\n", stop);
+
+	if (argc > 2)
+		fout = fopen(argv[2],"a");
+	if (!fout)
+		fout = stdout;
+	fprintf(fout, "completed %d iterations\n", stop);
 	return 0;
 }
