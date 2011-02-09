@@ -1,0 +1,174 @@
+#!/bin/bash
+# FS QA Test No. 251
+#
+# This test was created in order to verify filesystem FITRIM implementation.
+# By many concurrent copy and remove operations and checking that files
+# does not change after copied into SCRATCH_MNT test if FITRIM implementation
+# corrupts the filesystem (data/metadata).
+#
+#-----------------------------------------------------------------------
+# Copyright 2010 (C) Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+owner=lczerner@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=`mktemp -d`
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 3
+trap "_destroy; exit \$status" 2 15
+chpid=0
+mypid=$$
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+_cleanup()
+{
+	rm -rf $tmp
+}
+
+_destroy()
+{
+	kill $pids $fstrim_pid
+	wait $pids $fstrim_pid
+	rm -rf $tmp
+}
+
+_destroy_fstrim()
+{
+	kill $fpid
+	wait $fpid
+}
+
+_fail()
+{
+	echo "$1"
+	kill $mypid
+}
+
+_check_fstrim_support()
+{
+	$here/src/fstrim -l 10M $SCRATCH_MNT &> /dev/null
+}
+
+##
+# Background FSTRIM loop. We are trimming the device in the loop and for
+# test coverage, we are doing whole device trim followed by several smaller
+# trims.
+##
+fstrim_loop()
+{
+	trap "_destroy_fstrim; exit \$status" 2 15
+	fsize=$(df | grep $SCRATCH_MNT | grep $SCRATCH_DEV  | awk '{print $2}')
+
+	while true ; do
+		step=1048576
+		start=0
+		$here/src/fstrim $SCRATCH_MNT &
+		fpid=$!
+		wait $fpid
+		while [ $start -lt $fsize ] ; do
+			$here/src/fstrim -s ${start}k -l ${step}k $SCRATCH_MNT &
+			fpid=$!
+			wait $fpid
+			start=$(( $start + $step ))
+		done
+	done
+}
+
+function check_sums() {
+	(
+	cd $SCRATCH_MNT/$p
+	find -P . -xdev -type f -print0 | xargs -0 md5sum | sort -o $tmp/stress.$$.$p
+	)
+
+	diff $tmp/content.sums $tmp/stress.$$.$p
+	if [ $? -ne 0 ]; then
+		_fail "!!!Checksums has changed - Filesystem possibly corrupted!!!\n"
+	fi
+	rm -f $tmp/stress.$$.$p
+}
+
+function run_process() {
+	local p=$1
+	repeat=10
+
+	sleep $((5*$p))s &
+	export chpid=$! && wait $chpid &> /dev/null
+	chpid=0
+
+	while [ $repeat -gt 0 ]; do
+
+		# Remove old directories.
+		rm -rf $SCRATCH_MNT/$p
+		export chpid=$! && wait $chpid &> /dev/null
+
+		# Copy content -> partition.
+		mkdir $SCRATCH_MNT/$p
+		cp -axT $content $SCRATCH_MNT/$p
+		export chpid=$! && wait $chpid &> /dev/null
+
+		check_sums
+		repeat=$(( $repeat - 1 ))
+	done
+}
+
+nproc=20
+content=$here
+
+# Check for FITRIM support
+echo -n "Checking FITRIM support: "
+_check_fstrim_support || _notrun "FSTRIM is not supported"
+echo "done."
+
+mkdir -p $tmp
+
+(
+cd $content
+find -P . -xdev -type f -print0 | xargs -0 md5sum | sort -o $tmp/content.sums
+)
+
+echo -n "Running the test: "
+pids=""
+fstrim_loop &
+fstrim_pid=$!
+p=1
+while [ $p -le $nproc ]; do
+	run_process $p &
+	pids="$pids $!"
+	p=$(($p+1))
+done
+echo "done."
+
+wait $pids
+kill $fstrim_pid
+wait $fstrim_pid
+
+status=0
+
+exit
