@@ -7,6 +7,9 @@
 # QEMU IO to a file-backed device with misaligned partitions
 # can send this sort of IO
 #
+# This test need only be run in the case where the logical block size
+# of the device can be smaller than the file system block size.
+#
 #-----------------------------------------------------------------------
 # Copyright (c) 2010 Red Hat, Inc.  All Rights Reserved.
 #
@@ -57,8 +60,16 @@ rm -f $seq.full
 
 rm -f $TEST_DIR/aiodio_sparse
 
-# 2 threads, 4k writes, 16k filesize, stride throug file by 4k, start at 512 offset
-$here/src/aio-dio-regress/aiodio_sparse2 -i 2 -w 4k -s 16k -n 4k -o 512 "$TEST_DIR/aiodio_sparse"
+logical_block_size=`blockdev --getss $TEST_DEV`
+fs_block_size=`stat -f $TEST_DIR | grep "Block size:" | awk '{print $3}'`
+
+if [ $fs_block_size -le $logical_block_size ]; then
+	_notrun "fs block size must be larger than the device block size.  fs block size: $fs_block_size, device block size: $logical_block_size"
+fi
+
+# 2 threads, fs block sized writes, 64k filesize, stride through file by
+# fs block size, start at logical block size offset
+$here/src/aio-dio-regress/aiodio_sparse2 -i 2 -w $fs_block_size -s 64k -n $fs_block_size -o $logical_block_size "$TEST_DIR/aiodio_sparse"
 
 status=$?
 exit
