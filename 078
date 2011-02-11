@@ -53,7 +53,7 @@ _supported_os Linux
 # Must have loop device
 _require_loop
 
-LOOP_DEV=$TEST_DIR/$seq.fs
+LOOP_IMG=$TEST_DIR/$seq.fs
 LOOP_MNT=$TEST_DIR/$seq.mnt
 
 _filter_io()
@@ -75,7 +75,7 @@ _grow_loop()
 	check=$4
 	agsize=$5
 
-	dparam="file,name=$LOOP_DEV,size=$original"
+	dparam="file,name=$LOOP_IMG,size=$original"
 	if [ -n "$agsize" ]; then
 		dparam="$dparam,agsize=$agsize"
 	fi
@@ -89,9 +89,9 @@ _grow_loop()
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
-	$XFS_IO_PROG -c "pwrite $new_size $bsize" $LOOP_DEV | _filter_io
+	$XFS_IO_PROG -c "pwrite $new_size $bsize" $LOOP_IMG | _filter_io
 	echo "*** mount loop filesystem"
-	mount -t xfs -o loop $LOOP_DEV $LOOP_MNT
+	mount -t xfs -o loop $LOOP_IMG $LOOP_MNT
 
 	echo "*** grow loop filesystem"
 	#xfs_growfs $LOOP_MNT 2>&1 | grep -e "^data" #| _filter_growfs 2>/dev/null
@@ -104,10 +104,13 @@ _grow_loop()
 	if [ "$check" -gt "0" ]
 	then
 		echo "*** check"
+		LOOP_DEV=`losetup -f`
+		losetup $LOOP_DEV $LOOP_IMG
 		 _check_xfs_filesystem $LOOP_DEV none none
+		losetup -d $LOOP_DEV
 	fi
 
-	rm -f $LOOP_DEV
+	rm -f $LOOP_IMG
 }
 
 # Wes' problem sizes...
