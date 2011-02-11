@@ -19,6 +19,8 @@
 #include <limits.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 
 #include <libaio.h>
 
@@ -274,6 +276,23 @@ void dirty_freeblocks(char *filename, int size)
 	unlink(filename2);
 }
 
+static long get_logical_block_size(char *filename)
+{
+	int fd;
+	int ret;
+	int logical_block_size;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0)
+		return 4096;
+
+	ret = ioctl(fd, BLKSSZGET, &logical_block_size);
+	close(fd);
+	if (ret < 0)
+		return 4096;
+	return logical_block_size;
+}
+
 void usage()
 {
 	fprintf(stderr, "usage: dio_sparse [-n step] [-s filesize]"
@@ -314,7 +333,7 @@ long long scale_by_kmg(long long value, char scale)
 int main(int argc, char **argv)
 {
 	char filename[PATH_MAX];
-	long alignment = 512;
+	long alignment = 0;
 	int readsize = 65536;
 	int writesize = 65536;
 	int startoffset = 0;
@@ -376,6 +395,8 @@ int main(int argc, char **argv)
 
 	strncpy(filename, argv[argc-1], PATH_MAX);
 
+	if (alignment == 0)
+		alignment = get_logical_block_size(filename);
 	/*
 	 * Create some dirty free blocks by allocating, writing, syncing,
 	 * and then unlinking and freeing.
