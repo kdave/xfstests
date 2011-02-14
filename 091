@@ -46,9 +46,10 @@ rm -f $seq.full
 
 run_fsx()
 {
-	echo fsx $@ | tee -a $seq.full | sed -e "s/ $bsize / BSIZE /g" -e "s/ $psize / PSIZE /g"
+	echo fsx $@ | tee -a $seq.full
+	args=`echo $@ | sed -e "s/ BSIZE / $bsize /g" -e "s/ PSIZE / $psize /g"`
 	rm -f $TEST_DIR/junk
-	$here/ltp/fsx $@ $TEST_DIR/junk >>$seq.full 2>&1
+	$here/ltp/fsx $args $TEST_DIR/junk >>$seq.full 2>&1
 	if [ $? -ne 0 ]; then
 		cat $seq.full
 		exit 1
@@ -56,20 +57,11 @@ run_fsx()
 }
 
 psize=`$here/src/feature -s`
-bsize=512
+bsize=`blockdev --getss $TEST_DEV`
 kernel=`uname -r  | sed -e 's/\(2\..\).*/\1/'`
 
 # 2.4 Linux kernels support bsize aligned direct I/O only
 [ "$HOSTOS" = "Linux" -a "$kernel" = "2.4" ] && bsize=$psize
-
-# 2.6 Linux kernels support sector aligned direct I/O only
-if [ "$HOSTOS" = "Linux" -a "$kernel" = "2.6" ]; then
-	xfs_info $TEST_DIR | _filter_mkfs 2> $tmp.info > /dev/null
-	if [ $? -eq 0 ]; then
-		source $tmp.info
-		bsize=$sectsz
-	fi
-fi
 
 # fsx usage:
 # 
@@ -85,16 +77,16 @@ fi
 # -W: mapped write operations DISabled
 
 #run_fsx -N 10000            -l 500000 -r $psize -t $psize -w $psize -Z -R -W
- run_fsx -N 10000            -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
- run_fsx -N 10000  -o 8192   -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
-#run_fsx -N 10000  -o 16384  -l 500000 -r $psize -t $psize -w $psize -Z -R -W
- run_fsx -N 10000  -o 32768  -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
-#run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $psize -w $psize -Z -R -W
- run_fsx -N 10000  -o 8192   -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
-#run_fsx -N 10000  -o 16384  -l 500000 -r $psize -t $psize -w $psize -Z -R -W
- run_fsx -N 10000  -o 32768  -l 500000 -r $psize -t $bsize -w $bsize -Z -R -W
-#run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $psize -w $psize -Z -W
- run_fsx -N 10000  -o 128000 -l 500000 -r $psize -t $bsize -w $bsize -Z -W
+ run_fsx -N 10000            -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -R -W
+ run_fsx -N 10000  -o 8192   -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -R -W
+#run_fsx -N 10000  -o 16384  -l 500000 -r PSIZE -t PSIZE -w PSIZE -Z -R -W
+ run_fsx -N 10000  -o 32768  -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -R -W
+#run_fsx -N 10000  -o 128000 -l 500000 -r PSIZE -t PSIZE -w PSIZE -Z -R -W
+ run_fsx -N 10000  -o 8192   -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -R -W
+#run_fsx -N 10000  -o 16384  -l 500000 -r PSIZE -t PSIZE -w PSIZE -Z -R -W
+ run_fsx -N 10000  -o 32768  -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -R -W
+#run_fsx -N 10000  -o 128000 -l 500000 -r PSIZE -t PSIZE -w PSIZE -Z -W
+ run_fsx -N 10000  -o 128000 -l 500000 -r PSIZE -t BSIZE -w BSIZE -Z -W
 
 # Commented out calls above are less likely to pick up issues, so
 # save time by commenting them out (leave 'em for manual testing).
