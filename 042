@@ -100,16 +100,19 @@ echo "done"
 echo -n "Reserve 16 1Mb unfragmented regions... "
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 do
-    _do "dd if=/dev/zero of=$SCRATCH_MNT/hole$i bs=4096 count=256"
-    _do "dd if=/dev/zero of=$SCRATCH_MNT/space$i bs=4096 count=1"
-    _do "xfs_bmap -v $SCRATCH_MNT/hole$i"
+	_do "$XFS_IO_PROG -f -c \"resvsp 0 1m\" $SCRATCH_MNT/hole$i"
+	_do "$XFS_IO_PROG -f -c \"resvsp 0 4k\" $SCRATCH_MNT/space$i"
+	_do "$XFS_IO_PROG -f -c \"resvsp 0 1m\" $SCRATCH_MNT/hole$i"
+	_do "xfs_bmap -vp $SCRATCH_MNT/hole$i"
 done
 echo "done" 
 
 # set up filesystem
-echo -n "Fill filesystem with 4k files, generate manifest... "
-fill_options="--verbose --seed=0 --filesize=4096 --stddev=0 --sync=1000000"
-_do "src/fill2fs $fill_options --dir=$SCRATCH_MNT/fill --list=- > $tmp.manifest"
+echo -n "Fill filesystem with fill file... "
+for i in `seq 0 1 31`; do
+	_do "$XFS_IO_PROG -fs -c \"pwrite -S$i ${i}m 1m\" $SCRATCH_MNT/fill"
+done
+_do "xfs_bmap -vp $SCRATCH_MNT/fill"
 echo "done"
 # flush the filesystem - make sure there is no space "lost" to pre-allocation
 _do "umount $SCRATCH_MNT"
@@ -119,7 +122,18 @@ _do "dd if=/dev/zero of=$SCRATCH_MNT/pad bs=4096"
 echo "done"
 
 # create fragmented file
-_do "Delete every second file" "_cull_files"
+#_do "Delete every second file" "_cull_files"
+echo -n "Punch every second 4k block... "
+for i in `seq 0 8 32768`; do
+	# This generates excessive output that significantly slows down the
+	# test. It's not necessary for debug, so just bin it.
+	$XFS_IO_PROG -f -c "unresvsp ${i}k 4k" $SCRATCH_MNT/fill \
+								> /dev/null 2>&1
+done
+_do "xfs_bmap -vp $SCRATCH_MNT/fill"
+_do "sum $SCRATCH_MNT/fill >$tmp.fillsum1"
+echo "done"
+
 echo -n "Create one very large file... "
 _do "src/fill2 -d nbytes=16000000,file=$SCRATCH_MNT/fragmented"
 echo "done"
@@ -130,7 +144,15 @@ _do "Remove other files" "rm -rf $SCRATCH_MNT/{pad,hole*}"
 # defragment
 _do "Run xfs_fsr on filesystem" "$XFS_FSR_PROG -v $SCRATCH_MNT/fragmented"
 _do "xfs_bmap -v $SCRATCH_MNT/fragmented"
-_do "Check 4k files" "src/fill2fs_check $tmp.manifest"
+
+echo -n "Check fill file... "
+_do "sum $SCRATCH_MNT/fill >$tmp.fillsum2"
+if ! _do "diff $tmp.fillsum1 $tmp.fillsum2"; then
+    echo "fail"
+    echo "Fill file is corrupt/missing after fsr. Test failed see $seq.full"
+    status=1; exit
+fi
+echo "done"
 
 # check
 echo -n "Check large file... "
