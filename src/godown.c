@@ -16,6 +16,7 @@
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <syslog.h>
 #include "global.h"
 
 static char *xprogname;
@@ -109,6 +110,8 @@ main(int argc, char *argv[])
 	if (verbose_opt) {
 		printf("Calling XFS_IOC_GOINGDOWN\n");
 	}
+	syslog(LOG_WARNING, "xfstests-induced forced shutdown of %s:\n",
+		mnt_dir);
 	if ((xfsctl(mnt_dir, fd, XFS_IOC_GOINGDOWN, &flag)) == -1) {
 		fprintf(stderr, "%s: error on xfsctl(GOINGDOWN) of \"%s\": %s\n",
 			xprogname, mnt_dir, strerror(errno));
