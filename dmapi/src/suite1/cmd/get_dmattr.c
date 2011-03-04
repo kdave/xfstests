@@ -61,7 +61,7 @@ main(
 	dm_token_t	token = DM_NO_TOKEN;
 	char		*object;
 	dm_attrname_t	*attrnamep;
-	void		*bufp;
+	void		*bufp = NULL;
 	size_t		buflen = 10000;
 	size_t		rlenp;
 	void		*hanp;
@@ -69,7 +69,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -122,14 +123,14 @@ main(
 	    bufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_get_dmattr buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_get_dmattr failed, %s\n",
 				strerror(errno));
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp is %d, value is '%s'\n", rlenp, (char*)bufp);
+	fprintf(stdout, "rlenp is %zd, value is '%s'\n", rlenp, (char*)bufp);
 
 	dm_handle_free(hanp, hlen);
 	exit(0);

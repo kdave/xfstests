@@ -155,7 +155,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -236,7 +237,8 @@ print_alloc(
 	char		*type = NULL;
 	int		rc;
 
-	fprintf(stdout, "%s: starting offset %lld\n", pathname, startoff);
+	fprintf(stdout, "%s: starting offset %lld\n", pathname,
+		(long long) startoff);
 
 	/* Allocate space for the number of extents requested by the user. */
 
@@ -283,21 +285,21 @@ print_alloc(
 
 			if (!Dflag) {
 				fprintf(stdout, "\t%d: [%lld..%lld]: %s", num,
-					extent[i].ex_offset / 512,
-					(extent[i].ex_offset +
+					(long long) extent[i].ex_offset / 512,
+					(long long) (extent[i].ex_offset +
 					extent[i].ex_length - 1) / 512, type);
 				if ((extent[i].ex_offset % 512 != 0) ||
 				    (endoff % 512 != 0)) {
 					fprintf(stdout, "\t[%lld..%lld]\n",
-						extent[i].ex_offset % 512,
-						(endoff-1) % 512);
+						(long long) extent[i].ex_offset % 512,
+						(long long) (endoff-1) % 512);
 				} else {
 					fprintf(stdout, "\n");
 				}
 			} else {
 				fprintf(stdout, "%5s	%13lld	%13lld\n",
-					type, extent[i].ex_offset,
-					extent[i].ex_length);
+					type, (long long) extent[i].ex_offset,
+					(long long) extent[i].ex_length);
 			}
 
 			/* The ex_offset of the first extent should match the
@@ -310,13 +312,14 @@ print_alloc(
 			if (extent[i].ex_offset != endoff) {
 				fprintf(stderr, "new extent (%lld)is not "
 					"adjacent to previous one (%lld)\n",
-					extent[i].ex_offset, endoff);
+					(long long) extent[i].ex_offset,
+					(long long) endoff);
 				return(1);
 			}
 			if (num && (extent[i].ex_offset % 512) != 0) {
 				fprintf(stderr, "non-initial ex_offset (%lld) "
 					"is not a 512-byte multiple\n",
-					extent[i].ex_offset);
+					(long long) extent[i].ex_offset);
 				return(1);
 			}
 
@@ -343,7 +346,7 @@ print_alloc(
 
 		if (rc && startoff != endoff) {
 			fprintf(stderr, "startoff is %lld, should be %lld\n",
-				startoff, endoff);
+				(long long) startoff, (long long) endoff);
 			return(1);
 		}
 

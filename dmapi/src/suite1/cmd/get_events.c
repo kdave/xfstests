@@ -60,14 +60,15 @@ main(
 	dm_eventmsg_t	*msg;
 	dm_sessid_t	sid;
 	u_int		flags = 0;
-	void		*bufp;
+	void		*bufp = NULL;
 	size_t		buflen = 10000;
 	u_int		maxmsgs = 1;
 	size_t		rlenp;
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -109,14 +110,14 @@ main(
 	if (dm_get_events(sid, maxmsgs, flags, buflen, bufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_get_events buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_get_events failed, (%d)%s\n",
 				errno, strerror(errno));
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp=%d\n", rlenp);
+	fprintf(stdout, "rlenp=%zd\n", rlenp);
 
 	if (rlenp == 0)
 		return(0);

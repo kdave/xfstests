@@ -58,7 +58,7 @@ main(
 {
 	dm_dispinfo_t	*disp;
 	dm_sessid_t	sid;
-	void		*bufp;
+	void		*bufp = NULL;
 	size_t		buflen = 10000;
 	void		*hanp;
 	size_t		hlen;
@@ -67,7 +67,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -103,14 +104,14 @@ main(
 	if (dm_getall_disp(sid, buflen, bufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_getall_disp buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_getall_disp failed, %s\n",
 				strerror(errno));
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp is %d\n", rlenp);
+	fprintf(stdout, "rlenp is %zd\n", rlenp);
 	if (rlenp == 0)
 		return(0);
 
@@ -121,11 +122,11 @@ main(
 		if (hanp && hlen) {
 			hantoa(hanp, hlen, hans1);
 		} else {
-			sprintf(hans1, "<BAD HANDLE, hlen %d>", hlen);
+			sprintf(hans1, "<BAD HANDLE, hlen %zd>", hlen);
 		}
 		printf("%-15s %s dm_eventset_t 0%llo\n",
 			"fshandle", hans1,
-			disp->di_eventset);
+			(unsigned long long) disp->di_eventset);
 
 		disp = DM_STEP_TO_NEXT(disp, dm_dispinfo_t *);
 	}

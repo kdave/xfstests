@@ -65,7 +65,8 @@ main(
 	int		opt;
 	int		i;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -104,7 +105,7 @@ main(
 	}
 
 	fprintf(stdout, "Events supported (0x%llx), nelemp %d:\n",
-		eventset, nelemp);
+		(unsigned long long) eventset, nelemp);
 
 	for (i = 0; i < nelemp; i++) {
 		if (!DMEV_ISSET(i, eventset))

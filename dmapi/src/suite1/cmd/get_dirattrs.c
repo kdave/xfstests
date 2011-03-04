@@ -43,8 +43,6 @@ char	*Progname;
 static void
 usage(void)
 {
-	int	i;
-
 	fprintf(stderr, "usage:\t%s [-b buflen] [-l loc] [-s sid] [-1] [-q] dirpath\n",
 		Progname);
 	exit(1);
@@ -68,12 +66,12 @@ main(
 	size_t		hlen;
 	char		*name;
 	int		opt;
-	int		i;
 	int		ret;
 	int		oneline = 0;
 	int		quiet = 0;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -137,8 +135,8 @@ main(
 			exit(1);
 		}
 		if (!quiet) {
-			fprintf(stdout, "ret = %d, rlenp is %d, loc is %lld\n", ret,
-				rlenp, loc);
+			fprintf(stdout, "ret = %d, rlenp is %zd, loc is %lld\n",
+				ret, rlenp, (long long) loc);
 		}
 		if (rlenp > 0) {
 			dm_stat_t	*statp;

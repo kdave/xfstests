@@ -67,7 +67,8 @@ main(
 	int		opt;
 	int		i;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -121,12 +122,9 @@ main(
 	fprintf(stdout, "%d regions\n", nelemp);
 
 	for (i = 0; i < nelemp; i++) {
-#ifdef	VERITAS_21
-		fprintf(stdout, "offset %d, size %d, flags 0x%x\n",
-#else
-		fprintf(stdout, "offset %lld, size %lld, flags 0x%x\n",
-#endif
-			regbufp[i].rg_offset, regbufp[i].rg_size,
+		fprintf(stdout, "offset %lld, size %llu, flags 0x%x\n",
+			(long long) regbufp[i].rg_offset,
+			(unsigned long long) regbufp[i].rg_size,
 			regbufp[i].rg_flags);
 	}
 

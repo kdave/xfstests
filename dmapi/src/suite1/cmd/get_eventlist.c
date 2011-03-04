@@ -80,7 +80,8 @@ main(
 	int		opt;
 	int		i;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -147,12 +148,8 @@ main(
 		return(1);
 	}
 
-#ifdef	VERITAS_21
-	fprintf(stdout, "Events on object %s (0x%x), nelemp %d:\n",
-#else
 	fprintf(stdout, "Events on object %s (0x%llx), nelemp %d:\n",
-#endif
-		object, eventset, nelemp);
+		object, (unsigned long long) eventset, nelemp);
 
 	for (i = 0; i < nelemp; i++) {
 		if (!DMEV_ISSET(i, eventset))

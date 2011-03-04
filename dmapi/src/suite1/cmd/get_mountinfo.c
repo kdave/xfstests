@@ -76,7 +76,7 @@ main(
 {
 	dm_sessid_t	sid = DM_NO_SESSION;
 	char		*pathname;
-	void		*bufp;
+	void		*bufp = NULL;
 	size_t		buflen = 10000;
 	size_t		rlenp;
 	void		*fshanp;
@@ -84,7 +84,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -134,14 +135,14 @@ main(
 	    bufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_get_mountinfo buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_get_mountinfo failed, %s\n",
 				strerror(errno));
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp is %d\n", rlenp);
+	fprintf(stdout, "rlenp is %zd\n", rlenp);
 	print_one_mount_event(bufp);
 
 	dm_handle_free(fshanp, fshlen);
