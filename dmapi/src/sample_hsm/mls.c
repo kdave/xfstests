@@ -183,8 +183,8 @@ mr_info(
 	printf("\n");
 	for (i=0; i<ret; i++) {
 		printf("\tRegion %d:\n", i);
-		printf("\t\toffset %lld, ", rgn[i].rg_offset);
-		printf("size %lld, ", rgn[i].rg_size);
+		printf("\t\toffset %lld, ", (long long) rgn[i].rg_offset);
+		printf("size %llu, ", (unsigned long long) rgn[i].rg_size);
 		printf("flags 0x%x", rgn[i].rg_flags);
 		printf(" ( ");
 		if (rgn[i].rg_flags & DM_REGION_NOEVENT)
@@ -312,8 +312,8 @@ alloc_info(
 				printf("(resident): ");
 			if (ext[i].ex_type == DM_EXTENT_HOLE)
 				printf("(hole): ");
-			printf("offset %lld, ", ext[i].ex_offset);
-			printf("len %lld\n", ext[i].ex_length);
+			printf("offset %lld, ", (long long) ext[i].ex_offset);
+			printf("len %llu\n", (unsigned long long) ext[i].ex_length);
 		}
 	} while (more == 1);
 	return(0);

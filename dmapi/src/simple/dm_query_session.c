@@ -67,7 +67,7 @@ main( int argc, char **argv )
 
 	ret = dm_query_session( sid, buflen, sessinfo, &rlen );
 	printf( "ret=%d\n", ret );
-	printf( "rlen=%d\n", rlen );
+	printf( "rlen=%zd\n", rlen );
 	if( ret != -1 )
 		printf( "sessinfo=%s\n", sessinfo );
 	exit(0);

@@ -73,7 +73,9 @@ main(
 	dm_sessid_t	sid = DM_NO_SESSION;
 	char		*object = NULL;
 	dm_off_t	offset = 0;
+	long long	lltemp;
 	dm_size_t	length = 1;
+	unsigned long long	ulltemp;
 	char		*bufp = NULL;
 	void		*hanp;
 	size_t		hlen;
@@ -82,10 +84,11 @@ main(
 	int		opt;
 	int		i;
 	char		*storefile = NULL;
-	int		storefd;
+	int		storefd = 0;
 	int		exit_status = 0;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -96,10 +99,12 @@ main(
 	while ((opt = getopt(argc, argv, "o:l:s:c:S:")) != EOF) {
 		switch (opt) {
 		case 'o':
-			sscanf(optarg, "%lld", &offset);
+			sscanf(optarg, "%lld", &lltemp);
+			offset = (dm_off_t) lltemp;
 			break;
 		case 'l':
-			sscanf(optarg, "%llu", &length);
+			sscanf(optarg, "%llu", &ulltemp);
+			length = (dm_size_t) ulltemp;
 			break;
 		case 's':
 			sid = atol(optarg);
@@ -141,7 +146,8 @@ main(
 		   sufficiently big boundary.
 		*/
 		if ((bufp = memalign(4096, length)) == NULL) {
-			fprintf(stderr, "malloc of %llu bytes failed\n", length);
+			fprintf(stderr, "malloc of %llu bytes failed\n",
+				(unsigned long long) length);
 			exit(1);
 		}
 		memset(bufp, '\0', length);
@@ -168,8 +174,9 @@ main(
 		fprintf(stderr, "dm_read_invis failed, %s\n", strerror(errno));
 		exit_status++;
 	} else if (rc != length) {
-		fprintf(stderr, "dm_read_invis expected to read %lld bytes, actually "
-			"read %lld\n", length, rc);
+		fprintf(stderr, "dm_read_invis expected to read %llu bytes, actually "
+			"read %lld\n", (unsigned long long) length,
+			(long long) rc);
 		exit_status++;
 	}
 

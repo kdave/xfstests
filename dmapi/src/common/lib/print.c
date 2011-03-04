@@ -132,31 +132,31 @@ print_one_mount_event(
 	if (hanp1 && hlen1) {
 		hantoa(hanp1, hlen1, hans1);
 	} else {
-		sprintf(hans1, "<BAD HANDLE, hlen %d>", hlen1);
+		sprintf(hans1, "<BAD HANDLE, hlen %zd>", hlen1);
 	}
 	if (hanp2 && hlen2) {
 		hantoa(hanp2, hlen2, hans2);
 	} else {
-		sprintf(hans2, "<BAD HANDLE, hlen %d>", hlen2);
+		sprintf(hans2, "<BAD HANDLE, hlen %zd>", hlen2);
 	}
 	if (hanp3 && hlen3) {
 		hantoa(hanp3, hlen3, hans3);
 	} else {
-		sprintf(hans3, "<BAD HANDLE, hlen %d>", hlen3);
+		sprintf(hans3, "<BAD HANDLE, hlen %zd>", hlen3);
 	}
 	if (namp1 && nlen1) {
 		strncpy(nams1, namp1, nlen1);
 		if (nlen1 != sizeof(nams1))
 			nams1[nlen1] = '\0';
 	} else {
-		sprintf(nams1, "<BAD STRING, nlen %d>", nlen1);
+		sprintf(nams1, "<BAD STRING, nlen %zd>", nlen1);
 	}
 	if (namp2 && nlen2) {
 		strncpy(nams2, namp2, nlen2);
 		if (nlen2 != sizeof(nams2))
 			nams2[nlen2] = '\0';
 	} else {
-		sprintf(nams2, "<BAD STRING, nlen %d>", nlen2);
+		sprintf(nams2, "<BAD STRING, nlen %zd>", nlen2);
 	}
 
 	printf(VALS VALS VALS VALS VALS VALD,
@@ -183,13 +183,13 @@ print_one_data_event(
 	if (hanp && hlen) {
 		hantoa(hanp, hlen, handle);
 	} else {
-		sprintf(handle, "<BAD HANDLE, hlen %d>", hlen);
+		sprintf(handle, "<BAD HANDLE, hlen %zd>", hlen);
 	}
 
 	printf(VALS VALLLD VALLLD,
 		"file_handle",	handle,
-		"offset", msg_de->de_offset,
-		"length", msg_de->de_length);
+		"offset", (long long) msg_de->de_offset,
+		"length", (long long) msg_de->de_length);
 
 	return(0);
 }

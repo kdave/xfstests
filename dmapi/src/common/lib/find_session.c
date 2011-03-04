@@ -81,8 +81,8 @@ find_test_session(
 			allocelem = nelem;
 			sidbuf = realloc(sidbuf, nelem * sizeof(*sidbuf));
 			if (sidbuf == NULL) {
-				fprintf(stderr, "realloc of %d bytes failed\n",
-					nelem * sizeof(*sidbuf));
+				fprintf(stderr, "realloc of %lu bytes failed\n",
+					(unsigned long) nelem * sizeof(*sidbuf));
 				exit(1);
 			}
 		}
@@ -142,8 +142,8 @@ find_test_session(
 			allocelem = nelem;
 			sidbuf = realloc(sidbuf, nelem * sizeof(*sidbuf));
 			if (sidbuf == NULL) {
-				fprintf(stderr, "realloc of %d bytes failed\n",
-					nelem * sizeof(*sidbuf));
+				fprintf(stderr, "realloc of %lu bytes failed\n",
+					(unsigned long) nelem * sizeof(*sidbuf));
 				exit(1);
 			}
 		}

@@ -71,7 +71,9 @@ main(
 	dm_sessid_t	sid = DM_NO_SESSION;
 	char		*object = NULL;
 	dm_off_t	offset = 0;
+	long long	lltemp;
 	dm_size_t	length = 1;
+	unsigned long long	ulltemp;
 	u_char		ch = 'X';
 	void		*bufp = NULL;
 	void		*hanp;
@@ -83,7 +85,8 @@ main(
 	int		storefd;
 	int		exit_status = 0;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -97,10 +100,12 @@ main(
 			ch = *optarg;
 			break;
 		case 'o':
-			sscanf(optarg, "%lld", &offset);
+			sscanf(optarg, "%lld", &lltemp);
+			offset = (dm_off_t) offset;
 			break;
 		case 'l':
-			sscanf(optarg, "%llu", &length);
+			sscanf(optarg, "%llu", &ulltemp);
+			length = (dm_size_t) ulltemp;
 			break;
 		case 's':
 			sid = atol(optarg);
@@ -135,7 +140,8 @@ main(
 		   sufficiently big boundary.
 		*/
 		if ((bufp = memalign(4096, length)) == NULL) {
-			fprintf(stderr, "malloc of %llu bytes failed\n", length);
+			fprintf(stderr, "malloc of %llu bytes failed\n",
+				(unsigned long long) length);
 			exit(1);
 		}
 		memset(bufp, ch, length);
@@ -170,8 +176,9 @@ main(
 		fprintf(stderr, "dm_write_invis failed, %s\n", strerror(errno));
 		exit_status++;
 	} else if (rc != length) {
-		fprintf(stderr, "dm_write_invis expected to write %lld bytes, actually "
-			"wrote %lld\n", length, rc);
+		fprintf(stderr, "dm_write_invis expected to write %llu bytes, "
+			"actually wrote %lld\n",
+			(unsigned long long) length, (long long)rc);
 		exit_status++;
 	}
 	dm_handle_free(hanp, hlen);

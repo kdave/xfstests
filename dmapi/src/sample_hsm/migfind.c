@@ -78,7 +78,7 @@ verify_size(
 
         size = strtol(str,0,0); 
         if (size < 0 || size >= LONG_MAX ) {
-                printf("Size %lld is invalid \n", size);
+                printf("Size %lld is invalid \n", (long long) size);
                 return(1);
         }
 
@@ -87,13 +87,13 @@ verify_size(
                 cp++;
         if (*cp == 'k' || *cp == 'K') {
                 if ( size >= (u_int) MAX_K) {
-                        printf("Size %lld is invalid\n", size);
+                        printf("Size %lld is invalid\n", (long long) size);
                         return(1);
                 }
                 size *= 1024;
         } else if (*cp == 'm' || *cp == 'M') {
                 if ( size >= (u_int) MAX_M) {
-                        printf("Size %lld is invalid\n", size);
+                        printf("Size %lld is invalid\n", (long long) size);
                         return(1);
                 }
                 size *= (1024*1024);

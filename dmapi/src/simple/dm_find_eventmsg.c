@@ -51,7 +51,7 @@ main( int argc, char **argv )
 			buflen = atoi( optarg );
 			break;
 		case 'q':
-			printf("dm_eventmsg_t=%d\n", sizeof(dm_eventmsg_t) );
+			printf("dm_eventmsg_t=%zd\n", sizeof(dm_eventmsg_t) );
 			exit(0);
 		case 'h':
 			fprintf(stderr, "Usage: %s <-s sid> <-t token> [-l buflen]\n", argv[0]);
@@ -75,6 +75,6 @@ main( int argc, char **argv )
 
 	ret = dm_find_eventmsg( sid, token, buflen, &msg, &rlen );
 	printf( "ret=%d\n", ret );
-	printf( "rlen=%d\n", rlen );
+	printf( "rlen=%zd\n", rlen );
 	exit(0);
 }
