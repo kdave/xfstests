@@ -39,14 +39,14 @@ TOOL_SUBDIRS = ltp src m4
 
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS)
 
-default: include/builddefs include/config.h $(DMAPI_MAKEFILE) new remake check $(TESTS)
+default: include/builddefs $(DMAPI_MAKEFILE) $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
 	$(Q)$(MAKE) $(MAKEOPTS) $@
 else
 	$(Q)$(MAKE) $(MAKEOPTS) $(SUBDIRS)
+ifeq ($(HAVE_DMAPI), true)
 	# automake doesn't always support "default" target 
 	# so do dmapi make explicitly with "all"
-ifeq ($(HAVE_DMAPI), true)
 	$(Q)$(MAKE) $(MAKEOPTS) -C $(TOPDIR)/dmapi all
 endif
 endif
@@ -60,22 +60,19 @@ else
 clean:  # if configure hasn't run, nothing to clean
 endif
 
-configure include/builddefs:
+configure: configure.in
 	autoheader
 	autoconf
+
+include/builddefs include/config.h: configure
 	./configure \
                 --libexecdir=/usr/lib \
                 --enable-lib64=yes
 
-include/config.h: include/builddefs
-## Recover from the removal of $@
-	@if test -f $@; then :; else \
-		rm -f include/builddefs; \
-		$(MAKE) $(AM_MAKEFLAGS) include/builddefs; \
-	fi
-
+ifeq ($(HAVE_DMAPI), true)
 $(DMAPI_MAKEFILE):
-	cd $(TOPDIR)/dmapi/ ; ./configure
+	$(Q)cd $(TOPDIR)/dmapi && ./configure
+endif
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
@@ -97,5 +94,5 @@ install-dev install-lib:
 	$(MAKE) $(MAKEOPTS) -C $* install
 
 realclean distclean: clean
-	rm -f $(LDIRT) $(CONFIGURE)
-	rm -rf autom4te.cache Logs
+	$(Q)rm -f $(LDIRT) $(CONFIGURE)
+	$(Q)rm -rf autom4te.cache Logs
