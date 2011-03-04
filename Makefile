@@ -1,5 +1,20 @@
 #
-# Copyright (c) 2000-2008 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (C) 2000-2008, 2011 SGI  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation; either version 2 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
 #
 
 ifeq ("$(origin V)", "command line")
@@ -30,12 +45,12 @@ LSRCFILES = configure configure.in aclocal.m4 README VERSION
 LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
 	conftest* check.log check.time
 
-ifeq ($(HAVE_DMAPI), true)
-DMAPI_MAKEFILE = dmapi/Makefile
-endif
 
 LIB_SUBDIRS = include lib
 TOOL_SUBDIRS = ltp src m4
+ifeq ($(HAVE_DMAPI), true)
+TOOL_SUBDIRS += dmapi
+endif
 
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS)
 
@@ -44,11 +59,6 @@ ifeq ($(HAVE_BUILDDEFS), no)
 	$(Q)$(MAKE) $(MAKEOPTS) $@
 else
 	$(Q)$(MAKE) $(MAKEOPTS) $(SUBDIRS)
-ifeq ($(HAVE_DMAPI), true)
-	# automake doesn't always support "default" target 
-	# so do dmapi make explicitly with "all"
-	$(Q)$(MAKE) $(MAKEOPTS) -C $(TOPDIR)/dmapi all
-endif
 endif
 
 # tool/lib dependencies
@@ -68,11 +78,6 @@ include/builddefs include/config.h: configure
 	./configure \
                 --libexecdir=/usr/lib \
                 --enable-lib64=yes
-
-ifeq ($(HAVE_DMAPI), true)
-$(DMAPI_MAKEFILE):
-	$(Q)cd $(TOPDIR)/dmapi && ./configure
-endif
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
