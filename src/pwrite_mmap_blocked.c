@@ -59,7 +59,8 @@ int main(int argc, char *argv[])
 		perror("mmap");
 		exit(1);
 	}
-	printf("pwrite %Ld bytes from %Ld to %Ld\n", amount, from, to);
+	printf("pwrite %Ld bytes from %Ld to %Ld\n",
+		(long long) amount, (long long) from, (long long) to);
 
 	ret = pwrite(fd, (char *)mapped_mem + from, amount, to);
 	if (ret != amount) {

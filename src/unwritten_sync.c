@@ -136,7 +136,9 @@ again:
 		}
 		if (bmapx[x].bmv_oflags & 1) {
 			fprintf(stderr, "FOUND ONE %lld %lld %x\n",
-				bmapx[x].bmv_offset, bmapx[x].bmv_length,bmapx[x].bmv_oflags);
+				(long long) bmapx[x].bmv_offset,
+				(long long) bmapx[x].bmv_length,
+				bmapx[x].bmv_oflags);
 			foundone = 1;
 			foundany = 1;
 		}

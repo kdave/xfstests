@@ -453,7 +453,7 @@ int
 lio_random_methods(long curr_mask)
 {
     int mask=0;
-    long random_bit();
+    long random_bit(long);
 
     /* remove random select, io type, and wait method bits from curr_mask */
     mask = curr_mask & (~(LIO_IO_TYPES | LIO_WAIT_TYPES | LIO_RANDOM));

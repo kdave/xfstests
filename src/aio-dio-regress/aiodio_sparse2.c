@@ -227,7 +227,8 @@ void aiodio_sparse(char *filename, int align, int writesize, int startoffset, in
 		unsigned char *badbuf;
 
 		if (debug)
-			fprintf(stderr, "seek to %ld and read %d\n", offset, writesize);
+			fprintf(stderr, "seek to %lld and read %d\n",
+				(long long) offset, writesize);
 		lseek(fd, offset, SEEK_SET);
 		if (read(fd, bufptr, writesize) < writesize) {
 			fprintf(stderr, "short read() at offset %lld\n",
