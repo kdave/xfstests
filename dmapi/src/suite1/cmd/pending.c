@@ -58,7 +58,8 @@ main(
 	char		*name;
 	dm_token_t	token;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];

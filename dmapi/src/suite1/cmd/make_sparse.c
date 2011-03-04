@@ -82,18 +82,18 @@ main(
 	for (i = 0; i < 200; i += 2) {
 		offset = i * 65536;
 		if (lseek(fd, offset, SEEK_SET) < 0) {
-			fprintf(stderr, "seek to %d failed, %s\n", offset,
+			fprintf(stderr, "seek to %zd failed, %s\n", offset,
 				strerror(errno));
 			exit(1);
 		}
 		if ((count = write(fd, buf, buflen)) < 0) {
 			fprintf(stderr, "write of %d bytes failed at offset "
-				"%d, , %s\n", buflen, offset, strerror(errno));
+				"%zd, , %s\n", buflen, offset, strerror(errno));
 			exit(1);
 		}
 		if (count != buflen) {
 			fprintf(stderr, "expected to write %d bytes at offset "
-				"%d, actually wrote %d\n", buflen, offset,
+				"%zd, actually wrote %zd\n", buflen, offset,
 				count);
 			exit(1);
 		}

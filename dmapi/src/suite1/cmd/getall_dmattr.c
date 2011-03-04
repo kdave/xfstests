@@ -66,7 +66,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -114,14 +115,14 @@ main(
 	    bufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_getall_dmattr buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_getall_dmattr failed, %s\n",
 				strerror(errno));
 		}
 		exit(1);
 	}
-	fprintf(stdout, "rlenp is %d\n", rlenp);
+	fprintf(stdout, "rlenp is %zd\n", rlenp);
 	if (rlenp > 0) {
 		dm_attrlist_t	*attrlist;
 

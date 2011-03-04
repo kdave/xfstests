@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include <lib/dmport.h>
+#include <lib/hsm.h>
 
 #include <getopt.h>
 #ifdef linux
@@ -84,7 +85,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -130,16 +132,16 @@ main(
 	    buflen, pathbufp, &rlenp)) {
 		if (errno == E2BIG) {
 			fprintf(stderr, "dm_handle_to_path buffer too small, "
-				"should be %d bytes\n", rlenp);
+				"should be %zd bytes\n", rlenp);
 		} else {
 			fprintf(stderr, "dm_handle_to_path failed, (%d) %s\n",
 				errno, strerror(errno));
 		}
 		return(1);
 	}
-	fprintf(stderr, "rlenp is %d, pathbufp is %s\n", rlenp, (char*)pathbufp);
+	fprintf(stderr, "rlenp is %zd, pathbufp is %s\n", rlenp, (char*)pathbufp);
 	if (strlen(pathbufp) + 1 != rlenp) {
-		fprintf(stderr, "rlenp is %d, should be %d\n", rlenp,
+		fprintf(stderr, "rlenp is %zd, should be %zd\n", rlenp,
 			strlen(pathbufp) + 1);
 		return(1);
 	}
