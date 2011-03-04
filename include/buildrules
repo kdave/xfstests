@@ -6,13 +6,20 @@ _BUILDRULES_INCLUDED_ = 1
 
 include $(TOPDIR)/include/builddefs
 
+depend: $(addsuffix -depend,$(SUBDIRS))
+
+%-depend:
+	$(Q)$(MAKE) $(MAKEOPTS) -q -C $* depend || \
+	    $(MAKE) $(MAKEOPTS) -C $* depend
+
 clean clobber : $(addsuffix -clean,$(SUBDIRS))
 	$(Q)rm -f $(DIRT)
 	$(Q)rm -fr .libs .ltdep .dep
 
 %-clean:
 	@echo "Cleaning $*"
-	$(Q)$(MAKE) $(MAKEOPTS) -q -C $* clean || $(MAKE) $(MAKEOPTS) -C $* clean
+	$(Q)$(MAKE) $(MAKEOPTS) -q -C $* clean || \
+	    $(MAKE) $(MAKEOPTS) -C $* clean
 
 # Never blow away subdirs
 ifdef SUBDIRS
@@ -71,21 +78,25 @@ endif # _BUILDRULES_INCLUDED_
 $(_FORCE):
 
 # dependency build is automatic, relies on gcc -MM to generate.
-.PHONY : depend ltdepend
+.PHONY : depend
 
 MAKEDEP := $(MAKEDEPEND) $(CFLAGS)
 
-ltdepend: .ltdep
-
 .ltdep: $(CFILES) $(HFILES)
 	@echo "    [LTDEP]"
-	$(Q)[ -n "$(CFILES)" ] && \
-	    $(MAKEDEP) $(CFILES) | $(SED) -e 's,^\([^:]*\)\.o,\1.lo,' > .ltdep
-
-depend: .dep
+	$(Q)if [ -n "$$( echo $(CFILES))" ]; then \
+	    $(MAKEDEP) $(CFILES) | \
+	    $(SED) -e 's,^\([^:]*\)\.o,\1.lo,' > .ltdep; \
+	else \
+	    cp /dev/null .ltdep; \
+	fi
 
 .dep: $(CFILES) $(HFILES)
 	@echo "    [DEP]"
-	$(Q)[ -n "$(CFILES)" ] && \
-	    $(MAKEDEP) $(CFILES) | $(SED) -e 's,^\([^:]*\)\.o,\1,' > .dep
+	$(Q)if [ -n "$$( echo $(CFILES))" ]; then \
+	    $(MAKEDEP) $(CFILES) | \
+	    $(SED) -e 's,^\([^:]*\)\.o,\1,' > .dep; \
+	else \
+	    cp /dev/null .dep; \
+	fi
 

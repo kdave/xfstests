@@ -61,6 +61,8 @@ LDIRT = $(TARGETS)
 
 default: depend $(TARGETS) $(SUBDIRS)
 
+depend: .dep
+
 include $(BUILDRULES)
 
 $(TARGETS): $(LIBTEST)

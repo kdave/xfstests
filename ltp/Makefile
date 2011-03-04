@@ -33,6 +33,8 @@ endif
 
 default: depend $(TARGETS)
 
+depend: .dep
+
 include $(BUILDRULES)
 
 $(TARGETS): $(LIBTEST)

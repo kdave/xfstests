@@ -52,7 +52,7 @@ endif
 endif
 
 # tool/lib dependencies
-src ltp: lib
+$(TOOL_SUBDIRS): $(LIB_SUBDIRS)
 
 ifeq ($(HAVE_BUILDDEFS), yes)
 include $(BUILDRULES)
@@ -76,6 +76,8 @@ endif
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
+
+depend: include/builddefs $(addsuffix -depend,$(SUBDIRS))
 
 install: default $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)

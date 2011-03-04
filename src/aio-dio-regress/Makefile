@@ -10,6 +10,8 @@ LLDLIBS = -laio -lpthread
 
 default: depend $(TARGETS)
 
+depend: .dep
+
 include $(BUILDRULES)
 
 $(TARGETS):
