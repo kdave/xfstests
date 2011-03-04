@@ -84,7 +84,8 @@ main(int argc, char **argv) {
 	char            command[100];
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -170,7 +171,7 @@ main(int argc, char **argv) {
 	 */
 	{ 
 	  u_int         nelem=5;
-	  u_int         *nelemp;
+	  u_int         *nelemp = NULL;
 	  dm_eventset_t *eventsetp;
 	  eventsetp = (dm_eventset_t *)malloc(nelem*sizeof(dm_eventset_t));
 	  if (eventsetp == NULL) {
@@ -198,7 +199,7 @@ main(int argc, char **argv) {
 	{ 
 	  size_t buflen = 5;
 	  void   *bufp  = (void *)malloc(buflen*sizeof(dm_attrlist_t));
-	  size_t *rlenp;
+	  size_t *rlenp = NULL;
 	  ERRTEST(EFAULT, "getall_dmattr (NULL handle)", 
 		  dm_getall_dmattr(sid, NULL, hlen, DM_NO_TOKEN,
 				   buflen, bufp, rlenp))

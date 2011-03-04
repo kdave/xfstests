@@ -102,7 +102,8 @@ main(
 	int		cont;
 	int		error_reported;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -180,7 +181,8 @@ main(
 	      if(curlength>0)
 		free(bufp);
 	      if ((bufp = malloc(length)) == NULL) {
-		fprintf(stderr, "malloc of %llu bytes failed\n", length);
+		fprintf(stderr, "malloc of %llu bytes failed\n",
+			(unsigned long long) length);
 		continue;
 	      }
 	      curlength = length;
@@ -195,7 +197,7 @@ main(
 	      cont=1;
 	    } else if (rc != length) {
 	      fprintf(stderr, "expected to write %lld bytes, actually "
-		      "wrote %lld\n", length, rc);
+		      "wrote %lld\n", (long long) length, (long long) rc);
 	      cont=1;
 	    }
 	    if(cont)
@@ -238,7 +240,7 @@ main(
 	    } 
 	    else if (rc != length) {
 	      fprintf(stderr, "expected to read %lld bytes, actually "
-		      "wrote %lld\n", length, rc);
+		      "wrote %lld\n", (long long) length, (long long) rc);
 	      continue;
 	    }
 	    else {

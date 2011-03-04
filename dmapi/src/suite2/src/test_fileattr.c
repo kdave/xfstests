@@ -123,7 +123,7 @@ comp_stat ( dm_stat_t expected,
    if (found.dt_size != expected.dt_size) {
      fprintf(stderr, 
 	     "ERROR: get #%d, expected size %lld, but found %lld\n",
-	     i, expected.dt_size, found.dt_size);
+	     i, (long long) expected.dt_size, (long long) found.dt_size);
    }
    else good++;
    if (Vflag){
@@ -183,7 +183,8 @@ main(
 	char            *chk_name_p;
 	int             chk_num;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -405,7 +406,8 @@ main(
 	    }
 	    else {
 	      /* Put JUST name (not path) from check_name into chk_name_p */
-	      if (chk_name_p = strrchr(check_name, '/')) chk_name_p++;
+	      chk_name_p = strrchr(check_name, '/');
+	      if (chk_name_p) chk_name_p++;
 	      else chk_name_p = check_name;
 	      /* Verify that check_name_p holds a testfile name */
 	      if (strncmp(chk_name_p, "DMAPI_fileattr_test.",20)==0) {
@@ -679,7 +681,7 @@ main(
 	     ERRTEST(EFAULT, "get_bulk (bad rlenp)", 
 		     dm_get_bulkattr(sid, fs_hanp, fs_hlen, DM_NO_TOKEN,
 				     GET_MASK, &loc, buflen, bufp,
-				     (u_int*)(-1000)))
+				     (size_t *) (-1000)))
 	     ERRTEST(EFAULT, "get_bulk (bad bufp)",
 		     dm_get_bulkattr(sid, fs_hanp, fs_hlen, DM_NO_TOKEN,
 				     GET_MASK, &loc, buflen, p, &rlen))

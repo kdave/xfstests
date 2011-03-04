@@ -95,7 +95,8 @@ main(
 	int             Vflag = 0;
 	dm_token_t	test_token = DM_NO_TOKEN;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];

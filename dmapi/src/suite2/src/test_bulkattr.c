@@ -164,7 +164,7 @@ my_print_victim(
 	else {
 		char handle_str[HANDLE_STR];
 		if (verbose & V_PRINT) {
-			printf("%d\t", hlen);
+			printf("%zd\t", hlen);
 			hantoa(hanp, hlen, handle_str);
 			printf("%s ", handle_str);
 		}
@@ -187,7 +187,7 @@ my_print_victim(
 			if( isalpha(buf[0]) )
 				printf("(%s)\n", buf);
 			else
-				printf("<len=%d>\n",rlen);
+				printf("<len=%zd>\n",rlen);
 		}
 	}
 }
@@ -251,7 +251,8 @@ scan_fs(
 		more = dm_get_bulkattr(sid, fs_hanp, fs_hlen, DM_NO_TOKEN,
 				       mask, &locp, buflen, dm_statbuf, &rlenp);
 		if (verbose & V_VERBOSE)
-			fprintf(stderr, "BULKATTR more=%d, rlen=%d\n", more, rlenp);
+			fprintf(stderr, "BULKATTR more=%d, rlen=%zd\n",
+				more, rlenp);
 		if (more == -1) {
 			errno_msg("%s/%d: Can't get bulkattr for filesystem", __FILE__, __LINE__, errno);
 			break;

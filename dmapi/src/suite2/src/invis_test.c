@@ -100,7 +100,8 @@ main(
 	int		i;
 	int		reuse_file = 0;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -157,9 +158,10 @@ main(
 	}
 
 	if( Vflag )
-		printf("using length = %llu\n", length );
+		printf("using length = %llu\n", (unsigned long long) length);
 	if( length > BUFSZ ){
-		fprintf(stderr, "length(%llu) > BUFSZ(%d)\n", length, BUFSZ);
+		fprintf(stderr, "length(%llu) > BUFSZ(%d)\n",
+			(unsigned long long) length, BUFSZ);
 		exit(1);
 	}
 
@@ -174,13 +176,15 @@ main(
 			exit(1);
 		}
 		if( rc != length ){
-			fprintf(stderr, "dm_read_invis read %lld bytes, wanted to write %lld bytes\n",
-				rc, length );
+			fprintf(stderr, "dm_read_invis read %llu bytes, "
+				"wanted to write %lld bytes\n",
+				(long long) rc, (unsigned long long) length);
 			dm_handle_free(hanp, hlen);
 			exitstat++;
 		}
 		else {
-			printf("dm_read_invis read %lld bytes\n", rc);
+			printf("dm_read_invis read %lld bytes\n",
+				(long long) rc);
 		}
 		
 		in_err_block = 0;
@@ -193,7 +197,10 @@ main(
 				}
 				else {
 					/* end of bad block */
-					fprintf(stderr, "read err block: byte %lld to %lld\n", errblockstart, errblockend);
+					fprintf(stderr, "read err block: "
+						"byte %lld to %lld\n",
+						(long long) errblockstart,
+						(long long) errblockend);
 					in_err_block = 0;
 				}
 			}
@@ -205,7 +212,9 @@ main(
 		}
 		if( in_err_block ){
 			/* end of bad block */
-			fprintf(stderr, "read err block: byte %lld to %lld\n", errblockstart, errblockend);
+			fprintf(stderr, "read err block: byte %lld to %lld\n",
+				(long long) errblockstart,
+				(long long) errblockend);
 			in_err_block = 0;
 		}
 	}
@@ -221,12 +230,13 @@ main(
 			exit(1);
 		}
 		if( rc != length ){
-			fprintf(stderr, "dm_write_invis wrote %lld bytes, wanted to write %lld bytes\n",
-				rc, length );
+			fprintf(stderr, "dm_write_invis wrote %lld bytes, "
+				"wanted to write %lld bytes\n",
+				(long long) rc, (long long) length );
 			dm_handle_free(hanp, hlen);
 			exit(1);
 		}
-		printf("dm_write_invis wrote %lld bytes\n", rc);
+		printf("dm_write_invis wrote %lld bytes\n", (long long) rc);
 	}
 
 	dm_handle_free(hanp, hlen);

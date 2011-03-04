@@ -83,7 +83,8 @@ main(
 	size_t	 	 hlen;
 	dm_boolean_t	exactflag;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];

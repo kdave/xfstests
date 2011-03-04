@@ -172,14 +172,14 @@ my_print_victim(
 	else {
 		char handle_str[HANDLE_STR];
 		if (verbose & V_PRINT) {
-			printf("%d\t", hlen);
+			printf("%zd\t", hlen);
 			hantoa(hanp, hlen, handle_str);
 			printf("%s ", handle_str);
 			if (extras) {
 				printf("size=%lld ",
-				       (int64_t)sbuf->dt_size);
+				       (long long) sbuf->dt_size);
 				printf("ino=%lld ",
-				       (int64_t)sbuf->dt_ino);
+				       (long long) sbuf->dt_ino);
 			}
 		}
 
@@ -271,7 +271,8 @@ scan_fs(
 				      mask, dmattr, &locp, buflen,
 				      dm_xstatbuf, &rlenp);
 		if (verbose & V_VERBOSE)
-			fprintf(stderr, "BULKALL more=%d, rlen=%d\n", more, rlenp);
+			fprintf(stderr, "BULKALL more=%d, rlen=%zd\n",
+				more, rlenp);
 		if (more == -1) {
 			errno_msg("%s/%d: Can't get bulkall for filesystem", __FILE__, __LINE__, errno);
 			break;

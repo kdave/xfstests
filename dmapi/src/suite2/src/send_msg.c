@@ -70,7 +70,8 @@ main(
 	int		opt;
 	dm_msgtype_t    msgtype = DM_MSGTYPE_SYNC;
 	
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];

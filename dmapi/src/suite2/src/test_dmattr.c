@@ -101,7 +101,8 @@ main(
 	struct stat    *statbuf;
 	struct stat    *checkbuf;
 
-        if (Progname = strrchr(argv[0], '/')) {
+        Progname = strrchr(argv[0], '/');
+        if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -224,7 +225,7 @@ main(
 			      bufp, &rlenp)) {
 	      if (errno == E2BIG) {
 		fprintf(stderr, "dm_get_dmattr buffer too small, "
-			"should be %d bytes\n", rlenp);
+			"should be %zd bytes\n", rlenp);
 	      } else {
 		fprintf(stderr, "dm_get_dmattr failed (%s) for test file %d\n",
 			ERR_NAME, i);

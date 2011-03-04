@@ -324,31 +324,31 @@ print_one_mount_event(
 	if (hanp1 && hlen1) {
 		hantoa(hanp1, hlen1, hans1);
 	} else {
-		sprintf(hans1, "<BAD_HANDLE_hlen_%d>", hlen1);
+		sprintf(hans1, "<BAD_HANDLE_hlen_%zd>", hlen1);
 	}
 	if (hanp2 && hlen2) {
 		hantoa(hanp2, hlen2, hans2);
 	} else {
-		sprintf(hans2, "<BAD_HANDLE_hlen_%d>", hlen2);
+		sprintf(hans2, "<BAD_HANDLE_hlen_%zd>", hlen2);
 	}
 	if (hanp3 && hlen3) {
 		hantoa(hanp3, hlen3, hans3);
 	} else {
-		sprintf(hans3, "<BAD_HANDLE_hlen_%d>", hlen3);
+		sprintf(hans3, "<BAD_HANDLE_hlen_%zd>", hlen3);
 	}
 	if (namp1 && nlen1) {
 		strncpy(nams1, namp1, nlen1);
 		if (nlen1 != sizeof(nams1))
 			nams1[nlen1] = '\0';
 	} else {
-		sprintf(nams1, "<BAD STRING_nlen_%d>", nlen1);
+		sprintf(nams1, "<BAD STRING_nlen_%zd>", nlen1);
 	}
 	if (namp2 && nlen2) {
 		strncpy(nams2, namp2, nlen2);
 		if (nlen2 != sizeof(nams2))
 			nams2[nlen2] = '\0';
 	} else {
-		sprintf(nams2, "<BAD_STRING_nlen_%d>", nlen2);
+		sprintf(nams2, "<BAD_STRING_nlen_%zd>", nlen2);
 	}
 
 	printf(VALS VALS VALS VALS VALS VALD,
@@ -373,8 +373,8 @@ handle_message(
 {
   int			pkt_error = 0;
   int			error;
-  dm_response_t		response;
-  int			respond, respcode;
+  dm_response_t		response = DM_RESP_INVALID;
+  int			respond, respcode = 0;
   dm_namesp_event_t	*msg_ne;
 #if	!VERITAS
     dm_mount_event_t	*msg_me;
@@ -578,24 +578,24 @@ handle_message(
       printf(HDR VALS VALLLD VALLLD,
 	     "read", msg->ev_token, msg->ev_sequence,
 	     "file handle",	hans1,
-	     "offset",		msg_de->de_offset,
-	     "length",		msg_de->de_length);
+	     "offset",		(long long) msg_de->de_offset,
+	     "length",		(long long) msg_de->de_length);
       break;
 
     case DM_EVENT_WRITE:
       printf(HDR VALS VALLLD VALLLD,
 	     "write", msg->ev_token, msg->ev_sequence,
 	     "file handle",	hans1,
-	     "offset",		msg_de->de_offset,
-	     "length",		msg_de->de_length);
+	     "offset",		(long long) msg_de->de_offset,
+	     "length",		(long long) msg_de->de_length);
       break;
 
     case DM_EVENT_TRUNCATE:
       printf(HDR VALS VALLLD VALLLD,
 	     "truncate", msg->ev_token, msg->ev_sequence,
 	     "file handle",	hans1,
-	     "offset",		msg_de->de_offset,
-	     "length",		msg_de->de_length);
+	     "offset",		(long long) msg_de->de_offset,
+	     "length",		(long long) msg_de->de_length);
       break;
     default: break;
     }
@@ -658,7 +658,7 @@ handle_message(
   /***** NAMESPACE EVENTS *****/
 
   else {
-    char	*type;
+    char	*type = NULL;
 
     msg_ne = DM_GET_VALUE(msg, ev_data, dm_namesp_event_t *);
     hanp1  = DM_GET_VALUE(msg_ne, ne_handle1, void *);
@@ -1168,7 +1168,7 @@ finish_responding(
   int		error = 0;
   u_int		nbytes, ntokens = 0, ret_ntokens, i;
   dm_token_t	*tokenbuf = NULL, *tokenptr;
-  size_t	buflen, ret_buflen;
+  size_t	buflen = 0, ret_buflen;
   char		*msgbuf = NULL;
   dm_eventmsg_t	*msg;
 

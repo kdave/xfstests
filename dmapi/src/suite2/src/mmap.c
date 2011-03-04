@@ -121,11 +121,13 @@ static int mfile_opt(char * s, mfile_t * f);
 static	void print_flags(char *s, mfile_t *f);
 static void Usage(void);
 
+int
 main(int argc, char * argv[])
 {
 	int	opt;
 
-	if ((Progname = strrchr(argv[0], '/')) == NULL)
+	Progname = strrchr(argv[0], '/');
+	if (Progname == NULL)
 		Progname = argv[0];
 	else
 		Progname++;
