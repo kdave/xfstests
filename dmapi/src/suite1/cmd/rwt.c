@@ -89,7 +89,8 @@ main(
 	ssize_t		rc;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -131,7 +132,7 @@ main(
 	}
 	if (length > 0) {
 		if ((bufp = malloc(length)) == NULL) {
-			fprintf(stderr, "malloc of %d bytes failed\n", length);
+			fprintf(stderr, "malloc of %zd bytes failed\n", length);
 			exit(1);
 		}
 		if (wflag)
@@ -147,7 +148,7 @@ main(
 			fprintf(stderr,
 				"seeked to offset %lld, actually "
 				"arrived at %lld\n",
-				(int64_t)offset, (int64_t)seek_off);
+				(long long) offset, (long long) seek_off);
 			exit(1);
 		}
 	}
@@ -158,8 +159,8 @@ main(
 			exit(1);
 		}
 		if (rc != length) {
-			fprintf(stderr, "expected to write %d bytes, actually "
-				"wrote %d bytes\n", length, rc);
+			fprintf(stderr, "expected to write %zd bytes, actually "
+				"wrote %zd bytes\n", length, rc);
 			exit(1);
 		}
 	} else if (tflag) {
@@ -174,8 +175,8 @@ main(
 			exit(1);
 		}
 		if (rc != length) {
-			fprintf(stderr, "expected to read %d bytes, actually "
-				"read %d bytes\n", length, rc);
+			fprintf(stderr, "expected to read %zd bytes, actually "
+				"read %zd bytes\n", length, rc);
 			exit(1);
 		}
 	}

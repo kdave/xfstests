@@ -108,7 +108,8 @@ main(
 	int		opt;
 	int		method = METHOD_DMAPI_PROBE;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -149,7 +150,8 @@ main(
 		usage();
 
 	printf("Running %s on %s with settings:\n", methodmap[method], pathname);
-	printf("  offset = '%lld', length = '%lld', sid = '%lld'\n", offset, length, sid);
+	printf("  offset = '%lld', length = '%lld', sid = '%lld'\n",
+		(long long) offset, (unsigned long long) length, (long long) sid);
 	
 	if (method ==  METHOD_XFSCTL) 
 		return xfsctl_punch_hole(pathname, offset, length);
@@ -176,7 +178,8 @@ main(
 				strerror(errno));
 			exit(1);
 		}
-		fprintf(stdout, "roffp is %lld, rlenp is %lld\n", roffp, rlenp);
+		fprintf(stdout, "roffp is %lld, rlenp is %llu\n",
+			(long long) roffp, (unsigned long long) rlenp);
 		break;
 	case METHOD_DMAPI_PUNCH:
 		if (dm_punch_hole(sid, hanp, hlen, DM_NO_TOKEN, offset, length)) {

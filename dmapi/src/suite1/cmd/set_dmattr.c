@@ -63,7 +63,7 @@ main(
 	char		*object;
 	dm_attrname_t	*attrnamep;
 	char		*bufp;
-	size_t		buflen;
+	size_t		buflen = 0;
 	int		bflag = 0;
 	int		setdtime = 0;
 	void		*hanp;
@@ -71,7 +71,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];

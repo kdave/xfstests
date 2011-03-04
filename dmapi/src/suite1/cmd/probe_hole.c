@@ -70,7 +70,8 @@ main(
 	char		*name;
 	int		opt;
 
-	if (Progname = strrchr(argv[0], '/')) {
+	Progname = strrchr(argv[0], '/');
+	if (Progname) {
 		Progname++;
 	} else {
 		Progname = argv[0];
@@ -117,7 +118,8 @@ main(
 			strerror(errno));
 		exit(1);
 	}
-	fprintf(stdout, "roffp is %lld, rlenp is %lld\n", roffp, rlenp);
+	fprintf(stdout, "roffp is %lld, rlenp is %llu\n",
+		(long long) roffp, (unsigned long long) rlenp);
 	dm_handle_free(hanp, hlen);
 	exit(0);
 }

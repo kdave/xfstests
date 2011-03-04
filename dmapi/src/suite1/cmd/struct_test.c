@@ -51,7 +51,7 @@
 	if (offsetof(struct_name, field_name) != offset) { \
 		printf("ERROR: field %s should be %d\n", \
 			#struct_name "." #field_name, \
-			offsetof(struct_name, field_name)); \
+			(int) offsetof(struct_name, field_name)); \
 	} \
 	offset = offsetof(struct_name, field_name) + sizeof(X.field_name); \
 }
@@ -60,7 +60,7 @@
 { \
 	printf("struct %s size is %d\n", s_name, offset); \
 	if (sizeof(struct_name) != offset) { \
-		printf("ERROR: struct %s should be %d\n", \
+		printf("ERROR: struct %s should be %zd\n", \
 			s_name, sizeof(struct_name)); \
 	} \
 }

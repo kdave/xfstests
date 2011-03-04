@@ -43,7 +43,7 @@ main(
 {
 	FILE	*infile;
 	FILE	*tmpfile;
-	char	*path;
+	char	path[] = "file_XXXXXX";
 	int	line_count = 0;
 	int	i;
 	int	j;
@@ -77,7 +77,7 @@ main(
 	   to each line copied.
 	*/
 
-	path = tmpnam(NULL);
+	(void) mkstemp(path);
 	if ((tmpfile = fopen(path, "w")) == NULL) {
 		fprintf(stderr, "error opening temp file %s\n", path);
 		exit(1);

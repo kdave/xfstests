@@ -88,7 +88,7 @@ main(
                 exit(1);
         }
 	fprintf(stdout, "Initial session ID: %d\n", sid);
-	fprintf(stdout, "Initial session message length: '%d'\n", rlen);
+	fprintf(stdout, "Initial session message length: '%zd'\n", rlen);
 	if (rlen > 0) {
 		fprintf(stdout, "Initial session message: '%s'\n", buffer);
 	}
@@ -108,7 +108,7 @@ main(
                 exit(1);
         }
 	fprintf(stdout, "Assumed session ID: %d\n", newsid);
-	fprintf(stdout, "Assumed session message length: '%d'\n", rlen);
+	fprintf(stdout, "Assumed session message length: '%zd'\n", rlen);
 	if (rlen > 0) {
 		fprintf(stdout, "Assumed session message: '%s'\n", buffer);
 	}
