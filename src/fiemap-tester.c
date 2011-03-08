@@ -467,8 +467,10 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize)
 		for (i = cur_extent, c = 1; i < blocks; i++, c++) {
 			__u64 logical_offset = i * blocksize;
 
-			if (c > blocks_to_map)
+			if (c > fiemap->fm_mapped_extents) {
+				i++;
 				break;
+			}
 
 			switch (map[i]) {
 			case 'D':
