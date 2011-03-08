@@ -37,7 +37,7 @@ int quiet;
 static void
 usage(void)
 {
-	printf("Usage: fiemap-tester [-m map] [-r number of runs] [-s seed] [-q]");
+	printf("Usage: fiemap-tester [-m map] [-r number of runs] [-s seed] [-qS]");
 	printf("[-p preallocate (1/0)] ");
 	printf("filename\n");
 	printf("  -m map    : generate a file with the map given and test\n");
@@ -45,6 +45,7 @@ usage(void)
 	printf("  -r count  : number of runs to execute (default infinity)\n");
 	printf("  -s seed   : seed for random map generator (default 1)\n");
 	printf("  -q        : be quiet about non-errors\n");
+	printf("  -S        : sync file before mapping (via ioctl flags)\n");
 	printf("-m and -r cannot be used together\n");
 	exit(EXIT_FAILURE);
 }
@@ -418,7 +419,7 @@ static int query_fiemap_count(int fd, int blocks, int blocksize)
 }
 
 static int
-compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize)
+compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfile)
 {
 	struct fiemap *fiemap;
 	char *fiebuf;
@@ -446,7 +447,7 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize)
 			last_data = i;
 	}
 
-	fiemap->fm_flags = FIEMAP_FLAG_SYNC;
+	fiemap->fm_flags = syncfile ? FIEMAP_FLAG_SYNC : 0;
 	fiemap->fm_extent_count = blocks_to_map;
 	fiemap->fm_mapped_extents = 0;
 
@@ -519,9 +520,10 @@ main(int argc, char **argv)
 	int	blocks = 0;	/* the number of blocks to generate */
 	int	maxblocks = 0;	/* max # of blocks to create */
 	int	prealloc = 1;	/* whether or not to do preallocation */
+	int	syncfile = 0;	/* whether fiemap should  sync file first */
 	int	seed = 1;
 
-	while ((opt = getopt(argc, argv, "m:r:s:p:q")) != -1) {
+	while ((opt = getopt(argc, argv, "m:r:s:p:qS")) != -1) {
 		switch(opt) {
 		case 'm':
 			map = strdup(optarg);
@@ -538,12 +540,15 @@ main(int argc, char **argv)
 		case 'q':
 			quiet = 1;
 			break;
-		/* sync file before mapping */
 		case 'r':
 			runs = atoi(optarg);
 			break;
 		case 's':
 			seed = atoi(optarg);
+			break;
+		/* sync file before mapping */
+		case 'S':
+			syncfile = 1;
 			break;
 		default:
 			usage();
@@ -623,7 +628,7 @@ main(int argc, char **argv)
 			exit(1);
 		}
 
-		rc = compare_fiemap_and_map(fd, map, blocks, blocksize);
+		rc = compare_fiemap_and_map(fd, map, blocks, blocksize, syncfile);
 		if (rc) {
 			printf("Problem comparing fiemap and map\n");
 			free(map);
