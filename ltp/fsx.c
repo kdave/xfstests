@@ -32,6 +32,9 @@
 #ifdef AIO
 #include <libaio.h>
 #endif
+#ifdef FALLOCATE
+#include <linux/falloc.h>
+#endif
 
 #ifndef MAP_FILE
 # define MAP_FILE 0
@@ -65,6 +68,7 @@ int			logcount = 0;	/* total ops */
 #define OP_MAPREAD	5
 #define OP_MAPWRITE	6
 #define OP_SKIPPED	7
+#define OP_FALLOCATE	8
 
 #undef PAGE_SIZE
 #define PAGE_SIZE       getpagesize()
@@ -105,6 +109,7 @@ long	numops = -1;			/* -N flag */
 int	randomoplen = 1;		/* -O flag disables it */
 int	seed = 1;			/* -S flag */
 int     mapped_writes = 1;              /* -W flag disables */
+int     fallocate_calls = 1;            /* -F flag disables */
 int 	mapped_reads = 1;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -202,6 +207,7 @@ logdump(void)
 {
 	int	i, count, down;
 	struct log_entry	*lp;
+	char *falloc_type[3] = {"PAST_EOF", "EXTENDING", "INTERIOR"};
 
 	prt("LOG DUMP (%d total operations):\n", logcount);
 	if (logcount < LOGSIZE) {
@@ -264,6 +270,14 @@ logdump(void)
 			if (badoff >= lp->args[!down] &&
 			    badoff < lp->args[!!down])
 				prt("\t******WWWW");
+			break;
+		case OP_FALLOCATE:
+			/* 0: offset 1: length 2: where alloced */
+			prt("FALLOCATE %s\tfrom 0x%x to 0x%x",
+			    falloc_type[lp->args[2]], lp->args[0], lp->args[0] + lp->args[1]);
+			if (badoff >= lp->args[0] &&
+			    badoff < lp->args[0] + lp->args[1])
+				prt("\t******FFFF");
 			break;
 		case OP_SKIPPED:
 			prt("SKIPPED (no operation)");
@@ -770,6 +784,64 @@ dotruncate(unsigned size)
 	}
 }
 
+#ifdef FALLOCATE
+/* fallocate is basically a no-op unless extending, then a lot like a truncate */
+void
+dofallocate(unsigned offset, unsigned length)
+{
+	unsigned end_offset;
+	int keep_size;
+
+        if (length == 0) {
+                if (!quiet && testcalls > simulatedopcount)
+                        prt("skipping zero length fallocate\n");
+                log4(OP_SKIPPED, OP_FALLOCATE, offset, length);
+                return;
+        }
+
+	keep_size = random() % 2;
+
+	end_offset = keep_size ? 0 : offset + length;
+
+	if (end_offset > biggest) {
+		biggest = end_offset;
+		if (!quiet && testcalls > simulatedopcount)
+			prt("fallocating to largest ever: 0x%x\n", end_offset);
+	}
+
+	/*
+	 * last arg:
+	 * 	1: allocate past EOF
+	 * 	2: extending prealloc
+	 * 	3: interior prealloc
+	 */
+	log4(OP_FALLOCATE, offset, length, (end_offset > file_size) ? (keep_size ? 1 : 2) : 3);
+
+	if (end_offset > file_size) {
+		memset(good_buf + file_size, '\0', end_offset - file_size);
+		file_size = end_offset;
+	}
+
+	if (testcalls <= simulatedopcount)
+		return;
+	
+	if ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug && (monitorstart == -1 || monitorend == -1 ||
+		      end_offset <= monitorend)))
+		prt("%lu falloc\tfrom 0x%x to 0x%x\n", testcalls, offset, length);
+	if (fallocate(fd, keep_size ? FALLOC_FL_KEEP_SIZE : 0, (loff_t)offset, (loff_t)length) == -1) {
+	        prt("fallocate: %x to %x\n", offset, length);
+		prterr("dofallocate: fallocate");
+		report_failure(161);
+	}
+}
+#else
+void
+dofallocate(unsigned offset, unsigned length)
+{
+	return;
+}
+#endif
 
 void
 writefileimage()
@@ -823,7 +895,7 @@ test(void)
 	unsigned long	offset;
 	unsigned long	size = maxoplen;
 	unsigned long	rv = random();
-	unsigned long	op = rv % (3 + !lite + mapped_writes);
+	unsigned long	op = rv % (3 + !lite + mapped_writes + fallocate_calls);
 
         /* turn off the map read if necessary */
 
@@ -845,22 +917,33 @@ test(void)
 		prt("%lu...\n", testcalls);
 
 	/*
-	 * READ:	op = 0
-	 * WRITE:	op = 1
-	 * MAPREAD:     op = 2
-	 * TRUNCATE:	op = 3
-	 * MAPWRITE:    op = 3 or 4
+	 *                 lite  !lite
+	 * READ:	op = 0	   0
+	 * WRITE:	op = 1     1
+	 * MAPREAD:     op = 2     2
+	 * TRUNCATE:	op = -     3
+	 * MAPWRITE:    op = 3     4
+	 * FALLOCATE:   op = -     5
 	 */
 	if (lite ? 0 : op == 3 && (style & 1) == 0) /* vanilla truncate? */
 		dotruncate(random() % maxfilelen);
 	else {
 		if (randomoplen)
 			size = random() % (maxoplen+1);
-		if (lite ? 0 : op == 3)
+
+		if (lite ? 0 : op == 3) {
+			/* truncate */
 			dotruncate(size);
-		else {
+		} else {
 			offset = random();
-			if (op == 1 || op == (lite ? 3 : 4)) {
+			if (op == 5) {
+				/* fallocate */
+				offset %= maxfilelen;
+				if (offset + size > maxfilelen)
+					size = maxfilelen - offset;
+				dofallocate(offset, size);
+			} else if (op == 1 || op == (lite ? 3 : 4)) {
+				/* write / mapwrite */
 				offset %= maxfilelen;
 				if (offset + size > maxfilelen)
 					size = maxfilelen - offset;
@@ -869,6 +952,7 @@ test(void)
 				else
 					dowrite(offset, size);
 			} else {
+				/* read / mapread */
 				if (file_size)
 					offset %= file_size;
 				else
@@ -904,7 +988,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqxALOWZ] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
@@ -925,8 +1009,11 @@ usage(void)
 #ifdef AIO
 "	-A: Use the AIO system calls\n"
 #endif
-"	-D startingop: debug output starting at specified operation\n\
-	-L: fsxLite - no file creations & no file size changes\n\
+"	-D startingop: debug output starting at specified operation\n"
+#ifdef FALLOCATE
+"	-F: Do not use fallocate (preallocation) calls\n"
+#endif
+"	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
 	-P: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
@@ -1092,7 +1179,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:LN:OP:RS:WZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FLN:OP:RS:WZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -1185,6 +1272,9 @@ main(int argc, char **argv)
 			debugstart = getnum(optarg, &endp);
 			if (debugstart < 1)
 				usage();
+			break;
+		case 'F':
+			fallocate_calls = 0;
 			break;
 		case 'L':
 		        lite = 1;
@@ -1330,6 +1420,18 @@ main(int argc, char **argv)
 		}
 	} else 
 		check_trunc_hack();
+
+#ifdef FALLOCATE
+	if (!lite && fallocate_calls) {
+		if (fallocate(fd, 0, 0, 1) && errno == EOPNOTSUPP) {
+			warn("main: filesystem does not support fallocate, disabling");
+			fallocate_calls = 0;
+		} else
+			ftruncate(fd, 0);
+	}
+#else /* ! FALLOCATE */
+	fallocate_calls = 0;
+#endif
 
 	while (numops == -1 || numops--)
 		test();

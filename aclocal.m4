@@ -18,6 +18,17 @@ AC_DEFUN([AC_PACKAGE_WANT_LINUX_FIEMAP_H],
 
 AC_DEFUN([AC_PACKAGE_WANT_FALLOCATE],
   [ AC_MSG_CHECKING([for fallocate])
+    AC_TRY_COMPILE([
+#include <linux/falloc.h>
+    ], [
+         fallocate(0, 0, 0, 0);
+    ], have_fallocate=true
+       AC_MSG_RESULT(true),
+       AC_MSG_RESULT(false))
+    AC_SUBST(have_fallocate)
+  ])
+AC_DEFUN([AC_PACKAGE_WANT_FALLOCATE],
+  [ AC_MSG_CHECKING([for fallocate])
     AC_TRY_LINK([
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
