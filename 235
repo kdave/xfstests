@@ -61,6 +61,11 @@ chown $qa_user:$qa_user $SCRATCH_MNT/testfile
 
 repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
 
+# XXX This is a nasty hack.  remount doesn't work on a fileystem
+# with a context; see https://bugzilla.redhat.com/show_bug.cgi?id=563267
+#
+# We work around it by editing the context out of mtab.  Sigh.
+sed -i "s#^$SCRATCH_DEV\(.*\),context=\"system_u:object_r:nfs_t:s0\"#$SCRATCH_DEV\1#" /etc/mtab
 mount -o remount,ro $SCRATCH_DEV 2>&1 | tee -a $seq.full | _filter_scratch
 touch $SCRATCH_MNT/failed 2>&1 | tee -a $seq.full | _filter_scratch
 mount -o remount,rw $SCRATCH_DEV 2>&1 | tee -a $seq.full | _filter_scratch
