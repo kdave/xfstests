@@ -1,7 +1,7 @@
 #! /bin/bash
-# FS QA Test No. 242
+# FS QA Test No. 252
 #
-# Test XFS_IOC_ZERO_RANGE
+# Test fallocate hole punching
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2010 Red Hat.  All Rights Reserved.
@@ -22,7 +22,7 @@
 #-----------------------------------------------------------------------
 #
 # creator
-owner=dchinner@redhat.com
+owner=josef@redhat.com
 
 seq=`basename $0`
 echo "QA output created by $seq"
@@ -44,21 +44,14 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 . ./common.punch
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 
-_test_io_zero()
-{
-	$XFS_IO_PROG -c "zero help" 2>&1 | \
-			grep 'command "zero" not found' > /dev/null
-	echo $?
-}
+_require_xfs_io_falloc_punch
+_require_xfs_io_fiemap
 
-[ $(_test_io_zero) -eq 0 ] && _notrun "zero command not supported"
+testfile=$TEST_DIR/252.$$
 
-
-testfile=$TEST_DIR/242.$$
-
-_test_generic_punch resvsp unresvsp zero 'bmap -p' _filter_bmap $testfile
+_test_generic_punch falloc fpunch fpunch fiemap _filter_fiemap $testfile -F
 
 status=0 ; exit

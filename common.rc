@@ -847,6 +847,33 @@ _require_xfs_io_falloc()
 		_notrun "xfs_io fallocate command failed (old kernel/wrong fs?)"
 }
 
+# check that xfs_io, kernel and filesystem all support fallocate with hole
+# punching
+_require_xfs_io_falloc_punch()
+{
+	testfile=$TEST_DIR/$$.falloc
+	testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
+		-c "fpunch 4k 8k" $testfile 2>&1`
+	rm -f $testfile 2>&1 > /dev/null
+	echo $testio | grep -q "not found" && \
+		_notrun "xfs_io fallocate punch support is missing"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "xfs_io fallocate punch command failed (no fs support?)"
+}
+
+# check that xfs_io, kernel and filesystem support fiemap
+_require_xfs_io_fiemap()
+{
+	testfile=$TEST_DIR/$$.fiemap
+	testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
+		-c "fiemap -v" $testfile 2>&1`
+	rm -f $testfile 2>&1 > /dev/null
+	echo $testio | grep -q "not found" && \
+		_notrun "xfs_io fiemap support is missing"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "xfs_io fiemap command failed (no fs support?)"
+}
+
 # Check that a fs has enough free space (in 1024b blocks)
 #
 _require_fs_space()

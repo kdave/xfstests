@@ -176,3 +176,160 @@ _test_punch() {
 		_do_bmap $filename		# print out the state of the file
 	done
 }
+
+_filter_fiemap()
+{
+    awk --posix '$3 ~ /hole/ { print $1, $2, $3; next }
+		 $5 ~ /0x[[:digit:]]*8[[:digit:]]{2}/ { print $1, $2, "unwritten"; next }
+		 $5 ~ /0x[[:digit:]]+/ {print $1, $2, "data" }'
+}
+
+_filter_bmap()
+{
+    awk '$3 ~ /hole/ { print $1, $2, $3; next }
+         $7 ~ /10000/ { print $1, $2, "unwritten"; next }
+         $7 ~ /00000/ {print $1, $2, "data" }'
+}
+
+die_now()
+{
+	status=1
+	exit
+}
+
+# test the different corner cases for zeroing a range:
+#
+#	1. into a hole
+#	2. into allocated space
+#	3. into unwritten space
+#	4. hole -> data
+#	5. hole -> unwritten
+#	6. data -> hole
+#	7. data -> unwritten
+#	8. unwritten -> hole
+#	9. unwritten -> data
+#	10. hole -> data -> hole
+#	11. data -> hole -> data
+#	12. unwritten -> data -> unwritten
+#	13. data -> unwritten -> data
+_test_generic_punch()
+{
+	alloc_cmd=$1
+	punch_cmd=$2
+	zero_cmd=$3	#if not testing zero just set to punch
+	map_cmd=$4
+	filter_cmd=$5
+	testfile=$6
+	xfs_io_opt=$7	#needs to be -F if not testing xfs
+
+	echo "	1. into a hole"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	2. into allocated space"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "pwrite 0 20k" -c "fsync" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	3. into unwritten space"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 20k" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	4. hole -> data"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "pwrite 8k 8k" -c "fsync" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	5. hole -> unwritten"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 8k 8k" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	6. data -> hole"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "pwrite 0 8k" -c "fsync" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	7. data -> unwritten"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "pwrite 0 8k" -c "fsync" \
+		-c "$alloc_cmd 8k 8k" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	8. unwritten -> hole"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 8k" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	9. unwritten -> data"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 8k" \
+		-c "pwrite 8k 8k" -c "fsync" \
+		-c "$zero_cmd 4k 8k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	10. hole -> data -> hole"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "pwrite 8k 4k" -c "fsync" \
+		-c "$zero_cmd 4k 12k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	11. data -> hole -> data"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 20k" \
+		-c "pwrite 0 8k" \
+		-c "pwrite 12k 8k" -c "fsync" \
+		-c "$punch_cmd 8k 4k" \
+		-c "$zero_cmd 4k 12k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	12. unwritten -> data -> unwritten"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 20k" \
+		-c "pwrite 8k 4k" -c "fsync" \
+		-c "$zero_cmd 4k 12k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+
+	echo "	13. data -> unwritten -> data"
+	rm -f $testfile
+	$XFS_IO_PROG $xfs_io_opt -f -c "truncate 20k" \
+		-c "$alloc_cmd 0 20k" \
+		-c "pwrite 0k 8k" -c "fsync" \
+		-c "pwrite 12k 8k" -c "fsync" \
+		-c "$zero_cmd 4k 12k" \
+		-c "$map_cmd -v" $testfile | $filter_cmd
+	[ $? -ne 0 ] && die_now
+}
