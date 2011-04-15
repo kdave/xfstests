@@ -14,10 +14,11 @@
  * along with this program; if not, write the Free Software Foundation,
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
-#include <stdio.h>
 
 int main(int argc, char **argv)
 {
@@ -29,8 +30,10 @@ int main(int argc, char **argv)
 		for (j = 0; j < 1024; j++)
 			buf[j]  = i | i << 5;
 
-		if (write(fd,buf,253*4*sizeof(int))!= 253*4*sizeof(int))
+		if (write(fd,buf,253*4*sizeof(int))!= 253*4*sizeof(int)) {
 			printf("Write did not return correct amount\n");
+			exit(EXIT_FAILURE);
+		}
 
 		if ((i % 9) == 0 && i < 9001)
 			lseek(fd, 4096 * 110,SEEK_CUR);
