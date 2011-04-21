@@ -177,18 +177,62 @@ _test_punch() {
 	done
 }
 
+_coalesce_extents()
+{
+	awk -F: '
+	{
+		range = $2;
+		type = $3;
+
+		split(range, bounds, "[\\[ \\.\\]]");
+		low = bounds[3];
+		high = bounds[5];
+
+		if (type != prev_type) {
+			if (prev_type != "")
+				printf("%u]:%s\n", low - 1, prev_type);
+			printf("%u: [%u..", out_count++, low);
+			prev_type = type;
+		}
+	}
+	END {
+		if (prev_type != "")
+			printf("%u]:%s\n", high, prev_type);
+	}'
+}
+
 _filter_fiemap()
 {
-    awk --posix '$3 ~ /hole/ { print $1, $2, $3; next }
-		 $5 ~ /0x[[:digit:]]*8[[:digit:]]{2}/ { print $1, $2, "unwritten"; next }
-		 $5 ~ /0x[[:digit:]]+/ {print $1, $2, "data" }'
+	awk --posix '
+		$3 ~ /hole/ {
+			print $1, $2, $3;
+			next;
+		}
+		$5 ~ /0x[[:digit:]]*8[[:digit:]]{2}/ {
+			print $1, $2, "unwritten";
+			next;
+		}
+		$5 ~ /0x[[:digit:]]+/ {
+			print $1, $2, "data";
+		}' |
+	_coalesce_extents
 }
 
 _filter_bmap()
 {
-    awk '$3 ~ /hole/ { print $1, $2, $3; next }
-         $7 ~ /10000/ { print $1, $2, "unwritten"; next }
-         $7 ~ /00000/ {print $1, $2, "data" }'
+	awk '
+		$3 ~ /hole/ {
+			print $1, $2, $3;
+			next;
+		}
+		$7 ~ /10000/ {
+			print $1, $2, "unwritten";
+			next;
+		}
+		$7 ~ /00000/ {
+			print $1, $2, "data"
+		}' |
+	_coalesce_extents
 }
 
 die_now()
