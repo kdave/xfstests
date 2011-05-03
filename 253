@@ -1,0 +1,194 @@
+#! /bin/bash
+# FS QA Test No. 253
+#
+# Test xfs_db metadump functionality.
+#
+# This test was created to verify fixes for problems where metadump
+# would never complete due to an inability to find a suitable
+# obfuscated name to use.  It also verifies a few other things,
+# including ensuring the "lost+found" directory and orphaned files
+# in it do not get obfuscated.
+#
+# This test also creates a number of files that are effectively
+# duplicates of existing files; this can happen in certain rare
+# instances where the obfuscation process has produced a filename
+# that is already in use (and no other name is available to use).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=aelder@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    rm -rf "${OUTPUT_DIR}"
+    rm -f "${METADUMP_FILE}"
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+_require_scratch
+
+# real QA test starts here
+
+OUTPUT_DIR="${SCRATCH_MNT}/test_${seq}"
+METADUMP_FILE="${TEST_MNT}/${seq}_metadump"
+ORPHANAGE="lost+found"
+
+_supported_fs xfs
+_supported_os Linux
+
+function create_file() {
+	[ $# -eq 1 ] ||		return 1
+	touch $(printf "$@")
+}
+
+echo "Disciplyne of silence is goed."
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+# Initialize and mount the scratch filesystem, then create a bunch
+# of files that exercise the original problem.
+#
+# The problem arose when a file name produced a hash that contained
+# either 0x00 (string terminator) or 0x27 ('/' character) in a
+# spot used to determine a character in an obfuscated name.  This
+# occurred in one of 5 spots at the end of the name, at position
+# (last-4), (last-3), (last-2), (last-1), or (last).
+
+rm -f "${METADUMP_FILE}"
+
+mkdir -p "${OUTPUT_DIR}"
+
+cd "${OUTPUT_DIR}"
+# Start out with some basic test files
+create_file 'abcde'		# hash 0x1c58f263 ("normal" name)
+
+create_file 'f'			# hash 0x00000066 (1-byte name)
+create_file 'gh'		# hash 0x000033e8 (2-byte name)
+create_file 'ijk'		# hash 0x001a756b (3-byte name)
+create_file 'lmno'		# hash 0x0d9b776f (4-byte name)
+create_file 'pqrstu'		# hash 0x1e5cf9f2 (6-byte name)
+create_file 'abcdefghijklmnopqrstuvwxyz' # a most remarkable word (0x55004ae3)
+
+# Create a short directory name; it won't be obfuscated.  Populate
+# it with some longer named-files.  The first part of the obfuscated
+# filenames should use printable characters.
+mkdir foo
+create_file 'foo/longer_file_name_1'	# hash 0xe83634ec
+create_file 'foo/longer_file_name_2'	# hash 0xe83634ef
+create_file 'foo/longer_file_name_3'	# hash 0xe83634ee
+
+# Now create a longer directory name
+mkdir longer_directory_name
+create_file 'longer_directory_name/f1'	# directory hash 0x9c7accdd
+create_file 'longer_directory_name/f2'	# filenames are short, no hash
+create_file 'longer_directory_name/f3'
+
+# The problematic name originally reported by Arkadiusz Miśkiewicz
+
+create_file 'R\323\257NE'	# hash 0x3a4be740, forces  (last-3) = 0x2f
+
+# Other names that force a 0x00 byte
+create_file 'Pbcde'		# hash 0x0c58f260, forces  (last-4) = 0x00
+create_file 'a\001\203de'	# hash 0x1000f263, forces  (last-3) = 0x00
+create_file 'ab\001\344e'	# hash 0x1c403263, forces  (last-2) = 0x00
+create_file 'abc\200e'		# hash 0x1c588063, forces  (last-1) = 0x00
+create_file 'abcd\006'		# hash 0x1c58f200, forces    (last) = 0x00
+
+# Names that force a 0x2f byte; note no name will ever force (last-4) = 0x2f
+create_file 'a.\343de'		# hash 0x15f8f263 forces   (last-3) = 0x00
+create_file 'ac\257de'		# hash 0x1c4bf263, forces  (last-2) = 0x2f
+create_file 'abe\257e'		# hash 0x1c5917e3, forces  (last-1) = 0x2f
+create_file 'abcd)'		# hash 0x1c58f22f, forces    (last) = 0x2f
+
+# The following names are possible results of obfuscating the name
+# "abcde".  Previously, xfs_metadump could get hung up trying to
+# obfuscate names when too many of the same length had the same hash
+# value.
+create_file '!bcda'		# essentially a dup of 'abcde'
+create_file 'Abcdg'		# essentially a dup of 'abcde'
+create_file 'qbcdd'		# essentially a dup of 'abcde'
+create_file '1bcd`'		# essentially a dup of 'abcde'
+create_file 'Qbcdf'		# essentially a dup of 'abcde'
+create_file '\001bcdc'		# essentially a dup of 'abcde'
+create_file 'Qbce\346'		# essentially a dup of 'abcde'
+create_file 'abb\344e'		# essentially a dup of 'abcde'
+
+# The orphanage directory (lost+found) should not be obfuscated.
+# Files thereunder can be, but not if their name is the same as
+# their inode number.  Test this.
+
+cd "${SCRATCH_MNT}"
+mkdir -p "${ORPHANAGE}"
+
+TEMP_ORPHAN="${ORPHANAGE}/__orphan__"
+NON_ORPHAN="${ORPHANAGE}/__should_be_obfuscated__"
+
+# Create an orphan, whose name is the same as its inode number
+touch "${TEMP_ORPHAN}"
+INUM=$(ls -i "${TEMP_ORPHAN}" | awk '{ print $1; }')
+ORPHAN="${SCRATCH_MNT}/lost+found/${INUM}"
+mv "${TEMP_ORPHAN}" "${ORPHAN}"
+
+# Create non-orphan, which *should* be obfuscated
+touch "${NON_ORPHAN}"
+
+# Get a listing of all the files before obfuscation
+ls -R >> "${seq}.full"
+ls -R | od -c >> "${seq}.full"
+
+# Now unmount the filesystem and create a metadump file
+cd /; sync; sync		# Old school
+
+_scratch_unmount
+
+xfs_metadump -f "${SCRATCH_DEV}" "${METADUMP_FILE}"
+
+# Now restore the obfuscated one back and take a look around
+xfs_mdrestore "${METADUMP_FILE}" "${SCRATCH_DEV}"
+
+_scratch_mount
+
+# Get a listing of all the files after obfuscation
+cd "${SCRATCH_MNT}"
+ls -R >> "${seq}.full"
+ls -R | od -c >> "${seq}.full"
+
+# Finally, re-make the filesystem since to ensure we don't
+# leave a directory with duplicate entries lying around.
+cd /
+_scratch_unmount
+_scratch_mkfs >/dev/null 2>&1
+
+# all done
+status=0
+exit
