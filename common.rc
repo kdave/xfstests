@@ -587,7 +587,14 @@ _is_block_dev()
 	exit 1
     fi
 
-    [ -b $1 ] && src/lstat64 $1 | $AWK_PROG '/Device type:/ { print $9 }'
+    _dev=$1
+    if [ -L "${_dev}" ]; then
+        _dev=`readlink -f ${_dev}`
+    fi
+
+    if [ -b "${_dev}" ]; then
+        src/lstat64 ${_dev} | $AWK_PROG '/Device type:/ { print $9 }'
+    fi
 }
 
 # Do a command, log it to $seq.full, optionally test return status
