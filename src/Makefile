@@ -31,7 +31,7 @@ ifeq ($(HAVE_FIEMAP), true)
 LINUX_TARGETS += fiemap-tester
 endif
 
-ifeq ($(HAVE_FALLOCATE),yes)
+ifeq ($(HAVE_FALLOCATE), true)
 LCFLAGS += -DHAVE_FALLOCATE
 endif
 
