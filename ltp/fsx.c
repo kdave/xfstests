@@ -1424,7 +1424,8 @@ main(int argc, char **argv)
 #ifdef FALLOCATE
 	if (!lite && fallocate_calls) {
 		if (fallocate(fd, 0, 0, 1) && errno == EOPNOTSUPP) {
-			warn("main: filesystem does not support fallocate, disabling");
+			if(!quiet)
+				prt("fsx: main: filesystem does not support fallocate, disabling\n");
 			fallocate_calls = 0;
 		} else
 			ftruncate(fd, 0);
