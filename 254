@@ -1,0 +1,107 @@
+#! /bin/bash
+# FS QA Test No. 254
+#
+# Test btrfs's subvolume and snapshot support
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 Red Hat.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=josef@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+# First test basic snapshotting
+echo "Creating file foo in root dir"
+dd if=/dev/zero of=$SCRATCH_MNT/foo bs=1M count=1 &> /dev/null
+echo "List root dir"
+ls $SCRATCH_MNT
+echo "Creating snapshot of root dir"
+btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap
+echo "List root dir after snapshot"
+ls $SCRATCH_MNT
+echo "List snapshot dir"
+ls $SCRATCH_MNT/snap
+rm -f $SCRATCH_MNT/foo
+echo "List root dir after rm of foo"
+ls $SCRATCH_MNT
+echo "List snapshot dir"
+ls $SCRATCH_MNT/snap
+
+# Test creating a normal subvolme
+btrfs subvolume create $SCRATCH_MNT/subvol
+echo "Listing root dir"
+ls $SCRATCH_MNT
+echo "Listing subvol"
+ls $SCRATCH_MNT/subvol
+
+# Test setting a default mount
+echo "Creating file bar in subvol"
+dd if=/dev/zero of=$SCRATCH_MNT/subvol/bar bs=1M count=1 &> /dev/null
+echo "Setting subvol to the default"
+btrfs subvolume set-default $SCRATCH_MNT/subvol $SCRATCH_MNT/subvol
+_scratch_remount
+echo "List root dir which is now subvol"
+ls $SCRATCH_MNT
+_scratch_unmount
+echo "Mounting sbuvolid=0 for the root dir"
+_scratch_mount "-o subvolid=0"
+echo "List root dir"
+ls $SCRATCH_MNT
+echo "Setting the root dir as the default again"
+btrfs subvolume set-default $SCRATCH_MNT $SCRATCH_MNT
+_scratch_remount
+echo "List root dir"
+ls $SCRATCH_MNT
+
+# Test listing the subvolumes
+echo "Listing subvolumes"
+btrfs subvolume list $SCRATCH_MNT
+
+# Delete the snapshot
+btrfs subvolume delete $SCRATCH_MNT/snap
+echo "List root dir"
+ls $SCRATCH_MNT
+_scratch_remount
+echo "List root dir"
+ls $SCRATCH_MNT
+
+status=0 ; exit
