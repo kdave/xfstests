@@ -40,6 +40,7 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common.rc
+. ./common.filter
 
 # real QA test starts here
 _supported_fs btrfs
@@ -55,7 +56,7 @@ dd if=/dev/zero of=$SCRATCH_MNT/foo bs=1M count=1 &> /dev/null
 echo "List root dir"
 ls $SCRATCH_MNT
 echo "Creating snapshot of root dir"
-btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap
+btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap | _filter_scratch
 echo "List root dir after snapshot"
 ls $SCRATCH_MNT
 echo "List snapshot dir"
@@ -67,7 +68,7 @@ echo "List snapshot dir"
 ls $SCRATCH_MNT/snap
 
 # Test creating a normal subvolme
-btrfs subvolume create $SCRATCH_MNT/subvol
+btrfs subvolume create $SCRATCH_MNT/subvol | _filter_scratch
 echo "Listing root dir"
 ls $SCRATCH_MNT
 echo "Listing subvol"
@@ -77,7 +78,7 @@ ls $SCRATCH_MNT/subvol
 echo "Creating file bar in subvol"
 dd if=/dev/zero of=$SCRATCH_MNT/subvol/bar bs=1M count=1 &> /dev/null
 echo "Setting subvol to the default"
-btrfs subvolume set-default $SCRATCH_MNT/subvol $SCRATCH_MNT/subvol
+btrfs subvolume set-default $SCRATCH_MNT/subvol $SCRATCH_MNT/subvol | _filter_scratch
 _scratch_remount
 echo "List root dir which is now subvol"
 ls $SCRATCH_MNT
@@ -87,17 +88,17 @@ _scratch_mount "-o subvolid=0"
 echo "List root dir"
 ls $SCRATCH_MNT
 echo "Setting the root dir as the default again"
-btrfs subvolume set-default $SCRATCH_MNT $SCRATCH_MNT
+btrfs subvolume set-default $SCRATCH_MNT $SCRATCH_MNT | _filter_scratch
 _scratch_remount
 echo "List root dir"
 ls $SCRATCH_MNT
 
 # Test listing the subvolumes
 echo "Listing subvolumes"
-btrfs subvolume list $SCRATCH_MNT
+btrfs subvolume list $SCRATCH_MNT | _filter_scratch
 
 # Delete the snapshot
-btrfs subvolume delete $SCRATCH_MNT/snap
+btrfs subvolume delete $SCRATCH_MNT/snap | _filter_scratch
 echo "List root dir"
 ls $SCRATCH_MNT
 _scratch_remount
