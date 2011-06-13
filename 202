@@ -41,8 +41,14 @@ _supported_os Linux
 
 _require_scratch
 
+#
+# The AG size is limited to 1TB (or even less with historic xfsprogs),
+# so chose a small enough filesystem to make sure we can actually create
+# a single AG filesystem.
+#
 echo "== Creating single-AG filesystem =="
-_scratch_mkfs_xfs -d agcount=1 >/dev/null 2>&1
+_scratch_mkfs_xfs -d agcount=1 -d size=$((1024*1024*1024)) >/dev/null 2>&1 \
+ || _fail "!!! failed to make filesystem with single AG"
 
 echo "== Trying to repair it (should fail) =="
 _scratch_xfs_repair
