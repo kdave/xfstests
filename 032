@@ -75,11 +75,15 @@ do
 	echo "    ( $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs )" >>$seq.full
 	eval $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs >>$seq.full 2>&1
 
-	# next, ensure we don't overwrite it
-	echo "=== Attempting XFS overwrite of $fs..." >>$seq.full
-	/sbin/mkfs.xfs $SCRATCH_DEV >>$seq.full 2>&1
+	if [ $? -eq 0 ] ; then
+		# next, ensure we don't overwrite it
+		echo "=== Attempting XFS overwrite of $fs..." >>$seq.full
+		/sbin/mkfs.xfs $SCRATCH_DEV >>$seq.full 2>&1
 
-	[ $? -eq 0 ] && echo "Failed - overwrote fs type ${fs}!"
+		[ $? -eq 0 ] && echo "Failed - overwrote fs type ${fs}!"
+	else
+		echo "mkfs of type ${fs} failed" >>$seq.full
+	fi
 done
 
 # success, all done
