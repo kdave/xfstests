@@ -1,0 +1,178 @@
+#! /bin/bash
+# FS QA Test No. 256
+#
+# Test Full File System Hole Punching
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 IBM Corporation.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=achender@linux.vnet.ibm.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.punch
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_xfs_io_falloc_punch
+_require_scratch
+_require_user
+
+testfile=$TEST_DIR/256.$$
+
+
+# _fill_fs()
+#
+# Fills a file system by repeatedly creating files in the given folder
+# starting with the given file size.  Files are reduced in size when
+# they can no longer fit untill no more files can be created.
+#
+# This routine is used by _test_full_fs_punch to test that a hole may
+# still be punched when the disk is full by borrowing reserved blocks.
+# All files are created as a non root user to prevent reserved blocks
+# from being consumed.
+#
+_fill_fs() {
+	local file_size=$1
+	local dir=$2
+	local block_size=$3
+	local file_count=1
+	local bytes_written=0
+
+	if [ $# -ne 3 ]
+	then
+		echo "USAGE: _fill_fs filesize dir block size"
+		exit 1
+	fi
+
+	# Creation of files or folders
+	# must not be done as root or
+	# reserved blocks will be consumed
+	_user_do "mkdir -p $dir &> /dev/null"
+	if [ $? -ne 0 ] ; then
+		return 0
+	fi
+
+	if [ $file_size -lt $block_size ]
+	then
+		$file_size = $block_size
+	fi
+
+	while [ $file_size -ge $block_size ]
+	do
+		bytes_written=0
+		_user_do "$XFS_IO_PROG -F -f -c \"pwrite 0 $file_size\" $dir/$file_count.bin &> /dev/null"
+
+		if [ -f $dir/$file_count.bin ]
+		then
+			bytes_written=`$XFS_IO_PROG -F -c "stat"  $dir/$file_count.bin | grep size | cut -d ' ' -f3`
+		fi
+
+		# If there was no room to make the file,
+		# then divide it in half, and keep going
+		if [ $bytes_written -lt $file_size ]
+		then
+			file_size=$(( $file_size / 2 ))
+		fi
+		file_count=$(( $file_count + 1 ))
+
+	done
+}
+
+# _test_full_fs_punch()
+#
+# This function will test that a hole may be punched
+# even when the file system is full.  Reserved blocks
+# should be used to allow a punch hole to proceed even
+# when there is not enough blocks to further fragment the
+# file. To test this, this function will fragment the file
+# system by punching holes in regular intervals and filling
+# the file system between punches.
+#
+_test_full_fs_punch()
+{
+	local hole_len=$1      # The length of the holes to punch
+	local hole_interval=$2 # The interval between the holes
+	local iterations=$3    # The number of holes to punch
+	local file_name=$4     # File to punch holes in
+	local block_size=$5    # File system block size
+	local file_len=$(( $(( $hole_len + $hole_interval )) * $iterations ))
+	local path=`dirname $file_name`
+	local hole_offset=0
+
+	if [ $# -ne 5 ]
+	then
+		echo "USAGE: _test_full_fs_punch hole_len hole_interval iterations file_name block_size"
+		exit 1
+	fi
+
+	rm -f $file_name &> /dev/null
+
+	$XFS_IO_PROG -F -f -c "pwrite 0 $file_len" \
+		-c "fsync" $file_name &> /dev/null
+	chmod 666 $file_name
+
+	_fill_fs $(( 1024 * 1024 * 1024 )) $path/fill $block_size
+
+	for (( i=0; i<$iterations; i++ ))
+	do
+		# This part must not be done as root in order to
+		# test that reserved blocks are used when needed
+		_user_do "$XFS_IO_PROG -F -f -c \"fpunch $hole_offset $hole_len\" $file_name"
+		rc=$?
+		if [ $? -ne 0 ] ; then
+			echo Punch hole failed
+			break
+		fi
+
+		hole_offset=$(( $hole_offset + $hole_len + $hole_interval ))
+
+		_fill_fs $hole_len $path/fill.$i $block_size
+
+	done
+}
+
+# Make a small file system to fill
+umount $SCRATCH_DEV &> /dev/null
+_scratch_mkfs_sized $(( 1024 * 1024 * 1024 )) &> /dev/null
+_scratch_mount
+# Test must be able to write files with non-root permissions
+chmod 777 $SCRATCH_MNT
+
+block_size=`stat -f $SCRATCH_DEV | grep "Block size" | cut -d " " -f3`
+_test_full_fs_punch $(( $block_size * 2 )) $block_size 500 $SCRATCH_MNT/252.$$ $block_size
+
+status=0 ; exit
