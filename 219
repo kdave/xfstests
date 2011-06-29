@@ -58,6 +58,23 @@ test_files()
 	done
 }
 
+check_usage()
+{
+	wroteblocks=$1
+	wrotefiles=$2
+	read id exceed blocks bsoft bhard inodes isoft ihard
+	if [ "$blocks" -lt "$wroteblocks" ]; then
+		echo "Too few blocks used (type=$type)"
+	# Save 5% for overhead of metadata or different block size
+	elif [ "$blocks" -gt $((wroteblocks+wroteblocks/20)) ]; then
+		echo "Too many blocks used (type=$type)"
+	elif [ "$inodes" != "$wrotefiles" ]; then
+		echo "Bad number of inodes used (type=$type)"
+	else
+		echo "Usage OK (type=$type)"
+	fi
+}
+
 test_accounting()
 {
 	echo "### some controlled buffered, direct and mmapd IO (type=$type)"
@@ -77,8 +94,12 @@ test_accounting()
 		$here/src/lstat64 $file | head -3 | _filter_scratch
 	done
 
-	repquota -$type -n $SCRATCH_MNT  | grep -v "^#0" | _filter_scratch |
-	awk '/^#/ { if (seen[$1]) next; seen[$1]++; } { print; }'
+	if [ $type == 'u' ]; then
+		id=$uid
+	else
+		id=$gid
+	fi
+	repquota -$type -n $SCRATCH_MNT  | grep "^#$id" | check_usage 144 3
 }
 
 # real QA test starts here
