@@ -218,6 +218,23 @@ _filter_fiemap()
 	_coalesce_extents
 }
 
+# Filters fiemap output to only print the 
+# file offset column and whether or not
+# it is an extent or a hole
+_filter_hole_fiemap()
+{
+	awk --posix '
+		$3 ~ /hole/ {
+			print $1, $2, $3; 
+			next;
+		}   
+		$5 ~ /0x[[:digit:]]+/ {
+			print $1, $2, "extent";
+		}' |
+	_coalesce_extents
+}
+
+
 # Prints the md5 checksum of a given file
 _md5_checksum()
 {
