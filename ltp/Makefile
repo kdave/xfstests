@@ -6,6 +6,7 @@ TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
 TARGETS = doio fsstress fsx growfiles iogen
+SCRIPTS = rwtest.sh
 CFILES = $(TARGETS:=.c)
 HFILES = doio.h
 LDIRT = $(TARGETS)
@@ -44,5 +45,6 @@ $(TARGETS): $(LIBTEST)
 install: default
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/ltp
 	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/ltp
+	$(INSTALL) -m 755 $(SCRIPTS) $(PKG_LIB_DIR)/ltp
 
 -include .dep
