@@ -1243,7 +1243,7 @@ test_fallocate()
 	if (!lite && fallocate_calls) {
 		if (fallocate(fd, 0, 0, 1) && errno == EOPNOTSUPP) {
 			if(!quiet)
-				prt("fsx: main: filesystem does not support fallocate, disabling\n");
+				warn("main: filesystem does not support fallocate, disabling\n");
 			fallocate_calls = 0;
 		} else {
 			ftruncate(fd, 0);
@@ -1260,13 +1260,13 @@ test_punch_hole()
 {
 #ifdef FALLOC_FL_PUNCH_HOLE
 	if (!lite && punch_hole_calls) {
-		if (fallocate(fd, 0, 0,
-			FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE) &&
-			errno == EOPNOTSUPP) {
-
-			warn("main: filesystem does not support fallocate punch hole, disabling");
+		if (fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+				0, 1) && errno == EOPNOTSUPP) {
+			if(!quiet)
+				warn("main: filesystem does not support fallocate punch hole, disabling");
 			punch_hole_calls = 0;
-		}
+		} else
+			ftruncate(fd, 0);
 	}
 #else /* ! PUNCH HOLE */
 	punch_hole_calls = 0;
