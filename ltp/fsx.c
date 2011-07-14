@@ -252,14 +252,14 @@ logdump(void)
 		int opnum;
 
 		opnum = i+1 + (logcount/LOGSIZE)*LOGSIZE;
-		prt("%d(%d mod 256): ", opnum, opnum%256);
+		prt("%d(%3d mod 256): ", opnum, opnum%256);
 		lp = &oplog[i];
 		if ((closeopen = lp->operation < 0))
 			lp->operation = ~ lp->operation;
 			
 		switch (lp->operation) {
 		case OP_MAPREAD:
-			prt("MAPREAD\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("MAPREAD  0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] && badoff <
@@ -275,7 +275,7 @@ logdump(void)
 				prt("\t******WWWW");
 			break;
 		case OP_READ:
-			prt("READ\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("READ     0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] &&
@@ -283,7 +283,7 @@ logdump(void)
 				prt("\t***RRRR***");
 			break;
 		case OP_WRITE:
-			prt("WRITE\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("WRITE    0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (lp->args[0] > lp->args[2])
@@ -304,14 +304,15 @@ logdump(void)
 			break;
 		case OP_FALLOCATE:
 			/* 0: offset 1: length 2: where alloced */
-			prt("FALLOCATE %s\tfrom 0x%x to 0x%x",
-			    falloc_type[lp->args[2]], lp->args[0], lp->args[0] + lp->args[1]);
+			prt("FALLOC   0x%x thru 0x%x\t(0x%x bytes) %s",
+				lp->args[0], lp->args[0] + lp->args[1],
+				lp->args[1], falloc_type[lp->args[2]]);
 			if (badoff >= lp->args[0] &&
 			    badoff < lp->args[0] + lp->args[1])
 				prt("\t******FFFF");
 			break;
 		case OP_PUNCH_HOLE:
-			prt("PUNCH HOLE\t0x%x thru 0x%x\t(0x%x bytes)",
+			prt("PUNCH    0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] && badoff <
@@ -906,12 +907,12 @@ do_preallocate(unsigned offset, unsigned length)
 	}
 
 	/*
-	 * last arg:
-	 * 	1: allocate past EOF
-	 * 	2: extending prealloc
-	 * 	3: interior prealloc
+	 * last arg matches fallocate string array index in logdump:
+	 * 	0: allocate past EOF
+	 * 	1: extending prealloc
+	 * 	2: interior prealloc
 	 */
-	log4(OP_FALLOCATE, offset, length, (end_offset > file_size) ? (keep_size ? 1 : 2) : 3);
+	log4(OP_FALLOCATE, offset, length, (end_offset > file_size) ? (keep_size ? 0 : 1) : 2);
 
 	if (end_offset > file_size) {
 		memset(good_buf + file_size, '\0', end_offset - file_size);
@@ -924,7 +925,8 @@ do_preallocate(unsigned offset, unsigned length)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend)))
-		prt("%lu falloc\tfrom 0x%x to 0x%x\n", testcalls, offset, length);
+		prt("%lu falloc\tfrom 0x%x to 0x%x (0x%x bytes)\n", testcalls,
+				offset, offset + length, length);
 	if (fallocate(fd, keep_size ? FALLOC_FL_KEEP_SIZE : 0, (loff_t)offset, (loff_t)length) == -1) {
 	        prt("fallocate: %x to %x\n", offset, length);
 		prterr("do_preallocate: fallocate");
