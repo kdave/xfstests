@@ -25,6 +25,7 @@
 #endif
 #include <signal.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -1053,22 +1054,22 @@ test(void)
 
 	switch (op) {
 	case OP_READ:
-		TRIM_OFF_LEN(offset, size, file_size, false);
+		TRIM_OFF_LEN(offset, size, file_size, 0);
 		doread(offset, size);
 		break;
 
 	case OP_WRITE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
 		dowrite(offset, size);
 		break;
 
 	case OP_MAPREAD:
-		TRIM_OFF_LEN(offset, size, file_size, false);
+		TRIM_OFF_LEN(offset, size, file_size, 0);
 		domapread(offset, size);
 		break;
 
 	case OP_MAPWRITE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
 		domapwrite(offset, size);
 		break;
 
@@ -1079,12 +1080,12 @@ test(void)
 		break;
 
 	case OP_FALLOCATE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
 		do_preallocate(offset, size);
 		break;
 
 	case OP_PUNCH_HOLE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
 		do_punch_hole(offset, size);
 		break;
 	default:
