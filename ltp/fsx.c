@@ -58,18 +58,47 @@ int			logptr = 0;	/* current position in log */
 int			logcount = 0;	/* total ops */
 
 /*
- *	Define operations
+ * The operation matrix is complex due to conditional execution of different
+ * features. Hence when we come to deciding what operation to run, we need to
+ * be careful in how we select the different operations. The active operations
+ * are mapped to numbers as follows:
+ *
+ *		lite	!lite
+ * READ:	0	0
+ * WRITE:	1	1
+ * MAPREAD:	2	2
+ * MAPWRITE:	3	3
+ * TRUNCATE:	-	4
+ * FALLOCATE:	-	5
+ * PUNCH HOLE:	-	6
+ *
+ * When mapped read/writes are disabled, they are simply converted to normal
+ * reads and writes. When fallocate/fpunch calls are disabled, they are
+ * converted to OP_SKIPPED. Hence OP_SKIPPED needs to have a number higher than
+ * the operation selction matrix, as does the OP_CLOSEOPEN which is an
+ * operation modifier rather than an operation in itself.
+ *
+ * Because of the "lite" version, we also need to have different "maximum
+ * operation" defines to allow the ops to be selected correctly based on the
+ * mode being run.
  */
 
-#define	OP_READ		1
-#define OP_WRITE	2
-#define OP_TRUNCATE	3
-#define OP_CLOSEOPEN	4
-#define OP_MAPREAD	5
-#define OP_MAPWRITE	6
-#define OP_SKIPPED	7
-#define OP_FALLOCATE	8
-#define OP_PUNCH_HOLE	9
+/* common operations */
+#define	OP_READ		0
+#define OP_WRITE	1
+#define OP_MAPREAD	2
+#define OP_MAPWRITE	3
+#define OP_MAX_LITE	4
+
+/* !lite operations */
+#define OP_TRUNCATE	4
+#define OP_FALLOCATE	5
+#define OP_PUNCH_HOLE	6
+#define OP_MAX_FULL	7
+
+/* operation modifiers */
+#define OP_CLOSEOPEN	100
+#define OP_SKIPPED	101
 
 #undef PAGE_SIZE
 #define PAGE_SIZE       getpagesize()
@@ -955,6 +984,15 @@ docloseopen(void)
 	}
 }
 
+#define TRIM_OFF_LEN(off, len, size, zero_offset)	\
+do {					\
+	if (!zero_offset || file_size)	\
+		offset %= size;		\
+	else				\
+		offset = 0;		\
+	if (offset + len > size)	\
+		len = size - offset;	\
+} while (0)
 
 void
 test(void)
@@ -962,11 +1000,7 @@ test(void)
 	unsigned long	offset;
 	unsigned long	size = maxoplen;
 	unsigned long	rv = random();
-	unsigned long	op = rv % (3 + !lite + mapped_writes + fallocate_calls + punch_hole_calls);
-        /* turn off the map read if necessary */
-
-        if (op == 2 && !mapped_reads)
-            op = 0;
+	unsigned long	op;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
 		writefileimage();
@@ -982,62 +1016,82 @@ test(void)
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
 		prt("%lu...\n", testcalls);
 
-	/*
-	 *                 lite  !lite
-	 * READ:	op = 0	   0
-	 * WRITE:	op = 1     1
-	 * MAPREAD:     op = 2     2
-	 * TRUNCATE:	op = -     3
-	 * MAPWRITE:    op = 3     4
-	 * FALLOCATE:   op = -     5
-	 * PUNCH HOLE:  op = -     6
-	 */
-	if (lite ? 0 : op == 3 && (style & 1) == 0) /* vanilla truncate? */
-		dotruncate(random() % maxfilelen);
-	else {
-		if (randomoplen)
-			size = random() % (maxoplen+1);
+	offset = random();
+	if (randomoplen)
+		size = random() % (maxoplen + 1);
 
-		if (lite ? 0 : op == 3) {
-			/* truncate */
-			dotruncate(size);
-		} else {
-			offset = random();
-			if (op == 5) {
-				/* fallocate */
-				offset %= maxfilelen;
-				if (offset + size > maxfilelen)
-					size = maxfilelen - offset;
-				do_preallocate(offset, size);
-			} else if (op == 6) {
-				offset %= maxfilelen;
-				if (offset + size > maxfilelen)
-					size = maxfilelen - offset;
-				do_punch_hole(offset, size);
-			} else if (op == 1 || op == (lite ? 3 : 4)) {
-				/* write / mapwrite */
-				offset %= maxfilelen;
-				if (offset + size > maxfilelen)
-					size = maxfilelen - offset;
-				if (op != 1)
-					domapwrite(offset, size);
-				else
-					dowrite(offset, size);
-			} else {
-				/* read / mapread */
-				if (file_size)
-					offset %= file_size;
-				else
-					offset = 0;
-				if (offset + size > file_size)
-					size = file_size - offset;
-				if (op != 0)
-					domapread(offset, size);
-				else
-					doread(offset, size);
-			}
+	/* calculate appropriate op to run */
+	if (lite)
+		op = rv % OP_MAX_LITE;
+	else
+		op = rv % OP_MAX_FULL;
+
+	switch (op) {
+	case OP_MAPREAD:
+		if (!mapped_reads)
+			op = OP_READ;
+		break;
+	case OP_MAPWRITE:
+		if (!mapped_writes)
+			op = OP_WRITE;
+		break;
+	case OP_FALLOCATE:
+		if (!fallocate_calls) {
+			log4(OP_SKIPPED, OP_FALLOCATE, offset, size);
+			goto out;
 		}
+		break;
+	case OP_PUNCH_HOLE:
+		if (!punch_hole_calls) {
+			log4(OP_SKIPPED, OP_PUNCH_HOLE, offset, size);
+			goto out;
+		}
+		break;
 	}
+
+	switch (op) {
+	case OP_READ:
+		TRIM_OFF_LEN(offset, size, file_size, false);
+		doread(offset, size);
+		break;
+
+	case OP_WRITE:
+		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		dowrite(offset, size);
+		break;
+
+	case OP_MAPREAD:
+		TRIM_OFF_LEN(offset, size, file_size, false);
+		domapread(offset, size);
+		break;
+
+	case OP_MAPWRITE:
+		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		domapwrite(offset, size);
+		break;
+
+	case OP_TRUNCATE:
+		if (!style)
+			size = random() % maxfilelen;
+		dotruncate(size);
+		break;
+
+	case OP_FALLOCATE:
+		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		do_preallocate(offset, size);
+		break;
+
+	case OP_PUNCH_HOLE:
+		TRIM_OFF_LEN(offset, size, maxfilelen, true);
+		do_punch_hole(offset, size);
+		break;
+	default:
+		prterr("test: unknown operation");
+		report_failure(42);
+		break;
+	}
+
+out:
 	if (sizechecks && testcalls > simulatedopcount)
 		check_size();
 	if (closeopen)
