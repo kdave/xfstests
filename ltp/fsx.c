@@ -987,14 +987,14 @@ docloseopen(void)
 	}
 }
 
-#define TRIM_OFF_LEN(off, len, size, zero_offset)	\
-do {					\
-	if (!zero_offset || file_size)	\
-		offset %= size;		\
-	else				\
-		offset = 0;		\
-	if (offset + len > size)	\
-		len = size - offset;	\
+#define TRIM_OFF_LEN(off, len, size, allow_zero_file_size)	\
+do {						\
+	if (allow_zero_file_size || file_size)	\
+		offset %= size;			\
+	else					\
+		offset = 0;			\
+	if (offset + len > size)		\
+		len = size - offset;		\
 } while (0)
 
 void
