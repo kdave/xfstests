@@ -44,7 +44,7 @@ include $(BUILDRULES)
 
 install install-dev: default
 
-$(TARGETS): $(LLDLIBS)
+$(TARGETS):
 	@echo "    [CC]    $@"
 	$(Q)$(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 

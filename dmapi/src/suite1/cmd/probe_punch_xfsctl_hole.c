@@ -69,7 +69,7 @@ xfsctl_punch_hole(
 	xfs_flock64_t   flock;
 	int		fd;
 	
-	if ((fd = open(path, O_RDWR|O_CREAT)) < 0) {
+	if ((fd = open(path, O_RDWR|O_CREAT, 0600)) < 0) {
 		perror(path);
 		exit(errno);
 	}
