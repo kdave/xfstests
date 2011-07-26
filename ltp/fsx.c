@@ -165,7 +165,7 @@ FILE *	fsxlogf = NULL;
 int badoff = -1;
 int closeopen = 0;
 
-static void *round_up(void *ptr, unsigned long align, unsigned long offset)
+static void *round_ptr_up(void *ptr, unsigned long align, unsigned long offset)
 {
 	unsigned long ret = (unsigned long)ptr;
 
@@ -1570,10 +1570,10 @@ main(int argc, char **argv)
 	for (i = 0; i < maxfilelen; i++)
 		original_buf[i] = random() % 256;
 	good_buf = (char *) malloc(maxfilelen + writebdy);
-	good_buf = round_up(good_buf, writebdy, 0);
+	good_buf = round_ptr_up(good_buf, writebdy, 0);
 	memset(good_buf, '\0', maxfilelen);
 	temp_buf = (char *) malloc(maxoplen + readbdy);
-	temp_buf = round_up(temp_buf, readbdy, 0);
+	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
 	memset(temp_buf, '\0', maxoplen);
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
