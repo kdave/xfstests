@@ -41,11 +41,8 @@
 #include <xfs/xfs.h>
 #include <xfs/handle.h>
 #include <xfs/jdm.h>
-
-#define EXT2_SUPER_MAGIC	0xEF53
-#define EXT2_IMMUTABLE_FL       0x00000010
-#define EXT2_APPEND_FL          0x00000020
-#define EXT2_IOC_SETFLAGS	_IOW('f', 2, long)
+#include <linux/fs.h>
+#include <linux/magic.h>
 
 #ifndef XFS_SUPER_MAGIC
 #define XFS_SUPER_MAGIC 0x58465342
@@ -55,52 +52,33 @@ extern const char *__progname;
 
 static int fsetflag(const char *path, int fd, int on, int immutable)
 {
-     int e2flags = 0;
-     struct fsxattr attr;
-     struct statfs stfs;
-     int xfsfl;
-     int e2fl;
+#ifdef FS_IOC_SETFLAGS
+     int fsflags = 0;
+     int fsfl;
 
-     if (immutable) {
-	  xfsfl = XFS_XFLAG_IMMUTABLE;
-	  e2fl = EXT2_IMMUTABLE_FL;
-     } else {
-	  xfsfl = XFS_XFLAG_APPEND;
-	  e2fl = EXT2_APPEND_FL;
-     }
-
-     if (fstatfs(fd, &stfs) != 0)
+     if (ioctl(fd, FS_IOC_GETFLAGS, &fsflags) < 0) {
+	  close(fd);
 	  return 1;
-
-     if (stfs.f_type == XFS_SUPER_MAGIC) {
-	  if (xfsctl(path, fd, XFS_IOC_FSGETXATTR, &attr) < 0) {
-	       close(fd);
-	       return 1;
-	  }
-	  if (on)
-	       attr.fsx_xflags |= xfsfl;
-	  else
-	       attr.fsx_xflags &= ~xfsfl;
-	  if (xfsctl(path, fd, XFS_IOC_FSSETXATTR, &attr) < 0) {
-	       close(fd);
-	       return 1;
-	  }
-     } else if (stfs.f_type == EXT2_SUPER_MAGIC) {
-	  if (on)
-	       e2flags |= e2fl;
-	  else
-	       e2flags &= ~e2fl;
-	  if (ioctl(fd, EXT2_IOC_SETFLAGS, &e2flags) < 0) {
-	       close(fd);
-	       return 1;
-	  }
-     } else {
-	  errno = EOPNOTSUPP;
+     }
+     if (immutable)
+	  fsfl = FS_IMMUTABLE_FL;
+     else
+	  fsfl = FS_APPEND_FL;
+     if (on)
+	  fsflags |= fsfl;
+     else
+	  fsflags &= ~fsfl;
+     if (ioctl(fd, FS_IOC_SETFLAGS, &fsflags) < 0) {
 	  close(fd);
 	  return 1;
      }
      close(fd);
      return 0;
+#else
+     errno = EOPNOTSUPP;
+     close(fd);
+     return 1;
+#endif
 }
 
 static int add_acl(const char *path, const char *acl_text)
