@@ -558,7 +558,13 @@ _fs_type()
 	exit 1
     fi
 
-    _df_device $1 | $AWK_PROG '{ print $2 }'
+    #
+    # The Linux kernel shows NFSv4 filesystems in df output as
+    # filesystem type nfs4, although we mounted it as nfs earlier.
+    # Fix the filesystem type up here so that the callers don't
+    # have to bother with this quirk.
+    #
+    _df_device $1 | $AWK_PROG '{ print $2 }' | sed -e 's/nfs4/nfs/'
 }
 
 # return the FS mount options of a mounted device
