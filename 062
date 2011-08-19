@@ -84,6 +84,12 @@ _scratch_mkfs > /dev/null 2>&1 || _fail "mkfs failed"
 _scratch_mount || _fail "mount failed"
 _create_test_bed
 
+# In kernels before 3.0, getxattr() fails with EPERM for an attribute which
+# cannot exist.  Later kernels fail with ENODATA.  Accept both results.
+invalid_attribute_filter() {
+	sed -e "s:\(No such attribute\|Operation not permitted\):No such attribute or operation not permitted:"
+}
+
 if [ "$USE_ATTR_SECURE" = yes ]; then
     ATTR_MODES="user security trusted"
 else
@@ -119,15 +125,15 @@ for nsp in $ATTR_MODES; do
 		
 		echo "*** set an empty value for second attribute"
 		setfattr -h -n $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -m $nsp -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -n $nsp.name2 $SCRATCH_MNT/$inode 2>&1 | invalid_attribute_filter
 
 		echo "*** overwrite empty value"
 		setfattr -h -n $nsp.name2 -v 0xcafe $SCRATCH_MNT/$inode
-		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode 2>&1 | invalid_attribute_filter
 
 		echo "*** remove attribute"
 		setfattr -h -x $nsp.name2 $SCRATCH_MNT/$inode
-		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode
+		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode 2>&1 | invalid_attribute_filter
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
 		getfattr -m '.' -e hex $SCRATCH_MNT/$inode
