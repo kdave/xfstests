@@ -239,7 +239,11 @@ loggen_empty(int count)
     /* an empty buffer too */
     blfs.blf_type       = XFS_LI_BUF;
     blfs.blf_size       = 2;
+#ifdef XFS_BLF_CANCEL
+    blfs.blf_flags      = XFS_BLF_CANCEL;
+#else
     blfs.blf_flags      = XFS_BLI_CANCEL;
+#endif
     blfs.blf_len        = 0;
     blfs.blf_blkno      = 1;
     blfs.blf_map_size   = 1;
