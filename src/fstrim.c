@@ -97,7 +97,7 @@ static unsigned long long get_number(char **optarg)
 	}
 
 	errno = 0;
-	number = strtoul(opt, &end , 0);
+	number = strtoull(opt, &end , 0);
 	if (errno)
 		err_exit("%s: %s (%s)\n", program_name,
 			 strerror(errno), *optarg);
