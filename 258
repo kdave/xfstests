@@ -1,0 +1,68 @@
+#! /bin/bash
+# FS QA Test No. 258
+#
+# Test timestamps prior to epoch
+# On 64-bit, ext2/3/4 was sign-extending when read from disk
+# See also commit 4d7bf11d649c72621ca31b8ea12b9c94af380e63
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+TESTFILE=$TEST_DIR/timestamp-test.txt
+
+# Create a file with a timestamp prior to the epoch
+echo "Creating file with timestamp of Jan 1, 1960"
+touch -t 196001010101 $TESTFILE
+# Should yield -315593940 (prior to epoch)
+echo -n "Stat of file yields: "
+stat -c %X $TESTFILE
+
+# unmount, remount, and check the timestamp
+echo "Remounting to flush cache"
+umount $TEST_DEV
+mount $TEST_DEV $TEST_DIR
+
+# Should yield -315593940 (prior to epoch)
+echo -n "Stat of file yields: "
+stat -c %X $TESTFILE
+
+status=0 ; exit
