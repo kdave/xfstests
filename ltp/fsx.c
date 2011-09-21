@@ -987,14 +987,14 @@ docloseopen(void)
 	}
 }
 
-#define TRIM_OFF_LEN(off, len, size, allow_zero_file_size)	\
-do {						\
-	if (allow_zero_file_size || file_size)	\
-		offset %= size;			\
-	else					\
-		offset = 0;			\
-	if (offset + len > size)		\
-		len = size - offset;		\
+#define TRIM_OFF_LEN(off, len, size)	\
+do {					\
+	if (size)			\
+		(off) %= (size);	\
+	else				\
+		(off) = 0;		\
+	if ((off) + (len) > (size))	\
+		(len) = (size) - (off);	\
 } while (0)
 
 void
@@ -1054,22 +1054,22 @@ test(void)
 
 	switch (op) {
 	case OP_READ:
-		TRIM_OFF_LEN(offset, size, file_size, 0);
+		TRIM_OFF_LEN(offset, size, file_size);
 		doread(offset, size);
 		break;
 
 	case OP_WRITE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
+		TRIM_OFF_LEN(offset, size, maxfilelen);
 		dowrite(offset, size);
 		break;
 
 	case OP_MAPREAD:
-		TRIM_OFF_LEN(offset, size, file_size, 0);
+		TRIM_OFF_LEN(offset, size, file_size);
 		domapread(offset, size);
 		break;
 
 	case OP_MAPWRITE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
+		TRIM_OFF_LEN(offset, size, maxfilelen);
 		domapwrite(offset, size);
 		break;
 
@@ -1080,12 +1080,12 @@ test(void)
 		break;
 
 	case OP_FALLOCATE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
+		TRIM_OFF_LEN(offset, size, maxfilelen);
 		do_preallocate(offset, size);
 		break;
 
 	case OP_PUNCH_HOLE:
-		TRIM_OFF_LEN(offset, size, maxfilelen, 1);
+		TRIM_OFF_LEN(offset, size, maxfilelen);
 		do_punch_hole(offset, size);
 		break;
 	default:
