@@ -20,6 +20,26 @@
 #  Mountain View, CA 94043, USA, or: http://www.sgi.com
 #-----------------------------------------------------------------------
 
+BC=$(which bc 2> /dev/null) || BC=
+
+_require_math()
+{
+	if [ -z "$BC" ]; then
+		_notrun "this test requires 'bc' tool for doing math operations"
+	fi
+}
+
+_math()
+{
+	[ $# -le 0 ] && return
+	if [ "$BC" ]; then
+		result=$(LANG=C echo "scale=0; $@" | "$BC" -q 2> /dev/null)
+	else
+		_notrun "this test requires 'bc' tool for doing math operations"
+	fi
+	echo "$result"
+}
+
 dd()
 {
    if [ "$HOSTOS" == "Linux" ]
