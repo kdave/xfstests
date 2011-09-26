@@ -29,8 +29,6 @@ echo "QA output created by $seq"
 
 status=1	# failure is the default!
 
-testfile=$TEST_DIR/259.image
-
 _cleanup()
 {
     rm -f "$testfile"
@@ -44,6 +42,8 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 # real QA test starts here
 _supported_fs xfs
 _supported_os Linux
+
+testfile=$TEST_DIR/259.image
 
 # Test various sizes slightly less than 4 TB
 # 4398046511103 = 2^42 - 1
@@ -63,6 +63,7 @@ do
 	lofile=$(losetup -f)
 	losetup $lofile "$testfile"
 	"$MKFS_XFS_PROG" -b size=512 $lofile >/dev/null || echo "mkfs failed!"
+	sync
 	losetup -d $lofile
 done
 
