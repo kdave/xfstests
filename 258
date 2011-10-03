@@ -53,8 +53,12 @@ TESTFILE=$TEST_DIR/timestamp-test.txt
 echo "Creating file with timestamp of Jan 1, 1960"
 touch -t 196001010101 $TESTFILE
 # Should yield -315593940 (prior to epoch)
-echo -n "Stat of file yields: "
-stat -c %X $TESTFILE
+echo "Testing for negative seconds since epoch"
+ts=`stat -c %X $TESTFILE`
+if [ "$ts" -ge 0 ]; then
+	echo "Timestamp wrapped: $ts"
+	_fail "Timestamp wrapped"
+fi
 
 # unmount, remount, and check the timestamp
 echo "Remounting to flush cache"
@@ -62,7 +66,11 @@ umount $TEST_DEV
 mount $TEST_DEV $TEST_DIR
 
 # Should yield -315593940 (prior to epoch)
-echo -n "Stat of file yields: "
-stat -c %X $TESTFILE
+echo "Testing for negative seconds since epoch"
+ts=`stat -c %X $TESTFILE`
+if [ "$ts" -ge 0 ]; then
+	echo "Timestamp wrapped: $ts"
+	_fail "Timestamp wrapped"
+fi
 
 status=0 ; exit
