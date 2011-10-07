@@ -43,20 +43,15 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 _supported_fs xfs
 _supported_os Linux
 
+_require_math
+
 testfile=$TEST_DIR/259.image
 
 # Test various sizes slightly less than 4 TB
-# 4398046511103 = 2^42 - 1
-# 4398046510592 = 2^42 - 512
-# 4398046510080 = 2^42 - 1024
-# 4398046510079 = 2^42 - 1025
-# 4398046509056 = 2^42 - 2048
-# 4398046507008 = 2^42 - 4096
-
-for ddseek in 4398046511103 4398046510592 4398046510080 \
-	4398046510079 4398046509056 4398046507008;
-do
-	echo "Trying to make $ddseek B long xfs fs image"
+four_TB=$(_math "2^42")
+for del in 1 512 1024 1025 2048 4096; do
+	ddseek=$(_math "$four_TB - $del")
+	echo "Trying to make (2 TB - $del) B long xfs fs image"
 	rm -f "$testfile"
 	dd if=/dev/zero "of=$testfile" bs=1 count=0 seek=$ddseek \
 					>/dev/null 2>&1 || echo "dd failed"
