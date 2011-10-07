@@ -1085,7 +1085,7 @@ test(void)
 		break;
 
 	case OP_PUNCH_HOLE:
-		TRIM_OFF_LEN(offset, size, maxfilelen);
+		TRIM_OFF_LEN(offset, size, file_size);
 		do_punch_hole(offset, size);
 		break;
 	default:
