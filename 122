@@ -57,6 +57,12 @@ s/sizeof\( xfs_agf_t \) = 64/sizeof( xfs_agf_t ) = <SIZE>/;
 	fi
 }
 
+# filter out known changes to xfs type names
+_type_name_filter()
+{
+	sed -e 's/xfs_bmbt_rec_64_t/xfs_bmbt_rec_t/'
+}
+
 _attribute_filter()
 {
 	sed -e 's/__attribute__ *[(][(]packed[)][)]//' \
@@ -73,7 +79,9 @@ cat >$cprog <<EOF
 EOF
 
 cat >$tmp.ignore <<EOF
+xfs_alloctype_t
 xfs_buf_cancel_t
+xfs_bmbt_rec_32_t
 xfs_swapext_t
 xfs_dirops_t
 xfs_efi_log_item_t
@@ -160,6 +168,7 @@ xfs_log_item_chunk_t
 xfs_trans_t
 xfs_dirent_t
 xfs_fsop_getparents_handlereq_t
+xfs_dinode_core_t
 EOF
 
 echo 'int main(int argc, char *argv[]) {' >>$cprog
@@ -193,7 +202,7 @@ echo 'return 0; }' >>$cprog
 # create and run program
 cc -o $oprog $cprog >> $seq.full 2>&1 || \
   _notrun "Could not compile test program (see end of $seq.full)"
-$oprog | _type_size_filter > $progout
+$oprog | _type_size_filter | _type_name_filter > $progout
 
 #
 # add addition sizes and xfs_sb_t fields that don't exist in the version
