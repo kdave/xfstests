@@ -45,20 +45,17 @@ _cleanup()
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
+_require_scratch
 
-_setup_testdir
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount > /dev/null 2>&1
 
-fiemapfile=$TEST_DIR/fiemap.$$
-fiemaplog=$TEST_DIR/fiemap.$$.log
+rm -f $seq.full
+fiemapfile=$SCRATCH_MNT/$seq.fiemap
+fiemaplog=$SCRATCH_MNT/$seq.log
+
 
 [ -x $here/src/fiemap-tester ] || _notrun "fiemap-tester not built"
-
-_cleanup()
-{
-	rm -f $fiemapfile
-	rm -f $fiemaplog
-}
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 seed=`date +%s`
 
@@ -67,16 +64,16 @@ echo "using seed $seed" >> $fiemaplog
 echo "fiemap run without preallocation, with sync"
 $here/src/fiemap-tester -q -S -s $seed -p 0 -r 200 $fiemapfile 2>&1 | tee -a $fiemaplog
 
-echo "fiemap run without preallocation or sync"
-$here/src/fiemap-tester -q -s $seed -p 0 -r 200 $fiemapfile 2>&1 | tee -a $fiemaplog
-
-if grep -q "Operation not supported" $fiemaplog; then
-      _notrun "FIEMAP not supported by this filesystem type: $FSTYP"
+if [ $? -ne 0 ]; then
+	if grep -q "Operation not supported" $fiemaplog; then
+	      _notrun "FIEMAP not supported by this filesystem type: $FSTYP"
+	fi
+	status=$?
+	exit
 fi
 
-rm -f $fiemapfile
-rm -f $fiemaplog
-rm -f $seq.full
+echo "fiemap run without preallocation or sync"
+$here/src/fiemap-tester -q -s $seed -p 0 -r 200 $fiemapfile 2>&1 | tee -a $fiemaplog
 
 status=0
 exit
