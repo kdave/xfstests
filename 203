@@ -43,7 +43,7 @@ _write_holes()
 
 	offset=0
 	for i in `seq 0 $writes`; do
-		xfs_io -f $file -c "pwrite -q $offset 1"
+		xfs_io -f $file -c "pwrite -q $offset 64k"
 		let offset=$offset+0x100000
 	done
 }
@@ -52,17 +52,18 @@ _write_holes()
 #       1: [8..2047]: hole
 _filter_bmap()
 {
-	_filter_test_dir |
+	_filter_scratch |
 	awk '$3 ~ /hole/ { print $1, $2, $3; next }
              {print $1, $2; next}'
 }
 
 _cleanup()
 {
-	rm -f $TEST_DIR/hole_file*
-	rm -f $TEST_DIR/r??
+	rm -f $SCRATCH_MNT/r??
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
+
+rm -f $seq.full
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -71,19 +72,20 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 # real QA test starts here
 _supported_fs xfs
 _supported_os Linux
-
+_require_scratch
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount > /dev/null 2>&1
 
 for i in 10 14 15 16 17 28 29 30 31; do
-        rm -f $TEST_DIR/hole_file
-	_write_holes $TEST_DIR/hole_file${i} ${i}
+        rm -f $SCRATCH_MNT/hole_file
+	_write_holes $SCRATCH_MNT/hole_file${i} ${i}
 done
 
 for i in 10 14 15 16 17 28 29 30 31; do
-        xfs_bmap $TEST_DIR/hole_file${i} | _filter_bmap
+        xfs_bmap $SCRATCH_MNT/hole_file${i} | _filter_bmap
 	echo
 done
 
 # success, all done
 echo "*** done"
-rm -f $seq.full
 status=0
