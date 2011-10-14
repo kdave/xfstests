@@ -18,8 +18,6 @@ git commit -s -a -m "${version} release"
 echo "Tagging git repository"
 git tag -s -a -m "${version} release" v${version}
 
-echo "Creating source tarball"
-make dist
+echo "Done.  Please remember to push out tags using \"git push --tags\""
+echo "If you wish to create a source tarball, run \"make dist\""
 
-echo "Done."
-echo "Please remember to push out tags using \"git push --tags\""
