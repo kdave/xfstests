@@ -1499,7 +1499,7 @@ _nfiles()
                 file=f$f
                 echo > $file
                 if [ $size -gt 0 ]; then
-                    if [ $2 == false ]; then
+                    if [ "$2" == "false" ]; then
                         dd if=/dev/zero of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     else
                         dd if=/dev/urandom of=$file bs=1024 count=$size 2>&1 | _filter_dd
@@ -1598,6 +1598,80 @@ _test_inode_extsz()
     echo $blocks
 }
 
+# scratch_dev_pool should contain the disks pool for the btrfs raid
+_require_scratch_dev_pool()
+{
+	local i
+	if [ -z "$SCRATCH_DEV_POOL" ]; then
+		_notrun "this test requires a valid \$SCRATCH_DEV_POOL"
+	fi
+
+	# btrfs test case needs 2 or more scratch_dev_pool; other FS not sure
+	# so fail it
+	case $FSTYP in
+	btrfs)
+		if [ "`echo $SCRATCH_DEV_POOL|wc -w`" -lt 2 ]; then
+			_notrun "btrfs and this test needs 2 or more disks in SCRATCH_DEV_POOL"
+		fi
+	;;
+	*)
+		_notrun "dev_pool is not supported by fstype \"$FSTYP\""
+	;;
+	esac
+
+	for i in $SCRATCH_DEV_POOL; do
+		if [ "`_is_block_dev $i`" = "" ]; then
+			_notrun "this test requires valid block disk $i"
+		fi
+		if [ "`_is_block_dev $i`" = "`_is_block_dev $TEST_DEV`" ]; then
+			_notrun "$i is part of TEST_DEV, this test requires unique disks"
+		fi
+		if _mount | grep -q $i; then
+			if ! $UMOUNT_PROG $i; then
+		            echo "failed to unmount $i - aborting"
+		            exit 1
+		        fi
+		fi
+		# to help better debug when something fails, we remove
+		# traces of previous btrfs FS on the dev.
+		dd if=/dev/zero of=$i bs=4096 count=100 > /dev/null 2>&1
+	done
+}
+
+# We will check if the device is virtual (eg: loop device) since it does not
+# have the delete entry-point. Otherwise SCSI and USB devices are fine. 
+_require_deletable_scratch_dev_pool()
+{
+	local i
+	local x
+	for i in $SCRATCH_DEV_POOL; do
+		x=`echo $i | cut -d"/" -f 3`
+		ls -l /sys/class/block/${x} | grep -q "virtual" 
+		if [ $? == "0" ]; then
+			_notrun "$i is a virtual device which is not deletable"
+		fi
+	done
+}
+
+# arg 1 is dev to remove and is output of the below eg.
+# ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
+_devmgt_remove()
+{
+	echo 1 > /sys/class/scsi_device/${1}/device/delete || _fail "Remove disk failed"
+}
+
+# arg 1 is dev to add and is output of the below eg.
+# ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
+_devmgt_add()
+{
+	local h
+	local tdl
+	# arg 1 will be in h:t:d:l format now in the h and "t d l" format
+	h=`echo ${1} | cut -d":" -f 1`
+	tdl=`echo ${1} | cut -d":" -f 2-|sed 's/:/ /g'`
+
+	echo ${tdl} >  /sys/class/scsi_host/host${h}/scan || _fail "Add disk failed"
+}
 
 ################################################################################
 
