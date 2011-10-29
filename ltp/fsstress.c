@@ -28,7 +28,9 @@
 #ifndef HAVE_ATTR_LIST
 #define attr_list(path, buf, size, flags, cursor) (errno = -ENOSYS, -1)
 #endif
-
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
 #include <math.h>
 #define XFS_ERRTAG_MAX		17
 #define XFS_IDMODULO_MAX	31	/* user/group IDs (1 << x)  */
@@ -209,6 +211,7 @@ int		rtpct;
 unsigned long	seed = 0;
 ino_t		top_ino;
 int		verbose = 0;
+sig_atomic_t	should_stop = 0;
 
 void	add_to_flist(int, int, int);
 void	append_pathname(pathname_t *, char *);
@@ -253,6 +256,11 @@ void	usage(void);
 void	write_freq(void);
 void	zero_freq(void);
 
+void sg_handler(int signum)
+{
+	should_stop = 1;
+}
+
 int main(int argc, char **argv)
 {
 	char		buf[10];
@@ -269,6 +277,7 @@ int main(int argc, char **argv)
 	ptrdiff_t	srval;
 	int             nousage = 0;
 	xfs_error_injection_t	        err_inj;
+	struct sigaction action;
 
 	errrange = errtag = 0;
 	umask(0);
@@ -429,8 +438,27 @@ int main(int argc, char **argv)
 		}
 	} else
 		close(fd);
+
+	setpgid(0, 0);
+	action.sa_handler = sg_handler;
+	sigemptyset(&action.sa_mask);
+	action.sa_flags = 0;
+	if (sigaction(SIGTERM, &action, 0)) {
+		perror("sigaction failed");
+		exit(1);
+	}
+
 	for (i = 0; i < nproc; i++) {
 		if (fork() == 0) {
+			action.sa_handler = SIG_DFL;
+			sigemptyset(&action.sa_mask);
+			if (sigaction(SIGTERM, &action, 0))
+				return 1;
+#ifdef HAVE_SYS_PRCTL_H
+			prctl(PR_SET_PDEATHSIG, SIGKILL);
+			if (getppid() == 1) /* parent died already? */
+				return 0;
+#endif
 			if (logname) {
 				char path[PATH_MAX];
 				snprintf(path, sizeof(path), "%s/%s.%d",
@@ -445,8 +473,15 @@ int main(int argc, char **argv)
 			return 0;
 		}
 	}
+	while (wait(&stat) > 0 && !should_stop) {
+		continue;
+	}
+	action.sa_flags = SA_RESTART;
+	sigaction(SIGTERM, &action, 0);
+	kill(-getpid(), SIGTERM);
 	while (wait(&stat) > 0)
 		continue;
+
 	if (errtag != 0) {
 		err_inj.errtag = 0;
 		err_inj.fd = fd;
