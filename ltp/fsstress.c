@@ -258,6 +258,8 @@ int main(int argc, char **argv)
 	char		buf[10];
 	int		c;
 	char		*dirname = NULL;
+	char		*logname = NULL;
+	char		rpath[PATH_MAX];
 	int		fd;
 	int		i;
 	int		j;
@@ -273,7 +275,7 @@ int main(int argc, char **argv)
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, "d:e:f:i:m:n:p:rs:vwzHS")) != -1) {
+	while ((c = getopt(argc, argv, "d:e:f:i:m:n:o:p:rs:vwzHS")) != -1) {
 		switch (c) {
 		case 'd':
 			dirname = optarg;
@@ -311,6 +313,10 @@ int main(int argc, char **argv)
 		case 'n':
 			operations = atoi(optarg);
 			break;
+		case 'o':
+			logname = optarg;
+			break;
+
 		case 'p':
 			nproc = atoi(optarg);
 			break;
@@ -351,9 +357,25 @@ int main(int argc, char **argv)
         }
 
 	(void)mkdir(dirname, 0777);
+	if (logname && logname[0] != '/') {
+		if (getcwd(rpath, sizeof(rpath)) < 0){
+			perror("getcwd failed");
+			exit(1);
+		}
+	} else {
+		rpath[0] = '\0';
+	}
 	if (chdir(dirname) < 0) {
 		perror(dirname);
 		exit(1);
+	}
+	if (logname) {
+		char path[PATH_MAX];
+		snprintf(path, sizeof(path), "%s/%s", rpath, logname);
+		if (freopen(path, "a", stdout) == NULL) {
+			perror("freopen logfile failed");
+			exit(1);
+		}
 	}
 	sprintf(buf, "fss%x", (unsigned int)getpid());
 	fd = creat(buf, 0666);
@@ -409,6 +431,15 @@ int main(int argc, char **argv)
 		close(fd);
 	for (i = 0; i < nproc; i++) {
 		if (fork() == 0) {
+			if (logname) {
+				char path[PATH_MAX];
+				snprintf(path, sizeof(path), "%s/%s.%d",
+					 rpath, logname, i);
+				if (freopen(path, "a", stdout) == NULL) {
+					perror("freopen logfile failed");
+					exit(1);
+				}
+			}
 			procid = i;
 			doproc();
 			return 0;
