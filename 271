@@ -1,0 +1,69 @@
+#! /bin/bash
+# FSQA Test No. 271
+#
+# Regression testcase for d583fb87a3ff0 (ext4 extent corruption)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dmonakhov@openvz.org
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_need_to_be_root
+
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs_sized $((128 * 1024 * 1024)) >> $seq.full 2>&1
+
+# -onoload and EXT4_SYNC_FL on file is important becase result in
+# metadata sync writes inside ext4_handle_dirty_metadata()
+_scratch_mount -onoload
+touch $SCRATCH_MNT/file
+chattr +S $SCRATCH_MNT/file
+# Create sparse file 
+for ((i = 0; i < 21; i++))
+do
+    dd if=/dev/zero of=$SCRATCH_MNT/file bs=4k count=1 seek=$((i*10))
+done
+# truncate last extent
+truncate $SCRATCH_MNT/file --size $((4096* 200))
+
+if ! _scratch_unmount; then
+	echo "failed to umount"
+	status=1
+	exit
+fi
+echo "Check filesystem"
+_check_scratch_fs
+status=$?
+exit
