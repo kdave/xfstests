@@ -1,0 +1,108 @@
+#! /bin/bash
+# FSQA Test No. 272
+#
+# Test data journaling flag switch for a single file  
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dmonakhov@openvz.org
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+_workout()
+{
+	echo ""
+	echo " Switch data journalling mode"
+	echo ""
+	write_opt_list="iflag=noatime conv=notrunc conv=fsync oflag=direct"
+	chattr_opt_list="+j -j +jS -j"
+	idx=0
+	#
+	for write_opt in $write_opt_list
+	do
+		idx=$((idx + 1))
+		for chattr_opt in $chattr_opt_list
+		do
+		    
+			echo "OP write_opt: $write_opt 4M, \
+chattr_opt: $chattr_opt"
+			dd if=/dev/zero of=$SCRATCH_MNT/file.$idx \
+				bs=1M count=4 $write_opt \
+				>> $seq.full 2>&1 || exit
+			chattr $chattr_opt $SCRATCH_MNT/file.$idx >> $seq.full \
+				|| exit
+		done
+	done
+	sync
+	# Same as previous test, but for one file,
+	# and with ENOSPC triggering
+	for write_opt in $write_opt_list
+	do
+		idx=$((idx + 1))
+		for chattr_opt in $chattr_opt_list
+		do
+
+			echo "OP write_opt: $write_opt ENOSPC, \
+chattr_opt: $chattr_opt"
+			dd if=/dev/zero of=$SCRATCH_MNT/file.$idx \
+				bs=1M $write_opt >> $seq.full 2>&1
+			chattr $chattr_opt $SCRATCH_MNT/file.$idx \
+				>> $seq.full || exit
+		done
+		sync
+		unlink $SCRATCH_MNT/file.$idx
+	done
+}
+
+# real QA test starts here
+_supported_fs ext3 ext4
+_supported_os Linux
+_require_scratch
+_need_to_be_root
+
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs_sized $((64 * 1024 * 1024)) >> $seq.full 2>&1
+_scratch_mount
+
+if ! _workout; then
+	echo "workout failed"
+	_scratch_unmount
+	status=1
+	exit
+fi
+
+if ! _scratch_unmount; then
+	echo "failed to umount"
+	status=1
+	exit
+fi
+echo "Check filesystem"
+_check_scratch_fs
+status=$?
+exit
