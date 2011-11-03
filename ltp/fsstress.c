@@ -284,7 +284,7 @@ int main(int argc, char **argv)
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, "d:e:f:i:m:n:o:p:rs:vwzHS")) != -1) {
+	while ((c = getopt(argc, argv, "d:e:f:i:m:n:o:p:rs:S:vwzH")) != -1) {
 		switch (c) {
 		case 'd':
 			dirname = optarg;
@@ -345,7 +345,10 @@ int main(int argc, char **argv)
 			zero_freq();
 			break;
 		case 'S':
-			show_ops(0, NULL);
+			i = 0;
+			if (optarg[0] == 'c')
+				i = 1;
+			show_ops(1, NULL);
 			printf("\n");
                         nousage=1;
 			break;
@@ -1310,7 +1313,8 @@ show_ops(int flag, char *lead_str)
                         x+=printf("%s ", p->name);
                 }
                 printf("\n");
-        } else {
+        } else if (flag == 0) {
+		/* Table view style */
 	        int		f;
 	        for (f = 0, p = ops; p < ops_end; p++)
 		        f += p->freq;
@@ -1327,6 +1331,15 @@ show_ops(int flag, char *lead_str)
 			        (p->iswrite == 0) ? " " : "write op");
 		        }
                 }
+	} else {
+		/* Command line style */
+		if (lead_str != NULL)
+			printf("%s", lead_str);
+		printf ("-z -s %ld -m %d -n %d -p %d \\\n", seed, idmodulo,
+			operations, nproc);
+	        for (p = ops; p < ops_end; p++)
+		        if (p->freq > 0)
+			        printf("-f %s=%d \\\n",p->name, p->freq);
 	}
 }
 
@@ -1433,7 +1446,7 @@ usage(void)
 	printf("   -v               specifies verbose mode\n");
 	printf("   -w               zeros frequencies of non-write operations\n");
 	printf("   -z               zeros frequencies of all operations\n");
-	printf("   -S               prints the table of operations (omitting zero frequency)\n");
+	printf("   -S [c,t]         prints the list of operations (omitting zero frequency) in command line or table style\n");
 	printf("   -H               prints usage and exits\n");
 }
 
