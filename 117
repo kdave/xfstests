@@ -33,8 +33,34 @@ tmp=/tmp/$$
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
-# seed for fsstress known to cause curruptions
+# seed and options for fsstress known to cause curruptions
 seed=1122413794
+fss_ops=" -z \
+    -f attr_remove=100 \
+    -f attr_set=100 \
+    -f chown=3 \
+    -f creat=4 \
+    -f dread=4 \
+    -f dwrite=4 \
+    -f fdatasync=1 \
+    -f fsync=1 \
+    -f getdents=1 \
+    -f link=1 \
+    -f mkdir=2 \
+    -f mknod=2 \
+    -f read=1 \
+    -f readlink=1 \
+    -f rename=2 \
+    -f rmdir=1 \
+    -f setxattr=1 \
+    -f stat=1 \
+    -f symlink=2 \
+    -f sync=1 \
+    -f truncate=2 \
+    -f unlink=1 \
+    -f write=4 \
+    -s $seed \
+    -m 31 -n 1000 -p 1"
 
 ITERATIONS=10
 
@@ -76,16 +102,7 @@ while [ $i -lt $ITERATIONS ]; do
     echo fsstress iteration: $i | tee -a $seq.full
     $FSSTRESS_PROG \
 	-d $SCRATCH_MNT/fsstress \
-	-f allocsp=0 \
-	-f freesp=0 \
-	-f bulkstat=0 \
-	-f bulkstat1=0 \
-	-f resvsp=0 \
-	-f unresvsp=0 \
-	-f attr_set=100 \
-	-f attr_remove=100 \
-        -s $seed \
-	-p 1 -n 1000 -S c >>$seq.full 2>&1
+	$fss_ops -S c >>$seq.full 2>&1
 
     let i=$i+1
 done
