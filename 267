@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test No. 267
+#
+# Test xfsdump with a file spanning multiple media files.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=wkendall@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+#
+# create a 40 MiB file with an extended attr.
+# xfsdump writes file data in "extent groups", currently 16 MiB in size. After
+# writing an extent group or finishing a file, xfsdump will start a new media
+# file if it is over the suggested size. With a single 40 MiB file and using a
+# suggested media file size of 12 MiB below, this dump will be contained in 3
+# media files.
+#
+_create_files()
+{
+    cat <<End-of-File >$tmp.config
+# pathname	size            user    group    perm   name value namespace
+biggg		41943040	$nobody	$nobody  777    attr1 some_text1  root
+End-of-File
+
+    _wipe_fs
+    _do_create_dumpdir_fill
+    _stable_fs
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.dump
+. ./common.attr
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_tape $TAPE_DEV
+_require_attrs
+
+_create_files
+_erase_hard
+_do_dump -d 12
+_do_restore
+_ls_compare_sub
+_diff_compare
+_diff_compare_eas
+
+# success, all done
+exit
