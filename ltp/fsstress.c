@@ -37,6 +37,15 @@
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+
+#include <linux/fs.h>
+#ifndef FS_IOC_GETFLAGS
+#define FS_IOC_GETFLAGS                 _IOR('f', 1, long)
+#endif
+#ifndef FS_IOC_SETFLAGS
+#define FS_IOC_SETFLAGS                 _IOW('f', 2, long)
+#endif
+
 #include <math.h>
 #define XFS_ERRTAG_MAX		17
 #define XFS_IDMODULO_MAX	31	/* user/group IDs (1 << x)  */
@@ -58,6 +67,7 @@ typedef enum {
 	OP_FDATASYNC,
 	OP_FREESP,
 	OP_FSYNC,
+	OP_GETATTR,
 	OP_GETDENTS,
 	OP_LINK,
 	OP_MKDIR,
@@ -68,6 +78,7 @@ typedef enum {
 	OP_RENAME,
 	OP_RESVSP,
 	OP_RMDIR,
+	OP_SETATTR,
 	OP_SETXATTR,
 	OP_STAT,
 	OP_SYMLINK,
@@ -140,6 +151,7 @@ void	fallocate_f(int, long);
 void	fdatasync_f(int, long);
 void	freesp_f(int, long);
 void	fsync_f(int, long);
+void	getattr_f(int, long);
 void	getdents_f(int, long);
 void	link_f(int, long);
 void	mkdir_f(int, long);
@@ -150,6 +162,7 @@ void	readlink_f(int, long);
 void	rename_f(int, long);
 void	resvsp_f(int, long);
 void	rmdir_f(int, long);
+void	setattr_f(int, long);
 void	setxattr_f(int, long);
 void	stat_f(int, long);
 void	symlink_f(int, long);
@@ -173,6 +186,7 @@ opdesc_t	ops[] = {
 	{ OP_FDATASYNC, "fdatasync", fdatasync_f, 1, 1 },
 	{ OP_FREESP, "freesp", freesp_f, 1, 1 },
 	{ OP_FSYNC, "fsync", fsync_f, 1, 1 },
+	{ OP_GETATTR, "getattr", getattr_f, 1, 0 },
 	{ OP_GETDENTS, "getdents", getdents_f, 1, 0 },
 	{ OP_LINK, "link", link_f, 1, 1 },
 	{ OP_MKDIR, "mkdir", mkdir_f, 2, 1 },
@@ -183,6 +197,7 @@ opdesc_t	ops[] = {
 	{ OP_RENAME, "rename", rename_f, 2, 1 },
 	{ OP_RESVSP, "resvsp", resvsp_f, 1, 1 },
 	{ OP_RMDIR, "rmdir", rmdir_f, 1, 1 },
+	{ OP_SETATTR, "setattr", setattr_f, 0, 1 },
 	{ OP_SETXATTR, "setxattr", setxattr_f, 1, 1 },
 	{ OP_STAT, "stat", stat_f, 1, 0 },
 	{ OP_SYMLINK, "symlink", symlink_f, 2, 1 },
@@ -218,6 +233,7 @@ int		nops;
 int		nproc = 1;
 int		operations = 1;
 unsigned int	idmodulo = XFS_IDMODULO_MAX;
+unsigned int	attr_mask = ~0;
 int		procid;
 int		rtpct;
 unsigned long	seed = 0;
@@ -296,7 +312,7 @@ int main(int argc, char **argv)
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, "d:e:f:i:m:n:o:p:rs:S:vwzH")) != -1) {
+	while ((c = getopt(argc, argv, "d:e:f:i:m:M:n:o:p:rs:S:vwzH")) != -1) {
 		switch (c) {
 		case 'd':
 			dirname = optarg;
@@ -355,6 +371,9 @@ int main(int argc, char **argv)
 			break;
 		case 'z':
 			zero_freq();
+			break;
+		case 'M':
+		  	attr_mask = strtoul(optarg, NULL, 0);
 			break;
 		case 'S':
 			i = 0;
@@ -2198,6 +2217,29 @@ fsync_f(int opno, long r)
 }
 
 void
+getattr_f(int opno, long r)
+{
+	int		fd;
+	int		e;
+	pathname_t	f;
+	uint		fl;
+	int		v;
+
+	init_pathname(&f);
+	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
+		append_pathname(&f, ".");
+	fd = open_path(&f, O_RDWR);
+	e = fd < 0 ? errno : 0;
+	check_cwd();
+
+	e = ioctl(fd, FS_IOC_GETFLAGS, &fl);
+	if (v)
+		printf("%d/%d: getattr %s %u %d\n", procid, opno, f.path, fl, e);
+	free_pathname(&f);
+	close(fd);
+}
+
+void
 getdents_f(int opno, long r)
 {
 	DIR		*dir;
@@ -2640,6 +2682,30 @@ rmdir_f(int opno, long r)
 				procid, opno, fep->id, fep->parent);
 	}
 	free_pathname(&f);
+}
+
+void
+setattr_f(int opno, long r)
+{
+	int		fd;
+	int		e;
+	pathname_t	f;
+	uint		fl;
+	int		v;
+
+	init_pathname(&f);
+	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
+		append_pathname(&f, ".");
+	fd = open_path(&f, O_RDWR);
+	e = fd < 0 ? errno : 0;
+	check_cwd();
+
+	fl = attr_mask & (uint)random();
+	e = ioctl(fd, FS_IOC_SETFLAGS, &fl);
+	if (v)
+		printf("%d/%d: setattr %s %x %d\n", procid, opno, f.path, fl, e);
+	free_pathname(&f);
+	close(fd);
 }
 
 void
