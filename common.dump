@@ -75,6 +75,14 @@ done
 have_mtvariable=false
 [ `uname` = "Linux" ] && have_mtvariable=true
 
+
+_require_multi_stream()
+{
+    $XFSDUMP_PROG -JF -f /dev/null -f /dev/null 2> /dev/null |
+    grep -q "too many -f arguments" &&
+    _notrun "xfsdump multi-stream support required"
+}
+
 #
 # do a remote/local mt
 #
@@ -536,6 +544,18 @@ _do_create_dumpdir_fill()
     cd $here
 }
 
+_mk_fillconfig_multi()
+{
+    _mk_fillconfig1
+    cat <<End-of-File >>$tmp.config
+# pathname	size in bytes
+#
+large000	8874368	$nobody	$nobody
+large111	2582912	$nobody	$nobody
+large222	7825792	$nobody	$nobody
+End-of-File
+}
+
 _create_dumpdir_largefile()
 {
     _wipe_fs
@@ -580,6 +600,17 @@ _create_dumpdir_fill_ea()
     _stable_fs
 }
 
+#
+# Create enough files, and a few large enough files, so that
+# some files are likely to be split across streams.
+#
+_create_dumpdir_fill_multi()
+{
+    _wipe_fs
+    _mk_fillconfig_multi
+    _do_create_dumpdir_fill
+    _stable_fs
+}
 
 #
 # Append a subset of the fill'ed files
@@ -802,9 +833,11 @@ _dump_filter_main()
       -e 's/time:[ 	].*/time: TIME/'		\
       -e 's/date:[ 	].*/date: DATE/'		\
       -e 's/dump begun .*/dump begun DATE/'		\
+      -e 's/previously begun .*/previously begun DATE/'	\
       -e 's/[0-9][0-9]* seconds/SECS seconds/'		\
       -e 's/restore.[0-9][0-9]*/restore.PID/'		\
-      -e 's/ino [0-9][0-9]*/ino INO/'			\
+      -e 's/ino [0-9][0-9]*/ino INO/g'			\
+      -e '/stream [0-9]:/s/offset [0-9][0-9]*/offset NUM/g'	\
       -e '/: dump size/s/[0-9][0-9]*/NUM/'		\
       -e '/dump size:/s/[0-9][0-9]*/NUM/'		\
       -e '/dump size per stream:/s/[0-9][0-9]*/NUM/'	\
@@ -862,7 +895,7 @@ _invutil_filter()
 _dir_filter()
 {
   sed \
-    -e "s#$dump_file#DUMP_FILE#"      \
+    -e "s#$dump_file#DUMP_FILE#g"      \
     -e "s#$SCRATCH_DEV#SCRATCH_DEV#"        \
     -e "s#$SCRATCH_RAWDEV#SCRATCH_DEV#"    \
     -e "s#$dumptape#TAPE_DEV#"         \
@@ -958,6 +991,9 @@ _parse_restore_args()
             ;;
         --no-check-quota)
             do_quota_check=false
+            ;;
+	-R)
+	    restore_args="$restore_args $1"
             ;;
 	*)
             _fail "invalid argument to common.dump function: $1"
