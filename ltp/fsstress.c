@@ -385,7 +385,7 @@ int main(int argc, char **argv)
 			i = 0;
 			if (optarg[0] == 'c')
 				i = 1;
-			show_ops(1, NULL);
+			show_ops(i, NULL);
 			printf("\n");
                         nousage=1;
 			break;
