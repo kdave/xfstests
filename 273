@@ -1,0 +1,145 @@
+#! /bin/bash
+# FS QA Test No. 273
+#
+# reservation test with heavy cp workload
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011-2012 Fujitsu, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+#creator
+owner=wu.bo@cn.fujitsu.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $SCRATCH_MNT/* $tmp.*
+	_scratch_unmount
+}
+
+. ./common.rc
+. ./common.filter
+
+threads=50
+count=1
+
+_threads_set()
+{
+	_cpu_num=`cat /proc/cpuinfo | grep "processor" | wc -l`
+	threads=$(($_cpu_num * 50))
+	if [ $threads -gt 200 ]
+	then
+		threads=200
+	fi
+}
+
+_file_create()
+{
+	_i=0
+
+	if ! mkdir $SCRATCH_MNT/origin
+	then
+		echo "mkdir origin err"
+		status=1
+		exit
+	fi
+
+	cd $SCRATCH_MNT/origin
+
+	_disksize=`df --block-size=1 | grep $SCRATCH_DEV | awk '{print $2}'`
+	_disksize=$(($_disksize / 3))
+	_num=$(($_disksize / $count / $threads / 4096))
+	_count=$count
+	while [ $_i -lt $_num ]
+	do
+		dd if=/dev/zero of=file_$_i bs=4096 count=$_count >/dev/null 2>&1
+		_i=$(($_i + 1))
+	done
+
+	cd $here
+}
+
+_porter()
+{
+	_suffix=$1
+
+	if ! mkdir $SCRATCH_MNT/sub_$_suffix
+	then
+		echo "mkdir sub_xxx err"
+		status=1
+		exit
+	fi
+
+	cp -r $SCRATCH_MNT/origin $SCRATCH_MNT/sub_$_suffix >$seq.full 2>&1
+	if [ $? -ne 0 ]
+	then
+		echo "_porter $_suffix not complete"
+	fi
+	
+	sync
+}
+
+_do_workload()
+{
+	_pids=""
+	_pid=1
+	
+	rm -rf $SCRATCH_MNT/*
+
+	_threads_set
+	_file_create
+
+	_threads=$threads
+
+	while [ $_pid -lt $_threads ]
+	do
+		_porter $_pid &
+		_pids="$_pids $!"
+		_pid=$(($_pid + 1))
+	done
+
+	wait $_pids
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os IRIX Linux
+_require_scratch
+
+echo "------------------------------"
+echo "start the workload"
+echo "------------------------------"
+
+rm -f $seq.full
+
+umount $SCRATCH_DEV 2>/dev/null
+_scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seq.full 2>&1
+_scratch_mount
+
+_do_workload
+
+_check_scratch_fs
+status=$?
+exit
