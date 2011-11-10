@@ -40,12 +40,14 @@ _supported_os Linux
 
 _require_scratch
 
-_scratch_mkfs_xfs -d size=16m -b size=512 >/dev/null
+rm -f $seq.full
+
+_scratch_mkfs_xfs -d size=16m -b size=512 >> $seq.full 2>&1
 _scratch_mount
 
 # fix the reserve block pool to a known size so that the enospc calculations
 # work out correctly.
-_scratch_resvblks 1024 > $seq.full 2>&1
+_scratch_resvblks 1024 >> $seq.full 2>&1
 
 # on a 16MB filesystem, there's 32768x512byte blocks. used is:
 #	- 4944 in the log,
@@ -79,5 +81,4 @@ dd if=/dev/zero of=$SCRATCH_MNT/fred bs=15 count=$[26745/15*512] 2>&1 | _filter_
 
 # success, all done
 echo "*** done"
-rm -f $seq.full
 status=0
