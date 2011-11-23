@@ -864,6 +864,42 @@ _require_nonexternal()
 	_notrun "External device testing in progress, skipped this test"
 }
 
+# this test requires that a (specified) aio-dio executable exists
+# $1 - command (optional)
+#
+_require_aiodio()
+{
+    if [ -z "$1" ]
+    then
+        AIO_TEST=src/aio-dio-regress/aiodio_sparse2
+        [ -x $AIO_TEST ] || _notrun "aio-dio utilities required"
+    else
+        AIO_TEST=src/aio-dio-regress/$1
+        [ -x $AIO_TEST ] || _notrun "$AIO_TEST not built"
+    fi
+}
+
+# run an aio-dio program
+# $1 - command
+_run_aiodio()
+{
+    if [ -z "$1" ]
+    then
+        echo "usage: _run_aiodio command_name" 2>&1
+        status=1; exit 1
+    fi
+
+    _require_aiodio $1
+
+    local testtemp=$TEST_DIR/aio-testfile
+    rm -f $testtemp
+    $AIO_TEST $testtemp 2>&1
+    status=$?
+    rm -f $testtemp
+
+    return $status
+}
+
 # indicate whether YP/NIS is active or not
 #
 _yp_active()
