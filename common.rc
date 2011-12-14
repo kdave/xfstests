@@ -1337,6 +1337,54 @@ _check_xfs_test_fs()
     fi
 }
 
+_check_btrfs_filesystem()
+{
+    device=$1
+
+    # If type is set, we're mounted
+    type=`_fs_type $device`
+    ok=1
+
+    if [ "$type" = "$FSTYP" ]
+    then
+        # mounted ...
+        mountpoint=`_umount_or_remount_ro $device`
+    fi
+
+    btrfsck $device >$tmp.fsck 2>&1
+    if [ $? -ne 0 ]
+    then
+        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $seq.full)"
+
+        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
+        echo "*** fsck.$FSTYP output ***"                     >>$here/$seq.full
+        cat $tmp.fsck                                         >>$here/$seq.full
+        echo "*** end fsck.$FSTYP output"                     >>$here/$seq.full
+
+        ok=0
+    fi
+    rm -f $tmp.fsck
+
+    if [ $ok -eq 0 ]
+    then
+        echo "*** mount output ***"                             >>$here/$seq.full
+        _mount                                                  >>$here/$seq.full
+        echo "*** end mount output"                             >>$here/$seq.full
+    elif [ "$type" = "$FSTYP" ]
+    then
+	# was mounted ...
+	_mount_or_remount_rw "$MOUNT_OPTIONS" $device $mountpoint
+	ok=$?
+    fi
+
+    if [ $ok -eq 0 ]; then
+	status=1
+	exit 1
+    fi
+
+    return 0
+}
+
 _check_test_fs()
 {
     case $FSTYP in
@@ -1348,6 +1396,9 @@ _check_test_fs()
 	;;
     udf)
 	# do nothing for now
+	;;
+    btrfs)
+	_check_btrfs_filesystem $TEST_DEV
 	;;
     *)
 	_check_generic_filesystem $TEST_DEV
@@ -1374,6 +1425,9 @@ _check_scratch_fs()
 	;;
     nfs*)
 	# Don't know how to check an NFS filesystem, yet.
+	;;
+    btrfs)
+	_check_btrfs_filesystem $SCRATCH_DEV
 	;;
     *)
 	_check_generic_filesystem $SCRATCH_DEV
