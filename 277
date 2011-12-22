@@ -1,0 +1,71 @@
+#! /bin/bash
+# FS QA Test No. 277
+#
+# Check if ctime update caused by chattr is written to disk
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=lizf@cn.fujitsu.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+status=1	# failure is the default!
+
+_cleanup()
+{
+    rm -f $SCRATCH_MNT/tmp*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+touch $SCRATCH_MNT/tmp
+_scratch_remount
+ctime1=`stat -c %z $SCRATCH_MNT/tmp`
+
+sleep 1
+chattr +A $SCRATCH_MNT/tmp
+chattr -A $SCRATCH_MNT/tmp
+ctime2=`stat -c %z $SCRATCH_MNT/tmp`
+
+_scratch_remount
+ctime3=`stat -c %z $SCRATCH_MNT/tmp`
+
+if [ "$ctime1" == "$ctime2" ]; then
+	echo "error: ctime not updated after chattr"
+elif [ "$ctime1" == "$ctime3" ]; then
+	echo "error: on disk ctime not updated"
+else
+	status=0
+fi
+
+exit
