@@ -1692,6 +1692,18 @@ _require_deletable_scratch_dev_pool()
 	done
 }
 
+# We check for btrfs and (optionally) features of the btrfs command
+_require_btrfs()
+{
+	cmd=$1
+	_require_command $BTRFS_UTIL_PROG btrfs
+	if [ -z "$1" ]; then
+		return 1;
+	fi
+	$BTRFS_UTIL_PROG $cmd --help >/dev/null 2>&1
+	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd)"
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()
