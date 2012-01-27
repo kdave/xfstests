@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test No. 278
+#
+# Test xfs_repair to ensure it fixes the lost+found link count
+# at the first run. See also commit 198b747f255346bca64408875763b6ca0ed3d57d
+# from xfsprogs tree.
+#
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=cmaiolino@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+mkdir -p $SCRATCH_MNT/dir/subdir
+
+#get inodes to be changed
+DIR_INO=`ls -i $SCRATCH_MNT |awk '{print $1}'`
+SUBDIR_INO=`ls -i $SCRATCH_MNT/dir |awk '{print $1}'`
+
+_scratch_unmount
+
+echo "Silence is goodness..."
+
+# Corrupt DIR
+xfs_db -x -c "inode $DIR_INO" -c "write u.sfdir2.list[0].inumber.i4 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $DIR_INO" -c "write u.sfdir2.list[0].name 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $DIR_INO" -c "write u.sfdir2.list[0].offset 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $DIR_INO" -c "write u.sfdir2.list[0].namelen 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $DIR_INO" -c "write u.sfdir2.hdr.parent.i4 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $DIR_INO" -c "write core.nlinkv2 0" $SCRATCH_DEV >> $seq.full
+
+# Corrupt SUBDIR
+xfs_db -x -c "inode $SUBDIR_INO" -c "write u.sfdir2.hdr.parent.i4 0" $SCRATCH_DEV >> $seq.full
+xfs_db -x -c "inode $SUBDIR_INO" -c "write core.nlinkv2 0" $SCRATCH_DEV >> $seq.full
+
+echo "===== BEGIN of xfs_repair =====" >> $seq.full
+echo "" >>$seq.full
+
+xfs_repair  $SCRATCH_DEV >> $seq.full 2>&1
+echo "===== END of xfs_repair =====" >> $seq.full
+
+#if _check_scratch_fs; then
+#	status=0
+#else
+#	status=1
+#fi
+exit
