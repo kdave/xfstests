@@ -67,7 +67,7 @@ _create_test_bed()
 	mknod $SCRATCH_MNT/dev/c c 0 0
 	mknod $SCRATCH_MNT/dev/p p
 	# sanity check
-	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch
+	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch | grep -v "lost+found"
 }
 
 # real QA test starts here
@@ -160,18 +160,18 @@ _extend_test_bed()
 	# whack a symlink in the middle, just to be difficult
 	ln -s $SCRATCH_MNT/here/up $SCRATCH_MNT/descend/and
 	# dump out our new starting point
-	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch
+	find $SCRATCH_MNT | LC_COLLATE=POSIX sort | _filter_scratch | grep -v "lost+found"
 }
 
 _extend_test_bed
 
 echo
 echo "*** directory descent with us following symlinks"
-getfattr -h -L -R -m '.' -e hex $SCRATCH_MNT
+getfattr -h -L -R -m '.' -e hex $SCRATCH_MNT | _sort_getfattr_output
 
 echo
 echo "*** directory descent without following symlinks"
-getfattr -h -P -R -m '.' -e hex $SCRATCH_MNT
+getfattr -h -P -R -m '.' -e hex $SCRATCH_MNT | _sort_getfattr_output
 
 
 # 
