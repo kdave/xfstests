@@ -80,7 +80,7 @@ _attr_list()
 
 
 # real QA test starts here
-_supported_fs xfs udf
+_supported_fs generic
 _supported_os Linux
 
 _require_attrs
@@ -119,9 +119,10 @@ _attr_list $testfile
 
 echo "*** add lots of attributes"
 v=0
-while [ $v -lt 1000 ]
+
+while [ $v -lt $MAX_ATTRS ]
 do
-    echo "value_$v" | attr -s "attribute_$v" $testfile >>$seq.full
+    echo -n "value_$v" | attr -s "attribute_$v" $testfile >>$seq.full
     if [ $? -ne 0 ]
     then
         echo "!!! failed to add \"attribute_$v\""
@@ -139,11 +140,12 @@ getfattr --absolute-names $testfile \
     	/^#/ { next }
 	/^[ 	]*$/ { next }
         { l++ } 
-	END {print "   *** " (l - 1) " attribute(s)" }'
+	END {print "   *** " (l - 1) " attribute(s)" }' \
+    | sed s/$MAX_ATTRS/MAX_ATTRS/
 
 echo "*** remove lots of attributes"
 v=0
-while [ $v -lt 1000 ]
+while [ $v -lt $MAX_ATTRS ]
 do
     if ! $ATTR_PROG -r "attribute_$v" $testfile >>$seq.full
     then
@@ -157,10 +159,11 @@ done
 _attr_list $testfile
 
 echo "*** really long value"
-dd if=/dev/zero bs=1024 count=100 2>/dev/null \
+dd if=/dev/zero bs=1 count=$MAX_ATTRVAL_SIZE 2>/dev/null \
     | _attr -s "long_attr" $testfile >/dev/null
-    
-_attr -g "long_attr" $testfile | tail -n +2 | od -t x1
+
+OCTAL_SIZE=`echo "obase=8; $MAX_ATTRVAL_SIZE" | bc`
+_attr -q -g "long_attr" $testfile | od -t x1 | sed -e "s/^0*$OCTAL_SIZE$/ATTRSIZE/"    
 _attr -r "long_attr" $testfile >/dev/null
 
 

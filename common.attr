@@ -183,5 +183,26 @@ _sort_getfattr_output()
     awk '{a[FNR]=$0}END{n = asort(a); for(i=1; i <= n; i++) print a[i]"\n"}' RS=''
 }
 
+# set maximum total attr space based on fs type
+if [ "$FSTYP" == "xfs" -o "$FSTYP" == "udf" ]; then
+	MAX_ATTRS=1000
+else # Assume max ~1 block of attrs
+	BLOCK_SIZE=`stat -f $TEST_DEV | grep "Block size" | cut -d " " -f3`
+	# user.attribute_XXX="value.XXX" is about 32 bytes; leave some overhead
+	let MAX_ATTRS=$BLOCK_SIZE/40
+fi
+
+export MAX_ATTRS
+
+# Set max attr value size based on fs type
+if [ "$FSTYP" == "xfs" -o "$FSTYP" == "udf" -o "$FSTYP" == "btrfs" ]; then
+	MAX_ATTRVAL_SIZE=64
+else # Assume max ~1 block of attrs
+	BLOCK_SIZE=`stat -f $TEST_DEV | grep "Block size" | cut -d " " -f3`
+	# leave a little overhead
+	let MAX_ATTRVAL_SIZE=$BLOCK_SIZE-256
+fi
+
+export MAX_ATTRVAL_SIZE
 # make sure this script returns success
 /bin/true
