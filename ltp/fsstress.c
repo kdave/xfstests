@@ -178,6 +178,7 @@ void	unresvsp_f(int, long);
 void	write_f(int, long);
 
 opdesc_t	ops[] = {
+     /* { OP_ENUM, "name", function, freq, iswrite }, */
 	{ OP_ALLOCSP, "allocsp", allocsp_f, 1, 1 },
 	{ OP_ATTR_REMOVE, "attr_remove", attr_remove_f, /* 1 */ 0, 1 },
 	{ OP_ATTR_SET, "attr_set", attr_set_f, /* 2 */ 0, 1 },
@@ -207,7 +208,7 @@ opdesc_t	ops[] = {
 	{ OP_SETXATTR, "setxattr", setxattr_f, 1, 1 },
 	{ OP_STAT, "stat", stat_f, 1, 0 },
 	{ OP_SYMLINK, "symlink", symlink_f, 2, 1 },
-	{ OP_SYNC, "sync", sync_f, 1, 0 },
+	{ OP_SYNC, "sync", sync_f, 1, 1 },
 	{ OP_TRUNCATE, "truncate", truncate_f, 2, 1 },
 	{ OP_UNLINK, "unlink", unlink_f, 1, 1 },
 	{ OP_UNRESVSP, "unresvsp", unresvsp_f, 1, 1 },
