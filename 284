@@ -1,0 +1,171 @@
+#! /bin/bash
+# FS QA Test No. 284
+#
+# Btrfs Online defragmentation tests
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2012 Fujitsu Liu Bo.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=liubo2009@cn.fujitsu.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+here="`pwd`"
+tmp=/tmp/$$
+cnt=11999
+filesize=48000
+
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+_create_file()
+{
+	if [ $1 -ne 2 ]; then
+		tmpfile="$SCRATCH_MNT/tmp_file"
+	else
+		tmpfile="$SCRATCH_MNT/tmp_dir/tmp_file"
+	fi
+		
+	for i in `seq $cnt -1 0`; do
+		dd if=/dev/zero of=$tmpfile bs=4k count=1 \
+		 conv=notrunc seek=$i oflag=sync &>/dev/null
+	done
+	# get md5sum
+	md5sum $tmpfile > /tmp/checksum
+}
+
+_btrfs_online_defrag()
+{
+	str=""
+	if [ "$2" = "2" ];then
+		str="$str -s -1 -l $((filesize / 2)) "
+	elif [ "$2" = "3" ];then
+		str="$str -s $((filesize + 1)) -l $((filesize / 2)) "
+		HAVE_DEFRAG=1
+	elif [ "$2" = "4" ];then
+		str="$str -l -1 "
+	elif [ "$2" = "5" ];then
+		str="$str -l $((filesize + 1)) "
+	elif [ "$2" = "6" ];then
+		str="$str -l $((filesize / 2)) "
+	fi
+
+	if [ "$3" = "2" ];then
+		str="$str -c "
+	fi
+
+	if [ "$str" != "" ]; then
+		btrfs filesystem defragment $str $SCRATCH_MNT/tmp_file
+	else
+		if [ "$1" = "1" ];then
+			btrfs filesystem defragment $SCRATCH_MNT/tmp_file
+		elif [ "$1" = "2" ];then
+			btrfs filesystem defragment $SCRATCH_MNT/tmp_dir
+		elif [ "$1" = "3" ];then
+			btrfs filesystem defragment $SCRATCH_MNT
+		fi
+	fi
+	ret_val=$?
+	_scratch_remount
+	if [ $ret_val -ne 20 ];then
+		echo "btrfs filesystem defragment failed! err is $ret_val"
+	fi
+}
+
+_checksum()
+{
+	md5sum -c /tmp/checksum > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		echo "md5 checksum failed!"
+	fi
+}
+
+_cleanup_defrag()
+{
+	umount $SCRATCH_MNT > /dev/null 2>&1
+}
+
+_setup_defrag()
+{
+	umount $SCRATCH_MNT > /dev/null 2>&1
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount
+	_create_file $1
+}
+
+_rundefrag()
+{
+	_setup_defrag $1
+	_btrfs_online_defrag $1 $2 $3
+	_checksum
+	_cleanup_defrag
+	_check_scratch_fs
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.defrag
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+
+_setup_testdir
+## We require scratch so that we'll have free contiguous space
+_require_scratch
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+_require_defrag
+
+echo "defrag object | defragment range | defragment compress"
+echo "a single file |  default | off"
+_rundefrag 1 1 1
+
+echo "a single file | default |  on"
+_rundefrag 1 1 2
+
+echo "a single file | start < 0 && 0 < len < file size | off"
+_rundefrag 1 2 1
+
+echo "a single file | start > file size && 0 < len < file size | off"
+_rundefrag 1 3 1
+
+echo "a single file | start = 0 && len < 0 | off"
+_rundefrag 1 4 1
+
+echo "a single file | start = 0 && len > file size | off"
+_rundefrag 1 5 1
+
+echo "a single file | start = 0 && 0 < len < file size | off"
+_rundefrag 1 6 1
+
+echo "a directory | default | off"
+_rundefrag 2 1 1
+
+echo "a filesystem | default | off"
+_rundefrag 3 1 1
+
+status=0
+exit
