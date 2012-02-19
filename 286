@@ -1,0 +1,114 @@
+#! /bin/bash
+# FS QA Test No. 286
+#
+# SEEK_DATA/SEEK_HOLE copy tests.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2011 Oracle Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=jeff.liu@oracle.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+src=$TEST_DIR/seek_copy_testfile
+dest=$TEST_DIR/seek_copy_testfile.dest
+
+[ -x $here/src/seek_copy_test ] || _notrun "seek_copy_test not built"
+
+_cleanup()
+{
+	rm -f $src $dest
+}
+
+# seek_copy_test_01: tests file with holes and written data extents.
+# verify results:
+# 1. file size is identical.
+# 2. perform cmp(1) to compare SRC and DEST file byte by byte.
+test01()
+{
+	rm -f $src $dest
+
+	write_cmd="-c \"truncate 100m\""
+	for i in $(seq 0 5 100); do
+		offset=$(($i * $((1 << 20))))
+		write_cmd="$write_cmd -c \"pwrite $offset 1m\""
+	done
+
+	echo "*** test01() create sparse file ***" >>$seq.full
+	eval ${XFS_IO_PROG} -F -f "${write_cmd}" $src >>$seq.full 2>&1 ||
+		_fail "create sparse file failed!"
+	echo "*** test01() create sparse file done ***" >>$seq.full
+	echo >>$seq.full
+
+	$here/src/seek_copy_test $src $dest
+	
+	test $(stat --printf "%s" $src) = $(stat --printf "%s" $dest) ||
+		_fail "TEST01: file size check failed"
+
+	cmp $src $dest || _fail "TEST01: file bytes check failed"
+}
+
+# seek_copy_test_02 - tests file with holes, written and unwritten extents.
+# verify results:
+# 1. file size is identical.
+# 2. perform cmp(1) to compare SRC and DEST file byte by byte.
+test02()
+{
+	rm -rf $src $dest
+
+	write_cmd="-c \"truncate 200m\""
+	for i in $(seq 0 10 100); do
+		offset=$(($((6 << 20)) + $i * $((1 << 20))))
+		write_cmd="$write_cmd -c \"falloc $offset 3m\" -c \"pwrite $offset 1m\""
+	done
+
+	echo "*** test02() create sparse file ***" >>$seq.full
+	eval ${XFS_IO_PROG} -F -f "${write_cmd}" $src >>$seq.full 2>&1 ||
+		_fail "create sparse file failed!"
+	echo "*** test02() create sparse file done ***" >>$seq.full
+	echo >>$seq.full
+
+	$here/src/seek_copy_test $src $dest
+
+	test $(stat --printf "%s" $src) = $(stat --printf "%s" $dest) ||
+		_fail "TEST02: file size check failed"
+
+	cmp $src $dest || _fail "TEST02: file bytes check failed"
+}
+
+rm -f $seq.full
+
+test01
+test02
+
+status=0
+exit
