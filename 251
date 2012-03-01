@@ -54,26 +54,36 @@ _cleanup()
 
 _destroy()
 {
-	kill $pids $fstrim_pid
-	wait $pids $fstrim_pid
+	kill $pids $fstrim_pid 2> /dev/null
+	wait $pids $fstrim_pid 2> /dev/null
 	rm -rf $tmp
 }
 
 _destroy_fstrim()
 {
-	kill $fpid
-	wait $fpid
+	kill $fpid 2> /dev/null
+	wait $fpid 2> /dev/null
 }
 
 _fail()
 {
 	echo "$1"
-	kill $mypid
+	kill $mypid 2> /dev/null
 }
 
 _check_fstrim_support()
 {
 	$here/src/fstrim -l 10M $SCRATCH_MNT &> /dev/null
+}
+
+_guess_max_minlen()
+{
+	mmlen=100000
+	while [ $mmlen -gt 1 ]; do
+		$here/src/fstrim -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
+		mmlen=$(($mmlen/2))
+	done
+	echo $mmlen
 }
 
 ##
@@ -85,15 +95,19 @@ fstrim_loop()
 {
 	trap "_destroy_fstrim; exit \$status" 2 15
 	fsize=$(df | grep $SCRATCH_MNT | grep $SCRATCH_DEV  | awk '{print $2}')
+	mmlen=$(_guess_max_minlen)
 
 	while true ; do
-		step=1048576
-		start=0
-		$here/src/fstrim $SCRATCH_MNT &
-		fpid=$!
-		wait $fpid
+		step=$((RANDOM*$RANDOM))
+		minlen=$(((RANDOM*($RANDOM%2+1))%$mmlen))
+		start=$RANDOM
+		if [ $((RANDOM%10)) -gt 7 ]; then
+			$here/src/fstrim $SCRATCH_MNT &
+			fpid=$!
+			wait $fpid
+		fi
 		while [ $start -lt $fsize ] ; do
-			$here/src/fstrim -s ${start}k -l ${step}k $SCRATCH_MNT &
+			$here/src/fstrim -m ${minlen}k -s ${start}k -l ${step}k $SCRATCH_MNT &
 			fpid=$!
 			wait $fpid
 			start=$(( $start + $step ))
