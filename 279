@@ -1,0 +1,120 @@
+#! /bin/bash
+# FS QA Test No. 279
+#
+# Test mkfs.xfs against various types of devices with varying
+# logical & physical sector sizes and offsets.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2012 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    _put_scsi_debug_dev
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.scsi_debug
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scsi_debug
+
+rm -f $seq.full
+
+# Remove xfs signature so -f isn't needed to re-mkfs
+_wipe_device()
+{
+	device=$1
+	dd if=/dev/zero of=$device bs=4k count=1 &>/dev/null
+}
+
+_check_mkfs()
+{
+	echo "===================" 
+	echo "mkfs with opts: $@" | sed -e "s,/dev/sd.,DEVICE,"
+	/sbin/mkfs.xfs $@ 2>/dev/null > $tmp.mkfs.full
+	if [ $? -ne 0 ]; then
+		echo "Failed."
+		return
+	fi
+	echo "Passed."
+	cat $tmp.mkfs.full | _filter_mkfs >> $seq.full 2>$tmp.mkfs
+	. $tmp.mkfs
+	echo "Got sector size: $sectsz"
+	device=`echo $@ | awk '{print $NF}'`
+	_wipe_device $device
+}
+
+# === 4k physical 512b logical aligned
+(
+echo "==================="
+echo "4k physical 512b logical aligned"
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 0 128`
+# sector size should default to 4k
+_check_mkfs $SCSI_DEBUG_DEV
+# blocksize smaller than physical sectorsize should revert to logical sectorsize
+_check_mkfs -b size=2048 -f $SCSI_DEBUG_DEV
+) | tee -a $seq.full
+_put_scsi_debug_dev
+
+# === 4k physical 512b logical unaligned
+(
+echo "==================="
+echo "4k physical 512b logical unaligned"
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 1 128`
+# should fail on misalignment
+_check_mkfs $SCSI_DEBUG_DEV
+# should fall back to logical sector size with force
+_check_mkfs -f $SCSI_DEBUG_DEV
+# with 4k sector specified should fail without force
+_check_mkfs -s size=4096 $SCSI_DEBUG_DEV
+# with 4k sector specified should fall back to logical sector size with force
+_check_mkfs -s size=4096 -f $SCSI_DEBUG_DEV
+) | tee -a $seq.full
+_put_scsi_debug_dev
+
+# === hard 4k physical / 4k logical
+(
+echo "==================="
+echo "hard 4k physical / 4k logical"
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 4096 0 128`
+# block size smaller than sector size should fail 
+_check_mkfs -b size=2048 $SCSI_DEBUG_DEV
+# sector size smaller than physical sector size should fail
+_check_mkfs -s size=512 $SCSI_DEBUG_DEV
+) | tee -a $seq.full
+_put_scsi_debug_dev
+
+status=0
+exit

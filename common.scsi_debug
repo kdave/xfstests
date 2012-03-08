@@ -1,0 +1,62 @@
+##/bin/bash
+#
+# Copyright (c) 2012 Red Hat, Inc
+# All Rights Reserved.
+#
+# Written by Eric Sandeen <sandeen@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# Functions useful for tests on unique block devices
+#
+
+_require_scsi_debug()
+{
+	# make sure we have the module and it's not already used
+	modinfo scsi_debug 2>&1 > /dev/null || _notrun "scsi_debug module not found"
+	lsmod | grep -wq scsi_debug && _notrun "scsi_debug module in use"
+	# make sure it has the features we need
+	# logical/physical sectors plus unmap support all went in together
+	modinfo scsi_debug | grep -wq sector_size || _notrun "scsi_debug too old"
+}
+
+# Args: [physical sector size, [logical sector size, [unaligned(0|1), [size in megs]]]]
+_get_scsi_debug_dev()
+{
+	# Defaults to phys 512, logical 512, aligned
+	physical=${1-512}
+	logical=${2-512}
+	unaligned=${3-0}
+	size=${4-128}
+
+	phys_exp=0
+	while [ $logical -lt $physical ]; do
+		let physical=physical/2
+		let phys_exp=phys_exp+1
+	done
+	opts="sector_size=$logical physblk_exp=$phys_exp lowest_aligned=$unaligned dev_size_mb=$size"
+	echo "scsi_debug options $opts" >> $seq.full
+	modprobe scsi_debug $opts
+	[ $? -eq 0 ] || _fail "scsi_debug modprobe failed"
+	sleep 1
+	device=`grep -wl scsi_debug /sys/block/sd*/device/model | awk -F / '{print $4}'`
+	echo "/dev/$device"
+}
+
+_put_scsi_debug_dev()
+{
+	sleep 1
+	rmmod scsi_debug || _fail "Could not remove scsi_debug module"
+}
