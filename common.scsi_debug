@@ -26,7 +26,7 @@ _require_scsi_debug()
 {
 	# make sure we have the module and it's not already used
 	modinfo scsi_debug 2>&1 > /dev/null || _notrun "scsi_debug module not found"
-	lsmod | grep -wq scsi_debug && _notrun "scsi_debug module in use"
+	lsmod | grep -wq scsi_debug && (rmmod scsi_debug || _notrun "scsi_debug module in use")
 	# make sure it has the features we need
 	# logical/physical sectors plus unmap support all went in together
 	modinfo scsi_debug | grep -wq sector_size || _notrun "scsi_debug too old"
@@ -58,5 +58,6 @@ _get_scsi_debug_dev()
 _put_scsi_debug_dev()
 {
 	sleep 1
+	lsmod | grep -wq scsi_debug || return
 	rmmod scsi_debug || _fail "Could not remove scsi_debug module"
 }
