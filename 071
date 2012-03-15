@@ -43,6 +43,15 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common.rc
 . ./common.filter
 
+bitsperlong=`src/feature -w`
+# link correct .out file
+rm -f $seq.out
+if [ "$bitsperlong" -eq 32 ]; then
+	ln -s $seq.out.32 $seq.out
+else
+	ln -s $seq.out.64 $seq.out
+fi
+
 _filter_io()
 {
     sed -e "s/$dbsize/1FSB/g" -e '/.* ops; /d'
@@ -51,6 +60,16 @@ _filter_io()
 _filter_off()
 {
     sed -e "s/$1/<OFFSET>/g" | _filter_io
+}
+
+_filter_pwrite()
+{
+	sed -e "s/pwrite64: Invalid argument/pwrite64: File too large/g"
+}
+
+_filter_pread()
+{
+	sed -e "s/pread64: Invalid argument/read 0\/$bytes bytes at offset <OFFSET>/g" | _filter_io
 }
 
 write_block()
@@ -66,15 +85,15 @@ write_block()
     echo "Writing $bytes bytes, offset is $words (direct=$direct)" | _filter_io
     echo "Writing $bytes bytes at $location $words (direct=$direct)" >>$seq.full
     $XFS_IO_PROG -c "pwrite $offset 512" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
+	2>&1 | _filter_off $offset | tee -a $seq.full | _filter_pwrite
     xfs_bmap -v $SCRATCH_MNT/$seq >>$seq.full
 
     echo "Reading $bytes bytes (direct=$direct)" | _filter_io
     echo "Reading $bytes bytes at $location (direct=$direct)" >>$seq.full
     $XFS_IO_PROG -c "pread $offset $bytes" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | _filter_xfs_io | tee -a $seq.full
+	2>&1 | _filter_off $offset | tee -a $seq.full | _filter_pread
 
-    $XFS_IO_PROG -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full
+    $XFS_IO_PROG -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full 2>&1
 
     echo | tee -a $seq.full
 }
@@ -94,7 +113,7 @@ _scratch_mount
 # Okay... filesize limit depends on blocksize, bits per long and
 # also if large block device patch is enabled (can't dynamically
 # check that, so use env var USE_LBD_PATCH to override default).
-# 
+#
 # Note:
 # We check from 1Tb below our guessed limit to 1Tb above it, and
 # see what happens for each 1Tb increment along the way (first
@@ -102,14 +121,13 @@ _scratch_mount
 # So, number calculated here is not the actual limit, its a ways
 # above that, hopefully.
 
-bitsperlong=`src/feature -w`
 if [ "$bitsperlong" -eq 32 ]; then
     upperbound=`expr $dbsize / 512`
     # which is 8(TB) for 4K, 4(TB) for 2k, ... etc.
     [ "$USE_LBD_PATCH" = yes ] && upperbound=16
     # limited by page cache index when LBD patch onboard.
 else
-    upperbound=`echo 8 \* 1024 \* 1024 | bc` 
+    upperbound=`echo 8 \* 1024 \* 1024 | bc`
     # 8 exabytes (working in TBs below)
 fi
 
