@@ -83,6 +83,17 @@ _require_multi_stream()
     _notrun "xfsdump multi-stream support required"
 }
 
+_require_legacy_v2_format()
+{
+    $XFSDUMP_PROG 2>&1 |
+    grep -q "generate format 2 dump" ||
+    _notrun "xfsdump -K option required"
+
+    $XFSRESTORE_PROG 2>&1 |
+    grep -q "force use of format 2 generation" ||
+    _notrun "xfsrestore -K option required"
+}
+
 #
 # do a remote/local mt
 #
@@ -942,7 +953,7 @@ _parse_dump_args()
         --no-check-quota)
             do_quota_check=false
             ;;
-	-o|-D|-F)
+	-o|-D|-F|-K)
 	    dump_args="$dump_args $1"
             ;;
         -l|-d)
@@ -992,7 +1003,7 @@ _parse_restore_args()
         --no-check-quota)
             do_quota_check=false
             ;;
-	-R)
+	-K|-R)
 	    restore_args="$restore_args $1"
             ;;
 	*)

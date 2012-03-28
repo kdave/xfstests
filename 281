@@ -1,0 +1,59 @@
+#! /bin/bash
+# FS QA Test No. 281
+#
+# Test that xfsdump can generate a format 2 dump.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2012 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=wkendall@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.dump
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_legacy_v2_format
+
+_create_dumpdir_fill
+
+echo "*** Dump using format 2"
+_do_dump_file -K
+
+echo "*** Verify it's a format 2 dump"
+file $dump_file | cut -d: -f 2
+
+echo "*** Restoring format 2 dump"
+_do_restore_file
+_diff_compare
+
+# success, all done
+status=0
+exit

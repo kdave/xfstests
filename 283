@@ -1,0 +1,74 @@
+#! /bin/bash
+# FS QA Test No. 283
+#
+# Test incremental dumps containing a mix of dump formats.
+# level 0 - current format
+# level 1 - format 2
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2012 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=wkendall@sgi.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.dump
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_legacy_v2_format
+
+_create_dumpdir_fill
+# ensure file/dir timestamps precede dump timestamp
+sleep 2
+src/bstat $SCRATCH_MNT >>$here/$seq.full
+
+echo "*** Level 0 dump, current format"
+_do_dump_file -f $tmp.l0
+
+_append_dumpdir_fill
+src/bstat $SCRATCH_MNT >>$here/$seq.full
+
+echo "*** Level 1 dump, format 2"
+_do_dump_file -l 1 -f $tmp.l1 -K
+
+# note the first restore has to be told to use format
+# 2 generation numbers due to the unusual case of
+# having a new-format dump followed by an old-format.
+echo "*** Restore using current format level 0"
+_prepare_restore_dir
+_do_restore_file_cum -f $tmp.l0 -K
+
+echo "*** Restore using format 2 level 1"
+_do_restore_file_cum -f $tmp.l1
+_diff_compare
+
+# success, all done
+status=0
+exit
