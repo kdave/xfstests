@@ -1,7 +1,9 @@
 #! /bin/bash
 # FS QA Test No. 274
 #
-# preallocation test
+# preallocation test:
+# Preallocate space to a file, and fill the rest of the fs to 100%.
+# Then test a write into that preallocated space, which should succeed.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2011-2012 Fujitsu, Inc.  All Rights Reserved.
@@ -35,7 +37,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
 	cd /
-	rm -f $SCRATCH_MNT/* $tmp.*
+	rm -f $tmp.*
 	_scratch_unmount
 }
 
@@ -46,6 +48,7 @@ _cleanup()
 _supported_fs generic
 _supported_os IRIX Linux
 _require_scratch
+_require_xfs_io_falloc
 
 echo "------------------------------"
 echo "preallocation test"
@@ -57,35 +60,42 @@ umount $SCRATCH_DEV 2>/dev/null
 _scratch_mkfs_sized $((1 * 1024 * 1024 * 1024)) >>$seq.full 2>&1
 _scratch_mount
 
-rm -rf $SCRATCH_MNT/*
-cd $SCRATCH_MNT
-dd if=/dev/zero of=test bs=4K count=1 >/dev/null 2>&1
-if [ $? -ne 0 ]
-then
-	echo "create file err"
-	status=1
-	exit
-fi
+# Create a 4k file and Allocate 4M past EOF on that file
+xfs_io -F -f -c "pwrite 0 4k" -c "falloc -k 4k 4m" $SCRATCH_MNT/test \
+	>>$seq.full 2>&1 || _fail "failed to create test file"
 
-fallocate -n -o 4K -l 1M test >/dev/null 2>&1
-if [ $? -ne 0 ]
-then
-	echo "fallocate file err"
-	status=1
-	exit
-fi
-
-dd if=/dev/zero of=tmp1 bs=1M >/dev/null 2>&1
-dd if=/dev/zero of=tmp2 bs=4K >/dev/null 2>&1
+# Fill the rest of the fs completely
+# Note, this will show ENOSPC errors in $seq.full, that's ok.
+echo "Fill fs with 1M IOs; ENOSPC expected" >> $seq.full
+dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=1M >>$seq.full 2>&1
+echo "Fill fs with 4K IOs; ENOSPC expected" >> $seq.full
+dd if=/dev/zero of=$SCRATCH_MNT/tmp2 bs=4K >>$seq.full 2>&1
 sync
+# Last effort, use O_SYNC
+echo "Fill fs with 4K DIOs; ENOSPC expected" >> $seq.full
+dd if=/dev/zero of=$SCRATCH_MNT/tmp3 bs=4K oflag=sync >>$seq.full 2>&1
+# Save space usage info
+echo "Post-fill space:" >> $seq.full
+df $SCRATCH_MNT >>$seq.full 2>&1
 
-dd if=/dev/zero of=test seek=1 bs=4K count=2 conv=notrunc >/dev/null 2>&1
-if [ $? -ne 0 ]
-then
-	echo "fill prealloc range err"
-	status=1
-	exit
-fi
+# Now attempt a write into all of the preallocated space -
+# in a very nasty way, badly fragmenting it and then filling it in.
+echo "Fill in prealloc space; fragment at offsets:" >> $seq.full
+for i in `seq 1 2 1023`; do
+	echo -n "$i " >> $seq.full
+	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=4K count=1 conv=notrunc \
+		>>$seq.full 2>/dev/null || _fail "failed to write to test file"
+done
+sync
+echo >> $seq.full
+echo "Fill in prealloc space; fill holes at offsets:" >> $seq.full
+for i in `seq 2 2 1023`; do
+	echo -n "$i " >> $seq.full
+	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=4K count=1 conv=notrunc \
+		>>$seq.full 2>/dev/null || _fail "failed to fill test file"
+done
+sync
+echo >> $seq.full
 
 echo "done"
 exit
