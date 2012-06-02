@@ -42,8 +42,10 @@ static void get_file_system(int fd)
 {
 	struct statfs buf;
 
-	if (!fstatfs(fd, &buf))
-		fprintf(stdout, "File system magic#: 0x%lx\n", buf.f_type);
+	if (!fstatfs(fd, &buf)) {
+		fprintf(stdout, "File system magic#: 0x%lx\n",
+				(unsigned long int)buf.f_type);
+	}
 }
 
 static int get_io_sizes(int fd)
