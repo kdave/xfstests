@@ -52,6 +52,8 @@ _supported_fs xfs
 _supported_os Linux
 _require_scratch
 
+rm -f $seq.full
+
 [ "$XFS_FSR_PROG" = "" ] && _notrun "xfs_fsr not found"
 
 # create freespace holes of 1-3 blocks in length
@@ -62,26 +64,41 @@ _require_scratch
 # (say 5 extents) and lots of variations around that dependent on the
 # number of attributes in the files being defragmented.
 #
+# We have to make sure there are enough free inodes for the test to
+# pass without needing to allocate new clusters during the test.
+# With such fragemented free space, that will fail.
+#
 fragment_freespace()
 {
 	_file="$SCRATCH_MNT/not_free"
+	_dir="$SCRATCH_MNT/saved"
 
-	for i in `seq 0 1 10000`; do
-		echo foo > $_file.$i
+	# allocate inode space
+	mkdir -p $_dir
+	for i in `seq 0 1 1000`; do
+		touch $_file.$i
 	done
-	sync
-
-	for i in `seq 0 2 10000`; do
+	for i in `seq 0 63 1000`; do
+		mv $_file.$i $_dir
+	done
+	for i in `seq 0 1 1000`; do
 		rm -f $_file.$i
 	done
-	for i in `seq 0 7 10000`; do
-		rm -f $_file.$i
+
+	$XFS_IO_PROG -fs -c "resvsp 0 40000k" $_file > /dev/null 2>&1
+
+	for i in `seq 0 8 40000`; do
+		$XFS_IO_PROG -f -c "unresvsp ${i}k 4k" $_file \
+					> /dev/null 2>&1
+	done
+	for i in `seq 0 28 40000`; do
+		$XFS_IO_PROG -f -c "unresvsp ${i}k 4k" $_file \
+					> /dev/null 2>&1
 	done
 	sync
 
 	# and now use up all the remaining extents larger than 3 blocks
-	dd if=/dev/zero of=$_file.large bs=4k count=1024 > /dev/null 2>&1
-	sync
+	$XFS_IO_PROG -fs -c "resvsp 0 4m" $_file.large > /dev/null 2>&1
 }
 
 create_attrs()
@@ -93,11 +110,12 @@ create_attrs()
 
 create_data()
 {
+	size=`expr \( $1 + 1 \) \* 4096`
+	$XFS_IO_PROG -f -c "truncate $size" $2 > /dev/null 2>&1
 	for foo in `seq $1 -1 0`; do
 		let offset=$foo*4096
-		$XFS_IO_PROG -f -c "pwrite $offset 4096" -c "fsync" $2 > /dev/null 2>&1
+		$XFS_IO_PROG -f -c "resvsp $offset 4096" $2 > /dev/null 2>&1
 	done
-	xfs_bmap -vp $2
 }
 
 # create the designated file with a certain number of attributes and a certain
@@ -113,7 +131,7 @@ create_target_attr_first()
 	target=$3
 
 	rm -f $target
-	echo > $target
+	touch $target
 	create_attrs $nattrs $target
 	create_data $file_blocks $target
 }
@@ -131,7 +149,7 @@ create_target_attr_last()
 	target=$3
 
 	rm -f $target
-	echo > $target
+	touch $target
 	create_data $file_blocks $target
 	create_attrs $nattrs $target
 }
@@ -176,11 +194,13 @@ for n in `seq 4 1 12`; do
 		for j in `seq 5 1 20`; do
 			create_target_attr_first $i $j $targ.$i.$j >> $seq.full 2>&1
 		done
+		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
 		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seq.full 2>&1
 		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
 		for j in `seq 5 1 20`; do
 			create_target_attr_last $i $j $targ.$i.$j >> $seq.full 2>&1
 		done
+		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
 		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seq.full 2>&1
 		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
 	done
