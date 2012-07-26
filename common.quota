@@ -236,6 +236,11 @@ _check_quota_usage()
 {
 	# Sync to get delalloc to disk
 	sync
+
+	# kill caches to guarantee removal speculative delalloc
+	# XXX: really need an ioctl instead of this big hammer
+	echo 3 > /proc/sys/vm/drop_caches
+
 	VFS_QUOTA=0
 	case $FSTYP in
 	ext2|ext3|ext4|ext4dev|reiserfs)
@@ -253,8 +258,9 @@ _check_quota_usage()
 		quotacheck -u -g $SCRATCH_MNT 2>/dev/null
 	else
 		# use XFS method to force quotacheck
-		mount -o remount,noquota $SCRATCH_DEV
-		mount -o remount,usrquota,grpquota $SCRATCH_DEV
+		xfs_quota -x -c "off -ug" $SCRATCH_MNT
+		_scratch_unmount
+		_scratch_mount "-o usrquota,grpquota"
 	fi
 	repquota -u -n $SCRATCH_MNT  | grep -v "^#0" | _filter_scratch |
 		sort >$tmp.user.checked
