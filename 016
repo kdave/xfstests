@@ -65,6 +65,15 @@ _init()
     $here/src/devzero -b 2048 -n 50 -v 198 $SCRATCH_DEV
     echo "*** mkfs"
     force_opts="-dsize=50m -lsize=$log_size"
+    #
+    # Do not discard blocks as we check for patterns in free space.
+    # 
+    # First, make sure that mkfs supports '-K' option by using its
+    # dry run (-N option) and then add it to the force_opts.
+    #
+    if _scratch_mkfs_xfs -N -K $force_opts >/dev/null 2>&1; then
+        force_opts="-K $force_opts"
+    fi
     echo mkfs_xfs $force_opts $SCRATCH_DEV >>$seq.full
     _scratch_mkfs_xfs $force_opts >$tmp.mkfs0 2>&1
     [ $? -ne 0 ] && \

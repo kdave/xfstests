@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
 	cd /
-	rm -rf $SCRATCH_MNT/* $tmp.*
+	rm -rf $tmp.*
 	_scratch_unmount
 }
 
@@ -43,7 +43,7 @@ _cleanup()
 . ./common.filter
 
 threads=50
-count=1
+count=2
 
 _threads_set()
 {
@@ -68,7 +68,7 @@ _file_create()
 
 	cd $SCRATCH_MNT/origin
 
-	_disksize=`df --block-size=1 | grep $SCRATCH_DEV | awk '{print $2}'`
+	_disksize=`df --block-size=1 $SCRATCH_DEV | awk -v sd=$SCRATCH_DEV 'BEGIN{c=0}{for(i=1;i<=NF;++i){a[c]=$i;++c}}END{for(entry in a){if(a[entry] ~ sd){print a[entry + 3]; break}}}'`
 	_disksize=$(($_disksize / 3))
 	_num=$(($_disksize / $count / $threads / 4096))
 	_count=$count
@@ -106,8 +106,6 @@ _do_workload()
 	_pids=""
 	_pid=1
 	
-	rm -rf $SCRATCH_MNT/*
-
 	_threads_set
 	_file_create
 
@@ -134,7 +132,7 @@ echo "------------------------------"
 
 rm -f $seq.full
 
-umount $SCRATCH_DEV 2>/dev/null
+_scratch_unmount 2>/dev/null
 _scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seq.full 2>&1
 _scratch_mount
 
