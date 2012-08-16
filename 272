@@ -32,15 +32,17 @@ tmp=/tmp/$$
 status=1	# failure is the default!
 trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
+# ext3 doesn't support direct IO in journalling mode
+write_opt_list="iflag=noatime conv=notrunc conv=fsync"
+# For filesystems that can handle it, add also direct IO test
+[ $FSTYP = "ext4" ] && write_opt_list="$write_opt_list oflag=direct"
+
 # get standard environment, filters and checks
 . ./common.rc
 . ./common.filter
 _workout()
 {
-	echo ""
-	echo " Switch data journalling mode"
-	echo ""
-	write_opt_list="iflag=noatime conv=notrunc conv=fsync oflag=direct"
+	echo "Switch data journalling mode. Silence is golden."
 	chattr_opt_list="+j -j +jS -j"
 	idx=0
 	#
@@ -51,7 +53,7 @@ _workout()
 		do
 		    
 			echo "OP write_opt: $write_opt 4M, \
-chattr_opt: $chattr_opt"
+chattr_opt: $chattr_opt" >>$seq.full
 			dd if=/dev/zero of=$SCRATCH_MNT/file.$idx \
 				bs=1M count=4 $write_opt \
 				>> $seq.full 2>&1 || exit
@@ -69,7 +71,7 @@ chattr_opt: $chattr_opt"
 		do
 
 			echo "OP write_opt: $write_opt ENOSPC, \
-chattr_opt: $chattr_opt"
+chattr_opt: $chattr_opt" >>$seq.full
 			dd if=/dev/zero of=$SCRATCH_MNT/file.$idx \
 				bs=1M $write_opt >> $seq.full 2>&1
 			chattr $chattr_opt $SCRATCH_MNT/file.$idx \
