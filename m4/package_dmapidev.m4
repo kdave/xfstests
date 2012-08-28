@@ -20,8 +20,6 @@ AC_DEFUN([AC_PACKAGE_WANT_DMAPI],
 	echo
     ])
     libdm="-ldm"
-    test -f `pwd`/../dmapi/libdm/libdm.la && \
-        libdm="`pwd`/../dmapi/libdm/libdm.la"
     test -f ${libexecdir}${libdirsuffix}/libdm.la && \
 	libdm="${libexecdir}${libdirsuffix}/libdm.la"
     AC_SUBST(libdm)

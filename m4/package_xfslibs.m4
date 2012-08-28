@@ -51,8 +51,6 @@ AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
         exit 1
     ])
     libxfs="-lxfs"
-    test -f `pwd`/../xfsprogs/libxfs/libxfs.la && \
-        libxfs="`pwd`/../xfsprogs/libxfs/libxfs.la"
     test -f ${libexecdir}${libdirsuffix}/libxfs.la && \
 	libxfs="${libexecdir}${libdirsuffix}/libxfs.la"
     AC_SUBST(libxfs)
@@ -67,8 +65,6 @@ AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
         exit 1
     ])
     libhdl="-lhandle"
-    test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
-        libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
     test -f ${libexecdir}${libdirsuffix}/libhandle.la && \
 	libhdl="${libexecdir}${libdirsuffix}/libhandle.la"
     AC_SUBST(libhdl)
@@ -83,8 +79,6 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
         exit 1
     ])
     libhdl="-lhandle"
-    test -f `pwd`/../xfsprogs/libhandle/libhandle.la && \
-        libhdl="`pwd`/../xfsprogs/libhandle/libhandle.la"
     test -f ${libexecdir}${libdirsuffix}/libhandle.la && \
 	libhdl="${libexecdir}${libdirsuffix}/libhandle.la"
     AC_SUBST(libhdl)
