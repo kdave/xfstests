@@ -90,6 +90,21 @@ touch $tmp.running
     rmdir $STRESS_DIR
 } &
 
+# start fstest -m loop in a background block; this gets us mmap coverage
+{
+    FSTEST_DIR="$SCRATCH_MNT/fstest_test_dir"
+    mkdir "$FSTEST_DIR"
+
+    procs=2
+    while [ -f "$tmp.running" ]
+      do
+      src/fstest -m -p $FSTEST_DIR  -n $procs -f 4 > /dev/null 2>&1
+    done
+
+    rm -rf $FSTEST_DIR/*
+    rmdir $FSTEST_DIR
+} &
+
 i=0
 let ITERATIONS=$ITERATIONS-1
 
