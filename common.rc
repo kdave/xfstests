@@ -1787,6 +1787,23 @@ _devmgt_add()
 	echo ${tdl} >  /sys/class/scsi_host/host${h}/scan || _fail "Add disk failed"
 }
 
+_require_fstrim()
+{
+	if [ -z "$FSTRIM_PROG" ]; then
+		_notrun "This test requires fstrim utility."
+	fi
+}
+
+_test_batched_discard()
+{
+	if [ $# -ne 1 ]; then
+		echo "Usage: _test_batched_discard mnt_point" 1>&2
+		exit 1
+	fi
+	_require_fstrim
+	$FSTRIM_PROG ${1} &>/dev/null
+}
+
 ################################################################################
 
 if [ "$iam" != new -a "$iam" != bench ]

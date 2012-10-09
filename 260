@@ -41,13 +41,13 @@ mypid=$$
 _supported_fs generic
 _supported_os Linux
 _require_math
+_require_fstrim
 
 _require_scratch
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-FSTRIM="$here/src/fstrim"
-"$FSTRIM" -l 10M $SCRATCH_MNT &> /dev/null || _notrun "FSTRIM is not supported"
+_test_batched_discard $SCRATCH_MNT || _notrun "FITRIM not supported on $SCRATCH_DEV"
 
 fssize=$(df -k | grep "$SCRATCH_MNT" | grep "$SCRATCH_DEV"  | awk '{print $2}')
 
@@ -59,20 +59,24 @@ max_64bit=$(_math "2^64 - 1")
 # the file system
 
 echo "[+] Start beyond the end of fs (should fail)"
-"$FSTRIM" -s $beyond_eofs $SCRATCH_MNT
+out=$($FSTRIM_PROG -o $beyond_eofs $SCRATCH_MNT 2>&1)
 [ $? -eq 0 ] && status=1
+echo $out | _filter_scratch
 
 echo "[+] Start beyond the end of fs with len set (should fail)"
-"$FSTRIM" -s $beyond_eofs -l1M $SCRATCH_MNT
+out=$($FSTRIM_PROG -o $beyond_eofs -l1M $SCRATCH_MNT 2>&1)
 [ $? -eq 0 ] && status=1
+echo $out | _filter_scratch
 
 echo "[+] Start = 2^64-1 (should fail)"
-"$FSTRIM" -s $max_64bit $SCRATCH_MNT
+out=$($FSTRIM_PROG -o $max_64bit $SCRATCH_MNT 2>&1)
 [ $? -eq 0 ] && status=1
+echo $out | _filter_scratch
 
 echo "[+] Start = 2^64-1 and len is set (should fail)"
-"$FSTRIM" -s $max_64bit -l1M $SCRATCH_MNT
+out=$($FSTRIM_PROG -o $max_64bit -l1M $SCRATCH_MNT 2>&1)
 [ $? -eq 0 ] && status=1
+echo $out | _filter_scratch
 
 _scratch_unmount
 _scratch_mkfs >/dev/null 2>&1
@@ -82,16 +86,16 @@ _scratch_mount
 # since the length should be truncated
 
 echo "[+] Default length (should succeed)"
-"$FSTRIM" $SCRATCH_MNT
+$FSTRIM_PROG $SCRATCH_MNT
 [ $? -ne 0 ] && status=1
 echo "[+] Default length with start set (should succeed)"
-"$FSTRIM" -s10M $SCRATCH_MNT
+$FSTRIM_PROG -o10M $SCRATCH_MNT
 [ $? -ne 0 ] && status=1
 echo "[+] Length beyond the end of fs (should succeed)"
-"$FSTRIM" -l $beyond_eofs $SCRATCH_MNT
+$FSTRIM_PROG -l $beyond_eofs $SCRATCH_MNT
 [ $? -ne 0 ] && status=1
 echo "[+] Length beyond the end of fs with start set (should succeed)"
-"$FSTRIM" -s10M -l $beyond_eofs $SCRATCH_MNT
+$FSTRIM_PROG -o10M -l $beyond_eofs $SCRATCH_MNT
 [ $? -ne 0 ] && status=1
 
 _scratch_unmount
@@ -101,8 +105,9 @@ _scratch_mount
 # This is a bit fuzzy, but since the file system is fresh
 # there should be at least (fssize/2) free space to trim.
 # This is supposed to catch wrong FITRIM argument handling
-out=$("$FSTRIM" -v -s10M $SCRATCH_MNT)
-bytes=${out%% *}
+out=$($FSTRIM_PROG -v -o10M $SCRATCH_MNT)
+nopref=${out##*: }
+bytes=${nopref%% *}
 
 if [ $bytes -gt $(_math "$fssize*1024") ]; then
 	status=1
@@ -155,7 +160,7 @@ _scratch_unmount
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 # It should fail since $start is beyond the end of file system
-"$FSTRIM" -s$start -l10M $SCRATCH_MNT &> /dev/null
+$FSTRIM_PROG -o$start -l10M $SCRATCH_MNT &> /dev/null
 if [ $? -eq 0 ]; then
 	status=1
 	echo "It seems that fs logic handling start"\
@@ -173,8 +178,9 @@ _scratch_mount
 # It is because btrfs does not have not-yet-used parts of the device
 # mapped and since we got here right after the mkfs, there is not
 # enough free extents in the root tree.
-out=$("$FSTRIM" -v -l$len $SCRATCH_MNT)
-bytes=${out%% *}
+out=$($FSTRIM_PROG -v -l$len $SCRATCH_MNT)
+nopref=${out##*: }
+bytes=${nopref%% *}
 if [ $bytes -le $(_math "$fssize*512") ] && [ $FSTYP != "btrfs" ]; then
 	status=1
 	echo "It seems that fs logic handling len argument overflows"

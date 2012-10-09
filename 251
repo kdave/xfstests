@@ -44,6 +44,7 @@ mypid=$$
 _supported_fs generic
 _supported_os Linux
 _require_scratch
+_require_fstrim
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
@@ -71,16 +72,11 @@ _fail()
 	kill $mypid 2> /dev/null
 }
 
-_check_fstrim_support()
-{
-	$here/src/fstrim -l 10M $SCRATCH_MNT &> /dev/null
-}
-
 _guess_max_minlen()
 {
 	mmlen=100000
 	while [ $mmlen -gt 1 ]; do
-		$here/src/fstrim -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
+		$FSTRIM_PROG -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
 		mmlen=$(($mmlen/2))
 	done
 	echo $mmlen
@@ -102,12 +98,12 @@ fstrim_loop()
 		minlen=$(((RANDOM*($RANDOM%2+1))%$mmlen))
 		start=$RANDOM
 		if [ $((RANDOM%10)) -gt 7 ]; then
-			$here/src/fstrim $SCRATCH_MNT &
+			$FSTRIM_PROG $SCRATCH_MNT &
 			fpid=$!
 			wait $fpid
 		fi
 		while [ $start -lt $fsize ] ; do
-			$here/src/fstrim -m ${minlen}k -s ${start}k -l ${step}k $SCRATCH_MNT &
+			$FSTRIM_PROG -m ${minlen}k -o ${start}k -l ${step}k $SCRATCH_MNT &
 			fpid=$!
 			wait $fpid
 			start=$(( $start + $step ))
@@ -157,7 +153,7 @@ content=$here
 
 # Check for FITRIM support
 echo -n "Checking FITRIM support: "
-_check_fstrim_support || _notrun "FSTRIM is not supported"
+_test_batched_discard $SCRATCH_MNT || _notrun "FITRIM not supported on $SCRATCH_DEV"
 echo "done."
 
 mkdir -p $tmp
