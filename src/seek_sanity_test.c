@@ -674,9 +674,9 @@ int main(int argc, char **argv)
 		goto out;
 
 	for (i = 0; i < numtests; ++i) {
+		ret = run_test(&seek_tests[i]);
 		if (ret)
-			goto out;
-		run_test(&seek_tests[i]);
+			break;
 	}
 
 out:
