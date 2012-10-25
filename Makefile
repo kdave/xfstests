@@ -41,7 +41,7 @@ endif
 
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
-LSRCFILES = configure configure.in aclocal.m4 README VERSION
+LSRCFILES = configure configure.ac aclocal.m4 README VERSION
 LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
 	conftest* check.log check.time
 
@@ -70,7 +70,7 @@ else
 clean:  # if configure hasn't run, nothing to clean
 endif
 
-configure: configure.in
+configure: configure.ac
 	autoheader
 	autoconf
 
