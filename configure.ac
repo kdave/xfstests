@@ -1,5 +1,6 @@
-AC_INIT(src/xfsctl.c)
+AC_INIT([xfstests], [1.1.0])
 AC_PREREQ(2.50)
+AC_CONFIG_SRCDIR([src/xfsctl.c])
 AC_PACKAGE_GLOBALS(xfstests)
 AC_PACKAGE_UTILITIES(xfstests)
 
@@ -73,4 +74,5 @@ in
 esac
 
 AC_CONFIG_HEADER(include/config.h)
-AC_OUTPUT(include/builddefs)
+AC_CONFIG_FILES([include/builddefs])
+AC_OUTPUT
