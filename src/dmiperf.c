@@ -28,15 +28,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#ifdef  sgi
-#include <sys/attributes.h>
-#else
 #include <attr/attributes.h>
-#endif
 
-#ifndef sgi
 typedef unsigned int uint_t;
-#endif
 
 /*
  * Loop over directory sizes:

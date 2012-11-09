@@ -736,7 +736,7 @@ handle_message(
       respcode = ENOSPC;
       break;
 
-    case DM_EVENT_DEBUT:		/* not supported on SGI */
+    case DM_EVENT_DEBUT:
       printf(HDR VALS,
 	     "debut", msg->ev_token, msg->ev_sequence,
 	     "object",		hans1);
@@ -843,7 +843,7 @@ handle_message(
       respond = 0;
       break;
 
-    case DM_EVENT_CLOSE:	/* not supported on SGI */
+    case DM_EVENT_CLOSE:
       printf(HDR VALS,
 	     "close", msg->ev_token, msg->ev_sequence,
 	     "object",		hans1);
@@ -1024,11 +1024,11 @@ set_disposition(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 	! defined ( __sgi ) && ! defined ( VERITAS ) && ! defined(linux)
-	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
+#if 	!defined(VERITAS) && !defined(linux)
+	DMEV_SET(DM_EVENT_CANCEL, eventlist);
 #endif
-#if !defined(__sgi) && !defined(linux)
-	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
+#if !defined(linux)
+	DMEV_SET(DM_EVENT_CLOSE, eventlist);
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
 
@@ -1103,11 +1103,11 @@ set_events(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 	! defined ( __sgi ) && ! defined ( VERITAS ) && !defined(linux)
-	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
+#if 	!defined(VERITAS) && !defined(linux)
+	DMEV_SET(DM_EVENT_CANCEL, eventlist);
 #endif
-#if !defined(__sgi) && !defined(linux)
-	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
+#if !defined(linux)
+	DMEV_SET(DM_EVENT_CLOSE, eventlist);
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
 

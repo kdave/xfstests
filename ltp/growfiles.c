@@ -168,11 +168,7 @@ int mult_size=1;		/* when random iosz, iosz must be mult of mult_size */
 /* the *_lseek variables are only used when radon lseek option (-R) is used */
 int min_lseek=0;		/* also set in option parsing */
 int max_lseek=-1;		/* -1 means size of file */
-#ifdef CRAY
-int Pattern=PATTERN_OFFSET;	/* This pattern is 64 bit word based */
-#else
 int Pattern=PATTERN_ASCII;
-#endif
 int Seed=-1;			/* random number seed, < 0 == uninitialized  */
 int Nseeds=0;			/* Number of seed specified by the user */
 int *Seeds;			/* malloc'ed arrary of ints holding user spec seeds */
@@ -229,32 +225,6 @@ struct fileinfo_t {
  * to use.
  */
 int Open_flags[] = { 
-#ifdef CRAY
-	O_RDWR|O_CREAT,
-	O_RDWR|O_CREAT|O_RAW,
-	O_RDWR|O_CREAT|O_BIG,
-	O_RDWR|O_CREAT|O_APPEND,
-	O_RDWR|O_CREAT|O_NDELAY,
-	O_RDWR|O_CREAT|O_PLACE,
-	O_RDWR|O_CREAT|O_SYNC,
-	O_RDWR|O_CREAT|O_RAW|O_SYNC,
-	O_RDWR|O_CREAT|O_NDELAY|O_SYNC,
-	O_RDWR|O_CREAT|O_NDELAY|O_SYNC|O_BIG,
-	O_RDWR|O_CREAT|O_RAW,
-	O_RDWR|O_CREAT|O_RAW|O_APPEND,
-	O_RDWR|O_CREAT|O_RAW|O_BIG,
-	O_RDWR|O_CREAT|O_RAW|O_APPEND|O_BIG,
-/***
- * O_WELLFORMED makes -o random require well formed i/o
- ***/
-#if ALLOW_O_WELLFORMED
-#if O_PARALLEL
-	O_RDWR|O_CREAT|O_PARALLEL|O_WELLFORMED|O_RAW,
-	O_RDWR|O_CREAT|O_PARALLEL|O_WELLFORMED|O_RAW|O_TRUNC,
-#endif /* O_PARALLEL */
-#endif
-
-#else /* CRAY */
 	O_RDWR|O_CREAT,
 	O_RDWR|O_CREAT|O_APPEND,
 	O_RDWR|O_CREAT|O_NDELAY,
@@ -262,7 +232,6 @@ int Open_flags[] = {
 	O_RDWR|O_CREAT|O_SYNC|O_NDELAY,
 	O_RDWR|O_CREAT|O_APPEND|O_NDELAY,
 
-#endif /* CRAY */
 };
 
 #define REXEC_INIT	0	/* don't do re-exec of childern */
@@ -270,11 +239,7 @@ int Open_flags[] = {
 #define REXEC_DONE	2	/* We've already been re-exec'ed */
 
 #ifndef BSIZE
-#ifdef CRAY
-#define BSIZE	1024
-#else
 #define BSIZE	512
-#endif  /* CRAY */
 #endif  /* BSIZE */
 
 #define USECS_PER_SEC	1000000  /* microseconds per second */
@@ -428,9 +393,6 @@ extern int Forker_npids;	/* num of forked pid, defined in forker.c */
 
 		case 'd':
 			auto_dir=optarg;
-#ifdef CRAY
-			unsetenv("TMPDIR");	/* force the use of auto_dir */
-#endif
 			if ( stat(auto_dir, &statbuf) == -1 ) {
 			    if ( mkdir(auto_dir, 0777) == -1 ) {
 				if ( errno != EEXIST ) {
@@ -612,18 +574,9 @@ extern int Forker_npids;	/* num of forked pid, defined in forker.c */
 			break;
 
 		case 'P':
-#ifdef CRAY
-			if (strcmp(optarg, "PANIC") != 0 ) {
-				fprintf(stderr, "%s%s: --P arg must be PANIC\n", Progname, TagName);
-				exit(1);
-			}
-			Upanic_on_error++;
-			printf("%s: Will call upanic after writes\n");
-#else
 			printf("%s%s: --P is illegal option on non-cray system\n",
 				Progname, TagName);
 			exit(1);
-#endif
 			break;
 
 		case 'q':	/* file content or pattern */
@@ -903,11 +856,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 		    Progname, Opid);
 	    background(Progname);	/* give user their prompt back */
 	}
-
-#if CRAY
-	if ( Sync_with_others )
-	   setpgrp();
-#endif
 
 	if ( Debug > 3 ) {
 #if NEWIO
@@ -1227,18 +1175,9 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 	/*
 	 * If delaying between iterations, get amount time to
 	 * delaysecs in clocks or usecs.
-	 * If on the CRAY, delaytime is in clocks since
-	 * _rtc() will be used, which does not have the overhead
-         * of gettimeofday(2).
 	 */
 	if ( delaysecs ) {
-#if CRAY
-	   int hz;
-	   hz=sysconf(_SC_CLK_TCK);
-	   delaytime=(int)((float)hz * delaysecs);
-#else
 	   delaytime=(int)((float)USECS_PER_SEC * delaysecs);
-#endif
         }
 
 	/*
@@ -1398,13 +1337,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 	        if ( delaytime ) {
 		
 		    int ct, end;
-#ifdef CRAY
-		    ct=_rtc();
-		    end=ct+delaytime;
-        	    while ( ct < end ) {
-		        ct = _rtc();
-		    }
-#else
 		    struct timeval curtime;
 		    gettimeofday(&curtime, NULL);
 		    ct=curtime.tv_sec*USECS_PER_SEC + curtime.tv_usec;
@@ -1414,7 +1346,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 		        gettimeofday(&curtime, NULL);
 		        ct=curtime.tv_sec*USECS_PER_SEC + curtime.tv_usec;
 		    }
-#endif
 	        }
 	    }
 #ifndef NO_XFS
@@ -1472,10 +1403,6 @@ set_sig()
                 case SIGKILL:
                 case SIGSTOP:
                 case SIGCONT:
-#ifdef CRAY
-                case SIGINFO:
-                case SIGRECOVERY:
-#endif /* CRAY */
 #ifdef SIGCKPT
 	        case SIGCKPT:
 #endif /* SIGCKPT */
@@ -1486,12 +1413,7 @@ set_sig()
                     break;
 
                 default:
-#ifdef sgi
-		    sigset( sig, sig_handler );
-#else
-/* linux and cray */
                     signal(sig, sig_handler);
-#endif
                 break;
             }
         } /* endfor */
@@ -1512,9 +1434,7 @@ int sig;
     if ( sig == SIGUSR2 ) {
 	fprintf(stdout, "%s%s: %d %s/%d: received SIGUSR2 (%d) - stopping.\n",
 	    Progname, TagName, Pid, __FILE__, __LINE__, sig);
-#ifndef sgi
         signal(sig, sig_handler);	/* allow us to get this signal more than once */
-#endif
         
     } else if( sig == SIGINT ){
 	/* The user has told us to cleanup, don't pretend it's an error. */
@@ -1552,13 +1472,6 @@ notify_others()
 
     if ( Sync_with_others && send_signals == 0 ) {
 
-#if CRAY
-	send_signals=1; /* only send signals once */
-	if ( Debug > 1 )
-	    printf("%s%s: %d DEBUG2 %s/%d: Sending SIGUSR2 to pgrp\n",
-		  Progname, TagName, Pid, __FILE__, __LINE__);
-	killm(C_PGRP, getpgrp(), SIGUSR2);
-#else
 	send_signals=1; /* only send signals once */
 
         for (ind=0; ind< Forker_npids; ind++) {
@@ -1568,7 +1481,6 @@ notify_others()
 		        Progname, TagName, Pid, __FILE__, __LINE__, Forker_pids[ind]);
 	        kill(Forker_pids[ind], SIGUSR2);
         }
-#endif
     }
 
 }
@@ -1582,12 +1494,6 @@ int
 handle_error()
 {
     Errors++;
-
-#ifdef CRAY
-    if ( Errors & Upanic_on_error ) {
-        upanic(PA_PANIC);
-    }
-#endif
 
     if ( Maxerrs && Errors >= Maxerrs ) {
 	printf("%s%s: %d %s/%d: %d Hit max errors value of %d\n", 
@@ -2030,25 +1936,6 @@ unsigned char *buf;
 					Progname, TagName, __FILE__, __LINE__, errno, strerror(errno) );
 				return -1;
 			}
-#if NEWIO
-#ifdef sgi
-			/* If this is POSIX I/O and it is via aio_{read,write}
-			 * or lio_listio then after completion of the I/O the
-			 * value of the file offset for the file is
-			 * unspecified--which means we cannot trust what
-			 * tell() told us.  Fudge it here.
-			 */
-			if( (io_type & LIO_IO_ASYNC_TYPES) || (io_type & LIO_RANDOM) ){
-				if( tmp != Woffset + grow_incr ){
-					if( Debug > 5 ){
-						printf("%s: %d DEBUG6 %s/%d: posix fudge, forcing tmp (%d) to match Woffset+grow_incr (%d)\n",
-						       Progname, Pid, __FILE__, __LINE__, tmp, Woffset+grow_incr);
-					}
-					tmp = Woffset + grow_incr;
-				}
-			}
-#endif
-#endif
 		}
 
 		lkfile(fd, LOCK_UN, LKLVL0);	
@@ -2140,9 +2027,6 @@ int just_trunc;		/* lseek has already been done for you */
     int cur_offset;
     int new_offset;
     int ret;
-#ifdef CRAY
-    int offset;
-#endif
 
 	shrink_cnt++;
 
@@ -2184,19 +2068,6 @@ int just_trunc;		/* lseek has already been done for you */
             else {
                 new_offset=random_range(min_lseek, max_lseek, 1, NULL);
             }
-
-#ifdef CRAY
-            if ((offset=lseek(fd, new_offset, SEEK_SET)) == -1 ) {
-                fprintf(stderr, "%s%s: %d %s/%d: lseek(%d, %d, SEEK_SET) l3 failed: %s\n",
-                    Progname, TagName, Pid, __FILE__, __LINE__, fd, new_offset, strerror(errno));
-	        lkfile(fd, LOCK_UN, LKLVL0);
-                return -1;
-            }
-            else if ( Debug > 3 )
-                printf("%s: %d DEBUG4 %s/%d: lseeked to random offset %d\n",
-                    Progname, Pid, __FILE__, __LINE__, offset);
-    
-#endif
         }
 
 	else {	/* remove trunc_incr from file */
@@ -2205,41 +2076,19 @@ int just_trunc;		/* lseek has already been done for you */
 
 	    if ( new_offset < 0 )
 		new_offset=0;
-	
-#ifdef CRAY
-	    if (  lseek(fd, new_offset, SEEK_SET) == -1 ) {
-		fprintf(stderr, "%s%s: %d %s/%d: lseek(fd, %d, SEEK_SET) l4 failed: %s\n",
-			Progname, TagName, Pid, __FILE__, __LINE__, new_offset, strerror(errno));
-	        lkfile(fd, LOCK_UN, LKLVL0);
-		return -1;
-	    }
-            else if ( Debug > 3 )
-                printf("%s: %d DEBUG4 %s/%d: lseeked to offset %d, %d bytes from end\n",
-                    Progname, Pid, __FILE__, __LINE__, new_offset, trunc_incr);
-#endif
 	}
 
-
-#ifdef CRAY
-	ret=trunc(fd);
-#else
 	ret=ftruncate(fd, new_offset );
 	if( (ret == 0) && (Debug > 3) ){
                 printf("%s: %d DEBUG4 %s/%d: ftruncated to offset %d, %d bytes from end\n",
                     Progname, Pid, __FILE__, __LINE__, new_offset, trunc_incr);
 	}
-#endif
 
 	lkfile(fd, LOCK_UN, LKLVL0);
 
 	if ( ret == -1 ) {
-#ifdef CRAY
-		fprintf(stderr, "%s%s: %d %s/%d: trunc failed: %s\n",
-			Progname, TagName, Pid, __FILE__, __LINE__, strerror(errno));
-#else
 		fprintf(stderr, "%s%s: %d %s/%d: ftruncate failed: %s\n",
 			Progname, TagName, Pid, __FILE__, __LINE__, strerror(errno));
-#endif
 		return -1;
 	}
 
@@ -2755,17 +2604,6 @@ char *file;
 int fd;
 int size;
 {
-
-#ifdef CRAY
-    long avl;
-
-        if ( ialloc(fd, size, IA_CONT, &avl) == -1 ) {
-                fprintf(stderr, "%s%s %s/%d: Unable to pre-alloc space: ialloc failed: %d  %s\n",
-			Progname, TagName,
-                        __FILE__, __LINE__, errno, strerror(errno));
-                return -1;
-        }
-#endif
 
 #ifndef NO_XFS
 #ifdef XFS_IOC_RESVSP

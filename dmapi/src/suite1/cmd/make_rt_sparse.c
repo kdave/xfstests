@@ -21,13 +21,6 @@
  */
 
 #include <sys/types.h>
-#ifdef __sgi
-#include <sys/fs/xfs_itable.h>
-#include <sys/syssgi.h>
-#include <sys/uuid.h>
-#include <sys/fs/xfs_fsops.h>
-#endif
-
 #include <errno.h>
 #include <fcntl.h>
 #include <malloc.h>

@@ -43,11 +43,7 @@
  *
  ****************************************************************************/
 
-#if CRAY
-#define B_MULT	BSIZE		/* block size */
-#elif sgi
-#define B_MULT	BBSIZE		/* block size */
-#elif linux
+#if linux
 #define B_MULT	DEV_BSIZE	/* block size */
 #endif
 

@@ -146,21 +146,6 @@ struct strmap	Aio_Strat_Map[] = {
 #else
 	{ "none",	0	},
 #endif /* !linux */
-#ifdef CRAY
-#if _UMK || RELEASE_LEVEL >= 8000
-	{ "recall",	A_RECALL	},
-#endif
-
-#ifdef RECALL_SIZEOF
-	{ "recalla",    A_RECALLA	},
-#endif
-	{ "recalls",    A_RECALLS	},
-#endif /* CRAY */
-
-#ifdef sgi
-	{ "suspend",	A_SUSPEND	},
-	{ "callback",	A_CALLBACK	},
-#endif
 	{ NULL,		-1		}
 };
 
@@ -195,80 +180,20 @@ struct strmap	Omode_Map[] = {
 struct strmap	Syscall_Map[] = {
 	{ "read",		READ,		0			},
 	{ "write",		WRITE,		SY_WRITE		},
-#ifdef CRAY
-	{ "reada",		READA,		SY_ASYNC		},
-	{ "writea",		WRITEA,		SY_WRITE|SY_ASYNC	},
-#ifndef _CRAYMPP
-	{ "ssread",		SSREAD,		SY_SDS			},
-	{ "sswrite",		SSWRITE,	SY_WRITE|SY_SDS		},
-#endif
-	{ "listio",		LISTIO,		SY_ASYNC		},
-
-	/* listio as 4 system calls */
-	{ "lread",		LREAD,		0			},
-	{ "lreada",		LREADA,		SY_ASYNC		},
-	{ "lwrite",		LWRITE,		SY_WRITE		},
-	{ "lwritea",		LWRITEA,	SY_WRITE|SY_ASYNC	},
-
-	/* listio with nstrides > 1 */
-	{ "lsread",		LSREAD,		0			},
-	{ "lsreada",		LSREADA,	SY_ASYNC		},
-	{ "lswrite",		LSWRITE,	SY_WRITE		},
-	{ "lswritea",		LSWRITEA,	SY_WRITE|SY_ASYNC	},
-
-	/* listio with nents > 1 */
-	{ "leread",		LEREAD,		0|SY_NENT		},
-	{ "lereada",		LEREADA,	SY_ASYNC|SY_NENT	},
-	{ "lewrite",		LEWRITE,	SY_WRITE|SY_NENT	},
-	{ "lewritea",		LEWRITEA,	SY_WRITE|SY_ASYNC|SY_NENT },
-
-	/* listio with nents > 1 & nstrides > 1 */
-
-	/* all listio system calls under one name */
-	{ "listio+",		LREAD,		0			},
-	{ "listio+",		LREADA,		SY_ASYNC		},
-	{ "listio+",		LWRITE,		SY_WRITE		},
-	{ "listio+",		LWRITEA,	SY_WRITE|SY_ASYNC	},
-	{ "listio+",		LSREAD,		0			},
-	{ "listio+",		LSREADA,	SY_ASYNC		},
-	{ "listio+",		LSWRITE,	SY_WRITE		},
-	{ "listio+",		LSWRITEA,	SY_WRITE|SY_ASYNC	},
-	{ "listio+",		LEREAD,		0|SY_NENT		},
-	{ "listio+",		LEREADA,	SY_ASYNC|SY_NENT	},
-	{ "listio+",		LEWRITE,	SY_WRITE|SY_NENT	},
-	{ "listio+",		LEWRITEA,	SY_WRITE|SY_ASYNC|SY_NENT },
-#endif
-
 	{ "pread",		PREAD   				},
 	{ "pwrite",		PWRITE,		SY_WRITE		},
-#ifdef sgi
-	{ "aread",		AREAD,		SY_ASYNC		},
-	{ "awrite",		AWRITE,		SY_WRITE|SY_ASYNC	},
-#if 0
-	/* not written yet */
-	{ "llread",		LLREAD,		0			},
-	{ "llaread",		LLAREAD,	SY_ASYNC		},
-	{ "llwrite",		LLWRITE,	0			},
-	{ "llawrite",		LLAWRITE,	SY_ASYNC		},
-	{ "ffsync",		DFFSYNC, 	SY_WRITE		},
-#endif
-#endif /* SGI */
 #ifndef NO_XFS
 	{ "resvsp",		RESVSP, 	SY_WRITE		},
 	{ "unresvsp",		UNRESVSP, 	SY_WRITE		},
 	{ "reserve",		RESVSP, 	SY_WRITE		},
 	{ "unreserve",		UNRESVSP, 	SY_WRITE		},
 #endif
-
-#ifndef CRAY
 	{ "readv",		READV					},
 	{ "writev",		WRITEV,		SY_WRITE		},
 	{ "mmread",		MMAPR					},
 	{ "mmwrite",		MMAPW,		SY_WRITE		},
 	{ "fsync2",		FSYNC2, 	SY_WRITE		},
 	{ "fdatasync",		FDATASYNC, 	SY_WRITE		},
-#endif
-
 	{ NULL,			-1      }
 };
 
@@ -280,36 +205,7 @@ struct strmap	Syscall_Map[] = {
 struct strmap	Flag_Map[] = {
 	{ "buffered",		0,			0	},
 	{ "sync",		O_SYNC,			0	},
-#ifdef CRAY
-	{ "raw",		O_RAW,			FLG_RAW	},
-	{ "raw+wf",		O_RAW | O_WELLFORMED,	FLG_RAW	},
-	{ "raw+wf+ldraw",	O_RAW | O_WELLFORMED | O_LDRAW,	FLG_RAW	},
-	{ "raw+wf+ldraw+sync",	O_RAW | O_WELLFORMED | O_LDRAW | O_SYNC, FLG_RAW },
-#ifdef O_SSD
-	{ "ssd",		O_SSD,			FLG_RAW	},
-#endif
-#ifdef O_LDRAW
-	{ "ldraw",		O_LDRAW,		0	},
-#endif
-#ifdef O_PARALLEL
-	{ "parallel",		O_PARALLEL | O_RAW | O_WELLFORMED,
-		  FLG_RAW },
-	{ "parallel+sync",	O_PARALLEL | O_RAW | O_WELLFORMED | O_SYNC,
-		  FLG_RAW },
-	{ "parallel+ldraw",	O_PARALLEL | O_RAW | O_WELLFORMED | O_LDRAW,
-		  FLG_RAW },
-	{ "parallel+ldraw+sync",
-		  O_PARALLEL | O_RAW | O_WELLFORMED | O_LDRAW | O_SYNC,
-		  FLG_RAW },
-#endif
-#endif /* CRAY */
-
 	{ "direct",		O_DIRECT,		FLG_RAW },
-#ifdef sgi
-	{ "dsync",		O_DSYNC		},	/* affects writes */
-	{ "rsync",		O_RSYNC		},	/* affects reads */
-	{ "rsync+dsync",	O_RSYNC|O_DSYNC	},
-#endif
 	{ NULL, 	    -1	    	}
 };
 
@@ -353,13 +249,7 @@ char	**argv;
     struct io_req   req;
     
     umask(0);
-
-#ifdef CRAY
-    Sds_Avail = sysconf(_SC_CRAY_SDS);
-#else
     Sds_Avail = 0;
-#endif
-
     TagName[0] = '\0';
     parse_cmdline(argc, argv, OPTS);
 
@@ -557,9 +447,6 @@ struct io_req   *req;
     char    	    	pattern, *errp;
     struct strmap	*flags, *sc, *aio_strat;
     struct file_info	*fptr;
-#ifdef CRAY
-    int                 opcode, cmd;
-#endif
 
     /*
      * Choose system call, flags, and file
@@ -568,31 +455,10 @@ struct io_req   *req;
     sc = Syscall_List[random_range(0, Nsyscalls-1, 1, NULL)];
     req->r_type = sc->m_value;
 
-#ifdef CRAY
-    if (sc->m_value == LISTIO ) {
-	    opcode = random_range(0, 1, 1, NULL) ? LO_READ : LO_WRITE;
-	    cmd = random_range(0, 1, 1, NULL) ? LC_START : LC_WAIT;
-    }
-#endif
-
     if( sc->m_flags & SY_WRITE )
 	    pattern = Byte_Patterns[random_range(0, sizeof(Byte_Patterns) - 1, 1, NULL)];
     else
 	    pattern = 0;
-
-#if CRAY
-    /*
-     * If sds io, simply choose a length (possibly pattern) and return
-     */
-
-    if (sc->m_flags & SY_SDS ) {
-	    req->r_data.ssread.r_nbytes = random_range(Mintrans, Maxtrans, BSIZE, NULL);
-	    if (sc->m_flags & SY_WRITE)
-		    req->r_data.sswrite.r_pattern = pattern;
-
-	    return 0;
-    }
-#endif
 
     /*
      * otherwise, we're doing file io.  Choose starting offset, length,
@@ -856,25 +722,6 @@ struct io_req   *req;
 	break;
 
     case LISTIO:
-#ifdef CRAY
-	strcpy(req->r_data.listio.r_file, fptr->f_path);
-	req->r_data.listio.r_offset = offset;
-	req->r_data.listio.r_cmd = cmd;
-	req->r_data.listio.r_aio_strat = (aio_strat==NULL) ? 0 : aio_strat->m_value;
-	req->r_data.listio.r_filestride = 0;
-	req->r_data.listio.r_memstride = 0;
-	req->r_data.listio.r_opcode = opcode;
-	req->r_data.listio.r_nstrides = 1;
-	req->r_data.listio.r_nbytes = length;
-	req->r_data.listio.r_uflags = (flags->m_flags & FLG_RAW) ? F_WORD_ALIGNED : 0;
-
-	if (opcode == LO_WRITE) {
-		req->r_data.listio.r_pattern = pattern;
-		req->r_data.listio.r_oflags = O_WRONLY | flags->m_value;
-	} else {
-		req->r_data.listio.r_oflags = O_RDONLY | flags->m_value;
-	}
-#endif
 	break;
     }
 
@@ -897,9 +744,6 @@ get_file_info(rec)
 struct file_info    *rec;
 {
     struct stat			sbuf;
-#ifdef CRAY
-    struct lk_device_info	dinfo;
-#endif
 #ifndef NO_XFS
     int				fd;
     struct dioattr		finfo;
@@ -915,13 +759,6 @@ struct file_info    *rec;
 		TagName, rec->f_path, SYSERR);
 	return -1;
     }
-
-#if _CRAY2
-    if ((! S_ISREG(sbuf.st_mode)) || strncmp(rec->f_path, "/dev/", 5) == 0) {
-	fprintf(stderr, "iogen%s:  device level io not supported on cray2\n", TagName);
-	return -1;
-    }
-#endif
 
     rec->f_type = sbuf.st_mode & S_IFMT;
 
@@ -947,17 +784,6 @@ struct file_info    *rec;
 	}
 
 	rec->f_riou = BSIZE;
-#ifdef CRAY
-	if (lk_rawdev(rec->f_path, dinfo.path, sizeof(dinfo.path), 0) == -1)
-	    return -1;
-
-	if (lk_devinfo(&dinfo, 0) == -1) {
-	    /* can't get raw I/O unit -- use stat to fudge it */
-	    rec->f_riou = sbuf.st_blksize;
-	} else {
-	    rec->f_riou = ctob(dinfo.iou);
-	}
-#endif
 #ifndef NO_XFS
 	if( (fd = open(rec->f_path, O_RDWR|O_DIRECT, 0)) != -1 ) {
 #ifdef XFS_IOC_DIOINFO
@@ -980,34 +806,10 @@ bozo!
 	    rec->f_riou = BBSIZE;
 	}
 #endif
-
     } else {
 
-#ifdef CRAY
-	/*
-	 * Otherwise, file is a device.  Use lk_devinfo() to get its logical
-	 * sector size.  This is the iou and riou
-	 */
-
-	strcpy(dinfo.path, rec->f_path);
-
-	if (lk_devinfo(&dinfo, 0) == -1) {
-	    fprintf(stderr, "iogen%s: %s:  %s\n", TagName, Lk_err_func, Lk_err_mesg);
-	    return -1;
-	}
-
-	rec->f_iou = ctob(dinfo.iou);
-	rec->f_riou = ctob(dinfo.iou);
-	rec->f_length = ctob(dinfo.length);
-#else
-#ifdef sgi
-	rec->f_riou = BBSIZE;
-	rec->f_length = BBSIZE;
-#else
 	rec->f_riou = BSIZE;
 	rec->f_length = BSIZE;
-#endif /* sgi */
-#endif /* CRAY */
     }
 
     return 0;
@@ -1393,32 +1195,12 @@ char	*opts;
     struct file_info	*fptr;
     int			nopenargs;
     char		*openargs[5];	/* Flags, cbits, cblks */
-#ifdef CRAY
-    char		*errmsg;
-    char		*ranges;
-    struct strmap	*type;
-#endif
-
     while ((o = getopt(argc, argv, opts)) != EOF) {
         switch ((char)o) {
 
  	case 'a':
-#ifndef CRAY
 	    fprintf(stderr, "iogen%s:  Unrecognized option -a on this platform\n", TagName);
 	    exit(2);
-#else
-	    cp = strtok(optarg, ",");
-	    while (cp != NULL) {
-		if ((type = str_lookup(Aio_Strat_Map, cp)) == NULL) {
-		    fprintf(stderr, "iogen%s:  Unrecognized aio completion strategy:  %s\n", TagName, cp);
-		    exit(2);
-		}
-
-		Aio_Strat_List[Naio_Strat_Types++] = type;
-		cp = strtok(NULL, ",");
-	    }
-	    a_opt++;
-#endif
 	    break;
 
  	case 'f':
@@ -1480,23 +1262,8 @@ char	*opts;
 	    break;
 
 	case 'L':
-#ifndef CRAY
 	    fprintf(stderr, "iogen%s:  Unrecognized option -L on this platform\n", TagName);
 	    exit(2);
-#else
-	    if( parse_ranges(optarg, 1, 255, 1, NULL, &ranges, 
-			     &errmsg ) == -1 ) {
-		    fprintf(stderr, "iogen%s: error parsing listio range '%s': %s\n",
-			    TagName, optarg, errmsg);
-		    exit(1);
-	    }
-
-	    Minstrides = range_min(ranges, 0);
-	    Maxstrides = range_max(ranges, 0);
-
-	    free(ranges);
-	    L_opt++;
-#endif
 	    break;
 
 	case 'm':
@@ -1519,19 +1286,6 @@ char	*opts;
 	case 'O':
 
 	    nopenargs = string_to_tokens(optarg, openargs, 4, ":/");
-
-#ifdef CRAY
-	    if(nopenargs)
-		sscanf(openargs[1],"%i", &Ocbits);
-	    if(nopenargs > 1)
-		sscanf(openargs[2],"%i", &Ocblks);
-
-	    Oflags = parse_open_flags(openargs[0], &errmsg);
-	    if(Oflags == -1) {
-		fprintf(stderr, "iogen%s: -O %s error: %s\n", TagName, optarg, errmsg);
-		exit(1);
-	    }
-#endif
 #ifndef NO_XFS
 	    if(!strcmp(openargs[0], "realtime")) {
 		/*
@@ -1685,28 +1439,12 @@ char	*opts;
 	Nsyscalls = 0;
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "read");
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "write");
-#ifdef CRAY
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "reada");
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "writea");
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "lread");
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "lreada");
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "lwrite");
-	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "lwritea");
-#endif
-
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "pread");
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "pwrite");
-#ifdef sgi
-	/*Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "aread");*/
-	/*Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "awrite");*/
-#endif
-
-#ifndef CRAY
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "readv");
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "writev");
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "mmread");
 	Syscall_List[Nsyscalls++] = str_lookup(Syscall_Map, "mmwrite");
-#endif
 
         Fileio = 1;
     }
@@ -1724,18 +1462,6 @@ char	*opts;
 	    Nflags = 0;
 	    Flag_List[Nflags++] = str_lookup(Flag_Map, "buffered");
 	    Flag_List[Nflags++] = str_lookup(Flag_Map, "sync");
-#ifdef CRAY
-	    Flag_List[Nflags++] = str_lookup(Flag_Map, "raw+wf");
-    	    Flag_List[Nflags++] = str_lookup(Flag_Map, "ldraw");
-#endif
-
-#ifdef sgi
-	    /* Warning: cannot mix direct i/o with others! */
-	    Flag_List[Nflags++] = str_lookup(Flag_Map, "dsync");
-	    Flag_List[Nflags++] = str_lookup(Flag_Map, "rsync");
-	    /* Flag_List[Nflags++] = str_lookup(Flag_Map, "rsync+sync");*/
-	    /* Flag_List[Nflags++] = str_lookup(Flag_Map, "rsync+dsync");*/
-#endif
     }
 
     if (Fileio) {
@@ -1897,26 +1623,12 @@ FILE	*stream;
     fprintf(stream, "\n");
 #ifndef linux
     fprintf(stream, "\t-a aio_type,...  Async io completion types to choose.  Supported types\n");
-#ifdef CRAY
-#if _UMK || RELEASE_LEVEL >= 8000
-    fprintf(stream, "\t                 are:  poll, signal, recall, recalla, and recalls.\n");
-#else
-    fprintf(stream, "\t                 are:  poll, signal, recalla, and recalls.\n");
-#endif
-#else
     fprintf(stream, "\t                 are:  poll, signal, suspend, and callback.\n");
-#endif
     fprintf(stream, "\t                 Default is all of the above.\n");
 #else /* !linux */
     fprintf(stream, "\t-a               (Not used on Linux).\n");
 #endif /* !linux */
     fprintf(stream, "\t-f flag,...      Flags to use for file IO.  Supported flags are\n");
-#ifdef CRAY
-    fprintf(stream, "\t                 raw, ssd, buffered, ldraw, sync,\n");
-    fprintf(stream, "\t                 raw+wf, raw+wf+ldraw, raw+wf+ldraw+sync,\n");
-    fprintf(stream, "\t                 and parallel (unicos/mk on MPP only).\n");
-    fprintf(stream, "\t                 Default is 'raw,ldraw,sync,buffered'.\n");
-#else
 #ifndef NO_XFS
     fprintf(stream, "\t                 buffered, direct, sync.\n");
     fprintf(stream, "\t                 Default is 'buffered,sync'.\n");
@@ -1924,17 +1636,12 @@ FILE	*stream;
     fprintf(stream, "\t                 buffered, sync.\n");
     fprintf(stream, "\t                 Default is 'buffered,sync'.\n");
 #endif /* sgi */
-#endif /* CRAY */
     fprintf(stream, "\t-h               This help.\n");
     fprintf(stream, "\t-i iterations[s] # of requests to generate.  0 means causes iogen\n");
     fprintf(stream, "\t                 to run until it's killed.  If iterations is suffixed\n");
     fprintf(stream, "\t                 with 's', then iterations is the number of seconds\n");
     fprintf(stream, "\t                 that iogen should run for.  Default is '0'.\n");
-#ifndef CRAY
     fprintf(stream, "\t-L min:max       listio nstrides / nrequests range\n");
-#else
-    fprintf(stream, "\t-L               (Not used on this platform).\n");
-#endif /* !CRAY */
     fprintf(stream, "\t-m offset-mode   The mode by which iogen chooses the offset for\n");
     fprintf(stream, "\t                 consectutive transfers within a given file.\n");
     fprintf(stream, "\t                 Allowed values are 'random', 'sequential',\n");
@@ -1943,9 +1650,6 @@ FILE	*stream;
     fprintf(stream, "\t-N tagname       Tag name, for Monster.\n");
     fprintf(stream, "\t-o               Form overlapping consecutive requests.\n");
     fprintf(stream, "\t-O               Open flags for creating files\n");
-#ifdef CRAY
-    fprintf(stream, "\t                 {O_PLACE,O_BIG,etc}[:CBITS[:CBLKS]]\n");
-#endif
 #ifndef NO_XFS
     fprintf(stream, "\t                 realtime:extsize - put file on real-time volume\n");
     fprintf(stream, "\t                 allocate - allocate space with F_ALLOCSP\n");
@@ -1959,17 +1663,6 @@ FILE	*stream;
     fprintf(stream, "\t-q               Quiet mode.  Normally iogen spits out info\n");
     fprintf(stream, "\t                 about test files, options, etc. before starting.\n");
     fprintf(stream, "\t-s syscall,...   Syscalls to do.  Supported syscalls are\n");
-#ifdef sgi
-    fprintf(stream, "\t                 read, write, pread, pwrite, readv, writev\n");
-    fprintf(stream, "\t                 aread, awrite, resvsp, unresvsp, ffsync,\n");
-    fprintf(stream, "\t                 mmread, mmwrite, fsync2, fdatasync,\n");
-    fprintf(stream, "\t                 Default is 'read,write,pread,pwrite,readv,writev,mmread,mmwrite'.\n");
-#endif
-#ifdef CRAY
-    fprintf(stream, "\t                 read, write, reada, writea, listio,\n");
-    fprintf(stream, "\t                 ssread (PVP only), and sswrite (PVP only).\n");
-    fprintf(stream, "\t                 Default is 'read,write,reada,writea,listio'.\n");
-#endif
 #ifdef linux
     fprintf(stream, "\t                 read, write, pread, pwrite, readv, writev,\n");
     fprintf(stream, "\t                 mmread, mmwrite, fsync2, fdatasync,\n");

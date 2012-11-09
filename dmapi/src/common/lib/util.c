@@ -380,11 +380,7 @@ save_filedata(
 		nread = dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN, off, 
 					(dm_ssize_t)CHUNKSIZE, filebuf);
 		if (nread != CHUNKSIZE) {
-#ifdef	__sgi
-			errno_msg("%s/%d: invis read err: got %lld, expected %lld, buf %d",
-#else
 			errno_msg("%s/%d: invis read err: got %d, expected %d, buf %d",
-#endif
 				__FILE__, __LINE__,
 				nread, (dm_ssize_t)CHUNKSIZE, i);
 			retval = 1;
@@ -406,11 +402,7 @@ save_filedata(
 	nread  = dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN, off, 
 				(dm_ssize_t)lastbuf, filebuf);
 	if (nread != lastbuf) {
-#ifdef	__sgi
-		errno_msg("%s/%d: invis read error- got %lld, expected %lld, last buf",
-#else
 		errno_msg("%s/%d: invis read error- got %d, expected %d, last buf",
-#endif
 				__FILE__, __LINE__,
 				nread, lastbuf);
 		retval = 1;
@@ -419,11 +411,7 @@ save_filedata(
 
 	nwrite = write(stg_fd, filebuf, (int)lastbuf);
 	if (nwrite != lastbuf) {
-#ifdef	__sgi
-		errno_msg("%s/%d: write error %d, expected %lld, last buffer", 
-#else
 		errno_msg("%s/%d: write error %d, expected %d, last buffer", 
-#endif
 				__FILE__, __LINE__,
 				nwrite, lastbuf);
 		retval = 1;
@@ -845,7 +833,7 @@ static	char		buffer[256];
 }
 
 
-#if defined(__sgi) || defined(linux)
+#if defined(linux)
 
 extern char *
 xflags_to_string(
@@ -913,7 +901,7 @@ print_state(
 	fprintf(stdout, "dt_blksize     %d\n", dmstat->dt_blksize);
 	fprintf(stdout, "dt_blocks      %lld\n", (long long) dmstat->dt_blocks);
 
-#if defined(__sgi) || defined(linux)
+#if defined(linux)
 	fprintf(stdout, "dt_xfs_igen    %d\n",  dmstat->dt_xfs_igen);
 	fprintf(stdout, "dt_xfs_xflags  %s\n",
 		xflags_to_string(dmstat->dt_xfs_xflags));

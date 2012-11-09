@@ -294,22 +294,6 @@ typedef	struct dm_timestruct dm_timestruct_t;
 
 -------------- end of SGI-specific hack documentation --------------- */
 
-#ifdef	__sgi
-
-#include <sys/dmi.h>
-
-/* In the dm_fileattr_t structure, Veritas used 'timeval' structures for all
-   the time fields while XDSM uses 'time_t' structures.  Define some symbols
-   that can be used for the time fields with all implementation types.
-*/
-
-#define FA_ATIME	fa_atime
-#define FA_MTIME	fa_mtime
-#define FA_CTIME	fa_ctime
-#define FA_DTIME	fa_dtime
-
-#endif /* __sgi */
-
 #ifdef	linux
 
 #include <dmapi.h>

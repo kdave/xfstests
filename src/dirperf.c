@@ -28,9 +28,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifndef __sgi__
 typedef unsigned int uint_t;
-#endif
 
 /*
  * Loop over directory sizes:

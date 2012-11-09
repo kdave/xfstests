@@ -965,10 +965,10 @@ set_disposition(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 ) && !defined(linux)
+#if 	!defined(VERITAS_21) && !defined(linux)
 	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
 #endif
-#if !defined( __sgi) && !defined(linux)
+#if !defined(linux)
 	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);
@@ -1051,10 +1051,10 @@ set_events(
 	/* Metadata events. */
 
 	DMEV_SET(DM_EVENT_ATTRIBUTE, eventlist);
-#if 	! defined ( __sgi ) && ! defined ( VERITAS_21 ) && ! defined(linux)
+#if 	!defined(VERITAS_21) && !defined(linux)
 	DMEV_SET(DM_EVENT_CANCEL, eventlist);	/* not supported on SGI */
 #endif
-#if !defined( __sgi) && !defined(linux)
+#if !defined(linux)
 	DMEV_SET(DM_EVENT_CLOSE, eventlist);	/* not supported on SGI */
 #endif
 	DMEV_SET(DM_EVENT_DESTROY, eventlist);

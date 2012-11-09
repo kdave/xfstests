@@ -338,27 +338,7 @@ char	**errp;
 	}
 
     	nmults = ((max - min) / mult) + 1;
-#if CRAY 
-        /*
-         * If max is less than 2gb, then the value can fit in 32 bits
-         * and the standard lrand48() routine can be used.
-         */
-        if ( max <= (long)2147483647 ) {
-            return (long) (min + (((long)lrand48() % nmults) * mult));
-        } else {
-            /*
-             * max is greater than 2gb - meeds more than 32 bits.
-             * Since lrand48 only will get a number up to 32bits.
-             */
-	    long randnum;
-            randnum=divider(min, max, 0, -1);
-            return (long) (min + ((randnum % nmults) * mult));
-        }
-
-#else
         return (min + ((lrand48() % nmults) * mult));
-#endif
-
 }
 
 /*
@@ -430,7 +410,7 @@ char	**errp;
 	}
 
     	nmults = ((max - min) / mult) + 1;
-#if CRAY || (_MIPS_SZLONG == 64)
+#if (_MIPS_SZLONG == 64)
         /*
          * If max is less than 2gb, then the value can fit in 32 bits
          * and the standard lrand48() routine can be used.
@@ -648,18 +628,12 @@ random_bit(long mask)
     /*
      * get the number of bits set in mask
      */
-#ifndef CRAY
-
         bit=1L;
         for ( nshift=0; nshift<sizeof(long)*8; nshift++) {
                 if ( mask & bit )
                         nbits++;
                 bit=bit<<1;
         }
-
-#else
-        nbits=_popcnt(mask);
-#endif  /* if CRAY */
 
     /*
      * randomly choose a bit.
@@ -740,14 +714,10 @@ char **argv;
     int ind;
     int cnt, iter=10;
     int imin=0, imult=1, itmin, itmax=0;
-#if CRAY
-    int imax=6*GIG;	/* higher than 32 bits */
-#else
     int imax=1048576;
-#endif
 
     long lret, lmin=0, lmult=1, ltmin, ltmax=0; 
-#if CRAY || (_MIPS_SZLONG == 64)
+#if (_MIPS_SZLONG == 64)
     long lmax=6*(long)GIG;	/* higher than 32 bits */
 #else
     long lmax=1048576;

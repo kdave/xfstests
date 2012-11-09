@@ -43,11 +43,7 @@ in the call, and sid is the session ID whose attributes you are interested in.
 #define HDR  "%s: token %d sequence %d\n"
 #define VALS "\t%-15s %s\n"
 #define VALD "\t%-15s %d\n"
-#ifdef	__sgi
-#define VALLLD "\t%-15s %lld\n"
-#else
 #define VALLLD "\t%-15s %ld\n"
-#endif
 
 #ifndef linux
 extern	char	*sys_errlist[];

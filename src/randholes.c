@@ -54,13 +54,8 @@ static int test;
  * F_FSGETXATTR (Irix).
  *
  */
-#ifdef	__sgi__	/* Irix */
-#  define xfscntl(filename, fd, cmd, arg) \
-		fcntl((fd), F_ ## cmd, (arg))
-#else	/* ! __sgi__ */
 #  define xfscntl(filename, fd, cmd, arg) \
 		xfsctl((filename), (fd), XFS_IOC_ ## cmd, (arg))
-#endif	/* ! __sgi__ */
 
 static void
 usage(char *progname)

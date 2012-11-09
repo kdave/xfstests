@@ -94,18 +94,9 @@ static	struct	{
 	FLAG(PROT_READ, FL_PROT),
 	FLAG(PROT_WRITE, FL_PROT),
 	FLAG(PROT_EXEC, FL_PROT),
-#ifdef __sgi
-	FLAG(PROT_EXECUTE, FL_PROT),
-#endif
 	FLAG(MAP_SHARED, FL_MAP),
 	FLAG(MAP_PRIVATE, FL_MAP),
 	FLAG(MAP_FIXED, FL_MAP),
-#ifdef __sgi
-	FLAG(MAP_RENAME, FL_MAP),
-	FLAG(MAP_AUTOGROW, FL_MAP),
-	FLAG(MAP_LOCAL, FL_MAP),
-	FLAG(MAP_AUTORESRV, FL_MAP),
-#endif
 	FLAG(MAP_NONE, FL_MAP),
 };
 
@@ -145,9 +136,6 @@ main(int argc, char * argv[])
 	ifile->flags[FL_PROT].value = PROT_READ;
 	ifile->flags[FL_OPEN].value = O_RDONLY;
 	ofile->flags[FL_MAP].value = MAP_SHARED;
-#ifdef __sgi
-	ofile->flags[FL_MAP].value = MAP_AUTOGROW;
-#endif
 	ofile->flags[FL_PROT].value = PROT_WRITE;
 	ofile->flags[FL_OPEN].value = O_RDWR|O_CREAT;
 

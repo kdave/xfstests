@@ -210,18 +210,9 @@ main(
 		      test_file);
 	    }
 	    else {
-#ifdef __sgi
-	      if ((statbuf.st_atim.tv_sec == checkbuf.st_atim.tv_sec) &&
-	      (statbuf.st_atim.tv_nsec == checkbuf.st_atim.tv_nsec) &&
-	      (statbuf.st_mtim.tv_sec == checkbuf.st_mtim.tv_sec) &&
-	      (statbuf.st_mtim.tv_nsec == checkbuf.st_mtim.tv_nsec) &&
-	      (statbuf.st_ctim.tv_sec == checkbuf.st_ctim.tv_sec) &&
-	      (statbuf.st_ctim.tv_nsec == checkbuf.st_ctim.tv_nsec))
-#else
 	      if ((statbuf.st_atime == checkbuf.st_atime) &&
 	      (statbuf.st_mtime == checkbuf.st_mtime) &&
 	      (statbuf.st_ctime == checkbuf.st_ctime))
-#endif
 		{
 		if (Vflag) {
 		  printf("Report: time stamp unchanged by write\n");
@@ -267,18 +258,9 @@ main(
 		      test_file);
 	    }
 	    else {
-#ifdef __sgi
-	      if ((statbuf.st_atim.tv_sec == checkbuf.st_atim.tv_sec) &&
-	      (statbuf.st_atim.tv_nsec == checkbuf.st_atim.tv_nsec) &&
-	      (statbuf.st_mtim.tv_sec == checkbuf.st_mtim.tv_sec) &&
-	      (statbuf.st_mtim.tv_nsec == checkbuf.st_mtim.tv_nsec) &&
-	      (statbuf.st_ctim.tv_sec == checkbuf.st_ctim.tv_sec) &&
-	      (statbuf.st_ctim.tv_nsec == checkbuf.st_ctim.tv_nsec))
-#else
 	      if ((statbuf.st_atime == checkbuf.st_atime) &&
 	      (statbuf.st_mtime == checkbuf.st_mtime) &&
 	      (statbuf.st_ctime == checkbuf.st_ctime))
-#endif
 		{
 		if (Vflag) {
 		  printf("Report: time stamp unchanged by read\n");
@@ -344,31 +326,6 @@ main(
 	    printf("Report: \"0x%x\" was written and \"0x%x\" was read "
 		   "at byte %d million.\n", ch, *(u_char *)bufp, ch);
 	  }
-
-#ifdef __sgi
-	  /* Try writing a character in the 2 gigabyte (2^31) range */
-	  sprintf(bufp, "%c", ch);
-	  if (dm_write_invis(sid, hanp, hlen, DM_NO_TOKEN, 0, 
-			     2147840000, 1, bufp)==-1){
-	    printf("Error invis-writing %s at 2 gigabytes: %s\n", 
-		   (u_char *)bufp, ERR_NAME);
-	  }
-	  else if (dm_read_invis(sid, hanp, hlen, DM_NO_TOKEN,
-				 2147840000, 1, bufp)==-1){
-	    printf("Error invis-reading at 2 gigabytes: %s\n",
-		   ERR_NAME);
-	  }
-	  else if (((u_char *)bufp)[0]!=ch) {
-	    printf("Error: wanted to read %c and instead got %s.\n",
-		   ch, (u_char *)bufp);
-	  }
-	  else if (Vflag) {
-	    printf("Report: \"0x%x\" was written and \"0x%x\" was read "
-		   "at 2147840000 bytes\n\t(a bit over 2 gigabytes).\n", 
-		   ch, *(u_char *)bufp);
-	  }
-#endif
-
 	  printf("\t(errno subtests beginning...)\n");
 	  /**** WRITE tests ****/
 	  /*---------------------------------------------------------*/

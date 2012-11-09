@@ -89,10 +89,8 @@
 #endif
 #endif
 
-#ifndef CRAY
 #ifndef BSIZE 
 #define BSIZE BBSIZE
-#endif
 #endif
 
 /***********************************************************************

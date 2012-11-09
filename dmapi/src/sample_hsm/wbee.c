@@ -245,7 +245,7 @@ check_lockstate(
 		errno_msg("Can't query file access rights");
 		return(1);
 	}
-#if defined(__sgi) || defined(linux)
+#if defined(linux)
 	/*
  	 * There are no access rights on the SGI. 1 means it's
 	 * there.

@@ -75,87 +75,8 @@ char *buffer;
 int bsize;
 int offset;
 {
-#if CRAY
-	
-   int cnt;
-   int tmp;
-   char *chr;
-   long *wptr;
-   long word;
-   int woff;	/* file offset for the word */
-   int boff;	/* buffer offset or index */
-   int num_full_words;
-
-    num_full_words = bsize/NBPW;
-    boff = 0;
-
-    if ( cnt=(offset % NBPW) ) {	/* partial word */
-
-	woff = offset - cnt;
-#if DEBUG
-printf("partial at beginning, cnt = %d, woff = %d\n", cnt, woff);
-#endif
-
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-
-	for (tmp=0; tmp<cnt; tmp++) {   /* skip unused bytes */
-	    chr++;
-        }
-
-	for (; boff<(NBPW-cnt) && boff<bsize; boff++, chr++) {
-	    buffer[boff] = *chr;
-	}
-    }
-
-    /*
-     * full words 
-     */
-
-    num_full_words = (bsize-boff)/NBPW;
-	
-    woff = offset+boff;
-	
-    for (cnt=0; cnt<num_full_words; woff += NBPW, cnt++ ) {
-
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-	for(tmp=0; tmp<NBPW; tmp++, chr++) {
-	    buffer[boff++] = *chr;
-	}
-/****** Only if wptr is a word ellined
-	wptr = (long *)&buffer[boff];
-	*wptr = word;
-	boff += NBPW;
-*****/
-
-    }
-
-    /*
-     * partial word at end of buffer
-     */
-
-    if ( cnt=((bsize-boff) % NBPW) ) {
-#if DEBUG
-printf("partial at end\n");
-#endif
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-
-	for (tmp=0; tmp<cnt && boff<bsize; tmp++, chr++) {
-	    buffer[boff++] = *chr;
-	}
-    }
-
-    return bsize;
-
-#else
 	return -1;	/* not support on non-64 bits word machines  */
 
-#endif
 
 } 
 
@@ -171,111 +92,11 @@ int bsize;
 int offset;
 char **errmsg;
 {
-#if CRAY
-	
-   int cnt;
-   int tmp;
-   char *chr;
-   long *wptr;
-   long word;
-   int woff;	/* file offset for the word */
-   int boff;	/* buffer offset or index */
-   int num_full_words;
-
-
-    if ( errmsg != NULL ) {
-        *errmsg = Errmsg;
-    }
-
-
-    num_full_words = bsize/NBPW;
-    boff = 0;
-
-    if ( cnt=(offset % NBPW) ) {	/* partial word */
-	woff = offset - cnt;
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-
-	for (tmp=0; tmp<cnt; tmp++) {   /* skip unused bytes */
-	    chr++;
-        }
-
-	for (; boff<(NBPW-cnt) && boff<bsize; boff++, chr++) {
-	    if (buffer[boff] != *chr) {
-		sprintf(Errmsg, "Data mismatch at offset %d, exp:%#o, act:%#o",
-		    offset+boff, *chr, buffer[boff]);
-		return offset+boff;
-	    }
-	}
-    }
-
-    /*
-     * full words 
-     */
-
-    num_full_words = (bsize-boff)/NBPW;
-	
-    woff = offset+boff;
-	
-    for (cnt=0; cnt<num_full_words; woff += NBPW, cnt++ ) {
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-	for(tmp=0; tmp<NBPW; tmp++, boff++, chr++) {
-	    if ( buffer[boff] != *chr ) {
-	        sprintf(Errmsg, "Data mismatch at offset %d, exp:%#o, act:%#o",
-	            woff, *chr, buffer[boff]);
-	        return woff;
-	    }
-	}
-
-/****** only if a word elined
-	wptr = (long *)&buffer[boff];
-	if ( *wptr != word ) {
-	    sprintf(Errmsg, "Data mismatch at offset %d, exp:%#o, act:%#o",
-	        woff, word, *wptr);
-	    return woff;
-	}
-	boff += NBPW;
-******/
-    }
-
-    /*
-     * partial word at end of buffer
-     */
-
-    if ( cnt=((bsize-boff) % NBPW) ) {
-#if DEBUG
-printf("partial at end\n");
-#endif
-	word = ((LOWER16BITS(pid) << 48) | (LOWER32BITS(woff) << 16) | LOWER16BITS(pid));
-
-	chr = (char *)&word;
-
-
-	for (tmp=0; tmp<cnt && boff<bsize; boff++, tmp++, chr++) {
-	    if ( buffer[boff] != *chr ) {
-		sprintf(Errmsg, "Data mismatch at offset %d, exp:%#o, act:%#o",
-		    offset+boff, *chr, buffer[boff]);
-		return offset+boff;
-	    }
-	}
-    }
-
-    sprintf(Errmsg, "all %d bytes match desired pattern", bsize);
-    return -1;      /* buffer is ok */
-
-#else
-	
     if ( errmsg != NULL ) {
         *errmsg = Errmsg;
     }
     sprintf(Errmsg, "Not supported on this OS.");
     return 0;
-
-#endif
-
 
 }       /* end of datapidchk */
 

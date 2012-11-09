@@ -22,17 +22,10 @@
 
 #include <sys/types.h>
 #include <string.h>
-#ifdef __sgi
-#include <sys/syssgi.h>
-#include <sys/uuid.h>
-#include <sys/fs/xfs_fsops.h>
-#endif
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <lib/dmport.h>
 
 char *Progname;
@@ -56,11 +49,6 @@ main(
 	int		argc,
 	char		**argv)
 {
-#ifdef __sgi
-	xfs_fsop_geom_t	geom;
-	char		*uuid_str;
-	u_int		status;
-#endif
 	char		*name;
 	int		fd;
 	void		*fshanp;
@@ -85,15 +73,6 @@ main(
 			strerror(errno));
 		exit(1);
 	}
-
-#ifdef __sgi
-	syssgi(SGI_XFS_FSOPERATIONS, fd, XFS_FS_GEOMETRY, NULL, &geom);
-
-	uuid_to_string(&geom.uuid, &uuid_str, &status);
-
-	fprintf(stdout, "fshandle %s, uuid %s, %s\n",
-		buffer, uuid_str, argv[1]);
-#endif
 	fprintf(stdout, "fshandle %s, %s\n",
 		buffer, argv[1]);
 	exit(0);

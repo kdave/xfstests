@@ -23,9 +23,6 @@
 #ifdef linux
 #include <dmapi.h>
 #endif
-#ifdef __sgi
-#include <sys/dmi.h>
-#endif
 
 int
 main( int argc, char **argv )

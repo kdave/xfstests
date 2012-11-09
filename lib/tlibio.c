@@ -38,16 +38,6 @@
  *						char **errmsg, long wrd);
  *  int  lio_read_buffer(int fd, int method, char *buffer, int size,
  *						char **errmsg, long wrd);
- *
- *  #ifdef CRAY
- *  int  lio_wait4asyncio(int method, int fd, struct iosw **statptr)
- *  int  lio_check_asyncio(char *io_type, int size, struct iosw *status)
- *  #endif
- *  #ifdef sgi
- *  int  lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
- *  int  lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
- *  #endif
- *
  *  int  lio_parse_io_arg1(char *string)
  *  void lio_help1(char *prefix);
  *
@@ -76,19 +66,9 @@
 #include <sys/types.h>
 #include <sys/file.h>
 #include <signal.h>
-#ifdef CRAY
-#include <sys/secparm.h>
-#include <sys/iosw.h>
-#include <sys/listio.h>
-#else
-/* for linux or sgi */
 #include <sys/uio.h> /* readv(2)/writev(2) */
 #include <string.h>
 #include <strings.h>
-#endif
-#ifdef sgi
-#include <aio.h>
-#endif
 #include <stdlib.h> /* atoi, abs */
 
 #include "tlibio.h"		/* defines LIO* marcos */
@@ -109,9 +89,6 @@
 #ifndef linux
 static void lio_async_signal_handler();
 #endif
-#ifdef sgi
-static void lio_async_callback_handler();
-#endif
 
 /*
  * Define the structure as used in lio_parse_arg1 and lio_help1
@@ -121,17 +98,10 @@ struct lio_info_type  Lio_info1[] = {
     { "p", LIO_IO_ASYNC|LIO_WAIT_SIGACTIVE, "async i/o using a loop to wait for a signal" },
     { "b", LIO_IO_ASYNC|LIO_WAIT_SIGPAUSE, "async i/o using pause" },
     { "a", LIO_IO_ASYNC|LIO_WAIT_RECALL, "async i/o using recall/aio_suspend" },
-#ifdef sgi
-    { "r", 
-	LIO_RANDOM|LIO_IO_TYPES|LIO_WAIT_TYPES, "random sync i/o types and wait methods" },
-    { "R", 
-	LIO_RANDOM|LIO_IO_ATYPES|LIO_WAIT_ATYPES, "random i/o types and wait methods" },
-#else
     { "r", 
 	LIO_RANDOM|LIO_IO_TYPES|LIO_WAIT_TYPES, "random i/o types and wait methods" },
     { "R", 
 	LIO_RANDOM|LIO_IO_TYPES|LIO_WAIT_TYPES, "random i/o types and wait methods" },
-#endif
     { "l", LIO_IO_SLISTIO|LIO_WAIT_RECALL, "single stride sync listio" },
     { "L", LIO_IO_ALISTIO|LIO_WAIT_RECALL, "single stride async listio using recall" },
     { "X", LIO_IO_ALISTIO|LIO_WAIT_SIGPAUSE, "single stride async listio using pause" },
@@ -165,10 +135,6 @@ char Lio_SysCall[PATH_MAX];	/* string containing last i/o system call */
 
 static volatile int Received_signal = 0;	/* number of signals received */
 static volatile int Rec_signal;
-#ifdef sgi
-static volatile int Received_callback = 0;	/* number of callbacks received */
-static volatile int Rec_callback;
-#endif
 static char Errormsg[500];
 static int Debug_level = 0;
 
@@ -416,25 +382,6 @@ lio_async_signal_handler(int sig)
 }
 #endif
 
-#ifdef sgi
-/***********************************************************************
- * This is an internal callback handler.
- * If the handler is called, it will increment the Received_callback
- * global variable.
- ***********************************************************************/
-static void
-lio_async_callback_handler(sigval_t sigval)
-{
-	if ( Debug_level )
-	    printf("DEBUG %s/%d: received callback, nbytes=%d, a callback called %d times\n",
-		__FILE__, __LINE__, sigval.sival_int, Received_callback+1);
-
-	Received_callback++;
-
-	return;
-}
-#endif /* sgi */
-
 /***********************************************************************
  * lio_random_methods
  * This function will randomly choose an io type and wait method
@@ -523,18 +470,7 @@ long wrd;	/* to allow future features, use zero for now */
     int omethod = method;
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
 #endif
-#ifdef  CRAY
-    struct listreq request;	/* Used when a listio is wanted */
-    struct iosw status, *statptr[1];  
-#else
-    /* for linux or sgi */
     struct iovec iov;	/* iovec for writev(2) */
-#endif
-#ifdef sgi
-    aiocb_t aiocbp;	/* POSIX aio control block */
-    aiocb_t *aiolist[1]; /* list of aio control blocks for lio_listio */
-    off64_t poffset;	/* pwrite(2) offset */
-#endif
 
     /*
      * If LIO_RANDOM bit specified, get new method randomly.
@@ -551,64 +487,9 @@ long wrd;	/* to allow future features, use zero for now */
 	*errmsg = Errormsg;
 
     Rec_signal=Received_signal;	/* get the current number of signals received */
-#ifdef sgi
-    Rec_callback=Received_callback;	/* get the current number of callbacks received */
-#endif
-
-#ifdef  CRAY
-    bzero(&status, sizeof(struct iosw));
-    bzero(&request, sizeof(struct listreq));
-    statptr[0] = &status;
-#else
-    /* for linux or sgi */
     bzero(&iov, sizeof(struct iovec));
     iov.iov_base = buffer;
     iov.iov_len = size;
-#endif
-#ifdef sgi
-    bzero(&aiocbp, sizeof(aiocb_t));
-    aiocbp.aio_fildes = fd;
-    aiocbp.aio_nbytes = size;
-    aiocbp.aio_buf = buffer;
-/*    aiocbp.aio_offset = lseek( fd, 0, SEEK_CUR ); -- set below */
-    aiocbp.aio_sigevent.sigev_notify = SIGEV_NONE;
-    aiocbp.aio_sigevent.sigev_signo = 0;
-    aiocbp.aio_sigevent.sigev_func = NULL;
-    aiocbp.aio_sigevent.sigev_value.sival_int = 0;
-    aiolist[0] = &aiocbp;
-
-    if( (ret = lseek( fd, 0, SEEK_CUR )) == -1 ){
-	ret = 0;
-	/* If there is an error and it is not ESPIPE then kick out the error.
-	 * If the fd is a fifo then we have to make sure that
-	 * lio_random_methods() didn't select pwrite/pread; if it did then
-	 * switch to write/read.
-	 */
-	if( errno == ESPIPE ){
-		if( method & LIO_IO_SYNCP ){
-			if( omethod & LIO_RANDOM ){
-				method &= ~LIO_IO_SYNCP;
-				method |= LIO_IO_SYNC;
-				if( Debug_level > 2 )
-					printf("DEBUG %s/%d: random chosen method switched to %#o for fifo\n", __FILE__, __LINE__, method );
-			}
-			else if( Debug_level ){
-				printf("DEBUG %s/%d: pwrite will fail when it writes to a fifo\n",
-				       __FILE__, __LINE__ );
-			}
-		}
-		/* else: let it ride */
-	}
-	else{
-		sprintf(Errormsg, "%s/%d lseek(fd=%d,0,SEEK_CUR) failed, errno=%d  %s",
-			__FILE__, __LINE__, fd, errno, strerror(errno));
-		return -errno;
-	}
-    }
-    poffset = (off64_t)ret;
-    aiocbp.aio_offset = ret;
-
-#endif
 
     /*
      * If the LIO_USE_SIGNAL bit is not set, only use the signal
@@ -622,11 +503,6 @@ long wrd;	/* to allow future features, use zero for now */
 	sig=0;	/* ignore signal parameter */
     }
 
-#ifdef sgi
-    if ( sig && (method & LIO_WAIT_CBTYPES) )
-	sig=0; /* ignore signal parameter */
-#endif
-
     /*
      * only setup signal hander if sig was specified and
      * a sig wait method was specified.
@@ -634,27 +510,6 @@ long wrd;	/* to allow future features, use zero for now */
      * old signal handler will not be restored.
      *** restoring the signal handler could be added ***
      */
-
-    if ( sig &&  (method & LIO_WAIT_SIGTYPES) ){
-#ifdef CRAY
-        sigctl(SCTL_REG, sig, lio_async_signal_handler);
-#endif
-#ifdef sgi
-        aiocbp.aio_sigevent.sigev_notify = SIGEV_SIGNAL;
-	aiocbp.aio_sigevent.sigev_signo = sig;
-        sigset(sig, lio_async_signal_handler);
-#endif /* sgi */
-    }
-#ifdef sgi
-    else if( method & LIO_WAIT_CBTYPES ){
-	/* sival_int just has to be something that I can use
-	 * to identify the callback, and "size" happens to be handy...
-	 */
-	aiocbp.aio_sigevent.sigev_notify = SIGEV_CALLBACK;
-	aiocbp.aio_sigevent.sigev_func = lio_async_callback_handler;
-	aiocbp.aio_sigevent.sigev_value.sival_int = size;
-    }
-#endif
 
     /*
      * Determine the system call that will be called and produce
@@ -700,182 +555,6 @@ long wrd;	/* to allow future features, use zero for now */
 
     }
 
-    else if ( method & LIO_IO_ASYNC ) {
-#ifdef CRAY
-	sprintf(Lio_SysCall,
-	    "writea(%d, buf, %d, &status, %d)", fd, size, sig);
-	io_type="writea";
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ((ret = writea(fd, buffer, size, &status, sig)) == -1) {
-	    sprintf(Errormsg,
-		"%s/%d writea(%d, buf, %d, &stat, %d) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, sig, errno, strerror(errno));
-	    sigon();
-	    return -errno;
-	}
-#endif
-#ifdef sgi
-	sprintf(Lio_SysCall,
-	    "aio_write(fildes=%d, buf, nbytes=%d, signo=%d)", fd, size, sig);
-	io_type="aio_write";
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-		sighold( sig );
-	if ((ret = aio_write(&aiocbp)) == -1) {
-	    sprintf(Errormsg,
-		"%s/%d aio_write(fildes=%d, buf, nbytes=%d, signo=%d) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, sig, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-	    return -errno;
-	}
-#endif
-    } /* LIO_IO_ASYNC */
-
-    else if ( method & LIO_IO_SLISTIO ) {
-#ifdef CRAY
-	request.li_opcode = LO_WRITE;
-	request.li_fildes = fd;
-        request.li_buf = buffer;
-        request.li_nbyte = size;
-        request.li_status = &status;
-        request.li_signo = sig;
-        request.li_nstride = 0;
-        request.li_filstride = 0;
-        request.li_memstride = 0;
-
-	listio_cmd=LC_WAIT;
-	io_type="listio(2) sync write";
-
-	sprintf(Lio_SysCall, 
-		"listio(LC_WAIT, &req, 1) LO_WRITE, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ( listio(listio_cmd, &request, 1) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    sigon();
-            return -errno;
-        }
-
-	if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: %s did not return -1\n",
-		__FILE__, __LINE__, Lio_SysCall);
-
-	ret=lio_check_asyncio(io_type, size,  &status);
-	return ret;
-
-#endif
-#ifdef sgi
-
-	aiocbp.aio_lio_opcode = LIO_WRITE;
-	listio_cmd=LIO_WAIT;
-	io_type="lio_listio(3) sync write";
-
-	sprintf(Lio_SysCall,
-		"lio_listio(LIO_WAIT, aiolist, 1, NULL) LIO_WRITE, fd:%d, nbyte:%d, sig:%d",
-                fd, size, sig );
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-	    sighold( sig );
-	if ( lio_listio(listio_cmd, aiolist, 1, NULL) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-            return -errno;
-        }
-
-	if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: %s did not return -1\n",
-		__FILE__, __LINE__, Lio_SysCall);
-
-	ret=lio_check_asyncio(io_type, size,  &aiocbp, method);
-	return ret;
-#endif
-    } /* LIO_IO_SLISTIO */
-
-    else if ( method & LIO_IO_ALISTIO ) {
-#ifdef CRAY
-	request.li_opcode = LO_WRITE;
-	request.li_fildes = fd;
-        request.li_buf = buffer;
-        request.li_nbyte = size;
-        request.li_status = &status;
-        request.li_signo = sig;
-        request.li_nstride = 0;
-        request.li_filstride = 0;
-        request.li_memstride = 0;
-
-	listio_cmd=LC_START;
-	io_type="listio(2) async write";
-
-	sprintf(Lio_SysCall, 
-		"listio(LC_START, &req, 1) LO_WRITE, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ( listio(listio_cmd, &request, 1) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    sigon();
-            return -errno;
-        }
-#endif
-#ifdef sgi
-	aiocbp.aio_lio_opcode = LIO_WRITE;
-	listio_cmd=LIO_NOWAIT;
-	io_type="lio_listio(3) async write";
-
-	sprintf(Lio_SysCall,
-		"lio_listio(LIO_NOWAIT, aiolist, 1, NULL) LIO_WRITE, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-		sighold( sig );
-	if ( lio_listio(listio_cmd, aiolist, 1, NULL) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-            return -errno;
-        }
-#endif
-    }/* LIO_IO_ALISTIO */
-
-#ifndef CRAY
     else if ( method & LIO_IO_SYNCV ) {
 	io_type="writev(2)";
 
@@ -904,53 +583,11 @@ long wrd;	/* to allow future features, use zero for now */
 
         return ret;
     } /* LIO_IO_SYNCV */
-#endif
-
-#ifdef sgi
-    else if ( method & LIO_IO_SYNCP ) {
-	io_type="pwrite(2)";
-
-	sprintf(Lio_SysCall, 
-		"pwrite(%d, buf, %d, %lld)", fd, size, poffset);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-	if ((ret = pwrite(fd, buffer, size, poffset)) == -1) {
-	    sprintf(Errormsg, "%s/%d pwrite(%d, buf, %d, %lld) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, poffset, errno, strerror(errno));
-	    return -errno;
-	}
-
-	if ( ret != size ) {
-            sprintf(Errormsg,
-		"%s/%d pwrite(%d, buf, %d, %lld) returned=%d",
-		    __FILE__, __LINE__,
-		    fd, size, poffset, ret);
-        }
-        else if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: pwrite completed without error (ret %d)\n",
-                __FILE__, __LINE__, ret);
-
-        return ret;
-    } /* LIO_IO_SYNCP */
-#endif
 
     else {
 	printf("DEBUG %s/%d: No I/O method chosen\n", __FILE__, __LINE__ );
 	return -1;
     }
-
-    /*
-     * wait for async io to complete.
-     */
-#ifdef CRAY
-    ret=lio_wait4asyncio(method, fd, statptr);
-#endif
-#ifdef sgi
-    ret=lio_wait4asyncio(method, fd, &aiocbp);
-#endif
 
     /*
      * If there was an error waiting for async i/o to complete,
@@ -976,13 +613,6 @@ long wrd;	/* to allow future features, use zero for now */
      * have been updated but the actual i/o size if returned.
      */
     
-#ifdef CRAY
-    ret=lio_check_asyncio(io_type, size, &status);
-#endif
-#ifdef sgi
-    ret=lio_check_asyncio(io_type, size, &aiocbp, method);
-#endif
-
     return ret;
 }	/* end of lio_write_buffer */
 
@@ -1042,18 +672,7 @@ long wrd;	/* to allow future features, use zero for now */
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
     int omethod = method;
 #endif
-#ifdef  CRAY
-    struct listreq request;	/* Used when a listio is wanted */
-    struct iosw status, *statptr[1];  
-#else
-    /* for linux or sgi */
     struct iovec iov; /* iovec for readv(2) */
-#endif
-#ifdef sgi
-    aiocb_t aiocbp;	/* POSIX aio control block */
-    aiocb_t *aiolist[1]; /* list of aio control blocks for lio_listio */
-    off64_t poffset;	/* pread(2) offset */
-#endif
 
     /*
      * If LIO_RANDOM bit specified, get new method randomly.
@@ -1070,64 +689,9 @@ long wrd;	/* to allow future features, use zero for now */
 	*errmsg = Errormsg;
 
     Rec_signal=Received_signal;	/* get the current number of signals received */
-#ifdef sgi
-    Rec_callback=Received_callback;	/* get the current number of callbacks received */
-#endif
-
-#ifdef  CRAY
-    bzero(&status, sizeof(struct iosw));
-    bzero(&request, sizeof(struct listreq));
-    statptr[0] = &status;
-#else
-    /* for linux or sgi */
     bzero(&iov, sizeof(struct iovec));
     iov.iov_base = buffer;
     iov.iov_len = size;
-#endif
-#ifdef sgi
-    bzero(&aiocbp, sizeof(aiocb_t));
-    aiocbp.aio_fildes = fd;
-    aiocbp.aio_nbytes = size;
-    aiocbp.aio_buf = buffer;
-/*    aiocbp.aio_offset = lseek( fd, 0, SEEK_CUR ); -- set below */
-    aiocbp.aio_sigevent.sigev_notify = SIGEV_NONE;
-    aiocbp.aio_sigevent.sigev_signo = 0;
-    aiocbp.aio_sigevent.sigev_func = NULL;
-    aiocbp.aio_sigevent.sigev_value.sival_int = 0;
-    aiolist[0] = &aiocbp;
-
-    if( (ret = lseek( fd, 0, SEEK_CUR )) == -1 ){
-	ret = 0;
-	/* If there is an error and it is not ESPIPE then kick out the error.
-	 * If the fd is a fifo then we have to make sure that
-	 * lio_random_methods() didn't select pwrite/pread; if it did then
-	 * switch to write/read.
-	 */
-	if( errno == ESPIPE ){
-		if( method & LIO_IO_SYNCP ){
-			if( omethod & LIO_RANDOM ){
-				method &= ~LIO_IO_SYNCP;
-				method |= LIO_IO_SYNC;
-				if( Debug_level > 2 )
-					printf("DEBUG %s/%d: random chosen method switched to %#o for fifo\n", __FILE__, __LINE__, method );
-			}
-			else if( Debug_level ){
-				printf("DEBUG %s/%d: pread will fail when it reads from a fifo\n",
-				       __FILE__, __LINE__ );
-			}
-		}
-		/* else: let it ride */
-	}
-	else{
-		sprintf(Errormsg, "%s/%d lseek(fd=%d,0,SEEK_CUR) failed, errno=%d  %s",
-			__FILE__, __LINE__, fd, errno, strerror(errno));
-		return -errno;
-	}
-    }
-    poffset = (off64_t)ret;
-    aiocbp.aio_offset = ret;
-
-#endif
 
     /*
      * If the LIO_USE_SIGNAL bit is not set, only use the signal
@@ -1141,11 +705,6 @@ long wrd;	/* to allow future features, use zero for now */
         sig=0;  /* ignore signal parameter */
     }
 
-#ifdef sgi
-    if ( sig && (method & LIO_WAIT_CBTYPES) )
-	sig=0; /* ignore signal parameter */
-#endif
-
     /*
      * only setup signal hander if sig was specified and
      * a sig wait method was specified.
@@ -1153,27 +712,6 @@ long wrd;	/* to allow future features, use zero for now */
      * old signal handler will not be restored.
      *** restoring the signal handler could be added ***
      */
-
-    if ( sig &&  (method & LIO_WAIT_SIGTYPES) ){
-#ifdef CRAY
-	    sigctl(SCTL_REG, sig, lio_async_signal_handler);
-#endif
-#ifdef sgi
-	    aiocbp.aio_sigevent.sigev_notify = SIGEV_SIGNAL;
-	    aiocbp.aio_sigevent.sigev_signo = sig;
-	    sigset(sig, lio_async_signal_handler);
-#endif /* CRAY */
-    }
-#ifdef sgi
-    else if( method & LIO_WAIT_CBTYPES ){
-	    aiocbp.aio_sigevent.sigev_notify = SIGEV_CALLBACK;
-	    aiocbp.aio_sigevent.sigev_func = lio_async_callback_handler;
-	    /* sival_int just has to be something that I can use
-	     * to identify the callback, and "size" happens to be handy...
-	     */
-	    aiocbp.aio_sigevent.sigev_value.sival_int = size;
-    }
-#endif
 
     /*
      * Determine the system call that will be called and produce
@@ -1219,180 +757,6 @@ long wrd;	/* to allow future features, use zero for now */
 
     }
 
-    else if ( method & LIO_IO_ASYNC ) {
-#ifdef CRAY
-	sprintf(Lio_SysCall,
-	    "reada(%d, buf, %d, &status, %d)", fd, size, sig);
-	io_type="reada";
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ((ret = reada(fd, buffer, size, &status, sig)) == -1) {
-	    sprintf(Errormsg,
-		"%s/%d reada(%d, buf, %d, &stat, %d) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, sig, errno, strerror(errno));
-	    sigon();
-	    return -errno;
-	}
-#endif
-#ifdef sgi
-	sprintf(Lio_SysCall,
-	    "aio_read(fildes=%d, buf, nbytes=%d, signo=%d)", fd, size, sig);
-	io_type="aio_read";
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-		sighold( sig );
-	if ((ret = aio_read(&aiocbp)) == -1) {
-	    sprintf(Errormsg,
-		"%s/%d aio_read(fildes=%d, buf, nbytes=%d, signo=%d) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, sig, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-	    return -errno;
-	}
-#endif
-    } /* LIO_IO_ASYNC */
-
-    else if ( method & LIO_IO_SLISTIO ) {
-#ifdef CRAY
-	request.li_opcode = LO_READ;
-	request.li_fildes = fd;
-        request.li_buf = buffer;
-        request.li_nbyte = size;
-        request.li_status = &status;
-        request.li_signo = sig;
-        request.li_nstride = 0;
-        request.li_filstride = 0;
-        request.li_memstride = 0;
-
-	listio_cmd=LC_WAIT;
-	io_type="listio(2) sync read";
-
-	sprintf(Lio_SysCall, 
-		"listio(LC_WAIT, &req, 1) LO_READ, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ( listio(listio_cmd, &request, 1) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    sigon();
-            return -errno;
-        }
-
-	if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: %s did not return -1\n",
-		__FILE__, __LINE__, Lio_SysCall);
-
-	ret=lio_check_asyncio(io_type, size,  &status);
-	return ret;
-#endif
-#ifdef sgi
-	aiocbp.aio_lio_opcode = LIO_READ;
-	listio_cmd=LIO_WAIT;
-	io_type="lio_listio(3) sync read";
-
-	sprintf(Lio_SysCall, 
-		"lio_listio(LIO_WAIT, aiolist, 1, NULL) LIO_READ, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-		sighold( sig );
-	if ( lio_listio(listio_cmd, aiolist, 1, NULL) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-            return -errno;
-        }
-
-	if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: %s did not return -1\n",
-		__FILE__, __LINE__, Lio_SysCall);
-
-	ret=lio_check_asyncio(io_type, size,  &aiocbp, method);
-	return ret;
-#endif
-    }/* LIO_IO_SLISTIO */
-
-    else if ( method & LIO_IO_ALISTIO ) {
-#ifdef CRAY
-	request.li_opcode = LO_READ;
-	request.li_fildes = fd;
-        request.li_buf = buffer;
-        request.li_nbyte = size;
-        request.li_status = &status;
-        request.li_signo = sig;
-        request.li_nstride = 0;
-        request.li_filstride = 0;
-        request.li_memstride = 0;
-
-	listio_cmd=LC_START;
-	io_type="listio(2) async read";
-
-	sprintf(Lio_SysCall, 
-		"listio(LC_START, &req, 1) LO_READ, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	sigoff();
-	if ( listio(listio_cmd, &request, 1) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    sigon();
-            return -errno;
-        }
-#endif
-#ifdef sgi
-	aiocbp.aio_lio_opcode = LIO_READ;
-	listio_cmd=LIO_NOWAIT;
-	io_type="lio_listio(3) async read";
-
-	sprintf(Lio_SysCall, 
-		"lio_listio(LIO_NOWAIT, aiolist, 1, NULL) LIO_READ, fd:%d, nbyte:%d",
-                fd, size);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-
-	if( sig )
-		sighold( sig );
-	if ( lio_listio(listio_cmd, aiolist, 1, NULL) == -1 ) {
-            sprintf(Errormsg, "%s/%d %s failed, fd:%d, nbyte:%d errno=%d %s",
-		    __FILE__, __LINE__,
-		Lio_SysCall, fd, size, errno, strerror(errno));
-	    if( sig )
-		sigrelse( sig );
-            return -errno;
-        }
-#endif
-    } /* LIO_IO_ALISTIO */
-
-#ifndef CRAY
     else if ( method & LIO_IO_SYNCV ) {
 	io_type="readv(2)";
 
@@ -1421,54 +785,11 @@ long wrd;	/* to allow future features, use zero for now */
 
         return ret;
     } /* LIO_IO_SYNCV */
-#endif
-
-#ifdef sgi
-    else if ( method & LIO_IO_SYNCP ) {
-	io_type="pread(2)";
-
-	sprintf(Lio_SysCall, 
-		"pread(%d, buf, %d, %lld)", fd, size, poffset);
-
-        if ( Debug_level ) {
-	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
-        }
-	if ((ret = pread(fd, buffer, size, poffset)) == -1) {
-	    sprintf(Errormsg, "%s/%d pread(%d, buf, %d, %lld) ret:-1, errno=%d %s",
-		    __FILE__, __LINE__,
-		fd, size, poffset, errno, strerror(errno));
-	    return -errno;
-	}
-
-	if ( ret != size ) {
-            sprintf(Errormsg,
-		"%s/%d pread(%d, buf, %d, %lld) returned=%d",
-		    __FILE__, __LINE__,
-		    fd, size, poffset, ret);
-        }
-        else if ( Debug_level > 1 )
-            printf("DEBUG %s/%d: pread completed without error (ret %d)\n",
-                __FILE__, __LINE__, ret);
-
-        return ret;
-    } /* LIO_IO_SYNCP */
-#endif
 
     else {
 	printf("DEBUG %s/%d: No I/O method chosen\n", __FILE__, __LINE__ );
 	return -1;
     }
-
-    /*
-     * wait for async io to complete.
-     * Note: Sync io should have returned prior to getting here.
-     */
-#ifdef CRAY
-    ret=lio_wait4asyncio(method, fd, statptr);
-#endif
-#ifdef sgi
-    ret=lio_wait4asyncio(method, fd, &aiocbp);
-#endif
 
     /*
      * If there was an error waiting for async i/o to complete,
@@ -1494,13 +815,6 @@ long wrd;	/* to allow future features, use zero for now */
      * have been updated but the actual i/o size if returned.
      */
     
-#ifdef CRAY
-    ret=lio_check_asyncio(io_type, size, &status);
-#endif
-#ifdef sgi
-    ret=lio_check_asyncio(io_type, size, &aiocbp, method);
-#endif
-
     return ret;
 }	/* end of lio_read_buffer */
 
@@ -1518,37 +832,9 @@ long wrd;	/* to allow future features, use zero for now */
  * (rrl 04/96)
  ***********************************************************************/
 int
-#ifdef CRAY
-lio_check_asyncio(char *io_type, int size, struct iosw *status)
-#else
 lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
-#endif
 {
     int ret;
-
-#ifdef CRAY
-    if ( status->sw_error ) {
-        sprintf(Errormsg,
-            "%s/%d %s, sw_error set = %d %s, sw_count = %d",
-		__FILE__, __LINE__, io_type,
-            status->sw_error, strerror(status->sw_error), status->sw_count);
-        return -status->sw_error;
-    }
-    else if ( status->sw_count != size ) {
-        sprintf(Errormsg,
-            "%s/%d %s, sw_count not as expected(%d), but actual:%d",
-		__FILE__, __LINE__, io_type,
-            size, status->sw_count);
-    }
-    else if ( Debug_level > 1 ) {
-        printf("DEBUG %s/%d: %s completed without error (sw_error == 0, sw_count == %d)\n",
-            __FILE__, __LINE__, io_type, status->sw_count);
-    }
-
-    return status->sw_count;
-
-#else
-
     int cnt = 1;
 
     /* The I/O may have been synchronous with signal completion.  It doesn't
@@ -1609,8 +895,6 @@ lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
 
     return ret;
 
-#endif
-
 } /* end of lio_check_asyncio */
 
 
@@ -1633,39 +917,16 @@ lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
  * (rrl 04/96)
  ***********************************************************************/
 int
-#ifdef CRAY
-lio_wait4asyncio(int method, int fd, struct iosw **statptr)
-#else
 lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
-#endif
 {
     int cnt;
-#ifdef sgi
-    int ret;
-    const aiocb_t *aioary[1]; 
-#endif
 
     if ( (method & LIO_WAIT_RECALL)
-#ifdef sgi
-	|| (method & LIO_WAIT_CBSUSPEND) 
-	|| (method & LIO_WAIT_SIGSUSPEND) 
-#endif
 	|| ((method & LIO_WAIT_TYPES) == 0) ){
 	/*
 	 * If method has LIO_WAIT_RECALL bit set or method does
 	 * not have any wait method bits set (default), use recall/aio_suspend.
          */
-#ifdef CRAY
-        if ( Debug_level > 2 )
-            printf("DEBUG %s/%d: wait method : recall\n", __FILE__, __LINE__);
-        sigon();
-        if ( recall(fd, 1, statptr) ) {
-	    sprintf(Errormsg, "%s/%d recall(%d, 1, stat) failed, errno:%d %s",
-		    __FILE__, __LINE__,
-		fd, errno, strerror(errno));
-	    return -errno;
-	}
-#else
         if ( Debug_level > 2 )
             printf("DEBUG %s/%d: wait method : aio_suspend, sigev_notify=%s\n", __FILE__, __LINE__,
     		(aiocbp->aio_sigevent.sigev_notify == SIGEV_SIGNAL ? "signal" :
@@ -1698,24 +959,10 @@ lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
 		fd, errno, strerror(errno));
 	    return -errno;
 	}
-#endif
-
     } else if ( method & LIO_WAIT_ACTIVE ) {
         if ( Debug_level > 2 )
             printf("DEBUG %s/%d: wait method : active\n", __FILE__, __LINE__);
-#ifdef CRAY
-        sigon();
-	/* 
-         * loop until sw_flag, sw_count or sw_error field elements
-	 * change to non-zero.
- 	 */
-        cnt=0;
-        while ( (*statptr)->sw_flag == 0 && 
-		(*statptr)->sw_count == 0 &&
-		(*statptr)->sw_error == 0 ) {
-	   cnt++;
-	}
-#else
+
 	/* loop while aio_error() returns EINPROGRESS */
 	cnt=0;
 	while(1){
@@ -1726,7 +973,6 @@ lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
 		++cnt;
 	}
 
-#endif
 	if ( Debug_level > 5 && cnt && (cnt % 50) == 0 )
 		printf("DEBUG %s/%d: wait active cnt = %d\n",
 		    __FILE__, __LINE__, cnt);
@@ -1734,37 +980,20 @@ lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
     } else if ( method & LIO_WAIT_SIGPAUSE ) {
         if ( Debug_level > 2 )
             printf("DEBUG %s/%d: wait method : sigpause\n", __FILE__, __LINE__);
-#ifdef sgi
-	/* note: don't do the sigon() for CRAY in this case.  why? -- roehrich 6/11/97 */
-	if( aiocbp->aio_sigevent.sigev_notify == SIGEV_SIGNAL )
-		sigrelse( aiocbp->aio_sigevent.sigev_signo );
-	else {
-		printf("DEBUG %s/%d: sigev_notify != SIGEV_SIGNAL\n", __FILE__, __LINE__ );
-		return -1;
-	}
-#endif
         pause();
 
     } else if ( method & LIO_WAIT_SIGACTIVE ) {
         if ( Debug_level > 2 )
             printf("DEBUG %s/%d: wait method : sigactive\n", __FILE__, __LINE__);
-#ifdef CRAY
-        sigon();
-#else
 	if( aiocbp->aio_sigevent.sigev_notify == SIGEV_SIGNAL )
 		sigrelse( aiocbp->aio_sigevent.sigev_signo );
 	else {
 		printf("DEBUG %s/%d: sigev_notify != SIGEV_SIGNAL\n", __FILE__, __LINE__ );
 		return -1;
 	}
-#endif
 	/* loop waiting for signal */
         while ( Received_signal == Rec_signal ){
-#ifdef CRAY
-                sigon();
-#else
 		sigrelse( aiocbp->aio_sigevent.sigev_signo );
-#endif
 	}
 
     } else if ( method & LIO_WAIT_NONE ) {
@@ -1779,10 +1008,6 @@ lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
 	 */
 	sprintf(Errormsg, "%s/%d LIO_WAIT_NONE was selected (this is broken)\n",
 		__FILE__, __LINE__ );
-#ifdef CRAY
-        sigon();
-#endif
-/*        return 1;*/
         return -1;
     }
     else {

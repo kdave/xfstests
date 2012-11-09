@@ -21,11 +21,6 @@
 
 #include <config.h>
 
-#ifdef sgi
-#include <../../irix/include/xfs/platform_defs.h>
-#include <../../xfsprogs/include/irix.h>
-#endif
-
 #ifdef HAVE_XFS_XFS_H
 #include <xfs/xfs.h>
 #endif

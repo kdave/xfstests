@@ -123,31 +123,6 @@ main(
 	  exit(1);
 	}
 
-	/*--------------------------------
-	 * EXAMINE /usr/include/sys/dmi.h:
-	 *--------------------------------
-	 */
-#ifdef __sgi
-#define DMAPI_HDR "/usr/include/sys/dmi.h"
-
-	if (stat(DMAPI_HDR, &stat_buf)==-1){
-	  if (errno==ENOENT) { 
-	    printf( "You are missing a vital DMAPI file: %s\n", DMAPI_HDR);
-	  }
-	  else {
-	    printf( "ERROR: could not stat %s (%s)\n", DMAPI_HDR, strerror(errno));
-	  }
-	}
-	else {
-	  if (stat_buf.st_size <= 15000) {
-	    printf("You appear to have an old version of a vital DMAPI file: %s\n", DMAPI_HDR);
-	  }
-	  else if (Vflag) {
-	    printf("(You appear to have the correct version of %s\n", DMAPI_HDR);
-	  }
-	}
-#endif
-	
 	/*--------------------------
 	 * RESOLVE KERNEL PRESENCE:
 	 *--------------------------

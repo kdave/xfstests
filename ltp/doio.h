@@ -56,13 +56,7 @@
 #define UNRESVSP 123		/* xfsctl(XFS_IOC_UNRESVSP) */
 #define	FSYNC2	125		/* fsync(2) */
 #define	FDATASYNC 126		/* fdatasync(2) */
-
-#ifdef CRAY
-/* used: <<doio>> 1.? <<DOIO>> 1.5 <-DOIO-> 1.7*/
-#define DOIO_MAGIC  '<[DOIO]>'
-#else
 #define DOIO_MAGIC  07116601
-#endif
 
 /*
  * Define various user flags (r_uflag field) that io requests can have
