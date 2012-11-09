@@ -37,10 +37,8 @@
 #include <sys/time.h>	/* for delays */
 #include <ctype.h>
 
-#ifndef NO_XFS
 struct io_req;
 int do_xfsctl(struct io_req *);
-#endif
 
 #include "doio.h"
 #include "pattern.h"
@@ -172,11 +170,9 @@ struct fd_cache {
 	int	c_oflags;
 	int	c_fd;
 	long    c_rtc;
-#ifndef NO_XFS
 	int	c_memalign;	/* from xfsctl(XFS_IOC_DIOINFO) */
 	int	c_miniosz;
 	int	c_maxiosz;
-#endif
 	void	*c_memaddr;	/* mmapped address */
 	int	c_memlen;	/* length of above region */
 };
@@ -777,12 +773,10 @@ doio()
 		case LEWRITEA:
 			rval = do_rw(&ioreq);
 			break;
-#ifndef NO_XFS
 		case RESVSP:
 		case UNRESVSP:
 			rval = do_xfsctl(&ioreq);
 			break;
-#endif
 		case FSYNC2:
 		case FDATASYNC:
 			rval = do_sync(&ioreq);
@@ -1056,9 +1050,7 @@ struct io_req	*req;
 {
 	int	    	    	fd, offset, nbytes, oflags, rval;
 	char    	    	*addr, *file;
-#ifndef NO_XFS
 	struct fd_cache		*fdc;
-#endif
 
 	/*
 	 * Initialize common fields - assumes r_oflags, r_file, r_offset, and
@@ -1090,7 +1082,6 @@ struct io_req	*req;
 #define wtob(x)	(x * sizeof(UINT64_T))
 #endif
 
-#ifndef NO_XFS
 	/* get memory alignment for using DIRECT I/O */
 	fdc = alloc_fdcache(file, oflags);
 
@@ -1111,14 +1102,6 @@ struct io_req	*req;
 	} else {
 		addr += random_range(0, wtob(1) - 1, 1, NULL);
 	}
-#else
-	if ((rval = alloc_mem(nbytes + wtob(1) * 2)) < 0) {
-		return rval;
-	}
-
-	addr = Memptr;
-#endif	/* !NO_XFS */
-
 
 	switch (req->r_type) {
 	case READ:
@@ -1167,9 +1150,7 @@ struct io_req	*req;
 	long    	    	offset, woffset = 0;
 	char    	    	*addr, pattern, *file, *msg;
 	struct wlog_rec		wrec;
-#ifndef NO_XFS
 	struct fd_cache		*fdc;
-#endif
 
 	/*
 	 * Misc variable setup
@@ -1206,7 +1187,6 @@ struct io_req	*req;
 	 * Allocate SDS space for backdoor write if desired
 	 */
 
-#ifndef NO_XFS
 	/* get memory alignment for using DIRECT I/O */
 	fdc = alloc_fdcache(file, oflags);
 
@@ -1230,18 +1210,6 @@ struct io_req	*req;
 	(*Data_Fill)(Memptr, nbytes, Pattern, Pattern_Length, 0);
 	if( addr != Memptr )
 		memmove( addr, Memptr, nbytes);
-
-#else /* sgi */
-	if ((rval = alloc_mem(nbytes + wtob(1) * 2)) < 0) {
-		return rval;
-	}
-
-	addr = Memptr;
-
-	(*Data_Fill)(Memptr, nbytes, Pattern, Pattern_Length, 0);
-	if( addr != Memptr )
-		memmove( addr, Memptr, nbytes);
-#endif /* sgi */
 
 	rval = -1;
 	got_lock = 0;
@@ -1312,7 +1280,6 @@ struct io_req	*req;
 				     "write() failed:  %s (%d)\n%s\n",
 				     SYSERR, errno,
 				     format_rw(req, fd, addr, -1, Pattern, NULL));
-#ifndef NO_XFS
 			doio_fprintf(stderr,
 				     "write() failed:  %s\n\twrite(%d, %#o, %d)\n\toffset %d, nbytes%%miniou(%d)=%d, oflags=%#o memalign=%d, addr%%memalign=%d\n",
 				     strerror(errno),
@@ -1320,13 +1287,6 @@ struct io_req	*req;
 				     offset,
 				     fdc->c_miniosz, nbytes%fdc->c_miniosz,
 				     oflags, fdc->c_memalign, (long)addr%fdc->c_memalign);
-#else
-			doio_fprintf(stderr,
-				     "write() failed:  %s\n\twrite(%d, %#o, %d)\n\toffset %d, nbytes%%1B=%d, oflags=%#o\n",
-				     strerror(errno),
-				     fd, addr, nbytes,
-				     offset, nbytes%4096, oflags);
-#endif
 			doio_upanic(U_RVAL);
 		} else if (rval != nbytes) {
 			doio_fprintf(stderr,
@@ -1511,7 +1471,6 @@ fmt_ioreq(struct io_req *ioreq, struct syscall_info *sy, int fd)
 	cp += sprintf(cp, "          memory alignment is %s\n",
 		      (io->r_uflags & F_WORD_ALIGNED) ? "aligned" : "unaligned");
 
-#ifndef NO_XFS
 	if(io->r_oflags & O_DIRECT) {
 		struct dioattr	finfo;
 		
@@ -1531,8 +1490,6 @@ fmt_ioreq(struct io_req *ioreq, struct syscall_info *sy, int fd)
 		cp += sprintf(cp, "          mem alignment 0x%x xfer size: small: %d large: %d\n",
 			      finfo.d_mem, finfo.d_miniosz, finfo.d_maxiosz);
 	}
-#endif
-
 	return(errbuf);
 }
 
@@ -1846,9 +1803,7 @@ do_rw(req)
 	struct status		*s;
 	struct wlog_rec		wrec;
 	struct syscall_info	*sy;
-#ifndef NO_XFS
 	struct fd_cache		*fdc;
-#endif
 
 	/*
 	 * Initialize common fields - assumes r_oflags, r_file, r_offset, and
@@ -1907,18 +1862,12 @@ do_rw(req)
 		mem_needed = nbytes;
 	}
 
-#ifndef NO_XFS
 	/* get memory alignment for using DIRECT I/O */
 	fdc = alloc_fdcache(file, oflags);
 
 	if ((rval = alloc_mem(mem_needed + wtob(1) * 2 + fdc->c_memalign)) < 0) {
 		return rval;
 	}
-#else
-	if ((rval = alloc_mem(mem_needed + wtob(1) * 2)) < 0) {
-		return rval;
-	}
-#endif
 
 	Pattern[0] = pattern;
 
@@ -1945,14 +1894,12 @@ do_rw(req)
 			addr += random_range(0, wtob(1) - 1, 1, NULL);
 		}
 
-#ifndef NO_XFS
 		/*
 		 * Force memory alignment for Direct I/O
 		 */
 		if( (oflags & O_DIRECT) && ((long)addr % fdc->c_memalign != 0) ) {
 			addr += fdc->c_memalign - ((long)addr % fdc->c_memalign);
 		}
-#endif
 
 		/*
 		 * FILL must be done on a word-aligned buffer.
@@ -2141,7 +2088,6 @@ do_rw(req)
  *   - XFS_IOC_RESVSP
  *   - XFS_IOC_UNRESVSP
  */
-#ifndef NO_XFS
 int
 do_xfsctl(req)
 	struct io_req	*req;
@@ -2232,7 +2178,6 @@ do_xfsctl(req)
 
 	return (rval == -1) ? -1 : 0;
 }
-#endif
 
 /*
  *  fsync(2) and fdatasync(2)
@@ -2379,9 +2324,7 @@ int	fsa;
 	static char	errbuf[4096];
 	int	    	fd, nb, flags;
 	char		*buf, *em, *ep;
-#ifndef NO_XFS
 	struct fd_cache *fdc;
-#endif
 
 	buf = Memptr;
 
@@ -2406,27 +2349,18 @@ int	fsa;
 		return errbuf;
 	}
 
-#ifndef NO_XFS
 	/* Guarantee a properly aligned address on Direct I/O */
 	fdc = alloc_fdcache(file, flags);
 	if( (flags & O_DIRECT) && ((long)buf % fdc->c_memalign != 0) ) {
 		buf += fdc->c_memalign - ((long)buf % fdc->c_memalign);
 	}
-#endif
 
 	if ((nb = read(fd, buf, length)) == -1) {
-#ifndef NO_XFS
 		sprintf(errbuf,
 			"Could not read %d bytes from %s for verification:  %s (%d)\n\tread(%d, 0x%p, %d)\n\tbuf %% alignment(%d) = %ld\n",
 			length, file, SYSERR, errno,
 			fd, buf, length,
 			fdc->c_memalign, (long)buf % fdc->c_memalign);
-#else
-		sprintf(errbuf,
-			"Could not read %d bytes from %s for verification:  %s (%d)\n",
-			length, file, SYSERR, errno);
-
-#endif
 		return errbuf;
 	}
 
@@ -2722,9 +2656,7 @@ int	oflags;
 	struct fd_cache		*free_slot, *oldest_slot, *cp;
 	static int		cache_size = 0;
 	static struct fd_cache	*cache = NULL;
-#ifndef NO_XFS
 	struct dioattr	finfo;
-#endif
 
 	/*
 	 * If file is NULL, it means to free up the fd cache.
@@ -2846,7 +2778,6 @@ int	oflags;
 	strcpy(free_slot->c_file, file);
 	free_slot->c_rtc = Reqno;
 
-#ifndef NO_XFS
 	if (oflags & O_DIRECT) {
 		if (xfsctl(file, fd, XFS_IOC_DIOINFO, &finfo) == -1) {
 			finfo.d_mem = 1;
@@ -2862,7 +2793,6 @@ int	oflags;
 	free_slot->c_memalign = finfo.d_mem;
 	free_slot->c_miniosz = finfo.d_miniosz;
 	free_slot->c_maxiosz = finfo.d_maxiosz;
-#endif
 	free_slot->c_memaddr = NULL;
 	free_slot->c_memlen = 0;
 

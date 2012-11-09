@@ -182,12 +182,10 @@ struct strmap	Syscall_Map[] = {
 	{ "write",		WRITE,		SY_WRITE		},
 	{ "pread",		PREAD   				},
 	{ "pwrite",		PWRITE,		SY_WRITE		},
-#ifndef NO_XFS
 	{ "resvsp",		RESVSP, 	SY_WRITE		},
 	{ "unresvsp",		UNRESVSP, 	SY_WRITE		},
 	{ "reserve",		RESVSP, 	SY_WRITE		},
 	{ "unreserve",		UNRESVSP, 	SY_WRITE		},
-#endif
 	{ "readv",		READV					},
 	{ "writev",		WRITEV,		SY_WRITE		},
 	{ "mmread",		MMAPR					},
@@ -744,10 +742,8 @@ get_file_info(rec)
 struct file_info    *rec;
 {
     struct stat			sbuf;
-#ifndef NO_XFS
     int				fd;
     struct dioattr		finfo;
-#endif
 
     /*
      * Figure out if the files is regular, block or character special.  Any
@@ -784,7 +780,6 @@ struct file_info    *rec;
 	}
 
 	rec->f_riou = BSIZE;
-#ifndef NO_XFS
 	if( (fd = open(rec->f_path, O_RDWR|O_DIRECT, 0)) != -1 ) {
 #ifdef XFS_IOC_DIOINFO
 	    if(xfsctl(rec->f_path, fd, XFS_IOC_DIOINFO, &finfo) != -1) {
@@ -805,7 +800,6 @@ bozo!
 	} else {
 	    rec->f_riou = BBSIZE;
 	}
-#endif
     } else {
 
 	rec->f_riou = BSIZE;
@@ -829,13 +823,11 @@ int 	nbytes;
     int	    	fd, rval;
     char    	c;
     struct stat	sbuf;
-#ifndef NO_XFS
     int		nb;
     struct flock64 f;
     struct fsxattr xattr;
     struct dioattr finfo;
     char	*b, *buf;
-#endif
 
     errno = 0;
     rval = stat(path, &sbuf);
@@ -883,7 +875,6 @@ int 	nbytes;
 	}
     } else {
 
-#ifndef NO_XFS
 	/*
 	 *  The file must be designated as Real-Time before any data
 	 *  is allocated to it.
@@ -926,7 +917,6 @@ bozo!
 		fprintf(stderr, "get: fsx_xflags = 0x%x\n", 
 			xattr.fsx_xflags);
 	    }
-#endif
 	}
 
 	/*
@@ -1008,7 +998,6 @@ bozo!
 	 * file size.
 	 */
 
-#ifndef NO_XFS
 	if(Owrite == 2) {
 	    close(fd);
 	    if( (fd = open(path, O_CREAT|O_RDWR|O_DIRECT, 0)) != -1 ) {
@@ -1081,7 +1070,6 @@ bozo!
 	    }
 	    free(b);
 	} else
-#endif
 	    if(Owrite) {
 	    /*fprintf(stderr,
 		    "create_file_Owrite: lseek(%d, %d {%d}, SEEK_SET)\n",
@@ -1286,7 +1274,6 @@ char	*opts;
 	case 'O':
 
 	    nopenargs = string_to_tokens(optarg, openargs, 4, ":/");
-#ifndef NO_XFS
 	    if(!strcmp(openargs[0], "realtime")) {
 		/*
 		 * -O realtime:extsize
@@ -1323,14 +1310,6 @@ char	*opts;
 			TagName, openargs[0]);
 		exit(1);
 	    }
-#else
-	    Oflags = parse_open_flags(openargs[0], &errmsg);
-	    if(Oflags == -1) {
-		fprintf(stderr, "iogen%s: -O %s error: %s\n", TagName, optarg, errmsg);
-		exit(1);
-	    }
-#endif
-
 	    O_opt++;
 	    break;
 
@@ -1629,13 +1608,8 @@ FILE	*stream;
     fprintf(stream, "\t-a               (Not used on Linux).\n");
 #endif /* !linux */
     fprintf(stream, "\t-f flag,...      Flags to use for file IO.  Supported flags are\n");
-#ifndef NO_XFS
     fprintf(stream, "\t                 buffered, direct, sync.\n");
     fprintf(stream, "\t                 Default is 'buffered,sync'.\n");
-#else
-    fprintf(stream, "\t                 buffered, sync.\n");
-    fprintf(stream, "\t                 Default is 'buffered,sync'.\n");
-#endif /* sgi */
     fprintf(stream, "\t-h               This help.\n");
     fprintf(stream, "\t-i iterations[s] # of requests to generate.  0 means causes iogen\n");
     fprintf(stream, "\t                 to run until it's killed.  If iterations is suffixed\n");
@@ -1650,15 +1624,11 @@ FILE	*stream;
     fprintf(stream, "\t-N tagname       Tag name, for Monster.\n");
     fprintf(stream, "\t-o               Form overlapping consecutive requests.\n");
     fprintf(stream, "\t-O               Open flags for creating files\n");
-#ifndef NO_XFS
     fprintf(stream, "\t                 realtime:extsize - put file on real-time volume\n");
     fprintf(stream, "\t                 allocate - allocate space with F_ALLOCSP\n");
     fprintf(stream, "\t                 reserve - reserve space with F_RESVSP (default)\n");
     fprintf(stream, "\t                 noreserve - do not reserve with F_RESVSP\n");
     fprintf(stream, "\t                 direct - use O_DIRECT I/O to write to the file\n");
-#else
-    fprintf(stream, "\t                 {O_SYNC,etc}\n");
-#endif
     fprintf(stream, "\t-p               Output pipe.  Default is stdout.\n");
     fprintf(stream, "\t-q               Quiet mode.  Normally iogen spits out info\n");
     fprintf(stream, "\t                 about test files, options, etc. before starting.\n");

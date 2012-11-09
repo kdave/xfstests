@@ -89,9 +89,7 @@ void prt_examples();
 int set_sig();
 void sig_handler();
 static void notify_others();
-#ifndef NO_XFS
 int pre_alloc();
-#endif
 
 
 #define NEWIO	1	/* Use the tlibio.c functions */
@@ -293,9 +291,7 @@ int tmp;
 char chr;
 int ret;
 int pre_alloc_space = 0;
-#ifndef NO_XFS
 int total_grow_value = 0;	/* used in pre-allocations */
-#endif
 int backgrnd = 1;		/* return control to user */
 struct stat statbuf;
 int time_iterval = -1;
@@ -564,13 +560,9 @@ extern int Forker_npids;	/* num of forked pid, defined in forker.c */
 
 
 		case 'p' :	/* pre allocate space */
-#ifdef NO_XFS
 			printf("%s%s: --p is illegal option on this system\n",
 				Progname, TagName);
 			exit(1);
-#else
-			pre_alloc_space++;
-#endif
 			break;
 
 		case 'P':
@@ -1147,7 +1139,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 			Progname, Pid, num_files);
 	}
 
-#ifndef NO_XFS
 	if ( pre_alloc_space ) {
 		if ( iterations == 0 ) {
 		    fprintf(stderr, "%s%s: %d %s/%d: can NOT pre-alloc and grow forever\n",
@@ -1170,7 +1161,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 			total_grow_value=bytes_to_consume;
 		}
 	}
-#endif
 
 	/*
 	 * If delaying between iterations, get amount time to
@@ -1254,7 +1244,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 
 		lkfile(fd, LOCK_EX, LKLVL1);   /* lock if lockfile is LKLVL1 */
 
-#ifndef NO_XFS
 		/*
 		 * preallocation is only done once, if specified.
 		 */
@@ -1272,7 +1261,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 			Iter_cnt=0;	/* reset outside loop to restart from one */
 			continue;
 		}
-#endif
 
 		/*
 		 * grow file by desired amount.
@@ -1348,7 +1336,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 		    }
 	        }
 	    }
-#ifndef NO_XFS
 	    /*
 	     * if Iter_cnt == 0, then we pre allocated space to all files
 	     * and we are starting outside loop over.  Set pre_alloc_space
@@ -1357,9 +1344,6 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 	    if ( Iter_cnt == 0 ) {
 		pre_alloc_space=0;
 	    }
-#endif
-
-
 	}   /* end iteration for loop */
 
 
@@ -2594,7 +2578,6 @@ lkfile(int fd, int operation, int lklevel)
    return 0;
 }
 
-#ifndef NO_XFS
 /***********************************************************************
  *
  ***********************************************************************/
@@ -2605,7 +2588,6 @@ int fd;
 int size;
 {
 
-#ifndef NO_XFS
 #ifdef XFS_IOC_RESVSP
     struct xfs_flock64 f;
 
@@ -2635,8 +2617,6 @@ int size;
 		return -1;
 	}
 #endif
-#endif
 
 	return 0;
 }
-#endif
