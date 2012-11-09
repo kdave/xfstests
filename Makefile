@@ -76,8 +76,7 @@ configure: configure.ac
 
 include/builddefs include/config.h: configure
 	./configure \
-                --libexecdir=/usr/lib \
-                --enable-lib64=yes
+                --libexecdir=/usr/lib
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@

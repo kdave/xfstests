@@ -72,90 +72,87 @@ main(
 	char		*cname = NULL, *sessinfop = NULL;
 	char		*path = NULL, *pathbufp = NULL, **versionstrpp = NULL;
 	int		flags = 0, fd = 0, setdtime = 0, reterror = 0;
-	u_int		urc;
-	int		rc;
-	dm_ssize_t	ssrc;
 
 /* Definitions per the prototypes in dmport.h, in the same order. */
 
-	rc = dm_clear_inherit(sid, hanp, hlen, token, attrnamep);
-	rc = dm_create_by_handle(sid, dirhanp, dirhlen, token,
+	dm_clear_inherit(sid, hanp, hlen, token, attrnamep);
+	dm_create_by_handle(sid, dirhanp, dirhlen, token,
 		hanp, hlen, cname);
-	rc = dm_create_session(oldsid, sessinfop, newsidp);
-	rc = dm_create_userevent(sid, msglen, msgdatap, tokenp);
-	rc = dm_destroy_session(sid);
-	rc = dm_downgrade_right(sid, hanp, hlen, token);
-	rc = dm_fd_to_handle(fd, hanpp, hlenp);
-	rc = dm_find_eventmsg(sid, token, buflen, bufp, rlenp);
-	rc = dm_get_allocinfo(sid, hanp, hlen,
+	dm_create_session(oldsid, sessinfop, newsidp);
+	dm_create_userevent(sid, msglen, msgdatap, tokenp);
+	dm_destroy_session(sid);
+	dm_downgrade_right(sid, hanp, hlen, token);
+	dm_fd_to_handle(fd, hanpp, hlenp);
+	dm_find_eventmsg(sid, token, buflen, bufp, rlenp);
+	dm_get_allocinfo(sid, hanp, hlen,
 		token, offp, nelem, extentp, nelemp);
-	rc = dm_get_bulkall(sid, hanp, hlen, token, mask, attrnamep,
+	dm_get_bulkall(sid, hanp, hlen, token, mask, attrnamep,
 		locp, buflen, bufp, rlenp);
-	rc = dm_get_bulkattr(sid, hanp, hlen, token, mask, locp, buflen, 
+	dm_get_bulkattr(sid, hanp, hlen, token, mask, locp, buflen,
 		bufp, rlenp);
-	rc = dm_get_config(hanp, hlen, flagname, retvalp);
-	rc = dm_get_config_events(hanp, hlen, nelem, eventsetp, nelemp);
-	rc = dm_get_dirattrs(sid, hanp, hlen, token, mask, locp, buflen,
+	dm_get_config(hanp, hlen, flagname, retvalp);
+	dm_get_config_events(hanp, hlen, nelem, eventsetp, nelemp);
+	dm_get_dirattrs(sid, hanp, hlen, token, mask, locp, buflen,
 		bufp, rlenp);
-	rc = dm_get_dmattr(sid, hanp, hlen, token, attrnamep, buflen,
+	dm_get_dmattr(sid, hanp, hlen, token, attrnamep, buflen,
 		bufp, rlenp);
-	rc = dm_get_eventlist(sid, hanp, hlen, token, nelem, eventsetp, nelemp);
-	rc = dm_get_events(sid, maxmsgs, flags, buflen, bufp, rlenp);
-	rc = dm_get_fileattr(sid, hanp, hlen, token, mask, statp);
-	rc = dm_get_mountinfo(sid, hanp, hlen, token, buflen, bufp, rlenp);
-	rc = dm_get_region(sid, hanp, hlen, token, nelem, regbufp, nelemp);
-	rc = dm_getall_disp(sid, buflen, bufp, rlenp);
-	rc = dm_getall_dmattr(sid, hanp, hlen, token, buflen, bufp, rlenp);
-	rc = dm_getall_inherit(sid, hanp, hlen,
+	dm_get_eventlist(sid, hanp, hlen, token, nelem, eventsetp, nelemp);
+	dm_get_events(sid, maxmsgs, flags, buflen, bufp, rlenp);
+	dm_get_fileattr(sid, hanp, hlen, token, mask, statp);
+	dm_get_mountinfo(sid, hanp, hlen, token, buflen, bufp, rlenp);
+	dm_get_region(sid, hanp, hlen, token, nelem, regbufp, nelemp);
+	dm_getall_disp(sid, buflen, bufp, rlenp);
+	dm_getall_dmattr(sid, hanp, hlen, token, buflen, bufp, rlenp);
+	dm_getall_inherit(sid, hanp, hlen,
 		token, nelem, inheritbufp, nelemp);
-	rc = dm_getall_sessions(nelem, sidbufp, nelemp);
-	rc = dm_getall_tokens(sid, nelem, tokenbufp, nelemp);
-	rc = dm_handle_cmp(hanp1, hlen1, hanp2, hlen2);
+	dm_getall_sessions(nelem, sidbufp, nelemp);
+	dm_getall_tokens(sid, nelem, tokenbufp, nelemp);
+	dm_handle_cmp(hanp1, hlen1, hanp2, hlen2);
 	dm_handle_free(hanp, hlen);
-	urc = dm_handle_hash(hanp, hlen);
-	rc = dm_handle_is_valid(hanp, hlen);
-	rc = dm_handle_to_fshandle(hanp, hlen, fshanpp, fshlenp);
-	rc = dm_handle_to_fsid(hanp, hlen, fsidp);
-	rc = dm_handle_to_igen(hanp, hlen, igenp);
-	rc = dm_handle_to_ino(hanp, hlen, inop);
-	rc = dm_handle_to_path(dirhanp, dirhlen, targhanp, targhlen, 
+	dm_handle_hash(hanp, hlen);
+	dm_handle_is_valid(hanp, hlen);
+	dm_handle_to_fshandle(hanp, hlen, fshanpp, fshlenp);
+	dm_handle_to_fsid(hanp, hlen, fsidp);
+	dm_handle_to_igen(hanp, hlen, igenp);
+	dm_handle_to_ino(hanp, hlen, inop);
+	dm_handle_to_path(dirhanp, dirhlen, targhanp, targhlen,
 		buflen, pathbufp, rlenp);
-	rc = dm_init_attrloc(sid, hanp, hlen, token, locp);
-	rc = dm_init_service(versionstrpp);
-	rc = dm_make_handle(&fsid, &ino, &igen, hanpp, hlenp);
-	rc = dm_make_fshandle(&fsid, hanpp, hlenp);
-	rc = dm_mkdir_by_handle(sid, dirhanp, dirhlen, token,
+	dm_init_attrloc(sid, hanp, hlen, token, locp);
+	dm_init_service(versionstrpp);
+	dm_make_handle(&fsid, &ino, &igen, hanpp, hlenp);
+	dm_make_fshandle(&fsid, hanpp, hlenp);
+	dm_mkdir_by_handle(sid, dirhanp, dirhlen, token,
 		hanp, hlen, cname); 
-	rc = dm_move_event(sid, token, targetsid, rtokenp);
-	rc = dm_obj_ref_hold(sid, token, hanp, hlen);
-	rc = dm_obj_ref_query(sid, token, hanp, hlen);
-	rc = dm_obj_ref_rele(sid, token, hanp, hlen);
-	rc = dm_path_to_fshandle(path, hanpp, hlenp);
-	rc = dm_path_to_handle(path, hanpp, hlenp);
-	rc = dm_pending(sid, token, delay);
-	rc = dm_probe_hole(sid, hanp, hlen, token, off, len, roffp, dmrlenp);
-	rc = dm_punch_hole(sid, hanp, hlen, token, off, len);
-	rc = dm_query_right(sid, hanp, hlen, token, rightp);
-	rc = dm_query_session(sid, buflen, bufp, rlenp);
-	ssrc = dm_read_invis(sid, hanp, hlen, token, off, len, bufp);
-	rc =  dm_release_right(sid, hanp, hlen, token);
-	rc = dm_remove_dmattr(sid, hanp, hlen, token, setdtime, attrnamep);
-	rc = dm_request_right(sid, hanp, hlen, token, uflags, right);
-	rc = dm_respond_event(sid, token, response, reterror, buflen, respbufp);
-	rc = dm_send_msg(sid, msgtype, buflen, bufp);
-	rc = dm_set_disp(sid, hanp, hlen, token, eventsetp, maxevent);
-	rc = dm_set_dmattr(sid, hanp, hlen,
+	dm_move_event(sid, token, targetsid, rtokenp);
+	dm_obj_ref_hold(sid, token, hanp, hlen);
+	dm_obj_ref_query(sid, token, hanp, hlen);
+	dm_obj_ref_rele(sid, token, hanp, hlen);
+	dm_path_to_fshandle(path, hanpp, hlenp);
+	dm_path_to_handle(path, hanpp, hlenp);
+	dm_pending(sid, token, delay);
+	dm_probe_hole(sid, hanp, hlen, token, off, len, roffp, dmrlenp);
+	dm_punch_hole(sid, hanp, hlen, token, off, len);
+	dm_query_right(sid, hanp, hlen, token, rightp);
+	dm_query_session(sid, buflen, bufp, rlenp);
+	dm_read_invis(sid, hanp, hlen, token, off, len, bufp);
+	 dm_release_right(sid, hanp, hlen, token);
+	dm_remove_dmattr(sid, hanp, hlen, token, setdtime, attrnamep);
+	dm_request_right(sid, hanp, hlen, token, uflags, right);
+	dm_respond_event(sid, token, response, reterror, buflen, respbufp);
+	dm_send_msg(sid, msgtype, buflen, bufp);
+	dm_set_disp(sid, hanp, hlen, token, eventsetp, maxevent);
+	dm_set_dmattr(sid, hanp, hlen,
 		token, attrnamep, setdtime, buflen, bufp);
-	rc = dm_set_eventlist(sid, hanp, hlen, token, eventsetp, maxevent);
-	rc = dm_set_fileattr(sid, hanp, hlen, token, mask, attrp);
-	rc = dm_set_inherit(sid, hanp, hlen, token, attrnamep, mode);
-	rc = dm_set_region(sid, hanp, hlen, token, nelem, regbufp, exactflagp);
-	rc = dm_set_return_on_destroy(sid, hanp, hlen,
+	dm_set_eventlist(sid, hanp, hlen, token, eventsetp, maxevent);
+	dm_set_fileattr(sid, hanp, hlen, token, mask, attrp);
+	dm_set_inherit(sid, hanp, hlen, token, attrnamep, mode);
+	dm_set_region(sid, hanp, hlen, token, nelem, regbufp, exactflagp);
+	dm_set_return_on_destroy(sid, hanp, hlen,
 		token,  attrnamep, enable);
-	rc = dm_symlink_by_handle(sid, dirhanp, dirhlen, token,
+	dm_symlink_by_handle(sid, dirhanp, dirhlen, token,
 		hanp, hlen, cname, path); 
-	rc = dm_sync_by_handle(sid, hanp, hlen, token);
-	rc = dm_upgrade_right(sid, hanp, hlen, token);
-	ssrc = dm_write_invis(sid, hanp, hlen, flags, token, off, len, bufp);
+	dm_sync_by_handle(sid, hanp, hlen, token);
+	dm_upgrade_right(sid, hanp, hlen, token);
+	dm_write_invis(sid, hanp, hlen, flags, token, off, len, bufp);
 	exit(0);
 }

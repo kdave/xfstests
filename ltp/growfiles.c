@@ -62,34 +62,30 @@
 #include "dataascii.h"
 #include "random_range.h"
 #include "databin.h"
+#include "open_flags.h"
+#include "forker.h"
+#include "file_lock.h"
 
+extern int datapidgen(int pid, unsigned char *buffer, int bsize, int offset);
+extern void databingen(int mode, unsigned char *buffer, int bsize, int offset);
+extern int datapidchk(int pid, char *buffer, int bsize, int offset, char **errmsg);
+extern int databinchk(int mode, char *buffer, int bsize, int offset, char **errmsg);
 
-extern char *openflags2symbols();
-
-extern int parse_open_flags();
-extern int background();
-extern int forker();
-extern int datapidgen();
-extern void databingen();
-extern int datapidchk();
-extern int databinchk();
-extern int file_lock();
-
-int file_size();
-int check_write();
-int shrinkfile();
-int check_file();
-int growfile();
+int file_size(int fd);
+int check_write(int fd, int cf_inter, char *filename, int mode);
+int shrinkfile(int fd, char *filename, int trunc_incr, int trunc_inter, int just_trunc);
+int check_file(int fd, int cf_inter, char *filename, int no_file_check);
+int growfile(int fd, char *file, int grow_incr, unsigned char *buf);
 int cleanup();
 int handle_error();
-int lkfile();
+int lkfile(int fd, int operation, int lklevel);
 void usage();
 void help();
-void prt_examples();
+void prt_examples(FILE *stream);
 int set_sig();
 void sig_handler();
 static void notify_others();
-int pre_alloc();
+int pre_alloc(char *file, int fd, int size);
 
 
 #define NEWIO	1	/* Use the tlibio.c functions */
@@ -1223,7 +1219,7 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 		if ( Debug > 3 ) {
 		    printf("%s: %d DEBUG3 %s/%d: %d Open filename = %s, open flags = %#o %s\n",
 			Progname, Pid, __FILE__, __LINE__, Iter_cnt, filename, ret, 
-		        openflags2symbols(ret, ",", NULL));
+		        openflags2symbols(ret, ",", 0));
 		} else if ( Debug > 2 ) {
 		    printf("%s: %d DEBUG3 %s/%d: %d filename = %s, open flags = %#o\n",
 			Progname, Pid, __FILE__, __LINE__, Iter_cnt, filename, ret);
@@ -1269,7 +1265,7 @@ no whole file checking will be performed!\n", Progname, TagName, (int)getpid());
 		 * if we are dealing with a FIFO file.
 		 */
 
-		if (growfile(fd, filename, grow_incr, Buffer) != 0 ) {
+		if (growfile(fd, filename, grow_incr, (unsigned char *)Buffer) != 0 ) {
 			handle_error();
 			lkfile(fd, LOCK_UN, LKLVL1);   /* release lock */
 			close(fd);
@@ -2263,7 +2259,7 @@ int mode;       /* write mode */
 	if ( Debug > 0 )
 	    printf("%s%s: %d DEBUG1 %s/%d: **fd:%d, lk:%d, offset:%d, sz:%d open flags:%#o %s\n",
 		Progname, TagName, Pid, __FILE__, __LINE__, fd, lockfile, 
-		Woffset, Grow_incr, Fileinfo.openflags, openflags2symbols(Fileinfo.openflags, ",", NULL));
+		Woffset, Grow_incr, Fileinfo.openflags, openflags2symbols(Fileinfo.openflags, ",", 0));
 
 	fflush(stderr);
 	return 1;

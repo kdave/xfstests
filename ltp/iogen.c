@@ -132,7 +132,7 @@ int	Fileio = 0;		/* flag indicating that a file		    */
 int	Naio_Strat_Types = 0;	/* # async io completion types		    */
 struct	strmap *Aio_Strat_List[128]; /* Async io completion types	    */
 
-void	startup_info();
+void	startup_info(FILE *stream, int seed);
 
 /*
  * Map async io completion modes (-a args) names to values.  Macros are
@@ -299,7 +299,7 @@ char	**argv;
 void
 startup_info(FILE *stream, int seed)
 {
-    char	*value_to_string(), *type;
+    char	*value_to_string(struct strmap *map, int val), *type;
     int		i;
 
     fprintf(stream, "\n");

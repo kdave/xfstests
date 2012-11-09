@@ -47,7 +47,7 @@ char	**argv;
 	int fd, err, elapsed;
 	char *buf, *goodbuf;
 	time_t starttime;
-        char	ch, *filename="testfile";
+        char *filename="testfile";
  	int c;
 
 if(argc != 3)
@@ -56,7 +56,6 @@ if(argc != 3)
         }
 
 while((c=getopt(argc,argv,"f:"))!=EOF) {
-		ch = (char)c;
 		switch (c) {
 		case 'f':
 			filename = optarg;

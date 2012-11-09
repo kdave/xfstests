@@ -465,7 +465,6 @@ char **errmsg;	/* char pointer that will be updated to point to err message */
 long wrd;	/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
-    char *io_type;		/* Holds string of type of io */
 #ifndef linux
     int omethod = method;
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
@@ -514,10 +513,8 @@ long wrd;	/* to allow future features, use zero for now */
     /*
      * Determine the system call that will be called and produce
      * the string of the system call and place it in Lio_SysCall.
-     * Also update the io_type char pointer to give brief description
-     * of system call.  Execute the system call and check for
-     * system call failure.  If sync i/o, return the number of
-     * bytes written/read.
+     * Execute the system call and check for system call failure.
+     * If sync i/o, return the number of bytes written/read.
      */
      
     if ( (method & LIO_IO_SYNC) || (method & LIO_IO_TYPES) == 0 ){
@@ -528,7 +525,6 @@ long wrd;	/* to allow future features, use zero for now */
 
 	sprintf(Lio_SysCall,
 	    "write(%d, buf, %d)", fd, size);
-	io_type="write";
 
         if ( Debug_level ) {
 	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
@@ -556,7 +552,6 @@ long wrd;	/* to allow future features, use zero for now */
     }
 
     else if ( method & LIO_IO_SYNCV ) {
-	io_type="writev(2)";
 
 	sprintf(Lio_SysCall, 
 		"writev(%d, &iov, 1) nbyte:%d", fd, size);
@@ -667,7 +662,6 @@ char **errmsg;	/* char pointer that will be updated to point to err message */
 long wrd;	/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
-    char *io_type;		/* Holds string of type of io */
 #ifndef linux
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
     int omethod = method;
@@ -716,10 +710,8 @@ long wrd;	/* to allow future features, use zero for now */
     /*
      * Determine the system call that will be called and produce
      * the string of the system call and place it in Lio_SysCall.
-     * Also update the io_type char pointer to give brief description
-     * of system call.  Execute the system call and check for
-     * system call failure.  If sync i/o, return the number of
-     * bytes written/read.
+     * Execute the system call and check for system call failure.
+     * If sync i/o, return the number of bytes written/read.
      */
      
     if ( (method & LIO_IO_SYNC) || (method & LIO_IO_TYPES) == 0 ){
@@ -730,7 +722,6 @@ long wrd;	/* to allow future features, use zero for now */
 
 	sprintf(Lio_SysCall,
 	    "read(%d, buf, %d)", fd, size);
-	io_type="read";
 
         if ( Debug_level ) {
 	    printf("DEBUG %s/%d: %s\n", __FILE__, __LINE__, Lio_SysCall);
@@ -758,7 +749,6 @@ long wrd;	/* to allow future features, use zero for now */
     }
 
     else if ( method & LIO_IO_SYNCV ) {
-	io_type="readv(2)";
 
 	sprintf(Lio_SysCall, 
 		"readv(%d, &iov, 1) nbyte:%d", fd, size);

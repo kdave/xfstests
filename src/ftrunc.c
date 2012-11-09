@@ -30,7 +30,7 @@ int     argc;
 char    **argv;
 
 {
-char    ch, *filename="testfile";
+char *filename="testfile";
 int c;
 int fd, err;
 
@@ -40,7 +40,6 @@ if(argc != 3)
         }
 
 while((c=getopt(argc,argv,"f:"))!=EOF) {
-                ch = (char)c;
                 switch (c) {
                 case 'f':
                         filename = optarg;

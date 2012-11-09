@@ -210,15 +210,16 @@ void	sigbus_handler();	/* Handle sigbus--check active_mmap_rw to
 
 void	cb_handler();		/* Posix aio callback handler. */
 void	noop_handler();		/* Delayop alarm, does nothing. */
-char	*hms();
+char	*hms(time_t  t);
 char	*format_rw();
 char	*format_sds();
 char	*format_listio();
-char	*check_file();
+char	*check_file(char *file, int offset, int length, char *pattern,
+		    int pattern_length, int patshift, int fsa);
 int	doio_fprintf(FILE *stream, char *format, ...);
-void	doio_upanic();
+void	doio_upanic(int mask);
 void	doio();
-void	help();
+void	help(FILE *stream);
 void	doio_delay();
 int     alloc_fd( char *, int );
 int     alloc_mem( int );
@@ -1145,7 +1146,6 @@ struct io_req	*req;
 	static int		pid = -1;
 	int	    	    	fd, nbytes, oflags;
 	/* REFERENCED */
-	int			signo;
 	int	    	    	logged_write, rval, got_lock;
 	long    	    	offset, woffset = 0;
 	char    	    	*addr, pattern, *file, *msg;
@@ -1156,7 +1156,6 @@ struct io_req	*req;
 	 * Misc variable setup
 	 */
 
-	signo   = 0;
 	nbytes	= req->r_data.write.r_nbytes;
 	offset	= req->r_data.write.r_offset;
 	pattern	= req->r_data.write.r_pattern;
@@ -1567,28 +1566,6 @@ fmt_pread(struct io_req *req, struct syscall_info *sy, int fd, char *addr)
 }
 
 struct status *
-sy_readv(req, sysc, fd, addr)
-struct io_req	*req;
-struct syscall_info *sysc;
-int fd;
-char *addr;
-{
-	struct status *sy_rwv();
-	return sy_rwv(req, sysc, fd, addr, 0);
-}
-
-struct status *
-sy_writev(req, sysc, fd, addr)
-struct io_req	*req;
-struct syscall_info *sysc;
-int fd;
-char *addr;
-{
-	struct status *sy_rwv();
-	return sy_rwv(req, sysc, fd, addr, 1);
-}
-
-struct status *
 sy_rwv(req, sysc, fd, addr, rw)
 struct io_req	*req;
 struct syscall_info *sysc;
@@ -1628,6 +1605,26 @@ int rw;
 	return(status);
 }
 
+struct status *
+sy_readv(req, sysc, fd, addr)
+struct io_req	*req;
+struct syscall_info *sysc;
+int fd;
+char *addr;
+{
+	return sy_rwv(req, sysc, fd, addr, 0);
+}
+
+struct status *
+sy_writev(req, sysc, fd, addr)
+struct io_req	*req;
+struct syscall_info *sysc;
+int fd;
+char *addr;
+{
+	return sy_rwv(req, sysc, fd, addr, 1);
+}
+
 char *
 fmt_readv(struct io_req *req, struct syscall_info *sy, int fd, char *addr)
 {
@@ -1638,28 +1635,6 @@ fmt_readv(struct io_req *req, struct syscall_info *sy, int fd, char *addr)
 	cp += sprintf(cp, "syscall:  %s(%d, (iov on stack), 1)\n",
 		      sy->sy_name, fd);
 	return(errbuf);
-}
-
-struct status *
-sy_mmread(req, sysc, fd, addr)
-struct io_req *req;
-struct syscall_info *sysc;
-int fd;
-char *addr;
-{
-	struct status *sy_mmrw();
-	return sy_mmrw(req, sysc, fd, addr, 0);
-}
-
-struct status *
-sy_mmwrite(req, sysc, fd, addr)
-struct io_req *req;
-struct syscall_info *sysc;
-int fd;
-char *addr;
-{
-	struct status *sy_mmrw();
-	return sy_mmrw(req, sysc, fd, addr, 1);
 }
 
 struct status *
@@ -1726,6 +1701,26 @@ int rw;
 	status->rval = req->r_data.io.r_nbytes;
 	status->err = 0;
 	return(status);
+}
+
+struct status *
+sy_mmread(req, sysc, fd, addr)
+struct io_req *req;
+struct syscall_info *sysc;
+int fd;
+char *addr;
+{
+	return sy_mmrw(req, sysc, fd, addr, 0);
+}
+
+struct status *
+sy_mmwrite(req, sysc, fd, addr)
+struct io_req *req;
+struct syscall_info *sysc;
+int fd;
+char *addr;
+{
+	return sy_mmrw(req, sysc, fd, addr, 1);
 }
 
 char *

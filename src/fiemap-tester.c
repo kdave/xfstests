@@ -423,7 +423,7 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfil
 {
 	struct fiemap *fiemap;
 	char *fiebuf;
-	int blocks_to_map, ret, cur_extent = 0, last_data;
+	int blocks_to_map, ret, cur_extent = 0, last_data = 0;
 	__u64 map_start, map_length;
 	int i, c;
 
