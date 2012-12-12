@@ -1,4 +1,4 @@
-AC_INIT([xfstests], [1.1.0])
+AC_INIT([xfstests], [1.1.1])
 AC_PREREQ(2.50)
 AC_CONFIG_SRCDIR([src/xfsctl.c])
 AC_PACKAGE_GLOBALS(xfstests)
