@@ -45,16 +45,18 @@ _supported_fs generic
 _supported_os Linux #IRIX
 _require_scratch
 _require_quota
+_require_user
+_require_group
 
 test_files()
 {
 	echo; echo "### create files, setting up ownership (type=$type)"
 	rm -f $SCRATCH_MNT/{buffer,direct,mmap}
 	touch $SCRATCH_MNT/{buffer,direct,mmap}
-	chown $uid $SCRATCH_MNT/{buffer,direct,mmap}
-	chgrp $gid $SCRATCH_MNT/{buffer,direct,mmap}
+	chown $qa_user $SCRATCH_MNT/{buffer,direct,mmap}
+	chgrp $qa_group $SCRATCH_MNT/{buffer,direct,mmap}
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
-		$here/src/lstat64 $file | head -3 | _filter_scratch
+		$here/src/lstat64 $file | head -2 | _filter_scratch
 	done
 }
 
@@ -91,22 +93,19 @@ test_accounting()
 	echo "--- completed parallel IO ($type)" >>$seq.full
 
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
-		$here/src/lstat64 $file | head -3 | _filter_scratch
+		$here/src/lstat64 $file | head -2 | _filter_scratch
 	done
 
 	if [ $type == 'u' ]; then
-		id=$uid
+		id=$qa_user
 	else
-		id=$gid
+		id=$qa_group
 	fi
-	repquota -$type -n $SCRATCH_MNT  | grep "^#$id" | check_usage 144 3
+	repquota -$type $SCRATCH_MNT | grep "^$id" | check_usage 144 3
 }
 
 # real QA test starts here
 rm -f $seq.full
-
-uid=1
-gid=2
 
 umount $SCRATCH_DEV 2>/dev/null
 _scratch_mkfs >> $seq.full 2>&1
