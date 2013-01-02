@@ -1,0 +1,81 @@
+#! /bin/bash
+# FS QA Test No. 295
+#
+# Test xfs_logprint w/ multiply-logged inodes & continued transactions
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@sandeen.net
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os IRIX Linux
+_require_scratch
+
+rm -f $seq.full
+
+_scratch_mkfs -l size=2560b >/dev/null 2>&1
+
+# Should yield a multiply-logged inode, thanks to xattr
+# Old logprint says this, then coredumps:
+#	xlog_print_trans_inode: illegal inode type
+_scratch_mount
+echo hello > $SCRATCH_MNT/hello; setfattr -n user.name -v value $SCRATCH_MNT/hello
+_scratch_unmount
+_scratch_xfs_logprint 2>&1 >> $seq.full
+
+# Now go for a continued transaction
+# The trick here is to get a transaction which is exactly the size of a
+# xfs_inode_log_format_32_t or xfs_inode_log_format_64_t
+# Prior to the bugfix, this was parsed like an inode due to the size
+# match, not as a continued transaction.  If that happens we'll see:
+#	xfs_logprint: unknown log operation type (494e)
+
+_scratch_mkfs -l size=2560b >/dev/null 2>&1
+_scratch_mount
+for I in `seq 0 8192`; do
+        echo a >> $SCRATCH_MNT/cat
+        touch $SCRATCH_MNT/tmp$I
+done
+_scratch_unmount
+_scratch_xfs_logprint 2>&1 >> $seq.full
+
+# success, all done
+status=0
+exit
