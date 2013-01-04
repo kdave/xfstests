@@ -1,0 +1,83 @@
+#! /bin/bash
+# FS QA Test No. 296
+#
+# Test that xfsdump/restore preserves file capabilities
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@sandeen.net
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.dump
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seq.full
+
+_wipe_fs
+
+mkdir -p $dump_dir
+echo test > $dump_dir/testfile
+# Set a generic xattr
+setfattr -n user.name -v value $dump_dir/testfile
+# Now set the cap (which is also an xattr)
+setcap cap_setgid,cap_setuid+ep $dump_dir/testfile
+# And make sure they are there on the source
+echo "Checking for xattr on source file"
+getfattr --absolute-names -m user.name $dump_dir/testfile | _dir_filter
+echo "Checking for capability on source file"
+getcap $dump_dir/testfile | _dir_filter
+getfattr --absolute-names -m security.capability $dump_dir/testfile | _dir_filter
+
+_do_dump_file -f $tmp.df.0
+_prepare_restore_dir
+_do_restore_file
+# Basic dump/restore checks first - the file is there, right?
+_ls_compare_sub
+_diff_compare
+
+echo "Checking for xattr on restored file"
+getfattr --absolute-names -m user.name $restore_dir/$dump_sdir/testfile | _dir_filter
+echo "Checking for capability on restored file"
+getcap $restore_dir/$dump_sdir/testfile | _dir_filter
+getfattr --absolute-names -m security.capability $restore_dir/$dump_sdir/testfile | _dir_filter
+
+status=0
+exit
