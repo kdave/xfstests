@@ -8,6 +8,9 @@
 version=${PKG_MAJOR}.${PKG_MINOR}.${PKG_REVISION}
 date=`date +"%-d %B %Y"`
 
+echo "Cleaning up"
+make realclean
+
 echo "Updating CHANGES"
 sed -e "s/${version}.*/${version} (${date})/" doc/CHANGES > doc/CHANGES.tmp && \
 	mv doc/CHANGES.tmp doc/CHANGES
@@ -18,6 +21,10 @@ git commit -s -a -m "${version} release"
 echo "Tagging git repository"
 git tag -s -a -m "${version} release" v${version}
 
-echo "Done.  Please remember to push out tags using \"git push --tags\""
-echo "If you wish to create a source tarball, run \"make dist\""
+echo "Making source tarball"
+make dist
 
+echo "Sign the source tarball"
+gpg --detach-sign xfstests-${version}.tar.gz
+
+echo "Done.  Please remember to push out tags using \"git push --tags\""

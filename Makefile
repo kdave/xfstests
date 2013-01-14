@@ -39,12 +39,17 @@ ifeq ($(HAVE_BUILDDEFS), yes)
 include $(TOPDIR)/include/builddefs
 endif
 
+SRCTAR = $(PKG_NAME)-$(PKG_VERSION).tar.gz
+
 TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
 LSRCFILES = configure configure.ac aclocal.m4 README VERSION
 LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
 	conftest* check.log check.time
 
+ifeq ($(HAVE_BUILDDEFS), yes)
+LDIRT += $(SRCTAR)
+endif
 
 LIB_SUBDIRS = include lib
 TOOL_SUBDIRS = ltp src m4
@@ -102,3 +107,18 @@ install-dev install-lib:
 realclean distclean: clean
 	$(Q)rm -f $(LDIRT) $(CONFIGURE)
 	$(Q)rm -rf autom4te.cache Logs
+
+dist: include/builddefs include/config.h default
+ifeq ($(HAVE_BUILDDEFS), no)
+	$(Q)$(MAKE) $(MAKEOPTS) -C . $@
+else
+	$(Q)$(MAKE) $(MAKEOPTS) $(SRCTAR)
+endif
+
+$(SRCTAR) : default
+	$(Q)git archive --prefix=$(PKG_NAME)-$(PKG_VERSION)/ --format=tar \
+	  v$(PKG_VERSION) > $(PKG_NAME)-$(PKG_VERSION).tar
+	$(Q)$(TAR) --transform "s,^,$(PKG_NAME)-$(PKG_VERSION)/," \
+	  -rf $(PKG_NAME)-$(PKG_VERSION).tar $(CONFIGURE)
+	$(Q)$(ZIP) $(PKG_NAME)-$(PKG_VERSION).tar
+	echo Wrote: $@
