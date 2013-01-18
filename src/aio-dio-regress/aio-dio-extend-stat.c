@@ -141,8 +141,7 @@ void fun_read(void *ptr)
 			struct io_event *event = &ioevents[i];
 			if (event->res != BUFSIZE)
 				fail("error in block: expected %d bytes, "
-				     "received %ld\n", BUFSIZE,
-				     event->obj->u.c.nbytes);
+				     "received %ld\n", BUFSIZE, event->res);
 
 			exSize = event->obj->u.c.offset + event->obj->u.c.nbytes;
 			fstat(handle, &filestat);
@@ -164,7 +163,7 @@ void fun_writeN(void *ptr)
 	for(i = 0; i < MAX_AIO_EVENTS; ++i) {
 		ret = io_submit(ctxp, 1, &(iocbs[i]));
 		if (ret != 1)
-			fail("io_subit returned %d instead of 1\n", ret);
+			fail("io_submit returned %d instead of 1\n", ret);
 	}
 }
 
@@ -174,6 +173,6 @@ void fun_write1(void *ptr)
     
 	ret = io_submit(ctxp, MAX_AIO_EVENTS, iocbs);
 	if (ret !=  MAX_AIO_EVENTS)
-		fail("io_subit returned %d instead of %u\n", ret,
+		fail("io_submit returned %d instead of %u\n", ret,
 		     MAX_AIO_EVENTS);
 }
