@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 297
+#
+# Test freeze/unfreeze file system randomly under fsstress
+# Regression test for commit:
+# 437a255 xfs: fix direct IO nested transaction deadlock.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=eguan@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_require_scratch
+_require_freeze
+
+rm -f $seq.full
+_scratch_mkfs_xfs -d agcount=16,su=256k,sw=12 -l su=256k,size=2560b >/dev/null 2>&1
+_scratch_mount >/dev/null 2>&1
+
+STRESS_DIR="$SCRATCH_MNT/testdir"
+mkdir -p $STRESS_DIR
+
+$FSSTRESS_PROG -d $STRESS_DIR -n 100 -p 1000 $FSSTRESS_AVOID >/dev/null 2>&1 &
+
+# Freeze/unfreeze file system randomly
+echo "Start freeze/unfreeze randomly" | tee -a $seq.full
+LOOP=10
+while [ $LOOP -gt 0 ];do
+	TIMEOUT=`expr $RANDOM % 5`
+	sleep $TIMEOUT
+	echo "* Freeze file system after sleeping $TIMEOUT seconds" >>$seq.full
+	xfs_freeze -f $SCRATCH_MNT
+	if [ $? -ne 0 ];then
+		echo " - Error: freeze filesystem failed" | tee -a $seq.full
+	fi
+	TIMEOUT=`expr $RANDOM % 3`
+	sleep $TIMEOUT
+	echo "* Unfreeze file system after sleeping $TIMEOUT seconds" >>$seq.full
+	xfs_freeze -u $SCRATCH_MNT
+	if [ $? -ne 0 ];then
+		echo " - Error: unfreeze filesystem failed" | tee -a $seq.full
+	fi
+	let LOOP=$LOOP-1
+done
+echo "Test done" | tee -a $seq.full
+killall -q $FSSTRESS_PROG
+wait
+
+_check_scratch_fs
+status=0
+exit
