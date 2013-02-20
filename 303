@@ -1,0 +1,153 @@
+#! /bin/bash
+# FSQA Test No. 303
+#
+# Ext4 defragmentation stress test
+# Two defrag tasks use common donor file
+#
+#-----------------------------------------------------------------------
+# (c) 2013 Dmitry Monakhov
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dmonakhov@openvz.org
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+. ./common.defrag
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs ext4
+_need_to_be_root
+_require_scratch
+_require_defrag
+
+BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+# We need space for 3 files (one donor file and two test files)
+# Reserve space for 4 files in order to avoid ENOSPC
+FILE_SIZE=$((BLK_DEV_SIZE * (512 / (3+1))))
+
+cat >$tmp-$seq.fio <<EOF
+# Common e4defrag regression tests
+[global]
+ioengine=ioe_e4defrag
+iodepth=1
+directory=${SCRATCH_MNT}
+filesize=${FILE_SIZE}
+size=999G
+buffered=0
+fadvise_hint=0
+group_reporting
+
+#################################
+# Test3
+# Two defrag tasks use common donor file
+[defrag-1]
+ioengine=e4defrag
+iodepth=1
+bs=128k
+donorname=test3.def
+filename=test31
+inplace=0
+rw=write
+numjobs=${LOAD_FACTOR}
+runtime=30*${TIME_FACTOR}
+time_based
+
+[defrag-2]
+ioengine=e4defrag
+iodepth=1
+bs=128k
+donorname=test3.def
+filename=test32
+inplace=0
+rw=write
+numjobs=${LOAD_FACTOR}
+runtime=30*${TIME_FACTOR}
+time_based
+
+[aio-dio-verifier-1]
+ioengine=libaio
+iodepth=128*${LOAD_FACTOR}
+numjobs=1
+verify=crc32c-intel
+verify_fatal=1
+verify_dump=1
+verify_backlog=1024
+verify_async=1
+verifysort=1
+direct=1
+bs=64k
+rw=write
+filename=test31
+runtime=30*${TIME_FACTOR}
+time_based
+
+[aio-buffer-verifier-2]
+ioengine=libaio
+numjobs=1
+verify=crc32c-intel
+verify_fatal=1
+verify_dump=1
+verify_backlog=1024
+verify_async=1
+verifysort=1
+buffered=1
+bs=64k
+rw=randrw
+filename=test32
+runtime=30*${TIME_FACTOR}
+time_based
+
+EOF
+
+_workout()
+{
+	echo ""
+	echo " Start defragment activity"
+	echo ""
+	cat $tmp-$seq.fio >>  $seq.full
+	run_check $FIO_PROG $tmp-$seq.fio
+}
+
+_require_fio $tmp-$seq.fio
+
+_scratch_mkfs  >> $seq.full 2>&1
+_scratch_mount
+
+if ! _workout; then
+	umount $SCRATCH_DEV 2>/dev/null
+	exit
+fi
+
+if ! _scratch_unmount; then
+	echo "failed to umount"
+	status=1
+	exit
+fi
+_check_scratch_fs
+status=$?
+exit
