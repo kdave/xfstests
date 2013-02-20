@@ -1,0 +1,186 @@
+#! /bin/bash
+# FSQA Test No. 305
+#
+# Run fsstress and fio(dio/aio and mmap) and simulate disk failure
+# check filesystem consistency at the end.
+#
+#-----------------------------------------------------------------------
+# (c) 2013 Dmitry Monakhov
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+# creator
+owner=dmonakhov@openvz.org
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+_supported_fs ext3 ext4 xfs btrfs reiserfs
+_supported_os Linux
+_need_to_be_root
+_require_scratch
+_require_fail_make_request
+
+# TODO: Function are common enough to be moved to common.blkdev
+SCRATCH_REAL_DEV=`readlink -f $SCRATCH_DEV`
+SCRATCH_BDEV=`basename $SCRATCH_REAL_DEV`
+
+allow_fail_make_request()
+{
+    echo "Allow global fail_make_request feature"
+    echo 100 > $DEBUGFS_MNT/fail_make_request/probability
+    echo 9999999 > $DEBUGFS_MNT/fail_make_request/times
+    echo 0 >  /sys/kernel/debug/fail_make_request/verbose
+}
+
+disallow_fail_make_request()
+{
+    echo "Disallow global fail_make_request feature"
+    echo 0 > $DEBUGFS_MNT/fail_make_request/probability
+    echo 0 > $DEBUGFS_MNT/fail_make_request/times
+}
+
+start_fail_scratch_dev()
+{
+    echo "Force SCRATCH_DEV device failure"
+    echo " echo 1 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $here/$seq.full
+    echo 1 > /sys/block/$SCRATCH_BDEV/make-it-fail
+
+}
+
+stop_fail_scratch_dev()
+{
+    echo "Make SCRATCH_DEV device operable again"
+    echo " echo 0 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $here/$seq.full
+    echo 0 > /sys/block/$SCRATCH_BDEV/make-it-fail
+
+}
+
+_cleanup()
+{
+    poweron_scratch_dev
+    disallow_fail_make_request
+}
+trap "_cleanup; exit \$status" 1 2 3 15
+
+RUN_TIME=$((20+10*$TIME_FACTOR))
+NUM_JOBS=$((4*LOAD_FACTOR))
+BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+FILE_SIZE=$((BLK_DEV_SIZE * 512))
+
+cat >$tmp-$seq.fio <<EOF
+###########
+# $seq test's fio activity
+# Filenames derived from jobsname and jobid like follows:
+# ${JOB_NAME}.${JOB_ID}.${ITERATION_ID}
+[global]
+ioengine=libaio
+bs=4k
+directory=${SCRATCH_MNT}
+filesize=${FILE_SIZE}
+size=9999T
+continue_on_error=write
+ignore_error=EIO,ENOSPC:EIO
+error_dump=0
+
+[stress_dio_aio_activity]
+create_on_open=1
+fallocate=none
+iodepth=128*${LOAD_FACTOR}
+direct=1
+buffered=0
+numjobs=${NUM_JOBS}
+rw=randwrite
+runtime=40+${RUN_TIME}
+time_based
+
+[stress_mmap_activity]
+ioengine=mmap
+create_on_open=0
+fallocate=1
+fdatasync=40960
+filesize=8M
+size=9999T
+numjobs=${NUM_JOBS}
+rw=randwrite
+runtime=40+${RUN_TIME}
+time_based
+
+EOF
+
+_require_fio $tmp-$seq.fio
+
+# Disable all sync operations to get higher load
+FSSTRESS_AVOID="$FSSTRESS_AVOID -ffsync=0 -fsync=0 -ffdatasync=0 -f setattr=1"
+
+_workout()
+{
+	out=$SCRATCH_MNT/fsstress.$$
+	args=`_scale_fsstress_args -p 1 -n999999999 -f setattr=0 $FSSTRESS_AVOID -d $out`
+	echo ""
+	echo "Start fsstress.."
+	echo ""
+	echo "fsstress $args" >> $here/$seq.full
+	$FSSTRESS_PROG $args > /dev/null 2>&1 &
+	fs_pid=$!
+	echo "Start fio.."
+	cat $tmp-$seq.fio >>  $seq.full
+	$FIO_PROG $tmp-$seq.fio >> $here/$seq.full 2>&1 &
+	fio_pid=$!
+
+	# Let's it work for awhile, and force device failure
+	sleep $RUN_TIME
+	start_fail_scratch_dev
+	# After device turns in to failed state filesystem may yet not know about
+	# that so buffered write(2) may succeed, but any integrity operations
+	# such as (sync, fsync, fdatasync, direct-io) should fail.
+	dd if=/dev/zero of=$SCRATCH_MNT/touch_failed_filesystem count=1 bs=4k conv=fsync \
+	    >> $here/$seq.full 2>&1 && \
+	    _fail "failed: still able to perform integrity fsync on $SCRATCH_MNT"
+
+	kill $fs_pid
+	wait $fs_pid
+	wait $fio_pid
+
+	# We expect that broken FS still can be umounted
+	run_check umount $SCRATCH_DEV
+	# Once filesystem was umounted no one is able to write to block device
+	# It is now safe to bring device back to normal state
+	stop_fail_scratch_dev
+
+	# In order to check that filesystem is able to recover journal on mount(2)
+	# perform mount/umount, after that all errors should be fixed
+	run_check _scratch_mount
+	run_check _scratch_unmount
+	_check_scratch_fs
+}
+
+# real QA test starts here
+
+_scratch_mkfs >> $here/$seq.full 2>&1 || _fail "mkfs failed"
+_scratch_mount || _fail "mount failed"
+allow_fail_make_request
+_workout
+status=$?
+disallow_fail_make_request
+exit
