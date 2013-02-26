@@ -26,7 +26,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef O_DIRECT
 #define O_DIRECT	040000
+#endif
 
 #define WAITTIME	60
 #define BUFSIZE		4096
@@ -82,7 +84,7 @@ while((c=getopt(argc,argv,"f:"))!=EOF) {
 
 	printf("direct write of 1's into file\n");	
 	err = write(fd, buf, BUFSIZE);
-	if (err < 0) perror("buffered write failed");
+	if (err < 0) perror("direct write failed");
 
 	close(fd);
 	
@@ -96,7 +98,7 @@ while((c=getopt(argc,argv,"f:"))!=EOF) {
 
 	printf("buffered write of 2's into file\n");	
 	err = write(fd, buf, BUFSIZE);
-	if (err < 0) perror("direct write failed");
+	if (err < 0) perror("buffered write failed");
 
 	/* 1 now on disk, but 2 data is buffered */
 
