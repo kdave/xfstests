@@ -1,0 +1,60 @@
+# Filters for btrfs command output
+
+. ./common.filter
+
+# Some, but not all, commands emit "Btrfs <version>"
+_filter_btrfs_version()
+{
+	sed -e "s/^Btrfs.*//g"
+}
+
+_filter_devid()
+{
+	sed -e "s/\(devid\s\+\)[0-9]\+/\1 <DEVID>/g"
+}
+
+# If passed a number as first arg, filter that number of devices
+# If passed a UUID as second arg, filter that exact UUID
+_filter_btrfs_filesystem_show()
+{
+	if [ ! -z $1 ]; then
+		NUMDEVS=$1
+		NUM_SUBST="<EXACTNUM>"
+	else
+		NUMDEVS="[0-9]\+"
+		NUM_SUBST="<NUM>"
+	fi
+
+	UUID=""
+	if [ ! -z $2 ]; then
+		UUID=$2
+	fi
+
+	# the uniq collapses all device lines into 1
+	_filter_uuid $UUID | _filter_scratch | _filter_scratch_pool | \
+	_filter_size | _filter_btrfs_version | _filter_devid | \
+	sed -e "s/\(Total devices\) $NUMDEVS/\1 $NUM_SUBST/g" | \
+	uniq
+}
+
+# This eliminates all numbers, and shows only unique lines,
+# to accomodate a varying nr. of devices.
+# If given an argument, make sure we saw that many devices
+# in total.
+_filter_btrfs_device_stats()
+{
+	if [ ! -z $1 ]; then
+		NUMDEVS=$1
+		UNIQ_OPT="-c"
+	else
+		NUMDEVS="thiswillnotmatch"
+		UNIQ_OPT=""
+	fi
+
+	_filter_scratch | _filter_scratch_pool | \
+	sed -e "s/[0-9]\+$/<NUM>/g" | sort | uniq $UNIQ_OPT | \
+	sed -e "s/$NUMDEVS /<NUMDEVS> /g"
+}
+
+# make sure this script returns success
+/bin/true
