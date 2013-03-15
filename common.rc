@@ -1273,19 +1273,17 @@ _check_xfs_filesystem()
     extra_mount_options=""
     device=$1
     if [ "$2" != "none" ]; then
-       	extra_log_options="-l$2"
+	extra_log_options="-l$2"
         extra_mount_options="-ologdev=$2"
     fi
 
     if [ "$3" != "none" ]; then
-       	extra_rt_options="-r$3"
+	extra_rt_options="-r$3"
         extra_mount_options=$extra_mount_options" -ortdev=$3"
     fi
     extra_mount_options=$extra_mount_options" $MOUNT_OPTIONS"
 
     [ "$FSTYP" != xfs ] && return 0
-    testoption=""
-    [ "$LARGE_SCRATCH_DEV" = yes ] && testoption=-t
 
     type=`_fs_type $device`
     ok=1
@@ -1310,8 +1308,13 @@ _check_xfs_filesystem()
         ok=0
     fi
 
-    $XFS_CHECK_PROG $testoption $extra_log_options $device 2>&1 |\
-	 _fix_malloc >$tmp.fs_check
+    # xfs_check runs out of memory on large files, so even providing the test
+    # option (-t) to avoid indexing the free space trees doesn't make it pass on
+    # large filesystems. Avoid it.
+    if [ "$LARGE_SCRATCH_DEV" != yes ]; then
+	    $XFS_CHECK_PROG $extra_log_options $device 2>&1 |\
+		 _fix_malloc >$tmp.fs_check
+    fi
     if [ -s $tmp.fs_check ]
     then
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent (c) (see $seq.full)"
@@ -1323,8 +1326,7 @@ _check_xfs_filesystem()
 
         ok=0
     fi
-    # repair doesn't scale massively at this stage, optionally skip it for now
-    [ "$LARGE_SCRATCH_DEV" = yes ] || \
+
     $XFS_REPAIR_PROG -n $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
