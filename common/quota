@@ -96,8 +96,8 @@ _file_as_id()
 
     parent=`dirname $1`
     if [ $3 = p ]; then
-	echo PARENT: xfs_io -r -c "chproj $2" -c "chattr +P" $parent >>$RESULT_DIR/$seq.full
-	$XFS_IO_PROG -r -c "chproj $2" -c "chattr +P" $parent >>$RESULT_DIR/$seq.full 2>&1
+	echo PARENT: xfs_io -r -c "chproj $2" -c "chattr +P" $parent >>$seqres.full
+	$XFS_IO_PROG -r -c "chproj $2" -c "chattr +P" $parent >>$seqres.full 2>&1
 	magik='$>'	# (irrelevent, above set projid-inherit-on-parent)
     elif [ $3 = u ]; then
 	magik='$>'	# perlspeak for effective uid
@@ -107,7 +107,7 @@ _file_as_id()
 	_notrun "broken type in call to _file_as_id in test $seq"
     fi
 
-    perl <<EOF >>$RESULT_DIR/$seq.full 2>&1
+    perl <<EOF >>$seqres.full 2>&1
 	\$| = 1;
 	$magik = $2;
 	if ($5 == 0) {
@@ -119,11 +119,11 @@ _file_as_id()
 	}
 EOF
 # for debugging the above euid change, try... [need write in cwd]
-#	exec "dd if=/dev/zero of=$1 bs=$4 count=$5 >>$RESULT_DIR/$seq.full 2>&1";
+#	exec "dd if=/dev/zero of=$1 bs=$4 count=$5 >>$seqres.full 2>&1";
 
     if [ $3 = p ]; then
-	echo PARENT: xfs_io -r -c "chproj 0" -c "chattr -P" $parent >>$RESULT_DIR/$seq.full
-	$XFS_IO_PROG -r -c "chproj 0" -c "chattr -P" $parent >>$RESULT_DIR/$seq.full 2>&1
+	echo PARENT: xfs_io -r -c "chproj 0" -c "chattr -P" $parent >>$seqres.full
+	$XFS_IO_PROG -r -c "chproj 0" -c "chattr -P" $parent >>$seqres.full 2>&1
     fi
 }
 
@@ -198,8 +198,8 @@ _qsetup()
 	_notrun "No quota support at mount time"
     fi
 
-    echo "Using output from '" `ls -l $seq.out` "'" >>$RESULT_DIR/$seq.full
-    echo "and using type=$type id=$id" >>$RESULT_DIR/$seq.full
+    echo "Using output from '" `ls -l $seq.out` "'" >>$seqres.full
+    echo "and using type=$type id=$id" >>$seqres.full
 }
 
 #
@@ -229,7 +229,7 @@ _qmount_option()
 
 	# Ensure we have the given quota option - duplicates are fine
 	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $1"
-	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$RESULT_DIR/$seq.full
+	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seqres.full
 }
 
 _check_quota_usage()

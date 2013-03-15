@@ -64,7 +64,7 @@ disallow_fail_make_request()
 start_fail_scratch_dev()
 {
     echo "Force SCRATCH_DEV device failure"
-    echo " echo 1 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $here/$seqres.full
+    echo " echo 1 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $seqres.full
     echo 1 > /sys/block/$SCRATCH_BDEV/make-it-fail
 
 }
@@ -72,7 +72,7 @@ start_fail_scratch_dev()
 stop_fail_scratch_dev()
 {
     echo "Make SCRATCH_DEV device operable again"
-    echo " echo 0 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $here/$seqres.full
+    echo " echo 0 > /sys/block/$SCRATCH_BDEV/make-it-fail" >> $seqres.full
     echo 0 > /sys/block/$SCRATCH_BDEV/make-it-fail
 
 }
@@ -141,12 +141,12 @@ _workout()
 	echo ""
 	echo "Start fsstress.."
 	echo ""
-	echo "fsstress $args" >> $here/$seqres.full
+	echo "fsstress $args" >> $seqres.full
 	$FSSTRESS_PROG $args > /dev/null 2>&1 &
 	fs_pid=$!
 	echo "Start fio.."
 	cat $tmp-$seq.fio >>  $seqres.full
-	$FIO_PROG $tmp-$seq.fio >> $here/$seqres.full 2>&1 &
+	$FIO_PROG $tmp-$seq.fio >> $seqres.full 2>&1 &
 	fio_pid=$!
 
 	# Let's it work for awhile, and force device failure
@@ -156,7 +156,7 @@ _workout()
 	# that so buffered write(2) may succeed, but any integrity operations
 	# such as (sync, fsync, fdatasync, direct-io) should fail.
 	dd if=/dev/zero of=$SCRATCH_MNT/touch_failed_filesystem count=1 bs=4k conv=fsync \
-	    >> $here/$seqres.full 2>&1 && \
+	    >> $seqres.full 2>&1 && \
 	    _fail "failed: still able to perform integrity fsync on $SCRATCH_MNT"
 
 	kill $fs_pid
@@ -178,7 +178,7 @@ _workout()
 
 # real QA test starts here
 
-_scratch_mkfs >> $here/$seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount || _fail "mount failed"
 allow_fail_make_request
 _workout

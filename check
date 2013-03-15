@@ -36,24 +36,37 @@ here=`pwd`
 FSTYP=xfs
 xfile=""
 
-SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
-SRC_GROUPS="generic shared"
-export SRC_DIR="tests"
-export RESULT_BASE=${RESULT_BASE:="results"}
-
-# generic initialization
+# start the initialisation work now
 iam=check
 
+export MSGVERB="text:action"
 export QA_CHECK_FS=${QA_CHECK_FS:=true}
-
-# by default don't output timestamps
-timestamp=${TIMESTAMP:=false}
 
 # number of diff lines from a failed test, 0 for whole output
 export DIFF_LENGTH=${DIFF_LENGTH:=10}
 
 # by default don't output timestamps
 timestamp=${TIMESTAMP:=false}
+
+rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist
+
+# Autodetect fs type based on what's on $TEST_DEV
+if [ "$HOSTOS" == "Linux" ]; then
+    FSTYP=`blkid -c /dev/null -s TYPE -o value $TEST_DEV`
+fi
+export FSTYP
+
+# we need common.config
+if ! . ./common/config
+then
+    echo "$iam: failed to source common/config"
+    exit 1
+fi
+
+SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
+SRC_GROUPS="generic shared"
+export SRC_DIR="tests"
+export RESULT_BASE=${RESULT_BASE:="$here/results"}
 
 usage()
 {
@@ -77,12 +90,6 @@ testlist options
     [testlist]		include tests matching names in testlist
 '
 	    exit 0
-}
-
-_setenvironment()
-{
-    MSGVERB="text:action"
-    export MSGVERB
 }
 
 get_group_list()
@@ -146,24 +153,6 @@ _timestamp()
     now=`date "+%T"`
     echo -n " [$now]"
 }
-
-# start the initialisation work now
-_setenvironment
-
-rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist
-
-# Autodetect fs type based on what's on $TEST_DEV
-if [ "$HOSTOS" == "Linux" ]; then
-    FSTYP=`blkid -c /dev/null -s TYPE -o value $TEST_DEV`
-fi
-export FSTYP
-
-# we need common.config
-if ! . ./common/config
-then
-    echo "$iam: failed to source common/config"
-    exit 1
-fi
 
 # Process command arguments first.
 while [ $# -gt 0 ]; do
