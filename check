@@ -36,8 +36,9 @@ here=`pwd`
 FSTYP=xfs
 
 SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
-SRC_DIR="tests"
 SRC_GROUPS="generic shared"
+export SRC_DIR="tests"
+export RESULT_BASE=${RESULT_BASE:="results"}
 
 # generic initialization
 iam=check
@@ -374,6 +375,12 @@ if [ ! -z "$SCRATCH_DEV" ]; then
   fi
 fi
 
+mkdir -p $RESULT_BASE
+if [ ! -d $RESULT_BASE ]; then
+	echo "failed to create results directory $RESULTS_BASE"
+	exit 1;
+fi
+
 seq="check"
 _check_test_fs
 
@@ -384,6 +391,13 @@ do
     # the filename for the test and the name output are different.
     # we don't include the tests/ directory in the name output.
     seqnum=`echo $seq | sed -e "s;$SRC_DIR/;;"`
+
+    # Similarly, the result directory needs to replace the tests/
+    # part of the test location.
+    group=`dirname $seq`
+    export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;$RESULT_BASE;"`
+    mkdir -p $RESULT_DIR
+    seqres="$RESULT_BASE/$seqnum"
 
     echo -n "$seqnum"
 
@@ -397,7 +411,7 @@ do
     else
 	# really going to try and run this one
 	#
-	rm -f $seq.out.bad
+	rm -f $seqres.out.bad
 
 	# slashes now in names, sed barfs on them so use grep
 	lasttime=`grep -w ^$seq check.time | awk '// {print $2}'`
@@ -406,7 +420,7 @@ do
 	else
 		echo -n "	"	# prettier output with timestamps.
 	fi
-	rm -f core $seq.notrun
+	rm -f core $seqres.notrun
 
 	start=`_wallclock`
 	$timestamp && echo -n "	["`date "+%T"`"]"
@@ -423,15 +437,15 @@ do
 	if [ -f core ]
 	then
 	    echo -n " [dumped core]"
-	    mv core $seq.core
+	    mv core $RESULT_BASE/$seqnum.core
 	    err=true
 	fi
 
-	if [ -f $seq.notrun ]
+	if [ -f $seqres.notrun ]
 	then
 	    $timestamp || echo -n " [not run] "
 	    $timestamp && echo " [not run]" && echo -n "	$seqnum -- "
-	    cat $seq.notrun
+	    cat $seqres.notrun
 	    notrun="$notrun $seqnum"
 	else
 	    if [ $sts -ne 0 ]
@@ -455,9 +469,9 @@ do
 		    fi
 		    echo ""
 		else
-		    echo " - output mismatch (see $seq.out.bad)"
-		    mv $tmp.out $seq.out.bad
-		    $diff $seq.out $seq.out.bad | {
+		    echo " - output mismatch (see $seqres.out.bad)"
+		    mv $tmp.out $seqres.out.bad
+		    $diff $seq.out $seqres.out.bad | {
 		        if test "$DIFF_LENGTH" -le 0; then
 				cat
 			else
@@ -465,7 +479,7 @@ do
 			fi; } | \
 			sed -e 's/^\(.\)/    \1/'
 		    echo "     ..."
-		    echo "     (Run '$diff $seq.out $seq.out.bad' to see the" \
+		    echo "     (Run '$diff $seq.out $seqres.out.bad' to see the" \
 			 "entire diff)"
 		    err=true
 		fi
@@ -482,13 +496,13 @@ do
 	n_bad=`expr $n_bad + 1`
 	quick=false
     fi
-    if [ ! -f $seq.notrun ]
+    if [ ! -f $seqres.notrun ]
     then
 	try="$try $seqnum"
 	n_try=`expr $n_try + 1`
         _check_test_fs
     fi
-    
+
     seq="after_$seqnum"
 done
 

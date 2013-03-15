@@ -358,9 +358,9 @@ _scratch_mkfs_xfs()
 
     if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
         echo "** mkfs failed with extra mkfs options added to \"$MKFS_OPTIONS\" by test $seq **" \
-            >>$here/$seq.full
+            >>$RESULT_DIR/$seq.full
         echo "** attempting to mkfs using only test $seq options: $extra_mkfs_options **" \
-            >>$here/$seq.full
+            >>$RESULT_DIR/$seq.full
         # running mkfs again. overwrite previous mkfs output files
         $MKFS_XFS_PROG $SCRATCH_OPTIONS $extra_mkfs_options $SCRATCH_DEV \
             2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
@@ -796,7 +796,7 @@ _is_block_dev()
     fi
 }
 
-# Do a command, log it to $seq.full, optionally test return status
+# Do a command, log it to $RESULT_DIR/$seq.full, optionally test return status
 # and die if command fails. If called with one argument _do executes the
 # command, logs it, and returns its exit status. With two arguments _do
 # first prints the message passed in the first argument, and then "done"
@@ -804,7 +804,7 @@ _is_block_dev()
 # second argument. If the command fails and the variable _do_die_on_error
 # is set to "always" or the two argument form is used and _do_die_on_error
 # is set to "message_only" _do will print an error message to
-# $seq.out and exit.
+# $RESULT_DIR/$seq.out and exit.
 
 _do()
 {
@@ -819,9 +819,9 @@ _do()
 	status=1; exit
     fi
 
-    (eval "echo '---' \"$_cmd\"") >>$here/$seq.full
+    (eval "echo '---' \"$_cmd\"") >>$RESULT_DIR/$seq.full
     (eval "$_cmd") >$tmp._out 2>&1; ret=$?
-    cat $tmp._out | _fix_malloc >>$here/$seq.full
+    cat $tmp._out | _fix_malloc >>$RESULT_DIR/$seq.full
     if [ $# -eq 2 ]; then
 	if [ $ret -eq 0 ]; then
 	    echo "done"
@@ -834,7 +834,7 @@ _do()
 	    -o \( $# -eq 2 -a "$_do_die_on_error" = "message_only" \) ]
     then
 	[ $# -ne 2 ] && echo
-	eval "echo \"$_cmd\" failed \(returned $ret\): see $seq.full"
+	eval "echo \"$_cmd\" failed \(returned $ret\): see $RESULT_DIR/$seq.full"
 	status=1; exit
     fi
 
@@ -845,7 +845,7 @@ _do()
 #
 _notrun()
 {
-    echo "$*" >$seq.notrun
+    echo "$*" > $RESULT_DIR/$seq.notrun
     echo "$seq not run: $*"
     status=0
     exit
@@ -855,8 +855,8 @@ _notrun()
 #
 _fail()
 {
-    echo "$*" | tee -a $here/$seq.full
-    echo "(see $seq.full for details)"
+    echo "$*" | tee -a $RESULT_DIR/$seq.full
+    echo "(see $RESULT_DIR/$seq.full for details)"
     status=1
     exit 1
 }
@@ -1343,12 +1343,12 @@ _check_generic_filesystem()
     fsck -t $FSTYP $FSCK_OPTIONS $device >$tmp.fsck 2>&1
     if [ $? -ne 0 ]
     then
-        echo "_check_generic_filesystem: filesystem on $device is inconsistent (see $seq.full)"
+        echo "_check_generic_filesystem: filesystem on $device is inconsistent (see $RESULT_DIR/$seq.full)"
 
-        echo "_check_generic filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
-        echo "*** fsck.$FSTYP output ***"                     >>$here/$seq.full
-        cat $tmp.fsck                                         >>$here/$seq.full
-        echo "*** end fsck.$FSTYP output"                     >>$here/$seq.full
+        echo "_check_generic filesystem: filesystem on $device is inconsistent" >>$RESULT_DIR/$seq.full
+        echo "*** fsck.$FSTYP output ***"	>>$RESULT_DIR/$seq.full
+        cat $tmp.fsck				>>$RESULT_DIR/$seq.full
+        echo "*** end fsck.$FSTYP output"	>>$RESULT_DIR/$seq.full
 
         ok=0
     fi
@@ -1356,9 +1356,9 @@ _check_generic_filesystem()
 
     if [ $ok -eq 0 ]
     then
-        echo "*** mount output ***"                             >>$here/$seq.full
-        _mount                                                  >>$here/$seq.full
-        echo "*** end mount output"                             >>$here/$seq.full
+        echo "*** mount output ***"		>>$RESULT_DIR/$seq.full
+        _mount					>>$RESULT_DIR/$seq.full
+        echo "*** end mount output"		>>$RESULT_DIR/$seq.full
     elif [ "$type" = "$FSTYP" ]
     then
 	# was mounted ...
@@ -1412,12 +1412,12 @@ _check_xfs_filesystem()
                 | tee $tmp.logprint | grep -q "<CLEAN>"
     if [ $? -ne 0 -a "$HOSTOS" = "Linux" ]
     then
-        echo "_check_xfs_filesystem: filesystem on $device has dirty log (see $seq.full)"
+        echo "_check_xfs_filesystem: filesystem on $device has dirty log (see $RESULT_DIR/$seq.full)"
 
-        echo "_check_xfs_filesystem: filesystem on $device has dirty log"   >>$here/$seq.full
-        echo "*** xfs_logprint -t output ***"                   >>$here/$seq.full
-        cat $tmp.logprint                                       >>$here/$seq.full
-        echo "*** end xfs_logprint output"                      >>$here/$seq.full
+        echo "_check_xfs_filesystem: filesystem on $device has dirty log"   >>$RESULT_DIR/$seq.full
+        echo "*** xfs_logprint -t output ***"	>>$RESULT_DIR/$seq.full
+        cat $tmp.logprint			>>$RESULT_DIR/$seq.full
+        echo "*** end xfs_logprint output"	>>$RESULT_DIR/$seq.full
 
         ok=0
     fi
@@ -1431,12 +1431,12 @@ _check_xfs_filesystem()
     fi
     if [ -s $tmp.fs_check ]
     then
-        echo "_check_xfs_filesystem: filesystem on $device is inconsistent (c) (see $seq.full)"
+        echo "_check_xfs_filesystem: filesystem on $device is inconsistent (c) (see $RESULT_DIR/$seq.full)"
 
-        echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
-        echo "*** xfs_check output ***"                         >>$here/$seq.full
-        cat $tmp.fs_check                                       >>$here/$seq.full
-        echo "*** end xfs_check output"                         >>$here/$seq.full
+        echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$RESULT_DIR/$seq.full
+        echo "*** xfs_check output ***"		>>$RESULT_DIR/$seq.full
+        cat $tmp.fs_check			>>$RESULT_DIR/$seq.full
+        echo "*** end xfs_check output"		>>$RESULT_DIR/$seq.full
 
         ok=0
     fi
@@ -1444,12 +1444,12 @@ _check_xfs_filesystem()
     $XFS_REPAIR_PROG -n $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
-        echo "_check_xfs_filesystem: filesystem on $device is inconsistent (r) (see $seq.full)"
+        echo "_check_xfs_filesystem: filesystem on $device is inconsistent (r) (see $RESULT_DIR/$seq.full)"
 
-        echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
-        echo "*** xfs_repair -n output ***"                     >>$here/$seq.full
-        cat $tmp.repair | _fix_malloc                           >>$here/$seq.full
-        echo "*** end xfs_repair output"                        >>$here/$seq.full
+        echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$RESULT_DIR/$seq.full
+        echo "*** xfs_repair -n output ***"	>>$RESULT_DIR/$seq.full
+        cat $tmp.repair | _fix_malloc		>>$RESULT_DIR/$seq.full
+        echo "*** end xfs_repair output"	>>$RESULT_DIR/$seq.full
 
         ok=0
     fi
@@ -1457,9 +1457,9 @@ _check_xfs_filesystem()
 
     if [ $ok -eq 0 ]
     then
-        echo "*** mount output ***"                             >>$here/$seq.full
-        _mount                                                  >>$here/$seq.full
-        echo "*** end mount output"                             >>$here/$seq.full
+        echo "*** mount output ***"		>>$RESULT_DIR/$seq.full
+        _mount					>>$RESULT_DIR/$seq.full
+        echo "*** end mount output"		>>$RESULT_DIR/$seq.full
     elif [ "$type" = "xfs" ]
     then
 	_mount_or_remount_rw "$extra_mount_options" $device $mountpoint
@@ -1507,12 +1507,12 @@ _check_udf_filesystem()
         OPT_ARG="-lastvalidblock $LAST_BLOCK"
     fi
 
-    rm -f $seq.checkfs
+    rm -f $RESULT_DIR/$seq.checkfs
     sleep 1 # Due to a problem with time stamps in udf_test
-    $here/src/udf_test $OPT_ARG $device | tee $here/$seq.checkfs | egrep "Error|Warning" | \
+    $here/src/udf_test $OPT_ARG $device | tee $RESULT_DIR/$seq.checkfs | egrep "Error|Warning" | \
 	_udf_test_known_error_filter | \
 	egrep -iv "Error count:.*[0-9]+.*total occurrences:.*[0-9]+|Warning count:.*[0-9]+.*total occurrences:.*[0-9]+" | \
-	sed "s/^.*$/Warning UDF Verifier reported errors see $seq.checkfs./g"
+	sed "s/^.*$/Warning UDF Verifier reported errors see $RESULT_DIR/$seq.checkfs./g"
 
 }
 
@@ -1553,12 +1553,12 @@ _check_btrfs_filesystem()
     btrfsck $device >$tmp.fsck 2>&1
     if [ $? -ne 0 ]
     then
-        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $seq.full)"
+        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $RESULT_DIR/$seq.full)"
 
-        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent" >>$here/$seq.full
-        echo "*** fsck.$FSTYP output ***"                     >>$here/$seq.full
-        cat $tmp.fsck                                         >>$here/$seq.full
-        echo "*** end fsck.$FSTYP output"                     >>$here/$seq.full
+        echo "_check_btrfs_filesystem: filesystem on $device is inconsistent" >>$RESULT_DIR/$seq.full
+        echo "*** fsck.$FSTYP output ***"	>>$RESULT_DIR/$seq.full
+        cat $tmp.fsck				>>$RESULT_DIR/$seq.full
+        echo "*** end fsck.$FSTYP output"	>>$RESULT_DIR/$seq.full
 
         ok=0
     fi
@@ -1566,9 +1566,9 @@ _check_btrfs_filesystem()
 
     if [ $ok -eq 0 ]
     then
-        echo "*** mount output ***"                             >>$here/$seq.full
-        _mount                                                  >>$here/$seq.full
-        echo "*** end mount output"                             >>$here/$seq.full
+        echo "*** mount output ***"		>>$RESULT_DIR/$seq.full
+        _mount					>>$RESULT_DIR/$seq.full
+        echo "*** end mount output"		>>$RESULT_DIR/$seq.full
     elif [ "$type" = "$FSTYP" ]
     then
 	# was mounted ...
@@ -2053,8 +2053,8 @@ _scale_fsstress_args()
 
 run_check()
 {
-	echo "# $@" >> $seq.full 2>&1
-	"$@" >> $seq.full 2>&1 || _fail "failed: '$@'"
+	echo "# $@" >> $RESULT_DIR/$seq.full 2>&1
+	"$@" >> $RESULT_DIR/$seq.full 2>&1 || _fail "failed: '$@'"
 }
 
 ################################################################################

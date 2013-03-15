@@ -20,7 +20,7 @@
 #
 
 # --- initializations ---
-rm -f $here/$seq.full
+rm -f $RESULT_DIR/$seq.full
 
 if [ -n "$DEBUGDUMP" ]; then
 	_dump_debug=-v4
@@ -125,7 +125,7 @@ _check_onl()
     _limit=10
     i=0
     while [ $i -lt $_limit ]; do
-        echo "Checking online..." >>$here/$seq.full
+        echo "Checking online..." >>$RESULT_DIR/$seq.full
 	if _mt status >$tmp.status 2>&1; then
 	    break;
 	else
@@ -159,12 +159,12 @@ _check_onl()
 
 _wait_tape()
 {
-    echo "Wait for tape, $dumptape, ..." >>$here/$seq.full
+    echo "Wait for tape, $dumptape, ..." >>$RESULT_DIR/$seq.full
 
     i=0
     while [ $i -lt 20 ]; do
-        echo "Checking status..." >>$here/$seq.full
-	if _mt status 2>&1 | tee -a $here/$seq.full | egrep -i "onl|ready" >/dev/null; then
+        echo "Checking status..." >>$RESULT_DIR/$seq.full
+	if _mt status 2>&1 | tee -a $RESULT_DIR/$seq.full | egrep -i "onl|ready" >/dev/null; then
 	    break;
 	else
 	    sleep 1
@@ -178,7 +178,7 @@ _wait_tape()
 #
 _rewind()
 {
-    echo "Initiate rewind..." >>$here/$seq.full
+    echo "Initiate rewind..." >>$RESULT_DIR/$seq.full
     _wait_tape
     _mt rewind >/dev/null
     _wait_tape
@@ -191,7 +191,7 @@ _rewind()
 #
 _erase_soft()
 {
-    echo "Erasing tape" | tee -a $here/$seq.full
+    echo "Erasing tape" | tee -a $RESULT_DIR/$seq.full
     _rewind
     _mt weof 3
     _rewind
@@ -199,7 +199,7 @@ _erase_soft()
 
 _erase_hard()
 {
-    echo "Erasing tape" | tee -a $here/$seq.full
+    echo "Erasing tape" | tee -a $RESULT_DIR/$seq.full
     _mt erase
 }
 
@@ -230,7 +230,7 @@ _require_tape()
 
     if [ -z "$dumptape" -o "@" == "$dumptape" ]; then
         echo "This test requires a dump tape - none was specified"
-	echo "No dump tape specified" >$seq.notrun
+	echo "No dump tape specified" >$RESULT_DIR/$seq.notrun
 	status=$NOTRUNSTS
 	exit
     fi
@@ -243,8 +243,8 @@ _wipe_fs()
 {
     _require_scratch
 
-    _scratch_mkfs_xfs >>$here/$seq.full || _fail "mkfs failed"
-    _scratch_mount >>$here/$seq.full || _fail "mount failed"
+    _scratch_mkfs_xfs >>$RESULT_DIR/$seq.full || _fail "mkfs failed"
+    _scratch_mount >>$RESULT_DIR/$seq.full || _fail "mount failed"
 }
 
 #
@@ -266,8 +266,8 @@ _cleanup()
 	# save it for inspection
 	for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
 	    [ -d $dir ] || continue
-	    tar -cvf $seq.inventory.tar $dir
-	    ls -nR $dir >$seq.inventory.ls
+	    tar -cvf $RESULT_DIR/$seq.inventory.tar $dir
+	    ls -nR $dir >$RESULT_DIR/$seq.inventory.ls
 	done
     fi
 
@@ -295,8 +295,8 @@ _cleanup()
 _stable_fs()
 {
     _saveddir=`pwd`; cd /
-    umount $SCRATCH_MNT >>$here/$seq.full || _fail "unmount failed"
-    _scratch_mount >>$here/$seq.full || _fail "mount failed"
+    umount $SCRATCH_MNT >>$RESULT_DIR/$seq.full || _fail "unmount failed"
+    _scratch_mount >>$RESULT_DIR/$seq.full || _fail "mount failed"
     cd $_saveddir
 }
 
@@ -326,12 +326,12 @@ _create_dumpdir_stress()
     echo "-----------------------------------------------"
     if ! $here/ltp/fsstress $_param -s 1 $FSSTRESS_AVOID -n $_count -d $dump_dir >$tmp.out 2>&1
     then
-        echo "    fsstress (count=$_count) returned $? - see $here/$seq.full"
+        echo "    fsstress (count=$_count) returned $? - see $RESULT_DIR/$seq.full"
 
-        echo "--------------------------------------"       >>$here/$seq.full
-        echo "output from fsstress:"                        >>$here/$seq.full
-        echo "--------------------------------------"       >>$here/$seq.full
-        cat $tmp.out                                        >>$here/$seq.full
+        echo "--------------------------------------"       >>$RESULT_DIR/$seq.full
+        echo "output from fsstress:"                        >>$RESULT_DIR/$seq.full
+        echo "--------------------------------------"       >>$RESULT_DIR/$seq.full
+        cat $tmp.out                                        >>$RESULT_DIR/$seq.full
         status=1
     fi
 
@@ -1043,7 +1043,7 @@ _do_dump_sub()
     echo "Dumping to tape..."
     opts="$_dump_debug$dump_args -s $dump_sdir -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter
-    $XFSDUMP_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1056,7 +1056,7 @@ _do_dump()
     echo "Dumping to tape..."
     opts="$_dump_debug$dump_args -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter
-    $XFSDUMP_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 
@@ -1071,7 +1071,7 @@ _do_dump_min()
     onemeg=1048576
     opts="$_dump_debug$dump_args -m -b $onemeg -l0 -f $dumptape -M $media_label -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter
-    $XFSDUMP_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 
@@ -1085,7 +1085,7 @@ _do_dump_file()
     echo "Dumping to file..."
     opts="$_dump_debug$dump_args -f $dump_file -M $media_label -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter
-    $XFSDUMP_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1107,7 +1107,7 @@ _do_dump_multi_file()
     echo "Dumping to files..."
     opts="$_dump_debug$dump_args $multi_args -L $session_label $SCRATCH_MNT"
     echo "xfsdump $opts" | _dir_filter
-    $XFSDUMP_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 
@@ -1140,7 +1140,7 @@ _do_restore()
     echo "Restoring from tape..."
     opts="$_restore_debug$restore_args -f $dumptape  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1155,7 +1155,7 @@ _do_restore_min()
     onemeg=1048576
     opts="$_restore_debug$restore_args -m -b $onemeg -f $dumptape  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1169,7 +1169,7 @@ _do_restore_file()
     echo "Restoring from file..."
     opts="$_restore_debug$restore_args -f $dump_file  -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1184,7 +1184,7 @@ _do_restore_file_cum()
     echo "Restoring cumumlative from file..."
     opts="$_restore_debug$restore_args -f $dump_file -r $restore_dir"
     echo "xfsrestore $opts" | _dir_filter
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 _do_restore_toc()
@@ -1195,7 +1195,7 @@ _do_restore_toc()
     opts="$_restore_debug$restore_args -f $dump_file -t"
     echo "xfsrestore $opts" | _dir_filter
     cd $SCRATCH_MNT # for IRIX which needs xfs cwd
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter_main |\
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter_main |\
     _check_quota_file |\
     _check_quota_entries |\
     $AWK_PROG 'NF != 1 { print; next }
@@ -1226,7 +1226,7 @@ _do_restore_multi_file()
     echo "Restoring from file..."
     opts="$_restore_debug$restore_args $multi_args -L $session_label $restore_dir"
     echo "xfsrestore $opts" | _dir_filter
-    $XFSRESTORE_PROG $opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSRESTORE_PROG $opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
 }
 
 #
@@ -1246,7 +1246,7 @@ _do_dump_restore()
     restore_opts="$_restore_debug$restore_args - $restore_dir"
     dump_opts="$_dump_debug$dump_args -s $dump_sdir - $SCRATCH_MNT"
     echo "xfsdump $dump_opts | xfsrestore $restore_opts" | _dir_filter
-    $XFSDUMP_PROG $dump_opts 2>$tmp.dump.mlog | $XFSRESTORE_PROG $restore_opts 2>&1 | tee -a $here/$seq.full | _dump_filter
+    $XFSDUMP_PROG $dump_opts 2>$tmp.dump.mlog | $XFSRESTORE_PROG $restore_opts 2>&1 | tee -a $RESULT_DIR/$seq.full | _dump_filter
     _dump_filter <$tmp.dump.mlog
 }
 
@@ -1262,8 +1262,8 @@ _ls_compare_sub()
     # verify we got back what we dumped
     #
     echo "Comparing listing of dump directory with restore directory"
-    ls -nR $dump_dir | tee -a $here/$seq.full | _ls_filter >$tmp.dump_dir
-    ls -nR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
+    ls -nR $dump_dir | tee -a $RESULT_DIR/$seq.full | _ls_filter >$tmp.dump_dir
+    ls -nR $restore_dir/$dump_sdir | tee -a $RESULT_DIR/$seq.full | _ls_filter \
     | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -bcs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
@@ -1285,8 +1285,8 @@ _ls_nodate_compare_sub()
     # verify we got back what we dumped
     #
     echo "Comparing listing of dump directory with restore directory"
-    ls -nR $dump_dir | tee -a $here/$seq.full | _ls_filter | _ls_nodate_filter >$tmp.dump_dir
-    ls -nR $restore_dir/$dump_sdir | tee -a $here/$seq.full | _ls_filter \
+    ls -nR $dump_dir | tee -a $RESULT_DIR/$seq.full | _ls_filter | _ls_nodate_filter >$tmp.dump_dir
+    ls -nR $restore_dir/$dump_sdir | tee -a $RESULT_DIR/$seq.full | _ls_filter \
     | _ls_nodate_filter | sed -e "s#$restore_sdir\/##" >$tmp.restore_dir
 
     diff -bcs $tmp.dump_dir $tmp.restore_dir | sed -e "s#$tmp#TMP#g"
@@ -1359,13 +1359,13 @@ _diff_compare_eas()
     echo "Comparing dump directory with restore directory"
     echo "Looking at the extended attributes (EAs)"
     echo "EAs on dump"
-    _get_eas_on_path $dump_dir | tee $seq.ea1 | _dir_filter
+    _get_eas_on_path $dump_dir | tee $RESULT_DIR/$seq.ea1 | _dir_filter
     echo "EAs on restore"
     _get_eas_on_path $restore_dir/$dump_sdir \
     | sed -e "s#$restore_sdir\/##" \
-    | tee $seq.ea2 \
+    | tee $RESULT_DIR/$seq.ea2 \
     | _dir_filter
-    diff -s $seq.ea1 $seq.ea2
+    diff -s $RESULT_DIR/$seq.ea1 $RESULT_DIR/$seq.ea2
 }
 
 
@@ -1384,7 +1384,7 @@ _diff_compare()
 #
 _dump_inventory()
 {
-    $XFSDUMP_PROG $_dump_debug -I | tee -a $here/$seq.full | _dump_filter_main
+    $XFSDUMP_PROG $_dump_debug -I | tee -a $RESULT_DIR/$seq.full | _dump_filter_main
 }
 
 #
@@ -1394,9 +1394,9 @@ _dump_inventory()
 _do_invutil()
 {
     host=`hostname`
-    echo "xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT \"$middate\" $*" >$here/$seq.full
+    echo "xfsinvutil $_invutil_debug -M $host:$SCRATCH_MNT \"$middate\" $*" >$RESULT_DIR/$seq.full
     $XFSINVUTIL_PROG $_invutil_debug $* -M $host:$SCRATCH_MNT "$middate" \
-    | tee -a $here/$seq.full | _invutil_filter
+    | tee -a $RESULT_DIR/$seq.full | _invutil_filter
 }
 
 #
@@ -1416,7 +1416,7 @@ _check_quota()
     $here/src/feature -P $SCRATCH_DEV && pquota=1
 
     $AWK_PROG -v uquota=$uquota -v gquota=$gquota -v pquota=$pquota \
-	      -v full=$here/$seq.full -v usermsg="$usermsg" \
+	      -v full=$RESULT_DIR/$seq.full -v usermsg="$usermsg" \
 	      -v groupmsg="$groupmsg" -v projectmsg="$projectmsg" '
 	$0 ~ projectmsg {
 			print "Found project quota:", $0 >>full
