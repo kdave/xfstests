@@ -30,7 +30,6 @@ notrun=""
 interrupt=true
 diff="diff -u"
 showme=false
-expunge=true
 have_test_arg=false
 randomize=false
 here=`pwd`
@@ -105,10 +104,6 @@ BEGIN	{ for (t='$start'; t<='$end'; t++) printf "%03d\n",t }' \
 	do
 		if grep -s "^$id " group >/dev/null ; then
 			# in group file ... OK
-			echo $id >>$tmp.list
-		elif [ -f expunged ] && $expunge && \
-				egrep "^$id([ 	]|\$)" expunged >/dev/null ; then
-			# expunged ... will be reported, but not run, later
 			echo $id >>$tmp.list
 		else
 			# oops
@@ -293,13 +288,6 @@ END	{ if (NR > 0) {
 	    mv $tmp.out check.time
 	fi
 
-	if [ -f $tmp.expunged ]
-	then
-	    notrun=`wc -l <$tmp.expunged | sed -e 's/  *//g'`
-	    n_try=`expr $n_try - $notrun`
-	    list=`echo "$list" | sed -f $tmp.expunged`
-	fi
-
 	echo "" >>check.log
 	date >>check.log
 	echo $list | fmt | sed -e 's/^/    /' >>check.log
@@ -393,15 +381,9 @@ do
     then
 	echo
 	continue
-    elif [ -f expunged ] && $expunge && egrep "^$seq([ 	]|\$)" expunged >/dev/null
-    then
-	echo " - expunged"
-	rm -f $seq.out.bad
-	echo "/^$seq\$/d" >>$tmp.expunged
     elif [ ! -f $seq ]
     then
 	echo " - no such test?"
-	echo "/^$seq\$/d" >>$tmp.expunged
     else
 	# really going to try and run this one
 	#
