@@ -275,12 +275,6 @@ fi
 
 _wrapup()
 {
-    # for hangcheck ...
-    # remove files that were used by hangcheck
-    #
-    [ -f /tmp/check.pid ] && rm -rf /tmp/check.pid
-    [ -f /tmp/check.sts ] && rm -rf /tmp/check.sts
-
     if $showme
     then
 	:
@@ -336,26 +330,10 @@ END	{ if (NR > 0) {
     fi
 
     rm -f /tmp/*.rawout /tmp/*.out /tmp/*.err /tmp/*.time
-    rm -f /tmp/check.pid /tmp/check.sts
     rm -f $tmp.*
 }
 
 trap "_wrapup; exit \$status" 0 1 2 3 15
-
-# for hangcheck ...
-# Save pid of check in a well known place, so that hangcheck can be sure it
-# has the right pid (getting the pid from ps output is not reliable enough).
-#
-rm -rf /tmp/check.pid
-echo $$ >/tmp/check.pid
-
-# for hangcheck ...
-# Save the status of check in a well known place, so that hangcheck can be
-# sure to know where check is up to (getting test number from ps output is
-# not reliable enough since the trace stuff has been introduced).
-#
-rm -rf /tmp/check.sts
-echo "preamble" >/tmp/check.sts
 
 # don't leave old full output behind on a clean run
 rm -f check.full
@@ -435,9 +413,6 @@ do
 		echo -n "	"	# prettier output with timestamps.
 	fi
 	rm -f core $seq.notrun
-
-	# for hangcheck ...
-	echo "$seq" >/tmp/check.sts
 
 	start=`_wallclock`
 	$timestamp && echo -n "	["`date "+%T"`"]"
