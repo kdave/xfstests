@@ -29,7 +29,8 @@ if [ -n "$DEBUGDUMP" ]; then
 
 	# Use dump/restore in qa directory (copy them here) for debugging
 	export PATH="$here:$PATH"
-	export XFSDUMP_PROG="`set_prog_path xfsdump`"
+	export __XFSDUMP_PROG="`set_prog_path xfsdump`"
+	export XFSDUMP_PROG="$__XFSDUMP_PROG -e"
 	export XFSRESTORE_PROG="`set_prog_path xfsrestore`"
 	export XFSINVUTIL_PROG="`set_prog_path xfsinvutil`"
 	[ -x $here/xfsdump ]    && echo "Using xfstests' xfsdump for debug"
@@ -829,7 +830,7 @@ _dump_filter_main()
 {
   _filter_devchar |\
   sed \
-      -e "s#$XFSDUMP_PROG#xfsdump#"			\
+      -e "s#$__XFSDUMP_PROG#xfsdump#"			\
       -e "s#$XFSRESTORE_PROG#xfsrestore#"		\
       -e "s#$XFSINVUTIL_PROG#xfsinvutil#"		\
       -e "s/`hostname`/HOSTNAME/"			\
@@ -872,13 +873,29 @@ _dump_filter_main()
       -e '/xfsdump: ino map phase [5]/,1d'		\
       -e 's/id:[[:space:]]*[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}/ID: ID/'						\
       -e 's/\[y\/n\][- ]----------------------*/\[y\/n\]/'		\
+      -e '/skip attribute set/d'				\
   | perl -ne '
-      if ($_ =~ /(?:Dump|Restore) Summary/) {
-        $skip = 1;
-      } elsif ($_ =~ /(?:Dump|Restore) Status/) {
-        $skip = 0;
-      }
-      print if (! $skip);'
+	# filter out all the output between the lines "Dump Summary:"
+	# and "Dump Status:"
+	if ($_ =~ /(?:Dump|Restore) Summary/) {
+		$skip = 1;
+	} elsif ($_ =~ /(?:Dump|Restore) Status/) {
+		$skip = 0;
+	}
+	print if (! $skip);' \
+  | perl -ne '
+	# correct the file count if large scratch devices are being used
+	$skip = 0;
+	if ($_ =~ /(\S+) directories and (\S+) entries/) {
+		$foo = $2;
+		if ($ENV{'LARGE_SCRATCH_DEV'} && $foo > 0) {
+			$foo -= 1;
+		}
+		printf("xfsrestore: %u directories and %u entries processed\n",
+						$1, $foo);
+		$skip = 1;
+	}
+	print if (! $skip);'
 }
 
 _dump_filter()
@@ -916,6 +933,7 @@ _dir_filter()
     -e "s#$dump_sdir#DUMP_SUBDIR#g"   \
     -e "s#$restore_sdir#RESTORE_SUBDIR#g" \
     -e "s#$$#PID#g" \
+    -e "/Only in SCRATCH_MNT: .use_space/d" \
 
 }
 
