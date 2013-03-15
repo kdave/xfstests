@@ -69,7 +69,13 @@ _filter_report()
 	perl -npe '
 		s/^\#'$id' /[NAME] /g;
 		s/^\#0 \d+ /[ROOT] 0 /g;
-		s/6 days/7 days/g'
+		s/6 days/7 days/g' |
+	perl -npe '
+		$val = 0;
+		if ($ENV{'LARGE_SCRATCH_DEV'}) {
+			$val = $ENV{'NUM_SPACE_FILES'};
+		}
+		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g'
 }
 
 # The actual point at which limit enforcement takes place for the
