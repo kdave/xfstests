@@ -92,7 +92,7 @@ _require_nobody()
 #
 _file_as_id()
 {
-    [ $# != 5 ] && _notrun "broken call to _file_as_id in test $seq"
+    [ $# != 5 ] && _fail "broken call to _file_as_id in test $seq"
 
     parent=`dirname $1`
     if [ $3 = p ]; then
@@ -155,51 +155,6 @@ _qmount()
     umount $SCRATCH_DEV >/dev/null 2>&1
     _scratch_mount || _fail "qmount failed"
     chmod ugo+rwx $SCRATCH_MNT
-}
-
-_qsetup()
-{
-    # setup exactly what it is we'll be testing
-    enforce=1
-    if src/feature -u $SCRATCH_DEV
-    then
-	type=u ;
-	eval `_choose_uid`
-	[ ! -f $seq.out ] && ln -s $seq.usrquota $seq.out
-    elif src/feature -g $SCRATCH_DEV
-    then
-	type=g
-	eval `_choose_gid`
-	[ ! -f $seq.out ] && ln -s $seq.grpquota $seq.out
-    elif src/feature -p $SCRATCH_DEV
-    then
-	type=p
-	eval `_choose_prid`
-	[ ! -f $seq.out ] && ln -s $seq.prjquota $seq.out
-    elif src/feature -U $SCRATCH_DEV
-    then
-	type=u
-	eval `_choose_uid`
-	[ ! -f $seq.out ] && ln -s $seq.uqnoenforce $seq.out
-	enforce=0
-    elif src/feature -G $SCRATCH_DEV
-    then
-	type=g
-	eval `_choose_gid`
-	[ ! -f $seq.out ] && ln -s $seq.gqnoenforce $seq.out
-	enforce=0
-    elif src/feature -P $SCRATCH_DEV
-    then
-	type=p
-	eval `_choose_prid`
-	[ ! -f $seq.out ] && ln -s $seq.pqnoenforce $seq.out
-	enforce=0
-    else
-	_notrun "No quota support at mount time"
-    fi
-
-    echo "Using output from '" `ls -l $seq.out` "'" >>$seqres.full
-    echo "and using type=$type id=$id" >>$seqres.full
 }
 
 #

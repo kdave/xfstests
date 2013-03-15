@@ -100,6 +100,25 @@ _filter_and_check_blks()
 	' | _filter_report
 }
 
+_qsetup()
+{
+	opt=$1
+	enforce=0
+	if [ $opt = "u" -o $opt = "uno" ]; then
+		type=u
+		eval `_choose_uid`
+	elif [ $opt = "g" -o $opt = "gno" ]; then
+		type=g
+		eval `_choose_gid`
+	elif [ $opt = "p" -o $opt = "pno" ]; then
+		type=p
+		eval `_choose_prid`
+	fi
+	[ $opt = "u" -o $opt = "g" -o $opt = "p" ] && enforce=1
+
+	echo "Using type=$type id=$id" >> $seqres.full
+}
+
 _exercise()
 {
 	_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
@@ -118,10 +137,9 @@ _exercise()
 	[ $extsize -ge 512000 ] && \
 		_notrun "Extent size hint is too large ($extsize bytes)"
 
-	_qsetup
+	_qsetup $1
 
-	echo "Using output from '" `ls -l $seq.out` "'" >>$seqres.full
-	echo "and using type=$type id=$id" >>$seqres.full
+	echo "Using type=$type id=$id" >>$seqres.full
 
 	echo
 	echo "*** report no quota settings" | tee -a $seqres.full
@@ -206,11 +224,11 @@ then
 else
 	_qmount_option "uquota"
 fi
-_exercise
+_exercise u
 
 echo "*** group"
 _qmount_option "gquota"
-_exercise
+_exercise g
 
 echo "*** uqnoenforce"
 if [ "$HOSTOS" == "IRIX" ]
@@ -219,19 +237,19 @@ then
 else
 	_qmount_option "uqnoenforce"
 fi
-_exercise
+_exercise uno
 
 echo "*** gqnoenforce"
 _qmount_option "gqnoenforce"
-_exercise
+_exercise gno
 
 echo "*** pquota"
 _qmount_option "pquota"
-_exercise
+_exercise p
 
 echo "*** pqnoenforce"
 _qmount_option "pqnoenforce"
-_exercise
+_exercise pno
 
 # success, all done
 status=0
