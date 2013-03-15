@@ -310,7 +310,7 @@ _scratch_mkfs_xfs()
     cat $tmp_dir.mkfsstd
     rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
 
-    if [ "$USE_BIG_LOOPFS" = yes ]; then
+    if [ "$LARGE_SCRATCH_DEV" = yes ]; then
         [ -z "$RETAIN_AG_BYTES" ] && RETAIN_AG_BYTES=0
         ./tools/ag-wipe -q -r $RETAIN_AG_BYTES $SCRATCH_DEV
     fi
@@ -437,7 +437,7 @@ _scratch_xfs_repair()
         SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
     [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
         SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -r$SCRATCH_RTDEV"
-    [ "$USE_BIG_LOOPFS" = yes ] && SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
+    [ "$LARGE_SCRATCH_DEV" = yes ] && SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
     $XFS_REPAIR_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
@@ -826,9 +826,9 @@ _require_ext2()
 
 # this test requires that (large) loopback device files are not in use
 #
-_require_nobigloopfs()
+_require_no_large_scratch_dev()
 {
-    [ "$USE_BIG_LOOPFS" = yes ] && \
+    [ "$LARGE_SCRATCH_DEV" = yes ] && \
 	_notrun "Large filesystem testing in progress, skipped this test"
 }
 
@@ -1237,7 +1237,7 @@ _check_xfs_filesystem()
 
     [ "$FSTYP" != xfs ] && return 0
     testoption=""
-    [ "$USE_BIG_LOOPFS" = yes ] && testoption=-t
+    [ "$LARGE_SCRATCH_DEV" = yes ] && testoption=-t
 
     type=`_fs_type $device`
     ok=1
@@ -1276,7 +1276,7 @@ _check_xfs_filesystem()
         ok=0
     fi
     # repair doesn't scale massively at this stage, optionally skip it for now
-    [ "$USE_BIG_LOOPFS" = yes ] || \
+    [ "$LARGE_SCRATCH_DEV" = yes ] || \
     $XFS_REPAIR_PROG -n $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
