@@ -1,0 +1,81 @@
+#! /bin/bash
+# FS QA Test No. 306
+#
+# Test RW open of a device on a RO fs
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+# creator
+owner=sandeen@redhat.com
+
+seq=`basename $0`
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common.rc
+. ./common.filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+DEVNULL=$SCRATCH_MNT/devnull
+DEVZERO=$SCRATCH_MNT/devzero
+
+rm -f $seq.full
+_scratch_mkfs > $seq.full 2>&1
+_scratch_mount
+
+rm -f $DEVNULL $DEVZERO
+
+mknod $DEVNULL c 1 3 || _fail "Could not create devnull device"
+mknod $DEVZERO c 1 5 || _fail "Could not create devzero device"
+
+_scratch_unmount || _fail "Could not unmount scratch device"
+_scratch_mount -o ro || _fail "Could notemount scratch readonly"
+
+# We should be able to read & write to/from these devices even on an RO fs
+echo "== try to create new file"
+touch $SCRATCH_MNT/this_should_fail 2>&1 | _filter_scratch
+echo "== pwrite to null device"
+$XFS_IO_PROG -c "pwrite 0 512" /dev/null | _filter_xfs_io
+echo "== pread from zero device"
+$XFS_IO_PROG -c "pread 0 512" /dev/zero | _filter_xfs_io
+
+echo "== truncating write to null device"
+echo foo > $DEVNULL 2>&1 | _filter_scratch
+echo "== appending write to null device"
+echo foo >> $DEVNULL 2>&1 | _filter_scratch
+
+# success, all done
+status=0
+exit
