@@ -27,6 +27,35 @@ _setenvironment()
     export MSGVERB
 }
 
+usage()
+{
+    echo "Usage: $0 [options] [testlist]"'
+
+common options
+    -v			verbose
+
+check options
+    -xfs                test XFS (default)
+    -udf                test UDF
+    -nfs                test NFS
+    -l			line mode diff
+    -xdiff		graphical mode diff
+    -udiff		show unified diff (default)
+    -n			show me, do not run tests
+    -q			quick [deprecated]
+    -T			output timestamps
+    -r			randomize test order
+    --large-fs		optimise scratch device for large filesystems
+
+testlist options
+    -g group[,group...]	include tests from these groups
+    -x group[,group...]	exclude tests from these groups
+    NNN			include test NNN
+    NNN-NNN		include test range (eg. 012-021)
+'
+	    exit 0
+}
+
 here=`pwd`
 rm -f $here/$iam.out
 _setenvironment
@@ -117,30 +146,7 @@ s/ .*//p
     in
 
 	-\? | -h | --help)	# usage
-	    echo "Usage: $0 [options] [testlist]"'
-
-common options
-    -v			verbose
-
-check options
-    -xfs                test XFS (default)
-    -udf                test UDF
-    -nfs                test NFS
-    -l			line mode diff
-    -xdiff		graphical mode diff
-    -udiff		show unified diff (default)
-    -n			show me, do not run tests
-    -q			quick [deprecated]
-    -T			output timestamps
-    -r 			randomize test order
-    
-testlist options
-    -g group[,group...]	include tests from these groups
-    -x group[,group...]	exclude tests from these groups
-    NNN			include test NNN
-    NNN-NNN		include test range (eg. 012-021)
-'
-	    exit 0
+	    usage
 	    ;;
 
 	-udf)	# -udf ... set FSTYP to udf
@@ -230,6 +236,15 @@ testlist options
 		status=1
 		exit $status
 	    fi
+	    ;;
+
+	--large-fs)
+	    export USE_BIG_LOOPFS=yes
+	    xpand=false
+	    ;;
+
+	-*)
+	    usage
 	    ;;
 
 	*)
