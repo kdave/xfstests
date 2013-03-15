@@ -36,9 +36,8 @@ here=`pwd`
 FSTYP=xfs
 
 SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
-TEST_GROUP_DIR="tests"
-GENERIC_GROUP_DIR="$TEST_GROUP_DIR/generic"
-XFS_GROUP_DIR="$TEST_GROUP_DIR/xfs"
+SRC_DIR="tests"
+SRC_GROUPS="generic shared"
 
 # generic initialization
 iam=check
@@ -87,13 +86,12 @@ _setenvironment()
 get_group_list()
 {
 	grp=$1
-	dirs=". $GENERIC_GROUP_DIR $XFS_GROUP_DIR"
 
-	for d in $dirs; do
-		l=$(sed -n < $d/group \
+	for d in $SRC_GROUPS $FSTYP; do
+		l=$(sed -n < $SRC_DIR/$d/group \
 			-e 's/#.*//' \
 			-e 's/$/ /' \
-			-e "s;\(^[0-9][0-9][0-9]\).* $grp .*;$d/\1;p")
+			-e "s;\(^[0-9][0-9][0-9]\).* $grp .*;$SRC_DIR/$d/\1;p")
 		grpl="$grpl $l"
 	done
 	echo $grpl
@@ -297,7 +295,7 @@ END	{ if (NR > 0) {
 
 	echo "" >>check.log
 	date >>check.log
-	echo $list | fmt | sed -e 's/^/    /' -e 's;tests/;;g' >>check.log
+	echo $list | fmt | sed -e 's/^/    /' -e "s;$SRC_DIR/;;g" >>check.log
 	$interrupt && echo "Interrupted!" >>check.log
         
         if [ ! -z "$n_try" -a $n_try != 0 ]
@@ -378,7 +376,7 @@ do
 
     # the filename for the test and the name output are different.
     # we don't include the tests/ directory in the name output.
-    seqnum=`echo $seq | sed -e 's;tests/;;'`
+    seqnum=`echo $seq | sed -e "s;$SRC_DIR/;;"`
 
     echo -n "$seqnum"
 
