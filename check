@@ -34,6 +34,7 @@ have_test_arg=false
 randomize=false
 here=`pwd`
 FSTYP=xfs
+xfile=""
 
 SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
 SRC_GROUPS="generic shared"
@@ -72,6 +73,7 @@ check options
 testlist options
     -g group[,group...]	include tests from these groups
     -x group[,group...]	exclude tests from these groups
+    -X file		exclude individual tests
     [testlist]		include tests matching names in testlist
 '
 	    exit 0
@@ -110,6 +112,30 @@ get_all_tests()
 	done
 }
 
+# takes the list of tests to run in $tmp.list, and removes the tests passed to
+# the function from that list.
+trim_test_list()
+{
+	test_list="$*"
+
+	rm -f $tmp.grep
+	numsed=0
+	for t in $test_list
+	do
+	    if [ $numsed -gt 100 ]; then
+		grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
+		mv $tmp.tmp $tmp.list
+		numsed=0
+		rm -f $tmp.grep
+	    fi
+	    echo "^$t\$" >>$tmp.grep
+	    numsed=`expr $numsed + 1`
+	done
+	grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
+	mv $tmp.tmp $tmp.list
+}
+
+
 _wallclock()
 {
     date "+%H %M %S" | $AWK_PROG '{ print $1*3600 + $2*60 + $3 }'
@@ -124,7 +150,7 @@ _timestamp()
 # start the initialisation work now
 _setenvironment
 
-rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out
+rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist
 
 # Autodetect fs type based on what's on $TEST_DEV
 if [ "$HOSTOS" == "Linux" ]; then
@@ -177,21 +203,16 @@ while [ $# -gt 0 ]; do
 		    exit 1
 		fi
 
-		rm -f $tmp.grep
-		numsed=0
-		for t in $group_list
-		do
-		    if [ $numsed -gt 100 ]; then
-			grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
-			mv $tmp.tmp $tmp.list
-			numsed=0
-			rm -f $tmp.grep
-		    fi
-		    echo "^$t\$" >>$tmp.grep
-		    numsed=`expr $numsed + 1`
+		trim_test_list $group_list
+		;;
+
+	-X)	xfile=$2; shift ;
+		for d in $SRC_GROUPS $FSTYP; do
+			[ -f $SRC_DIR/$d/$xfile ] || continue
+			for f in `cat $SRC_DIR/$d/$xfile`; do
+				echo $d/$f >> $tmp.xlist
+			done
 		done
-		grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
-		mv $tmp.tmp $tmp.list
 		;;
 
 	-l)	diff="diff" ;;
@@ -412,6 +433,14 @@ do
 	# really going to try and run this one
 	#
 	rm -f $seqres.out.bad
+
+	# check if we really should run it
+	if [ -s $tmp.xlist ]; then
+		if grep $seqnum $tmp.xlist > /dev/null 2>&1 ; then
+			echo "       [expunged]"
+			continue
+		fi
+	fi
 
 	# slashes now in names, sed barfs on them so use grep
 	lasttime=`grep -w ^$seq check.time | awk '// {print $2}'`
