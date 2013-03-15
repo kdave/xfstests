@@ -96,6 +96,19 @@ get_group_list()
 	echo $grpl
 }
 
+# find all tests, excluding files that are test metadata such as group files.
+# This assumes that tests are defined purely by alphanumeric filenames with no
+# ".xyz" extensions in the name.
+get_all_tests()
+{
+	touch $tmp.list
+	for d in $SRC_GROUPS $FSTYP; do
+		ls $SRC_DIR/$d/* | \
+			grep -v "\..*" | \
+			grep -v group >> $tmp.list 2>/dev/null
+	done
+}
+
 _wallclock()
 {
     date "+%H %M %S" | $AWK_PROG '{ print $1*3600 + $2*60 + $3 }'
@@ -110,7 +123,7 @@ _timestamp()
 # start the initialisation work now
 _setenvironment
 
-rm -f $tmp.list $tmp.tmp $tmp.sed $here/$iam.out
+rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out
 
 # Autodetect fs type based on what's on $TEST_DEV
 if [ "$HOSTOS" == "Linux" ]; then
@@ -150,27 +163,33 @@ while [ $# -gt 0 ]; do
 		;;
 
 	-x)	xgroup=$2 ; shift ;
-		[ ! -s $tmp.list ] &&  ls $SUPPORTED_TESTS >$tmp.list 2>/dev/null
+
+		# Note: behaviour is dependent on command line ordering of
+		# -g and -x parameters. If there are no preceding -g commands,
+		# this works on all tests, otherwise just the tests specified by
+		# the early -g inclusions.
+		[ ! -s $tmp.list ] && get_all_tests
+
 		group_list=$(get_group_list $xgroup)
 		if [ -z "$group_list" ]; then
 		    echo "Group \"$xgroup\" is empty or not defined?"
 		    exit 1
 		fi
 
-		rm -f $tmp.sed
+		rm -f $tmp.grep
 		numsed=0
 		for t in $group_list
 		do
 		    if [ $numsed -gt 100 ]; then
-			sed -f $tmp.sed <$tmp.list >$tmp.tmp
+			grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
 			mv $tmp.tmp $tmp.list
 			numsed=0
-			rm -f $tmp.sed
+			rm -f $tmp.grep
 		    fi
-		    echo "/^$t\$/d" >>$tmp.sed
+		    echo "^$t\$" >>$tmp.grep
 		    numsed=`expr $numsed + 1`
 		done
-		sed -f $tmp.sed <$tmp.list >$tmp.tmp
+		grep -v -f $tmp.grep <$tmp.list >$tmp.tmp
 		mv $tmp.tmp $tmp.list
 		;;
 
@@ -239,7 +258,7 @@ fi
 
 # sort the list of tests into numeric order
 list=`sort -n $tmp.list`
-rm -f $tmp.list $tmp.tmp $tmp.sed
+rm -f $tmp.list $tmp.tmp $tmp.grep
 
 if $randomize
 then
