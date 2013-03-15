@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -58,13 +61,13 @@ _require_scratch
 
 echo "*** init fs"
 
-rm -f $seq.full
+rm -f $seqres.full
 umount $SCRATCH_DEV >/dev/null 2>&1
-echo "*** MKFS ***"                         >>$seq.full
-echo ""                                     >>$seq.full
-_scratch_mkfs                               >>$seq.full 2>&1 \
+echo "*** MKFS ***"                         >>$seqres.full
+echo ""                                     >>$seqres.full
+_scratch_mkfs                               >>$seqres.full 2>&1 \
 	|| _fail "mkfs failed"
-_scratch_mount                              >>$seq.full 2>&1 \
+_scratch_mount                              >>$seqres.full 2>&1 \
 	|| _fail "mount failed"
 
 echo "*** test concurrent block/fs access"
@@ -73,8 +76,8 @@ cat $SCRATCH_DEV >/dev/null &
 pid=$!
 
 FSSTRESS_ARGS=`_scale_fsstress_args -p 2 -n 2000 $FSSTRESS_AVOID`
-echo "run fsstress with args: $FSSTRESS_ARGS" >>$seq.full
-$FSSTRESS_PROG $FSSTRESS_ARGS >>$seq.full
+echo "run fsstress with args: $FSSTRESS_ARGS" >>$seqres.full
+$FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full
 _lets_get_pidst
 _check_scratch_fs
 

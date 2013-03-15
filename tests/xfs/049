@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 _cleanup()
@@ -32,10 +35,10 @@ _cleanup()
     umount -d $SCRATCH_MNT/test > /dev/null 2>&1
     rm -f $tmp.*
 
-    if [ -w $seq.full ]
+    if [ -w $seqres.full ]
     then
-        echo "--- mounts at end (after cleanup)" >> $seq.full
-        mount >> $seq.full
+        echo "--- mounts at end (after cleanup)" >> $seqres.full
+        mount >> $seqres.full
     fi
 }
 
@@ -55,7 +58,7 @@ _supported_os Linux
 _log()
 {
     echo "--- $*"
-    echo "--- $*" >> $seq.full
+    echo "--- $*" >> $seqres.full
 }
 
 _require_nonexternal
@@ -64,75 +67,75 @@ _require_no_large_scratch_dev
 _require_loop
 _require_ext2
 
-rm -f $seq.full
+rm -f $seqres.full
 
-echo "(dev=$SCRATCH_DEV, mount=$SCRATCH_MNT)" >> $seq.full
-echo "" >> $seq.full
+echo "(dev=$SCRATCH_DEV, mount=$SCRATCH_MNT)" >> $seqres.full
+echo "" >> $seqres.full
 
-echo "--- mounts" >> $seq.full
-mount >> $seq.full
+echo "--- mounts" >> $seqres.full
+mount >> $seqres.full
 
 _log "Create ext2 fs on scratch"
-mkfs -t ext2 -F $SCRATCH_DEV >> $seq.full 2>&1 \
+mkfs -t ext2 -F $SCRATCH_DEV >> $seqres.full 2>&1 \
     || _fail "!!! failed to mkfs ext2"
 
 _log "Mount ext2 fs on scratch"
-mount -t ext2 $SCRATCH_DEV $SCRATCH_MNT >> $seq.full 2>&1 \
+mount -t ext2 $SCRATCH_DEV $SCRATCH_MNT >> $seqres.full 2>&1 \
     || _fail "!!! failed to mount"
 
 _log "Create xfs fs in file on scratch"
 ${MKFS_PROG}.xfs -f -dfile,name=$SCRATCH_MNT/test.xfs,size=40m \
-    >> $seq.full 2>&1 \
+    >> $seqres.full 2>&1 \
     || _fail "!!! failed to mkfs xfs"
 
 _log "Make mount points"
-mkdir $SCRATCH_MNT/test $SCRATCH_MNT/test2 >> $seq.full 2>&1 \
+mkdir $SCRATCH_MNT/test $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to make mount points"
 
 _log "Mount xfs via loop"
-mount -t xfs -o loop $SCRATCH_MNT/test.xfs $SCRATCH_MNT/test >> $seq.full 2>&1 \
+mount -t xfs -o loop $SCRATCH_MNT/test.xfs $SCRATCH_MNT/test >> $seqres.full 2>&1 \
     || _fail "!!! failed to loop mount xfs"
 
 _log "stress"
-$FSSTRESS_PROG -d $SCRATCH_MNT/test -n 1000 $FSSTRESS_AVOID >> $seq.full 2>&1 \
+$FSSTRESS_PROG -d $SCRATCH_MNT/test -n 1000 $FSSTRESS_AVOID >> $seqres.full 2>&1 \
     || _fail "!!! stress failed"
 
 _log "clean"
-rm -rf $SCRATCH_MNT/test/* >> $seq.full 2>&1 \
+rm -rf $SCRATCH_MNT/test/* >> $seqres.full 2>&1 \
     || _fail "!!! clean failed"
 
 _log "create file for ext2 fs"
-dd if=/dev/zero of=$SCRATCH_MNT/test/test.ext2 bs=1024 count=10240 >> $seq.full 2>&1 \
+dd if=/dev/zero of=$SCRATCH_MNT/test/test.ext2 bs=1024 count=10240 >> $seqres.full 2>&1 \
     || _fail "!!! create file failed"
 
 _log "Create ext2 fs in file on looped xfs"
-echo y | mkfs -t ext2 $SCRATCH_MNT/test/test.ext2 >> $seq.full 2>&1 \
+echo y | mkfs -t ext2 $SCRATCH_MNT/test/test.ext2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to mkfs ext2 on xfs"
 
 _log "Mount ext2 on xfs via loop"
-mount -t ext2 -o loop $SCRATCH_MNT/test/test.ext2 $SCRATCH_MNT/test2 >> $seq.full 2>&1 \
+mount -t ext2 -o loop $SCRATCH_MNT/test/test.ext2 $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to loop mount xfs"
 
 _log "stress ext2 on xfs via loop"
-$FSSTRESS_PROG -d $SCRATCH_MNT/test2 -n 1000 $FSSTRESS_AVOID >> $seq.full 2>&1 \
+$FSSTRESS_PROG -d $SCRATCH_MNT/test2 -n 1000 $FSSTRESS_AVOID >> $seqres.full 2>&1 \
     || _fail "!!! stress ext2 failed"
 
 _log "clean"
-rm -rf $SCRATCH_MNT/test/* >> $seq.full 2>&1 \
+rm -rf $SCRATCH_MNT/test/* >> $seqres.full 2>&1 \
     || _fail "!!! clean failed"
 
 _log "umount ext2 on xfs"
-umount -d $SCRATCH_MNT/test2 >> $seq.full 2>&1 \
+umount -d $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! umount ext2 failed"
 
 _log "umount xfs"
-umount -d $SCRATCH_MNT/test >> $seq.full 2>&1 \
+umount -d $SCRATCH_MNT/test >> $seqres.full 2>&1 \
     || _fail "!!! umount xfs failed"
 
-echo "--- mounts at end (before cleanup)" >> $seq.full
-mount >> $seq.full
+echo "--- mounts at end (before cleanup)" >> $seqres.full
+mount >> $seqres.full
 
-rm -f $seq.full
+rm -f $seqres.full
 # success, all done
 status=0
 exit

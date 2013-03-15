@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -48,7 +51,7 @@ _supported_os Linux
 
 _require_scsi_debug
 
-rm -f $seq.full
+rm -f $seqres.full
 
 # Remove xfs signature so -f isn't needed to re-mkfs
 _wipe_device()
@@ -67,7 +70,7 @@ _check_mkfs()
 		return
 	fi
 	echo "Passed."
-	cat $tmp.mkfs.full | _filter_mkfs >> $seq.full 2>$tmp.mkfs
+	cat $tmp.mkfs.full | _filter_mkfs >> $seqres.full 2>$tmp.mkfs
 	. $tmp.mkfs
 	echo "Got sector size: $sectsz"
 	device=`echo $@ | awk '{print $NF}'`
@@ -83,7 +86,7 @@ SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 0 128`
 _check_mkfs $SCSI_DEBUG_DEV
 # blocksize smaller than physical sectorsize should revert to logical sectorsize
 _check_mkfs -b size=2048 -f $SCSI_DEBUG_DEV
-) | tee -a $seq.full
+) | tee -a $seqres.full
 _put_scsi_debug_dev
 
 # === 4k physical 512b logical unaligned
@@ -99,7 +102,7 @@ _check_mkfs -f $SCSI_DEBUG_DEV
 _check_mkfs -s size=4096 $SCSI_DEBUG_DEV
 # with 4k sector specified should fall back to logical sector size with force
 _check_mkfs -s size=4096 -f $SCSI_DEBUG_DEV
-) | tee -a $seq.full
+) | tee -a $seqres.full
 _put_scsi_debug_dev
 
 # === hard 4k physical / 4k logical
@@ -111,7 +114,7 @@ SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 4096 0 128`
 _check_mkfs -b size=2048 $SCSI_DEBUG_DEV
 # sector size smaller than physical sector size should fail
 _check_mkfs -s size=512 $SCSI_DEBUG_DEV
-) | tee -a $seq.full
+) | tee -a $seqres.full
 _put_scsi_debug_dev
 
 status=0

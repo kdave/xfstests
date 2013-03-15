@@ -24,6 +24,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -75,7 +78,7 @@ _supported_os Linux
 _require_scratch
 _require_attrs
 
-rm -f $tmp.backup1 $tmp.backup2 $seq.full
+rm -f $tmp.backup1 $tmp.backup2 $seqres.full
 
 # real QA test starts here
 _scratch_mkfs > /dev/null 2>&1 || _fail "mkfs failed"
@@ -181,8 +184,8 @@ _backup()
 {
 	# NB: no filtering of scratch here... (need to restore too)
 	$GETFATTR_PROG --absolute-names -dh -R -m '.' $SCRATCH_MNT >$1
-	echo BACKUP $1 >>$seq.full
-	cat $1 >> $seq.full
+	echo BACKUP $1 >>$seqres.full
+	cat $1 >> $seqres.full
 	[ ! -s $1 ] && echo "warning: $1 (backup file) is empty"
 }
 
@@ -191,8 +194,8 @@ _backup $tmp.backup1
 
 echo "*** clear out the scratch device"
 rm -fr $SCRATCH_MNT/*
-echo "AFTER REMOVE" >>$seq.full
-getfattr -L -R -m '.' $SCRATCH_MNT >>$seq.full
+echo "AFTER REMOVE" >>$seqres.full
+getfattr -L -R -m '.' $SCRATCH_MNT >>$seqres.full
 
 echo "*** reset test bed with no extended attributes"
 _create_test_bed
@@ -202,8 +205,8 @@ echo "*** restore everything"
 setfattr -h --restore=$tmp.backup1
 _backup $tmp.backup2
 
-echo "AFTER RESTORE" >>$seq.full
-getfattr -L -R -m '.' $SCRATCH_MNT >>$seq.full
+echo "AFTER RESTORE" >>$seqres.full
+getfattr -L -R -m '.' $SCRATCH_MNT >>$seqres.full
 
 echo "*** compare before and after backups"
 diff $tmp.backup1 $tmp.backup2

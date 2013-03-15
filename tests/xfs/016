@@ -36,6 +36,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -72,7 +75,7 @@ _init()
     if _scratch_mkfs_xfs -N -K $force_opts >/dev/null 2>&1; then
         force_opts="-K $force_opts"
     fi
-    echo mkfs_xfs $force_opts $SCRATCH_DEV >>$seq.full
+    echo mkfs_xfs $force_opts $SCRATCH_DEV >>$seqres.full
     _scratch_mkfs_xfs $force_opts >$tmp.mkfs0 2>&1
     [ $? -ne 0 ] && \
         _notrun "Cannot mkfs for this test using MKFS_OPTIONS specified"
@@ -163,8 +166,8 @@ _check_corrupt()
 {
     f="c6c6c6c6"
     echo "*** check for corruption"
-    echo "expect $f..." >>$seq.full
-    xfs_db -r -c "fsblock $2" -c "print" $1 | head | tee -a $seq.full | \
+    echo "expect $f..." >>$seqres.full
+    xfs_db -r -c "fsblock $2" -c "print" $1 | head | tee -a $seqres.full | \
         grep -q -v "$f $f $f $f $f $f $f $f" && \
             _fail "!!! block $2 corrupted!"
 }
@@ -177,7 +180,7 @@ _check_corrupt()
 _supported_fs xfs
 _supported_os Linux
 
-rm -f $seq.full
+rm -f $seqres.full
 
 # mkfs sizes
 log_size=2097152
@@ -187,15 +190,15 @@ _require_scratch
 _init
 
 block=`_after_log $SCRATCH_DEV`
-echo "fsblock after log = $block"               >>$seq.full
+echo "fsblock after log = $block"               >>$seqres.full
 _check_corrupt $SCRATCH_DEV $block
 
 actual_log_size=`_log_size`
-echo "log size = $actual_log_size BB"                      >>$seq.full
+echo "log size = $actual_log_size BB"                      >>$seqres.full
 head=`_log_head`
-echo "log position = $head"                     >>$seq.full
+echo "log position = $head"                     >>$seqres.full
 lsunit=`_log_sunit`
-echo "log sunit = $lsunit"			>>$seq.full
+echo "log sunit = $lsunit"			>>$seqres.full
 
 # sanity checks
 [ $actual_log_size -eq $log_size_bb ] || \
@@ -206,36 +209,36 @@ echo "log sunit = $lsunit"			>>$seq.full
 # find how how many blocks per op for 100 ops
 # ignore the fact that it will also include an unmount record etc...
 # this should be small overall
-echo "    lots of traffic for sampling" >>$seq.full
+echo "    lots of traffic for sampling" >>$seqres.full
 sample_size_ops=100
 _log_traffic $sample_size_ops
 head1=`_log_head`
 num_blocks=`expr $head1 - $head`
 blocks_per_op=`echo "scale=3; $num_blocks / $sample_size_ops" | bc`
-echo "blocks_per_op = $blocks_per_op" >>$seq.full
+echo "blocks_per_op = $blocks_per_op" >>$seqres.full
 num_expected_ops=`echo "$log_size_bb / $blocks_per_op" | bc`
-echo "num_expected_ops = $num_expected_ops" >>$seq.full
+echo "num_expected_ops = $num_expected_ops" >>$seqres.full
 num_expected_to_go=`echo "$num_expected_ops - $sample_size_ops" | bc`
-echo "num_expected_to_go = $num_expected_to_go" >>$seq.full
+echo "num_expected_to_go = $num_expected_to_go" >>$seqres.full
 
-echo "    lots more traffic" >>$seq.full
+echo "    lots more traffic" >>$seqres.full
 _log_traffic $num_expected_to_go
 head=`_log_head`
-echo "log position = $head"                     >>$seq.full
+echo "log position = $head"                     >>$seqres.full
 
 # e.g. 3891
 near_end_min=`echo "0.95 * $log_size_bb" | bc | sed 's/\..*//'`
-echo "near_end_min = $near_end_min" >>$seq.full
+echo "near_end_min = $near_end_min" >>$seqres.full
 
 [ $head -gt $near_end_min -a $head -lt $log_size_bb ] || \
     _fail "!!! unexpected near end log position $head"
 
 for c in `seq 0 20`
 do
-    echo "   little traffic"            >>$seq.full
+    echo "   little traffic"            >>$seqres.full
     _log_traffic 2
     head=`_log_head`
-    echo "log position = $head"         >>$seq.full
+    echo "log position = $head"         >>$seqres.full
     _check_corrupt $SCRATCH_DEV $block
 done
 

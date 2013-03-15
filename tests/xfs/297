@@ -24,6 +24,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -48,7 +51,7 @@ _supported_os IRIX Linux
 _require_scratch
 _require_freeze
 
-rm -f $seq.full
+rm -f $seqres.full
 _scratch_mkfs_xfs -d agcount=16,su=256k,sw=12 -l su=256k,size=2560b >/dev/null 2>&1
 _scratch_mount >/dev/null 2>&1
 
@@ -58,26 +61,26 @@ mkdir -p $STRESS_DIR
 $FSSTRESS_PROG -d $STRESS_DIR -n 100 -p 1000 $FSSTRESS_AVOID >/dev/null 2>&1 &
 
 # Freeze/unfreeze file system randomly
-echo "Start freeze/unfreeze randomly" | tee -a $seq.full
+echo "Start freeze/unfreeze randomly" | tee -a $seqres.full
 LOOP=10
 while [ $LOOP -gt 0 ];do
 	TIMEOUT=`expr $RANDOM % 5`
 	sleep $TIMEOUT
-	echo "* Freeze file system after sleeping $TIMEOUT seconds" >>$seq.full
+	echo "* Freeze file system after sleeping $TIMEOUT seconds" >>$seqres.full
 	xfs_freeze -f $SCRATCH_MNT
 	if [ $? -ne 0 ];then
-		echo " - Error: freeze filesystem failed" | tee -a $seq.full
+		echo " - Error: freeze filesystem failed" | tee -a $seqres.full
 	fi
 	TIMEOUT=`expr $RANDOM % 3`
 	sleep $TIMEOUT
-	echo "* Unfreeze file system after sleeping $TIMEOUT seconds" >>$seq.full
+	echo "* Unfreeze file system after sleeping $TIMEOUT seconds" >>$seqres.full
 	xfs_freeze -u $SCRATCH_MNT
 	if [ $? -ne 0 ];then
-		echo " - Error: unfreeze filesystem failed" | tee -a $seq.full
+		echo " - Error: unfreeze filesystem failed" | tee -a $seqres.full
 	fi
 	let LOOP=$LOOP-1
 done
-echo "Test done" | tee -a $seq.full
+echo "Test done" | tee -a $seqres.full
 killall -q $FSSTRESS_PROG
 wait
 

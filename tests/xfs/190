@@ -35,12 +35,15 @@ filesize=10
 filename=test-190
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
 status=0    # success is the default!
-rm -f $seq.full
+rm -f $seqres.full
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -55,20 +58,20 @@ _scratch_mkfs_xfs >/dev/null 2>&1
 _scratch_mount
 fsblocksize=`xfs_info $SCRATCH_MNT|sed 's/=/ /g'|awk '/^data / { print $3 }'`
 
-dd if=/dev/zero of=$SCRATCH_MNT/$filename bs=1024k count=10 >> $seq.full 2>&1
+dd if=/dev/zero of=$SCRATCH_MNT/$filename bs=1024k count=10 >> $seqres.full 2>&1
 
 # run DMAPI test using verbose output
 echo Punching holes in file
-echo Punching holes in file >> $seq.full
+echo Punching holes in file >> $seqres.full
 for i in $holes ; do
-	echo xfs_io -c "unresvsp `echo $i |$SED_PROG 's/:/ /g'`" $SCRATCH_MNT/$filename >> $seq.full
+	echo xfs_io -c "unresvsp `echo $i |$SED_PROG 's/:/ /g'`" $SCRATCH_MNT/$filename >> $seqres.full
 	xfs_io -c "unresvsp `echo $i |$SED_PROG 's/:/ /g'`" $SCRATCH_MNT/$filename ;
 done
 
 echo Verifying holes are in the correct spots:
 
 xfs_bmap=`xfs_bmap $SCRATCH_MNT/$filename`
-xfs_bmap $SCRATCH_MNT/$filename >> $seq.full
+xfs_bmap $SCRATCH_MNT/$filename >> $seqres.full
 for i in $holes ; do
 	holeStart=$[`echo $i|$SED_PROG 's/:/ /g'|awk '{print $1}'`];
 	holeEnd=$[`echo $i|$SED_PROG 's/:/ /g'|awk '{print $2}'`];
@@ -83,7 +86,7 @@ for i in $holes ; do
 	#xfs_bmap prints holes in the following format
 	#                1: [8..15]: hole
 	bmap="\[$[$holeStart/512]..$[($holeEnd/512) -1]\]";
-	echo $bmap >> $seq.full
+	echo $bmap >> $seqres.full
 	if [ $holeEnd == $holeStart ] ; then
 		continue #there is no hole
 	fi

@@ -22,6 +22,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -44,7 +47,7 @@ _supported_fs xfs
 _supported_os IRIX Linux
 
 # real QA test starts here
-rm -f $seq.full
+rm -f $seqres.full
 
 # For this test we use block size = 1/8 page size
 pgsize=`$here/src/feature -s`
@@ -63,7 +66,7 @@ blksize=`expr $pgsize / 8`
 
 _filter_bmap()
 {
-    tee -a $seq.full | \
+    tee -a $seqres.full | \
     sed "s#$SCRATCH_MNT#SCRATCH_MNT#g" | \
     awk \
         '$3 ~ /hole/     { print $1 "\t" $3 "\t" ($4 * 512) / blksize; next }
@@ -75,7 +78,7 @@ _filter_bmap()
 # Filter out offsets, which vary by blocksize
 _filter_od()
 {
-    tee -a $seq.full | \
+    tee -a $seqres.full | \
     sed -e "s/^[0-9A-Fa-f ]\{7,8\}//"
 }
 
@@ -118,12 +121,12 @@ xfs_io \
 -c "pwrite -S 0x11 -b `expr $pgsize / 2`  0 `expr $pgsize / 2`" \
 -c "truncate `expr $blksize / 2`" \
 -c "truncate $pgsize" \
--t -f $SCRATCH_MNT/testfile1 >> $seq.full
+-t -f $SCRATCH_MNT/testfile1 >> $seqres.full
 
 # directio read of entire file
 xfs_io \
 -c "pread 0 $pgsize" \
--d $SCRATCH_MNT/testfile1 >> $seq.full
+-d $SCRATCH_MNT/testfile1 >> $seqres.full
 
 xfs_bmap -v $SCRATCH_MNT/testfile1 | _filter_bmap
 od -x $SCRATCH_MNT/testfile1 | _filter_od
@@ -137,12 +140,12 @@ xfs_io \
 -c "truncate `expr $blksize / 2`" \
 -c "truncate $pgsize" \
 -c "pwrite -S 0x22 -b $blksize `expr $blksize \* 4` $blksize" \
--t -f $SCRATCH_MNT/testfile2 >> $seq.full
+-t -f $SCRATCH_MNT/testfile2 >> $seqres.full
 
 # directio read of entire file
 xfs_io \
 -c "pread 0 $pgsize" \
--d $SCRATCH_MNT/testfile2 >> $seq.full
+-d $SCRATCH_MNT/testfile2 >> $seqres.full
 
 xfs_bmap -v $SCRATCH_MNT/testfile2 | _filter_bmap
 od -x $SCRATCH_MNT/testfile2 | _filter_od
@@ -187,7 +190,7 @@ xfs_io \
 -c "truncate `expr $blksize / 2`" \
 -c "truncate `expr $blksize + 1`" \
 -c "pwrite -S 0x22 -b $blksize `expr $pgsize / 2` $blksize" \
--t -d -f $SCRATCH_MNT/testfile3 >> $seq.full
+-t -d -f $SCRATCH_MNT/testfile3 >> $seqres.full
 
 xfs_bmap -v $SCRATCH_MNT/testfile3 | _filter_bmap
 od -x $SCRATCH_MNT/testfile3 | _filter_od
@@ -207,7 +210,7 @@ xfs_io \
 -c "truncate `expr $blksize + 1`" \
 -c "pwrite -S 0x22 -b $blksize `expr $pgsize / 2` $blksize" \
 -c "pwrite -S 0x33 -b 512 `expr $blksize \* 2` 512" \
--t -d -f $SCRATCH_MNT/testfile4 >> $seq.full
+-t -d -f $SCRATCH_MNT/testfile4 >> $seqres.full
 
 xfs_bmap -v $SCRATCH_MNT/testfile4 | _filter_bmap
 od -x $SCRATCH_MNT/testfile4 | _filter_od

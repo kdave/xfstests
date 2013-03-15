@@ -26,6 +26,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -49,7 +52,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _supported_fs xfs
 _supported_os IRIX Linux
 
-rm -f $seq.full
+rm -f $seqres.full
 
 _require_scratch
 _require_xfs_quota
@@ -59,8 +62,8 @@ _require_nobody
 _qmount_option uquota
 
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-cat $tmp.mkfs >>$seq.full
-chmod a+w $seq.full     # arbitrary users will write here
+cat $tmp.mkfs >>$seqres.full
+chmod a+w $seqres.full     # arbitrary users will write here
 
 # keep the blocksize from mkfs ($dbsize)
 . $tmp.mkfs
@@ -94,7 +97,7 @@ xfs_quota -x \
 
 # cross check blks, softblks, hardblks <-> quota, xfs_db
 xfs_quota -c "quota -$type -birnN $id" $SCRATCH_DEV |
-			tr -d '\n' | tr -s '[:space:]' | tee -a $seq.full |
+			tr -d '\n' | tr -s '[:space:]' | tee -a $seqres.full |
 	perl -ne 'if (m[^\s*'$SCRATCH_DEV'\s+(\d+)\s+(\d+)\s+(\d+)]) {
 		print "used_blocks=", $1, "\n";
 		print "soft_blocks=", $2, "\n";
@@ -102,14 +105,14 @@ xfs_quota -c "quota -$type -birnN $id" $SCRATCH_DEV |
 		$next = 0;
 	}' | LC_COLLATE=POSIX sort >$tmp.quota
 
-echo ===quota output >> $seq.full
-cat $tmp.quota >> $seq.full
+echo ===quota output >> $seqres.full
+cat $tmp.quota >> $seqres.full
 [ ! -s $tmp.quota ] && echo "warning: quota output file is empty"
 
 umount $SCRATCH_MNT
 
 # note - does (insitu) conversion from fs blocks to 1K blocks
-xfs_db -rc "dquot -$type $id" -c p $SCRATCH_DEV | tee -a $seq.full | perl -ne '
+xfs_db -rc "dquot -$type $id" -c p $SCRATCH_DEV | tee -a $seqres.full | perl -ne '
 	if (/^diskdq.bcount = (\d+)$/) {
 		 print "used_blocks=", $1 * '$dbsize' / 1024, "\n";
 	}
@@ -120,8 +123,8 @@ xfs_db -rc "dquot -$type $id" -c p $SCRATCH_DEV | tee -a $seq.full | perl -ne '
 		print "soft_blocks=", $1 * '$dbsize' / 1024, "\n";
 	}' | LC_COLLATE=POSIX sort >$tmp.xfs_db
 
-echo ===xfs_db output >> $seq.full
-cat $tmp.xfs_db >> $seq.full
+echo ===xfs_db output >> $seqres.full
+cat $tmp.xfs_db >> $seqres.full
 [ ! -s $tmp.xfs_db ] && echo "warning: xfs_db output file is empty"
 
 echo Comparing out of xfs_quota and xfs_db

@@ -22,6 +22,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -43,9 +46,9 @@ _supported_fs xfs
 _supported_os IRIX Linux
 
 # real QA test starts here
-rm -f $seq.full
+rm -f $seqres.full
 _require_scratch
-_scratch_mkfs_xfs -n size=16k -d size=128m >> $seq.full 2>&1
+_scratch_mkfs_xfs -n size=16k -d size=128m >> $seqres.full 2>&1
 _scratch_mount
 
 # First we cause very badly fragmented freespace, then
@@ -55,21 +58,21 @@ _scratch_mount
 # Step 1: Cause badly fragmented free space
 mkdir $SCRATCH_MNT/fragdir
 for I in `seq 0 27200`; do
-        (echo data > $SCRATCH_MNT/fragdir/f$I) >> $seq.full 2>&1
+        (echo data > $SCRATCH_MNT/fragdir/f$I) >> $seqres.full 2>&1
 done
 sync
 
 for I in `seq 0 2 27200`; do
-        rm -f $SCRATCH_MNT/fragdir/f$I >> $seq.full 2>&1
+        rm -f $SCRATCH_MNT/fragdir/f$I >> $seqres.full 2>&1
 done
 sync
 
 # Soak up any remaining freespace
-xfs_io -f -c "pwrite 0 16m" -c "fsync" $SCRATCH_MNT/space_file.large >> $seq.full 2>&1
+xfs_io -f -c "pwrite 0 16m" -c "fsync" $SCRATCH_MNT/space_file.large >> $seqres.full 2>&1
 
 # Take a look at freespace for any post-mortem on the test
 _scratch_unmount
-xfs_db -c freesp $SCRATCH_DEV >> $seq.full 2>&1
+xfs_db -c freesp $SCRATCH_DEV >> $seqres.full 2>&1
 _scratch_mount
 
 # Step 2: Make a bunch of (hopefully fragmented) multiblock
@@ -111,14 +114,14 @@ done
 
 _scratch_unmount
 # Can xfs_repair and xfs_check cope with this monster?
-_scratch_xfs_repair >> $seq.full 2>&1 || _fail "xfs_repair failed"
-xfs_check $SCRATCH_DEV >> $seq.full 2>&1 || _fail "xfs_check failed"
+_scratch_xfs_repair >> $seqres.full 2>&1 || _fail "xfs_repair failed"
+xfs_check $SCRATCH_DEV >> $seqres.full 2>&1 || _fail "xfs_check failed"
 
 # Yes they can!  Now...
 # Can xfs_metadump cope with this monster?
 xfs_metadump $SCRATCH_DEV $tmp.metadump || _fail "xfs_metadump failed"
 xfs_mdrestore $tmp.metadump $tmp.img || _fail "xfs_mdrestore failed"
-xfs_repair $tmp.img >> $seq.full 2>&1 || _fail "xfs_repair of metadump failed"
+xfs_repair $tmp.img >> $seqres.full 2>&1 || _fail "xfs_repair of metadump failed"
 
 # Yes it can; success, all done
 status=0

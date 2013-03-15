@@ -25,6 +25,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -42,7 +45,7 @@ FSX_ARGS="-q -l $FSX_FILE_SIZE -o 65536 -S 191110531 -N 100000"
 
 _filter_num()
 {
-	tee -a $here/$seq.full |\
+	tee -a $here/$seqres.full |\
 	sed -e 's/[0-9][0-9]* inodes/I inodes/g' \
 	    -e 's/[0-9][0-9]* paths/P paths/g' \
 	    -e 's/seed = [0-9][0-9]*/seed = S/'
@@ -61,11 +64,11 @@ _fsstress()
 -f rename=10 -f fsync=2 -f write=15 -f dwrite=15 \
 -n $count -d $out -p 7`
 
-	echo "fsstress $args" >> tee -a $here/$seq.full
-	if ! su $qa_user -c "$FSSTRESS_PROG $args" | tee -a $here/$seq.full | _filter_num
+	echo "fsstress $args" >> tee -a $here/$seqres.full
+	if ! su $qa_user -c "$FSSTRESS_PROG $args" | tee -a $here/$seqres.full | _filter_num
 	then
 		echo "    fsstress $args returned $?"
-		cat $tmp.out | tee -a $here/$seq.full
+		cat $tmp.out | tee -a $here/$seqres.full
 		status=1
 	fi
 }
@@ -78,7 +81,7 @@ _require_quota
 _require_user
 _need_to_be_root
 
-_scratch_mkfs >> $seq.full 2>&1
+_scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount "-o usrquota,grpquota"
 chmod 777 $SCRATCH_MNT
 quotacheck -u -g $SCRATCH_MNT 2>/dev/null

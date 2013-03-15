@@ -23,13 +23,14 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
-rm -f $seq.full
+rm -f $seqres.full
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -75,18 +76,18 @@ do
 	src/devzero -n 20 $SCRATCH_DEV >/dev/null
 
 	# create a filesystem of this type
-	echo "=== Creating $fs filesystem..." >>$seq.full
-	echo "    ( $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs )" >>$seq.full
-	eval $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs >>$seq.full 2>&1
+	echo "=== Creating $fs filesystem..." >>$seqres.full
+	echo "    ( $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs )" >>$seqres.full
+	eval $preop mkfs -t $fs $preargs $SCRATCH_DEV $postargs >>$seqres.full 2>&1
 
 	if [ $? -eq 0 ] ; then
 		# next, ensure we don't overwrite it
-		echo "=== Attempting $FSTYP overwrite of $fs..." >>$seq.full
-		${MKFS_PROG}.$FSTYP $SCRATCH_DEV >>$seq.full 2>&1
+		echo "=== Attempting $FSTYP overwrite of $fs..." >>$seqres.full
+		${MKFS_PROG}.$FSTYP $SCRATCH_DEV >>$seqres.full 2>&1
 
 		[ $? -eq 0 ] && echo "Failed - overwrote fs type ${fs}!"
 	else
-		echo "mkfs of type ${fs} failed" >>$seq.full
+		echo "mkfs of type ${fs} failed" >>$seqres.full
 	fi
 done
 

@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -79,8 +82,8 @@ _test_create()
 	p=dir2/dir3/dir4/file4
 	touch $p
 
-	#_print_names $p >>$here/$seq.full
-	_print_names $p | tee -a $here/$seq.full
+	#_print_names $p >>$here/$seqres.full
+	_print_names $p | tee -a $here/$seqres.full
 
 	_check_paths $SCRATCH_MNT/$p
 }
@@ -130,13 +133,13 @@ _test_hardlink()
 		ln $p $x
 	done
 
-	_print_names $p >>$here/$seq.full
+	_print_names $p >>$here/$seqres.full
 
 	echo ""
 	echo "print out names and check after created hardlinks"
 	echo ""
 	for x in $paths; do
-		_print_names $x | tee -a $here/$seq.full
+		_print_names $x | tee -a $here/$seqres.full
 		_check_paths $SCRATCH_MNT/$x
 	done
 
@@ -160,7 +163,7 @@ _test_hardlink()
 	echo ""
 	for x in $paths; do
 		if [ -e $x ]; then 
-			_print_names $x | tee -a $here/$seq.full
+			_print_names $x | tee -a $here/$seqres.full
 			_check_paths $SCRATCH_MNT/$x
 		fi
 	done
@@ -229,7 +232,7 @@ _test_rename()
 
 _filter_num()
 {
-	tee -a $here/$seq.full |\
+	tee -a $here/$seqres.full |\
 	sed -e 's/[0-9][0-9]* inodes/I inodes/g' \
 	    -e 's/[0-9][0-9]* paths/P paths/g' \
 	    -e 's/seed = [0-9][0-9]*/seed = S/'
@@ -254,7 +257,7 @@ _test_fsstress()
 	if ! $FSSTRESS_PROG $args | _filter_num
 	then
 		echo "    fsstress $args returned $?"
-		cat $tmp.out | tee -a $here/$seq.full
+		cat $tmp.out | tee -a $here/$seqres.full
 		status=1
 	fi
 
@@ -283,8 +286,8 @@ _test_dirstress()
 	if ! $here/src/dirstress $args >$tmp.out 2>&1 | _filter_num
 	then
 		echo "    dirstress failed"
-		echo "*** dirstress $args" | tee -a $here/$seq.full
-		cat $tmp.out >>$here/$seq.full
+		echo "*** dirstress $args" | tee -a $here/$seqres.full
+		cat $tmp.out >>$here/$seqres.full
 		status=1
 		exit
 	fi
@@ -294,8 +297,8 @@ _test_dirstress()
 	if ! $here/src/dirstress $args >$tmp.out 2>&1 | _filter_num
 	then
 		echo "    dirstress failed"
-		echo "*** dirstress $args" | tee -a $here/$seq.full
-		cat $tmp.out >>$here/$seq.full
+		echo "*** dirstress $args" | tee -a $here/$seqres.full
+		cat $tmp.out >>$here/$seqres.full
 		status=1
 		exit
 	fi
@@ -315,16 +318,16 @@ _require_scratch
 _require_attrs
 _need_to_be_root
 
-rm -f $here/$seq.full
+rm -f $here/$seqres.full
 
 echo "mkfs"
-_scratch_mkfs_xfs >>$here/$seq.full 2>&1 \
+_scratch_mkfs_xfs >>$here/$seqres.full 2>&1 \
     || _fail "mkfs scratch failed"
-_scratch_mkfs_xfs -i parent=1 >>$here/$seq.full 2>&1 \
+_scratch_mkfs_xfs -i parent=1 >>$here/$seqres.full 2>&1 \
     || _notrun "parent inodes not supported"
 
 echo "mount"
-_scratch_mount >>$here/$seq.full 2>&1 \
+_scratch_mount >>$here/$seqres.full 2>&1 \
     || _fail "mount failed: $MOUNT_OPTIONS"
 
 # real QA test starts here

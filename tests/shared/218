@@ -22,6 +22,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -59,36 +62,36 @@ rm -f $fragfile
 
 # Craft some fragmented files, defrag them, check the result.
 
-echo "zero-length file:" | tee -a $seq.full
+echo "zero-length file:" | tee -a $seqres.full
 touch $fragfile
 _defrag $fragfile
 
-echo "Sparse file (no blocks):" | tee -a $seq.full
+echo "Sparse file (no blocks):" | tee -a $seqres.full
 xfs_io -F -f -c "truncate 1m" $fragfile
 _defrag $fragfile
 
-echo "Contiguous file:" | tee -a $seq.full
+echo "Contiguous file:" | tee -a $seqres.full
 dd if=/dev/zero of=$fragfile bs=4k count=4 &>/dev/null
 _defrag $fragfile
 
-echo "Write backwards sync, but contiguous - should defrag to 1 extent" | tee -a $seq.full
+echo "Write backwards sync, but contiguous - should defrag to 1 extent" | tee -a $seqres.full
 for I in `seq 9 -1 0`; do
 	dd if=/dev/zero of=$fragfile bs=4k count=1 conv=notrunc seek=$I oflag=sync &>/dev/null
 done
 _defrag $fragfile
 
-echo "Write backwards sync leaving holes - defrag should do nothing" | tee -a $seq.full
+echo "Write backwards sync leaving holes - defrag should do nothing" | tee -a $seqres.full
 for I in `seq 31 -2 0`; do
 	dd if=/dev/zero of=$fragfile bs=4k count=1 conv=notrunc seek=$I oflag=sync &>/dev/null
 done
 _defrag $fragfile
 
-echo "Write forwards sync leaving holes - defrag should do nothing" | tee -a $seq.full
+echo "Write forwards sync leaving holes - defrag should do nothing" | tee -a $seqres.full
 for I in `seq 0 2 31`; do
 	dd if=/dev/zero of=$fragfile bs=4k count=1 conv=notrunc seek=$I oflag=sync &>/dev/null
 done
 _defrag $fragfile
 
-rm -f $seq.full
+rm -f $seqres.full
 status=0
 exit

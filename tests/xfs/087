@@ -25,6 +25,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -46,7 +49,7 @@ _do_meta()
            -f rename=30 -f stat=30 -f unlink=30 -f truncate=20"
     _echofull "calling fsstress $param -m8 -n $count"
     FSSTRESS_ARGS=`_scale_fsstress_args $param $FSSTRESS_AVOID -m 8 -n $count -d $out`
-    if ! $FSSTRESS_PROG $FSSTRESS_ARGS >>$seq.full 2>&1
+    if ! $FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full 2>&1
     then
 	_echofull "fsstress failed"
     fi
@@ -56,7 +59,7 @@ _do_meta()
 _supported_fs xfs
 _supported_os IRIX Linux
 
-rm -f $seq.full $tmp.*
+rm -f $seqres.full $tmp.*
 _require_scratch
 _require_v2log 
 _require_xfs_quota
@@ -91,7 +94,7 @@ do
 
     # mkfs the FS
     _echofull "mkfs"
-    _scratch_mkfs_xfs >>$seq.full 2>&1
+    _scratch_mkfs_xfs >>$seqres.full 2>&1
     if [ $? -ne 0 ] ; then 
 	_echofull "mkfs failed: $MKFS_OPTIONS"
 	continue
@@ -99,7 +102,7 @@ do
 
     # mount the FS
     _echofull "mount"
-    if ! _scratch_mount -o uquota >>$seq.full 2>&1; then
+    if ! _scratch_mount -o uquota >>$seqres.full 2>&1; then
 	_echofull "mount failed: $MOUNT_OPTIONS"
 	continue
     fi
@@ -112,20 +115,20 @@ do
     ls -RF $SCRATCH_MNT >$tmp.ls1
 
     _echofull "godown"
-    src/godown -v -f $SCRATCH_MNT >> $seq.full
+    src/godown -v -f $SCRATCH_MNT >> $seqres.full
 
     _echofull "unmount"
-    umount $SCRATCH_DEV >>$seq.full 2>&1 \
+    umount $SCRATCH_DEV >>$seqres.full 2>&1 \
 	|| _fail "umount failed"
 
     _echofull "logprint after going down..."
     _print_logstate
 
     _full "logprint headers"
-    _scratch_xfs_logprint -n >>$seq.full 2>&1
+    _scratch_xfs_logprint -n >>$seqres.full 2>&1
 
     _echofull "mount with replay"
-    _scratch_mount -o uquota >>$seq.full 2>&1 \
+    _scratch_mount -o uquota >>$seqres.full 2>&1 \
 	|| _fail "mount failed: $MOUNT_OPTIONS"
 
     # check on what FS looks like after log recovery

@@ -24,12 +24,15 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 tmp=/tmp/$$
 here=`pwd`
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
-rm -f $seq.full
+rm -f $seqres.full
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -57,7 +60,7 @@ _require_scratch
 _require_projid32bit
 
 # create xfs fs without projid32bit ability, will be gained by xfs_admin
-_scratch_mkfs_xfs -i projid32bit=0 -d size=200m >> $seq.full \
+_scratch_mkfs_xfs -i projid32bit=0 -d size=200m >> $seqres.full \
 		|| _fail "mkfs failed"
 _qmount_option "pquota"
 _qmount
@@ -73,9 +76,9 @@ touch $dir/{16,32}bit
 inode16a=$(ls -i $dir/16bit | cut -d ' ' -f 1)
 inode32a=$(ls -i $dir/32bit | cut -d ' ' -f 1)
 $XFS_QUOTA_PROG -x -c "project -s -p $dir/16bit 1234" $SCRATCH_DEV \
-		>> $seq.full
+		>> $seqres.full
 $XFS_QUOTA_PROG -x -c "project -s -p $dir/32bit 2123456789" $SCRATCH_DEV \
-		>> $seq.full 2>&1
+		>> $seqres.full 2>&1
 
 echo "No 32bit project quotas:"
 $XFS_IO_PROG -r -c "lsproj" $dir/16bit
@@ -84,13 +87,13 @@ $XFS_IO_PROG -r -c "lsproj" $dir/32bit
 umount $SCRATCH_MNT
 
 # Now, enable projid32bit support by xfs_admin
-xfs_admin -p $SCRATCH_DEV >> $seq.full 2>&1 || _fail "xfs_admin failed"
+xfs_admin -p $SCRATCH_DEV >> $seqres.full 2>&1 || _fail "xfs_admin failed"
 
 # Now mount the fs, 32bit project quotas shall be supported, now
 _qmount_option "pquota"
 _qmount
 $XFS_QUOTA_PROG -x -c "project -s -p $dir/32bit 2123456789" $SCRATCH_DEV \
-		>> $seq.full
+		>> $seqres.full
 
 # These will be checked by $seq.out
 echo "With 32bit project quota support:"
@@ -99,7 +102,7 @@ $XFS_IO_PROG -r -c "lsproj" $dir/32bit
 
 # Dump the fs to a temporary file
 rm -f $tmp.dump.img
-$XFSDUMP_PROG -f $tmp.dump -L label -M media -l 0 $SCRATCH_MNT >> $seq.full \
+$XFSDUMP_PROG -f $tmp.dump -L label -M media -l 0 $SCRATCH_MNT >> $seqres.full \
 		|| _fail "dump failed"
 
 # Prepare the device to restore the dumped file system
@@ -109,7 +112,7 @@ restore_dir=$SCRATCH_MNT/restore/pquota
 mkdir -p $SCRATCH_MNT/restore
 
 # Restore
-$XFSRESTORE_PROG -f $tmp.dump $SCRATCH_MNT/restore >> $seq.full 2>&1 \
+$XFSRESTORE_PROG -f $tmp.dump $SCRATCH_MNT/restore >> $seqres.full 2>&1 \
 		|| _fail "xfsrestore failed"
 
 # Check that they are the same
@@ -120,7 +123,7 @@ inode16b=$(ls -i $restore_dir/16bit | cut -d ' ' -f 1)
 inode32b=$(ls -i $restore_dir/32bit | cut -d ' ' -f 1)
 inode32v2=$(ls -i $restore_dir/32bitv2 | cut -d ' ' -f 1)
 $XFS_QUOTA_PROG -x -c "project -s -p $restore_dir/32bitv2 2123456789" \
-		$SCRATCH_MNT >> $seq.full
+		$SCRATCH_MNT >> $seqres.full
 echo "The restored file system + one additional file:"
 $XFS_IO_PROG -r -c "lsproj" $restore_dir/16bit
 $XFS_IO_PROG -r -c "lsproj" $restore_dir/32bit

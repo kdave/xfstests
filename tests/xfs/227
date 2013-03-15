@@ -28,6 +28,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -50,7 +53,7 @@ _supported_fs xfs
 _supported_os Linux
 _require_scratch
 
-rm -f $seq.full
+rm -f $seqres.full
 
 [ "$XFS_FSR_PROG" = "" ] && _notrun "xfs_fsr not found"
 
@@ -152,10 +155,10 @@ create_target_attr_last()
 	create_attrs $nattrs $target
 }
 
-rm -f $seq.full
+rm -f $seqres.full
 
 # use a small filesystem so we can control freespace easily
-_scratch_mkfs_sized $((50 * 1024 * 1024)) >> $seq.full 2>&1
+_scratch_mkfs_sized $((50 * 1024 * 1024)) >> $seqres.full 2>&1
 _scratch_mount
 fragment_freespace
 
@@ -187,20 +190,20 @@ _scratch_mount
 
 targ=$SCRATCH_MNT/fsr_test_file.$$
 for n in `seq 4 1 12`; do
-	echo "*** n == $n ***" >> $seq.full
+	echo "*** n == $n ***" >> $seqres.full
 	for i in `seq 5 1 15`; do
 		for j in `seq 5 1 20`; do
-			create_target_attr_first $i $j $targ.$i.$j >> $seq.full 2>&1
+			create_target_attr_first $i $j $targ.$i.$j >> $seqres.full 2>&1
 		done
-		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
-		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seq.full 2>&1
-		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
+		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
+		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
 		for j in `seq 5 1 20`; do
-			create_target_attr_last $i $j $targ.$i.$j >> $seq.full 2>&1
+			create_target_attr_last $i $j $targ.$i.$j >> $seqres.full 2>&1
 		done
-		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
-		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seq.full 2>&1
-		xfs_bmap -vp $targ.$i.* >> $seq.full 2>&1
+		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
+		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
 	done
 done
 

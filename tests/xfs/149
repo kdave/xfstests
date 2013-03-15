@@ -24,13 +24,16 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
-rm -f $seq.full
+rm -f $seqres.full
 
 # get standard environment, filters and checks
 . ./common.rc
@@ -44,15 +47,15 @@ export XFS_REPAIR_PROG=$XFS_PARALLEL_REPAIR_PROG
 
 _check_repair()
 {
-	echo "Repairing, round 0" >> $seq.full
-	_scratch_xfs_repair 2>&1 | _filter_repair | tee -a $seq.full >$tmp.0
+	echo "Repairing, round 0" >> $seqres.full
+	_scratch_xfs_repair 2>&1 | _filter_repair | tee -a $seqres.full >$tmp.0
 	for i in 1 2 3 4
 	do
-		echo "Repairing, iteration $i" | tee -a $seq.full
+		echo "Repairing, iteration $i" | tee -a $seqres.full
 		_scratch_xfs_repair 2>&1 | _filter_repair >$tmp.$i
-		diff $tmp.0 $tmp.$i >> $seq.full
+		diff $tmp.0 $tmp.$i >> $seqres.full
 		if [ $? -ne 0 ]; then
-			echo "ERROR: repair round $i differs to round 0 (see $seq.full)" | tee -a $seq.full
+			echo "ERROR: repair round $i differs to round 0 (see $seqres.full)" | tee -a $seqres.full
 			break
 		fi
 		# echo all interesting stuff...

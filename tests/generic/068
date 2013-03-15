@@ -24,6 +24,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -57,13 +60,13 @@ _require_freeze
 
 echo "*** init FS"
 
-rm -f $seq.full
+rm -f $seqres.full
 umount $SCRATCH_DEV >/dev/null 2>&1
-echo "*** MKFS ***"                         >>$seq.full
-echo ""                                     >>$seq.full
-_scratch_mkfs                               >>$seq.full 2>&1 \
+echo "*** MKFS ***"                         >>$seqres.full
+echo ""                                     >>$seqres.full
+_scratch_mkfs                               >>$seqres.full 2>&1 \
     || _fail "mkfs failed"
-_scratch_mount                              >>$seq.full 2>&1 \
+_scratch_mount                              >>$seqres.full 2>&1 \
     || _fail "mount failed"
 
 touch $tmp.running
@@ -106,23 +109,23 @@ touch $tmp.running
 i=0
 let ITERATIONS=$ITERATIONS-1
 
-echo | tee -a $seq.full
+echo | tee -a $seqres.full
 while [ $i -le $ITERATIONS ]
 do
-        echo "*** iteration: $i" | tee -a $seq.full
-	echo "*** freezing \$SCRATCH_MNT" | tee -a $seq.full
-	xfs_freeze -f "$SCRATCH_MNT" | tee -a $seq.full
+        echo "*** iteration: $i" | tee -a $seqres.full
+	echo "*** freezing \$SCRATCH_MNT" | tee -a $seqres.full
+	xfs_freeze -f "$SCRATCH_MNT" | tee -a $seqres.full
 	[ $? != 0 ] && echo xfs_freeze -f "$SCRATCH_MNT" failed | \
-	    tee -a $seq.full
+	    tee -a $seqres.full
 	sleep 2
 
-	echo "*** thawing  \$SCRATCH_MNT" | tee -a $seq.full
-	xfs_freeze -u "$SCRATCH_MNT" | tee -a $seq.full
+	echo "*** thawing  \$SCRATCH_MNT" | tee -a $seqres.full
+	xfs_freeze -u "$SCRATCH_MNT" | tee -a $seqres.full
 	[ $? != 0 ] && echo xfs_freeze -u "$SCRATCH_MNT" failed | \
-	    tee -a $seq.full
+	    tee -a $seqres.full
 	sleep 2
 
-	echo  | tee -a $seq.full
+	echo  | tee -a $seqres.full
 	let i=$i+1
 done
 

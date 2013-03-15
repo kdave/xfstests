@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -37,7 +40,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 _create_scratch()
 {
 	echo "*** mkfs"
-	_scratch_mkfs_xfs $@ | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
+	_scratch_mkfs_xfs $@ | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs
 	. $tmp.mkfs
 
 	echo "*** mount"
@@ -64,13 +67,13 @@ _stress_scratch()
 	# -w ensures that the only ops are ones which cause write I/O
 	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs \
 	    -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seq.full &
+	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full &
 }
 
 # real QA test starts here
 _supported_fs xfs
 _require_scratch
-_scratch_mkfs_xfs | tee -a $seq.full | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs
 . $tmp.mkfs	# extract blocksize and data size for scratch device
 
 endsize=`expr 550 \* 1048576`	# stop after growing this big
@@ -95,19 +98,19 @@ _fill_scratch $fillsize
 #
 while [ $size -le $endsize ]; do
 	echo "*** stressing a ${size} byte filesystem"
-	echo "*** stressing a ${sizeb} block filesystem" >> $seq.full
+	echo "*** stressing a ${sizeb} block filesystem" >> $seqres.full
 	_stress_scratch
 	sleep 1
 	size=`expr $size + $incsize`
 	sizeb=`expr $size / $dbsize`	# in data blocks
 	echo "*** growing to a ${size} byte filesystem"
-	echo "*** growing to a ${sizeb} block filesystem" >> $seq.full
+	echo "*** growing to a ${sizeb} block filesystem" >> $seqres.full
 	xfs_growfs -D ${sizeb} $SCRATCH_MNT \
-		| tee -a $seq.full | _filter_mkfs 2>$tmp.growfs
+		| tee -a $seqres.full | _filter_mkfs 2>$tmp.growfs
 	. $tmp.growfs
 	[ `expr $size % $modsize` -eq 0 ] && wait	# every 4th iteration
-	echo AGCOUNT=$agcount | tee -a $seq.full
-	echo && echo >> $seq.full
+	echo AGCOUNT=$agcount | tee -a $seqres.full
+	echo && echo >> $seqres.full
 done
 wait	# stop for any remaining stress processes
 

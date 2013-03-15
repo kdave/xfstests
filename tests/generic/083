@@ -33,6 +33,9 @@
 
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -58,7 +61,7 @@ _supported_os IRIX Linux
 _require_scratch
 _require_no_large_scratch_dev
 
-rm -f $seq.full
+rm -f $seqres.full
 
 workout()
 {
@@ -68,22 +71,22 @@ workout()
 	nops=$4
 
 	umount $SCRATCH_DEV >/dev/null 2>&1
-	echo "*** mkfs -dsize=$fsz,agcount=$ags"    >>$seq.full
-	echo ""                                     >>$seq.full
+	echo "*** mkfs -dsize=$fsz,agcount=$ags"    >>$seqres.full
+	echo ""                                     >>$seqres.full
 	if [ $FSTYP = xfs ]
 	then
-		_scratch_mkfs_xfs -dsize=$fsz,agcount=$ags  >>$seq.full 2>&1 \
+		_scratch_mkfs_xfs -dsize=$fsz,agcount=$ags  >>$seqres.full 2>&1 \
 			|| _fail "size=$fsz,agcount=$ags mkfs failed"
 	else
-		_scratch_mkfs_sized $fsz >>$seq.full 2>&1 \
+		_scratch_mkfs_sized $fsz >>$seqres.full 2>&1 \
 			|| _fail "size=$fsz mkfs failed"
 	fi
-	_scratch_mount                              >>$seq.full 2>&1 \
+	_scratch_mount                              >>$seqres.full 2>&1 \
 		|| _fail "mount failed"
 
 	# -w ensures that the only ops are ones which cause write I/O
 	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >>$seq.full
+	$FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full
 	_check_scratch_fs
 }
 

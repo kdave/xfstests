@@ -22,8 +22,11 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
-rm -f $seq.full
+rm -f $seqres.full
 
 here=`pwd`
 tmp=/tmp/$$
@@ -81,19 +84,19 @@ write_block()
     [ `$direct` ] && flags=-d
 
     echo "Writing $bytes bytes, offset is $words (direct=$direct)" | _filter_io
-    echo "Writing $bytes bytes at $location $words (direct=$direct)" >>$seq.full
+    echo "Writing $bytes bytes at $location $words (direct=$direct)" >>$seqres.full
     $XFS_IO_PROG -c "pwrite $offset 512" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | tee -a $seq.full | _filter_pwrite
-    xfs_bmap -v $SCRATCH_MNT/$seq >>$seq.full
+	2>&1 | _filter_off $offset | tee -a $seqres.full | _filter_pwrite
+    xfs_bmap -v $SCRATCH_MNT/$seq >>$seqres.full
 
     echo "Reading $bytes bytes (direct=$direct)" | _filter_io
-    echo "Reading $bytes bytes at $location (direct=$direct)" >>$seq.full
+    echo "Reading $bytes bytes at $location (direct=$direct)" >>$seqres.full
     $XFS_IO_PROG -c "pread $offset $bytes" $flags $SCRATCH_MNT/$seq \
-	2>&1 | _filter_off $offset | tee -a $seq.full | _filter_pread
+	2>&1 | _filter_off $offset | tee -a $seqres.full | _filter_pread
 
-    $XFS_IO_PROG -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seq.full 2>&1
+    $XFS_IO_PROG -c "pread -v $offset $bytes" $flags $SCRATCH_MNT/$seq >>$seqres.full 2>&1
 
-    echo | tee -a $seq.full
+    echo | tee -a $seqres.full
 }
 
 # real QA test starts here

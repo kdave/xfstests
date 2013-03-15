@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -52,13 +55,13 @@ _require_no_large_scratch_dev
 
 echo "*** init FS"
 
-rm -f $seq.full
+rm -f $seqres.full
 umount $SCRATCH_DEV >/dev/null 2>&1
-echo "*** MKFS ***"                         >>$seq.full
-echo ""                                     >>$seq.full
-_scratch_mkfs_xfs                           >>$seq.full 2>&1 \
+echo "*** MKFS ***"                         >>$seqres.full
+echo ""                                     >>$seqres.full
+_scratch_mkfs_xfs                           >>$seqres.full 2>&1 \
     || _fail "mkfs failed"
-_scratch_mount                              >>$seq.full 2>&1 \
+_scratch_mount                              >>$seqres.full 2>&1 \
     || _fail "mount failed"
 
 echo "*** test"
@@ -67,21 +70,21 @@ for l in 0 1 2 3 4
 do
         echo "    *** test $l"
 	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -n 1000 $FSSTRESS_AVOID`
-        $FSSTRESS_PROG  $FSSTRESS_ARGS >>$seq.full
+        $FSSTRESS_PROG  $FSSTRESS_ARGS >>$seqres.full
 
         _scratch_mount -o remount,ro \
             || _fail "remount ro failed"
 
-        echo ""                                 >>$seq.full
-        echo "*** xfs_logprint ***"             >>$seq.full
-        echo ""                                 >>$seq.full
-        _scratch_xfs_logprint -tb               | tee -a $seq.full \
+        echo ""                                 >>$seqres.full
+        echo "*** xfs_logprint ***"             >>$seqres.full
+        echo ""                                 >>$seqres.full
+        _scratch_xfs_logprint -tb               | tee -a $seqres.full \
             | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
 
-        echo ""                             >>$seq.full
-        echo "*** XFS_CHECK ***"            >>$seq.full
-        echo ""                             >>$seq.full
-        _scratch_xfs_check                  >>$seq.full 2>&1 \
+        echo ""                             >>$seqres.full
+        echo "*** XFS_CHECK ***"            >>$seqres.full
+        echo ""                             >>$seqres.full
+        _scratch_xfs_check                  >>$seqres.full 2>&1 \
             || _fail "xfs_check failed"
         _scratch_mount -o remount,rw \
             || _fail "remount rw failed"
@@ -89,6 +92,6 @@ done
 
 echo "*** done"
 # happy exit
-rm -f $seq.full
+rm -f $seqres.full
 status=0
 exit 0

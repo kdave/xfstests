@@ -25,6 +25,9 @@
 #creator
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -50,38 +53,38 @@ echo "------------------------------"
 echo "write until ENOSPC test"
 echo "------------------------------"
 
-rm -f $seq.full
+rm -f $seqres.full
 
 umount $SCRATCH_DEV 2>/dev/null
-_scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seq.full 2>&1
+_scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount
 
-dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=256K count=1 >>$seq.full 2>&1
+dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=256K count=1 >>$seqres.full 2>&1
 [ $? -ne 0 ] && _fail "Error creating file"
 
 # Attempt to completely fill fs
-dd if=/dev/zero of=$SCRATCH_MNT/tmp2 bs=1M >>$seq.full 2>&1
+dd if=/dev/zero of=$SCRATCH_MNT/tmp2 bs=1M >>$seqres.full 2>&1
 sync
-dd if=/dev/zero of=$SCRATCH_MNT/tmp3 bs=4K >>$seq.full 2>&1
+dd if=/dev/zero of=$SCRATCH_MNT/tmp3 bs=4K >>$seqres.full 2>&1
 sync
 # Last effort, use O_SYNC
-dd if=/dev/zero of=$SCRATCH_MNT/tmp4 bs=4K oflag=sync >>$seq.full 2>&1
+dd if=/dev/zero of=$SCRATCH_MNT/tmp4 bs=4K oflag=sync >>$seqres.full 2>&1
 # Save space usage info to the full file
-echo "Pre rm space:" >> $seq.full
-df $SCRATCH_MNT >>$seq.full 2>&1
+echo "Pre rm space:" >> $seqres.full
+df $SCRATCH_MNT >>$seqres.full 2>&1
 
 # Should leave approx 256k free
 rm -f $SCRATCH_MNT/tmp1
 sync
-echo "Post rm space:" >> $seq.full
-df $SCRATCH_MNT >>$seq.full 2>&1
+echo "Post rm space:" >> $seqres.full
+df $SCRATCH_MNT >>$seqres.full 2>&1
 _freespace=`df -k $SCRATCH_MNT | tail -n 1 | awk '{print $4}'`
 [ $_freespace -gt 1024 ] && _fail "could not sufficiently fill filesystem"
 
 # Try a write larger than available space
-dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=1M count=1 >>$seq.full 2>&1
-echo "Bytes written until ENOSPC:" >>$seq.full
-du $SCRATCH_MNT/tmp1 >>$seq.full
+dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=1M count=1 >>$seqres.full 2>&1
+echo "Bytes written until ENOSPC:" >>$seqres.full
+du $SCRATCH_MNT/tmp1 >>$seqres.full
 
 # And at least some of it should succeed.
 _filesize=`ls -l $SCRATCH_MNT/tmp1 | awk '{print $5}'`

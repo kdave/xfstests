@@ -24,6 +24,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -49,8 +52,8 @@ _supported_fs xfs
 _supported_os Linux IRIX
 
 
-cp /dev/null $seq.full
-chmod a+rwx $seq.full	# arbitrary users will write here
+cp /dev/null $seqres.full
+chmod a+rwx $seqres.full	# arbitrary users will write here
 
 _require_scratch
 _require_xfs_quota
@@ -100,7 +103,7 @@ _filter_and_check_blks()
 _exercise()
 {
 	_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-	cat $tmp.mkfs >>$seq.full
+	cat $tmp.mkfs >>$seqres.full
 
 	# keep the blocksize and data size for dd later
 	. $tmp.mkfs
@@ -117,20 +120,20 @@ _exercise()
 
 	_qsetup
 
-	echo "Using output from '" `ls -l $seq.out` "'" >>$seq.full
-	echo "and using type=$type id=$id" >>$seq.full
+	echo "Using output from '" `ls -l $seq.out` "'" >>$seqres.full
+	echo "and using type=$type id=$id" >>$seqres.full
 
 	echo
-	echo "*** report no quota settings" | tee -a $seq.full
+	echo "*** report no quota settings" | tee -a $seqres.full
 	xfs_quota -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
 	echo
-	echo "*** report initial settings" | tee -a $seq.full
+	echo "*** report initial settings" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/initme $id $type 1024 0
-	echo "ls -l $SCRATCH_MNT" >>$seq.full
-	ls -l $SCRATCH_MNT >>$seq.full
+	echo "ls -l $SCRATCH_MNT" >>$seqres.full
+	ls -l $SCRATCH_MNT >>$seqres.full
 	xfs_quota -D $tmp.projects -P $temp.projid -x \
 		-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
 		-c "limit -$type isoft=$isoft ihard=$ihard $id" \
@@ -140,7 +143,7 @@ _exercise()
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
 	echo
-	echo "*** push past the soft inode limit" | tee -a $seq.full
+	echo "*** push past the soft inode limit" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie1 $id $type 1024 0
 	_file_as_id $SCRATCH_MNT/softie2 $id $type 1024 0
 	_qmount
@@ -149,7 +152,7 @@ _exercise()
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
 	echo
-	echo "*** push past the soft block limit" | tee -a $seq.full
+	echo "*** push past the soft block limit" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
 	_qmount
 	xfs_quota -D $tmp.projects -P $tmp.projid -x \
@@ -158,7 +161,7 @@ _exercise()
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
-	echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seq.full
+	echo "*** push past the hard inode limit (expect EDQUOT)" | tee -a $seqres.full
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12
 	do
 		_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
@@ -170,10 +173,10 @@ _exercise()
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
-	echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seq.full
+	echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie $id $type 1024 540
-	echo "ls -l $SCRATCH_MNT" >>$seq.full
-	ls -l $SCRATCH_MNT >>$seq.full
+	echo "ls -l $SCRATCH_MNT" >>$seqres.full
+	ls -l $SCRATCH_MNT >>$seqres.full
 	_qmount
 	xfs_quota -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |

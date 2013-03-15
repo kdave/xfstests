@@ -42,6 +42,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -85,23 +88,23 @@ _check_ext4_eof_flag()
 
     # Ensure that the iflags value was parsed correctly.
     if [ -z ${iflags} ]; then
-      echo "iFlags value was not parsed successfully." >> $seq.full
+      echo "iFlags value was not parsed successfully." >> $seqres.full
       status=1
       exit ${status}
     fi
 
     # Check if EOFBLOCKS_FL is set.
     if ((${iflags} & 0x400000)); then
-      echo "EOFBLOCK_FL bit is set." >> $seq.full
+      echo "EOFBLOCK_FL bit is set." >> $seqres.full
       bit_set=1
     else
-      echo "EOFBLOCK_FL bit is not set." >> $seq.full
+      echo "EOFBLOCK_FL bit is not set." >> $seqres.full
       bit_set=0
     fi
 
     # Check current bit state to expected value.
     if [ ${bit_set} -ne ${2} ]; then
-      echo "Error: Current bit state incorrect." >> $seq.full
+      echo "Error: Current bit state incorrect." >> $seqres.full
       status=1
       exit ${status}
     fi
@@ -121,14 +124,14 @@ _supported_os Linux
 _require_xfs_io_falloc
 
 # Real QA test starts here.
-rm -f $seq.full
+rm -f $seqres.full
 
 # Remove any leftover files from last run.
 rm -f ${TEST_DIR}/test_?
 
 # Begin test cases.
 echo "Test 1: Fallocate 40960 bytes and write 4096 bytes (buffered io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f                    \
     -c 'falloc -k 0 40960'              \
     -c 'pwrite 0 4096'                  \
@@ -136,7 +139,7 @@ ${XFS_IO_PROG} -F -f                    \
 _check_ext4_eof_flag test_1 ${BIT_SET}
 
 echo "Test 2: Fallocate 40960 bytes and write 4096 bytes (direct io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f -d                 \
     -c 'falloc -k 0 40960'              \
     -c 'pwrite 0 4096'                  \
@@ -144,7 +147,7 @@ ${XFS_IO_PROG} -F -f -d                 \
 _check_ext4_eof_flag test_2 ${BIT_SET}
 
 echo "Test 3: Fallocate 40960 bytes and write 40960 bytes (buffered io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f                    \
     -c 'falloc -k 0 40960'              \
     -c 'pwrite 0 40960'                 \
@@ -152,7 +155,7 @@ ${XFS_IO_PROG} -F -f                    \
 _check_ext4_eof_flag test_3 ${BIT_NOT_SET}
 
 echo "Test 4: Fallocate 40960 bytes and write 40960 bytes (direct io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f -d                 \
     -c 'falloc -k 0 40960'              \
     -c 'pwrite 0 40960'                 \
@@ -160,7 +163,7 @@ ${XFS_IO_PROG} -F -f -d                 \
 _check_ext4_eof_flag test_4 ${BIT_NOT_SET}
 
 echo "Test 5: Fallocate 128k, seek 256k and write 4k block (buffered io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f                    \
     -c 'falloc -k 0 128k'               \
     -c 'pwrite 256k 4k'                 \
@@ -168,7 +171,7 @@ ${XFS_IO_PROG} -F -f                    \
 _check_ext4_eof_flag test_5 ${BIT_NOT_SET}
 
 echo "Test 6: Fallocate 128k, seek to 256k and write a 4k block (direct io)." \
-    >> $seq.full
+    >> $seqres.full
 ${XFS_IO_PROG} -F -f -d                 \
     -c 'falloc -k 0 128k'               \
     -c 'pwrite 256k 4k'                 \

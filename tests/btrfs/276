@@ -26,6 +26,10 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -36,7 +40,7 @@ noise_pid=0
 _cleanup()
 {
 	if [ $noise_pid -ne 0 ]; then
-		echo "background noise kill $noise_pid" >>$seq.full
+		echo "background noise kill $noise_pid" >>$seqres.full
 		kill $noise_pid
 		noise_pid=0
 		wait
@@ -60,7 +64,7 @@ _require_no_large_scratch_dev
 _require_btrfs inspect-internal
 _require_command "/usr/sbin/filefrag"
 
-rm -f $seq.full
+rm -f $seqres.full
 
 FILEFRAG_FILTER='if (/, blocksize (\d+)/) {$blocksize = $1; next} ($ext, '\
 '$logical, $physical, $expected, $length, $flags) = (/^\s*(\d+)\s+(\d+)'\
@@ -74,18 +78,18 @@ FILEFRAG_FILTER='if (/, blocksize (\d+)/) {$blocksize = $1; next} ($ext, '\
 # sample output: "1234#10#5678" -> physical 1234, length 10, logical 5678
 _filter_extents()
 {
-	tee -a $seq.full | $PERL_PROG -ne "$FILEFRAG_FILTER"
+	tee -a $seqres.full | $PERL_PROG -ne "$FILEFRAG_FILTER"
 }
 
 _check_file_extents()
 {
 	cmd="filefrag -v $1"
-	echo "# $cmd" >> $seq.full
+	echo "# $cmd" >> $seqres.full
 	out=`$cmd | _filter_extents`
 	if [ -z "$out" ]; then
 		return 1
 	fi
-	echo "after filter: $out" >> $seq.full
+	echo "after filter: $out" >> $seqres.full
 	echo $out
 	return 0
 }
@@ -101,9 +105,9 @@ _btrfs_inspect_addr()
 	expect_inum=$4
 	file=$5
 	cmd="$BTRFS_UTIL_PROG inspect-internal logical-resolve -P $addr $mp"
-	echo "# $cmd" >> $seq.full
+	echo "# $cmd" >> $seqres.full
 	out=`$cmd`
-	echo "$out" >> $seq.full
+	echo "$out" >> $seqres.full
 	grep_expr="inode $expect_inum offset $expect_addr root"
 	echo "$out" | grep "^$grep_expr 5$" >/dev/null
 	ret=$?
@@ -134,9 +138,9 @@ _btrfs_inspect_inum()
 	snap_name=$3
 	mp="$SCRATCH_MNT/$snap_name"
 	cmd="$BTRFS_UTIL_PROG inspect-internal inode-resolve $inum $mp"
-	echo "# $cmd" >> $seq.full
+	echo "# $cmd" >> $seqres.full
 	out=`$cmd`
-	echo "$out" >> $seq.full
+	echo "$out" >> $seqres.full
 	grep_expr="^$file$"
 	cnt=`echo "$out" | grep "$grep_expr" | wc -l`
 	if [ $cnt -ge "1" ]; then
@@ -157,9 +161,9 @@ _btrfs_inspect_check()
 	logical=$4
 	snap_name=$5
 	cmd="stat -c %i $file"
-	echo "# $cmd" >> $seq.full
+	echo "# $cmd" >> $seqres.full
 	inum=`$cmd`
-	echo "$inum" >> $seq.full
+	echo "$inum" >> $seqres.full
 	_btrfs_inspect_addr $SCRATCH_MNT $physical $logical $inum $file
 	ret=$?
 	if [ $ret -eq 0 ]; then
@@ -178,9 +182,9 @@ workout()
 	do_bg_noise=$5
 
 	umount $SCRATCH_DEV >/dev/null 2>&1
-	echo "*** mkfs -dsize=$fsz"    >>$seq.full
-	echo ""                                     >>$seq.full
-	_scratch_mkfs_sized $fsz >>$seq.full 2>&1 \
+	echo "*** mkfs -dsize=$fsz"    >>$seqres.full
+	echo ""                                     >>$seqres.full
+	_scratch_mkfs_sized $fsz >>$seqres.full 2>&1 \
 		|| _fail "size=$fsz mkfs failed"
 	run_check _scratch_mount
 	# -w ensures that the only ops are ones which cause write I/O
@@ -210,13 +214,13 @@ workout()
 	if [ $do_bg_noise -ne 0 ]; then
 		# make background noise while backrefs are being walked
 		while /bin/true; do
-			echo background fsstress >>$seq.full
+			echo background fsstress >>$seqres.full
 			run_check $FSSTRESS_PROG -d $SCRATCH_MNT/bgnoise -n 999
-			echo background rm >>$seq.full
+			echo background rm >>$seqres.full
 			rm -rf $SCRATCH_MNT/bgnoise/
 		done &
 		noise_pid=`jobs -p %1`
-		echo "background noise by $noise_pid" >>$seq.full
+		echo "background noise by $noise_pid" >>$seqres.full
 	fi
 
 	cnt=0

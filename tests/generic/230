@@ -26,6 +26,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -58,49 +61,49 @@ test_files()
 test_enforcement()
 {
 	echo "### some buffered IO (type=$type)"
-	echo "--- initiating IO..." >>$seq.full
+	echo "--- initiating IO..." >>$seqres.full
 	# Firstly fit below block soft limit
 	echo "Write 900k..."
 	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 900k' -c fsync \
-		$SCRATCH_MNT/file1" 2>&1 >>$seq.full | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Secondly overcome block soft limit
 	echo "Rewrite 1001k..."
 	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 1001k' -c fsync \
-		$SCRATCH_MNT/file1" 2>&1 >>$seq.full | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now try to overcome block hardlimit
 	echo "Write 1000k..."
 	su $qa_user -c "$XFS_IO_PROG -F -c 'pwrite 0 1000k' -c fsync \
-		$SCRATCH_MNT/file2" 2>&1 >>$seq.full | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now sleep for grace time and check that softlimit got enforced
 	sleep $((grace+1))
 	echo "Write 4096..."
 	su $qa_user -c "$XFS_IO_PROG -F -c 'truncate 0' -c 'pwrite 0 4096' \
-		$SCRATCH_MNT/file2" 2>&1 >>$seq.full | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# And now the softlimit test for inodes
 	# First reset space limits so that we don't have problems with
 	# space reservations on XFS
 	setquota -$type $qa_user 0 0 3 5 $SCRATCH_MNT
 	echo "Touch 3+4"
 	su $qa_user -c "touch $SCRATCH_MNT/file3 $SCRATCH_MNT/file4" \
-		2>&1 >>$seq.full | _filter_scratch | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Try to exceed inode hardlimit
 	echo "Touch 5+6"
 	su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
-		2>&1 >>$seq.full | _filter_scratch | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
+		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Wait and check grace time enforcement
-	rm -f $SCRATCH_MNT/file5 >>$seq.full 2>&1
+	rm -f $SCRATCH_MNT/file5 >>$seqres.full 2>&1
 	sleep $((grace+1))
 	echo "Touch 5"
-	su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seq.full |
-		_filter_scratch | tee -a $seq.full
-	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seq.full 2>&1
-	echo "--- completed IO ($type)" >>$seq.full
+	su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seqres.full |
+		_filter_scratch | tee -a $seqres.full
+	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
+	echo "--- completed IO ($type)" >>$seqres.full
 }
 
 cleanup_files()
@@ -109,11 +112,11 @@ cleanup_files()
 }
 
 # real QA test starts here
-rm -f $seq.full
+rm -f $seqres.full
 
 grace=2
 
-_scratch_mkfs >> $seq.full 2>&1
+_scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount "-o usrquota,grpquota"
 quotacheck -u -g $SCRATCH_MNT 2>/dev/null
 quotaon $SCRATCH_MNT 2>/dev/null

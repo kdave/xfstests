@@ -23,6 +23,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -57,15 +60,15 @@ test_files()
 test_accounting()
 {
 	echo "### some controlled buffered, direct and mmapd IO (type=$type)"
-	echo "--- initiating parallel IO..." >>$seq.full
+	echo "--- initiating parallel IO..." >>$seqres.full
 	$XFS_IO_PROG -c 'pwrite -b 1m 0 16m' -c 'fsync' \
-					$SCRATCH_MNT/buffer >>$seq.full 2>&1 &
+					$SCRATCH_MNT/buffer >>$seqres.full 2>&1 &
 	$XFS_IO_PROG -c 'pwrite -b 1m 0 16m' -d \
-					$SCRATCH_MNT/direct >>$seq.full 2>&1 &
+					$SCRATCH_MNT/direct >>$seqres.full 2>&1 &
 	$XFS_IO_PROG -c 't 16m' -c 'mm -rw 0 16m' -c 'mw 0 16m' -c 'ms -s' \
-					$SCRATCH_MNT/mmap   >>$seq.full 2>&1 &
+					$SCRATCH_MNT/mmap   >>$seqres.full 2>&1 &
 	wait
-	echo "--- completed parallel IO ($type)" >>$seq.full
+	echo "--- completed parallel IO ($type)" >>$seqres.full
 
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
 		$here/src/lstat64 $file | head -3 | _filter_scratch
@@ -80,10 +83,10 @@ _qmount
 _require_prjquota $SCRATCH_DEV
 
 # real QA test starts here
-rm -f $tmp.projects $seq.full
+rm -f $tmp.projects $seqres.full
 umount $SCRATCH_DEV 2>/dev/null
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-cat $tmp.mkfs >>$seq.full
+cat $tmp.mkfs >>$seqres.full
 _scratch_mount
 
 uid=1

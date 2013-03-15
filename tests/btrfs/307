@@ -23,6 +23,10 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "== QA output created by $seq"
 
 here=`pwd`
@@ -48,16 +52,16 @@ _supported_os Linux
 _require_scratch
 _require_scratch_dev_pool
 
-rm -f $seq.full
+rm -f $seqres.full
 
 FIRST_POOL_DEV=`echo $SCRATCH_DEV_POOL | awk '{print $1}'`
 LAST_POOL_DEV=`echo $SCRATCH_DEV_POOL | awk '{print $NF}'`
 TOTAL_DEVS=`echo $SCRATCH_DEV $SCRATCH_DEV_POOL | wc -w`
 LABEL=TestLabel.$seq
 
-echo "Scratch $SCRATCH_DEV First $FIRST_POOL_DEV last $LAST_POOL_DEV Total $TOTAL_DEVS" > $seq.full
+echo "Scratch $SCRATCH_DEV First $FIRST_POOL_DEV last $LAST_POOL_DEV Total $TOTAL_DEVS" > $seqres.full
 
-_scratch_mkfs $SCRATCH_DEV_POOL >> $seq.full 2>&1 || _fail "mkfs failed"
+_scratch_mkfs $SCRATCH_DEV_POOL >> $seqres.full 2>&1 || _fail "mkfs failed"
 
 # These have to be done unmounted...?
 echo "== Set filesystem label to $LABEL"
@@ -72,7 +76,7 @@ echo "== Show filesystem by label"
 $BTRFS_UTIL_PROG filesystem show $LABEL | _filter_btrfs_filesystem_show $TOTAL_DEVS
 UUID=`$BTRFS_UTIL_PROG filesystem show $LABEL | grep uuid: | awk '{print $NF}'`
 
-echo "UUID $UUID" >> $seq.full
+echo "UUID $UUID" >> $seqres.full
 
 echo "== Show filesystem by UUID"
 $BTRFS_UTIL_PROG filesystem show $UUID | _filter_btrfs_filesystem_show $TOTAL_DEVS $UUID

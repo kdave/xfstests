@@ -25,6 +25,9 @@
 #
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -41,7 +44,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 _supported_fs xfs
 _supported_os IRIX Linux
 
-rm -f $seq.full $tmp.*
+rm -f $seqres.full $tmp.*
 _require_scratch
 _require_v2log
 
@@ -83,7 +86,7 @@ for s in sync nosync ; do
 
 	# mkfs the FS
 	_echofull "mkfs"
-	_scratch_mkfs_xfs >>$seq.full 2>&1
+	_scratch_mkfs_xfs >>$seqres.full 2>&1
 	if [ $? -ne 0 ] ; then 
 	    _echofull "mkfs failed: $MKFS_OPTIONS"
 	    continue
@@ -91,7 +94,7 @@ for s in sync nosync ; do
 
 	# mount the FS
 	_echofull "mount"
-	if ! _scratch_mount >>$seq.full 2>&1; then
+	if ! _scratch_mount >>$seqres.full 2>&1; then
 	    _echofull "mount failed: $MOUNT_OPTIONS"
 	    continue
 	fi
@@ -116,17 +119,17 @@ for s in sync nosync ; do
 	ls $SCRATCH_MNT
 
 	_echofull "godown"
-	src/godown -v -f $SCRATCH_MNT >> $seq.full
+	src/godown -v -f $SCRATCH_MNT >> $seqres.full
 
 	_echofull "unmount"
-	umount $SCRATCH_DEV >>$seq.full 2>&1 \
+	umount $SCRATCH_DEV >>$seqres.full 2>&1 \
 	    || _fail "umount failed"
 
 	_echofull "logprint after going down..."
 	_print_logstate
 
 	_echofull "mount with replay"
-	_scratch_mount >>$seq.full 2>&1 \
+	_scratch_mount >>$seqres.full 2>&1 \
 	    || _fail "mount failed: $MOUNT_OPTIONS"
 
 	# check on what FS looks like after log recovery
