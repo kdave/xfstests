@@ -36,6 +36,8 @@ here=`pwd`
 FSTYP=xfs
 
 SUPPORTED_TESTS="[0-9][0-9][0-9] [0-9][0-9][0-9][0-9]"
+TEST_GROUP_DIR="tests"
+GENERIC_GROUP_DIR="$TEST_GROUP_DIR/generic"
 
 # generic initialization
 iam=check
@@ -84,11 +86,15 @@ _setenvironment()
 get_group_list()
 {
 	grp=$1
+	dirs=". $GENERIC_GROUP_DIR"
 
-	grpl=$(sed -n < group \
-		       -e 's/#.*//' \
-		       -e 's/$/ /' \
-		       -e "/^[0-9][0-9][0-9].* $grp /"'{ s/ .*//p }')
+	for d in $dirs; do
+		l=$(sed -n < $d/group \
+			-e 's/#.*//' \
+			-e 's/$/ /' \
+			-e "s;\(^[0-9][0-9][0-9]\).* $grp .*;$d/\1;p")
+		grpl="$grpl $l"
+	done
 	echo $grpl
 }
 
@@ -290,7 +296,7 @@ END	{ if (NR > 0) {
 
 	echo "" >>check.log
 	date >>check.log
-	echo $list | fmt | sed -e 's/^/    /' >>check.log
+	echo $list | fmt | sed -e 's/^/    /' -e 's;tests/;;g' >>check.log
 	$interrupt && echo "Interrupted!" >>check.log
         
         if [ ! -z "$n_try" -a $n_try != 0 ]
@@ -368,7 +374,12 @@ _check_test_fs
 for seq in $list
 do
     err=false
-    echo -n "$seq"
+
+    # the filename for the test and the name output are different.
+    # we don't include the tests/ directory in the name output.
+    seqnum=`echo $seq | sed -e 's;tests/;;'`
+
+    echo -n "$seqnum"
 
     if $showme
     then
@@ -381,7 +392,9 @@ do
 	# really going to try and run this one
 	#
 	rm -f $seq.out.bad
-	lasttime=`sed -n -e "/^$seq /s/.* //p" <check.time`
+
+	# slashes now in names, sed barfs on them so use grep
+	lasttime=`grep -w ^$seq check.time | awk '// {print $2}'`
 	if [ "X$lasttime" != X ]; then
 		echo -n " ${lasttime}s ..."
 	else
@@ -392,7 +405,7 @@ do
 	start=`_wallclock`
 	$timestamp && echo -n "	["`date "+%T"`"]"
 	[ ! -x $seq ] && chmod u+x $seq # ensure we can run it
-	$LOGGER_PROG "run xfstest $seq"
+	$LOGGER_PROG "run xfstest $seqnum"
 	./$seq >$tmp.rawout 2>&1
 	sts=$?
 	$timestamp && _timestamp
@@ -411,9 +424,9 @@ do
 	if [ -f $seq.notrun ]
 	then
 	    $timestamp || echo -n " [not run] "
-	    $timestamp && echo " [not run]" && echo -n "	$seq -- "
+	    $timestamp && echo " [not run]" && echo -n "	$seqnum -- "
 	    cat $seq.notrun
-	    notrun="$notrun $seq"
+	    notrun="$notrun $seqnum"
 	else
 	    if [ $sts -ne 0 ]
 	    then
@@ -431,7 +444,7 @@ do
 		    then
 			:
 		    else
-			echo "$seq `expr $stop - $start`" >>$tmp.time
+			echo "$seqnum `expr $stop - $start`" >>$tmp.time
 			echo -n " `expr $stop - $start`s"
 		    fi
 		    echo ""
@@ -459,18 +472,18 @@ do
     #
     if $err
     then
-	bad="$bad $seq"
+	bad="$bad $seqnum"
 	n_bad=`expr $n_bad + 1`
 	quick=false
     fi
     if [ ! -f $seq.notrun ]
     then
-	try="$try $seq"
+	try="$try $seqnum"
 	n_try=`expr $n_try + 1`
         _check_test_fs
     fi
     
-    seq="after_$seq"
+    seq="after_$seqnum"
 done
 
 interrupt=false
