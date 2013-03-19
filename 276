@@ -33,9 +33,16 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1
+noise_pid=0
 
 _cleanup()
 {
+	if [ $noise_pid -ne 0 ]; then
+		echo "background noise kill $noise_pid" >>$seq.full
+		kill $noise_pid
+		noise_pid=0
+		wait
+	fi
 	echo "*** unmount"
 	umount $SCRATCH_MNT 2>/dev/null
 	rm -f $tmp.*
@@ -171,6 +178,7 @@ workout()
 	nfiles=$2
 	procs=$3
 	snap_name=$4
+	do_bg_noise=$5
 
 	umount $SCRATCH_DEV >/dev/null 2>&1
 	echo "*** mkfs -dsize=$fsz"    >>$seq.full
@@ -179,7 +187,7 @@ workout()
 		|| _fail "size=$fsz mkfs failed"
 	run_check _scratch_mount
 	# -w ensures that the only ops are ones which cause write I/O
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -w -p $procs -n 1000 \
+	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -w -p $procs -n 2000 \
 		$FSSTRESS_AVOID
 
 	run_check $BTRFS_UTIL_PROG subvol snap $SCRATCH_MNT \
@@ -190,9 +198,10 @@ workout()
 
 	# make some noise but ensure we're not touching existing data
 	# extents.
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -p $procs -n 2000 \
+	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -p $procs -n 4000 \
 		-z -f chown=3 -f link=1 -f mkdir=2 -f mknod=2 \
 		-f rename=2 -f setxattr=1 -f symlink=2
+
 	clean_dir="$SCRATCH_MNT/next"
 	mkdir $clean_dir
 	# now make more files to get a higher tree
@@ -200,6 +209,18 @@ workout()
 		$FSSTRESS_AVOID
 	run_check umount $SCRATCH_DEV >/dev/null 2>&1
 	run_check _scratch_mount "-o atime"
+
+	if [ $do_bg_noise -ne 0 ]; then
+		# make background noise while backrefs are being walked
+		while /bin/true; do
+			echo background fsstress >>$seq.full
+			run_check $FSSTRESS_PROG -d $SCRATCH_MNT/bgnoise -n 999
+			echo background rm >>$seq.full
+			rm -rf $SCRATCH_MNT/bgnoise/
+		done &
+		noise_pid=`jobs -p %1`
+		echo "background noise by $noise_pid" >>$seq.full
+	fi
 
 	cnt=0
 	errcnt=0
@@ -230,6 +251,7 @@ workout()
 			break
 		fi
 	done
+
 	if [ $errcnt -gt 0 ]; then
 		_fail "test failed: $errcnt error(s)"
 	fi
@@ -241,8 +263,9 @@ snap_name="snap1"
 filesize=`expr 2000 \* 1024 \* 1024`
 nfiles=4
 numprocs=1
+do_bg_noise=1
 
-workout $filesize $nfiles $numprocs $snap_name
+workout $filesize $nfiles $numprocs $snap_name $do_bg_noise
 
 echo "*** done"
 status=0
