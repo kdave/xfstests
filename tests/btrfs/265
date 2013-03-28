@@ -110,9 +110,9 @@ _test_add()
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
 	for i in `seq 1 $n`; do
-		btrfs device add ${devs[$i]} $SCRATCH_MNT > /dev/null 2>&1 || _fail "device add failed"
+		$BTRFS_UTIL_PROG device add ${devs[$i]} $SCRATCH_MNT > /dev/null 2>&1 || _fail "device add failed"
 	done
-	btrfs filesystem balance $SCRATCH_MNT || _fail "balance failed"
+	$BTRFS_UTIL_PROG filesystem balance $SCRATCH_MNT || _fail "balance failed"
 	umount $SCRATCH_MNT
 }
 
@@ -146,16 +146,16 @@ _test_replace()
 	_devmgt_remove ${DEVHTL}
 	dev_removed=1
 
-	btrfs fi show $SCRATCH_DEV | grep "Some devices missing" > /dev/null || _fail \
+	$BTRFS_UTIL_PROG fi show $SCRATCH_DEV | grep "Some devices missing" > /dev/null || _fail \
 							"btrfs did not report device missing"
 
 	# add a new disk to btrfs
 	ds=${devs[@]:$(($n)):1}
-	btrfs device add ${ds} $SCRATCH_MNT > /dev/null 2>&1 || _fail "dev add failed"
+	$BTRFS_UTIL_PROG device add ${ds} $SCRATCH_MNT > /dev/null 2>&1 || _fail "dev add failed"
 	# in some system balance fails if there is no delay (a bug)
 	# putting sleep 10 to work around as of now
 	# sleep 10
-	btrfs fi balance $SCRATCH_MNT || _fail "dev balance failed"
+	$BTRFS_UTIL_PROG filesystem balance $SCRATCH_MNT || _fail "dev balance failed"
 
 	# cleaup. add the removed disk
 	umount $SCRATCH_MNT
@@ -172,8 +172,8 @@ _test_remove()
 
 	# pick last dev in the list
 	dev_del=`echo ${SCRATCH_DEV_POOL} | awk '{print $NF}'`
-	btrfs device delete $dev_del $SCRATCH_MNT || _fail "btrfs device delete failed"
-	btrfs fi show $SCRATCH_DEV 2>&1 | grep $dev_del > /dev/null && _fail "btrfs still shows the deleted dev"
+	$BTRFS_UTIL_PROG device delete $dev_del $SCRATCH_MNT || _fail "btrfs device delete failed"
+	$BTRFS_UTIL_PROG filesystem show $SCRATCH_DEV 2>&1 | grep $dev_del > /dev/null && _fail "btrfs still shows the deleted dev"
 	umount $SCRATCH_MNT
 }
 
