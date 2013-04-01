@@ -1,0 +1,69 @@
+#! /bin/bash
+# FS QA Test No. 308
+#
+# Regression test for commit:
+# f17722f ext4: Fix max file size and logical block counting of extent format file
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+testfile=$TEST_DIR/testfile.$seq
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+rm -f $seq.full
+echo "Silence is golden"
+
+block_size=`stat -f -c %s $TEST_DIR`
+
+# On unpatched ext4, if an extent exists which includes the block right
+# before the maximum file offset, and the block for the maximum file offset
+# is written, the kernel panics
+# On patched ext4, the write would get EFBIG since we lower s_maxbytes by
+# one fs block
+
+# Create a sparse file with an extent lays at one block before old s_maxbytes
+offset=$(((2**32 - 2) * $block_size))
+$XFS_IO_PROG -f -c "pwrite $offset $block_size" -c fsync $testfile >$seq.full 2>&1
+
+# Write to the block after the extent just created
+offset=$(((2**32 - 1) * $block_size))
+$XFS_IO_PROG -f -c "pwrite $offset $block_size" -c fsync $testfile >>$seq.full 2>&1
+
+# Got here without hitting BUG_ON(), test passed
+status=0
+exit
