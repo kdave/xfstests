@@ -1,0 +1,74 @@
+#! /bin/bash
+# FS QA Test No. 309
+#
+# Test directory mtime and ctime are updated when moving a file onto an
+# existing file in the directory
+#
+# Regression test for commit:
+# 0b23076 ext3: fix update of mtime and ctime on rename
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+status=0	# success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $TEST_DIR/testdir_$seq
+    rm -f $TEST_DIR/testfile.$seq
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os IRIX Linux
+
+echo "Silence is golden"
+
+mkdir -p $TEST_DIR/testdir_$seq
+touch $TEST_DIR/testdir_$seq/testfile
+touch $TEST_DIR/testfile.$seq
+
+mtime1=`stat -c %Y $TEST_DIR/testdir_$seq`
+ctime1=`stat -c %Z $TEST_DIR/testdir_$seq`
+
+sleep 1
+mv $TEST_DIR/testfile.$seq $TEST_DIR/testdir_$seq/testfile
+
+mtime2=`stat -c %Y $TEST_DIR/testdir_$seq`
+ctime2=`stat -c %Z $TEST_DIR/testdir_$seq`
+
+if [ "$mtime1" == "$mtime2" ]; then
+	echo "mtime not updated"
+	let status=$status+1
+fi
+if [ "$ctime1" == "$ctime2" ]; then
+	echo "ctime not updated"
+	let status=$status+1
+fi
+
+exit
