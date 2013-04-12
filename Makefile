@@ -52,12 +52,13 @@ LDIRT += $(SRCTAR)
 endif
 
 LIB_SUBDIRS = include lib
-TOOL_SUBDIRS = ltp src m4
+TOOL_SUBDIRS = ltp src m4 common
 ifeq ($(HAVE_DMAPI), true)
 TOOL_SUBDIRS += dmapi
 endif
 
-SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS)
+export TESTS_DIR = tests
+SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
 
 default: include/builddefs $(DMAPI_MAKEFILE) $(TESTS)
 ifeq ($(HAVE_BUILDDEFS), no)
@@ -91,12 +92,7 @@ depend: include/builddefs $(addsuffix -depend,$(SUBDIRS))
 install: default $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)
 	$(INSTALL) -m 755 check $(PKG_LIB_DIR)
-	$(INSTALL) -m 755 [0-9]?? $(PKG_LIB_DIR)
-	$(INSTALL) -m 755 run.* $(PKG_LIB_DIR)
-	$(INSTALL) -m 644 group $(PKG_LIB_DIR)
 	$(INSTALL) -m 644 randomize.awk $(PKG_LIB_DIR)
-	$(INSTALL) -m 644 [0-9]??.* $(PKG_LIB_DIR)
-	$(INSTALL) -m 644 common* $(PKG_LIB_DIR)
 
 # Nothing.
 install-dev install-lib:
