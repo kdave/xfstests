@@ -166,7 +166,6 @@ case "$FSTYP" in
     xfs)
 	 [ "$XFS_LOGPRINT_PROG" = "" ] && _fatal "xfs_logprint not found"
 	 [ "$XFS_REPAIR_PROG" = "" ] && _fatal "xfs_repair not found"
-	 [ "$XFS_CHECK_PROG" = "" ] && _fatal "xfs_check not found"
 	 [ "$XFS_DB_PROG" = "" ] && _fatal "xfs_db not found"
 	 [ "$MKFS_XFS_PROG" = "" ] && _fatal "mkfs_xfs not found"
 	 ;;
@@ -387,6 +386,34 @@ _scratch_mkfs_xfs()
     return $mkfs_status
 }
 
+# xfs_check script is planned to be deprecated. But, we want to
+# be able to invoke "xfs_check" behavior in xfstests in order to
+# maintain the current verification levels.
+_xfs_check()
+{
+    OPTS=" "
+    DBOPTS=" "
+
+    OPTIND=1
+    while getopts "b:fi:l:stvV" c
+    do
+        case $c in
+            s) OPTS=$OPTS"-s ";;
+            t) OPTS=$OPTS"-t ";;
+            v) OPTS=$OPTS"-v ";;
+            i) OPTS=$OPTS"-i "$OPTARG" ";;
+            b) OPTS=$OPTS"-b "$OPTARG" ";;
+            f) DBOPTS=$DBOPTS" -f";;
+            l) DBOPTS=$DBOPTS" -l "$OPTARG" ";;
+            V) $XFS_DB_PROG -p xfs_check -V
+                return $?
+                ;;
+        esac
+    done
+    ${XFS_DB_PROG}${DBOPTS} -F -i -p xfs_check -c "check$OPTS" $1
+    return $?
+}
+
 _setup_large_ext4_fs()
 {
 	fs_size=$1
@@ -589,7 +616,7 @@ _scratch_xfs_check()
         SCRATCH_OPTIONS="-l $SCRATCH_LOGDEV"
     [ "$LARGE_SCRATCH_DEV" = yes ] && \
         SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
-    $XFS_CHECK_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
+    _xfs_check $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
 _scratch_xfs_repair()
@@ -1426,7 +1453,7 @@ _check_xfs_filesystem()
     # option (-t) to avoid indexing the free space trees doesn't make it pass on
     # large filesystems. Avoid it.
     if [ "$LARGE_SCRATCH_DEV" != yes ]; then
-	    $XFS_CHECK_PROG $extra_log_options $device 2>&1 |\
+	    _xfs_check $extra_log_options $device 2>&1 |\
 		 _fix_malloc >$tmp.fs_check
     fi
     if [ -s $tmp.fs_check ]
