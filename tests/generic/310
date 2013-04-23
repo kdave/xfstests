@@ -1,10 +1,22 @@
 #! /bin/bash
 # FS QA Test No. 310
 #
-#Check if there are two threads,one keeps calling read() or lseek(), and
-#the other calling readdir(), both on the same directory fd.
+# Check if there are two threads,one keeps calling read() or lseek(), and
+# the other calling readdir(), both on the same directory fd.
 #
-# Based on a testcase from Li Zefan <lizefan@huawei.com>.
+# Testing on ext3: with dir_index disabled results in the following
+# dmesg output: (also occurs when testing ext2 and ext4)
+#
+# EXT3-fs error (device sdb): ext3_readdir: bad entry in directory #1134241:
+# rec_len % 4 != 0 - offset=2704, inode=16973836, rec_len=12850, name_len=52
+# EXT3-fs error (device sdb): ext3_readdir: bad entry in directory #1134241:
+# directory entry across blocks - offset=1672, inode=16973836, rec_len=14132,
+# name_len=57
+#
+# The filesystem mount option 'errors=' will define the behavior
+# when an error is encountered. (see mount manpage)
+#
+# The test is based on a testcase from Li Zefan <lizefan@huawei.com>.
 #
 # http://marc.info/?l=linux-kernel&m=136123703211869&w=2
 #
@@ -25,10 +37,9 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 #
-# creator
-owner=zhaohongjiang@huawei.com
 
 seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 status=1	# failure is the default!
@@ -40,13 +51,44 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
-. ./common.rc
-. ./common.filter
+. ./common/rc
+. ./common/filter
 
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
 
+dmesg -c > /dev/null
+
+nr_bug=`dmesg | grep -c "kernel BUG"`
+nr_error=`dmesg | grep -c "error"`
+nr_null=`dmesg | grep -c "kernel NULL pointer dereference"`
+nr_warning=`dmesg | grep -c "^WARNING"`
+nr_lockdep=`dmesg | grep -c "possible recursive locking detected"`
+
+#check if some kind of kernel bug happened
+check_kernel_bug()
+{
+	new_bug=`dmesg | grep -c "kernel BUG"`
+	new_error=`dmesg | grep -c "error"`
+	new_null=`dmesg | grep -c "kernel NULL pointer dereference"`
+	new_warning=`dmesg | grep -c "^WARNING"`
+	new_lockdep=`dmesg | grep -c "possible recursive locking detected"`
+
+
+	# no kernel bug is detected
+	if [ $new_bug -eq $nr_bug -a $new_error -eq $nr_error -a \
+	     $new_null -eq $nr_null -a $new_warning -eq $nr_warning -a \
+	     $new_lockdep -eq $nr_lockdep ]; then
+		return 1
+	fi
+
+	nr_bug=$new_bug
+	nr_error=$new_error
+	nr_null=$new_null
+	nr_warning=$new_warning
+	nr_lockdep=$new_lockdep
+}
 mkdir $TEST_DIR/tmp
 for n in {1..4096}; do
 	touch $TEST_DIR/tmp/$n
@@ -57,6 +99,13 @@ _test_read()
 	src/t_readdir_1 $TEST_DIR/tmp &
 	sleep 100
 	killall src/t_readdir_1
+	check_kernel_bug
+	if [ $? -eq 1 ]; then
+		status=0
+	else
+		echo "error: kernel bug was found, you can see the
+			dmesg for more infomation."
+	fi
 }
 
 _test_lseek()
@@ -64,6 +113,13 @@ _test_lseek()
 	src/t_readdir_2 $TEST_DIR/tmp &
 	sleep 100
 	killall src/t_readdir_2
+	check_kernel_bug
+	if [ $? -eq 1 ]; then
+		status=0
+	else
+		echo "error: kernel bug was found, you can see the
+			dmesg for more infomation."
+	fi
 }
 
 _test_read
@@ -71,6 +127,4 @@ _test_lseek
 
 # success, all done
 echo "*** done"
-rm -f $seq.full
-status=0
 exit
