@@ -57,6 +57,13 @@ dd()
    fi
 }
 
+# Prints the md5 checksum of a given file
+_md5_checksum()
+{
+	md5sum $1 | cut -d ' ' -f1
+}
+
+
 # ls -l w/ selinux sometimes puts a dot at the end:
 # -rwxrw-r--. id1 id2 file1
 
@@ -1048,6 +1055,22 @@ _require_command()
 {
     [ -n "$1" ] && _cmd="$1" || _cmd="$2"
     [ -n "$1" -a -x "$1" ] || _notrun "$_cmd utility required, skipped this test"
+}
+
+# this test requires the device mapper flakey target
+#
+_require_dm_flakey()
+{
+    _require_command $DMSETUP_PROG
+
+    modprobe dm-flakey >/dev/null 2>&1
+    $DMSETUP_PROG targets | grep flakey >/dev/null 2>&1
+    if [ $? -eq 0 ]
+    then
+	:
+    else
+	_notrun "This test requires dm flakey support"
+    fi
 }
 
 # this test requires the projid32bit feature to be available in
