@@ -36,14 +36,8 @@ noise_pid=0
 
 _cleanup()
 {
-	if [ $noise_pid -ne 0 ]; then
-		echo "background noise kill $noise_pid" >>$seqres.full
-		kill $noise_pid
-		noise_pid=0
-		wait
-	fi
-	echo "*** unmount"
-	umount $SCRATCH_MNT 2>/dev/null
+	rm $tmp.running
+	wait
 	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
@@ -210,7 +204,7 @@ workout()
 
 	if [ $do_bg_noise -ne 0 ]; then
 		# make background noise while backrefs are being walked
-		while /bin/true; do
+		while [ -f "$tmp.running" ]; do
 			echo background fsstress >>$seqres.full
 			run_check $FSSTRESS_PROG -d $SCRATCH_MNT/bgnoise -n 999
 			echo background rm >>$seqres.full
@@ -262,6 +256,8 @@ filesize=`expr 2000 \* 1024 \* 1024`
 nfiles=4
 numprocs=1
 do_bg_noise=1
+
+touch $tmp.running
 
 workout $filesize $nfiles $numprocs $snap_name $do_bg_noise
 
