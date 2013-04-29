@@ -32,6 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+    umount $BINDFILE
     cd /
     rm -f $tmp.*
 }
@@ -49,6 +50,9 @@ _require_scratch
 
 DEVNULL=$SCRATCH_MNT/devnull
 DEVZERO=$SCRATCH_MNT/devzero
+SYMLINK=$SCRATCH_MNT/symlink
+BINDFILE=$SCRATCH_MNT/bindfile
+TARGET=$TEST_DIR/target
 
 rm -f $seqres.full
 _scratch_mkfs > $seqres.full 2>&1
@@ -58,22 +62,38 @@ rm -f $DEVNULL $DEVZERO
 
 mknod $DEVNULL c 1 3 || _fail "Could not create devnull device"
 mknod $DEVZERO c 1 5 || _fail "Could not create devzero device"
+touch $BINDFILE || _fail "Could not create bind mount file"
+touch $TARGET || _fail "Could not create symlink target"
+ln -s $TARGET $SYMLINK
 
 _scratch_unmount || _fail "Could not unmount scratch device"
-_scratch_mount -o ro || _fail "Could notemount scratch readonly"
+_scratch_mount -o ro || _fail "Could not mount scratch readonly"
 
 # We should be able to read & write to/from these devices even on an RO fs
 echo "== try to create new file"
 touch $SCRATCH_MNT/this_should_fail 2>&1 | _filter_scratch
 echo "== pwrite to null device"
-$XFS_IO_PROG -c "pwrite 0 512" /dev/null | _filter_xfs_io
+$XFS_IO_PROG -F -c "pwrite 0 512" /dev/null | _filter_xfs_io
 echo "== pread from zero device"
-$XFS_IO_PROG -c "pread 0 512" /dev/zero | _filter_xfs_io
+$XFS_IO_PROG -F -c "pread 0 512" /dev/zero | _filter_xfs_io
 
 echo "== truncating write to null device"
 echo foo > $DEVNULL 2>&1 | _filter_scratch
 echo "== appending write to null device"
 echo foo >> $DEVNULL 2>&1 | _filter_scratch
+
+echo "== writing to symlink from ro fs to rw fs"
+# Various combinations of O_CREAT & O_TRUNC
+$XFS_IO_PROG -F -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+$XFS_IO_PROG -F -f -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+$XFS_IO_PROG -F -t -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+
+echo "== write to bind-mounted rw file on ro fs"
+mount --bind $TARGET $BINDFILE
+# with and without -f (adds O_CREAT)
+$XFS_IO_PROG -F -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
+$XFS_IO_PROG -F -f -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
+$XFS_IO_PROG -F -t -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
 
 # success, all done
 status=0
