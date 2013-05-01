@@ -293,14 +293,17 @@ fi
 
 _wrapup()
 {
+    seq="check"
+    check="$RESULT_BASE/check"
+
     if $showme
     then
 	:
     elif $needwrap
     then
-	if [ -f check.time -a -f $tmp.time ]
+	if [ -f $check.time -a -f $tmp.time ]
 	then
-	    cat check.time $tmp.time \
+	    cat $check.time $tmp.time \
 	    | $AWK_PROG '
 	{ t[$1] = $2 }
 END	{ if (NR > 0) {
@@ -308,13 +311,13 @@ END	{ if (NR > 0) {
 	  }
 	}' \
 	    | sort -n >$tmp.out
-	    mv $tmp.out check.time
+	    mv $tmp.out $check.time
 	fi
 
-	echo "" >>check.log
-	date >>check.log
-	echo $list | fmt | sed -e 's/^/    /' -e "s;$SRC_DIR/;;g" >>check.log
-	$interrupt && echo "Interrupted!" >>check.log
+	echo "" >>$check.log
+	date >>$check.log
+	echo $list | fmt | sed -e 's/^/    /' -e "s;$SRC_DIR/;;g" >>$check.log
+	$interrupt && echo "Interrupted!" >>$check.log
         
         if [ ! -z "$n_try" -a $n_try != 0 ]
 	then
@@ -324,18 +327,18 @@ END	{ if (NR > 0) {
 	if [ ! -z "$notrun" ]
 	then
 	    echo "Not run:$notrun"
-	    echo "Not run:$notrun" >>check.log
+	    echo "Not run:$notrun" >>$check.log
 	fi
 
         if [ ! -z "$n_bad" -a $n_bad != 0 ]
 	then
 	    echo "Failures:$bad"
 	    echo "Failed $n_bad of $n_try tests"
-	    echo "Failures:$bad" | fmt >>check.log
-	    echo "Failed $n_bad of $n_try tests" >>check.log
+	    echo "Failures:$bad" | fmt >>$check.log
+	    echo "Failed $n_bad of $n_try tests" >>$check.log
 	else
 	    echo "Passed all $n_try tests"
-	    echo "Passed all $n_try tests" >>check.log
+	    echo "Passed all $n_try tests" >>$check.log
 	fi
 	needwrap=false
     fi
@@ -346,10 +349,19 @@ END	{ if (NR > 0) {
 
 trap "_wrapup; exit \$status" 0 1 2 3 15
 
-# don't leave old full output behind on a clean run
-rm -f check.full
+mkdir -p $RESULT_BASE
+if [ ! -d $RESULT_BASE ]; then
+	echo "failed to create results directory $RESULTS_BASE"
+	exit 1;
+fi
 
-[ -f check.time ] || touch check.time
+seq="check"
+check="$RESULT_BASE/check"
+
+# don't leave old full output behind on a clean run
+rm -f $check.full
+
+[ -f $check.time ] || touch $check.time
 
 # print out our test configuration
 echo "FSTYP         -- `_full_fstyp_details`"
@@ -385,13 +397,7 @@ if [ ! -z "$SCRATCH_DEV" ]; then
   fi
 fi
 
-mkdir -p $RESULT_BASE
-if [ ! -d $RESULT_BASE ]; then
-	echo "failed to create results directory $RESULTS_BASE"
-	exit 1;
-fi
-
-seq="check"
+seqres="$check"
 _check_test_fs
 
 for seq in $list
@@ -432,7 +438,7 @@ do
 	fi
 
 	# slashes now in names, sed barfs on them so use grep
-	lasttime=`grep -w ^$seq check.time | awk '// {print $2}'`
+	lasttime=`grep -w ^$seqnum $check.time | awk '// {print $2}'`
 	if [ "X$lasttime" != X ]; then
 		echo -n " ${lasttime}s ..."
 	else
