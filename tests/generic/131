@@ -33,8 +33,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    kill $locktest_pid2 2&>1 /dev/null
-    kill $locktest_pid1 2&>1 /dev/null
+    kill $locktest_pid2 > /dev/null 2>&1
+    kill $locktest_pid1 > /dev/null 2>&1
     _cleanup_testdir
 }
 
@@ -60,23 +60,21 @@ elif [ $$ -gt 32000 ]; then
 fi
 
 # Start the server
-src/locktest -p $PORT $TESTFILE > $testdir/server.out 2>&1 &
+src/locktest -p $PORT $TESTFILE 2>&1 > $testdir/server.out &
 locktest_pid1=$!
 
 sleep 1
 
 # Start the client
-src/locktest -p $PORT -h localhost $TESTFILE > $testdir/client.out 2>&1
+src/locktest -p $PORT -h localhost $TESTFILE 2>&1 > $testdir/client.out
 locktest_pid2=$!
 result=$?
 if [ $result -eq 0 ]; then
-    echo success!
+	echo success!
+	status=0
 else
-    echo "Client reported failure ($result)"
-    cat $testdir/*.out
-    _cleanup
-    exit $status
+	echo "Client reported failure ($result)"
+	cat $testdir/*.out
 fi
 
-status=0
 exit
