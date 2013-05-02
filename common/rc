@@ -393,8 +393,8 @@ _xfs_check()
 {
     OPTS=" "
     DBOPTS=" "
+    USAGE="Usage: xfs_check [-fsvV] [-l logdev] [-i ino]... [-b bno]... special"
 
-    OPTIND=1
     while getopts "b:fi:l:stvV" c
     do
         case $c in
@@ -410,8 +410,17 @@ _xfs_check()
                 ;;
         esac
     done
-    ${XFS_DB_PROG}${DBOPTS} -F -i -p xfs_check -c "check$OPTS" $1
-    return $?
+    set -- extra $@
+    shift $OPTIND
+    case $# in
+        1)    ${XFS_DB_PROG}${DBOPTS} -F -i -p xfs_check -c "check$OPTS" $1
+               status=$?
+               ;;
+        2)    echo $USAGE 1>&1
+              status=2
+              ;;
+    esac
+    return $status
 }
 
 _setup_large_ext4_fs()
