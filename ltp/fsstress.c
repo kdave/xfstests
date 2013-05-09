@@ -247,6 +247,8 @@ unsigned long	seed = 0;
 ino_t		top_ino;
 int		verbose = 0;
 sig_atomic_t	should_stop = 0;
+char		*execute_cmd = NULL;
+int		execute_freq = 1;
 
 void	add_to_flist(int, int, int);
 void	append_pathname(pathname_t *, char *);
@@ -313,13 +315,14 @@ int main(int argc, char **argv)
 	int             nousage = 0;
 	xfs_error_injection_t	        err_inj;
 	struct sigaction action;
+	const char	*allopts = "d:e:f:i:m:M:n:o:p:rs:S:vwx:X:zH";
 
 	errrange = errtag = 0;
 	umask(0);
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, "d:e:f:i:m:M:n:o:p:rs:S:vwzH")) != -1) {
+	while ((c = getopt(argc, argv, allopts)) != -1) {
 		switch (c) {
 		case 'd':
 			dirname = optarg;
@@ -376,6 +379,9 @@ int main(int argc, char **argv)
 		case 'w':
 			write_freq();
 			break;
+		case 'x':
+			execute_cmd = optarg;
+			break;
 		case 'z':
 			zero_freq();
 			break;
@@ -389,6 +395,9 @@ int main(int argc, char **argv)
 			show_ops(i, NULL);
 			printf("\n");
                         nousage=1;
+			break;
+		case 'X':
+			execute_freq = strtoul(optarg, NULL, 0);
 			break;
 		case '?':
 			fprintf(stderr, "%s - invalid parameters\n",
@@ -765,7 +774,9 @@ doproc(void)
 	int		opno;
 	int		rval;
 	opdesc_t	*p;
+	int		dividend;
 
+	dividend = (operations + execute_freq) / (execute_freq + 1);
 	sprintf(buf, "p%x", procid);
 	(void)mkdir(buf, 0777);
 	if (chdir(buf) < 0 || stat64(".", &statbuf) < 0) {
@@ -779,6 +790,15 @@ doproc(void)
 	if (namerand)
 		namerand = random();
 	for (opno = 0; opno < operations; opno++) {
+		if (execute_cmd && opno && opno % dividend == 0) {
+			if (verbose)
+				printf("%d: execute command %s\n", opno,
+					execute_cmd);
+			rval = system(execute_cmd);
+			if (rval)
+				fprintf(stderr, "execute command failed with "
+					"%d\n", rval);
+		}
 		p = &ops[freq_table[random() % freq_table_size]];
 		p->func(opno, random());
 		/*
@@ -1468,7 +1488,7 @@ usage(void)
 	printf("Usage: %s -H   or\n", myprog);
 	printf("       %s [-d dir][-e errtg][-f op_name=freq][-n nops]\n",
 		myprog);
-	printf("          [-p nproc][-r len][-s seed][-v][-w][-z][-S]\n");
+	printf("          [-p nproc][-r len][-s seed][-v][-w][-x cmd][-z][-S][-X ncmd]\n");
 	printf("where\n");
 	printf("   -d dir           specifies the base directory for operations\n");
 	printf("   -e errtg         specifies error injection stuff\n");
@@ -1483,8 +1503,10 @@ usage(void)
 	printf("   -s seed          specifies the seed for the random generator (default random)\n");
 	printf("   -v               specifies verbose mode\n");
 	printf("   -w               zeros frequencies of non-write operations\n");
+	printf("   -x cmd           execute command in the middle of operations\n");
 	printf("   -z               zeros frequencies of all operations\n");
 	printf("   -S [c,t]         prints the list of operations (omitting zero frequency) in command line or table style\n");
+	printf("   -X ncmd          number of calls to the -x command (default 1)\n");
 	printf("   -H               prints usage and exits\n");
 }
 
