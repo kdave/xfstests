@@ -5,7 +5,7 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-TESTS_SUBDIRS = $(shell find . -maxdepth 1 -type d | sed -n -e 's/\.\///gp')
+TESTS_SUBDIRS = $(sort $(dir $(wildcard $(PWD)/$(TESTS_DIR)/[a-z]*/)))
 
 include $(BUILDRULES)
 
