@@ -660,6 +660,8 @@ int main(int argc, char **argv)
 {
 	int ret = -1;
 	int i = 0;
+	int opt;
+	int check_support = 0;
 	int numtests = sizeof(seek_tests) / sizeof(struct testrec);
 
 	if (argc != 2) {
@@ -667,10 +669,22 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
-	base_file_path = (char *)strdup(argv[1]);
+	while ((opt = getopt(argc, argv, "t")) != -1) {
+		switch (opt) {
+		case 't':
+			check_support++;
+			break;
+		default:
+			fprintf(stderr, "Usage: %s [-t] base_file_path\n",
+				argv[0]);
+			return ret;
+		}
+	}
+
+	base_file_path = (char *)strdup(argv[optind]);
 
 	ret = test_basic_support();
-	if (ret)
+	if (ret || check_support)
 		goto out;
 
 	for (i = 0; i < numtests; ++i) {
