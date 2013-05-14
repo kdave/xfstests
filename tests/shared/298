@@ -28,12 +28,12 @@ echo "QA output created by $seq"
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
-. common/config
-. common/rc
+. ./common/rc
 
 _supported_fs ext4 xfs
 _supported_os Linux
 _require_fstrim
+_require_xfs_io_fiemap
 _require_fs_space $TEST_DIR 307200
 [ "$FSTYP" = "ext4" ] && _require_dumpe2fs
 
@@ -49,7 +49,7 @@ _cleanup()
 
 get_holes()
 {
-	$XFS_IO_PROG -c fiemap $1 | grep hole | $SED_PROG 's/.*\[\(.*\)\.\.\(.*\)\].*/\1 \2/'
+	$XFS_IO_PROG -F -c fiemap $1 | grep hole | $SED_PROG 's/.*\[\(.*\)\.\.\(.*\)\].*/\1 \2/'
 }
 
 get_free_sectors()
@@ -136,9 +136,10 @@ $MKFS_PROG -t $FSTYP $MKFS_OPTIONS $loop_dev &> /dev/null
 $MOUNT_PROG $loop_dev $loop_mnt
 
 echo -n "Generating garbage on loop..."
+# Goal is to fill it up, ignore any errors.
 for i in `seq 1 10`; do
-	mkdir $loop_mnt/$i
-	cp -r $here/* $loop_mnt/$i
+	mkdir $loop_mnt/$i &> /dev/null
+	cp -r $here/* $loop_mnt/$i &> /dev/null || break
 done
 
 # Get reference fiemap, this can contain i.e. uninitialized inode table
