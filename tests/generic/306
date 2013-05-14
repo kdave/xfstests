@@ -73,9 +73,9 @@ _scratch_mount -o ro || _fail "Could not mount scratch readonly"
 echo "== try to create new file"
 touch $SCRATCH_MNT/this_should_fail 2>&1 | _filter_scratch
 echo "== pwrite to null device"
-$XFS_IO_PROG -F -c "pwrite 0 512" $DEVNULL | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite 0 512" $DEVNULL | _filter_xfs_io
 echo "== pread from zero device"
-$XFS_IO_PROG -F -c "pread 0 512" $DEVZERO | _filter_xfs_io
+$XFS_IO_PROG -c "pread 0 512" $DEVZERO | _filter_xfs_io
 
 echo "== truncating write to null device"
 echo foo > $DEVNULL 2>&1 | _filter_scratch
@@ -84,16 +84,16 @@ echo foo >> $DEVNULL 2>&1 | _filter_scratch
 
 echo "== writing to symlink from ro fs to rw fs"
 # Various combinations of O_CREAT & O_TRUNC
-$XFS_IO_PROG -F -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
-$XFS_IO_PROG -F -f -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
-$XFS_IO_PROG -F -t -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
+$XFS_IO_PROG -t -c "pwrite 0 512" $SYMLINK | _filter_xfs_io
 
 echo "== write to bind-mounted rw file on ro fs"
 mount --bind $TARGET $BINDFILE
 # with and without -f (adds O_CREAT)
-$XFS_IO_PROG -F -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
-$XFS_IO_PROG -F -f -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
-$XFS_IO_PROG -F -t -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
+$XFS_IO_PROG -t -c "pwrite 0 512" $BINDFILE | _filter_xfs_io
 
 # success, all done
 status=0
