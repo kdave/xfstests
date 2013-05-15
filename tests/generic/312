@@ -1,0 +1,72 @@
+#! /bin/bash
+# FS QA Test No. 312
+#
+# ENOSPC in fallocate(2) could corrupt ext4 when file size > 4G
+#
+# Regression test for commit
+# 29ae07b ext4: Fix overflow caused by missing cast in ext4_fallocate()
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_xfs_io_falloc
+_require_scratch
+
+# 5G in byte
+fssize=$((2**30 * 5))
+required_blocks=$(($fssize / 1024))
+dev_blocks=$(grep $(basename $(readlink -f $SCRATCH_DEV)) /proc/partitions | $AWK_PROG '{print $3}')
+if [ $required_blocks -gt $dev_blocks ];then
+	_notrun "this test requires \$SCRATCH_DEV has ${fssize}B space"
+fi
+
+rm -f $seqres.full
+_scratch_mkfs_sized $fssize >>$seqres.full 2>&1
+_scratch_mount >>$seqres.full 2>&1
+
+echo "Silence is golden"
+
+# fallocate(2) a 6G(> 4G) file on a 5G fs
+$XFS_IO_PROG -f -c "falloc 0 6g" $SCRATCH_MNT/testfile.$seq >>$seqres.full 2>&1
+
+_scratch_unmount
+_check_scratch_fs
+status=0
+exit
