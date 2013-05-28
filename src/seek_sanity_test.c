@@ -656,6 +656,12 @@ out:
 	return ret;
 }
 
+void usage(char *cmd)
+{
+	fprintf(stdout, "Usage: %s [-t] base_file_path\n", cmd);
+	exit(1);
+}
+
 int main(int argc, char **argv)
 {
 	int ret = -1;
@@ -664,22 +670,19 @@ int main(int argc, char **argv)
 	int check_support = 0;
 	int numtests = sizeof(seek_tests) / sizeof(struct testrec);
 
-	if (argc != 2) {
-		fprintf(stdout, "Usage: %s base_file_path\n", argv[0]);
-		return ret;
-	}
-
 	while ((opt = getopt(argc, argv, "t")) != -1) {
 		switch (opt) {
 		case 't':
 			check_support++;
 			break;
 		default:
-			fprintf(stderr, "Usage: %s [-t] base_file_path\n",
-				argv[0]);
-			return ret;
+			usage(argv[0]);
 		}
 	}
+
+	/* should be exactly one arg left, the filename */
+	if (optind != argc - 1)
+		usage(argv[0]);
 
 	base_file_path = (char *)strdup(argv[optind]);
 
