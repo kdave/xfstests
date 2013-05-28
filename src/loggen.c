@@ -134,7 +134,6 @@ loggen_unmount(int count)
     head->h_cycle = cpu_to_be32(param_cycle);
     head->h_version = cpu_to_be32(1);
     head->h_len = cpu_to_be32(20);
-    head->h_chksum = cpu_to_be32(0);
     head->h_prev_block = cpu_to_be32(-1);
     head->h_num_logops = cpu_to_be32(1);
     head->h_cycle_data[0] = cpu_to_be32(0xb0c0d0d0);
@@ -202,7 +201,6 @@ loggen_empty(int count)
                                                     sizeof(xfs_trans_header_t)+
                                                     sizeof(xfs_buf_log_format_t)+
                                                     sizeof(int));
-    head->h_chksum         = cpu_to_be32(0);
     head->h_prev_block     = cpu_to_be32(-1);
     head->h_num_logops     = cpu_to_be32(5);
     head->h_cycle_data[0]  = cpu_to_be32(0xb0c0d0d0);
