@@ -120,19 +120,19 @@ static int do_sync_dirty_pages(int fd, off64_t offset, off64_t nbytes)
 
 static ssize_t do_pwrite(int fd, const void *buf, size_t count, off_t offset)
 {
-       ssize_t ret, written = 0;
+	ssize_t ret, written = 0;
 
-       while (count > written) {
-               ret = pwrite(fd, buf + written, count - written, offset + written);
-               if (ret < 0) {
-                       fprintf(stderr, "  ERROR %d: Failed to write %ld "
-                               "bytes\n", errno, (long)count);
-                       return ret;
-               }
-               written += ret;
-       }
+	while (count > written) {
+		ret = pwrite(fd, buf + written, count - written, offset + written);
+		if (ret < 0) {
+			fprintf(stderr, "  ERROR %d: Failed to write %ld "
+				"bytes\n", errno, (long)count);
+			return ret;
+		}
+		written += ret;
+	}
 
-       return 0;
+	return 0;
 }
 
 #define do_close(x)	do { if ((x) > -1) close(x); } while(0);
