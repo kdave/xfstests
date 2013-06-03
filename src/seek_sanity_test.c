@@ -18,6 +18,7 @@
  */
 
 #define _XOPEN_SOURCE 500
+#define _FILE_OFFSET_BITS 64
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
@@ -129,6 +130,9 @@ static ssize_t do_pwrite(int fd, const void *buf, size_t count, off_t offset)
 	while (count > written) {
 		ret = pwrite(fd, buf + written, count - written, offset + written);
 		if (ret < 0) {
+			/* Don't warn about too large file. It's fs dependent. */
+			if (errno == EFBIG)
+				return ret;
 			fprintf(stderr, "  ERROR %d: Failed to write %ld "
 				"bytes\n", errno, (long)count);
 			return ret;
@@ -193,6 +197,77 @@ static int do_lseek(int testnum, int subtest, int fd, int filsz, int origin,
 	fprintf(stdout, "%*s\n", (70 - x), ret ? "FAIL" : "succ");
 
 	return ret;
+}
+
+static int huge_file_test(int fd, int testnum, off_t filsz)
+{
+	char *buf = NULL;
+	int bufsz = alloc_size * 16;	/* XFS seems to round allocated size */
+	off_t off = filsz - 2*bufsz;
+	int ret = -1;
+
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+	ret = do_pwrite(fd, buf, bufsz, off);
+	if (ret) {
+		/*
+		 * Report success. Filesystem just cannot handle so large
+		 * offsets and correctly reports it.
+		 */
+		if (errno == EFBIG) {
+			fprintf(stdout, "Test skipped as fs doesn't support so large files.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	/* offset at the beginning */
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 1, 1);
+
+	/* offset around eof */
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_HOLE, off, off + bufsz);
+	ret += do_lseek(testnum,  6, fd, filsz, SEEK_DATA, off, off);
+	ret += do_lseek(testnum,  7, fd, filsz, SEEK_DATA, off + 1, off + 1);
+	ret += do_lseek(testnum,  8, fd, filsz, SEEK_DATA, off - bufsz, off);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
+/*
+ * Test huge file to check for overflows of block counts due to usage of
+ * 32-bit types.
+ */
+static int test12(int fd, int testnum)
+{
+	return huge_file_test(fd, testnum,
+				((long long)alloc_size << 32) + (1 << 20));
+}
+
+/*
+ * Test huge file to check for overflows of block counts due to usage of
+ * signed types
+ */
+static int test11(int fd, int testnum)
+{
+	return huge_file_test(fd, testnum,
+				((long long)alloc_size << 31) + (1 << 20));
+}
+
+/* Test an 8G file to check for offset overflows at 1 << 32 */
+static int test10(int fd, int testnum)
+{
+	return huge_file_test(fd, testnum, 8ULL << 30);
 }
 
 /*
@@ -599,6 +674,9 @@ struct testrec seek_tests[] = {
        {  7, test07, "Test file with unwritten extents, only have dirty pages" },
        {  8, test08, "Test file with unwritten extents, only have unwritten pages" },
        {  9, test09, "Test file with unwritten extents, have both dirty && unwritten pages" },
+       { 10, test10, "Test a huge file for offset overflow" },
+       { 11, test11, "Test a huge file for block number signed" },
+       { 12, test12, "Test a huge file for block number overflow" },
 };
 
 static int run_test(struct testrec *tr)
