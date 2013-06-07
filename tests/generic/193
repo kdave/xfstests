@@ -43,9 +43,9 @@ tag="added by qa $seq"
 #
 _create_files()
 {
-	touch test.root
-	touch test.${qa_user}
-	chown ${qa_user}:${qa_user} test.${qa_user}
+	touch $test_root
+	touch $test_user
+	chown ${qa_user}:${qa_user} $test_user
 }
 
 #
@@ -53,8 +53,13 @@ _create_files()
 #
 _cleanup_files()
 {
-	rm -f test.${qa_user}
-	rm -f test.root
+	rm -f $test_user
+	rm -f $test_root
+}
+
+_filter_files()
+{
+	sed -e "s,$test_root,test.root,g" -e "s,$test_user,test.user,g"
 }
 
 # get standard environment, filters and checks
@@ -67,6 +72,9 @@ _supported_os Linux
 
 _require_user
 _need_to_be_root
+
+test_root=$TEST_DIR/$seq.$$.root
+test_user=$TEST_DIR/$seq.$$.user
 
 #
 # make sure we have a normal umask set
@@ -83,17 +91,17 @@ echo
 _create_files
 
 echo "user: chown root owned file to qa_user (should fail)"
-su ${qa_user} -c "chown ${qa_user} test.root"
+su ${qa_user} -c "chown ${qa_user} $test_root" 2>&1 | _filter_files
 
 echo "user: chown root owned file to root (should fail)"
-su ${qa_user} -c "chown root test.root"
+su ${qa_user} -c "chown root $test_root" 2>&1 | _filter_files
 
 echo "user: chown qa_user owned file to qa_user (should succeed)"
-su ${qa_user} -c "chown ${qa_user} test.${qa_user}"
+su ${qa_user} -c "chown ${qa_user} $test_user"
 
 # this would work without _POSIX_CHOWN_RESTRICTED
 echo "user: chown qa_user owned file to root (should fail)"
-su ${qa_user} -c "chown root test.${qa_user}"
+su ${qa_user} -c "chown root $test_user" 2>&1 | _filter_files
 
 _cleanup_files
 
@@ -107,19 +115,19 @@ echo
 _create_files
 
 echo "user: chgrp root owned file to root (should fail)"
-su ${qa_user} -c "chgrp root test.root"
+su ${qa_user} -c "chgrp root $test_root" 2>&1 | _filter_files
 
 echo "user: chgrp qa_user owned file to root (should fail)"
-su ${qa_user} -c "chgrp root test.${qa_user}"
+su ${qa_user} -c "chgrp root $test_user" 2>&1 | _filter_files
 
 echo "user: chgrp root owned file to qa_user (should fail)"
-su ${qa_user} -c "chgrp ${qa_user} test.root"
+su ${qa_user} -c "chgrp ${qa_user} $test_root" 2>&1 | _filter_files
 
 echo "user: chgrp qa_user owned file to qa_user (should succeed)"
-su ${qa_user} -c "chgrp ${qa_user} test.${qa_user}"
+su ${qa_user} -c "chgrp ${qa_user} $test_user"
 
 #echo "user: chgrp qa_user owned file to secondary group (should succeed)"
-#su ${qa_user} -c "chgrp ${group2} test.${qa_user}"
+#su ${qa_user} -c "chgrp ${group2} $test_user"
 
 _cleanup_files
 
@@ -133,10 +141,10 @@ echo
 _create_files
 
 echo "user: chmod a+r on qa_user owned file (should succeed)"
-su ${qa_user} -c "chmod a+r test.${qa_user}"
+su ${qa_user} -c "chmod a+r $test_user"
 
 echo "user: chmod a+r on root owned file (should fail)"
-su ${qa_user} -c "chmod a+r test.root"
+su ${qa_user} -c "chmod a+r $test_root" 2>&1 | _filter_files
 
 #
 # Setup a file owned by the qa_user, but with a group ID that
@@ -153,12 +161,12 @@ su ${qa_user} -c "chmod a+r test.root"
 # reg file + file's gid not in process' group set + no approp. privileges -> clear sgid
 #
 echo "check that the sgid bit is cleared"
-chown ${qa_user}:root test.${qa_user}
-chmod g+s test.${qa_user}
+chown ${qa_user}:root $test_user
+chmod g+s $test_user
 
 # and let the qa_user change permission bits
-su ${qa_user} -c "chmod a+w test.${qa_user}"
-stat -c '%A' test.${qa_user}
+su ${qa_user} -c "chmod a+w $test_user"
+stat -c '%A' $test_user
 
 #
 # Setup a file owned by the qa_user and with the suid bit set.
@@ -166,9 +174,9 @@ stat -c '%A' test.${qa_user}
 # There is nothing in Posix that says it should but just checking.
 #
 echo "check that suid bit is not cleared"
-chmod u+s test.${qa_user}
-chmod a+w test.${qa_user}
-stat -c '%A' test.${qa_user}
+chmod u+s $test_user
+chmod a+w $test_user
+stat -c '%A' $test_user
 
 _cleanup_files
 
@@ -196,34 +204,71 @@ _create_files
 echo "check that suid/sgid bits are cleared after successful chown..."
 
 echo "with no exec perm"
-chmod ug+s test.${qa_user}
-echo -n "before: "; stat -c '%A' test.${qa_user}
-chown root test.${qa_user}
-echo -n "after:  "; stat -c '%A' test.${qa_user}
+chmod ug+s $test_user
+echo -n "before: "; stat -c '%A' $test_user
+chown root $test_user
+echo -n "after:  "; stat -c '%A' $test_user
 
 echo "with user exec perm"
-chmod ug+s test.${qa_user}
-chmod u+x test.${qa_user}
-echo -n "before: "; stat -c '%A' test.${qa_user}
-chown root test.${qa_user}
-echo -n "after:  "; stat -c '%A' test.${qa_user}
+chmod ug+s $test_user
+chmod u+x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+chown root $test_user
+echo -n "after:  "; stat -c '%A' $test_user
 
 echo "with group exec perm"
-chmod ug+s test.${qa_user}
-chmod g+x test.${qa_user}
-chmod u-x test.${qa_user}
-echo -n "before: "; stat -c '%A' test.${qa_user}
-chown root test.${qa_user}
-echo -n "after:  "; stat -c '%A' test.${qa_user}
+chmod ug+s $test_user
+chmod g+x $test_user
+chmod u-x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+chown root $test_user
+echo -n "after:  "; stat -c '%A' $test_user
 
 echo "with user+group exec perm"
-chmod ug+s test.${qa_user}
-chmod ug+x test.${qa_user}
-echo -n "before: "; stat -c '%A' test.${qa_user}
-chown root test.${qa_user}
-echo -n "after:  "; stat -c '%A' test.${qa_user}
+chmod ug+s $test_user
+chmod ug+x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+chown root $test_user
+echo -n "after:  "; stat -c '%A' $test_user
 
 _cleanup_files
+
+_create_files
+# Now test out the clear of suid/sgid for truncate
+#
+echo "check that suid/sgid bits are cleared after successful truncate..."
+
+echo "with no exec perm"
+echo frobnozzle >> $test_user
+chmod ug+s $test_user
+echo -n "before: "; stat -c '%A' $test_user
+su ${qa_user} -c "echo > $test_user"
+echo -n "after:  "; stat -c '%A' $test_user
+
+echo "with user exec perm"
+echo frobnozzle >> $test_user
+chmod ug+s $test_user
+chmod u+x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+su ${qa_user} -c "echo > $test_user"
+echo -n "after:  "; stat -c '%A' $test_user
+
+echo "with group exec perm"
+echo frobnozzle >> $test_user
+chmod ug+s $test_user
+chmod g+x $test_user
+chmod u-x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+su ${qa_user} -c "echo > $test_user"
+echo -n "after:  "; stat -c '%A' $test_user
+
+echo "with user+group exec perm"
+echo frobnozzle >> $test_user
+chmod ug+s $test_user
+chmod ug+x $test_user
+echo -n "before: "; stat -c '%A' $test_user
+su ${qa_user} -c "echo > $test_user"
+echo -n "after:  "; stat -c '%A' $test_user
 
 #
 # Test ATTR_*TIMES_SET
@@ -235,10 +280,10 @@ echo
 _create_files
 
 echo "user: touch qa_user file (should succeed)"
-su ${qa_user} -c "touch test.${qa_user}"
+su ${qa_user} -c "touch $test_user"
 
 echo "user: touch root file (should fail)"
-su ${qa_user} -c "touch test.root"
+su ${qa_user} -c "touch $test_root" 2>&1 | _filter_files
 
 _cleanup_files
 
