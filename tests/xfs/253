@@ -71,6 +71,8 @@ function create_file() {
 
 echo "Disciplyne of silence is goed."
 
+rm -f $seqres.full
+
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
@@ -162,11 +164,11 @@ mv "${TEMP_ORPHAN}" "${ORPHAN}"
 touch "${NON_ORPHAN}"
 
 # Get a listing of all the files before obfuscation
-ls -R >> "${seq}.full"
-ls -R | od -c >> "${seq}.full"
+ls -R >> $seqres.full
+ls -R | od -c >> $seqres.full
 
 # Now unmount the filesystem and create a metadump file
-cd /; sync; sync		# Old school
+cd $here
 
 _scratch_unmount
 
@@ -178,9 +180,9 @@ xfs_mdrestore "${METADUMP_FILE}" "${SCRATCH_DEV}"
 _scratch_mount
 
 # Get a listing of all the files after obfuscation
-cd "${SCRATCH_MNT}"
-ls -R >> "${seq}.full"
-ls -R | od -c >> "${seq}.full"
+cd ${SCRATCH_MNT}
+ls -R >> $seqres.full
+ls -R | od -c >> $seqres.full
 
 # Finally, re-make the filesystem since to ensure we don't
 # leave a directory with duplicate entries lying around.
