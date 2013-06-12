@@ -230,7 +230,7 @@ static int test_five()
 
 	memset(buf, character, 3072);
 	for (i = 0; i < runs; i++) {
-		size_t write_size = (random() % 3072) + 1;
+		ssize_t write_size = (random() % 3072) + 1;
 
 		if (pwrite(test_fd, buf, write_size, 0) < write_size) {
 			fprintf(stderr, "Short write %d\n", errno);
@@ -418,6 +418,14 @@ int main(int argc, char **argv)
 
 	if (optind >= argc)
 		usage();
+
+	/*
+	 * test 19 is for smaller than blocksize writes to test btrfs's inline
+	 * extent fsyncing, so direct_io doesn't make sense and in fact doesn't
+	 * work for other file systems, so just disable direct io for this test.
+	 */
+	if (test == 19)
+		direct_io = 0;
 
 	fname = argv[optind];
 	if (!fname)
