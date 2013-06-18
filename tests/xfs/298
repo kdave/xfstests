@@ -1,0 +1,91 @@
+#! /bin/bash
+# FS QA Test No. 298
+#
+# Test that inline symlinks are removed from the inode when an extended
+# attributes forces it into being remote symlink.
+# Warning: this test will ASSERT on unpatched DEBUG XFS.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate. This is a XFS specific bug. xfs_db also limits
+# this test to xfs
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+rm -f $seqres.full
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+SYMLINK_FILE="$SCRATCH_MNT/symlink"
+SYMLINK=""
+SYMLINK_ADD="0123456789ABCDEF01234567890ABCDEF"
+
+# test from 32 to MAXPATHLEN sized symlink. This should make sure that
+# 256-1024 byte version 2 and 3 inodes are covered.
+SIZE=32
+while [ $SIZE -lt 1024 ];do
+	_scratch_mount >/dev/null 2>&1
+	cd $SCRATCH_MNT
+	echo "Testing symlink size $SIZE"
+	SYMLINK="${SYMLINK}${SYMLINK_ADD}"
+	ln -s $SYMLINK $SYMLINK_FILE > /dev/null 2>&1
+
+	inode=`ls -li $SYMLINK_FILE | awk '{print $1}'`
+# add the extended attributes
+	attr  -Rs 1234567890ab $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+	attr  -Rs 1234567890ac $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+	attr  -Rs 1234567890ad $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+# remove the extended attributes
+	attr  -Rr 1234567890ab $SYMLINK_FILE > /dev/null 2>&1
+	attr  -Rr 1234567890ac $SYMLINK_FILE > /dev/null 2>&1
+	attr  -Rr 1234567890ad $SYMLINK_FILE > /dev/null 2>&1
+# remove the symlink - make sure ifree removes the remote symlink.
+	rm $SYMLINK_FILE
+# umount and check the number of extents on the inode. Should be 0.
+	cd
+	_scratch_unmount >/dev/null 2>&1
+	$XFS_DB_PROG  -c "inode $inode" -c "p core.nextents" $SCRATCH_DEV
+
+	let SIZE=$SIZE+32
+done
+
+status=0
+exit
