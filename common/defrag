@@ -38,13 +38,13 @@ _require_defrag()
     esac
 
     _require_command $DEFRAG_PROG
-    _require_command $FILEFRAG_PROG
+    _require_xfs_io_fiemap
 }
 
 _extent_count()
 {
-	$FILEFRAG_PROG $1 | awk '{print $2}'
-	$FILEFRAG_PROG -v $1  >> $seqres.full 2>&1
+	$XFS_IO_PROG -c "fiemap" $1 | tail -n +2 | grep -v hole | wc -l
+	$XFS_IO_PROG -c "fiemap" $1  >> $seqres.full 2>&1
 }
 
 # Defrag file, check it, and remove it.
