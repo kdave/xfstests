@@ -1,0 +1,79 @@
+#! /bin/bash
+# FS QA Test No. 315
+#
+# fallocate/truncate tests with FALLOC_FL_KEEP_SIZE option.
+# Verify if the disk space is released after truncating a file back
+# to the old smaller size.  Before Linux 3.10, Btrfs/OCFS2 are test
+# failed in this case.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+
+rm -f $seqres.full
+
+echo "Slience is golden"
+
+# Check the current avaliable disk space on $TEST_DIR.
+# 1024KiB at least
+avail_begin=`df -P $TEST_DIR | awk 'END {print $4}'`
+[ "$avail_begin" -ge 1024 ] || _notrun "Test device is too small ($avail_begin KiB)"
+
+# Preallocate half size of the available disk space to a file
+# starts from offset 0 with FALLOC_FL_KEEP_SIZE option on the
+# test file system.
+fallocate -n -o 0 -l $(($avail_begin/2)) $TEST_DIR/testfile.$seq >>$seqres.full 2>&1
+
+# Verify the file size, it should keep unchanged as 0 in this case
+fsize=`ls -l $TEST_DIR/testfile.$seq | awk '{print $5}'`
+[ "$fsize" -eq 0 ] || _fail "File size is changed to ($fsize Bytes)"
+
+# Truncate the file size back to 0
+truncate -s 0 $TEST_DIR/testfile.$seq
+sync
+
+# Preallocated disk space should be released
+avail_done=`df -P $TEST_DIR | awk 'END {print $4}'`
+[ "$avail_done" -eq "$avail_begin" ] || _fail "Available disk space ($avail_done KiB)"
+
+# success, all done
+exit
