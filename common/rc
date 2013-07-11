@@ -2139,46 +2139,48 @@ run_check()
 	"$@" >> $seqres.full 2>&1 || _fail "failed: '$@'"
 }
 
-################################################################################
+init_rc()
+{
+	if [ "$iam" == new ]
+	then
+		return
+	fi
+	# make some further configuration checks here
+	if [ "$TEST_DEV" = ""  ]
+	then
+		echo "common/rc: Error: \$TEST_DEV is not set"
+		exit 1
+	fi
 
-if [ "$iam" != new ]
-then
-    # make some further configuration checks here
+	# if $TEST_DEV is not mounted, mount it now as XFS
+	if [ -z "`_fs_type $TEST_DEV`" ]
+	then
+		# $TEST_DEV is not mounted
+		if ! _test_mount
+		then
+			echo "common/rc: retrying test device mount with external set"
+			[ "$USE_EXTERNAL" != "yes" ] && export USE_EXTERNAL=yes
+			if ! _test_mount
+			then
+				echo "common/rc: could not mount $TEST_DEV on $TEST_DIR"
+				exit 1
+			fi
+		fi
+	fi
 
-    if [ "$TEST_DEV" = ""  ]
-    then
-        echo "common/rc: Error: \$TEST_DEV is not set"
-        exit 1
-    fi
-
-    # if $TEST_DEV is not mounted, mount it now as XFS
-    if [ -z "`_fs_type $TEST_DEV`" ]
-    then
-        # $TEST_DEV is not mounted
-        if ! _test_mount
-        then
-            echo "common/rc: retrying test device mount with external set"
-            [ "$USE_EXTERNAL" != "yes" ] && export USE_EXTERNAL=yes
-            if ! _test_mount
-            then
-                echo "common/rc: could not mount $TEST_DEV on $TEST_DIR"
-                exit 1
-            fi
-        fi
-    fi
-
-    if [ "`_fs_type $TEST_DEV`" != "$FSTYP" ]
-    then
-        echo "common/rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED $FSTYP filesystem"
-        $DF_PROG $TEST_DEV
-        exit 1
-    fi
-
-    # Figure out if we need to add -F ("foreign", deprecated) option to xfs_io
-    xfs_io -c stat $TEST_DIR 2>&1 | grep -q "is not on an XFS filesystem" && \
+	if [ "`_fs_type $TEST_DEV`" != "$FSTYP" ]
+	then
+		echo "common/rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED $FSTYP filesystem"
+		$DF_PROG $TEST_DEV
+		exit 1
+	fi
+	# Figure out if we need to add -F ("foreign", deprecated) option to xfs_io
+	xfs_io -c stat $TEST_DIR 2>&1 | grep -q "is not on an XFS filesystem" && \
 	export XFS_IO_PROG="$XFS_IO_PROG -F"
+}
 
-fi
+init_rc
 
+################################################################################
 # make sure this script returns success
 /bin/true
