@@ -151,6 +151,56 @@ _timestamp()
     echo -n " [$now]"
 }
 
+_prepare_test_list()
+{
+	unset list
+	# Tests specified on the command line
+	if [ -s $tmp.arglist ]; then
+		cat $tmp.arglist > $tmp.list
+	else
+		touch $tmp.list
+	fi
+
+	# Specified groups to include
+	for group in $GROUP_LIST; do
+		list=$(get_group_list $group)
+		if [ -z "$list" ]; then
+			echo "Group \"$group\" is empty or not defined?"
+			exit 1
+		fi
+
+		for t in $list; do
+			grep -s "^$t\$" $tmp.list >/dev/null || \
+							echo "$t" >>$tmp.list
+		done
+	done
+
+	if ! $have_test_arg && [ -z "$GROUP_LIST" ]; then
+		# no test numbers, do everything
+		get_all_tests
+	fi
+
+	# Specified groups to exclude
+	for xgroup in $XGROUP_LIST; do
+		list=$(get_group_list $xgroup)
+		if [ -z "$list" ]; then
+			echo "Group \"$xgroup\" is empty or not defined?"
+			exit 1
+		fi
+
+		trim_test_list $list
+	done
+
+	# sort the list of tests into numeric order
+	list=`sort -n $tmp.list | uniq`
+	rm -f $tmp.list $tmp.tmp $tmp.grep
+
+	if $randomize
+	then
+		list=`echo $list | awk -f randomize.awk`
+	fi
+}
+
 # Process command arguments first.
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -159,35 +209,11 @@ while [ $# -gt 0 ]; do
 	-nfs)	FSTYP=nfs ;;
 
 	-g)	group=$2 ; shift ;
-		group_list=$(get_group_list $group)
-		if [ -z "$group_list" ]; then
-		    echo "Group \"$group\" is empty or not defined?"
-		    exit 1
-		fi
-
-		[ ! -s $tmp.list ] && touch $tmp.list
-		for t in $group_list; do
-			grep -s "^$t\$" $tmp.list >/dev/null || \
-							echo "$t" >>$tmp.list
-		done
-
+		GROUP_LIST="$GROUP_LIST $group"
 		;;
 
 	-x)	xgroup=$2 ; shift ;
-
-		# Note: behaviour is dependent on command line ordering of
-		# -g and -x parameters. If there are no preceding -g commands,
-		# this works on all tests, otherwise just the tests specified by
-		# the early -g inclusions.
-		[ ! -s $tmp.list ] && get_all_tests
-
-		group_list=$(get_group_list $xgroup)
-		if [ -z "$group_list" ]; then
-		    echo "Group \"$xgroup\" is empty or not defined?"
-		    exit 1
-		fi
-
-		trim_test_list $group_list
+		XGROUP_LIST="$XGROUP_LIST $xgroup"
 		;;
 
 	-X)	xfile=$2; shift ;
@@ -239,7 +265,7 @@ if $have_test_arg; then
 
 			if egrep "^$test_name" $group_file >/dev/null ; then
 				# in group file ... OK
-				echo $SRC_DIR/$1 >>$tmp.list
+				echo $SRC_DIR/$1 >>$tmp.arglist
 			else
 				# oops
 				echo "$1 - unknown test, ignored"
@@ -251,25 +277,7 @@ if $have_test_arg; then
 	done
 fi
 
-if [ -s $tmp.list ]; then
-    # found some valid test numbers ... this is good
-    :
-elif $have_test_arg; then
-	# had test numbers, but none in group file ... do nothing
-	touch $tmp.list
-else
-	# no test numbers, do everything
-	get_all_tests
-fi
-
-# sort the list of tests into numeric order
-list=`sort -n $tmp.list`
-rm -f $tmp.list $tmp.tmp $tmp.grep
-
-if $randomize
-then
-    list=`echo $list | awk -f randomize.awk`
-fi
+_prepare_test_list
 
 # we need common/rc
 if ! . ./common/rc
