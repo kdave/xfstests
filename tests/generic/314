@@ -1,0 +1,68 @@
+#! /bin/bash
+# FS QA Test No. 314
+#
+# Test SGID inheritance on subdirectories
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1       # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_require_acls
+_require_user
+_need_to_be_root
+
+rm -rf $TEST_DIR/$seq-dir
+
+# Make dir owned by qa user, and an unrelated group:
+mkdir $TEST_DIR/$seq-dir
+chown $qa_user:12345 $TEST_DIR/$seq-dir
+
+# Make parent dir sgid
+chmod 2775 $TEST_DIR/$seq-dir
+
+# Make subdirs before & after acl set
+su $qa_user -c "mkdir $TEST_DIR/$seq-dir/subdir"
+su $qa_user -c "setfacl -m u:$qa_user:rwx,d:u:$qa_user:rwx $TEST_DIR/$seq-dir"
+su $qa_user -c "mkdir $TEST_DIR/$seq-dir/subdir2"
+
+# Both subdirs should have inherited sgid
+_ls_l $TEST_DIR/$seq-dir/ | _filter_test_dir | awk '{print $1,$NF}'
+
+status=0
+exit
