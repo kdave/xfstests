@@ -56,6 +56,14 @@ ifeq ($(HAVE_AIO), true)
 SUBDIRS += aio-dio-regress
 endif
 
+ifeq ($(HAVE_SSL), true)
+TARGETS += fssum
+LLDLIBS += -lssl -lcrypto
+ifeq ($(PKG_PLATFORM),linux)
+CFLAGS += -D__LINUX__
+endif
+endif
+
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS)
 

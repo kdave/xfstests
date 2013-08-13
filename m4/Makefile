@@ -16,6 +16,7 @@ LSRCFILES = \
 	package_libcdev.m4 \
 	package_ncurses.m4 \
 	package_pthread.m4 \
+	package_ssldev.m4 \
 	package_types.m4 \
 	package_utilies.m4 \
 	package_uuiddev.m4 \
