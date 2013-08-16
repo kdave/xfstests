@@ -285,18 +285,24 @@ die_now()
 # Use the -d flag to not sync the file between tests.
 # This will test the handling of delayed extents
 #
+# Use the -u flag to not run unwritten tests.
+# This will eliminate some unnecessary information.
+#
 _test_generic_punch()
 {
 
 	remove_testfile=1
 	sync_cmd="-c fsync"
+	unwritten_tests=1
 	OPTIND=1
-	while getopts 'dk' OPTION
+	while getopts 'dku' OPTION
 	do
 		case $OPTION in
 		k)	remove_testfile=
 		;;
 		d)	sync_cmd=
+		;;
+		u)	unwritten_tests=
 		;;
 		?)	echo Invalid flag
 		exit 1
@@ -333,16 +339,18 @@ _test_generic_punch()
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
 
-	echo "	3. into unwritten space"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
+	if [ "$unwritten_tests" ]; then
+		echo "	3. into unwritten space"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 0 20k" \
+			-c "$zero_cmd 4k 8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 20k" \
-		-c "$zero_cmd 4k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
 
 	echo "	4. hole -> data"
 	if [ "$remove_testfile" ]; then
@@ -355,16 +363,18 @@ _test_generic_punch()
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
 
-	echo "	5. hole -> unwritten"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
+	if [ "$unwritten_tests" ]; then
+		echo "	5. hole -> unwritten"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 8k 8k" \
+			-c "$zero_cmd 4k 8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 8k 8k" \
-		-c "$zero_cmd 4k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
 
 	echo "	6. data -> hole"
 	if [ "$remove_testfile" ]; then
@@ -377,40 +387,42 @@ _test_generic_punch()
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
 
-	echo "	7. data -> unwritten"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
-	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 8k" $sync_cmd \
-		-c "$alloc_cmd 8k 8k" \
-		-c "$zero_cmd 4k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
+	if [ "$unwritten_tests" ]; then
+		echo "	7. data -> unwritten"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "pwrite 0 8k" $sync_cmd \
+			-c "$alloc_cmd 8k 8k" \
+			-c "$zero_cmd 4k 8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 
-	echo "	8. unwritten -> hole"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
-	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 8k" \
-		-c "$zero_cmd 4k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
+		echo "	8. unwritten -> hole"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 0 8k" \
+			-c "$zero_cmd 4k 8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 
-	echo "	9. unwritten -> data"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
+		echo "	9. unwritten -> data"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 0 8k" \
+			-c "pwrite 8k 8k" $sync_cmd \
+			-c "$zero_cmd 4k 8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 8k" \
-		-c "pwrite 8k 8k" $sync_cmd \
-		-c "$zero_cmd 4k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
 
 	echo "	10. hole -> data -> hole"
 	if [ "$remove_testfile" ]; then
@@ -437,30 +449,32 @@ _test_generic_punch()
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
 
-	echo "	12. unwritten -> data -> unwritten"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
-	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 20k" \
-		-c "pwrite 8k 4k" $sync_cmd \
-		-c "$zero_cmd 4k 12k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
+	if [ "$unwritten_tests" ]; then
+		echo "	12. unwritten -> data -> unwritten"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 0 20k" \
+			-c "pwrite 8k 4k" $sync_cmd \
+			-c "$zero_cmd 4k 12k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 
-	echo "	13. data -> unwritten -> data"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
+		echo "	13. data -> unwritten -> data"
+		if [ "$remove_testfile" ]; then
+			rm -f $testfile
+		fi
+		$XFS_IO_PROG -f -c "truncate 20k" \
+			-c "$alloc_cmd 0 20k" \
+			-c "pwrite 0k 8k" $sync_cmd \
+			-c "pwrite 12k 8k" -c "fsync" \
+			-c "$zero_cmd 4k 12k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 20k" \
-		-c "pwrite 0k 8k" $sync_cmd \
-		-c "pwrite 12k 8k" -c "fsync" \
-		-c "$zero_cmd 4k 12k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
 
 	echo "	14. data -> hole @ EOF"
 	rm -f $testfile
