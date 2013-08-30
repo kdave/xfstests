@@ -28,6 +28,7 @@ iterations=1
 istop=false
 loop_on_fail=0
 exclude_tests=()
+EXTERNAL_SCRIPTS=()
 
 # This is a global variable used to pass test failure text to reporting gunk
 _err_msg=""
@@ -83,6 +84,7 @@ check options
     -s section		run only specified section from config file
     -S section		exclude the specified section from the config file
     -L <n>		loop tests <n> times following a failure, measuring aggregate pass/fail metrics
+    --external FILE     use external testscript FILE, can be specified multiple times
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -342,6 +344,16 @@ while [ $# -gt 0 ]; do
 		loop_on_fail=$2; shift
 		;;
 
+	--external)
+		xfile="$2"; shift;
+		if ! [ -f "$xfile" ]; then
+			echo "External script $xfile is not a file"
+			exit 1
+		fi
+		echo "Adding external script $xfile"
+		EXTERNAL_SCRIPTS+=("$xfile")
+		;;
+
 	-*)	usage ;;
 	*)	# not an argument, we've got tests now.
 		have_test_arg=true ;;
@@ -396,6 +408,10 @@ if [ -n "$subdir_xfile" ]; then
 		done
 	done
 fi
+
+for ext in ${EXTERNAL_SCRIPTS[*]}; do
+	echo "$ext" >> $tmp.list
+done
 
 # Process tests from command line now.
 if $have_test_arg; then
