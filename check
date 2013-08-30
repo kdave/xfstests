@@ -29,6 +29,7 @@ do_report=false
 DUMP_OUTPUT=false
 iterations=1
 istop=false
+EXTERNAL_SCRIPTS=()
 
 # This is a global variable used to pass test failure text to reporting gunk
 _err_msg=""
@@ -78,6 +79,7 @@ check options
     --large-fs		optimise scratch device for large filesystems
     -s section		run only specified section from config file
     -S section		exclude the specified section from the config file
+    --external FILE     use external testscript FILE, can be specified multiple times
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -339,6 +341,16 @@ while [ $# -gt 0 ]; do
 	--large-fs) export LARGE_SCRATCH_DEV=yes ;;
 	--extra-space=*) export SCRATCH_DEV_EMPTY_SPACE=${r#*=} ;;
 
+	--external)
+		xfile="$2"; shift;
+		if ! [ -f "$xfile" ]; then
+			echo "External script $xfile is not a file"
+			exit 1
+		fi
+		echo "Adding external script $xfile"
+		EXTERNAL_SCRIPTS+=("$xfile")
+		;;
+
 	-*)	usage ;;
 	*)	# not an argument, we've got tests now.
 		have_test_arg=true ;;
@@ -369,6 +381,10 @@ if [ -n "$subdir_xfile" ]; then
 		done
 	done
 fi
+
+for ext in ${EXTERNAL_SCRIPTS[*]}; do
+	echo "$ext" >> $tmp.list
+done
 
 # Process tests from command line now.
 if $have_test_arg; then
