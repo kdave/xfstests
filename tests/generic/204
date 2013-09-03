@@ -28,6 +28,12 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
 
 # get standard environment, filters and checks
 . ./common/rc
@@ -41,15 +47,35 @@ _require_scratch
 
 rm -f $seqres.full
 
+# get the block size first
+_scratch_mkfs 2> /dev/null | _filter_mkfs 2> $tmp.mkfs > /dev/null
+. $tmp.mkfs
+
 SIZE=`expr 104 \* 1024 \* 1024`
-_scratch_mkfs_sized $SIZE  &> /dev/null
+_scratch_mkfs_sized $SIZE $dbsize 2> /dev/null \
+		| _filter_mkfs 2> $tmp.mkfs > /dev/null
 _scratch_mount
 
-# fix the reserve block pool to a known size so that the enospc calculations
-# work out correctly.
-_scratch_resvblks 1024 >> $seqres.full 2>&1
+. $tmp.mkfs
 
-for i in `seq 1 22500`; do
+# fix the reserve block pool to a known size so that the enospc calculations
+# work out correctly. Space usages is based 22500 files and 1024 reserved blocks
+# on a 4k block size 256 byte inode size filesystem.
+resv_blks=1024
+space=97920000
+
+# decrease files for inode size.
+#	22500 * (256 + 4k) = ~97MB
+#	files * (isize + bsize) = 97MB
+#	files = (97920000 / (isize + bsize))
+
+files=$((space / (isize + dbsize)))
+resv_blks=$((resv_blks * (4096 / dbsize)))
+
+echo files $files, resvblks $resv_blks >> $seqres.full
+_scratch_resvblks $resv_blks >> $seqres.full 2>&1
+
+for i in `seq 1 $files`; do
     echo -n > $SCRATCH_MNT/$i
     echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i
 done

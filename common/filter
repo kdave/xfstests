@@ -131,9 +131,17 @@ _filter_date()
 }
 
 # prints filtered output on stdout, values (use eval) on stderr
-# 
+# Non XFS filesystems always return a 4k block size and a 256 byte inode.
 _filter_mkfs()
 {
+    case $FSTYP in
+    xfs)
+	;;
+    *)
+	perl -e 'print STDERR "dbsize=4096\nisize=256\n"'
+	return ;;
+    esac
+
     set -
     perl -ne '
     if (/^meta-data=([\w,|\/.-]+)\s+isize=(\d+)\s+agcount=(\d+), agsize=(\d+) blks/) {
