@@ -578,7 +578,13 @@ _scratch_mkfs_sized()
 
     case $FSTYP in
     xfs)
-	_scratch_mkfs_xfs -d size=$fssize -b size=$blocksize
+	# don't override MKFS_OPTIONS that set a block size.
+	echo $MKFS_OPTIONS |egrep -q "b?size="
+	if [ $? -eq 0 ]; then
+		_scratch_mkfs_xfs -d size=$fssize
+	else
+		_scratch_mkfs_xfs -d size=$fssize -b size=$blocksize
+	fi
 	;;
     ext2|ext3|ext4|ext4dev)
 	yes | ${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
