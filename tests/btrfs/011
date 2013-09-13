@@ -78,6 +78,7 @@ workout()
 	local quick="$4"
 	local source_dev="`echo ${SCRATCH_DEV_POOL} | awk '{print $1}'`"
 	local target_dev="`echo ${SCRATCH_DEV_POOL} | awk '{print $NF}'`"
+	local fssize
 
 	if [ "`echo $SCRATCH_DEV_POOL | wc -w`" -lt `expr $num_devs4raid + 1` ]; then
 		echo "Skip workout $1 $2 $3 $4" >> $seqres.full
@@ -107,33 +108,46 @@ workout()
 		_notrun "Different device sizes detected"
 	fi
 
+	if [ `$BTRFS_SHOW_SUPER_PROG $SCRATCH_DEV | grep dev_item.total_bytes | awk '{print $2}'` -lt 2500000000 ]; then
+		_notrun "device size too small"
+	fi
+
 	_scratch_mount
 
-	# Generate 500 times 20K extents in the data chunk and fill up
-	# metadata with inline extents. Ignore ENOSPC.
+	# Generate metadata and some minimal user data, generate 500 times
+	# 20K extents in the data chunk and fill up metadata with inline
+	# extents.
 	for i in `seq 1 500`; do
 		dd if=/dev/urandom of=$SCRATCH_MNT/l$i bs=16385 count=1
 		dd if=/dev/urandom of=$SCRATCH_MNT/s$i bs=3800 count=1
 	done > /dev/null 2>&1
 
+	# /dev/urandom is slow but has the benefit that the generated
+	# contents does not shrink during compression.
+	# Generate a template once and quickly copy it multiple times.
+	# Obviously with online deduplication this will not work anymore.
+	dd if=/dev/urandom of=$SCRATCH_MNT/t0 bs=1M count=1 > /dev/null 2>&1
+
 	if [ "${quick}Q" = "thoroughQ" ]; then
 		# The intention of this "thorough" test is to increase
 		# the probability of random errors, in particular in
 		# conjunction with the background noise generator and
-		# a sync call while the replace operation in ongoing.
-		# Unfortunately it takes quite some time to generate
-		# the test filesystem, therefore most data consists out
-		# of zeros although this data is not very useful for
-		# detecting misplaced read/write requests.
-		# Ignore ENOSPC, it's not a problem..
-		dd if=/dev/urandom of=$SCRATCH_MNT/r bs=1M count=200 >> $seqres.full 2>&1 &
-		dd if=/dev/zero of=$SCRATCH_MNT/0 bs=1M count=2000 >> $seqres.full 2>&1
-		wait
+		# a sync call while the replace operation is ongoing.
+		fssize=2048
 	elif [ "${with_cancel}Q" = "cancelQ" ]; then
-		# produce some data to prevent that the replace operation
-		# finishes before the cancel request is started
-		dd if=/dev/zero of=$SCRATCH_MNT/0 bs=1M count=1000 >> $seqres.full 2>&1
+		# The goal is to produce enough data to prevent that the
+		# replace operation finishes before the cancel request
+		# is started.
+		fssize=1024
+	else
+		fssize=64
 	fi
+
+	# since the available size was tested before, do not tolerate
+	# any failures
+	for i in `seq $fssize`; do
+		cp $SCRATCH_MNT/t0 $SCRATCH_MNT/t$i || _fail "cp failed"
+	done > /dev/null 2>> $seqres.full
 	sync; sync
 
 	btrfs_replace_test $source_dev $target_dev "" $with_cancel $quick
@@ -214,7 +228,7 @@ btrfs_replace_test()
 		# before the status is printed
 		$BTRFS_UTIL_PROG replace status $SCRATCH_MNT > $tmp.tmp 2>&1
 		cat $tmp.tmp >> $seqres.full
-		grep -q canceled $tmp.tmp || _fail "btrfs replace status failed"
+		grep -q canceled $tmp.tmp || _fail "btrfs replace status (canceled) failed"
 	else
 		if [ "${quick}Q" = "thoroughQ" ]; then
 			# On current hardware, the thorough test runs
@@ -226,7 +240,7 @@ btrfs_replace_test()
 
 		$BTRFS_UTIL_PROG replace status $SCRATCH_MNT > $tmp.tmp 2>&1
 		cat $tmp.tmp >> $seqres.full
-		grep -q finished $tmp.tmp || _fail "btrfs replace status failed"
+		grep -q finished $tmp.tmp || _fail "btrfs replace status (finished) failed"
 	fi
 
 	if ps -p $noise_pid | grep -q $noise_pid; then
