@@ -1494,8 +1494,8 @@ usage(void)
 	printf("   -e errtg         specifies error injection stuff\n");
 	printf("   -f op_name=freq  changes the frequency of option name to freq\n");
 	printf("                    the valid operation names are:\n");
-	printf("   -i filenum       get verbose output for this nth file object\n");
 	show_ops(-1, "                        ");
+	printf("   -i filenum       get verbose output for this nth file object\n");
 	printf("   -m modulo        uid/gid modulo for chown/chgrp (default 32)\n");
 	printf("   -n nops          specifies the no. of operations per process (default 1)\n");
 	printf("   -p nproc         specifies the no. of processes (default 1)\n");
