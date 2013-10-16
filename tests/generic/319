@@ -1,0 +1,71 @@
+#! /bin/bash
+# FS QA Test No. generic/319
+#
+# Regression test to make sure a directory inherits the default ACL from
+# its parent directory. This test was motivated by an issue reported by
+# a btrfs user. That issue is fixed and described by the following btrfs
+# kernel patch:
+#
+#     https://patchwork.kernel.org/patch/3046931/
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Filipe Manana.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# FAILure is the default!
+
+_cleanup()
+{
+       rm -f $tmp.*
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_acls
+_require_scratch
+_need_to_be_root
+
+rm -f $seqres.full
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+mkdir $SCRATCH_MNT/testdir
+setfacl -d --set u::rwx,g::rwx,o::- $SCRATCH_MNT/testdir
+getfacl --absolute-names $SCRATCH_MNT/testdir | _filter_scratch
+
+mkdir $SCRATCH_MNT/testdir/testsubdir
+getfacl --absolute-names $SCRATCH_MNT/testdir/testsubdir | _filter_scratch
+
+# success, all done
+status=0
+exit
