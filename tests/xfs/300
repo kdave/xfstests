@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 300
+#
+# Test xfs_fsr / swapext management of di_forkoff w/ selinux
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_require_scratch
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+
+getenforce | grep -q "Enforcing\|Permissive" || _notrun "SELinux not enabled"
+[ "$XFS_FSR_PROG" = "" ] && _notrun "xfs_fsr not found"
+
+rm -f $seqres.full
+
+_scratch_mkfs_xfs -i size=256 >> $seq.full 2>&1 || _fail "mkfs failed"
+
+# Manually mount to avoid fs-wide context set by default in xfstests
+mount $SCRATCH_DEV $SCRATCH_MNT
+
+touch $SCRATCH_MNT/$seq.test
+
+# Create an extents-format attribute on a file
+$XFS_IO_PROG -f -c "pwrite -S 0x63 0 4096" $SCRATCH_MNT/attrvals >> $seqres.full 2>&1
+cat $SCRATCH_MNT/attrvals | attr -s name $SCRATCH_MNT/$seq.test >> $seqres.full 2>&1
+
+# Fragment the file by writing backwards
+for I in `seq 6 -1 0`; do
+	dd if=/dev/zero of=$SCRATCH_MNT/$seq.test seek=$I bs=4k \
+	   oflag=direct count=1 conv=notrunc >> $seqres.full 2>&1
+done
+
+# See if xfs_fsr works.
+
+# The target file now has a non-local attribute, but the
+# fsr temp file gets assigned a local attribute on creation,
+# due to selinux.
+    
+# In this case, the large-ish selinux attr will create a forkoff
+# in the temp file smaller than the forkoff in the target file,
+# because the FMT_EXTENTS attr takes up less space.  If there is
+# no mechanism to grow the temp forkoff to match, we can end up
+# failing to swap these 2 inodes if the result is not enough
+# data space in the temp inode as a result.
+
+$XFS_FSR_PROG -v $SCRATCH_MNT/$seq.test | _filter_scratch
+
+# success, all done
+status=0
+exit
