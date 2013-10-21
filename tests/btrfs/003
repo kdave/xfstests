@@ -51,6 +51,7 @@ _supported_os Linux
 _require_scratch
 _require_scratch_dev_pool
 _require_deletable_scratch_dev_pool
+_require_command $WIPEFS_PROG
 
 rm -f $seqres.full
 
@@ -109,6 +110,8 @@ _test_add()
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
 	for i in `seq 2 $n`; do
+		$WIPEFS_PROG -a ${devs[$i]} >> $seqres.full 2>&1 || \
+			_fail "wipefs failed"
 		$BTRFS_UTIL_PROG device add ${devs[$i]} $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "device add failed"
 	done
 	$BTRFS_UTIL_PROG filesystem balance $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "balance failed"
@@ -150,6 +153,7 @@ _test_replace()
 
 	# add a new disk to btrfs
 	ds=${devs[@]:$(($n)):1}
+	$WIPEFS_PROG -a ${ds} >> $seqres.full 2>&1 || _fail "wipefs failed"
 	$BTRFS_UTIL_PROG device add ${ds} $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "dev add failed"
 	# in some system balance fails if there is no delay (a bug)
 	# putting sleep 10 to work around as of now
