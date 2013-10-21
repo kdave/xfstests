@@ -2093,7 +2093,16 @@ _require_freeze()
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()
 {
-	echo 1 > /sys/class/scsi_device/${1}/device/delete || _fail "Remove disk failed"
+	local lun=$1
+	local disk=$2
+
+	echo 1 > /sys/class/scsi_device/${lun}/device/delete || _fail "Remove disk failed"
+
+	stat $disk > /dev/null 2>&1
+	while [ $? -eq 0 ]; do
+		sleep 1
+		stat $disk > /dev/null 2>&1
+	done
 }
 
 # arg 1 is dev to add and is output of the below eg.
