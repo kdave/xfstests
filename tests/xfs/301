@@ -1,0 +1,73 @@
+#! /bin/bash
+# FS QA Test No. 301
+#
+# Verify multi-stream xfsdump/restore preserves extended attributes
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dump
+. ./common/attr
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+
+# Extended attributes
+attr_name=attrname
+attr_value=1234
+
+rm -f $seqres.full
+
+_create_dumpdir_fill_ea
+
+# Create and add wholly-sparse file to the dump directory
+$XFS_IO_PROG -f -c "truncate 1t" $dump_dir/sparsefile >> $seqres.full 2>&1 \
+	|| _fail "could not create \"$dump_dir\"/sparsefile"
+
+# Set the xattr on sparsefile
+$ATTR_PROG -s $attr_name -V $attr_value $dump_dir/sparsefile >> $seqres.full 2>&1 \
+	|| _fail "could not set ATTR for \"$dump_dir\"/sparsefile"
+
+_do_dump_multi_file --multi 4  >> $seqres.full 2>&1
+_do_restore_multi_file --multi 4 >> $seqres.full 2>&1
+_diff_compare_eas
+
+status=0
+exit
