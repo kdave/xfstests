@@ -1,0 +1,68 @@
+#! /bin/bash
+# FS QA Test No. 302
+#
+# Dump and restore partialmax + 1 wholly-sparse files
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dump
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+echo "Silence is golden."
+_wipe_fs
+mkdir $dump_dir >> $seqres.full 2>&1 || _fail "mkdir \"$dump_dir\" failed"
+for i in `seq 1 4`; do
+	$XFS_IO_PROG -f -c "truncate 1t" $dump_dir/sparsefile$i \
+		>> $seqres.full 2>&1 || _fail "failed to create sparsefile\"$i\""
+done
+# Dump and restore the files
+_prepare_restore_dir
+$XFSDUMP_PROG -L session -M label1 -M label2 -f $tmp.stream1 \
+	-f $tmp.stream2 $SCRATCH_MNT -s $dump_sdir \
+	>> $seqres.full 2>&1 || _fail "dump failed"
+$XFSRESTORE_PROG -F -f $tmp.stream1 -f $tmp.stream2 $restore_dir \
+	>> $seqres.full 2>&1 || _fail "restore failed"
+status=0
+exit 
