@@ -77,6 +77,7 @@ mkfs.xfs -f -bsize=4096 -dagsize=76288719b,size=3905982455b -llazy-count=0 $tmpf
 	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
 		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/" \
 		-e "s/, projid32bit=[0-9]//" \
+		-e "s/ ftype=[0-9]//" \
 		-e "/.*crc=/d"
 
 mount -o loop $tmpfile $tmpdir || _fail "!!! failed to loopback mount"
@@ -86,6 +87,8 @@ echo "=== xfs_growfs ==="
 xfs_growfs $tmpdir \
 	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
 		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/" \
+		-e "s/, projid32bit=[0-9]//" \
+		-e "s/ ftype=[0-9]//" \
 		-e "/.*crc=/d"
 
 # and double-check the new geometry
@@ -93,6 +96,8 @@ echo "=== xfs_info ==="
 xfs_info $tmpdir \
 	| sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
 		-e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/" \
+		-e "s/, projid32bit=[0-9]//" \
+		-e "s/ ftype=[0-9]//" \
 		-e "/.*crc=/d"
 
 # _cleanup cleans up for us
