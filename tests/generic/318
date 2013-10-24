@@ -63,6 +63,23 @@ _require_scratch
 _need_to_be_root
 _acl_setup_ids
 _require_acls
+ns_acl1=0
+ns_acl2=`expr $acl2 - $acl1`
+ns_acl3=`expr $acl3 - $acl1`
+
+_getfacl_filter_nsid()
+{
+    sed \
+       -e "s/user:$ns_acl1/user:nsid1/" \
+       -e "s/user:$ns_acl2/user:nsid2/" \
+       -e "s/user:$ns_acl3/user:nsid3/" \
+       -e "s/group:$ns_acl1/group:nsid1/" \
+       -e "s/group:$ns_acl2/group:nsid2/" \
+       -e "s/group:$ns_acl3/group:nsid3/" \
+       -e "s/: $ns_acl1/: nsid1/" \
+       -e "s/: $ns_acl2/: nsid2/" \
+       -e "s/: $ns_acl3/: nsid3/"
+}
 
 _print_getfacls()
 {
@@ -70,7 +87,7 @@ _print_getfacls()
     getfacl --absolute-names -n $file 2>/dev/null | _filter_scratch | _getfacl_filter_id
 
     echo "From user_ns"
-    $nsexec -U -M "0 $acl1 1000" -G "0 $acl2 1000" getfacl --absolute-names -n $file  2>/dev/null | _filter_scratch | _getfacl_filter_id
+    $nsexec -U -M "0 $acl1 1000" -G "0 $acl1 1000" getfacl --absolute-names -n $file 2>/dev/null | _filter_scratch | _getfacl_filter_nsid
 }
 
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -85,7 +102,7 @@ chown $acl1.$acl1 $file
 # set acls from init_user_ns, to be checked from inside the userns
 setfacl -n -m u:$acl2:rw,g:$acl2:r $file
 # set acls from inside userns, to be checked from init_user_ns
-$nsexec -s -U -M "0 $acl1 1000" -G "0 $acl2 1000" setfacl -n -m u:root:rx,g:root:x $file
+$nsexec -s -U -M "0 $acl1 1000" -G "0 $acl1 1000" setfacl -n -m u:root:rx,g:$ns_acl2:x $file
 
 _print_getfacls
 
