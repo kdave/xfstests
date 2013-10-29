@@ -30,6 +30,7 @@
  * Return code: 0 is true, anything else is error/not supported
  *
  * Test for machine features
+ *   -o  report a number of online cpus
  *   -s  report pagesize
  *   -w  report bits per long
  */
@@ -39,6 +40,7 @@
 #include <sys/quota.h>
 #include <sys/resource.h>
 #include <signal.h>
+#include <unistd.h>
 
 #ifdef HAVE_XFS_XQM_H
 #include <xfs/xqm.h>
@@ -64,7 +66,7 @@ usage(void)
 	fprintf(stderr, "Usage: feature [-v] -<q|u|g|p|U|G|P> <filesystem>\n");
 	fprintf(stderr, "       feature [-v] -c <file>\n");
 	fprintf(stderr, "       feature [-v] -t <file>\n");
-	fprintf(stderr, "       feature -s | -w\n");
+	fprintf(stderr, "       feature -o | -s | -w\n");
 	exit(1);
 }
 
@@ -212,9 +214,10 @@ main(int argc, char **argv)
 	int	uflag = 0;
 	int	Uflag = 0;
 	int	wflag = 0;
+	int	oflag = 0;
 	char	*fs = NULL;
 
-	while ((c = getopt(argc, argv, "ctgGpPqsuUvw")) != EOF) {
+	while ((c = getopt(argc, argv, "ctgGopPqsuUvw")) != EOF) {
 		switch (c) {
 		case 'c':
 			cflag++;
@@ -227,6 +230,9 @@ main(int argc, char **argv)
 			break;
 		case 'G':
 			Gflag++;
+			break;
+		case 'o':
+			oflag++;
 			break;
 		case 'p':
 			pflag++;
@@ -262,7 +268,7 @@ main(int argc, char **argv)
 		if (optind != argc-1)	/* need a device */
 			usage();
 		fs = argv[argc-1];
-	} else if (wflag || sflag) {
+	} else if (wflag || sflag || oflag) {
 		if (optind != argc)
 			usage();
 	} else 
@@ -304,6 +310,21 @@ main(int argc, char **argv)
 bozo!
 #endif
 #endif
+		exit(0);
+	}
+	if (oflag) {
+		long ncpus = -1;
+
+#if defined(_SC_NPROCESSORS_ONLN)
+		ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+#elif defined(_SC_NPROC_ONLN)
+		ncpus = sysconf(_SC_NPROC_ONLN);
+#endif
+		if (ncpus == -1)
+			ncpus = 1;
+
+		printf("%ld\n", ncpus);
+
 		exit(0);
 	}
 
