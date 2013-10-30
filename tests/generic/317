@@ -46,8 +46,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common/filter
 . ./common/attr
 
-nsexec=$here/src/nsexec
-lstat64=$here/src/lstat64
 file=$SCRATCH_MNT/file1
 
 # real QA test starts here
@@ -76,10 +74,10 @@ _filter_output()
 _print_numeric_uid()
 {
     echo "From init_user_ns"
-    $here/src/lstat64 $file |head -3 |_filter_output
+    src/lstat64 $file |head -3 |_filter_output
 
     echo "From user_ns"
-    $nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" $here/src/lstat64 $file |head -3 |_filter_output
+    src/nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" src/lstat64 $file |head -3 |_filter_output
 }
 
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -90,7 +88,7 @@ _scratch_mount      >>$seqres.full 2>&1 || _fail "mount failed"
 chmod 777 $SCRATCH_MNT
 
 # create $file as "root" in userns, which is $qa_user in parent namespace
-$nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" touch $file
+src/nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" touch $file
 
 _print_numeric_uid
 
