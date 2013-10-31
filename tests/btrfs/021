@@ -1,0 +1,93 @@
+#! /bin/bash
+# FS QA Test No. 021
+#
+# A regression test of running btrfs balance and defrag concurrently.
+#
+# The test aims to trigger snapshot-aware defrag path in endio by
+# running balance, which is not expected and leads to a crash.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Oracle.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+run_test()
+{
+	$BTRFS_UTIL_PROG balance start $SCRATCH_MNT >> $seqres.full &
+
+	sleep 0.5
+
+	find $SCRATCH_MNT -type f -print0 | xargs -0 \
+	$BTRFS_UTIL_PROG filesystem defrag -f
+
+	sync
+	wait
+}
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+# This is going to reproduce a race senario between balance and the writeback
+# of snapshot-aware defragment.
+
+# we first create a few files to get higher btree height.
+for j in `seq 0 100`; do
+	touch $SCRATCH_MNT/padding-$j
+done
+
+# Get 50 files with fragments by using backwards writes.
+for j in `seq 0 50`; do
+	for i in `seq 20 -1 1`; do
+		$XFS_IO_PROG -f -d -c "pwrite $(($i * 4096)) 4096" \
+		$SCRATCH_MNT/foo-$j >> $seqres.full | _filter_xfs_io
+	done
+done
+
+# Make sure that our metadata makes it self on disk.
+sync
+
+run_test
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
