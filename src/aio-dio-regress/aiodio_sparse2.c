@@ -117,8 +117,10 @@ void aiodio_sparse(char *filename, int align, int writesize, int startoffset, in
 	for (i = 0; i < num_aio; i++) {
 		void *bufptr;
 
-		if (posix_memalign(&bufptr, align, writesize)) {
-			perror("cannot malloc aligned memory");
+		w = posix_memalign(&bufptr, align, writesize);
+		if (w) {
+			fprintf(stderr, "cannot malloc aligned memory: %s\n",
+				strerror(w));
 			close(fd);
 			unlink(filename);
 			return;
@@ -131,8 +133,10 @@ void aiodio_sparse(char *filename, int align, int writesize, int startoffset, in
 	/*
 	 * start the 1st num_aio write requests
 	 */
-	if ((w = io_submit(myctx, num_aio, iocbs)) < 0) {
-		perror("io_submit failed");
+	w = io_submit(myctx, num_aio, iocbs);
+	if (w < 0) {
+		fprintf(stderr, "io_submit failed: %s\n",
+			strerror(-w));
 		close(fd);
 		unlink(filename);
 		return;
@@ -182,10 +186,11 @@ void aiodio_sparse(char *filename, int align, int writesize, int startoffset, in
 		/* start next write */
 		io_prep_pwrite(iocbp, fd, iocbp->u.c.buf, writesize, offset);
 		offset += step;
-		if ((w = io_submit(myctx, 1, &iocbp)) < 0) {
-			fprintf(stderr, "io_submit failed at offset %lld\n",
-				(long long)offset);
-			perror("");
+		w = io_submit(myctx, 1, &iocbp);
+		if (w < 0) {
+			fprintf(stderr, "io_submit failed at offset %lld: %s\n",
+				(long long)offset,
+				strerror(-w));
 			break;
 		}
 		if (debug)
@@ -200,8 +205,10 @@ void aiodio_sparse(char *filename, int align, int writesize, int startoffset, in
 		int n;
 		struct iocb *iocbp;
 
-		if ((n = io_getevents(myctx, 1, 1, &event, 0)) != 1) {
-			perror("io_getevents failed");
+		n = io_getevents(myctx, 1, 1, &event, 0);
+		if (n != 1) {
+			fprintf(stderr, "io_getevents failed: %s\n",
+				 strerror(-n));
 			break;
 		}
 		aio_inflight--;

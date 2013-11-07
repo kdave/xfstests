@@ -437,15 +437,16 @@ int main(int argc, char **argv)
 	if (direct_io) {
 		flags |= O_DIRECT;
 		ret = posix_memalign((void **)&buf, getpagesize(), 4096);
-		if (ret)
-			buf = NULL;
+		if (ret) {
+			fprintf(stderr, "Error allocating buf: %d\n", ret);
+			return 1;
+		}
 	} else {
 		buf = malloc(4096);
-	}
-
-	if (!buf) {
-		fprintf(stderr, "Error allocating buf: %d\n", errno);
-		return 1;
+		if (!buf) {
+			fprintf(stderr, "Error allocating buf: %d\n", errno);
+			return 1;
+		}
 	}
 
 	test_fd = open(fname, flags, 0644);

@@ -69,10 +69,12 @@ while((c=getopt(argc,argv,"f:"))!=EOF) {
 	}
 
 	err = posix_memalign((void **)&buf, ALIGNMENT, BUFSIZE);
-	if (err < 0) perror("posix_memalign failed");
+	if (err)
+		fprintf(stderr, "posix_memalign failed: %s\n", strerror(err));
 
 	err = posix_memalign((void **)&goodbuf, ALIGNMENT, BUFSIZE);
-	if (err < 0) perror("posix_memalign failed");
+	if (err)
+		fprintf(stderr, "posix_memalign failed: %s\n", strerror(err));
 
 	err = unlink(filename);
 /*	if (err < 0) perror("unlink failed");*/

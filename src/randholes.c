@@ -193,11 +193,13 @@ writeblks(char *fname, int fd, size_t alignment)
 	__uint64_t offset;
 	char *buffer = NULL;
 	int block;
+	int ret;
 	struct flock64 fl;
 
 	if (!test) {
-		if (posix_memalign((void **) &buffer, alignment, blocksize)) {
-			perror("malloc");
+		ret = posix_memalign((void **) &buffer, alignment, blocksize);
+		if (ret) {
+			fprintf(stderr, "posix_memalign: %s\n", strerror(ret));
 			exit(1);
 		}
 		memset(buffer, 0, blocksize);
@@ -279,8 +281,9 @@ readblks(int fd, size_t alignment)
 	if (alloconly)
 		return 0;
 	xfer = READ_XFER*blocksize;
-	if (posix_memalign((void **) &buffer, alignment, xfer)) {
-		perror("malloc");
+	err = posix_memalign((void **) &buffer, alignment, xfer);
+	if (err) {
+		fprintf(stderr, "posix_memalign: %s\n", strerror(err));
 		exit(1);
 	}
 	memset(buffer, 0, xfer);
