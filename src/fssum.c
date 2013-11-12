@@ -50,6 +50,8 @@
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define htonll(x)     __bswap_64 (x)
+#else
+#define htonll(x)     (x)
 #endif
 #endif
 
