@@ -38,7 +38,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     rm -f $tmp.output
-    _cleanup_testdir
 }
 
 # get standard environment, filters and checks
@@ -51,10 +50,10 @@ FSX_ARGS="-q -l $FSX_FILE_SIZE -o 65536 -S 191110531 -N 100000"
 _fsx_lite_nommap()
 {
     echo "=== FSX Light Mode, No Memory Mapping ==="
-    dd if=/dev/zero of=$testdir/fsx_lite_nommap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
-    if ! ltp/fsx $FSX_ARGS -L -R -W $testdir/fsx_lite_nommap > $tmp.output 2>&1
+    dd if=/dev/zero of=$TEST_DIR/fsx_lite_nommap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
+    if ! ltp/fsx $FSX_ARGS -L -R -W $TEST_DIR/fsx_lite_nommap > $tmp.output 2>&1
     then
-        echo "ltp/fsx $FSX_ARGS -L -R -W $testdir/fsx_lite_nommap"
+        echo "ltp/fsx $FSX_ARGS -L -R -W $TEST_DIR/fsx_lite_nommap"
         cat $tmp.output
         return 1
     fi
@@ -65,8 +64,8 @@ _fsx_lite_nommap()
 _fsx_lite_mmap()
 {
     echo "=== FSX Light Mode, Memory Mapping ==="
-    dd if=/dev/zero of=$testdir/fsx_lite_mmap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
-    if ! ltp/fsx $FSX_ARGS -L $testdir/fsx_lite_mmap > $tmp.output 2>&1
+    dd if=/dev/zero of=$TEST_DIR/fsx_lite_mmap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
+    if ! ltp/fsx $FSX_ARGS -L $TEST_DIR/fsx_lite_mmap > $tmp.output 2>&1
     then
     	echo "ltp/fsx $FSX_ARGS -L fsx_lite_mmap"
 	cat $tmp.output
@@ -79,7 +78,7 @@ _fsx_lite_mmap()
 _fsx_std_nommap()
 {
     echo "=== FSX Standard Mode, No Memory Mapping ==="
-    if ! ltp/fsx $FSX_ARGS -R -W $testdir/fsx_std_nommap > $tmp.output 2>&1
+    if ! ltp/fsx $FSX_ARGS -R -W $TEST_DIR/fsx_std_nommap > $tmp.output 2>&1
     then
         echo "ltp/fsx $FSX_ARGS -R -W fsx_std_nommap"
         cat $tmp.output
@@ -92,7 +91,7 @@ _fsx_std_nommap()
 _fsx_std_mmap()
 {
     echo "=== FSX Standard Mode, Memory Mapping ==="
-    if ! ltp/fsx $FSX_ARGS $testdir/fsx_std_mmap > $tmp.output 2>&1
+    if ! ltp/fsx $FSX_ARGS $TEST_DIR/fsx_std_mmap > $tmp.output 2>&1
     then
     	echo "ltp/fsx $FSX_ARGS fsx_std_mmap"
 	cat $tmp.output
@@ -105,8 +104,6 @@ _fsx_std_mmap()
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
-
-_setup_testdir
 
 _fsx_lite_nommap
 _fsx_lite_mmap

@@ -35,7 +35,6 @@ _cleanup()
 {
     kill $locktest_pid2 > /dev/null 2>&1
     kill $locktest_pid1 > /dev/null 2>&1
-    _cleanup_testdir
 }
 
 # get standard environment, filters and checks
@@ -46,9 +45,7 @@ _cleanup()
 _supported_fs generic
 _supported_os Linux
 
-_setup_testdir
-
-TESTFILE=$testdir/lock_file
+TESTFILE=$TEST_DIR/lock_file
 
 # Grab a port which is hopefully unused
 if [ $$ -gt 1024 -a $$ -lt 32000 ]; then
@@ -60,13 +57,13 @@ elif [ $$ -gt 32000 ]; then
 fi
 
 # Start the server
-src/locktest -p $PORT $TESTFILE 2>&1 > $testdir/server.out &
+src/locktest -p $PORT $TESTFILE 2>&1 > $TEST_DIR/server.out &
 locktest_pid1=$!
 
 sleep 1
 
 # Start the client
-src/locktest -p $PORT -h localhost $TESTFILE 2>&1 > $testdir/client.out
+src/locktest -p $PORT -h localhost $TESTFILE 2>&1 > $TEST_DIR/client.out
 locktest_pid2=$!
 result=$?
 if [ $result -eq 0 ]; then
@@ -74,7 +71,7 @@ if [ $result -eq 0 ]; then
 	status=0
 else
 	echo "Client reported failure ($result)"
-	cat $testdir/*.out
+	cat $TEST_DIR/*.out
 fi
 
 exit

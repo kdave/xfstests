@@ -975,11 +975,7 @@ _require_scratch()
 {
     case "$FSTYP" in
 	nfs*)
-		 echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
-		 if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]
-		 then
-		     _notrun "this test requires a valid \$SCRATCH_DEV"
-		 fi
+                 _notrun "requires a scratch device"
 		 ;;
 	*)
 		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
@@ -1771,100 +1767,6 @@ _full_platform_details()
      kernel=`uname -r`
      platform=`uname -m`
      echo "$os/$platform $host $kernel"
-}
-
-_setup_udf_scratchdir()
-{
-    [ "$FSTYP" != "udf" ] \
-	&& _fail "setup_udf_testdir: \$FSTYP is not udf"
-    [ -z "$SCRATCH_DEV" -o ! -b "$SCRATCH_DEV" ] \
-	&& _notrun "this test requires a valid \$SCRATCH_DEV"
-    [ -z "$SCRATCH_MNT" ] \
-	&& _notrun "this test requires a valid \$SCRATCH_MNT"
-
-    # mounted?
-    if _mount | grep -q $SCRATCH_DEV
-    then
-        # if it's mounted, make sure its on $TEST_RW_DIR
-        if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
-        then
-            _fail "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
-        fi
-    	$UMOUNT_PROG $SCRATCH_DEV
-    fi
-
-    _scratch_mkfs
-    _scratch_mount
-
-    testdir=$SCRATCH_MNT
-}
-
-_setup_nfs_scratchdir()
-{
-    [ "$FSTYP" != "nfs" ] \
-	&& _fail "setup_nfs_testdir: \$FSTYP is not nfs"
-    [ -z "$SCRATCH_DEV" ] \
-	&& _notrun "this test requires a valid host fs for \$SCRATCH_DEV"
-    [ -z "$SCRATCH_MNT" ] \
-	&& _notrun "this test requires a valid \$SCRATCH_MNT"
-
-    # mounted?
-    if _mount | grep -q $SCRATCH_DEV
-    then
-        # if it's mounted, make sure its on $SCRATCH_MNT
-        if ! _mount | grep $SCRATCH_DEV | grep -q $SCRATCH_MNT
-        then
-            _fail "\$SCRATCH_DEV is mounted but not on \$SCRATCH_MNT - aborting"
-        fi
-    	$UMOUNT_PROG $SCRATCH_DEV
-    fi
-
-    _scratch_mkfs
-    _scratch_mount
-
-    testdir=$SCRATCH_MNT
-}
-
-#
-# Warning for UDF and NFS:
-# this function calls _setup_udf_scratchdir and _setup_udf_scratchdir
-# which actually uses the scratch dir for the test dir.
-#
-# This was done because testdir was intended to be a persistent
-# XFS only partition.  This should eventually change, and treat
-# at least local filesystems all the same.
-#
-_setup_testdir()
-{
-    case $FSTYP in
-    udf)
-	_setup_udf_scratchdir
-	;;
-    nfs*)
-	_setup_nfs_scratchdir
-	;;
-    *)
-	testdir=$TEST_DIR
-	;;
-    esac
-}
-
-_cleanup_testdir()
-{
-    case $FSTYP in
-    udf)
-	# umount testdir as it is $SCRATCH_MNT which could be used by xfs next
-	[ -n "$testdir" ] && $UMOUNT_PROG $testdir
-	;;
-    nfs*)
-	# umount testdir as it is $SCRATCH_MNT which could be used by xfs next
-	[ -n "$testdir" ] && $UMOUNT_PROG $testdir
-	;;
-    *)
-	# do nothing, testdir is $TEST_DIR
-	:
-	;;
-    esac
 }
 
 _link_out_file()
