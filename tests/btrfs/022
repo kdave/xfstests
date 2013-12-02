@@ -1,0 +1,129 @@
+#! /bin/bash
+# FS QA Test No. 022
+#
+# Test the basic functionality of qgroups
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Fusion IO.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+# Test to make sure we can actually turn it on and it makes sense
+_basic_test()
+{
+	run_check $BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/a
+	run_check $BTRFS_UTIL_PROG quota enable $SCRATCH_MNT/a
+	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
+	$BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid >> \
+		$seqres.full 2>&1
+	[ $? -eq 0 ] || _fail "couldn't find our subvols quota group"
+	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
+		$FSSTRESS_AVOID
+	run_check $BTRFS_UTIL_PROG subvolume snapshot $SCRATCH_MNT/a \
+		$SCRATCH_MNT/b
+
+	# the shared values of both the original subvol and snapshot should
+	# match
+	a_shared=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	a_shared=$(echo $a_shared | awk '{ print $2 }')
+	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT b)
+	b_shared=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	b_shared=$(echo $b_shared | awk '{ print $2 }')
+	[ $b_shared -eq $a_shared ] || _fail "shared values don't match"
+}
+
+#enable quotas, do some work, check our values and then rescan and make sure we
+#come up with the same answer
+_rescan_test()
+{
+	# first with a blank subvol
+	run_check $BTRFS_UTIL_PROG subvol create $SCRATCH_MNT/a
+	run_check $BTRFS_UTIL_PROG quota enable $SCRATCH_MNT/a
+	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
+	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
+		$FSSTRESS_AVOID
+	sync
+	output=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	echo $output >> $seqres.full
+	refer=$(echo $output | awk '{ print $2 }')
+	excl=$(echo $output | awk '{ print $3 }')
+	run_check $BTRFS_UTIL_PROG quota rescan -w $SCRATCH_MNT
+	output=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	echo $output >> $seqres.full
+	[ $refer -eq $(echo $output | awk '{ print $2 }') ] || \
+		_fail "reference values don't match after rescan"
+	[ $excl -eq $(echo $output | awk '{ print $3 }') ] || \
+		_fail "exclusive values don't match after rescan"
+}
+
+#basic limit testing
+_limit_test()
+{
+	run_check $BTRFS_UTIL_PROG subvol create $SCRATCH_MNT/a
+	run_check $BTRFS_UTIL_PROG quota enable $SCRATCH_MNT
+	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
+	run_check $BTRFS_UTIL_PROG qgroup limit 5M 0/$subvolid $SCRATCH_MNT
+	dd if=/dev/urandom of=$SCRATCH_MNT/a/file bs=10M count=1 >> \
+		$seqres.full 2>&1
+	[ $? -ne 0 ] || _fail "quota should have limited us"
+	dd if=/dev/urandom of=$SCRATCH_MNT/a/file bs=4M count=1 >> \
+		$seqres.full 2>&1
+	[ $? -eq 0 ] || _fail "should have been allowed to write"
+}
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+_basic_test
+_scratch_unmount
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+_rescan_test
+_scratch_unmount
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+_limit_test
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
