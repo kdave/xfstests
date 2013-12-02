@@ -1,0 +1,74 @@
+##/bin/bash
+#
+# Copyright (c) 2013 Fusion IO, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# common functions for setting up and tearing down a dmflakey device
+
+FLAKEY_ALLOW_WRITES=0
+FLAKEY_DROP_WRITES=1
+
+_init_flakey()
+{
+	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+	FLAKEY_DEV=/dev/mapper/flakey-test
+	FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 180 0"
+	FLAKEY_TABLE_DROP="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 drop_writes"
+	$DMSETUP_PROG create flakey-test --table "$FLAKEY_TABLE" || \
+		_fatal "failed to create flakey device"
+}
+
+_mount_flakey()
+{
+	mount -t $FSTYP $MOUNT_OPTIONS $FLAKEY_DEV $SCRATCH_MNT
+}
+
+_unmount_flakey()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+_cleanup_flakey()
+{
+	# If dmsetup load fails then we need to make sure to do resume here
+	# otherwise the umount will hang
+	$DMSETUP_PROG resume flakey-test > /dev/null 2>&1
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	$DMSETUP_PROG remove flakey-test > /dev/null 2>&1
+}
+
+# _load_flakey_table <table> [lockfs]
+#
+# This defaults to --nolockfs, which doesn't freeze_fs() before loading the new
+# table, so it simulates power failure.
+_load_flakey_table()
+{
+
+	table="$FLAKEY_TABLE"
+	[ $1 -eq $FLAKEY_DROP_WRITES ] && table="$FLAKEY_TABLE_DROP"
+
+	suspend_opt="--nolockfs"
+	[ $# -gt 1 ] && [ $2 -eq 1 ] && suspend_opt=""
+
+	$DMSETUP_PROG suspend $suspend_opt flakey-test
+	[ $? -ne 0 ] && _fatal "failed to suspend flakey-test"
+
+	$DMSETUP_PROG load flakey-test --table "$table"
+	[ $? -ne 0 ] && _fatal "failed to load table into flakey-test"
+
+	$DMSETUP_PROG resume flakey-test
+	[ $? -ne 0 ] && _fatal  "failed to resumeflakey-test"
+}

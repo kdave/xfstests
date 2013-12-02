@@ -41,17 +41,14 @@ status=1	# failure is the default!
 
 _cleanup()
 {
-	# If dmsetup load fails then we need to make sure to do resume here
-	# otherwise the umount will hang
-	$DMSETUP_PROG resume flakey-test > /dev/null 2>&1
-	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	$DMSETUP_PROG remove flakey-test > /dev/null 2>&1
+	_cleanup_flakey
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/dmflakey
 
 # real QA test starts here
 _supported_fs generic
@@ -63,49 +60,12 @@ _require_dm_flakey
 [ -x $here/src/fsync-tester ] || _notrun "fsync-tester not build"
 
 rm -f $seqres.full
-BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
-FLAKEY_DEV=/dev/mapper/flakey-test
 SEED=1
 testfile=$SCRATCH_MNT/$seq.fsync
-FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 180 0"
-FLAKEY_TABLE_DROP="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 drop_writes"
-_TEST_OPTIONS=""
-
-_mount_flakey()
-{
-	mount -t $FSTYP $MOUNT_OPTIONS $FLAKEY_DEV $SCRATCH_MNT
-}
-
-_unmount_flakey()
-{
-	$UMOUNT_PROG $SCRATCH_MNT
-}
-
-_load_flakey_table()
-{
-	# _load_flakey_table <table>
-
-	table="$FLAKEY_TABLE"
-	[ $1 -eq 1 ] && table="$FLAKEY_TABLE_DROP"
-
-	suspend_opt=""
-	[ $nolockfs -eq 1 ] && suspend_opt="--nolockfs"
-
-	$DMSETUP_PROG suspend $suspend_opt flakey-test
-	[ $? -ne 0 ] && _fatal "failed to suspend flakey-test"
-
-	$DMSETUP_PROG load flakey-test --table "$table"
-	[ $? -ne 0 ] && _fatal "failed to load table into flakey-test"
-
-	$DMSETUP_PROG resume flakey-test
-	[ $? -ne 0 ] && _fatal  "failed to resumeflakey-test"
-}
 
 _run_test()
 {
 	# _run_test <testnum> <0 - buffered | 1 - O_DIRECT>
-	allow_writes=0
-	drop_writes=1
 	test_num=$1
 
 	direct_opt=""
@@ -115,11 +75,11 @@ _run_test()
 	[ $? -ne 0 ] && _fatal "fsync tester exited abnormally"
 
 	_md5_checksum $testfile
-	_load_flakey_table $drop_writes
+	_load_flakey_table $FLAKEY_DROP_WRITES $lockfs
 	_unmount_flakey
 
 	#Ok mount so that any recovery that needs to happen is done
-	_load_flakey_table $allow_writes
+	_load_flakey_table $FLAKEY_ALLOW_WRITES
 	_mount_flakey
 	_md5_checksum $testfile
 
@@ -134,23 +94,21 @@ _run_test()
 _scratch_mkfs >> $seqres.full 2>&1
 
 # Create a basic flakey device that will never error out
-$DMSETUP_PROG create flakey-test --table "$FLAKEY_TABLE"
-[ $? -ne 0 ] && _fatal "failed to create flakey device"
-
+_init_flakey
 _mount_flakey
 
 buffered=0
 direct=1
 
 for i in $(seq 1 20); do
-	nolockfs=0
+	lockfs=1
 	SEED=$i
 	echo "Running test $i buffered, normal suspend"
 	_run_test $i $buffered
 	echo "Running test $i direct, normal suspend"
 	_run_test $i $direct
 
-	nolockfs=1
+	lockfs=0
 	echo "Running test $i buffered, nolockfs"
 	_run_test $i $buffered
 	echo "Running test $i direct, nolockfs"
