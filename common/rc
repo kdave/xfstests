@@ -112,6 +112,10 @@ _mount_opts()
 	# acls aren't turned on by default on gfs2
 	export MOUNT_OPTIONS="-o acl $GFS2_MOUNT_OPTIONS"
 	;;
+    tmpfs)
+	# We need to specify the size at mount, use 512 MB by default
+	export MOUNT_OPTIONS="-o size=512M $TMPFS_MOUNT_OPTIONS"
+	;;
     *)
 	;;
     esac
@@ -139,6 +143,9 @@ _mkfs_opts()
 	;;
     jfs)
 	export MKFS_OPTIONS="$JFS_MKFS_OPTIONS -q"
+	;;
+    tmpfs)
+	export MKFS_OPTIONS="$TMPFS_MKFS_OPTIONS"
 	;;
     *)
 	;;
@@ -543,6 +550,9 @@ _scratch_mkfs()
 	;;
     ext4)
 	_scratch_mkfs_ext4 $*
+	;;
+    tmpfs)
+	# do nothing for tmpfs
 	;;
     *)
 	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* $SCRATCH_DEV
@@ -977,6 +987,12 @@ _require_scratch()
 	nfs*)
                  _notrun "requires a scratch device"
 		 ;;
+	tmpfs)
+		if [ -z "$SCRATCH_DEV" -o ! -d "$SCRATCH_MNT" ];
+		then
+		    _notrun "this test requires a valid \$SCRATCH_MNT and unique $SCRATCH_DEV"
+		fi
+		;;
 	*)
 		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
 		 then
@@ -1701,6 +1717,9 @@ _check_test_fs()
     btrfs)
 	_check_btrfs_filesystem $TEST_DEV
 	;;
+    tmpfs)
+	# no way to check consistency for tmpfs
+	;;
     *)
 	_check_generic_filesystem $TEST_DEV
 	;;
@@ -1732,6 +1751,9 @@ _check_scratch_fs()
 	;;
     btrfs)
 	_check_btrfs_filesystem $device
+	;;
+    tmpfs)
+	# no way to check consistency for tmpfs
 	;;
     *)
 	_check_generic_filesystem $device
