@@ -62,14 +62,15 @@ rm -f $TEST_DIR/aiodio_sparse
 
 logical_block_size=`_min_dio_alignment $TEST_DEV`
 fs_block_size=`stat -f $TEST_DIR | grep "Block size:" | awk '{print $3}'`
+file_size=$((8 * $fs_block_size))
 
 if [ $fs_block_size -le $logical_block_size ]; then
 	_notrun "fs block size must be larger than the device block size.  fs block size: $fs_block_size, device block size: $logical_block_size"
 fi
 
-# 2 threads, fs block sized writes, 64k filesize, stride through file by
+# 2 threads, fs block sized writes, filesize, stride through file by
 # fs block size, start at logical block size offset
-$AIO_TEST -i 2 -w $fs_block_size -s 64k -n $fs_block_size -o $logical_block_size "$TEST_DIR/aiodio_sparse"
+$AIO_TEST -i 2 -w $fs_block_size -s $file_size -n $fs_block_size -o $logical_block_size "$TEST_DIR/aiodio_sparse"
 
 status=$?
 exit
