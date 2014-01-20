@@ -1,0 +1,105 @@
+#!/bin/bash
+# FS QA Test No. xfs/306
+#
+# Basic log recovery stress test - do lots of stuff, shut down in the middle of
+# it and check that recovery runs to completion and everything can be
+# successfully removed afterwards..
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+SLEEP_TIME=$((30 * $TIME_FACTOR))
+PROCS=$((2 * LOAD_FACTOR))
+
+load_dir=$SCRATCH_MNT/test
+
+# let this run for a while
+$FSSTRESS_PROG -n10000000 -p $PROCS -d $load_dir >> $seqres.full 2>&1 &
+sleep $SLEEP_TIME
+killall -q $FSSTRESS_PROG
+wait
+sync
+umount $SCRATCH_MNT
+
+# now mount again, run the load again, this time with a shutdown.
+_scratch_mount
+$XFS_FSR_PROG -v $load_dir >> $seqres.full 2>&1
+$FSSTRESS_PROG -n10000000 -p $PROCS -d $load_dir >> $seqres.full 2>&1 &
+sleep $SLEEP_TIME
+sync
+
+# now shutdown and unmount
+sleep 5
+$here/src/godown $load_dir
+killall -q $FSSTRESS_PROG
+wait
+
+# for some reason fsstress processes manage to live on beyond the wait?
+sleep 5
+umount $SCRATCH_MNT
+
+# now recover, check the filesystem for consistency
+_scratch_mount
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+# now clean up.
+_scratch_mount
+for d in $load_dir/*; do
+        rm -rf $d > /dev/null 2>&1 &
+done
+wait
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+echo "No output is good. Failures are loud."
+
+status=0
+exit
