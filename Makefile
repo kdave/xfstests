@@ -41,7 +41,6 @@ endif
 
 SRCTAR = $(PKG_NAME)-$(PKG_VERSION).tar.gz
 
-TESTS = $(shell sed -n -e '/^[0-9][0-9][0-9]*/s/ .*//p' group)
 CONFIGURE = configure include/builddefs include/config.h
 LSRCFILES = configure configure.ac aclocal.m4 README VERSION
 LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
@@ -60,7 +59,7 @@ endif
 export TESTS_DIR = tests
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
 
-default: include/builddefs $(DMAPI_MAKEFILE) $(TESTS)
+default: include/builddefs $(DMAPI_MAKEFILE)
 ifeq ($(HAVE_BUILDDEFS), no)
 	$(Q)$(MAKE) $(MAKEOPTS) $@
 else
