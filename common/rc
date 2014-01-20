@@ -360,53 +360,73 @@ _setup_large_xfs_fs()
 	return 0
 }
 
+_scratch_mkfs_xfs_opts()
+{
+	mkfs_opts=$*
+
+	_scratch_options mkfs
+
+	$MKFS_XFS_PROG $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+}
+
+
+_scratch_mkfs_xfs_supported()
+{
+	mkfs_opts=$*
+
+	_scratch_options mkfs
+
+	$MKFS_XFS_PROG -N $MKFS_OPTIONS $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+}
+
 _scratch_mkfs_xfs()
 {
-    # extra mkfs options can be added by tests
-    local extra_mkfs_options=$*
+	# extra mkfs options can be added by tests
+	local extra_mkfs_options=$*
 
-    local tmp_dir=/tmp/
+	local tmp_dir=/tmp/
 
-    _scratch_options mkfs
+	# save mkfs output in case conflict means we need to run again.
+	# only the output for the mkfs that applies should be shown
+	_scratch_mkfs_xfs_opts $MKFS_OPTIONS $extra_mkfs_options \
+		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+	local mkfs_status=$?
 
-    # save mkfs output in case conflict means we need to run again.
-    # only the output for the mkfs that applies should be shown
-    $MKFS_XFS_PROG $SCRATCH_OPTIONS $MKFS_OPTIONS $extra_mkfs_options $SCRATCH_DEV \
-        2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
-    local mkfs_status=$?
 
-    # a mkfs failure may be caused by conflicts between
-    # $MKFS_OPTIONS and $extra_mkfs_options
+	# a mkfs failure may be caused by conflicts between
+	# $MKFS_OPTIONS and $extra_mkfs_options
+	if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
+		(
+		echo -n "** mkfs failed with extra mkfs options "
+		echo "added to \"$MKFS_OPTIONS\" by test $seq **"
+		echo -n "** attempting to mkfs using only test $seq "
+		echo "options: $extra_mkfs_options **"
+		) >> $seqres.full
 
-    if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
-        echo "** mkfs failed with extra mkfs options added to \"$MKFS_OPTIONS\" by test $seq **" \
-            >>$seqres.full
-        echo "** attempting to mkfs using only test $seq options: $extra_mkfs_options **" \
-            >>$seqres.full
-        # running mkfs again. overwrite previous mkfs output files
-        $MKFS_XFS_PROG $SCRATCH_OPTIONS $extra_mkfs_options $SCRATCH_DEV \
-            2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
-        mkfs_status=$?
-    fi
+		# running mkfs again. overwrite previous mkfs output files
+		_scratch_mkfs_xfs_opts $extra_mkfs_options \
+			2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+		local mkfs_status=$?
+	fi
 
-    if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
-	# manually parse the mkfs output to get the fs size in bytes
-	local fs_size
-	fs_size=`cat $tmp_dir.mkfsstd | perl -ne '
-	    if (/^data\s+=\s+bsize=(\d+)\s+blocks=(\d+)/) {
-		my $size = $1 * $2;
-		print STDOUT "$size\n";
-	    }'`
-	_setup_large_xfs_fs $fs_size
-	mkfs_status=$?
-    fi
+	if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
+		# manually parse the mkfs output to get the fs size in bytes
+		local fs_size
+		fs_size=`cat $tmp_dir.mkfsstd | perl -ne '
+			if (/^data\s+=\s+bsize=(\d+)\s+blocks=(\d+)/) {
+				my $size = $1 * $2;
+				print STDOUT "$size\n";
+			}'`
+		_setup_large_xfs_fs $fs_size
+		mkfs_status=$?
+	fi
 
-    # output stored mkfs output
-    cat $tmp_dir.mkfserr >&2
-    cat $tmp_dir.mkfsstd
-    rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
+	# output stored mkfs output
+	cat $tmp_dir.mkfserr >&2
+	cat $tmp_dir.mkfsstd
+	rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
 
-    return $mkfs_status
+	return $mkfs_status
 }
 
 # xfs_check script is planned to be deprecated. But, we want to
@@ -1129,15 +1149,15 @@ _require_dm_flakey()
 #
 _require_projid32bit()
 {
-        _scratch_mkfs_xfs -f -i projid32bit=0 2>&1 >/dev/null \
-	   || _notrun "mkfs.xfs doesn't have projid32bit feature"
+	_scratch_mkfs_xfs_supported -i projid32bit=0 >/dev/null 2>&1 \
+		|| _notrun "mkfs.xfs doesn't have projid32bit feature"
 }
 
 # this test requires the crc feature to be available in mkfs.xfs
 #
 _require_xfs_mkfs_crc()
 {
-	_scratch_mkfs_xfs -f -m crc=1 >/dev/null 2>&1 \
+	_scratch_mkfs_xfs_supported -m crc=1 >/dev/null 2>&1 \
 	   || _notrun "mkfs.xfs doesn't have crc feature"
 }
 
@@ -1145,6 +1165,7 @@ _require_xfs_mkfs_crc()
 #
 _require_xfs_crc()
 {
+	_scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1 \
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
 	umount $SCRATCH_MNT
