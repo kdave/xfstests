@@ -1,0 +1,89 @@
+#! /bin/bash
+# FS QA Test No. 305
+#
+# Test to verify that turn group/project quotas off while fstress and
+# user quotas are left on.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_xfs_quota
+_require_xfs_mkfs_crc
+_require_xfs_crc
+
+_scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1
+
+_qmount_option "uquota,gquota,pquota"
+
+QUOTA_DIR=$SCRATCH_MNT/quota_dir
+
+_exercise()
+{
+	type=$1
+
+	_qmount
+	mkdir -p $QUOTA_DIR
+
+	$FSSTRESS_PROG -d $QUOTA_DIR -n 1000 -p 100 $FSSTRESS_AVOID >/dev/null 2>&1 &
+	sleep 10
+	xfs_quota -x -c "off -$type" $SCRATCH_DEV
+	sleep 5
+	killall -q $FSSTRESS_PROG
+	wait
+}
+
+echo "*** turn off group quotas"
+_exercise g
+echo "*** done"
+
+echo "*** turn off project quotas"
+_exercise p
+echo "*** done"
+
+echo "*** turn off group/project quotas"
+_exercise gp
+echo "*** done"
+
+# success, all done
+status=0
+exit
