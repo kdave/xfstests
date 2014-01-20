@@ -54,6 +54,8 @@ chmod a+rwx $seqres.full	# arbitrary users will write here
 
 _require_scratch
 _require_xfs_quota
+_require_xfs_mkfs_crc
+_require_xfs_crc
 
 bsoft=100
 bhard=500
@@ -193,18 +195,10 @@ _exercise()
 
 }
 
-_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs -m crc=1 2>/dev/null | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seqres.full
 # keep the blocksize and data size for dd later
 . $tmp.mkfs
-
-sb_ver=`$XFS_DB_PROG -r -c version $SCRATCH_DEV | awk -F= '{print $2}' | awk -F, '{print $1}' |cut -c3-`
-echo $sb_ver
-
-if [ $sb_ver -lt 5 ]
-then
-	_notrun "Can't run with older versions of superblock"
-fi
 
 cat >$tmp.projects <<EOF
 1:$SCRATCH_MNT
@@ -228,7 +222,7 @@ echo "*** unmount"
 umount $SCRATCH_MNT
 
 
-_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs -m crc=1 2>/dev/null | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seqres.full
 # keep the blocksize and data size for dd later
 . $tmp.mkfs
