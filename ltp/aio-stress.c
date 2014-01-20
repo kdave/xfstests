@@ -1413,9 +1413,9 @@ int main(int ac, char **av)
 	        num_threads);
     }
 
-    t = malloc(num_threads * sizeof(*t));
+    t = calloc(num_threads, sizeof(*t));
     if (!t) {
-        perror("malloc");
+        perror("calloc");
 	exit(1);
     }
     global_thread_info = t;
