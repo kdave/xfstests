@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test No. ext4/306
+#
+# Test that blocks are available to non-extent files after a resize2fs
+# Regression test for commit:
+# c5c72d8 ext4: fix online resizing for ext3-compat file systems
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+PIDS=""
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    _scratch_unmount
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+
+_require_scratch
+
+# This needs to mount ext3; might require ext3 driver, or ext4
+# might handle it itself.  Find out if we have it one way or another.
+modprobe ext3 > /dev/null 2>&1
+grep -q ext3 /proc/filesystems || _notrun "This test requires ext3 support"
+
+rm -f $seqres.full
+
+# Make a small ext3 fs, (extents disabled) & mount it
+yes | mkfs.ext3 $SCRATCH_DEV 512m >> $seqres.full 2>&1
+_scratch_mount -t ext3 || _fail "couldn't mount fs as ext3"
+# Create a small non-extent-based file
+echo "Create 1m testfile1"
+$XFS_IO_PROG -f $SCRATCH_MNT/testfile1 -c "pwrite 0 1m" | _filter_xfs_io
+echo "Create testfile2 to fill the fs"
+# A large non-extent-based file filling the fs; this will run out & fail
+$XFS_IO_PROG -f $SCRATCH_MNT/testfile2 -c "pwrite 0 512m" | _filter_xfs_io
+
+# Remount as ext4
+_scratch_unmount
+_scratch_mount -t ext4 || _fail "couldn't remount fs as ext4"
+df -h $SCRATCH_MNT >> $seqres.full
+
+# Grow it by 512m
+echo "Resize to 1g"
+resize2fs $SCRATCH_DEV 1g >> $seqres.full 2>&1 || _fail "Could not resize to 1g"
+df -h $SCRATCH_MNT >> $seqres.full
+
+# See if we can add more blocks to the files
+echo "append 2m to testfile1"
+$XFS_IO_PROG -f $SCRATCH_MNT/testfile1 -c "pwrite 1m 2m" | _filter_xfs_io
+echo "append 2m to testfile2"
+$XFS_IO_PROG -f $SCRATCH_MNT/testfile1 -c "pwrite 512m 2m" | _filter_xfs_io
+
+status=0
+exit
