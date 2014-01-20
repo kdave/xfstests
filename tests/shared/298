@@ -70,7 +70,7 @@ get_free_sectors()
 	agsize=`xfs_info $loop_mnt | $SED_PROG -n 's/.*agsize=\(.*\) blks.*/\1/p'`
 	# Convert free space (agno, block, length) to (start sector, end sector)
 	$UMOUNT_PROG $loop_mnt
-	$XFS_DB_PROG -c "freesp -d" $img_file | $SED_PROG '/^.*from/,$d'| \
+	$XFS_DB_PROG -r -c "freesp -d" $img_file | $SED_PROG '/^.*from/,$d'| \
 		 $AWK_PROG -v spb=$sectors_per_block -v agsize=$agsize \
 		'{ print spb * ($1 * agsize + $2), spb * ($1 * agsize + $2 + $3) - 1 }'
 	;;

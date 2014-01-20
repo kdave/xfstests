@@ -58,20 +58,24 @@ _supported_os Linux
 
 _require_scratch
 _require_attrs
+_require_attr_v1
+_require_projid16bit
 
 rm -f $seqres.full
 
-# lazysb and attr2 are in features2 and will require morebitsbit on
-# So test with lazysb and without it to see if the morebitsbit is
-# okay etc....
 # Reset the options so that we can control what is going on here
 export MKFS_OPTIONS=""
 export MOUNT_OPTIONS=""
 
+# lazysb, attr2 and other feature bits are held in features2 and will require
+# morebitsbit on So test with lazysb and without it to see if the morebitsbit is
+# okay etc. If the mkfs defaults change, these need to change as well.
+export MKFS_NO_LAZY="-l lazy-count=0 -i projid32bit=0"
+export MKFS_LAZY="-l lazy-count=1 -i projid32bit=0"
+
 # Make sure that when we think we are testing with morebits off
 # that we really are.
-# Trying to future-proof in case mkfs defaults change.
-_scratch_mkfs -i attr=1 -l lazy-count=0 >/dev/null 2>&1
+_scratch_mkfs -i attr=1 $MKFS_NO_LAZY  >/dev/null 2>&1
 $XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 >$tmp.db
 if grep -i morebits $tmp.db
 then
@@ -86,14 +90,14 @@ echo "*** 1. test attr2 mkfs and then noattr2 mount ***"
 echo ""
 echo "attr2 fs"
 echo ""
-_scratch_mkfs -i attr=2 -l lazy-count=0 >/dev/null 2>&1
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+_scratch_mkfs -i attr=2 $MKFS_NO_LAZY >/dev/null 2>&1
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 echo ""
 echo "noattr2 fs"
 echo ""
 _scratch_mount -o noattr2
 $UMOUNT_PROG $SCRATCH_MNT
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 
 # adding an EA will ensure the ATTR1 flag is turned on
 echo ""
@@ -101,8 +105,8 @@ echo "*** 2. test attr2 mkfs and then noattr2 mount with 1 EA ***"
 echo ""
 echo "attr2 fs"
 echo ""
-_scratch_mkfs -i attr=2 -l lazy-count=0 >/dev/null 2>&1
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+_scratch_mkfs -i attr=2 $MKFS_NO_LAZY >/dev/null 2>&1
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 echo ""
 echo "noattr2 fs"
 echo ""
@@ -113,7 +117,7 @@ $SETFATTR_PROG -n user.test -v 0xbabe testfile
 $GETFATTR_PROG testfile
 cd $here
 $UMOUNT_PROG $SCRATCH_MNT
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 
 echo ""
 echo "*** 3. test noattr2 mount and lazy sb ***"
@@ -121,8 +125,8 @@ echo ""
 echo ""
 echo "attr2 fs"
 echo ""
-_scratch_mkfs -i attr=2 -l lazy-count=1 >/dev/null 2>&1
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+_scratch_mkfs -i attr=2 $MKFS_LAZY >/dev/null 2>&1
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 echo ""
 echo "noattr2 fs"
 echo ""
@@ -131,7 +135,7 @@ cd $SCRATCH_MNT
 touch testfile
 cd $here
 $UMOUNT_PROG $SCRATCH_MNT
-$XFS_DB_PROG -c version $SCRATCH_DEV 2>&1 | _filter_version
+$XFS_DB_PROG -r -c version $SCRATCH_DEV 2>&1 | _filter_version
 
 # success, all done
 status=0
