@@ -1471,6 +1471,7 @@ fmt_ioreq(struct io_req *ioreq, struct syscall_info *sy, int fd)
 		      (io->r_uflags & F_WORD_ALIGNED) ? "aligned" : "unaligned");
 
 	if(io->r_oflags & O_DIRECT) {
+		char		*dio_env;
 		struct dioattr	finfo;
 		
 		if(xfsctl(io->r_file, fd, XFS_IOC_DIOINFO, &finfo) == -1) {
@@ -1480,6 +1481,10 @@ fmt_ioreq(struct io_req *ioreq, struct syscall_info *sy, int fd)
 			finfo.d_miniosz = 1;
 			finfo.d_maxiosz = 1;
 		}
+
+		dio_env = getenv("XFS_DIO_MIN");
+		if (dio_env)
+			finfo.d_mem = finfo.d_miniosz = atoi(dio_env);
 
 		cp += sprintf(cp, "          DIRECT I/O: offset %% %d = %d length %% %d = %d\n",
 			      finfo.d_miniosz,
@@ -2774,11 +2779,18 @@ int	oflags;
 	free_slot->c_rtc = Reqno;
 
 	if (oflags & O_DIRECT) {
+		char *dio_env;
+
 		if (xfsctl(file, fd, XFS_IOC_DIOINFO, &finfo) == -1) {
 			finfo.d_mem = 1;
 			finfo.d_miniosz = 1;
 			finfo.d_maxiosz = 1;
 		}
+
+		dio_env = getenv("XFS_DIO_MIN");
+		if (dio_env)
+			finfo.d_mem = finfo.d_miniosz = atoi(dio_env);
+
 	} else {
 		finfo.d_mem = 1;
 		finfo.d_miniosz = 1;

@@ -27,6 +27,7 @@ main(int argc, char *argv[])
 	off_t offset;
 	char	*file;
 	int	loops;
+	char	*dio_env;
 
 	if(argc != 3) {
 		fprintf(stderr, "%s <loops> <file>\n", argv[0]);
@@ -52,6 +53,10 @@ main(int argc, char *argv[])
 			perror("dioinfo");
 			exit(1);
 		}
+
+		dio_env = getenv("XFS_DIO_MIN");
+		if (dio_env)
+			dio.d_mem = dio.d_miniosz = atoi(dio_env);
 
 		if ((dio.d_miniosz > IO_SIZE) || (dio.d_maxiosz < IO_SIZE)) {
 			fprintf(stderr, "Test won't work - iosize out of range"

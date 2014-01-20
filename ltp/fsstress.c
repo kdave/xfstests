@@ -1930,6 +1930,7 @@ dread_f(int opno, long r)
 	struct stat64	stb;
 	int		v;
 	char		st[1024];
+	char		*dio_env;
 
 	init_pathname(&f);
 	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
@@ -1974,6 +1975,11 @@ dread_f(int opno, long r)
 		close(fd);
 		return;
 	}
+
+	dio_env = getenv("XFS_DIO_MIN");
+	if (dio_env)
+		diob.d_mem = diob.d_miniosz = atoi(dio_env);
+
 	align = (__int64_t)diob.d_miniosz;
 	lr = ((__int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
@@ -2010,6 +2016,7 @@ dwrite_f(int opno, long r)
 	struct stat64	stb;
 	int		v;
 	char		st[1024];
+	char		*dio_env;
 
 	init_pathname(&f);
 	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
@@ -2046,6 +2053,11 @@ dwrite_f(int opno, long r)
 		close(fd);
 		return;
 	}
+
+	dio_env = getenv("XFS_DIO_MIN");
+	if (dio_env)
+		diob.d_mem = diob.d_miniosz = atoi(dio_env);
+
 	align = (__int64_t)diob.d_miniosz;
 	lr = ((__int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));

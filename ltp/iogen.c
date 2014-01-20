@@ -781,6 +781,7 @@ struct file_info    *rec;
 
 	rec->f_riou = BSIZE;
 	if( (fd = open(rec->f_path, O_RDWR|O_DIRECT, 0)) != -1 ) {
+	    char *dio_env;
 #ifdef XFS_IOC_DIOINFO
 	    if(xfsctl(rec->f_path, fd, XFS_IOC_DIOINFO, &finfo) != -1) {
 #else
@@ -790,6 +791,10 @@ struct file_info    *rec;
 bozo!
 #endif
 #endif
+		dio_env = getenv("XFS_DIO_MIN");
+		if (dio_env)
+		    finfo.d_mem = finfo.d_miniosz = atoi(dio_env);
+
 		rec->f_riou = finfo.d_miniosz;
 	    } else {
 		fprintf(stderr,
@@ -1001,6 +1006,7 @@ bozo!
 	if(Owrite == 2) {
 	    close(fd);
 	    if( (fd = open(path, O_CREAT|O_RDWR|O_DIRECT, 0)) != -1 ) {
+		char *dio_env;
 #ifdef XFS_IOC_DIOINFO
 		if(xfsctl(path, fd, XFS_IOC_DIOINFO, &finfo) == -1) {
 #else
@@ -1018,6 +1024,10 @@ bozo!
 		    /*fprintf(stderr, "%s: miniosz=%d\n", 
 			    path, finfo.d_miniosz);*/
 		}
+
+		dio_env = getenv("XFS_DIO_MIN");
+		if (dio_env)
+			finfo.d_mem = finfo.d_miniosz = atoi(dio_env);
 	    } else {
 		fprintf(stderr, "iogen%s: Error %s (%d) opening file %s with flags O_CREAT|O_RDWR|O_DIRECT\n",
 			TagName, SYSERR, errno, path);
