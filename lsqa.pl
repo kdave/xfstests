@@ -15,13 +15,20 @@
 # along with this program; if not, write the Free Software Foundation,
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #
+
+# Print headers of given tests
+# Accepted parameter types:
+# - nothing - list all tests from all subdirectories in tests/*
+# - tests/DIR - list all tests from DIR
+# - tests/DIR/123 - show header from single test
+
 use strict;
 
 use Getopt::Long;
 
 sub help();
 sub get_qa_header($);
-sub get_qa_tests();
+sub get_qa_tests;
 
 my %opt;
 
@@ -43,8 +50,19 @@ if ($opt{'help'}) {
     die help();
 }
 
-my @qatests = map {sprintf("%03d", $_)} @ARGV;
-@qatests = get_qa_tests() unless (@qatests);
+my @qatests;
+
+if (!@ARGV) {
+    my $d="tests";
+    opendir(DIR, $d);
+    map { push @qatests,get_qa_tests("$d/$_") if -d "$d/$_" } readdir(DIR);
+    closedir(DIR);
+}
+
+foreach (@ARGV) {
+    push @qatests,$_ if -f && /\d{3}$/;
+    push @qatests,get_qa_tests($_) if -d;
+}
 
 foreach (@qatests) {
     my @h = get_qa_header($_);
@@ -103,13 +121,11 @@ sub get_qa_header($) {
     return @l;
 }
 
-sub get_qa_tests() {
+sub get_qa_tests {
     my $d = shift || $ENV{'PWD'};
 
     opendir(my $DIR, $d) || die "can't opendir $d: $!";
-    my @qa = grep {m/^\d\d\d$/ && -f "$d/$_" } readdir($DIR);
+    my @qa = sort grep { m/^\d\d\d$/ && -f "$d/$_" } readdir($DIR);
     closedir($DIR);
-
-    return @qa;
+    return map { $_ = "$d/$_" } @qa;
 }
-
