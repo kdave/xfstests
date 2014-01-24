@@ -34,9 +34,9 @@ status=1	# failure is the default!
 
 _cleanup()
 {
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/send/snapshots/backup2 > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/send/snapshots/backup3 > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/send > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/send/snapshots/backup2 > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/send/snapshots/backup3 > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/send > /dev/null 2>&1
 	rm -rf $TEST_DIR/$tmp_dir
 	rm -f $tmp.*
 }
@@ -62,7 +62,7 @@ export SELINUX_MOUNT_OPTIONS=""
 _scratch_mount
 
 mkdir $TEST_DIR/$tmp_dir
-$BTRFS_UTIL_PROG subvol create $TEST_DIR/$tmp_dir/send \
+$BTRFS_UTIL_PROG subvolume create $TEST_DIR/$tmp_dir/send \
 	> $seqres.full 2>&1 || _fail "failed subvol create"
 work_dir="$TEST_DIR/$tmp_dir/send"
 mkdir $work_dir/testdir
@@ -72,9 +72,9 @@ dd if=/dev/urandom  of=$work_dir/testdir/aa count=16 > /dev/null 2>&1
 dd if=/dev/urandom  of=$work_dir/testdir/bb count=16 > /dev/null 2>&1
 
 mkdir $work_dir/snapshots
-$BTRFS_UTIL_PROG sub snap -r $work_dir $work_dir/snapshots/backup2 \
+$BTRFS_UTIL_PROG subvolume snapshot -r $work_dir $work_dir/snapshots/backup2 \
 	>> $seqres.full 2>&1 || _fail "failed backup2"
-$BTRFS_UTIL_PROG sub snap -r $work_dir $work_dir/snapshots/backup3 \
+$BTRFS_UTIL_PROG subvolume snapshot -r $work_dir $work_dir/snapshots/backup3 \
 	>> $seqres.full 2>&1 || _fail "failed backup3"
 $BTRFS_UTIL_PROG send $work_dir/snapshots/backup3/ -f $TEST_DIR/$tmp_dir/blah \
 	>> $seqres.full 2>&1 || _fail "send failed"

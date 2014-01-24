@@ -34,9 +34,9 @@ status=1	# failure is the default!
 
 _cleanup()
 {
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/snap > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/snap1 > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvol del $TEST_DIR/$tmp_dir/send > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/snap > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/snap1 > /dev/null 2>&1
+	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/send > /dev/null 2>&1
 	rm -rf $TEST_DIR/$tmp_dir
 	rm -f $tmp.*
 }
@@ -65,15 +65,15 @@ export SELINUX_MOUNT_OPTIONS=""
 _scratch_mount
 
 mkdir $TEST_DIR/$tmp_dir
-$BTRFS_UTIL_PROG subvol create $TEST_DIR/$tmp_dir/send \
-	> $seqres.full 2>&1 || _fail "failed subvol create"
+$BTRFS_UTIL_PROG subvolume create $TEST_DIR/$tmp_dir/send \
+	> $seqres.full 2>&1 || _fail "failed subvolume create"
 
 dd if=/dev/urandom of=$TEST_DIR/$tmp_dir/send/foo bs=1M count=10 >> $seqres.full \
 	2>&1 || _fail "dd failed"
-$BTRFS_UTIL_PROG subvol snap -r $TEST_DIR/$tmp_dir/send \
+$BTRFS_UTIL_PROG subvolume snapshot -r $TEST_DIR/$tmp_dir/send \
 	$TEST_DIR/$tmp_dir/snap >> $seqres.full 2>&1 || _fail "failed snap"
 $XFS_IO_PROG -c "fpunch 1m 1m" $TEST_DIR/$tmp_dir/send/foo
-$BTRFS_UTIL_PROG subvol snap -r $TEST_DIR/$tmp_dir/send \
+$BTRFS_UTIL_PROG subvolume snapshot -r $TEST_DIR/$tmp_dir/send \
 	$TEST_DIR/$tmp_dir/snap1 >> $seqres.full 2>&1 || _fail "failed snap"
 
 $FSSUM_PROG -A -f -w $tmp/fssum.snap $TEST_DIR/$tmp_dir/snap >> $seqres.full \
