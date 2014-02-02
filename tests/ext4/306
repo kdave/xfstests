@@ -45,29 +45,22 @@ _supported_os Linux
 
 _require_scratch
 
-# This needs to mount ext3; might require ext3 driver, or ext4
-# might handle it itself.  Find out if we have it one way or another.
-modprobe ext3 > /dev/null 2>&1
-grep -q ext3 /proc/filesystems || _notrun "This test requires ext3 support"
-
 rm -f $seqres.full
 
-# Make a small ext3 fs, (extents disabled) & mount it
-yes | mkfs.ext3 $SCRATCH_DEV 512m >> $seqres.full 2>&1
-_scratch_mount -t ext3 || _fail "couldn't mount fs as ext3"
+# Make a small ext4 fs with extents disabled & mount it
+yes | mkfs.ext4 -O ^extents $SCRATCH_DEV 512m >> $seqres.full 2>&1
+_scratch_mount || _fail "couldn't mount fs"
+
 # Create a small non-extent-based file
 echo "Create 1m testfile1"
 $XFS_IO_PROG -f $SCRATCH_MNT/testfile1 -c "pwrite 0 1m" | _filter_xfs_io
-echo "Create testfile2 to fill the fs"
-# A large non-extent-based file filling the fs; this will run out & fail
-$XFS_IO_PROG -f $SCRATCH_MNT/testfile2 -c "pwrite 0 512m" | _filter_xfs_io
 
-# Remount as ext4
-_scratch_unmount
-_scratch_mount -t ext4 || _fail "couldn't remount fs as ext4"
+# Create a large non-extent-based file filling the fs; this will run out & fail
+echo "Create testfile2 to fill the fs"
+$XFS_IO_PROG -f $SCRATCH_MNT/testfile2 -c "pwrite 0 512m" | _filter_xfs_io
 df -h $SCRATCH_MNT >> $seqres.full
 
-# Grow it by 512m
+# Grow fs by 512m
 echo "Resize to 1g"
 resize2fs $SCRATCH_DEV 1g >> $seqres.full 2>&1 || _fail "Could not resize to 1g"
 df -h $SCRATCH_MNT >> $seqres.full
