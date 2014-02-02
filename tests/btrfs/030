@@ -73,22 +73,41 @@ mkdir $SCRATCH_MNT/a/b/www
 echo "hey" > $SCRATCH_MNT/a/b/foobar.txt
 mkdir -p $SCRATCH_MNT/a/b/c3/x/y
 
+mkdir -p $SCRATCH_MNT/a/b/foo1/foo2
+echo "hey" > $SCRATCH_MNT/a/b/foo1/foo2/f.txt
+mkdir $SCRATCH_MNT/a/b/foo3
+
+mkdir -p $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4
+echo "ola" > $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4/hello.txt
+
 # Directory tree looks like:
 #
-# .                         (ino 256)
-# |-- a/                    (ino 257)
-#     |-- b/                (ino 258)
-#         |-- c/            (ino 259)
-#         |   |-- file.txt  (ino 260)
-#         |   |-- d/        (ino 261)
+# .                                      (ino 256)
+# |-- a/                                 (ino 257)
+#     |-- b/                             (ino 258)
+#         |-- c/                         (ino 259)
+#         |   |-- file.txt               (ino 260)
+#         |   |-- d/                     (ino 261)
 #         |
-#         |-- c2/           (ino 262)
-#         |-- www/          (ino 263)
-#         |-- foobar.txt    (ino 264)
+#         |-- c2/                        (ino 262)
+#         |-- www/                       (ino 263)
+#         |-- foobar.txt                 (ino 264)
 #         |
-#         |-- c3/           (ino 265)
-#             |-- x/        (ino 266)
-#                 |-- y/    (ino 267)
+#         |-- c3/                        (ino 265)
+#         |   |-- x/                     (ino 266)
+#         |       |-- y/                 (ino 267)
+#         |
+#         |-- foo1/                      (ino 268)
+#         |    |---foo2/                 (ino 269)
+#         |         |---f.txt            (ino 270)
+#         |
+#         |-- foo3/                      (ino 271)
+#         |
+#         |-- bar1/                      (ino 272)
+#              |-- bar2/                 (ino 273)
+#                  |-- bar3/             (ino 274)
+#                      |-- bar4          (ino 275)
+#                           |--hello.txt (ino 276)
 
 run_check $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
     $SCRATCH_MNT/mysnap1
@@ -104,21 +123,46 @@ mv $SCRATCH_MNT/a/b/foobar.txt $SCRATCH_MNT/a/b/c2/y2/x2/qwerty.txt
 ln $SCRATCH_MNT/a/b/c2/d2/cc/file.txt $SCRATCH_MNT/a/b/c2/y2/x2/Z/file_link.txt
 mv $SCRATCH_MNT/a/b/c2/d2/cc/file.txt $SCRATCH_MNT/a/b/c2/y2/x2
 
+mv $SCRATCH_MNT/a/b/foo3 $SCRATCH_MNT/a/b/foo1/foo33
+mv $SCRATCH_MNT/a/b/foo1/foo2 $SCRATCH_MNT/a/b/foo1/foo33/foo22
+mv $SCRATCH_MNT/a/b/foo1/foo33/foo22/f.txt \
+    $SCRATCH_MNT/a/b/foo1/foo33/foo22/fff.txt
+
+echo " hello" >> $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4/hello.txt
+mv $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4/hello.txt \
+    $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4/hello2.txt
+mv $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4 $SCRATCH_MNT/a/b/k44
+mv $SCRATCH_MNT/a/b/bar1/bar2/bar3 $SCRATCH_MNT/a/b/k44
+mv $SCRATCH_MNT/a/b/bar1/bar2 $SCRATCH_MNT/a/b/k44/bar3
+mv $SCRATCH_MNT/a/b/bar1 $SCRATCH_MNT/a/b/k44/bar3/bar2/k11
+
 # Directory tree now looks like:
 #
 # .                                         (ino 256)
 # |-- a/                                    (ino 257)
 #     |-- b/                                (ino 258)
 #         |-- c2/                           (ino 262)
-#             |-- d2/                       (ino 261)
-#             |   |-- cc/                   (ino 259)
-#             |        |-- file.txt         (ino 260)
-#             |-- y2/                       (ino 267)
-#                 |-- x2/                   (ino 266)
-#                     |-- qwerty.txt        (ino 264)
-#                     |-- WWW/              (ino 263)
-#                     |-- Z/                (ino 265)
-#                         |-- file_link.txt
+#         |   |-- d2/                       (ino 261)
+#         |   |   |-- cc/                   (ino 259)
+#         |   |
+#         |   |-- y2/                       (ino 267)
+#         |       |-- x2/                   (ino 266)
+#         |           |-- file.txt          (ino 260)
+#         |           |-- qwerty.txt        (ino 264)
+#         |           |-- WWW/              (ino 263)
+#         |           |-- Z/                (ino 265)
+#         |               |-- file_link.txt
+#         |
+#         |-- foo1/                         (ino 268)
+#         |    |---foo33/                   (ino 271)
+#         |          |---foo22/             (ino 269)
+#         |                |---fff.txt      (ino 270)
+#         |
+#         |-- k44/                          (ino 275)
+#              |-- hello2.txt               (ino 276)
+#              |-- bar3/                    (ino 274)
+#                   |-- bar2/               (ino 273)
+#                        |-- k11/           (ino 272)
 
 run_check $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
     $SCRATCH_MNT/mysnap2
