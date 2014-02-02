@@ -66,7 +66,7 @@ mkdir $SOURCE_DIR
 
 rm -f $seqres.full
 
-_scratch_mkfs
+_scratch_mkfs > /dev/null 2>&1
 $XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $SOURCE_DIR/original \
  >> $seqres.full
 
@@ -87,8 +87,8 @@ _create_reflinks_to()
     # always reflink, should fail outright
     rm -rf $1; mkdir $1
     echo "reflink=always:"
-    cp --reflink=always $SOURCE_DIR/original $1/copyfail \
-        2>&1 | _filter_testdirs
+    cp --reflink=always $SOURCE_DIR/original $1/copyfail > $seqres.full 2>&1 \
+	|| echo "cp reflink failed"
 
     # The failed target actually gets created by cp:
     ls $1/copyfail | _filter_testdirs
