@@ -46,7 +46,7 @@ _supported_os IRIX Linux
 # real QA test starts here
 rm -f $seqres.full
 _require_scratch
-_scratch_mkfs_xfs -n size=16k -d size=128m >> $seqres.full 2>&1
+_scratch_mkfs_xfs -n size=16k -l size=5m -d size=128m >> $seqres.full 2>&1
 _scratch_mount
 
 # First we cause very badly fragmented freespace, then
@@ -54,13 +54,16 @@ _scratch_mount
 # should come out very fragmented as a result
 
 # Step 1: Cause badly fragmented free space
+# 
+# XXX: this needs to be factored to match what generic/204 does to support
+# different inode sizes without ENOSPC
 mkdir $SCRATCH_MNT/fragdir
-for I in `seq 0 27200`; do
+for I in `seq 0 26200`; do
         (echo data > $SCRATCH_MNT/fragdir/f$I) >> $seqres.full 2>&1
 done
 sync
 
-for I in `seq 0 2 27200`; do
+for I in `seq 0 2 26200`; do
         rm -f $SCRATCH_MNT/fragdir/f$I >> $seqres.full 2>&1
 done
 sync
