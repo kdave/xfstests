@@ -516,6 +516,12 @@ _test_generic_punch()
 	rm -f $testfile.2
 	_md5_checksum $testfile
 
+	# different file sizes mean we can't use md5sum to check the hole is
+	# valid. Hence use hexdump to dump the contents and chop off the last
+	# line of output that indicates the file size. We also have to fudge
+	# the extent size as that will change with file size, too - that's what
+	# the sed line noise does - it will always result in an output of [0..7]
+	# so it matches 4k block size...
 	echo "	17. data -> hole in single block file"
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
@@ -524,8 +530,8 @@ _test_generic_punch()
 	$XFS_IO_PROG -f -c "truncate $block_size" \
 		-c "pwrite 0 $block_size" $sync_cmd \
 		-c "$zero_cmd 128 128" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
+		-c "$map_cmd -v" $testfile | $filter_cmd | \
+			 sed -e "s/\.\.[0-9]*\]/..7\]/"
 	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
-
+	od -x $testfile | head -n -1
 }
