@@ -437,6 +437,7 @@ main(int argc, char *argv[])
 		perror("malloc");
 		return 1;
 	}
+	memset(valid, 0, size);
 
 	/* Lots of arguments affect how we open the file */
 	oflags = test ? O_RDONLY : O_RDWR|O_CREAT;
