@@ -56,27 +56,25 @@ _scratch_mount
 # detection was not correct, leading to data corruption by overriding latest
 # data regions of a file with zeroes.
 
-run_check $XFS_IO_PROG -f -c "truncate 104857600" $SCRATCH_MNT/foo
+$XFS_IO_PROG -f -c "truncate 104857600" $SCRATCH_MNT/foo
 
 for ((i = 0; i < 940; i++))
 do
-    OFFSET=$((32768 + i * 8192))
-    LEN=$((OFFSET + 8192))
-    run_check $XFS_IO_PROG -c "falloc -k $OFFSET $LEN" $SCRATCH_MNT/foo
-    run_check $XFS_IO_PROG -c "pwrite -S 0xf0 $OFFSET 4096" $SCRATCH_MNT/foo
+	OFFSET=$((32768 + i * 8192))
+	LEN=$((OFFSET + 8192))
+	$XFS_IO_PROG -c "falloc -k $OFFSET $LEN" $SCRATCH_MNT/foo
+	$XFS_IO_PROG -c "pwrite -S 0xf0 $OFFSET 4096" \
+		$SCRATCH_MNT/foo | _filter_xfs_io
 done
 
-run_check $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
-    $SCRATCH_MNT/mysnap1
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
-run_check $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
-run_check $XFS_IO_PROG -c "truncate 3882008" $SCRATCH_MNT/foo
+$XFS_IO_PROG -c "truncate 3882008" $SCRATCH_MNT/foo
 
-run_check $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
-    $SCRATCH_MNT/mysnap2
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
-run_check $BTRFS_UTIL_PROG send $SCRATCH_MNT/mysnap1 -f $tmp/1.snap
-run_check $BTRFS_UTIL_PROG send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
+_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $tmp/1.snap
+_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
     -f $tmp/2.snap
 
 md5sum $SCRATCH_MNT/foo | _filter_scratch
@@ -88,10 +86,10 @@ _check_btrfs_filesystem $SCRATCH_DEV
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-run_check $BTRFS_UTIL_PROG receive $SCRATCH_MNT -f $tmp/1.snap
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $tmp/1.snap
 md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
 
-run_check $BTRFS_UTIL_PROG receive $SCRATCH_MNT -f $tmp/2.snap
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $tmp/2.snap
 md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
 
 _scratch_unmount
