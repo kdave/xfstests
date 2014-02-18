@@ -135,10 +135,19 @@ xfs_db -r -c "inode $inum_1" -c "print a.sfattr" $SCRATCH_DEV | \
 
 echo "*** dump attributes (2)"
 
+# There is a fair bit of filtering here to convert v5 filesystem output
+# into the v4 format that holds the meaningful information for the test.
 xfs_db -r -c "inode $inum_2" -c "a a.bmx[0].startblock" -c print $SCRATCH_DEV \
 	| perl -ne '
 s/,secure//;
 s/,parent//;
+s/info.hdr/info/;
+/hdr.info.crc/ && next;
+/hdr.info.bno/ && next;
+/hdr.info.uuid/ && next;
+/hdr.info.lsn/ && next;
+/hdr.info.owner/ && next;
+s/^(hdr.info.magic =) 0x3bee/\1 0xfbee/;
 s/^(hdr.firstused =) (\d+)/\1 FIRSTUSED/;
 s/^(hdr.freemap\[0-2] = \[base,size]).*/\1 [FREEMAP..]/;
 s/^(entries\[0-2] = \[hashval,nameidx,incomplete,root,local]).*/\1 [ENTRIES..]/;
