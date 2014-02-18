@@ -1,0 +1,98 @@
+#! /bin/bash
+# FS QA Test No. 001
+#
+# Test the xfs_db write of the XFS BMBT entries. For each XFS BMBT field,
+# write the value 0, each bit and finally the entry beyond the maximum legal
+# value. Also makes sure a core write and hex input still work.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 SGI.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+_do_bit_test()
+{
+	field="$1"
+	bits="$2"
+
+	echo "testing $field with $bits bits"
+	$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write $field 0" $SCRATCH_DEV
+	num=1
+	for n in `seq 0 1 $bits`; do
+		$XFS_DB_PROG -x -c "inode $FILE_INO" \
+			  -c "write $field $num" $SCRATCH_DEV
+		let num=$num*2
+	done
+	echo
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_xfs_mkfs_crc
+
+_scratch_mkfs -m crc=0 >/dev/null 2>&1
+_scratch_mount
+
+# create the test file
+echo "make a file with data so it has an extent" > $SCRATCH_MNT/file
+
+# find the inode for the test file
+FILE_INO=`ls -i $SCRATCH_MNT |awk '{print $1}'`
+
+_scratch_unmount
+
+# test bit length constants
+BMBT_EXNTFLAG_BITLEN=1
+BMBT_STARTOFF_BITLEN=54
+BMBT_STARTBLOCK_BITLEN=52
+BMBT_BLOCKCOUNT_BITLEN=21
+
+# test setting the BMBT entries from 0 to past the valid number.
+_do_bit_test "u.bmx[0].extentflag" $BMBT_EXNTFLAG_BITLEN
+_do_bit_test "u.bmx[0].startoff" $BMBT_STARTOFF_BITLEN
+_do_bit_test "u.bmx[0].startblock" $BMBT_STARTBLOCK_BITLEN
+_do_bit_test "u.bmx[0].blockcount" $BMBT_BLOCKCOUNT_BITLEN
+# test setting the 32 bit generation number
+$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write core.gen 0x5a" $SCRATCH_DEV
+$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write core.gen 0xa5" $SCRATCH_DEV
+$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write core.gen 0" $SCRATCH_DEV
+$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write core.gen #5a5a" $SCRATCH_DEV
+$XFS_DB_PROG -x -c "inode $FILE_INO" -c "write core.gen #a5a5" $SCRATCH_DEV
+status=0
+exit
