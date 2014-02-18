@@ -57,11 +57,17 @@ _require_command "/usr/sbin/filefrag"
 
 rm -f $seqres.full
 
-FILEFRAG_FILTER='if (/, blocksize (\d+)/) {$blocksize = $1; next} ($ext, '\
-'$logical, $physical, $expected, $length, $flags) = (/^\s*(\d+)\s+(\d+)'\
-'\s+(\d+)\s+(?:(\d+)\s+)?(\d+)\s+(.*)/) or next; $flags =~ '\
-'/(?:^|,)inline(?:,|$)/ and next; print $physical * $blocksize, "#", '\
-'$length * $blocksize, "#", $logical * $blocksize, " "'
+FILEFRAG_FILTER='
+	if (/blocks of (\d+) bytes/) {
+		$blocksize = $1;
+		next
+	}
+	($ext, $logical, $physical, $length) =
+		(/^\s*(\d+):\s+(\d+)..\s+\d+:\s+(\d+)..\s+\d+:\s+(\d+):/)
+	or next;
+	print $physical * $blocksize, "#",
+	      $length * $blocksize, "#",
+	      $logical * $blocksize, " "'
 
 # this makes filefrag output script readable by using a perl helper.
 # output is one extent per line, with three numbers separated by '#'
