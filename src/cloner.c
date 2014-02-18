@@ -30,6 +30,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#ifdef HAVE_BTRFS_IOCTL_H
+#include <btrfs/ioctl.h>
+#else
 
 struct btrfs_ioctl_clone_range_args {
 	int64_t src_fd;
@@ -42,6 +45,7 @@ struct btrfs_ioctl_clone_range_args {
 #define BTRFS_IOC_CLONE       _IOW(BTRFS_IOCTL_MAGIC, 9, int)
 #define BTRFS_IOC_CLONE_RANGE _IOW(BTRFS_IOCTL_MAGIC, 13, \
 				   struct btrfs_ioctl_clone_range_args)
+#endif
 
 static void
 usage(char *name, const char *msg)

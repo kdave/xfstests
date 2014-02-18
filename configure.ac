@@ -30,6 +30,7 @@ AC_HEADER_STDC
     AC_CHECK_HEADERS([	sys/fs/xfs_fsops.h	\
 			sys/fs/xfs_itable.h	\
 			xfs/platform_defs.h	\
+			btrfs/ioctl.h		\
     ])
 
 AC_PACKAGE_NEED_UUIDCOMPARE
