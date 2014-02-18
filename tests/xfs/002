@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test No. 002
+#
+# Test that garbage in old v4 superblocks doesn't trip verifiers during growfs
+#
+# Older kernels sometimes left garbage in the unused portions
+# of the superblock during growfs; with the new verifiers this initially
+# caused failures during a subsequent growfs; see
+# 10e6e65 xfs: be more forgiving of a v4 secondary sb w/ junk in v5 fields
+# for further explanation.  (NB: while the commit log was good, the
+# patch had a bug which was subsequently fixed)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+# So we can explicitly turn it _off_:
+_require_xfs_mkfs_crc
+
+rm -f $seqres.full
+
+_scratch_mkfs_xfs -m crc=0 -d size=128m >> $seqres.full 2>&1 || _fail "mkfs failed"
+
+# Scribble past a couple V4 secondary superblocks to populate sb_crc
+# (We can't write to the structure member because it doesn't exist
+# on a v4 superblock, so we use the data type & "write fill")
+$XFS_DB_PROG -x -c "sb 1" -c "type data" -c "write fill 0xff 224 4" $SCRATCH_DEV
+$XFS_DB_PROG -x -c "sb 2" -c "type data" -c "write fill 0xff 224 4" $SCRATCH_DEV
+
+_scratch_mount
+
+# This should pass
+$XFS_GROWFS_PROG $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "growfs failed"
+
+# success, all done
+status=0
+exit
