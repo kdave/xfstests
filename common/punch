@@ -317,14 +317,29 @@ _test_generic_punch()
 	map_cmd=$4
 	filter_cmd=$5
 	testfile=$6
+	multiple=1
+
+	#
+	# If we are testing collapse range, we increare all the offsets of this
+	# test by a factor of 4. We do this because unlike punch, collapse
+	# range also decreases the size of file hence require bigger offsets.
+	#
+	if [ "$zero_cmd" == "fcollapse" ]; then
+		multiple=4
+	fi
+
+	_4k="$((multiple * 4))k"
+	_8k="$((multiple * 8))k"
+	_12k="$((multiple * 12))k"
+	_20k="$((multiple * 20))k"
 
 	# initial test state must be defined, otherwise the first test can fail
 	# due ot stale file state left from previous tests.
 	rm -f $testfile
 
 	echo "	1. into a hole"
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$zero_cmd 4k 8k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -333,9 +348,9 @@ _test_generic_punch()
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 20k" $sync_cmd \
-		-c "$zero_cmd 4k 8k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite 0 $_20k" $sync_cmd \
+		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -345,9 +360,9 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 0 20k" \
-			-c "$zero_cmd 4k 8k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd 0 $_20k" \
+			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -357,9 +372,9 @@ _test_generic_punch()
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 8k 8k" $sync_cmd \
-		-c "$zero_cmd 4k 8k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite $_8k $_8k" $sync_cmd \
+		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -369,9 +384,9 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 8k 8k" \
-			-c "$zero_cmd 4k 8k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd $_8k $_8k" \
+			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -381,9 +396,9 @@ _test_generic_punch()
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 8k" $sync_cmd \
-		-c "$zero_cmd 4k 8k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite 0 $_8k" $sync_cmd \
+		 -c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -393,10 +408,10 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "pwrite 0 8k" $sync_cmd \
-			-c "$alloc_cmd 8k 8k" \
-			-c "$zero_cmd 4k 8k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "pwrite 0 $_8k" $sync_cmd \
+			-c "$alloc_cmd $_8k $_8k" \
+			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -405,9 +420,9 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 0 8k" \
-			-c "$zero_cmd 4k 8k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd 0 $_8k" \
+			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -416,10 +431,10 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 0 8k" \
-			-c "pwrite 8k 8k" $sync_cmd \
-			-c "$zero_cmd 4k 8k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd 0 $_8k" \
+			-c "pwrite $_8k $_8k" $sync_cmd \
+			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -429,9 +444,9 @@ _test_generic_punch()
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 8k 4k" $sync_cmd \
-		-c "$zero_cmd 4k 12k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite $_8k $_4k" $sync_cmd \
+		-c "$zero_cmd $_4k $_12k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -440,12 +455,12 @@ _test_generic_punch()
 	if [ "$remove_testfile" ]; then
 		rm -f $testfile
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "$alloc_cmd 0 20k" \
-		-c "pwrite 0 8k" \
-		-c "pwrite 12k 8k" $sync_cmd \
-		-c "$punch_cmd 8k 4k" \
-		-c "$zero_cmd 4k 12k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "$alloc_cmd 0 $_20k" \
+		-c "pwrite 0 $_8k" \
+		-c "pwrite $_12k $_8k" $sync_cmd \
+		-c "$punch_cmd $_8k $_4k" \
+		-c "$zero_cmd $_4k $_12k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
@@ -455,10 +470,10 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 0 20k" \
-			-c "pwrite 8k 4k" $sync_cmd \
-			-c "$zero_cmd 4k 12k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd 0 $_20k" \
+			-c "pwrite $_8k $_4k" $sync_cmd \
+			-c "$zero_cmd $_4k $_12k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
@@ -467,35 +482,50 @@ _test_generic_punch()
 		if [ "$remove_testfile" ]; then
 			rm -f $testfile
 		fi
-		$XFS_IO_PROG -f -c "truncate 20k" \
-			-c "$alloc_cmd 0 20k" \
-			-c "pwrite 0k 8k" $sync_cmd \
-			-c "pwrite 12k 8k" -c "fsync" \
-			-c "$zero_cmd 4k 12k" \
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "$alloc_cmd 0 $_20k" \
+			-c "pwrite 0k $_4k" $sync_cmd \
+			-c "pwrite $_12k $_8k" -c "fsync" \
+			-c "$zero_cmd $_4k $_12k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
 		[ $? -ne 0 ] && die_now
 		_md5_checksum $testfile
 	fi
 
-	echo "	14. data -> hole @ EOF"
-	rm -f $testfile
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 20k" $sync_cmd \
-		-c "$zero_cmd 12k 8k" \
+	# Don't need to check EOF case for collapse range.
+	# VFS layer return invalid error in this case,
+	# So it is not a proper case for collapse range test of each local fs.
+	if [ "$zero_cmd" != "fcollapse" ]; then
+		echo "	14. data -> hole @ EOF"
+		rm -f $testfile
+		$XFS_IO_PROG -f -c "truncate $_20k" \
+			-c "pwrite 0 $_20k" $sync_cmd \
+			-c "$zero_cmd $_12k $_8k" \
+			-c "$map_cmd -v" $testfile | $filter_cmd
+		[ $? -ne 0 ] && die_now
+		_md5_checksum $testfile
+	fi
+
+	if [ "$zero_cmd" == "fcollapse" ]; then
+		echo "	14. data -> hole @ 0"
+	else
+		echo "	15. data -> hole @ 0"
+	fi
+
+	if [ "$remove_testfile" ]; then
+		rm -f $testfile
+	fi
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite 0 $_20k" $sync_cmd \
+		-c "$zero_cmd 0 $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	[ $? -ne 0 ] && die_now
 	_md5_checksum $testfile
 
-	echo "	15. data -> hole @ 0"
-	if [ "$remove_testfile" ]; then
-		rm -f $testfile
+	# If zero_cmd is fcollpase, don't check unaligned offsets
+	if [ "$zero_cmd" == "fcollapse" ]; then
+		return
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 20k" $sync_cmd \
-		-c "$zero_cmd 0k 8k" \
-		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
-	_md5_checksum $testfile
 
 	echo "	16. data -> cache cold ->hole"
 	if [ "$remove_testfile" ]; then
@@ -504,12 +534,12 @@ _test_generic_punch()
 	else
 		cp $testfile $testfile.2
 	fi
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 8k 12k" -c "fsync" $testfile.2 \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite $_8k $_12k" -c "fsync" $testfile.2 \
 		> /dev/null
-	$XFS_IO_PROG -f -c "truncate 20k" \
-		-c "pwrite 0 20k" $sync_cmd \
-		-c "$zero_cmd 0k 8k" \
+	$XFS_IO_PROG -f -c "truncate $_20k" \
+		-c "pwrite 0 $_20k" $sync_cmd \
+		-c "$zero_cmd 0k $_8k" \
 		-c "fadvise -d" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	diff $testfile $testfile.2

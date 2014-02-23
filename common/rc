@@ -1332,6 +1332,20 @@ _require_xfs_io_falloc_punch()
 		_notrun "xfs_io fallocate punch command failed (no fs support?)"
 }
 
+# check that xfs_io, kernel and filesystem all support fallocate with collapse
+# range
+_require_xfs_io_falloc_collapse()
+{
+	testfile=$TEST_DIR/$$.falloc
+	testio=`$XFS_IO_PROG -f -c "pwrite 0 20k" -c "fsync" \
+		-c "fcollapse 4k 8k" $testfile 2>&1`
+	rm -f $testfile 2>&1 > /dev/null
+	echo $testio | grep -q "not found" && \
+		_notrun "xfs_io fallocate collapse range support is missing"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "xfs_io fallocate collapse range failed (no fs support?)"
+}
+
 # check that xfs_io, kernel and filesystem support fiemap
 _require_xfs_io_fiemap()
 {
