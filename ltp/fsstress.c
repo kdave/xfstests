@@ -2274,6 +2274,18 @@ fdatasync_f(int opno, long r)
 	free_pathname(&f);
 	close(fd);
 }
+
+#ifdef HAVE_LINUX_FIEMAP_H
+struct print_flags fiemap_flags[] = {
+	{ FIEMAP_FLAG_SYNC, "SYNC"},
+	{ FIEMAP_FLAG_XATTR, "XATTR"},
+	{ -1, NULL}
+};
+
+#define translate_fiemap_flags(mode)	\
+	({translate_flags(mode, "|", fiemap_flags);})
+#endif
+
 void
 fiemap_f(int opno, long r)
 {
@@ -2336,9 +2348,10 @@ fiemap_f(int opno, long r)
 
 	e = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 	if (v)
-		printf("%d/%d: ioctl(FIEMAP) %s%s %lld %lld %x %d\n",
+		printf("%d/%d: ioctl(FIEMAP) %s%s %lld %lld (%s) %d\n",
 		       procid, opno, f.path, st, (long long)fiemap->fm_start,
-		       (long long) fiemap->fm_length, fiemap->fm_flags, e);
+		       (long long) fiemap->fm_length,
+		       translate_fiemap_flags(fiemap->fm_flags), e);
 	free(fiemap);
 	free_pathname(&f);
 	close(fd);
