@@ -38,6 +38,7 @@ trap "exit \$status" 0 1 2 3 15
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/punch
 
 # real QA test starts here
 
@@ -49,44 +50,7 @@ _require_xfs_io_zero
 
 testfile=$TEST_DIR/290.$$
 
-test_zero()
-{
-	zero_start=$1
-	zero_len=$2
-
-	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 4096" \
-                      -c "pwrite -S 0x42 4096 4096" \
-                      -c "zero $zero_start $zero_len" \
-                      -c "pread -v 0 8192" \
-                      $testfile | _filter_xfs_io_unique
-}
-
-# [0,1] -- Shouldn't toss anything
-test_zero    0    1
-
-#[0,4095] -- Shouldn't toss anything
-test_zero    0 4095
-
-#[0,4096] -- Should toss first page
-test_zero    0 4096
-
-#[0,4097] -- Should toss first page
-test_zero    0 4097
-
-#[4095,8191] -- Should toss last byte of first page
-test_zero 4095 4096
-
-#[4095,8192] -- Should toss second page & last byte of first page
-test_zero 4095 4097
-
-#[4095,8193] -- Should toss second page & last byte of first page
-test_zero 4095 4098
-
-#[4096,8192] -- Should toss second page
-test_zero 4096 4096
-
-#[1024,5120] -- Should toss from 1024 to end of first page
-test_zero 1024 4096
+_test_block_boundaries 4096 zero _filter_xfs_io_unique $testfile
 
 # success, all done
 status=0

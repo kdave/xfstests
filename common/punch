@@ -566,3 +566,109 @@ _test_generic_punch()
 	[ $? -ne 0 ] && die_now
 	od -x $testfile | head -n -1
 }
+
+_test_block_boundaries()
+{
+
+	remove_testfile=1
+	sync_cmd="-c fsync"
+	unwritten_tests=1
+	OPTIND=1
+	while getopts 'dk' OPTION
+	do
+		case $OPTION in
+		k)	remove_testfile=
+		;;
+		d)	sync_cmd=
+		;;
+		?)	echo Invalid flag
+		exit 1
+		;;
+		esac
+	done
+	shift $(($OPTIND - 1))
+
+	bs=$1
+	zero_cmd=$2
+	filter_cmd=$3
+	testfile=$4
+
+	# Block size plus 1
+	bs_p1=$(($bs + 1))
+	# Block size plus 2
+	bs_p2=$(($bs + 2))
+
+	# Block size minus 1
+	bs_m1=$(($bs - 1))
+
+	# Block size multiplied by 2
+	bs_t2=$(($bs * 2))
+
+	# Block size divided by 2
+	bs_d2=$(($bs / 2))
+
+	echo "zero 0, 1"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd 0 1" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero 0, $bs_m1"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd 0 $bs_m1" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero 0, $bs"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd 0 $bs" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero 0, $bs_p1"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd 0 $bs_p1" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero $bs_m1, $bs"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd $bs_m1 $bs" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero $bs_m1, $bs_p1"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd $bs_m1 $bs_p1" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+	echo "zero $bs_m1, $bs_p2"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd $bs_m1 $bs_p2" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+
+	echo "zero $bs, $bs"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd $bs $bs" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+
+
+	echo "zero $bs_d2 , $bs"
+	$XFS_IO_PROG -f -t -c "pwrite -S 0x41 0 $bs" \
+			   -c "pwrite -S 0x42 $bs $bs" \
+			   -c "$zero_cmd $bs_d2 $bs" \
+			   -c "pread -v 0 $bs_t2" \
+			   $testfile | $filter_cmd
+}
