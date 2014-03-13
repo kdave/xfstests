@@ -318,6 +318,14 @@ chacl m:user1:rwx file1
 chacl a::rwx file1
 set +x
 
+# we return E2BIG if hit the max acl limits on new kernel, but EINVAL
+# on old kernel. So we need to filter out the error message in order
+# to make the updated golden output works for both old and new kernels.
+_filter_largeacl()
+{
+	sed -e "s/Invalid argument/Argument list too long/"
+}
+
 #-------------------------------------------------------
 
 echo ""
@@ -342,7 +350,7 @@ chacl $acl2 largeaclfile
 getfacl --numeric largeaclfile | _filter_aces
 
 echo "1 above xfs acl max"
-chacl $acl3 largeaclfile
+chacl $acl3 largeaclfile 2>&1 | _filter_largeacl
 getfacl --numeric largeaclfile | _filter_aces
 
 echo "use 16 aces"
