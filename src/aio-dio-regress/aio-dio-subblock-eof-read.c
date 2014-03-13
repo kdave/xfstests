@@ -105,8 +105,8 @@ main(int argc, char **argv)
 	 *  are broken, we may very well see a result of 4k.
 	 */
 	if (ie.res != FILE_SIZE)
-		fail("AIO read of last block in file returned %d bytes, "
-		     "expected %d\n", ret, FILE_SIZE);
+		fail("AIO read of last block in file returned %ld bytes, "
+		     "expected %d\n", ie.res, FILE_SIZE);
 
 	printf("AIO read of last block in file succeeded.\n");
 	return 0;
