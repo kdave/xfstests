@@ -33,9 +33,6 @@
 #ifdef AIO
 #include <libaio.h>
 #endif
-#ifdef FALLOCATE
-#include <linux/falloc.h>
-#endif
 
 #ifndef MAP_FILE
 # define MAP_FILE 0
@@ -882,7 +879,7 @@ do_punch_hole(unsigned offset, unsigned length)
 }
 #endif
 
-#ifdef FALLOCATE
+#ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
 do_preallocate(unsigned offset, unsigned length)
@@ -1139,7 +1136,7 @@ usage(void)
 "	-A: Use the AIO system calls\n"
 #endif
 "	-D startingop: debug output starting at specified operation\n"
-#ifdef FALLOCATE
+#ifdef HAVE_LINUX_FALLOC_H
 "	-F: Do not use fallocate (preallocation) calls\n"
 #endif
 #ifdef FALLOC_FL_PUNCH_HOLE
@@ -1296,7 +1293,7 @@ int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 void
 test_fallocate()
 {
-#ifdef FALLOCATE
+#ifdef HAVE_LINUX_FALLOC_H
 	if (!lite && fallocate_calls) {
 		if (fallocate(fd, 0, 0, 1) && errno == EOPNOTSUPP) {
 			if(!quiet)
@@ -1306,7 +1303,7 @@ test_fallocate()
 			ftruncate(fd, 0);
 		}
 	}
-#else /* ! FALLOCATE */
+#else /* ! HAVE_LINUX_FALLOC_H */
 	fallocate_calls = 0;
 #endif
 

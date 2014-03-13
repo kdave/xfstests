@@ -25,7 +25,8 @@ AC_HEADER_STDC
 			sys/wait.h		\
 			sys/types.h		\
 			strings.h		\
-			err.h
+			err.h			\
+			linux/falloc.h
     ])
     AC_CHECK_HEADERS([	sys/fs/xfs_fsops.h	\
 			sys/fs/xfs_itable.h	\

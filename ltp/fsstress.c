@@ -27,13 +27,6 @@
 #ifdef HAVE_LINUX_FIEMAP_H
 #include <linux/fiemap.h>
 #endif
-#ifdef FALLOCATE
-#include <linux/falloc.h>
-#ifndef FALLOC_FL_PUNCH_HOLE
-/* Copy-paste from linux/falloc.h */
-#define FALLOC_FL_PUNCH_HOLE    0x02 /* de-allocates range */
-#endif
-#endif
 #ifndef HAVE_ATTR_LIST
 #define attr_list(path, buf, size, flags, cursor) (errno = -ENOSYS, -1)
 #endif
@@ -2093,7 +2086,7 @@ dwrite_f(int opno, long r)
 void
 fallocate_f(int opno, long r)
 {
-#ifdef FALLOCATE
+#ifdef HAVE_LINUX_FALLOC_H
 	int		e;
 	pathname_t	f;
 	int		fd;
@@ -2515,7 +2508,7 @@ mknod_f(int opno, long r)
 void
 punch_f(int opno, long r)
 {
-#ifdef FALLOCATE
+#ifdef HAVE_LINUX_FALLOC_H
 	int		e;
 	pathname_t	f;
 	int		fd;

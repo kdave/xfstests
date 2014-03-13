@@ -149,4 +149,29 @@
 #include <sys/param.h>
 #endif
 
+#ifdef HAVE_LINUX_FALLOC_H
+#include <linux/falloc.h>
+
+#ifndef FALLOC_FL_KEEP_SIZE
+#define FALLOC_FL_KEEP_SIZE		0x01
 #endif
+
+#ifndef FALLOC_FL_PUNCH_HOLE
+#define FALLOC_FL_PUNCH_HOLE		0x02
+#endif
+
+#ifndef FALLOC_FL_NO_HIDE_STALE
+#define FALLOC_FL_NO_HIDE_STALE		0x04
+#endif
+
+#ifndef FALLOC_FL_COLLAPSE_RANGE
+#define FALLOC_FL_COLLAPSE_RANGE	0x08
+#endif
+
+#ifndef FALLOC_FL_ZERO_RANGE
+#define FALLOC_FL_ZERO_RANGE		0x10
+#endif
+
+#endif /* HAVE_LINUX_FALLOC_H */
+
+#endif /* GLOBAL_H */
