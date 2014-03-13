@@ -45,9 +45,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common/filter
 . ./common/repair
 
-# link correct .out file
-_link_out_file $seq.out $seqfull.out
-
 # nuke the root, rt bitmap, and rt summary inodes
 # 
 _check_root_inos()
@@ -85,6 +82,13 @@ _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
 . $tmp.mkfs
 [ $isize -lt 512 ] && \
 	_scratch_mkfs_xfs -isize=512 | _filter_mkfs >/dev/null 2>&1
+
+# link correct .out file
+if [ $_fs_has_crcs -eq 1 ]; then
+	_link_out_file $seq.crc.out $seqfull.out
+else
+	_link_out_file $seq.out $seqfull.out
+fi
 
 `xfs_db -r -c sb -c p $SCRATCH_DEV | grep 'ino = ' | \
 	sed -e 's/ //g' -e 's/^/export /'`
