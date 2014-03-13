@@ -246,6 +246,7 @@ int		rtpct;
 unsigned long	seed = 0;
 ino_t		top_ino;
 int		verbose = 0;
+int		verifiable_log = 0;
 sig_atomic_t	should_stop = 0;
 char		*execute_cmd = NULL;
 int		execute_freq = 1;
@@ -315,7 +316,7 @@ int main(int argc, char **argv)
 	int             nousage = 0;
 	xfs_error_injection_t	        err_inj;
 	struct sigaction action;
-	const char	*allopts = "d:e:f:i:m:M:n:o:p:rs:S:vwx:X:zH";
+	const char	*allopts = "d:e:f:i:m:M:n:o:p:rs:S:vVwx:X:zH";
 
 	errrange = errtag = 0;
 	umask(0);
@@ -396,6 +397,10 @@ int main(int argc, char **argv)
 			printf("\n");
                         nousage=1;
 			break;
+		case 'V':
+			verifiable_log = 1;
+			break;
+
 		case 'X':
 			execute_freq = strtoul(optarg, NULL, 0);
 			break;
@@ -1498,6 +1503,7 @@ usage(void)
 	printf("   -i filenum       get verbose output for this nth file object\n");
 	printf("   -m modulo        uid/gid modulo for chown/chgrp (default 32)\n");
 	printf("   -n nops          specifies the no. of operations per process (default 1)\n");
+	printf("   -o logfile       specifies logfile name\n");
 	printf("   -p nproc         specifies the no. of processes (default 1)\n");
 	printf("   -r               specifies random name padding\n");
 	printf("   -s seed          specifies the seed for the random generator (default random)\n");
@@ -1506,6 +1512,7 @@ usage(void)
 	printf("   -x cmd           execute command in the middle of operations\n");
 	printf("   -z               zeros frequencies of all operations\n");
 	printf("   -S [c,t]         prints the list of operations (omitting zero frequency) in command line or table style\n");
+	printf("   -V               specifies verifiable logging mode (omitting inode numbers)\n");
 	printf("   -X ncmd          number of calls to the -x command (default 1)\n");
 	printf("   -H               prints usage and exits\n");
 }
@@ -1533,7 +1540,8 @@ zero_freq(void)
 void inode_info(char *str, size_t sz, struct stat64 *s, int verbose)
 {
 	if (verbose)
-		snprintf(str, sz, "[%ld %ld %d %d %lld %lld]", (long)s->st_ino,
+		snprintf(str, sz, "[%ld %ld %d %d %lld %lld]",
+			 verifiable_log ? -1: (long)s->st_ino,
 			 (long)s->st_nlink,  s->st_uid, s->st_gid,
 			 (long long) s->st_blocks, (long long) s->st_size);
 }
@@ -1773,11 +1781,11 @@ bulkstat1_f(int opno, long r)
         bsr.icount=1;
         bsr.ubuffer=&t;
         bsr.ocount=NULL;
-        
 	e = xfsctl(".", fd, XFS_IOC_FSBULKSTAT_SINGLE, &bsr) < 0 ? errno : 0;
 	if (v)
 		printf("%d/%d: bulkstat1 %s ino %lld %d\n", 
-                    procid, opno, good?"real":"random", (long long)ino, e);
+		       procid, opno, good?"real":"random",
+		       verifiable_log ? -1LL : (long long)ino, e);
 	close(fd);
 }
 
