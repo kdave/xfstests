@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test No. 042
+#
+# Test the basic functionality of Quota groups
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+run_check _scratch_mkfs
+run_check _scratch_mount
+
+LIMIT_SIZE=$((10 * 1024 * 1024))
+
+_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_run_btrfs_util_prog qgroup create 1/1 $SCRATCH_MNT
+_run_btrfs_util_prog qgroup limit $LIMIT_SIZE 1/1 $SCRATCH_MNT
+
+for i in `seq 10 -1 1`; do
+	#add newly created subvolume qgroup to it's parent qgroup
+	_run_btrfs_util_prog subvolume create -i 1/1 \
+		$SCRATCH_MNT/subv_$i
+done
+
+#try to write data into every subvolume
+for i in `seq 10 -1 1`; do
+	$XFS_IO_PROG -f -d -c 'pwrite -b 4k 0 10m' $SCRATCH_MNT/subv_$i/data \
+		>> /dev/null 2>&1 &
+done
+
+wait
+_run_btrfs_util_prog filesystem sync $SCRATCH_MNT \
+	>>$seqres.full 2>&1
+
+total_written=0
+#calculate every subvolume's data.
+for i in `seq 10 -1 1`; do
+	#we may fail to create the file, skip this subvolume
+	test -f $SCRATCH_MNT/subv_$i || continue
+
+	filesize=`du -b $SCRATCH_MNT/subv_$i/data | $AWK_PROG '{print $1}'`
+	if [ $filesize -gt $LIMIT_SIZE ];then
+		_fail "subv_$i/data size should be less than $LIMIT_SIZE"
+	fi
+	total_written=$(($total_written+$filesize))
+done
+
+#check if total written exceeds limit
+if [ $total_written -gt $LIMIT_SIZE ];then
+	_fail "total written should be less than $LIMIT_SIZE"
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
