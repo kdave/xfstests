@@ -5,16 +5,20 @@ Configuration file with sections is useful for running xfstests on multiple
 file systems, or multiple file system setups in a single run without any
 help of external scripts.
 
+
+Syntax
+------
+
 Syntax for defining a section is the following:
 
-[section_name]
+	[section_name]
 
 Section name should consist of alphanumeric characters and '_'. Anything
 else is forbidden and the section will not be recognised.
 
 Each section in the configuration file should contain options in the format
 
-OPTION=value
+	OPTION=value
 
 'OPTION' must not contain any white space characters. 'value' can contain
 any character you want with one simple limitation - characters ' and " can
@@ -24,8 +28,30 @@ Note that options are carried between sections so the same options does not
 have to be specified in each and every sections. However caution should be
 exercised not to leave unwanted options set from previous sections.
 
+
+Results
+-------
+
 For every section xfstests will run with specified options and will produce
 separate results in the '$RESULT_BASE/$section_name' directory.
+
+
+Multiple file systems
+---------------------
+
+Having different file systems in different config sections is allowed. When
+FSTYP differs in the following section the FSTYP file system will be created
+automatically before running the test.
+
+Note that if MOUNT_OPTIONS, MKFS_OPTIONS, or FSCK_OPTIONS are not directly
+specified in the section it will be reset to the default for a given file
+system.
+
+You can also force the file system recreation by specifying RECREATE_TEST_DEV.
+
+
+Example
+-------
 
 Here is an example of config file with sections:
 
@@ -36,6 +62,7 @@ SCRATCH_DEV=/dev/sdb
 SCRATCH_MNT=/mnt/test1
 MKFS_OPTIONS="-q -F -b4096"
 FSTYP=ext4
+RESULT_BASE="`pwd`/results/`date +%d%m%y_%H%M%S`"
 
 [ext4_1k_block_size]
 MKFS_OPTIONS="-q -F -b1024"
@@ -43,8 +70,10 @@ MKFS_OPTIONS="-q -F -b1024"
 [ext4_nojournal]
 MKFS_OPTIONS="-q -F -b4096 -O ^has_journal"
 
-[ext4_discard_ssd]
-MKFS_OPTIONS="-q -F -b4096"
-TEST_DEV=/dev/sdc
-SCRATCH_DEV=/dev/sdd
-MOUNT_OPTIONS="-o discard"
+[xfs_filesystem]
+MKFS_OPTIONS="-f"
+FSTYP=xfs
+
+[ext3_filesystem]
+FSTYP=ext3
+MOUNT_OPTIONS="-o noatime"

@@ -168,12 +168,6 @@ _fsck_opts()
     esac
 }
 
-[ -z "$FSTYP" ] && FSTYP=xfs
-[ -z "$MOUNT_OPTIONS" ] && _mount_opts
-[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
-[ -z "$FSCK_OPTIONS" ] && _fsck_opts
-
-
 # we need common/config
 if [ "$iam" != "check" ]
 then
@@ -536,6 +530,7 @@ _setup_large_ext4_fs()
 	fi
 	return 0
 }
+
 _scratch_mkfs_ext4()
 {
 	local tmp_dir=/tmp/
@@ -562,6 +557,24 @@ _scratch_mkfs_ext4()
 	rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
 
 	return $mkfs_status
+}
+
+_test_mkfs()
+{
+    case $FSTYP in
+    nfs*)
+	# do nothing for nfs
+	;;
+    udf)
+        $MKFS_UDF_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
+	;;
+    btrfs)
+        $MKFS_BTRFS_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
+	;;
+    *)
+	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* $TEST_DEV
+	;;
+    esac
 }
 
 _scratch_mkfs()
@@ -997,6 +1010,7 @@ _supported_fs()
 
     _notrun "not suitable for this filesystem type: $FSTYP"
 }
+
 
 # tests whether $FSTYP is one of the supported OSes for a test
 #

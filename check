@@ -283,8 +283,6 @@ if $have_test_arg; then
 	done
 fi
 
-_prepare_test_list
-
 # we need common/rc
 if ! . ./common/rc
 then
@@ -386,6 +384,8 @@ _summary()
 	rm -f $tmp.*
 }
 
+_prepare_test_list
+
 if $OPTIONS_HAVE_SECTIONS; then
 	trap "_summary; exit \$status" 0 1 2 3 15
 else
@@ -393,14 +393,38 @@ else
 fi
 
 for section in $HOST_OPTIONS_SECTIONS; do
+	OLD_FSTYP=$FSTYP
 	get_next_config $section
-	init_rc
 
 	mkdir -p $RESULT_BASE
 	if [ ! -d $RESULT_BASE ]; then
 		echo "failed to create results directory $RESULTS_BASE"
 		exit 1;
 	fi
+
+	if $OPTIONS_HAVE_SECTIONS; then
+		echo "SECTION       -- $section"
+	fi
+
+	if $RECREATE_TEST_DEV || [ "$OLD_FSTYP" != "$FSTYP" ]; then
+		echo "RECREATING    -- $FSTYP on $TEST_DEV"
+		umount $TEST_DEV 2> /dev/null
+		if ! _test_mkfs >$tmp.err 2>&1
+		then
+			echo "our local _test_mkfs routine ..."
+			cat $tmp.err
+			echo "check: failed to mkfs \$TEST_DEV using specified options"
+			exit 1
+		fi
+		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
+		if [ $? -ne 1 ]; then
+			echo $out
+			exit 1
+		fi
+		_prepare_test_list
+	fi
+
+	init_rc
 
 	seq="check"
 	check="$RESULT_BASE/check"
@@ -411,9 +435,6 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	[ -f $check.time ] || touch $check.time
 
 	# print out our test configuration
-	if $OPTIONS_HAVE_SECTIONS; then
-		echo "SECTION       -- $section"
-	fi
 	echo "FSTYP         -- `_full_fstyp_details`"
 	echo "PLATFORM      -- `_full_platform_details`"
 	if [ ! -z "$SCRATCH_DEV" ]; then
