@@ -224,15 +224,57 @@ known_hosts()
 	[ -f $HOST_CONFIG_DIR/$HOST.config ] && export HOST_OPTIONS=$HOST_CONFIG_DIR/$HOST.config
 }
 
+# Returns a list of sections in config file
+# Each section starts with the section name in the format
+# [section_name1]. Only alphanumeric characters and '_' is allowed
+# in the section name otherwise the section will not be resognised.
+# Section name must be contained between square brackets.
+get_config_sections() {
+	sed -n -e "s/^\[\([[:alnum:]_]*\)\]/\1/p" < $1
+}
+
 if [ ! -f "$HOST_OPTIONS" ]; then
 	known_hosts
 fi
 
+export HOST_OPTIONS_SECTIONS="-no-sections-"
+export OPTIONS_HAVE_SECTIONS=false
 if [ -f "$HOST_OPTIONS" ]; then
-	. $HOST_OPTIONS
+	export HOST_OPTIONS_SECTIONS=`get_config_sections $HOST_OPTIONS`
+	if [ -z "$HOST_OPTIONS_SECTIONS" ]; then
+		. $HOST_OPTIONS
+		export HOST_OPTIONS_SECTIONS="-no-sections-"
+	else
+		export OPTIONS_HAVE_SECTIONS=true
+	fi
 fi
 
+# Parse config section options. This function will parse all the configuration
+# within a single section which name is passed as an argument. For section
+# name format see comments in get_config_sections().
+# Empty lines and everything after '#' will be ignored.
+# Configuration options should be defined in the format
+#
+# CONFIG_OPTION=value
+#
+# This 'CONFIG_OPTION' variable and will be exported as an environment variable.
+parse_config_section() {
+	SECTION=$1
+	if ! $OPTIONS_HAVE_SECTIONS; then
+		return 0
+	fi
+	eval `sed -e 's/[[:space:]]*\=[[:space:]]*/=/g' \
+		-e 's/#.*$//' \
+		-e 's/[[:space:]]*$//' \
+		-e 's/^[[:space:]]*//' \
+		-e "s/^\(.*\)=\"\?'\?\([^\"']*\)\"\?'\?$/export \1=\"\2\"/" \
+		< $HOST_OPTIONS \
+		| sed -n -e "/^\[$SECTION\]/,/^\s*\[/{/^[^#].*\=.*/p;}"`
+}
+
 get_next_config() {
+	parse_config_section $1
+
 	# set default RESULT_BASE
 	if [ -z "$RESULT_BASE" ]; then
 		export RESULT_BASE="$here/results/"
@@ -284,7 +326,10 @@ get_next_config() {
 	fi
 }
 
-get_next_config
+if [ -z "$CONFIG_INCLUDED" ]; then
+	get_next_config `echo $HOST_OPTIONS_SECTIONS | cut -f1 -d" "`
+	export CONFIG_INCLUDED=true
+fi
 
 # make sure this script returns success
 /bin/true

@@ -22,9 +22,11 @@
 tmp=/tmp/$$
 status=0
 needwrap=true
+needsum=true
 n_try=0
 try=""
 n_bad=0
+sum_bad=0
 bad=""
 notrun=""
 interrupt=true
@@ -296,7 +298,12 @@ then
     exit 1
 fi
 
-# Ok, time to start running...
+_wipe_counters()
+{
+	n_try="0"
+	n_bad="0"
+	unset try notrun bad
+}
 
 _wrapup()
 {
@@ -325,16 +332,20 @@ END	{ if (NR > 0) {
 	date >>$check.log
 	echo $list | fmt | sed -e 's/^/    /' -e "s;$SRC_DIR/;;g" >>$check.log
 	$interrupt && echo "Interrupted!" >>$check.log
-        
+
+	echo "SECTION       -- $section" >>$tmp.summary
+	echo "=========================" >>$tmp.summary
         if [ ! -z "$n_try" -a $n_try != 0 ]
 	then
 	    echo "Ran:$try"
+	    echo "Ran:$try" >>$tmp.summary
 	fi
 
 	if [ ! -z "$notrun" ]
 	then
 	    echo "Not run:$notrun"
 	    echo "Not run:$notrun" >>$check.log
+	    echo "Not run:$notrun" >>$tmp.summary
 	fi
 
         if [ ! -z "$n_bad" -a $n_bad != 0 ]
@@ -343,20 +354,48 @@ END	{ if (NR > 0) {
 	    echo "Failed $n_bad of $n_try tests"
 	    echo "Failures:$bad" | fmt >>$check.log
 	    echo "Failed $n_bad of $n_try tests" >>$check.log
+	    echo "Failures:$bad" >>$tmp.summary
+	    echo "Failed $n_bad of $n_try tests" >>$tmp.summary
 	else
 	    echo "Passed all $n_try tests"
 	    echo "Passed all $n_try tests" >>$check.log
+	    echo "Passed all $n_try tests" >>$tmp.summary
 	fi
+	echo "" >>$tmp.summary
 	needwrap=false
     fi
 
+    sum_bad=`expr $sum_bad + $n_bad`
+    _wipe_counters
     rm -f /tmp/*.rawout /tmp/*.out /tmp/*.err /tmp/*.time
-    rm -f $tmp.*
+    if ! $OPTIONS_HAVE_SECTIONS; then
+        rm -f $tmp.*
+    fi
 }
 
-trap "_wrapup; exit \$status" 0 1 2 3 15
+_summary()
+{
+	_wrapup
+	if $showme; then
+		:
+	elif $needsum; then
+		count=`wc -L $tmp.summary | cut -f1 -d" "`
+		cat $tmp.summary
+		needsum=false
+	fi
+	rm -f $tmp.*
+}
 
-if true; then
+if $OPTIONS_HAVE_SECTIONS; then
+	trap "_summary; exit \$status" 0 1 2 3 15
+else
+	trap "_wrapup; exit \$status" 0 1 2 3 15
+fi
+
+for section in $HOST_OPTIONS_SECTIONS; do
+	get_next_config $section
+	init_rc
+
 	mkdir -p $RESULT_BASE
 	if [ ! -d $RESULT_BASE ]; then
 		echo "failed to create results directory $RESULTS_BASE"
@@ -372,6 +411,9 @@ if true; then
 	[ -f $check.time ] || touch $check.time
 
 	# print out our test configuration
+	if $OPTIONS_HAVE_SECTIONS; then
+		echo "SECTION       -- $section"
+	fi
 	echo "FSTYP         -- `_full_fstyp_details`"
 	echo "PLATFORM      -- `_full_platform_details`"
 	if [ ! -z "$SCRATCH_DEV" ]; then
@@ -379,7 +421,7 @@ if true; then
 	  echo "MOUNT_OPTIONS -- `_scratch_mount_options`"
 	fi
 	echo
-
+	needwrap=true
 
 	if [ ! -z "$SCRATCH_DEV" ]; then
 	  umount $SCRATCH_DEV 2>/dev/null
@@ -419,9 +461,15 @@ if true; then
 	    # Similarly, the result directory needs to replace the tests/
 	    # part of the test location.
 	    group=`dirname $seq`
-	    export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;$RESULT_BASE;"`
+	    if $OPTIONS_HAVE_SECTIONS; then
+		export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;${RESULT_BASE}/$section;"`
+		seqres="$RESULT_BASE/$section/$seqnum"
+	    else
+		export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;$RESULT_BASE;"`
+		seqres="$RESULT_BASE/$seqnum"
+	    fi
+
 	    mkdir -p $RESULT_DIR
-	    seqres="$RESULT_BASE/$seqnum"
 
 	    echo -n "$seqnum"
 
@@ -541,8 +589,10 @@ if true; then
 
 	    seq="after_$seqnum"
 	done
-fi
+	_wrapup
+	echo
+done
 
 interrupt=false
-status=`expr $n_bad`
+status=`expr $sum_bad`
 exit
