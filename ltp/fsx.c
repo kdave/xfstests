@@ -90,11 +90,12 @@ int			logcount = 0;	/* total ops */
 #define OP_MAX_LITE	4
 
 /* !lite operations */
-#define OP_TRUNCATE	4
-#define OP_FALLOCATE	5
-#define OP_PUNCH_HOLE	6
-#define OP_ZERO_RANGE	7
-#define OP_MAX_FULL	8
+#define OP_TRUNCATE		4
+#define OP_FALLOCATE		5
+#define OP_PUNCH_HOLE		6
+#define OP_ZERO_RANGE		7
+#define OP_COLLAPSE_RANGE	8
+#define OP_MAX_FULL		9
 
 /* operation modifiers */
 #define OP_CLOSEOPEN	100
@@ -111,6 +112,7 @@ char	*temp_buf;			/* a pointer to the current data */
 char	*fname;				/* name of our test file */
 int	fd;				/* fd for our test file */
 
+blksize_t	block_size = 0;
 off_t		file_size = 0;
 off_t		biggest = 0;
 char		state[256];
@@ -142,6 +144,7 @@ int     mapped_writes = 1;              /* -W flag disables */
 int     fallocate_calls = 1;            /* -F flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int     zero_range_calls = 1;           /* -z flag disables */
+int	collapse_range_calls = 1;	/* -C flag disables */
 int 	mapped_reads = 1;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -321,12 +324,20 @@ logdump(void)
 				prt("\t******PPPP");
 			break;
 		case OP_ZERO_RANGE:
-			prt("ZERO    0x%x thru 0x%x\t(0x%x bytes)",
+			prt("ZERO     0x%x thru 0x%x\t(0x%x bytes)",
 			    lp->args[0], lp->args[0] + lp->args[1] - 1,
 			    lp->args[1]);
 			if (badoff >= lp->args[0] && badoff <
 						     lp->args[0] + lp->args[1])
 				prt("\t******ZZZZ");
+			break;
+		case OP_COLLAPSE_RANGE:
+			prt("COLLAPSE 0x%x thru 0x%x\t(0x%x bytes)",
+			    lp->args[0], lp->args[0] + lp->args[1] - 1,
+			    lp->args[1]);
+			if (badoff >= lp->args[0] && badoff <
+						     lp->args[0] + lp->args[1])
+				prt("\t******CCCC");
 			break;
 		case OP_SKIPPED:
 			prt("SKIPPED (no operation)");
@@ -949,6 +960,58 @@ do_zero_range(unsigned offset, unsigned length)
 }
 #endif
 
+#ifdef FALLOC_FL_COLLAPSE_RANGE
+void
+do_collapse_range(unsigned offset, unsigned length)
+{
+	unsigned end_offset;
+	int mode = FALLOC_FL_COLLAPSE_RANGE;
+
+	if (length == 0) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping zero length collapse range\n");
+		log4(OP_SKIPPED, OP_COLLAPSE_RANGE, offset, length);
+		return;
+	}
+
+	end_offset = offset + length;
+	if ((loff_t)end_offset >= file_size) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping collapse range behind EOF\n");
+		log4(OP_SKIPPED, OP_COLLAPSE_RANGE, offset, length);
+		return;
+	}
+
+	log4(OP_COLLAPSE_RANGE, offset, length, 0);
+
+	if (testcalls <= simulatedopcount)
+		return;
+
+	if ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug && (monitorstart == -1 || monitorend == -1 ||
+		      end_offset <= monitorend))) {
+		prt("%lu collapse\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+			offset, offset+length, length);
+	}
+	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
+		prt("collapse range: %x to %x\n", offset, length);
+		prterr("do_collapse_range: fallocate");
+		report_failure(161);
+	}
+
+	memmove(good_buf + offset, good_buf + end_offset,
+		file_size - end_offset);
+	file_size -= length;
+}
+
+#else
+void
+do_collapse_range(unsigned offset, unsigned length)
+{
+	return;
+}
+#endif
+
 #ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
@@ -1123,6 +1186,12 @@ test(void)
 			goto out;
 		}
 		break;
+	case OP_COLLAPSE_RANGE:
+		if (!collapse_range_calls) {
+			log4(OP_SKIPPED, OP_COLLAPSE_RANGE, offset, size);
+			goto out;
+		}
+		break;
 	}
 
 	switch (op) {
@@ -1164,6 +1233,16 @@ test(void)
 	case OP_ZERO_RANGE:
 		TRIM_OFF_LEN(offset, size, file_size);
 		do_zero_range(offset, size);
+		break;
+	case OP_COLLAPSE_RANGE:
+		TRIM_OFF_LEN(offset, size, file_size - 1);
+		offset = offset & ~(block_size - 1);
+		size = size & ~(block_size - 1);
+		if (size == 0) {
+			log4(OP_SKIPPED, OP_COLLAPSE_RANGE, offset, size);
+			goto out;
+		}
+		do_collapse_range(offset, size);
 		break;
 	default:
 		prterr("test: unknown operation");
@@ -1224,6 +1303,9 @@ usage(void)
 #endif
 #ifdef FALLOC_FL_ZERO_RANGE
 "	-z: Do not use zero range calls\n"
+#endif
+#ifdef FALLOC_FL_COLLAPSE_RANGE
+"	-C: Do not use collapse range calls\n"
 #endif
 "	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
@@ -1399,6 +1481,7 @@ main(int argc, char **argv)
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
+	struct stat statbuf;
 
 	goodfile[0] = 0;
 	logfile[0] = 0;
@@ -1410,7 +1493,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FHzLN:OP:RS:WZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FHzCLN:OP:RS:WZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -1513,6 +1596,9 @@ main(int argc, char **argv)
 		case 'z':
 			zero_range_calls = 0;
 			break;
+		case 'C':
+			collapse_range_calls = 0;
+			break;
 		case 'L':
 		        lite = 1;
 			break;
@@ -1579,6 +1665,11 @@ main(int argc, char **argv)
 		prterr(fname);
 		exit(91);
 	}
+	if (fstat(fd, &statbuf)) {
+		prterr("check_size: fstat");
+		exit(91);
+	}
+	block_size = statbuf.st_blksize;
 #ifdef XFS
 	if (prealloc) {
 		xfs_flock64_t	resv = { 0 };
@@ -1665,6 +1756,8 @@ main(int argc, char **argv)
 						  FALLOC_FL_KEEP_SIZE);
 	if (zero_range_calls)
 		zero_range_calls = test_fallocate(FALLOC_FL_ZERO_RANGE);
+	if (collapse_range_calls)
+		collapse_range_calls = test_fallocate(FALLOC_FL_COLLAPSE_RANGE);
 
 	while (numops == -1 || numops--)
 		test();
