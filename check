@@ -394,6 +394,7 @@ fi
 
 for section in $HOST_OPTIONS_SECTIONS; do
 	OLD_FSTYP=$FSTYP
+	OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
 	get_next_config $section
 
 	mkdir -p $RESULT_BASE
@@ -422,6 +423,13 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			exit 1
 		fi
 		_prepare_test_list
+	elif [ "$OLD_MOUNT_OPTIONS" != "$MOUNT_OPTIONS" ]; then
+		umount $TEST_DEV 2> /dev/null
+		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
+		if [ $? -ne 1 ]; then
+			echo $out
+			exit 1
+		fi
 	fi
 
 	init_rc
