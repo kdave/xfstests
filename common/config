@@ -372,10 +372,15 @@ get_next_config() {
 	unset MOUNT_OPTIONS
 	unset MKFS_OPTIONS
 	unset FSCK_OPTIONS
+	# We might have deduced SCRATCH_DEV from the SCRATCH_DEV_POOL in the previous
+	# run, so we have to unset it now.
+	if [ "$SCRATCH_DEV_NOT_SET" == "true" ]; then
+		unset SCRATCH_DEV
+	fi
 
 	parse_config_section $1
 
-	if [ -n "$OLD_FSTYP" ] && [ $OLD_FSTYP != $FSTYP ]; then
+	if [ ! -z "$OLD_FSTYP" ] && [ $OLD_FSTYP != $FSTYP ]; then
 		[ -z "$MOUNT_OPTIONS" ] && _mount_opts
 		[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 		[ -z "$FSCK_OPTIONS" ] && _fsck_opts
@@ -423,6 +428,7 @@ get_next_config() {
 		fi
 		SCRATCH_DEV=`echo $SCRATCH_DEV_POOL | awk '{print $1}'`
 		export SCRATCH_DEV
+		export SCRATCH_DEV_NOT_SET=true
 	fi
 
 	echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
