@@ -297,11 +297,6 @@ _fsck_opts()
 	esac
 }
 
-[ -z "$FSTYP" ] && export FSTYP=xfs
-[ -z "$MOUNT_OPTIONS" ] && _mount_opts
-[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
-[ -z "$FSCK_OPTIONS" ] && _fsck_opts
-
 known_hosts()
 {
 	[ "$HOST_CONFIG_DIR" ] || HOST_CONFIG_DIR=`pwd`/configs
@@ -446,6 +441,19 @@ get_next_config() {
 if [ -z "$CONFIG_INCLUDED" ]; then
 	get_next_config `echo $HOST_OPTIONS_SECTIONS | cut -f1 -d" "`
 	export CONFIG_INCLUDED=true
+
+	# Autodetect fs type based on what's on $TEST_DEV unless it's been set
+	# externally
+	if [ -z "$FSTYP" ] && \
+	   [ "$HOSTOS" == "Linux" -o "$OSTYPE" == "linux-gnu" ] && \
+	   [ ! -z "$TEST_DEV" ]; then
+		FSTYP=`blkid -c /dev/null -s TYPE -o value $TEST_DEV`
+	fi
+	FSTYP=${FSTYP:=xfs}
+	export FSTYP
+	[ -z "$MOUNT_OPTIONS" ] && _mount_opts
+	[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
+	[ -z "$FSCK_OPTIONS" ] && _fsck_opts
 fi
 
 # make sure this script returns success
