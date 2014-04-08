@@ -360,6 +360,10 @@ parse_config_section() {
 }
 
 get_next_config() {
+	if [ ! -z "$CONFIG_INCLUDED" ] && ! $OPTIONS_HAVE_SECTIONS; then
+		return 0
+	fi
+
 	local OLD_FSTYP=$FSTYP
 	local OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
 	local OLD_MKFS_OPTIONS=$MKFS_OPTIONS
@@ -414,10 +418,11 @@ get_next_config() {
 	# to SCRATCH_DEV and rest to SCRATCH_DEV_POOL to maintain the backward compatibility
 	if [ ! -z "$SCRATCH_DEV_POOL" ]; then
 		if [ ! -z "$SCRATCH_DEV" ]; then
-			echo "common/config: Error: \$SCRATCH_DEV should be unset when \$SCRATCH_DEV_POOL is set"
+			echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) should be unset when \$SCRATCH_DEV_POOL ($SCRATCH_DEV_POOL) is set"
 			exit 1
 		fi
 		SCRATCH_DEV=`echo $SCRATCH_DEV_POOL | awk '{print $1}'`
+		export SCRATCH_DEV
 	fi
 
 	echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
