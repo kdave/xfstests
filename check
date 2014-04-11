@@ -75,6 +75,7 @@ check options
     -T			output timestamps
     -r			randomize test order
     --large-fs		optimise scratch device for large filesystems
+    -s section		run only specified section from config file
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -221,7 +222,7 @@ while [ $# -gt 0 ]; do
 			done
 		done
 		;;
-
+	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
 	-l)	diff="diff" ;;
 	-udiff)	diff="$diff -u" ;;
 
@@ -388,6 +389,19 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	OLD_FSTYP=$FSTYP
 	OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
 	get_next_config $section
+
+	# Do we need to run only some sections ?
+	if [ ! -z "$RUN_SECTION" ]; then
+		skip=true
+		for s in $RUN_SECTION; do
+			if [ $section == $s ]; then
+				skip=false
+			fi
+		done
+		if $skip; then
+			continue
+		fi
+	fi
 
 	mkdir -p $RESULT_BASE
 	if [ ! -d $RESULT_BASE ]; then
