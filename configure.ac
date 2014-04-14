@@ -76,6 +76,8 @@ in
 		;;
 esac
 
+AC_CHECK_FUNCS([renameat2])
+
 AC_CONFIG_HEADER(include/config.h)
 AC_CONFIG_FILES([include/builddefs])
 AC_OUTPUT

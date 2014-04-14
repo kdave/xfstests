@@ -1,0 +1,129 @@
+######
+#
+# renameat2 helpers
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Miklos Szeredi.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+#
+# Setup source or dest
+#
+_setup_one()
+{
+	local path=$1
+	local type=$2
+
+	case $type in
+		none)	;;
+		regu)	echo foo > $path;;
+		symb)	ln -s foo $path;;
+		dire)	mkdir $path;;
+		tree)	mkdir $path; echo foo > $path/bar;;
+	esac
+}
+
+#
+# Cleanup source or dest
+#
+_cleanup_one()
+{
+	local path=$1
+
+	if test -d $path; then
+		rm -f $path/bar
+		rmdir $path
+	else
+		rm -f $path
+	fi
+}
+
+#
+# Check type of source or destination
+#
+_showtype_one()
+{
+	local path=$1
+
+	if test -e $path -o -h $path; then
+		if test -d $path -a -e $path/bar; then
+			echo -n "tree"
+		else
+			echo -n `stat -c %F $path | cut -b-4`
+		fi
+	else
+		echo -n "none"
+	fi
+}
+
+#
+# This runs renameat2 on all combinations of source and dest
+#
+_rename_tests_source_dest()
+{
+	local source=$1
+	local dest=$2
+	local options=$3
+
+	for stype in none regu symb dire tree; do
+		for dtype in none regu symb dire tree; do
+			echo -n "$options $stype/$dtype -> "
+			_setup_one $source $stype
+			_setup_one $dest $dtype
+			src/renameat2 $source $dest $flags
+			if test $? == 0; then
+				_showtype_one $source
+				echo -n "/"
+				_showtype_one $dest
+				echo "."
+			fi
+			_cleanup_one $source
+			_cleanup_one $dest
+		done
+	done
+}
+
+#
+# This runs _rename_tests_source_dest() for both same-directory and
+# cross-directory renames
+#
+_rename_tests()
+{
+	local testdir=$1
+	local flags=$2
+
+	#same directory renames
+	_rename_tests_source_dest $testdir/src $testdir/dst     "samedir "
+
+	#cross directory renames
+	mkdir $testdir/x $testdir/y
+	_rename_tests_source_dest $testdir/x/src $testdir/y/dst "crossdir"
+	rmdir $testdir/x $testdir/y
+}
+
+#
+# This checks whether the renameat2 syscall is supported
+#
+_requires_renameat2()
+{
+	if test ! -x src/renameat2; then
+		_notrun "renameat2 binary not found"
+	fi
+	if ! src/renameat2 -t; then
+		_notrun "kernel doesn't support renameat2 syscall"
+	fi
+}
