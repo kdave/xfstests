@@ -65,9 +65,11 @@ FILEFRAG_FILTER='
 	($ext, $logical, $physical, $length) =
 		(/^\s*(\d+):\s+(\d+)..\s+\d+:\s+(\d+)..\s+\d+:\s+(\d+):/)
 	or next;
+	($flags) = /.*:\s*(\S*)$/;
 	print $physical * $blocksize, "#",
 	      $length * $blocksize, "#",
-	      $logical * $blocksize, " "'
+	      $logical * $blocksize, "#",
+	      $flags, " "'
 
 # this makes filefrag output script readable by using a perl helper.
 # output is one extent per line, with three numbers separated by '#'
@@ -230,16 +232,26 @@ workout()
 			continue;
 		fi
 		for i in $extents; do
-			physical=$i
-			length=$i
-			logical=$i
-			physical=`echo $physical | sed -e 's/#.*//'`
-			length=`echo $length | sed -e 's/[^#]+#//'`
-			length=`echo $length | sed -e 's/#.*//'`
-			logical=`echo $logical | sed -e 's/.*#//'`
-			_btrfs_inspect_check $file $physical $length $logical \
-						$snap_name
-			ret=$?
+			physical=`echo $i | cut -d '#' -f 1`
+			length=`echo $i | cut -d '#' -f 2`
+			logical=`echo $i | cut -d '#' -f 3`
+			flags=`echo $i | cut -d '#' -f 4`
+			# Skip inline extents, otherwise btrfs inspect-internal
+			# logical-resolve will fail (with errno ENOENT), as it
+			# can't find an extent with a start address of 0 in the
+			# extent tree.
+			if [ $physical -eq 0 ]; then
+				echo "$flags" | grep -E '(^|,)inline(,|$)' \
+					> /dev/null
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					echo "Unexpected physical address 0 for non-inline extent, file $file, flags $flags"
+				fi
+			else
+				_btrfs_inspect_check $file $physical $length \
+					$logical $snap_name
+				ret=$?
+			fi
 			if [ $ret -ne 0 ]; then
 				errcnt=`expr $errcnt + 1`
 			fi
