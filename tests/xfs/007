@@ -1,0 +1,79 @@
+#! /bin/bash
+# FS QA Test No. xfs/007
+#
+# Test to verify Q_XQUOTARM functionality.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux Irix
+
+_require_scratch
+_require_xfs_quota
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+_qmount_option "uquota,gquota"
+_qmount
+
+echo "*** umount"
+umount $SCRATCH_MNT
+
+UQUOTINO=`xfs_db -c "sb 0" -c "p" $SCRATCH_DEV | grep uquotino | awk '{print $NF}'`
+GQUOTINO=`xfs_db -c "sb 0" -c "p" $SCRATCH_DEV | grep gquotino | awk '{print $NF}'` 
+
+echo "*** Usage before quotarm ***"
+xfs_db -c "inode $UQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+xfs_db -c "inode $GQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+
+_qmount
+echo "*** turn off user and group quotas"
+xfs_quota -x -c 'off -ug' $SCRATCH_MNT
+xfs_quota -x -c "remove -ug" $SCRATCH_MNT
+echo "*** umount"
+umount $SCRATCH_MNT
+
+echo "*** Usage after quotarm ***"
+xfs_db -c "inode $UQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+xfs_db -c "inode $GQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+
+# success, all done
+status=0
+exit
