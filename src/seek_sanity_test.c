@@ -157,7 +157,7 @@ static int do_create(const char *filename)
 	return fd;
 }
 
-static int do_lseek(int testnum, int subtest, int fd, int filsz, int origin,
+static int do_lseek(int testnum, int subtest, int fd, off_t filsz, int origin,
 		    off_t set, off_t exp)
 {
 	off_t pos, exp2;
@@ -203,7 +203,7 @@ static int huge_file_test(int fd, int testnum, off_t filsz)
 {
 	char *buf = NULL;
 	int bufsz = alloc_size * 16;	/* XFS seems to round allocated size */
-	off_t off = filsz - 2*bufsz;
+	off_t off = filsz - bufsz;
 	int ret = -1;
 
 	buf = do_malloc(bufsz);
@@ -211,6 +211,7 @@ static int huge_file_test(int fd, int testnum, off_t filsz)
 		goto out;
 	memset(buf, 'a', bufsz);
 
+	/* |- DATA -|- HUGE HOLE -|- DATA -| */
 	ret = do_pwrite(fd, buf, bufsz, 0);
 	if (ret)
 		goto out;
