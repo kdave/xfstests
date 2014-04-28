@@ -318,51 +318,6 @@ chacl m:user1:rwx file1
 chacl a::rwx file1
 set +x
 
-# we return E2BIG if hit the max acl limits on new kernel, but EINVAL
-# on old kernel. So we need to filter out the error message in order
-# to make the updated golden output works for both old and new kernels.
-_filter_largeacl()
-{
-	sed -e "s/Invalid argument/Argument list too long/"
-}
-
-#-------------------------------------------------------
-
-echo ""
-echo "=== Test out large ACLs  ==="
-touch largeaclfile
-XFS_ACL_MAX_ENTRIES=25
-num_aces_pre=`expr $XFS_ACL_MAX_ENTRIES - 1`
-num_aces_post=`expr $XFS_ACL_MAX_ENTRIES + 1`
-
-acl1=`_create_n_aces $num_aces_pre`
-acl2=`_create_n_aces $XFS_ACL_MAX_ENTRIES`
-acl3=`_create_n_aces $num_aces_post`
-acl4=`_create_n_aces 16` # Andreas G. libacl size for initial get
-acl5=`_create_n_aces 17` # 1 over A.G. libacl initial size
-
-echo "1 below xfs acl max"
-chacl $acl1 largeaclfile
-getfacl --numeric largeaclfile | _filter_aces
-
-echo "xfs acl max"
-chacl $acl2 largeaclfile
-getfacl --numeric largeaclfile | _filter_aces
-
-echo "1 above xfs acl max"
-chacl $acl3 largeaclfile 2>&1 | _filter_largeacl
-getfacl --numeric largeaclfile | _filter_aces
-
-echo "use 16 aces"
-chacl $acl4 largeaclfile
-getfacl --numeric largeaclfile | _filter_aces
-
-echo "use 17 aces"
-chacl $acl5 largeaclfile
-getfacl --numeric largeaclfile | _filter_aces
-
-#-------------------------------------------------------
-
 # success, all done
 status=0
 exit
