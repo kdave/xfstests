@@ -21,6 +21,37 @@
 #-----------------------------------------------------------------------
 # common extended attribute and ACL support
 
+# filesystems that want to test maximum supported acl counts need to
+# add support in here
+_acl_get_max()
+{
+	case $FSTYP in
+	xfs)
+		# CRC format filesystems have much larger ACL counts. The actual
+		# number is into the thousands, but testing that meany takes too
+		# long, so just test well past the old limit of 25.
+		xfs_info $TEST_DIR | _filter_mkfs > /dev/null 2> $tmp.info
+		. $tmp.info
+		rm $tmp.info
+		if [ $_fs_has_crcs -eq 0 ]; then
+			echo 25
+		else
+			echo 5461
+		fi
+		;;
+	*)
+		echo 0
+		;;
+	esac
+}
+
+_require_acl_get_max()
+{
+	if [ $(_acl_get_max) -eq 0 ]; then
+		_notrun "$FSTYP does not define maximum ACL count"
+	fi
+}
+
 # pick three unused user/group ids, store them as $acl[1-3]
 #
 _acl_setup_ids()

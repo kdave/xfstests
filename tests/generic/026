@@ -1,0 +1,132 @@
+#! /bin/bash
+# FS QA Test No. generic/026
+#
+# Test out ACL count limits
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2014 Red hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+runas=$here/src/runas
+status=1	# FAILure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    [ -n "$TEST_DIR" ] && rm -rf $TEST_DIR/$seq.dir1
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_need_to_be_root
+_acl_setup_ids
+_require_acls
+_require_acl_get_max
+
+[ -x $runas ] || _notrun "$runas executable not found"
+
+rm -f $seqres.full
+
+# get dir
+cd $TEST_DIR
+rm -rf $seq.dir1
+mkdir $seq.dir1
+cd $seq.dir1
+
+# we return E2BIG if hit the max acl limits on new kernel, but EINVAL
+# on old kernel. So we need to filter out the error message in order
+# to make the updated golden output works for both old and new kernels.
+_filter_largeacl()
+{
+	sed -e "s/Invalid argument/Argument list too long/"
+}
+
+# filter all the non-ace stuff from the acl output so the count is
+# correct. Note that this assumes that _create_n_aces always creates rwx acls.
+_filter_acls()
+{
+	_filter_aces | grep ':rwx'
+}
+
+# store the output in seqres.full, then run again an count and filter the
+# output.
+check_acls()
+{
+	_acl=$1
+	_count=$2
+
+	chacl $_acl largeaclfile 2>&1 | _filter_largeacl
+	getfacl --numeric largeaclfile | _filter_aces \
+		>> $seqres.full 2> /dev/null
+	nacls=`getfacl --numeric largeaclfile | _filter_acls | wc -l`
+	if [ $nacls -ne $_count ]; then
+		echo Wrong ACL count - $nacls != $_count
+	fi
+}
+
+
+echo ""
+echo "=== Test out large ACLs  ==="
+touch largeaclfile
+
+ACL_MAX_ENTRIES=$(_acl_get_max)
+num_aces_pre=$((ACL_MAX_ENTRIES - 1))
+num_aces_post=$((ACL_MAX_ENTRIES + 1))
+
+acl1=`_create_n_aces $num_aces_pre`
+acl2=`_create_n_aces $ACL_MAX_ENTRIES`
+acl3=`_create_n_aces $num_aces_post`
+acl4=`_create_n_aces 16` # Andreas G. libacl size for initial get
+acl5=`_create_n_aces 17` # 1 over A.G. libacl initial size
+
+echo "1 below acl max"
+check_acls $acl1 $num_aces_pre
+
+echo "acl max"
+check_acls $acl2 $ACL_MAX_ENTRIES
+
+# we expect the ACL change to fail, so the old ACLs should remain on the
+# file. Hence the expected ACL count is XFS_ACL_MAX_ENTRIES, not num_aces_post.
+echo "1 above acl max"
+check_acls $acl3 $ACL_MAX_ENTRIES
+
+echo "use 16 aces"
+check_acls $acl4 16
+
+echo "use 17 aces"
+check_acls $acl5 17
+
+# success, all done
+status=0
+exit
