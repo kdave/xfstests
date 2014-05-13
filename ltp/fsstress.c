@@ -2230,7 +2230,7 @@ do_fallocate(int opno, long r, int mode)
 	 * Collapse range requires off and len to be block aligned, make it
 	 * more likely to be the case.
 	 */
-	if (FALLOC_FL_COLLAPSE_RANGE && (opno % 2)) {
+	if ((mode & FALLOC_FL_COLLAPSE_RANGE) && (opno % 2)) {
 		off = ((off + stb.st_blksize - 1) & ~(stb.st_blksize - 1));
 		len = ((len + stb.st_blksize - 1) & ~(stb.st_blksize - 1));
 	}
