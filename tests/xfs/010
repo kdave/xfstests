@@ -1,0 +1,133 @@
+#!/bin/bash
+# FS QA Test No. xfs/010
+#
+# Test xfs_repair of the free inode btree (finobt). Make a couple targeted
+# corruptions and verify that xfs_repair detects and repairs the filesystem to
+# a consistent state.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/repair
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_sparse_inode_populate()
+{
+	dir=$1
+	count=$2
+
+	for i in $(seq 0 $count)
+	do
+		touch $dir/$i
+	done
+
+	# Inode chunks are allocated 64 inodes at a time. If we remove 1 out of
+	# every 32 we allocated above, we'll end up leaving an inode or two free
+	# in each chunk. This ensures that most records are inserted into the
+	# finobt.
+	for i in $(seq 0 32 $count)
+	do
+		rm -f $dir/$i
+	done
+}
+
+_filter_dbval()
+{
+	awk '{ print $3 }'
+}
+
+_corrupt_finobt_records()
+{
+	dev=$1
+
+	# determine the root block of the finobt
+	free_root=`$XFS_DB_PROG -c "agi 0" -c "p free_root" $dev |
+			_filter_dbval`
+
+	# Corrupt a freecount value. This should never exceed 64.
+	$XFS_DB_PROG -x -c "fsb $free_root" -c "type inobt" \
+		-c "write recs[1].freecount 70" $dev
+
+	# Create a corrupted non-free record, which should never appear in the
+	# finobt.
+	$XFS_DB_PROG -x -c "fsb $free_root" -c "type inobt" \
+		 -c "write recs[2].freecount 0" $dev
+	$XFS_DB_PROG -x -c "fsb $free_root" -c "type inobt" \
+		-c "write recs[2].free 0" $dev
+}
+
+_corrupt_finobt_root()
+{
+	dev=$1
+
+	# nuke the agi finobt root fields
+	$XFS_DB_PROG -x -c "agi 0" -c "write free_root 0" $dev
+	$XFS_DB_PROG -x -c "agi 0" -c "write free_level 0" $dev
+}
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_xfs_mkfs_finobt
+_require_xfs_finobt
+
+rm -f $seqres.full
+
+_scratch_mkfs_xfs "-m crc=1,finobt=1 -d agcount=2" | _filter_mkfs 2>$seqres.full
+
+# sparsely populate the fs such that we create records with free inodes
+_scratch_mount
+_sparse_inode_populate $SCRATCH_MNT 999
+umount $SCRATCH_MNT
+
+# corrupt some finobt records
+_corrupt_finobt_records $SCRATCH_DEV
+
+# repair should detect the inconsistencies
+_scratch_xfs_repair 2>&1 | _filter_repair
+_check_scratch_fs
+
+# nuke the finobt root, repair will have to regenerate from the inobt
+_corrupt_finobt_root $SCRATCH_DEV
+
+_scratch_xfs_repair 2>&1 | _filter_repair
+_check_scratch_fs
+
+status=0
+exit
