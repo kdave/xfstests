@@ -1,0 +1,155 @@
+#!/bin/bash
+# FS QA Test No. xfs/013
+#
+# Exercise the free inode btree (finobt). XFS allocates physical inodes in
+# chunks of 64. Inode records with at least one free inode are stored in the
+# finobt to optimize free inode lookup. This test runs a workload that creates
+# and modifies a sparsely allocated set of inodes in combination with an
+# fsstress workload.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_cleanup()
+{
+	killall fsstress 2>/dev/null
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_create()
+{
+	dir=$1
+	count=$2
+
+	mkdir -p $dir
+	for i in $(seq 0 $count)
+	do
+		touch $dir/$i
+	done
+}
+
+_rand_replace()
+{
+	dir=$1
+	count=$2
+
+	# replace 5% of the dataset
+	for i in $(seq 0 $((count / 20)))
+	do
+		file=$((RANDOM % count))
+		rm -f $dir/$file
+		touch $dir/$file
+	done
+}
+
+_cleaner()
+{
+	dir=$1
+	iters=$2
+	mindirs=$3
+
+	iters=$((iters - mindirs))
+
+	for i in $(seq 1 $iters)
+	do
+		need=$dir/dir$((i + mindirs))
+		while [ ! -e $need ]
+		do
+			sleep 3
+		done
+
+		rm -rf $dir/dir$i
+	done
+}
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_xfs_mkfs_finobt
+_require_xfs_finobt
+
+rm -f $seqres.full
+
+_scratch_mkfs_xfs "-m crc=1,finobt=1 -d agcount=2" | \
+	_filter_mkfs 2>> $seqres.full
+_scratch_mount
+
+COUNT=20000	# number of files per directory
+LOOPS=15	# last loop iteration
+MINDIRS=2	# number of dirs for the cleaner to leave trailing behind the
+		# most recent (no less than 2 to prevent an rm from trampling a
+		# clone)
+
+# create initial directory
+_create $SCRATCH_MNT/dir1 $COUNT
+
+# start background cleaner to remove old directories as new ones are created
+_cleaner $SCRATCH_MNT $LOOPS $MINDIRS &
+
+# start a background stress workload on the fs
+$FSSTRESS_PROG -d $SCRATCH_MNT/fsstress -w -n 9999999 -p 2 -S t \
+	>> $seqres.full 2>&1 &
+
+# Each cycle clones the current directory and makes a random file replacement
+# pass on the new directory. The directory is copied to the next using hard
+# links. The replacement pass then randomly removes and replaces ~5% of the
+# content in the directory. Files replaced as such are effectively marked to be
+# freed by the background cleaner as it moves forward and removes all of the
+# previous hard links to the inode. Over several iterations, this workload
+# creates a sparsely located set of a free inodes across the set and uses the
+# finobt to allocate new inodes for replacement.
+
+for i in $(seq 1 $LOOPS)
+do
+	# hard link the content of the current directory to the next
+	cp -Rl $SCRATCH_MNT/dir$i $SCRATCH_MNT/dir$((i+1))
+
+	# do a random replacement of files in the new directory
+	_rand_replace $SCRATCH_MNT/dir$((i+1)) $COUNT
+done
+
+killall fsstress
+wait
+
+# clean out the competing fsstress allocations, then everything else
+rm -rf $SCRATCH_MNT/fsstress
+rm -rf $SCRATCH_MNT/dir*
+
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+status=0
+exit
