@@ -73,7 +73,7 @@ extern int h_errno;
        
 #define HANDLE              int
 #define INVALID_HANDLE      -1
-#define OPEN(N,F)           (open(N, F|O_CREAT|O_RDWR|O_BINARY| \
+#define OPEN(N,F)           (open(N, F|O_CREAT|O_BINARY| \
                             (D_flag ? O_DIRECT : 0), 0644))
 #define SEEK(H, O)          (lseek(H, O, SEEK_SET))
 #define READ(H, B, L)       (read(H, B, L))
@@ -512,35 +512,35 @@ static int64_t tests[][6] =
 		{27,	WRLOCK,	1,		5,		FAIL,		CLIENT,	},
 		{27,	F_CLOSE,0,		0,		PASS,		SERVER,	},
 		{27,	WRLOCK,	1,		5,		PASS,		CLIENT,	},
-		{27,	F_OPEN,	0,		0,		PASS,		SERVER,	},
+		{27,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
 		{27,	UNLOCK,	1,		5,		PASS,		CLIENT,	},
 	/* Acquire two read locks, close one file and then reopen to check that first lock still exists */
 		{28,	RDLOCK,	1,		5,		PASS,		SERVER,	},
 		{28,	RDLOCK,	1,		5,		PASS,		CLIENT,	},
 		{28,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{28,	F_OPEN,	0,		0,		PASS,		SERVER,	},
+		{28,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
 		{28,	WRLOCK,	0,		0,		FAIL,		SERVER,	},
 		{28,	UNLOCK,	1,		5,		PASS,		SERVER,	},
 #ifdef macosx
 	/* Close the opened file and open the file with SHLOCK, other client will try to open with SHLOCK too */
 		{29,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{29,	F_OPEN,	O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
+		{29,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
 		{29,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
-		{29,	F_OPEN,	O_SHLOCK|O_NONBLOCK,	0,	PASS,		CLIENT,	},
+		{29,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		CLIENT,	},
 	/* Close the opened file and open the file with SHLOCK, other client will try to open with EXLOCK */
 		{30,	F_CLOSE,0,		0,		PASS,		SERVER,	},
 		{30,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
-		{30,	F_OPEN,	O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
-		{30,	F_OPEN,	O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
+		{30,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
+		{30,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
 	/* Close the opened file and open the file with EXLOCK, other client will try to open with EXLOCK too */
 		{31,	F_CLOSE,0,		0,		PASS,		SERVER,	},
 		{31,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
-		{31,	F_OPEN,	O_EXLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
-		{31,	F_OPEN,	O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
+		{31,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
+		{31,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
 		{31,	F_CLOSE,0,		0,		PASS,		SERVER,	},
 		{31,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
-		{31,	F_OPEN,	0,		0,		PASS,		SERVER,	},
-		{31,	F_OPEN,	0,		0,		PASS,		CLIENT,	},
+		{31,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
+		{31,	F_OPEN,	O_RDWR,		0,		PASS,		CLIENT,	},
 #endif /* macosx */
 	/* indicate end of array */
 		{0,0,0,0,0,SERVER},
@@ -615,8 +615,6 @@ int do_open(int flag)
 {
     if ((f_fd = OPEN(filename, flag)) == INVALID_HANDLE) {
 	perror("shared file create");
-	if (!flag)	/* Only exit if the first open fails */
-	    exit(1);
 	closed = 0;
 	return FAIL;
 	/*NOTREACHED*/
@@ -858,7 +856,8 @@ main(int argc, char *argv[])
     }
 
     filename=argv[optind];
-    do_open(0);
+    if (do_open(O_RDWR) == FAIL)
+	exit(1);
 
     /*
      * +10 is slop for the iteration number if do_write() ... never
