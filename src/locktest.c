@@ -180,10 +180,11 @@ char *descriptions[] = {
     /* 26 */"Acquire read and write locks with overlapping ranges",
     /* 27 */"Acquire whole file write lock and then close without unlocking (and attempt a lock)",
     /* 28 */"Acquire two read locks, close and reopen the file, and test if the inital lock is still there",
+    /* 29 */"Verify that F_GETLK for F_WRLCK doesn't require that file be opened for write",
     #if defined(macosx)
-    /* 29 */"Close the opened file and open the file with SHLOCK, other client will try to open with SHLOCK too",
-    /* 30 */"Close the opened file and open the file with SHLOCK, other client will try to open with EXLOCK",
-    /* 31 */"Close the opened file and open the file with EXLOCK, other client will try to open with EXLOCK too"
+    /* 30 */"Close the opened file and open the file with SHLOCK, other client will try to open with SHLOCK too",
+    /* 31 */"Close the opened file and open the file with SHLOCK, other client will try to open with EXLOCK",
+    /* 32 */"Close the opened file and open the file with EXLOCK, other client will try to open with EXLOCK too"
     #endif
 };
 
@@ -521,26 +522,32 @@ static int64_t tests[][6] =
 		{28,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
 		{28,	WRLOCK,	0,		0,		FAIL,		SERVER,	},
 		{28,	UNLOCK,	1,		5,		PASS,		SERVER,	},
+	/* Verify that F_GETLK for F_WRLCK doesn't require that file be opened for write */
+		{29,	F_CLOSE, 0,		0,		PASS,		SERVER, },
+		{29,	F_OPEN, O_RDONLY,	0,		PASS,		SERVER, },
+		{29,	WRTEST, 0,		0,		PASS,		SERVER, },
+		{29,	F_CLOSE,0,		0,		PASS,		SERVER,	},
+		{29,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
 #ifdef macosx
 	/* Close the opened file and open the file with SHLOCK, other client will try to open with SHLOCK too */
-		{29,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{29,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
-		{29,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
-		{29,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		CLIENT,	},
-	/* Close the opened file and open the file with SHLOCK, other client will try to open with EXLOCK */
 		{30,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{30,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
 		{30,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
-		{30,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
-	/* Close the opened file and open the file with EXLOCK, other client will try to open with EXLOCK too */
+		{30,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
+		{30,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		CLIENT,	},
+	/* Close the opened file and open the file with SHLOCK, other client will try to open with EXLOCK */
 		{31,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{31,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
-		{31,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
+		{31,	F_CLOSE,0,		0,		PASS,		CLIENT,	},
+		{31,	F_OPEN,	O_RDWR|O_SHLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
 		{31,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
-		{31,	F_CLOSE,0,		0,		PASS,		SERVER,	},
-		{31,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
-		{31,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
-		{31,	F_OPEN,	O_RDWR,		0,		PASS,		CLIENT,	},
+	/* Close the opened file and open the file with EXLOCK, other client will try to open with EXLOCK too */
+		{32,	F_CLOSE,0,		0,		PASS,		SERVER,	},
+		{32,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
+		{32,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	PASS,		SERVER,	},
+		{32,	F_OPEN,	O_RDWR|O_EXLOCK|O_NONBLOCK,	0,	FAIL,		CLIENT,	},
+		{32,	F_CLOSE,0,		0,		PASS,		SERVER,	},
+		{32,	F_CLOSE,0,		0,		FAIL,		CLIENT,	},
+		{32,	F_OPEN,	O_RDWR,		0,		PASS,		SERVER,	},
+		{32,	F_OPEN,	O_RDWR,		0,		PASS,		CLIENT,	},
 #endif /* macosx */
 	/* indicate end of array */
 		{0,0,0,0,0,SERVER},
