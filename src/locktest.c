@@ -110,6 +110,8 @@ static int	D_flag = 0;
 #define		UNLOCK	2
 #define		F_CLOSE	3
 #define		F_OPEN	4
+#define		WRTEST	5
+#define		RDTEST	6
 
 #define		PASS 	1
 #define		FAIL	0
@@ -629,14 +631,14 @@ int do_open(int flag)
     return PASS;
 }
 
-int do_lock(int type, int start, int length)
+static int do_lock(int cmd, int type, int start, int length)
 {
     int ret;
     int filedes = f_fd;
     struct flock fl;
 
     if(debug > 1) {
-	fprintf(stderr, "do_lock: start=%d, length=%d\n", start, length);
+	fprintf(stderr, "do_lock: cmd=%d type=%d start=%d, length=%d\n", cmd, type, start, length);
     }
 
     if (f_fd < 0)
@@ -650,38 +652,9 @@ int do_lock(int type, int start, int length)
 
     errno = 0;
 
-    ret = fcntl(filedes, F_SETLK, &fl);
+    ret = fcntl(filedes, cmd, &fl);
     saved_errno = errno;	    
 
-    if(debug > 1 && ret)
-	fprintf(stderr, "do_lock: ret = %d, errno = %d (%s)\n", ret, errno, strerror(errno));
-
-    return(ret==0?PASS:FAIL);
-}
-
-int do_unlock(int start, int length)
-{
-    int ret;
-    int filedes = f_fd;
-    struct flock fl;
-
-    if(debug > 1) {
-	fprintf(stderr, "do_unlock: start=%d, length=%d\n", start, length);
-    }
-
-    if (f_fd < 0)
-	return f_fd;
-    
-    fl.l_start = start;
-    fl.l_len = length;
-    fl.l_whence = SEEK_SET;
-    fl.l_pid = getpid();
-    fl.l_type = F_UNLCK;
-
-    errno = 0;
-
-    ret = fcntl(filedes, F_SETLK, &fl);
-    saved_errno = errno;	    
     if(debug > 1 && ret)
 	fprintf(stderr, "do_lock: ret = %d, errno = %d (%s)\n", ret, errno, strerror(errno));
 
@@ -1016,19 +989,25 @@ main(int argc, char *argv[])
 		if(tests[index][TEST_NUM] != 0) {
 		    switch(tests[index][COMMAND]) {
 			case WRLOCK:
-			    result = do_lock(F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
+			    result = do_lock(F_SETLK, F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
 			    break;
 			case RDLOCK:
-			    result = do_lock(F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
+			    result = do_lock(F_SETLK, F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
 			    break;
 			case UNLOCK:
-			    result = do_unlock(tests[index][OFFSET], tests[index][LENGTH]);
+			    result = do_lock(F_SETLK, F_UNLCK, tests[index][OFFSET], tests[index][LENGTH]);
 			    break;
 			case F_CLOSE:
 			    result = do_close();
 			    break;
 			case F_OPEN:
 			    result = do_open(tests[index][FLAGS]);
+			    break;
+			case WRTEST:
+			    result = do_lock(F_GETLK, F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
+			    break;
+			case RDTEST:
+			    result = do_lock(F_GETLK, F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
 			    break;
 		    }
 		    if( result != tests[index][RESULT]) {
@@ -1126,19 +1105,25 @@ main(int argc, char *argv[])
 	    ctl.length = tests[index][LENGTH];
 	    switch(tests[index][COMMAND]) {
 		case WRLOCK:
-		    result = do_lock(F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
+		    result = do_lock(F_SETLK, F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
 		    break;
 		case RDLOCK:
-		    result = do_lock(F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
+		    result = do_lock(F_SETLK, F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
 		    break;
 		case UNLOCK:
-		    result = do_unlock(tests[index][OFFSET], tests[index][LENGTH]);
+		    result = do_lock(F_SETLK, F_UNLCK, tests[index][OFFSET], tests[index][LENGTH]);
 		    break;
 		case F_CLOSE:
 		    result = do_close();
 		    break;
 		case F_OPEN:
 		    result = do_open(tests[index][FLAGS]);
+		    break;
+		case WRTEST:
+		    result = do_lock(F_GETLK, F_WRLCK, tests[index][OFFSET], tests[index][LENGTH]);
+		    break;
+		case RDTEST:
+		    result = do_lock(F_GETLK, F_RDLCK, tests[index][OFFSET], tests[index][LENGTH]);
 		    break;
 	    }
 	    if( result != tests[index][RESULT] ) {
