@@ -96,8 +96,6 @@ static int	debug = 0;
 static int	server = 1;
 static int	maxio = 8192;
 static int	port = 7890;
-static int	reopen=0;
-static int	closed=0;
 static int 	testnumber = -1;
 static int	saved_errno = 0;
 
@@ -615,12 +613,9 @@ int do_open(int flag)
 {
     if ((f_fd = OPEN(filename, flag)) == INVALID_HANDLE) {
 	perror("shared file create");
-	closed = 0;
 	return FAIL;
 	/*NOTREACHED*/
     }
-
-    closed = 0;
 
 #ifdef __sun
     if (D_flag) {
@@ -701,12 +696,13 @@ int do_close(void)
 
     errno =0;
     CLOSE(f_fd);
+    f_fd = INVALID_HANDLE;
 
     saved_errno = errno;	    
 	
     if (errno)
 	return FAIL;
-    return(PASS);
+    return PASS;
 }
 
 void
@@ -778,7 +774,7 @@ void recv_ctl(void)
 void
 cleanup(void)
 {
-    if (f_fd>=0 && !reopen && !closed)
+    if (f_fd>=0)
         CLOSE(f_fd);
     
     if (c_fd>=0)
