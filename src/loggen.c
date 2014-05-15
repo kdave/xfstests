@@ -25,9 +25,16 @@
  *                                                  - dxm 29/09/00
  */
 
+#include <config.h>
+
 #include <xfs/libxfs.h>
+#ifdef HAVE_XFS_XFS_LOG_FORMAT_H
+#include <xfs/xfs_log_format.h>
+#define XFS_TRANS_MAGIC	XFS_TRANS_HEADER_MAGIC
+#else /* HAVE_XFS_XFS_LOG_FORMAT_H */
 #include <xfs/xfs_log.h>
 #include <xfs/xfs_log_priv.h>
+#endif /* HAVE_XFS_XFS_LOG_FORMAT_H */
 
 #ifndef ASSIGN_ANY_LSN_DISK
 #define ASSIGN_ANY_LSN_DISK(lsn,cycle,block)  \

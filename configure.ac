@@ -26,13 +26,14 @@ AC_HEADER_STDC
 			sys/types.h		\
 			strings.h		\
 			err.h			\
-			linux/falloc.h
-    ])
-    AC_CHECK_HEADERS([	sys/fs/xfs_fsops.h	\
+			linux/falloc.h		\
+			sys/fs/xfs_fsops.h	\
 			sys/fs/xfs_itable.h	\
 			xfs/platform_defs.h	\
 			btrfs/ioctl.h		\
     ])
+
+AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[#include <xfs/libxfs.h>])
 
 AC_PACKAGE_NEED_UUIDCOMPARE
 
