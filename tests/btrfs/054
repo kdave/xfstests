@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test No. btrfs/054
+#
+# Regression test for a btrfs incremental send issue where the difference
+# between the snapshots used by the incremental send consists of one of
+# these cases:
+#
+# 1) First snapshot has a directory with name X and in the second snapshot
+#    that directory doesn't exist anymore but a subvolume/snapshot with
+#    the same name (X) exists;
+#
+# 2) First snapshot has a subvolume/snapshot with name X and in the second
+#    snapshot that subvolume/snapshot doesn't exist anymore (might have been
+#    replaced by a directory with the same name or not).
+#
+# This issue is fixed by the following linux kernel btrfs patches:
+#
+#    Btrfs: send, don't error in the presence of subvols/snapshots
+#    Btrfs: set dead flag on the right root when destroying snapshot
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Filipe Manana.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    rm -fr $send_files_dir
+    rm -fr $tmp
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_need_to_be_root
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+mkdir $SCRATCH_MNT/testdir
+_run_btrfs_util_prog subvolume create $SCRATCH_MNT/first_subvol
+
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+
+# Replace the directory testdir with a subvolume that has the same name.
+rmdir $SCRATCH_MNT/testdir
+_run_btrfs_util_prog subvolume create $SCRATCH_MNT/testdir
+
+# Delete the subvolume first_subvol and create a directory with the same name.
+_run_btrfs_util_prog subvolume delete $SCRATCH_MNT/first_subvol
+mkdir $SCRATCH_MNT/first_subvol
+
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+
+_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
+_run_btrfs_util_prog send $SCRATCH_MNT/mysnap2 -p $SCRATCH_MNT/mysnap1 \
+	-f $send_files_dir/2.snap
+
+_scratch_unmount
+_check_scratch_fs
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+[ -e $SCRATCH_MNT/first_subvol ] && \
+	echo "Subvolume first_subvol was not supposed to be replicated by full send!"
+
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+[ -e $SCRATCH_MNT/testdir ] && \
+	echo "Directory testdir was supposed to be deleted after incremental send!"
+
+_check_scratch_fs
+
+status=0
+exit
