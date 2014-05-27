@@ -1,0 +1,107 @@
+#! /bin/bash
+# FS QA Test No. generic/027
+#
+# Run 8 processes writing 1k files to seperate files in seperate dirs to
+# hit ENOSPC on small fs with little free space. Loop for 100 iterations.
+#
+# Regression test for
+# 34cf865 ext4: fix deadlock when writing in ENOSPC conditions
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+create_file()
+{
+	local dir=$1
+	local direct=$2
+	local i=0
+
+	mkdir -p $dir
+	while $XFS_IO_PROG -f $direct -c "pwrite 0 1k" $dir/file_$i >/dev/null 2>&1; do
+		let i=$i+1
+	done
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >>$seqres.full 2>&1
+_scratch_mount
+
+echo "Reserve 2M space" >>$seqres.full
+$XFS_IO_PROG -f -c "pwrite 0 2m" $SCRATCH_MNT/testfile >>$seqres.full 2>&1
+echo "Fulfill the fs" >>$seqres.full
+$XFS_IO_PROG -f -c "pwrite 0 254m" $SCRATCH_MNT/bigfile >>$seqres.full 2>&1
+echo "Remove reserved file" >>$seqres.full
+rm -f $SCRATCH_MNT/testfile
+
+loop=100
+# btrfs takes much longer time, reduce the loop count
+if [ "$FSTYP" == "btrfs" ]; then
+	loop=10
+fi
+
+dir=$SCRATCH_MNT/testdir
+echo -n "iteration" >>$seqres.full
+i=1
+while [ $i -le $loop ]; do
+	echo -n " $i" >>$seqres.full
+	nr_worker=8
+	while [ $nr_worker -gt 0 ]; do
+		# half buffered I/O half direct I/O
+		if [ `expr $nr_worker % 2` -eq 0 ]; then
+			create_file $dir/$nr_worker -d >>$seqres.full &
+		else
+			create_file $dir/$nr_worker >>$seqres.full &
+		fi
+		let nr_worker=$nr_worker-1
+	done
+	wait
+	rm -rf $dir
+	let i=$i+1
+done
+_scratch_unmount
+_check_scratch_fs
+
+status=0
+exit
