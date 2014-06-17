@@ -73,7 +73,7 @@ main(int argc, char **argv)
 		perror("open");
 		exit(1);
 	}
-	memset(writebuffer, 'A', sizeof(writebuffer));
+	memset(writebuffer, 'A', bsize);
 
 	unlink(filename);
 	writefd = open(filename, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
@@ -111,7 +111,7 @@ main(int argc, char **argv)
 		char *p;
 		int numerrors;
 
-		if (write(writefd, writebuffer, sizeof(writebuffer)) < 0) {
+		if (write(writefd, writebuffer, bsize) < 0) {
 			perror("write");
 			exit(1);
 		}
@@ -128,11 +128,11 @@ main(int argc, char **argv)
 		lseek(readfd, SEEK_SET, 0);
 		numerrors = 0;
 		for (j = 0; j < n; j++) {
-			if (read(readfd, readbuffer, sizeof(readbuffer)) < 0) {
+			if (read(readfd, readbuffer, bsize) < 0) {
 				perror("read");
 				exit(1);
 			}
-			for (i = 0; i < sizeof(readbuffer); i++) {
+			for (i = 0; i < bsize; i++) {
 				if (readbuffer[i] != 'A') {
 					fprintf(stderr,
 "errors detected in file, pos: %d (%lld+%d), nwrites: %d [val=0x%x].\n",
