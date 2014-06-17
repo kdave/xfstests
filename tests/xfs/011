@@ -1,0 +1,116 @@
+#!/bin/bash
+# FS QA Test No. xfs/011
+#
+# Test the xfs log reservation mechanism for leaks. Run an fsstress workload to
+# include a variety of fs operations, freeze the filesystem and verify that
+# there are no oustanding reservations against the log.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+
+_cleanup()
+{
+	killall -9 fsstress 2>/dev/null
+	wait
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# Use the information exported by XFS to sysfs to determine whether the log has
+# active reservations after a filesystem freeze.
+_check_scratch_log_state()
+{
+	devname=`_short_dev $SCRATCH_DEV`
+	attrpath="/sys/fs/xfs/$devname/log"
+
+	# freeze the fs to ensure data is synced and the log is flushed. this
+	# means no outstanding transactions, and thus no outstanding log
+	# reservations, should exist
+	xfs_freeze -f $SCRATCH_MNT
+
+	# the log head is exported in basic blocks and the log grant heads in
+	# bytes. convert the log head to bytes for precise comparison
+	log_head_cycle=`awk -F : '{ print $1 }' $attrpath/log_head_lsn`
+	log_head_bytes=`awk -F : '{ print $2 }' $attrpath/log_head_lsn`
+	log_head_bytes=$((log_head_bytes * 512))
+
+	for attr in "reserve_grant_head" "write_grant_head"; do
+		cycle=`cat $attrpath/$attr | awk -F : '{ print $1 }'`
+		bytes=`cat $attrpath/$attr | awk -F : '{ print $2 }'`
+
+		if [ $cycle != $log_head_cycle ] ||
+		   [ $bytes != $log_head_bytes ]
+		then
+			echo "$attr ($cycle:$bytes) does not match" \
+				"log_head_lsn ($log_head_cycle:$log_head_bytes)," \
+				"possible leak detected."
+		fi
+	done
+
+	xfs_freeze -u $SCRATCH_MNT
+}
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_freeze
+_require_xfs_sysfs log
+
+rm -f $seqres.full
+
+echo "Silence is golden."
+
+_scratch_mkfs_xfs >> $seqres.full 2>&1
+_scratch_mount
+
+_check_scratch_log_state
+
+$FSSTRESS_PROG -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t \
+	>> $seqres.full 2>&1 &
+
+iters=5
+while [ $iters -gt 0 ]; do
+	sleep 3
+	_check_scratch_log_state
+	iters=$((iters - 1))
+done
+
+killall $FSSTRESS_PROG
+wait
+
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+status=0
+exit
