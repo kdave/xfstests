@@ -2177,6 +2177,31 @@ _require_btrfs_send_stream_version()
 	fi
 }
 
+_require_btrfs_mkfs_feature()
+{
+	if [ -z $1 ]; then
+		echo "Missing feature name argument for _require_btrfs_mkfs_feature"
+		exit 1
+	fi
+	feat=$1
+	$MKFS_BTRFS_PROG -O list-all 2>&1 | \
+		grep '^[ \t]*'"$feat"'\b' > /dev/null 2>&1
+	[ $? -eq 0 ] || \
+		_notrun "Feature $feat not supported in the available version of mkfs.btrfs"
+}
+
+_require_btrfs_fs_feature()
+{
+	if [ -z $1 ]; then
+		echo "Missing feature name argument for _require_btrfs_fs_feature"
+		exit 1
+	fi
+	feat=$1
+	modprobe btrfs > /dev/null 2>&1
+	[ -e /sys/fs/btrfs/features/$feat ] || \
+		_notrun "Feature $feat not supported by the available btrfs version"
+}
+
 init_rc()
 {
 	if [ "$iam" == new ]
