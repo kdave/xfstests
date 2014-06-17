@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/vfs.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <fcntl.h>
@@ -30,6 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <linux/magic.h>
 #ifdef HAVE_BTRFS_IOCTL_H
 #include <btrfs/ioctl.h>
 #else
@@ -45,6 +47,10 @@ struct btrfs_ioctl_clone_range_args {
 #define BTRFS_IOC_CLONE       _IOW(BTRFS_IOCTL_MAGIC, 9, int)
 #define BTRFS_IOC_CLONE_RANGE _IOW(BTRFS_IOCTL_MAGIC, 13, \
 				   struct btrfs_ioctl_clone_range_args)
+#endif
+
+#ifndef BTRFS_SUPER_MAGIC
+#define BTRFS_SUPER_MAGIC    0x9123683E
 #endif
 
 static void
@@ -89,6 +95,41 @@ clone_file_range(int src_fd, int dst_fd, uint64_t src_off, uint64_t dst_off,
 	return ret;
 }
 
+static int
+cloner_check_fs_support(int src_fd, int dest_fd, unsigned int *fs_type)
+{
+	int ret;
+	struct statfs sfs;
+
+	ret = fstatfs(src_fd, &sfs);
+	if (ret != 0) {
+		printf("failed to stat source FS\n");
+		return errno;
+	}
+
+	if (sfs.f_type != BTRFS_SUPER_MAGIC) {
+		printf("unsupported source FS 0x%x\n",
+		       (unsigned int)sfs.f_type);
+		return ENOTSUP;
+	}
+
+	*fs_type = (unsigned int)sfs.f_type;
+
+	ret = fstatfs(dest_fd, &sfs);
+	if (ret != 0) {
+		printf("failed to stat destination FS\n");
+		return errno;
+	}
+
+	if (sfs.f_type != *fs_type) {
+		printf("dest FS type 0x%x does not match source 0x%x\n",
+		       (unsigned int)sfs.f_type, *fs_type);
+		return ENOTSUP;
+	}
+
+	return 0;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -102,6 +143,7 @@ main(int argc, char **argv)
 	int dst_fd;
 	int ret;
 	int opt;
+	unsigned int fs_type = 0;
 
 	while ((opt = getopt(argc, argv, "s:d:l:")) != -1) {
 		char *sval_end;
@@ -160,6 +202,11 @@ main(int argc, char **argv)
 		ret = errno;
 		printf("failed to open %s: %s\n", dst_file, strerror(errno));
 		goto err_src_close;
+	}
+
+	ret = cloner_check_fs_support(src_fd, dst_fd, &fs_type);
+	if (ret != 0) {
+		goto err_dst_close;
 	}
 
 	if (full_file) {
