@@ -2141,6 +2141,31 @@ _devmgt_add()
 	tdl=`echo ${1} | cut -d":" -f 2-|sed 's/:/ /g'`
 
 	echo ${tdl} >  /sys/class/scsi_host/host${h}/scan || _fail "Add disk failed"
+
+	# ensure the device comes online
+	dev_back_oneline=0
+	for i in `seq 1 10`; do
+		if [ -d /sys/class/scsi_device/${1}/device/block ]; then
+			dev=`ls /sys/class/scsi_device/${1}/device/block`
+			for j in `seq 1 10`;
+			do
+				stat /dev/$dev > /dev/null 2>&1
+				if [ $? -eq 0 ]; then
+					dev_back_oneline=1
+					break
+				fi
+				sleep 1
+			done
+			break
+		else
+			sleep 1
+		fi
+	done
+	if [ $dev_back_oneline -eq 0 ]; then
+		echo "/dev/$dev online failed" >> $seqres.full
+	else
+		echo "/dev/$dev is back online" >> $seqres.full
+	fi
 }
 
 _require_fstrim()
