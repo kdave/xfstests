@@ -74,6 +74,30 @@ echo "*** Usage after quotarm ***"
 xfs_db -c "inode $UQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
 xfs_db -c "inode $GQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
 
+_qmount_option "uquota,pquota"
+_qmount
+
+echo "*** umount"
+umount $SCRATCH_MNT
+
+UQUOTINO=`xfs_db -c "sb 0" -c "p" $SCRATCH_DEV | grep uquotino | awk '{print $NF}'`
+PQUOTINO=`xfs_db -c "sb 0" -c "p" $SCRATCH_DEV | grep gquotino | awk '{print $NF}'`
+
+echo "*** Usage before quotarm ***"
+xfs_db -c "inode $UQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+xfs_db -c "inode $PQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+
+_qmount
+echo "*** turn off user and project quotas"
+xfs_quota -x -c 'off -up' $SCRATCH_MNT
+xfs_quota -x -c "remove -up" $SCRATCH_MNT
+echo "*** umount"
+umount $SCRATCH_MNT
+
+echo "*** Usage after quotarm ***"
+xfs_db -c "inode $UQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+xfs_db -c "inode $PQUOTINO" -c "p core.nblocks" $SCRATCH_DEV
+
 # success, all done
 status=0
 exit
