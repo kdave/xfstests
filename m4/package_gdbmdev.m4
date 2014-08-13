@@ -45,13 +45,13 @@ AC_DEFUN([AC_PACKAGE_WANT_GDBM],
       fi
 
       found="no"
-      AC_CHECK_LIB(gdbm_compat,dbm_open,found=true,found=false)
-      AC_CHECK_LIB(gdbm_compat,dbm_fetch,,found=false)
-      AC_CHECK_LIB(gdbm_compat,dbm_store,,found=false)
-      AC_CHECK_LIB(gdbm_compat,dbm_close,,found="no")
+      AC_CHECK_LIB(gdbm_compat,dbm_open,found=true,found=false,-lgdbm)
+      AC_CHECK_LIB(gdbm_compat,dbm_fetch,,found=false,-lgdbm)
+      AC_CHECK_LIB(gdbm_compat,dbm_store,,found=false,-lgdbm)
+      AC_CHECK_LIB(gdbm_compat,dbm_close,,found="no",-lgdbm)
 
       if test $found = true ; then
-        libgdbm="${libgdbm} -lgdbm_compat"
+        libgdbm="${libgdbm} -lgdbm_compat -lgdbm"
       fi
     fi
 
