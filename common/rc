@@ -989,6 +989,55 @@ _require_scratch()
     touch ${RESULT_DIR}/require_scratch
 }
 
+# this test needs a test partition - check we're ok & unmount it
+#
+_require_test()
+{
+    case "$FSTYP" in
+	nfs*)
+                 _notrun "requires a test device"
+		 ;;
+	tmpfs)
+		if [ -z "$TEST_DEV" -o ! -d "$TEST_DIR" ];
+		then
+		    _notrun "this test requires a valid \$TEST_DIR and unique $TEST_DEV"
+		fi
+		;;
+	*)
+		 if [ -z "$TEST_DEV" -o "`_is_block_dev $TEST_DEV`" = "" ]
+		 then
+		     _notrun "this test requires a valid \$TEST_DEV"
+		 fi
+		 if [ "`_is_block_dev $SCRATCH_DEV`" = "`_is_block_dev $TEST_DEV`" ]
+		 then
+		     _notrun "this test requires a valid \$TEST_DEV"
+		 fi
+		if [ ! -d "$TEST_DIR" ]
+		then
+		     _notrun "this test requires a valid \$TEST_DIR"
+		fi
+		 ;;
+    esac
+
+    # mounted?
+    if _mount | grep -q $TEST_DEV
+    then
+        # if it's mounted, make sure its on $TEST_DIR
+        if ! _mount | grep $TEST_DEV | grep -q $TEST_DIR
+        then
+            echo "\$TEST_DEV is mounted but not on \$TEST_DIR - aborting"
+            exit 1
+        fi
+    else
+	out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
+	if [ $? -ne 1 ]; then
+		echo $out
+		exit 1
+	fi
+    fi
+    touch ${RESULT_DIR}/require_test
+}
+
 # this test needs a logdev
 #
 _require_logdev()
