@@ -1,0 +1,73 @@
+#! /bin/bash
+# FSQA Test No. 307
+#
+# Check data integrity during defrag compacting
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/defrag
+# Disable all sync operations to get higher load
+FSSTRESS_AVOID="$FSSTRESS_AVOID -ffsync=0 -fsync=0 -ffdatasync=0"
+_workout()
+{
+	echo ""
+	echo "Run fsstress"
+	out=$SCRATCH_MNT/fsstress.$$
+	args=`_scale_fsstress_args -p4 -n999 -f setattr=1 $FSSTRESS_AVOID -d $out`
+	echo "fsstress $args" >> $seqres.full
+	$FSSTRESS_PROG $args > /dev/null 2>&1
+	find $out -type f > $out.list
+	cat $out.list | xargs  md5sum > $out.md5sum
+	usage=`du -sch $out | tail -n1 | gawk '{ print $1 }'`
+	echo "Allocate donor file"
+	$XFS_IO_PROG -c "falloc 0 250M" -f $SCRATCH_MNT/donor | _filter_xfs_io
+	echo "Perform compacting"
+	cat $out.list | run_check $here/src/e4compact \
+		-i -v -f $SCRATCH_MNT/donor  >> $seqres.full 2>&1
+	echo "Check data"
+	run_check md5sum -c $out.md5sum
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_fs ext4
+_supported_os Linux
+_need_to_be_root
+_require_scratch
+_require_defrag
+
+_scratch_mkfs_sized $((512 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+_workout
+status=0
+exit
