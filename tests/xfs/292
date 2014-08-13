@@ -53,9 +53,14 @@ rm -f $fsfile
 $XFS_IO_PROG -f -c "truncate 256g" $fsfile
 
 echo "mkfs.xfs without geometry"
-mkfs.xfs -f $fsfile 2>&1 | sed -e "s:$fsfile:FILENAME:g" | grep meta-data
+mkfs.xfs -f $fsfile | _filter_mkfs 2> $tmp.mkfs > /dev/null
+grep -E 'ddev|isize|agcount|agsize' $tmp.mkfs | \
+    sed -e "s:$fsfile:FILENAME:g"
+
 echo "mkfs.xfs with cmdline geometry"
-mkfs.xfs -f -d su=16k,sw=5 $fsfile 2>&1 | sed -e "s:$fsfile:FILENAME:g" | grep meta-data
+mkfs.xfs -f -d su=16k,sw=5 $fsfile | _filter_mkfs 2> $tmp.mkfs > /dev/null
+grep -E 'ddev|isize|agcount|agsize' $tmp.mkfs | \
+    sed -e "s:$fsfile:FILENAME:g"
 
 rm -f $fsfile
 
