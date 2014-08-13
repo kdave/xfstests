@@ -1,0 +1,58 @@
+#! /bin/bash
+# FS QA Test No. xfs/020
+#
+# Test segfault issue when repairing large xfs.
+#
+# Regression test for xfsprogs commit
+# 7f2d6b8 xfs_repair: avoid segfault if reporting progress early in repair
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+    rm -f $TEST_DIR/fsfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_test
+
+echo "Silence is golden"
+
+$MKFS_PROG -t xfs -d size=60t,file,name=$TEST_DIR/fsfile >/dev/null
+$XFS_REPAIR_PROG -o ag_stride=32 -t 1 $TEST_DIR/fsfile >/dev/null 2>&1
+
+status=$?
+exit
