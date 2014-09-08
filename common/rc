@@ -2428,6 +2428,29 @@ _require_btrfs_fs_feature()
 		_notrun "Feature $feat not supported by the available btrfs version"
 }
 
+_require_test_symlinks()
+{
+	# IRIX UDF does not support symlinks
+	[ "$HOSTOS" = "IRIX" -a "$FSTYP" = 'udf' ] && \
+		_notrun "Require symlinks support"
+	target=`mktemp -p $TEST_DIR`
+	link=`mktemp -p $TEST_DIR -u`
+	ln -s `basename $target` $link
+	if [ "$?" -ne 0 ]; then
+		rm -f $target
+		_notrun "Require symlinks support"
+	fi
+	rm -f $target $link
+}
+
+_require_test_fcntl_advisory_locks()
+{
+	[ "$FSTYP" != "cifs" ] && return 0
+	cat /proc/mounts | grep $TEST_DEV | grep cifs | grep -q "nobrl" && return 0
+	cat /proc/mounts | grep $TEST_DEV | grep cifs | grep -qE "nounix|forcemand" && \
+		_notrun "Require fcntl advisory locks support"
+}
+
 _get_total_inode()
 {
 	if [ -z "$1" ]; then
