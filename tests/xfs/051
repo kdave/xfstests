@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test No. 051
+#
+# Simulate a buffer use after free race in XFS log recovery. The race triggers
+# on I/O failures during log recovery. Note that this test is dangerous as it
+# causes BUG() errors or a panic.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	killall -9 $FSSTRESS_PROG > /dev/null 2>&1
+	_scratch_unmount > /dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/dmflakey
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_dm_flakey
+_require_xfs_sysfs debug/log_recovery_delay
+
+echo "Silence is golden."
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mount
+
+# Start a workload and shutdown the fs. The subsequent mount will require log
+# recovery.
+$FSSTRESS_PROG -n 9999 -p 2 -w -d $SCRATCH_MNT > /dev/null 2>&1 &
+sleep 5
+src/godown -f $SCRATCH_MNT
+killall -q $FSSTRESS_PROG
+wait
+_scratch_unmount
+
+# Initialize a dm-flakey device that will pass I/Os for 5s and fail thereafter.
+_init_flakey
+BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 5 180"
+_load_flakey_table $FLAKEY_ALLOW_WRITES
+
+# Set a 10s log recovery delay and mount the flakey device. This should allow
+# initial writes to proceed (e.g., stale log block reset) and then let the
+# flakey uptime timer expire such that I/Os will fail by the time log recovery
+# starts.
+echo 10 > /sys/fs/xfs/debug/log_recovery_delay
+
+# The mount should fail due to dm-flakey. Note that this is dangerous on kernels
+# without the xfs_buf log recovery race fixes.
+_mount_flakey > /dev/null 2>&1
+
+echo 0 > /sys/fs/xfs/debug/log_recovery_delay
+
+_cleanup_flakey
+
+# replay the log
+_scratch_mount
+_scratch_unmount
+
+# success, all done
+status=0
+exit
