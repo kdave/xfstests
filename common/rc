@@ -582,7 +582,19 @@ _scratch_mkfs_sized()
 {
     fssize=$1
     blocksize=$2
+
+    case $FSTYP in
+    xfs)
+	def_blksz=`echo $MKFS_OPTIONS|sed -rn 's/.*-b ?size= ?+([0-9]+).*/\1/p'`
+	;;
+    ext2|ext3|ext4|ext4dev|udf|btrfs)
+	def_blksz=`echo $MKFS_OPTIONS| sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
+	;;
+    esac
+
+    [ -n "$def_blksz" ] && blocksize=$def_blksz
     [ -z "$blocksize" ] && blocksize=4096
+
 
     re='^[0-9]+$'
     if ! [[ $fssize =~ $re ]] ; then
