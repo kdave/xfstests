@@ -908,12 +908,15 @@ _do()
     return $ret
 }
 
-# bail out, setting up .notrun file
+# bail out, setting up .notrun file. Need to kill the filesystem check files
+# here, otherwise they are set incorrectly for the next test.
 #
 _notrun()
 {
     echo "$*" > $seqres.notrun
     echo "$seq not run: $*"
+    rm -f ${RESULT_DIR}/require_test
+    rm -f ${RESULT_DIR}/require_scratch
     status=0
     exit
 }
@@ -960,8 +963,9 @@ _supported_os()
 }
 
 # this test needs a scratch partition - check we're ok & unmount it
-#
-_require_scratch()
+# No post-test check of the device is required. e.g. the test intentionally
+# finishes the test with the filesystem in a corrupt state
+_require_scratch_nocheck()
 {
     case "$FSTYP" in
 	nfs*)
@@ -1005,8 +1009,16 @@ _require_scratch()
             exit 1
         fi
     fi
-    touch ${RESULT_DIR}/require_scratch
+    rm -f ${RESULT_DIR}/require_scratch
 }
+
+# we need the scratch device and it should be checked post test.
+_require_scratch()
+{
+	_require_scratch_nocheck
+	touch ${RESULT_DIR}/require_scratch
+}
+
 
 # this test needs a test partition - check we're ok & unmount it
 #
@@ -1681,7 +1693,9 @@ _check_xfs_filesystem()
 
     if [ $ok -eq 0 ]; then
 	status=1
-	exit 1
+	if [ "$iam" != "check" ]; then
+		exit 1
+	fi
     fi
 
     return 0
