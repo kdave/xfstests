@@ -16,6 +16,8 @@
 #include <ctype.h>
 #include <limits.h>
 #include <errno.h>
+#include <linux/fs.h>
+#include <linux/fiemap.h>
 #include <linux/types.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -40,6 +42,7 @@ struct move_extent {
 
 #define EXT4_IOC_MOVE_EXT      _IOWR('f', 15, struct move_extent)
 #endif
+#define EXTENT_MAX_COUNT        512
 
 struct donor_info
 {
@@ -50,11 +53,12 @@ struct donor_info
 
 static int ignore_error = 0;
 static int verbose = 0;
+static int do_sparse = 0;
 static unsigned blk_per_pg;
 static unsigned blk_sz;
 
-
-static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor_info *donor)
+static int do_defrag_range(int fd, char *name,__u64 start, __u64 len,
+			   struct donor_info *donor)
 {
 	int ret, retry;
 	struct move_extent mv_ioc;
@@ -119,10 +123,64 @@ static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor
 	return ret;
 }
 
+static int do_defrag_sparse(int fd, char *name,__u64 start, __u64 len,
+			    struct donor_info *donor)
+{
+	int i, ret = 0;
+	struct fiemap	*fiemap_buf = NULL;
+	struct fiemap_extent	*ext_buf = NULL;
+
+	fiemap_buf = malloc(EXTENT_MAX_COUNT * sizeof(struct fiemap_extent)
+			    + sizeof(struct fiemap));
+	if (fiemap_buf == NULL) {
+		fprintf(stderr, "%s Can not allocate memory\n", __func__);
+		return -1;
+	}
+	ext_buf = fiemap_buf->fm_extents;
+	memset(fiemap_buf, 0, sizeof(struct fiemap));
+	fiemap_buf->fm_flags |= FIEMAP_FLAG_SYNC;
+	fiemap_buf->fm_extent_count = EXTENT_MAX_COUNT;
+
+	do {
+		__u64 next;
+
+		fiemap_buf->fm_start = start * blk_sz;
+		fiemap_buf->fm_length = len * blk_sz;
+		ret = ioctl(fd, FS_IOC_FIEMAP, fiemap_buf);
+		if (ret < 0 || fiemap_buf->fm_mapped_extents == 0) {
+			fprintf(stderr, "%s Can get extent info for %s ret:%d mapped:%d",
+				__func__, name, ret, fiemap_buf->fm_mapped_extents);
+			goto out;
+		}
+		for (i = 0; i < fiemap_buf->fm_mapped_extents; i++) {
+			ret = do_defrag_range(fd, name,
+					      ext_buf[i].fe_logical / blk_sz,
+					      ext_buf[i].fe_length / blk_sz,
+					      donor);
+			if (ret)
+				goto out;
+		}
+		next = (ext_buf[fiemap_buf->fm_mapped_extents -1].fe_logical +
+			   ext_buf[fiemap_buf->fm_mapped_extents -1].fe_length) /
+			blk_sz;
+		if (next <  start + len) {
+			len -= next  - start;
+			start = next;
+		} else
+			break;
+
+	} while (fiemap_buf->fm_mapped_extents == EXTENT_MAX_COUNT &&
+		 !(ext_buf[EXTENT_MAX_COUNT-1].fe_flags & FIEMAP_EXTENT_LAST));
+out:
+	free(fiemap_buf);
+	return ret;
+}
+
 void usage()
 {
 	printf("Usage: -f donor_file [-o donor_offset] [-v] [-i]\n"
 	       "\t\t -v: verbose\n"
+	       "\t\t -s: enable sparse file optimization\n"
 	       "\t\t -i: ignore errors\n");
 }
 
@@ -138,9 +196,10 @@ int main(int argc, char **argv)
 	extern int optind;
 	int c;
 	char * donor_name = NULL;
+	__u64 eof_blk;
 
 	donor.offset = 0;
-	while ((c = getopt(argc, argv, "f:o:iv")) != -1) {
+	while ((c = getopt(argc, argv, "f:o:isv")) != -1) {
 		switch (c) {
 		case 'o':
 			donor.offset = atol(optarg);
@@ -150,6 +209,9 @@ int main(int argc, char **argv)
 			break;
 		case 'v':
 			verbose = 1;
+			break;
+		case 's':
+			do_sparse = 1;
 			break;
 		case 'f':
 			donor_name = (optarg);
@@ -207,13 +269,17 @@ int main(int argc, char **argv)
 				break;
 
 		}
-		if (st.st_size && st.st_blocks) {
-			ret = do_defrag_one(fd, line, 0,
-					    (st.st_size  + blk_sz-1)/ blk_sz,
-					    &donor);
-			if (ret && !ignore_error)
-				break;
-		}
+		if (!(st.st_size && st.st_blocks))
+			continue;
+
+		eof_blk = (st.st_size + blk_sz-1) / blk_sz;
+		if (do_sparse)
+			ret = do_defrag_sparse(fd, line, 0, eof_blk, &donor);
+		else
+			ret = do_defrag_range(fd, line, 0, eof_blk, &donor);
+		if (ret && !ignore_error)
+			break;
+
 	}
 	free(line);
 	return ret;
