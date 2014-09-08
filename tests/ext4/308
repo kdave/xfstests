@@ -1,0 +1,103 @@
+#! /bin/bash
+# FSQA Test No. 308
+#
+# Check data integrity and layout stability during defrag compacting
+# EXT4_IOC_MOVE_EXT simply swap extents between target and donor inode.
+# So if ioctl was performed twice then inode's layout should not change.
+#
+#-----------------------------------------------------------------------
+# (c) 2014 Dmitry Monakhov
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+PIDS=""
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/defrag
+
+# real QA test starts here
+_supported_os Linux
+_need_to_be_root
+_require_scratch
+_require_defrag
+
+rm -f $seqres.full
+
+_workout()
+{
+	nr=$1
+	echo "Create file with $nr * 2 fragments"
+	# Create sparse file
+	for ((i=0;i<nr;i++))
+	do
+		$XFS_IO_PROG -f -c "falloc $((409600*i)) 4k"  \
+			$SCRATCH_MNT/test.$nr >> $seqres.full 2>&1
+	done
+	# Fill holes for half of range , as result file will contain nr*1.5 fragments
+	$XFS_IO_PROG -c "falloc 0 $((204800*nr))"  \
+	    $SCRATCH_MNT/test.$nr | _filter_xfs_io
+	# Data wrilte will convert extetns to inialized ones
+	for ((i=0;i<nr;i++))
+	do
+		patt=`printf "0x%x" $i`
+		$XFS_IO_PROG -c "pwrite -S $patt $((i*123400)) 1234" \
+			$SCRATCH_MNT/test.$nr | _filter_xfs_io
+	done
+	md5sum $SCRATCH_MNT/test.* | _filter_scratch
+	$XFS_IO_PROG -c "fiemap" -f $SCRATCH_MNT/test.* > $tmp.fiemap.before
+
+	echo "Perform compacting"
+	$XFS_IO_PROG -c "falloc 0 246M" -f $SCRATCH_MNT/donor | _filter_xfs_io
+	ls $SCRATCH_MNT/test.* | run_check $here/src/e4compact \
+		 -v -i -f $SCRATCH_MNT/donor  >> $seqres.full 2>&1
+	md5sum $SCRATCH_MNT/test.* | _filter_scratch
+	$XFS_IO_PROG -c "fiemap" -f $SCRATCH_MNT/test.* > $tmp.fiemap.pass1
+	diff $tmp.fiemap.before $tmp.fiemap.pass1 > /dev/null && \
+	    _fail "Pass1: Extent's layout not changed"
+
+	echo "Perform compacting, second pass"
+	# Second pass should restore original layout
+	ls $SCRATCH_MNT/test.* | run_check $here/src/e4compact \
+		 -v -f $SCRATCH_MNT/donor  >> $seqres.full 2>&1
+	md5sum $SCRATCH_MNT/test.* | _filter_scratch
+	$XFS_IO_PROG -c "fiemap" -f $SCRATCH_MNT/test.* > $tmp.fiemap.pass2
+	diff -up $tmp.fiemap.before $tmp.fiemap.pass2 || \
+	    _fail "Pass2: Extent's layout changed."
+	unlink $SCRATCH_MNT/donor
+}
+
+# Actual testing starting from here
+_scratch_mkfs  >> $seqres.full 2>&1
+_scratch_mount
+_workout 10
+_workout 20
+_workout 40
+_workout 80
+_workout 160
+status=0
