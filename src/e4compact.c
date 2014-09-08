@@ -64,7 +64,6 @@ static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor
 	mv_ioc.donor_fd = donor->fd;
 	mv_ioc.orig_start = start;
 	mv_ioc.donor_start = donor->offset;
-	mv_ioc.moved_len = 0;
 	mv_ioc.len = len;
 
 	if (verbose)
@@ -77,6 +76,7 @@ static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor
 	do {
 		i++;
 		errno = 0;
+		mv_ioc.moved_len = 0;
 		ret = ioctl(fd, EXT4_IOC_MOVE_EXT, &mv_ioc);
 		if (verbose)
 			printf("process %s  it:%d start:%lld len:%lld donor:%lld,"
@@ -102,12 +102,12 @@ static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor
 		assert(mv_ioc.len >= mv_ioc.moved_len);
 		mv_ioc.len -= mv_ioc.moved_len;
 		mv_ioc.orig_start += mv_ioc.moved_len;
-		mv_ioc.donor_start = mv_ioc.orig_start;
+		mv_ioc.donor_start += mv_ioc.moved_len;
 		moved += mv_ioc.moved_len;
-
 	} while (mv_ioc.len);
 
-	if (ret && (errno == EBUSY || errno == ENODATA))
+	if (ret && ignore_error &&
+	    (errno == EBUSY || errno == ENODATA || errno == EOPNOTSUPP))
 		ret = 0;
 	donor->length -= moved;
 	donor->offset += moved;
@@ -154,6 +154,10 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 	}
+	if (!donor_name) {
+		usage();
+		exit(1);
+	}
 	donor.fd = open(donor_name, O_RDWR);
 	if (donor.fd < 0) {
 		perror("can not open donor file");
@@ -168,7 +172,8 @@ int main(int argc, char **argv)
 		donor.offset /= st.st_blksize;
 
 	if (verbose)
-		printf("Init donor :%s off:%lld len:%lld\n", argv[1], donor.offset, donor.length);
+		printf("Init donor :%s off:%lld len:%lld\n",
+		       donor_name, donor.offset, donor.length);
 	while ((read = getline(&line, &len, stdin)) != -1) {
 
 		if (line[read -1] == '\n')
@@ -197,7 +202,7 @@ int main(int argc, char **argv)
 			ret = do_defrag_one(fd, line, 0,
 					    (st.st_size  + st.st_blksize-1)/
 					    st.st_blksize, &donor);
-			if (ret && ignore_error)
+			if (ret && !ignore_error)
 				break;
 		}
 	}
