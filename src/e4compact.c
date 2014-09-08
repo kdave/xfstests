@@ -50,6 +50,8 @@ struct donor_info
 
 static int ignore_error = 0;
 static int verbose = 0;
+static unsigned blk_per_pg;
+static unsigned blk_sz;
 
 
 static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor_info *donor)
@@ -60,6 +62,9 @@ static int do_defrag_one(int fd, char *name,__u64 start, __u64 len, struct donor
 	int i = 0;
 
 	assert(donor->length >= len);
+	/* EXT4_IOC_MOVE_EXT requires both files has same offset inside page */
+	donor->offset += (blk_per_pg - (donor->offset  & (blk_per_pg -1)) +
+			 (start  & (blk_per_pg -1))) & (blk_per_pg -1);
 
 	mv_ioc.donor_fd = donor->fd;
 	mv_ioc.orig_start = start;
@@ -133,6 +138,7 @@ int main(int argc, char **argv)
 	extern int optind;
 	int c;
 	char * donor_name = NULL;
+
 	donor.offset = 0;
 	while ((c = getopt(argc, argv, "f:o:iv")) != -1) {
 		switch (c) {
@@ -170,10 +176,13 @@ int main(int argc, char **argv)
 	donor.length = st.st_size / st.st_blksize;
 	if (donor.offset)
 		donor.offset /= st.st_blksize;
+	blk_sz = st.st_blksize;
+	blk_per_pg = sysconf(_SC_PAGESIZE) / blk_sz;
 
 	if (verbose)
-		printf("Init donor :%s off:%lld len:%lld\n",
-		       donor_name, donor.offset, donor.length);
+		printf("Init donor %s off:%lld len:%lld bsz:%lu\n",
+		       donor_name, donor.offset, donor.length, st.st_blksize);
+
 	while ((read = getline(&line, &len, stdin)) != -1) {
 
 		if (line[read -1] == '\n')
@@ -200,8 +209,8 @@ int main(int argc, char **argv)
 		}
 		if (st.st_size && st.st_blocks) {
 			ret = do_defrag_one(fd, line, 0,
-					    (st.st_size  + st.st_blksize-1)/
-					    st.st_blksize, &donor);
+					    (st.st_size  + blk_sz-1)/ blk_sz,
+					    &donor);
 			if (ret && !ignore_error)
 				break;
 		}
