@@ -206,6 +206,7 @@ case "$HOSTOS" in
         export MKFS_UDF_PROG="`set_prog_path mkfs_udf`"
         export XFS_FSR_PROG="`set_prog_path /usr/etc/fsr_xfs`"
         export MKFS_NFS_PROG="false"
+        export MKFS_CIFS_PROG="false"
         ;;
     Linux)
         export MKFS_XFS_PROG="`set_prog_path mkfs.xfs`"
@@ -215,6 +216,7 @@ case "$HOSTOS" in
         export BTRFS_SHOW_SUPER_PROG="`set_prog_path btrfs-show-super`"
         export XFS_FSR_PROG="`set_prog_path xfs_fsr`"
         export MKFS_NFS_PROG="false"
+        export MKFS_CIFS_PROG="false"
         ;;
 esac
 
@@ -238,6 +240,9 @@ _mount_opts()
 	nfs)
 		export MOUNT_OPTIONS=$NFS_MOUNT_OPTIONS
 		;;
+	cifs)
+		export MOUNT_OPTIONS=$CIFS_MOUNT_OPTIONS
+		;;
 	ext2|ext3|ext4|ext4dev)
 		# acls & xattrs aren't turned on by default on ext$FOO
 		export MOUNT_OPTIONS="-o acl,user_xattr $EXT_MOUNT_OPTIONS"
@@ -259,6 +264,17 @@ _mount_opts()
 	esac
 }
 
+_test_mount_opts()
+{
+	case $FSTYP in
+	cifs)
+		export TEST_FS_MOUNT_OPTS=$CIFS_MOUNT_OPTIONS
+		;;
+	*)
+		;;
+	esac
+}
+
 _mkfs_opts()
 {
 	case $FSTYP in
@@ -272,6 +288,9 @@ _mkfs_opts()
 		;;
 	nfs)
 		export MKFS_OPTIONS=$NFS_MKFS_OPTIONS
+		;;
+	cifs)
+		export MKFS_OPTIONS=$CIFS_MKFS_OPTIONS
 		;;
 	reiserfs)
 		export MKFS_OPTIONS="$REISERFS_MKFS_OPTIONS -q"
@@ -366,6 +385,7 @@ get_next_config() {
 
 	local OLD_FSTYP=$FSTYP
 	local OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
+	local OLD_TEST_FS_MOUNT_OPTS=$TEST_FS_MOUNT_OPTS
 	local OLD_MKFS_OPTIONS=$MKFS_OPTIONS
 	local OLD_FSCK_OPTIONS=$FSCK_OPTIONS
 
@@ -382,10 +402,12 @@ get_next_config() {
 
 	if [ ! -z "$OLD_FSTYP" ] && [ $OLD_FSTYP != $FSTYP ]; then
 		[ -z "$MOUNT_OPTIONS" ] && _mount_opts
+		[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
 		[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 		[ -z "$FSCK_OPTIONS" ] && _fsck_opts
 	else
 		[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS=$OLD_MOUNT_OPTIONS
+		[ -z "$TEST_FS_MOUNT_OPTS" ] && export TEST_FS_MOUNT_OPTS=$OLD_TEST_FS_MOUNT_OPTS
 		[ -z "$MKFS_OPTIONS" ] && export MKFS_OPTIONS=$OLD_MKFS_OPTIONS
 		[ -z "$FSCK_OPTIONS" ] && export FSCK_OPTIONS=$OLD_FSCK_OPTIONS
 	fi
@@ -408,9 +430,9 @@ get_next_config() {
 		exit 1
 	fi
 
-	echo $TEST_DEV | grep -q ":" > /dev/null 2>&1
+	echo $TEST_DEV | grep -qE ":|//" > /dev/null 2>&1
 	if [ ! -b "$TEST_DEV" -a "$?" != "0" ]; then
-		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a block device or a NFS filesystem"
+		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a block device or a network filesystem"
 		exit 1
 	fi
 
@@ -431,9 +453,9 @@ get_next_config() {
 		export SCRATCH_DEV_NOT_SET=true
 	fi
 
-	echo $SCRATCH_DEV | grep -q ":" > /dev/null 2>&1
+	echo $SCRATCH_DEV | grep -qE ":|//" > /dev/null 2>&1
 	if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]; then
-		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a block device or a NFS filesystem"
+		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a block device or a network filesystem"
 		exit 1
 	fi
 
@@ -457,6 +479,7 @@ if [ -z "$CONFIG_INCLUDED" ]; then
 	FSTYP=${FSTYP:=xfs}
 	export FSTYP
 	[ -z "$MOUNT_OPTIONS" ] && _mount_opts
+	[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
 	[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 	[ -z "$FSCK_OPTIONS" ] && _fsck_opts
 fi

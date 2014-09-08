@@ -107,6 +107,8 @@ case "$FSTYP" in
 	 ;;
     nfs)
 	 ;;
+    cifs)
+	 ;;
 esac
 
 # make sure we have a standard umask
@@ -503,6 +505,9 @@ _test_mkfs()
     nfs*)
 	# do nothing for nfs
 	;;
+    cifs)
+	# do nothing for cifs
+	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
 	;;
@@ -551,6 +556,9 @@ _scratch_mkfs()
 	;;
     nfs*)
 	# do nothing for nfs
+	;;
+    cifs)
+	# do nothing for cifs
 	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
@@ -1017,6 +1025,9 @@ _require_scratch_nocheck()
 	nfs*)
                  _notrun "requires a scratch device"
 		 ;;
+	cifs)
+		_notrun "requires a scratch device"
+		;;
 	tmpfs)
 		if [ -z "$SCRATCH_DEV" -o ! -d "$SCRATCH_MNT" ];
 		then
@@ -1074,6 +1085,15 @@ _require_test()
 	nfs*)
                  _notrun "requires a test device"
 		 ;;
+	cifs)
+		echo $TEST_DEV | grep -q "//" > /dev/null 2>&1
+		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DEV"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+		     _notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
 	tmpfs)
 		if [ -z "$TEST_DEV" -o ! -d "$TEST_DIR" ];
 		then
@@ -1866,6 +1886,9 @@ _check_test_fs()
     nfs)
 	# no way to check consistency for nfs
 	;;
+    cifs)
+	# no way to check consistency for cifs
+	;;
     udf)
 	# do nothing for now
 	;;
@@ -1903,6 +1926,9 @@ _check_scratch_fs()
 	;;
     nfs*)
 	# Don't know how to check an NFS filesystem, yet.
+	;;
+    cifs)
+	# Don't know how to check a CIFS filesystem, yet.
 	;;
     btrfs)
 	_check_btrfs_filesystem $device
