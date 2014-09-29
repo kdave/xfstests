@@ -73,7 +73,7 @@ static void check_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
 		for (j=0;j<MIN(20, block_size-i);j++) {
 			printf("%02x ", buf[j+i]);
 		}
-		for (j=i;buf[j] == buf2[j] && j<block_size;j++) ;
+		for (j=i;buf[j] != buf2[j] && j<block_size;j++) ;
 		printf("Corruption length: %d\n", j - i);
 		printf("\n");
 		exit(1);
