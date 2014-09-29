@@ -49,7 +49,7 @@ struct log_entry {
 	int	args[3];
 };
 
-#define	LOGSIZE	1000
+#define	LOGSIZE	10000
 
 struct log_entry	oplog[LOGSIZE];	/* the log */
 int			logptr = 0;	/* current position in log */
