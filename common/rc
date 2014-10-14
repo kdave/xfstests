@@ -1092,8 +1092,14 @@ _require_test()
 {
     case "$FSTYP" in
 	nfs*)
-                 _notrun "requires a test device"
-		 ;;
+		echo $TEST_DEV | grep -q ":/" > /dev/null 2>&1
+		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
 	cifs)
 		echo $TEST_DEV | grep -q "//" > /dev/null 2>&1
 		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
