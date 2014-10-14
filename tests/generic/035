@@ -1,0 +1,72 @@
+#! /bin/bash
+# FS QA Test No. generic/035
+#
+# Check overwriting rename system call
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Miklos Szeredi.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+_supported_fs generic
+_supported_os Linux
+
+_require_test
+
+# real QA test starts here
+
+rename_dir=$TEST_DIR/$$
+mkdir -p $rename_dir
+
+echo "overwriting regular file:"
+file1=$rename_dir/file1
+file2=$rename_dir/file2
+touch $file1
+touch $file2
+src/t_rename_overwrite $file1 $file2
+rm $file2
+
+echo "overwriting directory:"
+dir1=$rename_dir/dir1
+dir2=$rename_dir/dir2
+mkdir $dir1
+mkdir $dir2
+src/t_rename_overwrite $dir1 $dir2
+rmdir $dir2
+
+rmdir $rename_dir
+
+# success, all done
+status=0
+exit
