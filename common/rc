@@ -2617,6 +2617,20 @@ _btrfs_stress_defrag()
 	done
 }
 
+# stress btrfs by remounting it with different compression algorithms in a loop
+# run this with fsstress running at background could exercise the compression
+# code path and ensure no race when switching compression algorithm with constant
+# I/O activity.
+_btrfs_stress_remount_compress()
+{
+	local btrfs_mnt=$1
+	while true; do
+		for algo in no zlib lzo; do
+			$MOUNT_PROG -o remount,compress=$algo $btrfs_mnt
+		done
+	done
+}
+
 init_rc()
 {
 	if [ "$iam" == new ]
