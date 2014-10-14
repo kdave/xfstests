@@ -46,44 +46,30 @@ _require_scratch
 _require_xfs_io_command "fiemap"
 _require_xfs_io_command "fcollapse"
 _do_die_on_error=y
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
 testfile=$SCRATCH_MNT/$seq.$$
 BLOCKS=10240
 
-for (( BSIZE = 1024; BSIZE <= 4096; BSIZE *= 2 )); do
+BSIZE=`get_block_size $SCRATCH_MNT`
 
-	length=$(($BLOCKS * $BSIZE))
-	case $FSTYP in
-	xfs)
-	_scratch_mkfs -b size=$BSIZE >> $seqres.full 2>&1
-	;;
-	ext4)
-	_scratch_mkfs -b $BSIZE >> $seqres.full 2>&1
-	;;
-	esac
-	_scratch_mount >> $seqres.full 2>&1
+length=$(($BLOCKS * $BSIZE))
 
-	# Write file
-	$XFS_IO_PROG -f -c "pwrite 0 $length" -c fsync $testfile > /dev/null
+# Write file
+$XFS_IO_PROG -f -c "pwrite 0 $length" -c fsync $testfile > /dev/null
 
-	# Collapse alternate blocks 
-	for (( i = 1; i <= 7; i++ )); do
-		for (( j=0; j < $(($BLOCKS/(2**$i))); j++ )); do
-			offset=$(($j*$BSIZE))
-			$XFS_IO_PROG -c "fcollapse $offset $BSIZE" $testfile > /dev/null
-		done
+# Collapse alternate blocks 
+for (( i = 1; i <= 7; i++ )); do
+	for (( j=0; j < $(($BLOCKS/(2**$i))); j++ )); do
+		offset=$(($j*$BSIZE))
+		$XFS_IO_PROG -c "fcollapse $offset $BSIZE" $testfile > /dev/null
 	done
-
-	# Check if 80 extents are present
-	$XFS_IO_PROG -c "fiemap -v" $testfile | grep "^ *[0-9]*:" |wc -l
-
-	_check_scratch_fs
-	if [ $? -ne 0 ]; then
-		status=1
-		exit
-	fi
-
-	umount $SCRATCH_MNT
 done
+
+# Check if 80 extents are present
+$XFS_IO_PROG -c "fiemap -v" $testfile | grep "^ *[0-9]*:" |wc -l
 
 # success, all done
 status=0
