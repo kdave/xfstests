@@ -585,11 +585,17 @@ _scratch_pool_mkfs()
 {
     case $FSTYP in
     btrfs)
-	$MKFS_BTRFS_PROG $MKFS_OPTIONS $* $SCRATCH_DEV_POOL > /dev/null
-	;;
+        # if dup profile is in mkfs options call _scratch_mkfs instead
+        # because dup profile only works with single device
+        if [[ "$*" =~ dup ]]; then
+            _scratch_mkfs $*
+        else
+            $MKFS_BTRFS_PROG $MKFS_OPTIONS $* $SCRATCH_DEV_POOL > /dev/null
+        fi
+        ;;
     *)
-	echo "_scratch_pool_mkfs is not implemented for $FSTYP" 1>&2
-	;;
+        echo "_scratch_pool_mkfs is not implemented for $FSTYP" 1>&2
+        ;;
     esac
 }
 
@@ -2484,6 +2490,102 @@ _get_free_inode()
 	local nr_inode;
 	nr_inode=`$DF_PROG -i $1 | tail -1 | awk '{print $5}'`
 	echo $nr_inode
+}
+
+# get btrfs profile configs being tested
+#
+# A set of pre-set profile configs are exported via _btrfs_profile_configs
+# array. Default configs can be overridden by setting BTRFS_PROFILE_CONFIGS
+# var in the format "metadata_profile:data_profile", multiple configs can be
+# seperated by space, e.g.
+# export BTRFS_PROFILE_CONFIGS="raid0:raid0 raid1:raid1 dup:single"
+_btrfs_get_profile_configs()
+{
+	if [ "$FSTYP" != "btrfs" ]; then
+		return
+	fi
+
+	# no user specified btrfs profile configs, export the default configs
+	if [ -z "$BTRFS_PROFILE_CONFIGS" ]; then
+		# default configs
+		_btrfs_profile_configs=(
+			"-m single -d single"
+			"-m dup -d single"
+			"-m raid0 -d raid0"
+			"-m raid1 -d raid0"
+			"-m raid1 -d raid1"
+			"-m raid10 -d raid10"
+			"-m raid5 -d raid5"
+			"-m raid6 -d raid6"
+		)
+
+		# remove dup/raid5/raid6 profiles if we're doing device replace
+		# dup profile indicates only one device being used (SCRATCH_DEV),
+		# but we don't want to replace SCRATCH_DEV, which will be used in
+		# _scratch_mount/_check_scratch_fs etc.
+		# and raid5/raid6 doesn't support replace yet
+		if [ "$1" == "replace" ]; then
+			_btrfs_profile_configs=(
+				"-m single -d single"
+				"-m raid0 -d raid0"
+				"-m raid1 -d raid0"
+				"-m raid1 -d raid1"
+				"-m raid10 -d raid10"
+				# add these back when raid5/6 is working with replace
+				#"-m raid5 -d raid5"
+				#"-m raid6 -d raid6"
+			)
+		fi
+		export _btrfs_profile_configs
+		return
+	fi
+
+	# parse user specified btrfs profile configs
+	local i=0
+	local cfg=""
+	for cfg in $BTRFS_PROFILE_CONFIGS; do
+		# turn "metadata:data" format to "-m metadata -d data"
+		# and assign it to _btrfs_profile_configs array
+		cfg=`echo "$cfg" | sed -e 's/^/-m /' -e 's/:/ -d /'`
+		_btrfs_profile_configs[$i]="$cfg"
+		let i=i+1
+	done
+
+	if [ "$1" == "replace" ]; then
+		if echo ${_btrfs_profile_configs[*]} | grep -q raid[56]; then
+			_notrun "RAID5/6 doesn't support btrfs device replace yet"
+		fi
+		if echo ${_btrfs_profile_configs[*]} | grep -q dup; then
+			_notrun "Do not set dup profile in btrfs device replace test"
+		fi
+	fi
+	export _btrfs_profile_configs
+}
+
+# stress btrfs by running balance operation in a loop
+_btrfs_stress_balance()
+{
+	local btrfs_mnt=$1
+	while true; do
+		$BTRFS_UTIL_PROG balance start $btrfs_mnt
+	done
+}
+
+# stress btrfs by creating/mounting/umounting/deleting subvolume in a loop
+_btrfs_stress_subvolume()
+{
+	local btrfs_dev=$1
+	local btrfs_mnt=$2
+	local subvol_name=$3
+	local subvol_mnt=$4
+
+	mkdir -p $subvol_mnt
+	while true; do
+		$BTRFS_UTIL_PROG subvolume create $btrfs_mnt/$subvol_name
+		$MOUNT_PROG -o subvol=$subvol_name $btrfs_dev $subvol_mnt
+		$UMOUNT_PROG $subvol_mnt
+		$BTRFS_UTIL_PROG subvolume delete $btrfs_mnt/$subvol_name
+	done
 }
 
 init_rc()
