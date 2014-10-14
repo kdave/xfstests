@@ -40,6 +40,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/defrag
 
 # real QA test starts here
 
@@ -47,7 +48,6 @@ _cleanup()
 _supported_fs btrfs
 _supported_os Linux
 _require_scratch
-_require_command "/usr/sbin/filefrag"
 
 rm -f $seqres.full
 
@@ -71,9 +71,9 @@ done
 
 $BTRFS_UTIL_PROG filesystem defrag $subvol/foobar && sync
 
-num_extent_orig=`filefrag $subvol/foobar | awk -F ' ' '{print $2}'`
-num_extent_snap1=`filefrag $SCRATCH_MNT/snap-1/foobar | awk -F ' ' '{print $2}'`
-num_extent_snap2=`filefrag $SCRATCH_MNT/snap-2/foobar | awk -F ' ' '{print $2}'`
+num_extent_orig=`_extent_count $subvol/foobar`
+num_extent_snap1=`_extent_count $SCRATCH_MNT/snap-1/foobar`
+num_extent_snap2=`_extent_count $SCRATCH_MNT/snap-2/foobar`
 
 echo "$num_extent_orig $num_extent_snap1 $num_extent_snap2" >> $seqres.full
 
