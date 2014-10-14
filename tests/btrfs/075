@@ -1,0 +1,70 @@
+#! /bin/bash
+# FSQA Test No. btrfs/075
+#
+# If one subvolume was mounted with selinux context, other subvolumes
+# should be able to be mounted with the same selinux context too.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2014 Red Hat Inc. All rights reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	$UMOUNT_PROG $subvol_mnt >/dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+# SELINUX_MOUNT_OPTIONS will be set in common/config if selinux is enabled
+if [ "$SELINUX_MOUNT_OPTIONS" == "" ]; then
+	_notrun "Require selinux to be enabled"
+fi
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+# first mount default subvolume with selinux context set
+_scratch_mkfs >$seqres.full 2>&1
+_scratch_mount
+
+# create a new subvolume and mount it with the same selinux context
+subvol_mnt=$TEST_DIR/$seq.mnt
+mkdir -p $subvol_mnt
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol >>$seqres.full 2>&1
+$MOUNT_PROG -o subvol=subvol $SELINUX_MOUNT_OPTIONS $SCRATCH_DEV $subvol_mnt
+status=$?
+
+exit
