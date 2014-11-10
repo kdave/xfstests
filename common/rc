@@ -551,6 +551,14 @@ _mkfs_dev()
     rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
 }
 
+# remove all files in $SCRATCH_MNT, useful when testing on NFS/CIFS
+_scratch_cleanup_files()
+{
+	_scratch_mount
+	rm -rf $SCRATCH_MNT/*
+	_scratch_unmount
+}
+
 _scratch_mkfs()
 {
     case $FSTYP in
@@ -558,7 +566,9 @@ _scratch_mkfs()
         _scratch_mkfs_xfs $*
 	;;
     nfs*)
-	# do nothing for nfs
+	# unable to re-create NFS, just remove all files in $SCRATCH_MNT to
+	# avoid EEXIST caused by the leftover files created in previous runs
+        _scratch_cleanup_files
 	;;
     cifs)
 	# do nothing for cifs
@@ -1034,8 +1044,14 @@ _require_scratch_nocheck()
 {
     case "$FSTYP" in
 	nfs*)
-                 _notrun "requires a scratch device"
-		 ;;
+		echo $SCRATCH_DEV | grep -q ":/" > /dev/null 2>&1
+		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	cifs)
 		_notrun "requires a scratch device"
 		;;
