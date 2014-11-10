@@ -109,7 +109,7 @@ aio_test_thread(void *data)
 	ioctx_initted = 0;
 	ios_submitted = 0;
 
-	ret = posix_memalign((void **)&buffer, getpagesize(), IOSIZE);
+	ret = posix_memalign((void **)&buffer, getpagesize(), IOSIZE * NUM_IOS);
 	if (ret != 0) {
 		printf("%lu: Failed to allocate buffer for IO: %d\n",
 		       pthread_self(), ret);
@@ -137,7 +137,7 @@ aio_test_thread(void *data)
 				struct iocb *iocb = &iocbs[i];
 
 				memset(iocb, 0, sizeof(*iocb));
-				io_prep_pread(iocb, fd, buffer,
+				io_prep_pread(iocb, fd, (buffer + i * IOSIZE),
 					      IOSIZE, i * IOSIZE);
 				if (io_submit(ioctx, 1, &iocb) != 1) {
 					printf("%lu: failed to submit io #%d\n",
