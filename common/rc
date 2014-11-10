@@ -1247,10 +1247,25 @@ _require_command()
     [ -n "$1" -a -x "$1" ] || _notrun "$_cmd utility required, skipped this test"
 }
 
+# this test requires the device to be valid block device
+# $1 - device
+_require_block_device()
+{
+	if [ -z "$1" ]; then
+		echo "Usage: _require_block_device <dev>" 1>&2
+		exit 1
+	fi
+	if [ "`_is_block_dev $SCRATCH_DEV`" == "" ]; then
+		_notrun "require $1 to be valid block disk"
+	fi
+}
+
 # this test requires the device mapper flakey target
 #
 _require_dm_flakey()
 {
+    # require SCRATCH_DEV to be a valid block device
+    _require_block_device $SCRATCH_DEV
     _require_command $DMSETUP_PROG
 
     modprobe dm-flakey >/dev/null 2>&1
