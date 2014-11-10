@@ -809,14 +809,16 @@ _df_device()
 	exit 1
     fi
 
+    # Note that we use "==" here so awk doesn't try to interpret an NFS over
+    # IPv6 server as a regular expression.
     $DF_PROG 2>/dev/null | $AWK_PROG -v what=$1 '
-        match($1,what) && NF==1 {
+        ($1==what) && (NF==1) {
             v=$1
             getline
             print v, $0
             exit
         }
-        match($1,what) {
+        ($1==what) {
             print
             exit
         }
@@ -1132,10 +1134,12 @@ _require_test()
     esac
 
     # mounted?
-    if _mount | grep -q $TEST_DEV
+    # Note that we use -F here so grep doesn't try to interpret an NFS over
+    # IPv6 server as a regular expression.
+    if _mount | grep -F -q $TEST_DEV
     then
         # if it's mounted, make sure its on $TEST_DIR
-        if ! _mount | grep $TEST_DEV | grep -q $TEST_DIR
+        if ! _mount | grep -F $TEST_DEV | grep -q $TEST_DIR
         then
             echo "\$TEST_DEV is mounted but not on \$TEST_DIR - aborting"
             exit 1
