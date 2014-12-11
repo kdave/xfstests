@@ -49,6 +49,7 @@ _cleanup()
 _supported_fs generic
 _supported_os Linux
 _require_test
+_require_xfs_io_command "falloc"
 
 rm -f $seqres.full
 
@@ -62,7 +63,8 @@ avail_begin=`df -P $TEST_DIR | awk 'END {print $4}'`
 # Preallocate half size of the available disk space to a file
 # starts from offset 0 with FALLOC_FL_KEEP_SIZE option on the
 # test file system.
-fallocate -n -o 0 -l $(($avail_begin/2)) $TEST_DIR/testfile.$seq >>$seqres.full 2>&1
+$XFS_IO_PROG -f -c 'falloc -k 0 $(($avail_begin/2))' \
+	$TEST_DIR/testfile.$seq >>$seqres.full 2>&1
 
 # Verify the file size, it should keep unchanged as 0 in this case
 fsize=`ls -l $TEST_DIR/testfile.$seq | awk '{print $5}'`

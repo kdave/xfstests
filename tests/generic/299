@@ -110,6 +110,7 @@ filename=buffered-aio-verifier
 EOF
 
 _require_fio $fio_config
+_require_xfs_io_command "falloc"
 
 _workout()
 {
@@ -125,12 +126,13 @@ _workout()
 	do
 	    for ((k=1; k <= NUM_JOBS; k++))
 	    do
-		fallocate -l $FILE_SIZE $SCRATCH_MNT/direct_aio.$k.0 \
-			>> $seqres.full 2>&1
+		$XFS_IO_PROG -f -c "falloc 0 $FILE_SIZE" \
+			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
 	    done
 	    for ((k=1; k <= NUM_JOBS; k++))
 	    do
-		truncate -s 0 $SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
+		$XFS_IO_PROG -c "truncate  0" \
+			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
 	    done
 	    # Following like will check that pid is still run.
 	    # Once fio exit we can stop fallocate/truncate loop
