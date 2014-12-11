@@ -1,0 +1,80 @@
+#! /bin/bash
+# FS QA Test No. 032
+#
+# Test xfs_copy for all filesystem sector size / block size
+# combinations possible on this platform.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# success is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_require_scratch
+
+[ $here/src/feature ] || _notrun "src/feature not built, skipping this test"
+
+[ "$USE_EXTERNAL" = yes ] && _notrun "Cannot xfs_copy with external devices"
+[ -n "$XFS_COPY_PROG" ] || _notrun "xfs_copy binary not yet installed"
+
+rm -f $seqres.full
+
+SECTORSIZE=`blockdev --getss $SCRATCH_DEV`
+PAGESIZE=`src/feature -s`
+IMGFILE=$TEST_DIR/${seq}_copy.img
+
+echo "Silence is golden."
+
+while [ $SECTORSIZE -le $PAGESIZE ]; do
+	BLOCKSIZE=$SECTORSIZE;
+
+	while [ $BLOCKSIZE -le $PAGESIZE ]; do
+
+		echo "=== Sector size $SECTORSIZE Block size $BLOCKSIZE ==" >> $seqres.full
+		_scratch_mkfs -s size=$SECTORSIZE -b size=$BLOCKSIZE -d size=1g >> $seqres.full 2>&1
+		_scratch_mount
+		# light population of the fs
+		$FSSTRESS_PROG -n 100 -d $SCRATCH_MNT >> $seqres.full 2>&1
+		_scratch_unmount
+
+		$XFS_COPY_PROG -d $SCRATCH_DEV $IMGFILE >> $seqres.full 2>&1 || \
+			_fail "Copy failed for Sector size $SECTORSIZE Block size $BLOCKSIZE"
+		$XFS_REPAIR_PROG $IMGFILE >> $seqres.full 2>&1 || \
+			_fail "Copy corrupted for Sector size $SECTORSIZE Block size $BLOCKSIZE"
+
+		BLOCKSIZE=$(($BLOCKSIZE * 2));
+	done
+	SECTORSIZE=$(($SECTORSIZE * 2));
+done
+
+# success, all done
+exit
