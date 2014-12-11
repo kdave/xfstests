@@ -1,0 +1,89 @@
+#! /bin/bash
+# FSQA Test No. 004
+#
+# Test "dump | restore"(as opposed to a tape)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	# remove the generated data, which is much and meaningless.
+	rm -rf $restore_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+dump_dir=$SCRATCH_MNT/dump_restore_dir
+restore_dir=$TEST_DIR/dump_restore_dir
+
+workout()
+{
+	echo "Run fsstress" >> $seqres.full
+	args=`_scale_fsstress_args -z -f creat=5 -f write=20 -f mkdir=5 -n 1000 -p 15 -d $dump_dir`
+	echo "fsstress $args" >> $seqres.full
+
+	$FSSTRESS_PROG $args >> $seqres.full 2>&1
+
+	echo "start Dump/Restore" >> $seqres.full
+	cd $TEST_DIR
+
+	$DUMP_PROG -0 -f - $dump_dir 2>/dev/null | $RESTORE_PROG -urvf - >> $seqres.full 2>&1
+	if [ $? -ne 0 ];then
+		_fail "Dump/Restore failed"
+	fi
+
+	rm -rf restoresymtable
+}
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+
+_require_test
+_require_scratch
+
+_require_command $DUMP_PROG
+_require_command $RESTORE_PROG
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+_scratch_mkfs_sized $((512 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+rm -rf $restore_dir $TEST_DIR/restoresymtable
+
+workout
+diff -r $dump_dir $restore_dir
+
+status=0
+exit
