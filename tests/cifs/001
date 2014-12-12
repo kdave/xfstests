@@ -1,0 +1,69 @@
+#!/bin/bash
+# FS QA Test No. cifs/001
+#
+# Sanity test for server-side copies initiated via CIFS_IOC_COPYCHUNK_FILE
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2014 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	rm -f $tmp.*
+	rm -rf $TEST_DIR/$$
+}
+
+trap "_cleanup ; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs cifs
+_supported_os Linux
+_require_cloner
+_require_test
+
+mkdir -p $TEST_DIR/$$/src || _fail "failed to create clone src dir"
+mkdir -p $TEST_DIR/$$/dest || _fail "failed to create clone dest dir"
+
+# populate 10 files, 1K-10K in size
+for i in `seq 1 10`; do
+	len=$(($i * 1024))
+	$XFS_IO_PROG -f -c "pwrite -S $i 0 $len" $TEST_DIR/$$/src/${i} \
+		| _filter_xfs_io
+done
+sync
+
+# clone each, then compare both versions
+for i in `seq 1 10`; do
+	$CLONER_PROG $TEST_DIR/$$/src/${i} $TEST_DIR/$$/dest/${i}
+	diff $TEST_DIR/$$/src/${i} $TEST_DIR/$$/dest/${i}
+done
+
+status=0
+exit
