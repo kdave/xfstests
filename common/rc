@@ -517,6 +517,9 @@ _test_mkfs()
     btrfs)
         $MKFS_BTRFS_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
 	;;
+    ext2|ext3|ext4)
+	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $* $TEST_DEV
+	;;
     *)
 	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* $TEST_DEV
 	;;
@@ -535,6 +538,11 @@ _mkfs_dev()
     btrfs)
         $MKFS_BTRFS_PROG $MKFS_OPTIONS $* 2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
 	;;
+    ext2|ext3|ext4)
+	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $* \
+		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+	;;
+
     *)
 	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* \
 		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
@@ -580,6 +588,9 @@ _scratch_mkfs()
 	;;
     btrfs)
         $MKFS_BTRFS_PROG $MKFS_OPTIONS $* $SCRATCH_DEV > /dev/null
+	;;
+    ext2|ext3)
+	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $* $SCRATCH_DEV
 	;;
     ext4)
 	_scratch_mkfs_ext4 $*
@@ -657,7 +668,7 @@ _scratch_mkfs_sized()
 	fi
 	;;
     ext2|ext3|ext4|ext4dev)
-	yes | ${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
 	;;
     udf)
 	$MKFS_UDF_PROG $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
