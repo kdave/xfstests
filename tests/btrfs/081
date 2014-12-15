@@ -1,0 +1,135 @@
+#! /bin/bash
+# FSQA Test No. 081
+#
+# Regression test for a btrfs clone ioctl issue where races between
+# a clone operation and concurrent target file reads would result in
+# leaving stale data in the page cache. After the clone operation
+# finished, reading from the clone target file would return the old
+# and no longer valid data. This affected only buffered reads (i.e.
+# didn't affect direct IO reads).
+#
+# This issue was fixed by the following linux kernel patch:
+#
+#     Btrfs: ensure readers see new data after a clone operation
+#     (commit c125b8bff1d9f6c8c91ce4eb8bd5616058c7d510)
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2014 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_cloner
+
+rm -f $seqres.full
+
+num_extents=100
+extent_size=8192
+
+create_source_file()
+{
+	name=$1
+
+	# Create a file with $num_extents extents, each with a size of
+	# $extent_size bytes.
+	touch $SCRATCH_MNT/$name
+	for ((i = 0; i < $num_extents; i++)); do
+		off=$((i * $extent_size))
+		$XFS_IO_PROG \
+			-c "pwrite -S $i -b $extent_size $off $extent_size" \
+			-c "fsync" $SCRATCH_MNT/$name | _filter_xfs_io
+	done
+}
+
+create_target_file()
+{
+	name=$1
+	file_size=$(($num_extents * $extent_size))
+
+	$XFS_IO_PROG -f -c "pwrite -S 0xff 0 $file_size" \
+		-c "fsync" $SCRATCH_MNT/$name | _filter_xfs_io
+}
+
+reader_loop()
+{
+	name=$1
+
+	while true; do
+		cat $SCRATCH_MNT/$name > /dev/null
+	done
+}
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+echo "Creating source file..."
+create_source_file "foo"
+echo "Creating target file..."
+create_target_file "bar"
+
+reader_loop "bar" &
+reader_pid=$!
+
+$CLONER_PROG -s 0 -d 0 -l $(($num_extents * $extent_size)) \
+	$SCRATCH_MNT/foo $SCRATCH_MNT/bar
+
+kill $reader_pid > /dev/null 2>&1
+
+# Now both foo and bar should have exactly the same content.
+# This didn't use to be the case before the btrfs kernel fix mentioned
+# above. The clone ioctl was racy, as it removed bar's pages from the
+# page cache and only after it would update bar's metadata to point to
+# the same extents that foo's metadata points to - and this was done in
+# an unprotected way, so that a file read request done right after the
+# clone ioctl removed the pages from the page cache and before it updated
+# bar's metadata, would result in populating the page cache with stale
+# data. Therefore a file read after the clone operation finished would
+# not get the cloned data but it would get instead the old and no longer
+# valid data.
+echo "Verifying file digests after cloning"
+md5sum $SCRATCH_MNT/foo | _filter_scratch
+md5sum $SCRATCH_MNT/bar | _filter_scratch
+
+# Validate the content of bar still matches foo's content even after
+# clearing all of bar's data from the page cache.
+_scratch_remount
+echo "Verifying target file digest after umount + mount"
+md5sum $SCRATCH_MNT/bar | _filter_scratch
+
+status=0
+exit
