@@ -1402,6 +1402,7 @@ _require_aiodio()
         AIO_TEST=src/aio-dio-regress/$1
         [ -x $AIO_TEST ] || _notrun "$AIO_TEST not built"
     fi
+    _require_odirect
 }
 
 # run an aio-dio program
@@ -1528,6 +1529,17 @@ _require_xfs_io_command()
 		_notrun "xfs_io $command support is missing"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs?)"
+}
+
+# check that kernel and filesystem support direct I/O
+_require_odirect()
+{
+       testfile=$TEST_DIR/$$.direct
+       $XFS_IO_PROG -F -f -d -c "pwrite 0 20k" $testfile > /dev/null 2>&1
+       if [ $? -ne 0 ]; then
+               _notrun "O_DIRECT is not supported"
+       fi
+       rm -f $testfile 2>&1 > /dev/null
 }
 
 # Check that a fs has enough free space (in 1024b blocks)
