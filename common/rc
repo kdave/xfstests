@@ -112,6 +112,9 @@ case "$FSTYP" in
 	 ;;
     cifs)
 	 ;;
+    reiser4)
+	 [ "$MKFS_REISER4_PROG" = "" ] && _fatal "mkfs.reiser4 not found"
+	 ;;
 esac
 
 # make sure we have a standard umask
@@ -633,7 +636,7 @@ _scratch_mkfs_sized()
     xfs)
 	def_blksz=`echo $MKFS_OPTIONS|sed -rn 's/.*-b ?size= ?+([0-9]+).*/\1/p'`
 	;;
-    ext2|ext3|ext4|ext4dev|udf|btrfs)
+    ext2|ext3|ext4|ext4dev|udf|btrfs|reiser4)
 	def_blksz=`echo $MKFS_OPTIONS| sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
 	;;
     esac
@@ -675,6 +678,11 @@ _scratch_mkfs_sized()
 	;;
     btrfs)
 	$MKFS_BTRFS_PROG $MKFS_OPTIONS -b $fssize $SCRATCH_DEV
+	;;
+    reiser4)
+	# mkfs.resier4 requires size in KB as input for creating filesystem
+	$MKFS_REISER4_PROG $MKFS_OPTIONS -y -b $blocksize $SCRATCH_DEV \
+			   `expr $fssize / 1024`
 	;;
     *)
 	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_sized"

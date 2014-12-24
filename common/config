@@ -224,6 +224,7 @@ case "$HOSTOS" in
         export XFS_FSR_PROG="`set_prog_path xfs_fsr`"
         export MKFS_NFS_PROG="false"
         export MKFS_CIFS_PROG="false"
+        export MKFS_REISER4_PROG="`set_prog_path mkfs.reiser4`"
         ;;
 esac
 
@@ -258,6 +259,10 @@ _mount_opts()
 		# acls & xattrs aren't turned on by default on reiserfs
 		export MOUNT_OPTIONS="-o acl,user_xattr $REISERFS_MOUNT_OPTIONS"
 		;;
+       reiser4)
+               # acls & xattrs aren't supported by reiser4
+               export MOUNT_OPTIONS=$REISER4_MOUNT_OPTIONS
+               ;;
 	gfs2)
 		# acls aren't turned on by default on gfs2
 		export MOUNT_OPTIONS="-o acl $GFS2_MOUNT_OPTIONS"
@@ -302,6 +307,9 @@ _mkfs_opts()
 	reiserfs)
 		export MKFS_OPTIONS="$REISERFS_MKFS_OPTIONS -q"
 		;;
+       reiser4)
+		export MKFS_OPTIONS=$REISER4_MKFS_OPTIONS
+		;;
 	gfs2)
 		export MKFS_OPTIONS="$GFS2_MKFS_OPTIONS -O -p lock_nolock"
 		;;
@@ -319,7 +327,7 @@ _fsck_opts()
 	ext2|ext3|ext4|ext4dev)
 		export FSCK_OPTIONS="-nf"
 		;;
-	reiserfs)
+	reiser*)
 		export FSCK_OPTIONS="--yes"
 		;;
 	*)
