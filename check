@@ -385,6 +385,18 @@ _summary()
 	rm -f $tmp.*
 }
 
+_check_filesystems()
+{
+	if [ -f ${RESULT_DIR}/require_test ]; then
+		_check_test_fs || err=true
+		rm -f ${RESULT_DIR}/require_test
+	fi
+	if [ -f ${RESULT_DIR}/require_scratch ]; then
+		_check_scratch_fs || err=true
+		rm -f ${RESULT_DIR}/require_scratch
+	fi
+}
+
 _prepare_test_list
 
 if $OPTIONS_HAVE_SECTIONS; then
@@ -611,6 +623,9 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			    err=true
 			fi
 		    fi
+		    try="$try $seqnum"
+		    n_try=`expr $n_try + 1`
+		    _check_filesystems
 		fi
 
 	    fi
@@ -622,15 +637,6 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		bad="$bad $seqnum"
 		n_bad=`expr $n_bad + 1`
 		quick=false
-	    fi
-	    if [ ! -f $seqres.notrun ]
-	    then
-		try="$try $seqnum"
-		n_try=`expr $n_try + 1`
-		test -f ${RESULT_DIR}/require_test && _check_test_fs
-		rm -f ${RESULT_DIR}/require_test
-		test -f ${RESULT_DIR}/require_scratch && _check_scratch_fs
-		rm -f ${RESULT_DIR}/require_scratch
 	    fi
 
 	    seq="after_$seqnum"
