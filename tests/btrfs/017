@@ -56,7 +56,11 @@ _require_cloner
 
 rm -f $seqres.full
 
-_scratch_mkfs "--nodesize 4096"
+# Currently in btrfs the node/leaf size can not be smaller than the page
+# size (but it can be greater than the page size). So use the largest
+# supported node/leaf size (64Kb) so that the test can run on any platform
+# that Linux supports.
+_scratch_mkfs "--nodesize 65536" >>$seqres.full 2>&1
 _scratch_mount
 
 $XFS_IO_PROG -f -d -c "pwrite 0 8K" $SCRATCH_MNT/foo | _filter_xfs_io
