@@ -397,6 +397,32 @@ _check_filesystems()
 	fi
 }
 
+_check_dmesg()
+{
+	if [ ! -f ${RESULT_DIR}/check_dmesg ]; then
+		return
+	fi
+	rm -f ${RESULT_DIR}/check_dmesg
+
+	# search the dmesg log of last run of $seqnum for possible failures
+	# use sed \cregexpc address type, since $seqnum contains "/"
+	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
+		tac >$seqres.dmesg
+	grep -q -e "kernel BUG at" \
+	     -e "WARNING:" \
+	     -e "BUG:" \
+	     -e "Oops:" \
+	     -e "possible recursive locking detected" \
+	     $seqres.dmesg
+	if [ $? -eq 0 ]; then
+		echo "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
+		err=true
+	else
+		rm -f $seqres.dmesg
+	fi
+}
+
+
 _prepare_test_list
 
 if $OPTIONS_HAVE_SECTIONS; then
@@ -564,6 +590,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		if [ -w /dev/kmsg ]; then
 			date_time=`date +"%F %T"`
 			echo "run fstests $seqnum at $date_time" > /dev/kmsg
+			# _check_dmesg depends on this log in dmesg
+			touch ${RESULT_DIR}/check_dmesg
 		fi
 		./$seq >$tmp.rawout 2>&1
 		sts=$?
@@ -630,6 +658,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		    try="$try $seqnum"
 		    n_try=`expr $n_try + 1`
 		    _check_filesystems
+		    _check_dmesg
 		fi
 
 	    fi
