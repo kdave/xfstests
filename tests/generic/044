@@ -1,5 +1,5 @@
 #! /bin/bash
-# FSQA Test No. 137
+# FSQA Test No. 044
 #
 # Test for NULL files problem
 #
@@ -36,13 +36,13 @@ trap "exit \$status" 0 1 2 3 15
 . ./common/filter
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
 _require_fiemap
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 # create files
@@ -54,6 +54,12 @@ do
 	if [ $? -ne 0 ]
 	then
 		echo error creating/writing file $file
+		exit
+	fi
+	xfs_io -c "truncate 64k" $file > /dev/null
+	if [ $? -ne 0 ]
+	then
+		echo error truncating file $file
 		exit
 	fi
 	let i=$i+1
@@ -103,4 +109,4 @@ do
 done
 
 status=0
-exit 
+exit

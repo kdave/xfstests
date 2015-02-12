@@ -1,7 +1,8 @@
 #! /bin/bash
-# FSQA Test No. 140
+# FSQA Test No. 049
 #
 # Test for NULL files problem
+# test inode size is on disk after sync - expose log replay bug
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
@@ -36,16 +37,46 @@ trap "exit \$status" 0 1 2 3 15
 . ./common/filter
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
 _require_fiemap
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-# create files
+_check_files()
+{
+	# check file size and contents
+	i=1;
+	while [ $i -lt 1000 ]
+	do
+		file=$SCRATCH_MNT/$i
+		# if file is missing then sync failed
+		if [ -e $file ]
+		then
+			# if file size is not 32KB then sync failed
+			if [ `ls -l $file | tr -s ' ' | cut -d ' ' -f 5` -eq 32768 ]
+			then
+				# if file has non-zero size but no extents then it's contents will be NULLs, bad.
+				num_extents=`_count_extents $file`
+				if [ $num_extents -eq 0 ]; then
+					echo corrupt file $file - non-zero size but no extents
+				else
+					rm -f $file
+				fi
+			else
+				echo file $file has incorrect size - sync failed
+			fi
+		else
+			echo file $file missing - sync failed
+		fi
+		let i=$i+1
+	done
+}
+
+# create files and sync them
 i=1;
 while [ $i -lt 1000 ]
 do
@@ -56,20 +87,12 @@ do
 		echo error creating/writing file $file
 		exit
 	fi
-	xfs_io -c "truncate 64k" $file > /dev/null
-	if [ $? -ne 0 ]
-	then
-		echo error truncating file $file
-		exit
-	fi
 	let i=$i+1
 done
 
-# give the system a chance to write something out
-sleep 10
-
+# sync, then shutdown immediately after, then remount and test
+sync
 src/godown $SCRATCH_MNT
-
 umount $SCRATCH_MNT
 _scratch_mount
 umount $SCRATCH_MNT
@@ -79,31 +102,7 @@ then
 	exit
 fi
 _scratch_mount
-
-# check file size and contents
-i=1;
-while [ $i -lt 1000 ]
-do
-	file=$SCRATCH_MNT/$i
-	# if file does not exist, the create was not logged, skip it
-	if [ -e $file ]
-	then
-		# if file size is zero it cannot be corrupt, skip it
-		if [ -s $file ]
-		then
-			# if file has non-zero size but no extents then it's contents will be NULLs, bad.
-			num_extents=`_count_extents $file`
-			if [ $num_extents -eq 0 ]; then
-				echo corrupt file $file - non-zero size but no extents
-			else
-				rm -f $file
-			fi
-		else
-			rm -f $file
-		fi
-	fi
-	let i=$i+1
-done
+_check_files
 
 status=0
-exit 
+exit

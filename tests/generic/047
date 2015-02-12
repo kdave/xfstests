@@ -1,8 +1,8 @@
 #! /bin/bash
-# FSQA Test No. 182
+# FSQA Test No. 047
 #
 # Test for NULL files problem
-# test inode size is on disk after sync - expose log replay bug
+# test inode size is on disk after fsync
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
@@ -37,13 +37,13 @@ trap "exit \$status" 0 1 2 3 15
 . ./common/filter
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
 _require_fiemap
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 _check_files()
@@ -53,10 +53,10 @@ _check_files()
 	while [ $i -lt 1000 ]
 	do
 		file=$SCRATCH_MNT/$i
-		# if file is missing then sync failed
+		# if file is missing then fsync failed
 		if [ -e $file ]
 		then
-			# if file size is not 32KB then sync failed
+			# if file size is not 32KB then fsync failed
 			if [ `ls -l $file | tr -s ' ' | cut -d ' ' -f 5` -eq 32768 ]
 			then
 				# if file has non-zero size but no extents then it's contents will be NULLs, bad.
@@ -67,21 +67,21 @@ _check_files()
 					rm -f $file
 				fi
 			else
-				echo file $file has incorrect size - sync failed
+				echo file $file has incorrect size - fsync failed
 			fi
 		else
-			echo file $file missing - sync failed
+			echo file $file missing - fsync failed
 		fi
 		let i=$i+1
 	done
 }
 
-# create files and sync them
+# create files and fsync them
 i=1;
 while [ $i -lt 1000 ]
 do
 	file=$SCRATCH_MNT/$i
-	xfs_io -f -c "pwrite -b 32k -S 0xff 0 32k" $file > /dev/null
+	xfs_io -f -c "pwrite -b 32k -S 0xff 0 32k" -c "fsync" $file > /dev/null
 	if [ $? -ne 0 ]
 	then
 		echo error creating/writing file $file
@@ -90,8 +90,7 @@ do
 	let i=$i+1
 done
 
-# sync, then shutdown immediately after, then remount and test
-sync
+# shutdown immediately after, then remount and test
 src/godown $SCRATCH_MNT
 umount $SCRATCH_MNT
 _scratch_mount

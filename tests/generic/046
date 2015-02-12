@@ -1,5 +1,5 @@
 #! /bin/bash
-# FSQA Test No. 139
+# FSQA Test No. 046
 #
 # Test for NULL files problem
 #
@@ -36,13 +36,13 @@ trap "exit \$status" 0 1 2 3 15
 . ./common/filter
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
 _require_fiemap
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 # create files
@@ -50,13 +50,13 @@ i=1;
 while [ $i -lt 1000 ]
 do
 	file=$SCRATCH_MNT/$i
-	xfs_io -f -c "pwrite -b 64k -S 0xff 0 64k" $file > /dev/null
+	xfs_io -f -c "pwrite -b 32k -S 0xff 0 32k" $file > /dev/null
 	if [ $? -ne 0 ]
 	then
 		echo error creating/writing file $file
 		exit
 	fi
-	xfs_io -c "truncate 32k" $file > /dev/null
+	xfs_io -c "truncate 64k" $file > /dev/null
 	if [ $? -ne 0 ]
 	then
 		echo error truncating file $file
@@ -93,11 +93,8 @@ do
 		then
 			# if file has non-zero size but no extents then it's contents will be NULLs, bad.
 			num_extents=`_count_extents $file`
-			num_holes=`_count_holes $file`
 			if [ $num_extents -eq 0 ]; then
 				echo corrupt file $file - non-zero size but no extents
-			elif [ $num_holes -ne 0 ]; then
-				echo corrupt file $file - contains holes
 			else
 				rm -f $file
 			fi
@@ -109,4 +106,4 @@ do
 done
 
 status=0
-exit 
+exit
