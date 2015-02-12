@@ -42,6 +42,7 @@ _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
+_require_fiemap
 _scratch_mkfs_xfs >/dev/null 2>&1
 _scratch_mount
 
@@ -62,8 +63,8 @@ _check_files()
 			if [ `ls -l $file | tr -s ' ' | cut -d ' ' -f 5` -eq 10485760 ]
 			then
 				# if file has non-zero size but no extents then it's contents will be NULLs, bad.
-				if xfs_bmap $file | grep 'no extents' > /dev/null
-				then
+				num_extents=`_count_extents $file`
+				if [ $num_extents -eq 0 ]; then
 					echo corrupt file $file - non-zero size but no extents
 				else
 					rm -f $file

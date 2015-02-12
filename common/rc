@@ -2332,6 +2332,24 @@ _require_scratch_shutdown()
 	_scratch_unmount
 }
 
+# Does fiemap support?
+_require_fiemap()
+{
+	_require_xfs_io_command "fiemap"
+}
+
+_count_extents()
+{
+	res=`$XFS_IO_PROG -c "fiemap" $1 | tail -n +2`
+	echo $res | grep -v hole | wc -l | $AWK_PROG '{print $1}'
+}
+
+_count_holes()
+{
+	res=`$XFS_IO_PROG -c "fiemap" $1 | tail -n +2`
+	echo $res | grep hole | wc -l | $AWK_PROG '{print $1}'
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()

@@ -41,6 +41,7 @@ _supported_os Linux IRIX
 
 _require_scratch
 _require_scratch_shutdown
+_require_fiemap
 _scratch_mkfs_xfs >/dev/null 2>&1
 _scratch_mount
 
@@ -91,11 +92,11 @@ do
 		if [ -s $file ]
 		then
 			# if file has non-zero size but no extents then it's contents will be NULLs, bad.
-			if xfs_bmap $file | grep 'no extents' > /dev/null
-			then
+			num_extents=`_count_extents $file`
+			num_holes=`_count_holes $file`
+			if [ $num_extents -eq 0 ]; then
 				echo corrupt file $file - non-zero size but no extents
-			elif xfs_bmap $file | grep 'hole' > /dev/null
-			then
+			elif [ $num_holes -ne 0 ]; then
 				echo corrupt file $file - contains holes
 			else
 				rm -f $file
