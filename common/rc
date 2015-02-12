@@ -2320,6 +2320,18 @@ _require_freeze()
 	[ $result -eq 0 ] || _notrun "$FSTYP does not support freezing"
 }
 
+# Does shutdown work on this fs?
+_require_scratch_shutdown()
+{
+	[ -x src/godown ] || _notrun "src/godown executable not found"
+
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount
+	src/godown -f $SCRATCH_MNT 2>&1 \
+		|| _notrun "$FSTYP does not support shutdown"
+	_scratch_unmount
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()
