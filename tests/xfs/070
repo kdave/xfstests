@@ -1,0 +1,110 @@
+#! /bin/bash
+# FS QA Test No. 070
+#
+# As part of superblock verification, xfs_repair checks the primary sb and
+# verifies all secondary sb's against the primary. In the event of geometry
+# inconsistency, repair uses a heuristic that tracks the most frequently
+# occurring settings across the set of N (agcount) superblocks.
+#
+# xfs_repair was subject to a bug that disregards this heuristic in the event
+# that the last secondary superblock in the fs is corrupt. The side effect is an
+# unnecessary and potentially time consuming brute force superblock scan.
+#
+# This is a regression test for the aforementioned xfs_repair bug. We
+# intentionally corrupt the last superblock in the fs, run xfs_repair and
+# verify it repairs the fs correctly. We explicitly detect a brute force scan
+# and abort the repair to save time in the failure case.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	killall -9 $XFS_REPAIR_PROG > /dev/null 2>&1
+	wait > /dev/null 2>&1
+}
+
+# Start and monitor an xfs_repair of the scratch device. This test can induce a
+# time consuming brute force superblock scan. Since a brute force scan means
+# test failure, detect it and end the repair.
+_xfs_repair_noscan()
+{
+	# invoke repair directly so we can kill the process if need be
+	$XFS_REPAIR_PROG $SCRATCH_DEV 2>&1 | tee -a $seqres.full > $tmp.repair &
+	repair_pid=$!
+
+	# monitor progress for as long as it is running
+	while [ `pgrep xfs_repair` ]; do
+		grep "couldn't verify primary superblock" $tmp.repair \
+			> /dev/null 2>&1
+		if [ $? == 0 ]; then
+			# we've started a brute force scan. kill repair and
+			# fail the test
+			kill -9 $repair_pid >> $seqres.full 2>&1
+			wait >> $seqres.full 2>&1
+
+			_fail "xfs_repair resorted to brute force scan"
+		fi
+
+		sleep 1
+	done
+
+	wait
+
+	cat $tmp.repair | _filter_repair
+}
+
+rm -f $seqres.full
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/repair
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch_nocheck
+
+_scratch_mkfs | _filter_mkfs > /dev/null 2> $tmp.mkfs || _fail "mkfs failed"
+
+. $tmp.mkfs # import agcount
+
+# corrupt the last secondary sb in the fs
+$XFS_DB_PROG -x -c "sb $((agcount - 1))" -c "type data" \
+	-c "write fill 0xff 0 512" $SCRATCH_DEV
+
+# attempt to repair
+_xfs_repair_noscan
+
+# success, all done
+status=0
+exit
