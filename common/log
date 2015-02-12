@@ -510,5 +510,52 @@ _require_logstate()
     esac
 }
 
+_xfs_log_config()
+{
+    echo "# mkfs-opt             mount-opt"
+    echo "# ------------------------------"
+    echo "  version=2            logbsize=32k"
+    echo "  version=2,su=4096    logbsize=32k"
+    echo "  version=2,su=32768   logbsize=32k"
+    echo "  version=2,su=32768   logbsize=64k"
+    echo "  version=2            logbsize=64k"
+    echo "  version=2,su=64k     logbsize=64k"
+    echo "  version=2            logbsize=128k"
+    echo "  version=2,su=128k    logbsize=128k"
+    echo "  version=2            logbsize=256k"
+    echo "  version=2,su=256k    logbsize=256k"
+}
+
+_f2fs_log_config()
+{
+    echo "# mkfs-opt             mount-opt"
+    echo "# ------------------------------"
+    echo "  test1     active_logs=6,background_gc=off"
+    echo "  test2     active_logs=6,background_gc=off,inline_data"
+    echo "  test3     active_logs=6,background_gc=off,inline_dentry"
+    echo "  test4     active_logs=6,background_gc=off,inline_data,inline_dentry"
+    echo "  test5     active_logs=6,background_gc=off,disable_roll_forward"
+    echo "  test6     active_logs=6,background_gc=off,discard,inline_data,inline_dentry"
+    echo "  test7     active_logs=6,background_gc=on"
+    echo "  test8     active_logs=6,background_gc=on,inline_data"
+    echo "  test9     active_logs=6,background_gc=on,inline_data,inline_dentry"
+    echo "  test10    active_logs=6,background_gc=on,discard,inline_data,inline_dentry"
+}
+
+_get_log_configs()
+{
+    case "$FSTYP" in
+    xfs)
+        _xfs_log_config
+        ;;
+    f2fs)
+        _f2fs_log_config
+        ;;
+    *)
+        _notrun "$FSTYP does not support log configs."
+        ;;
+    esac
+}
+
 # make sure this script returns success
 /bin/true
