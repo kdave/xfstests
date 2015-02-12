@@ -53,6 +53,18 @@ _do_meta()
     fi
 }
 
+_get_quota_option()
+{
+    case $FSTYP in
+    xfs)
+        _require_xfs_quota
+        echo "-o uquota"
+        ;;
+    *)
+        ;;
+    esac
+}
+
 # real QA test starts here
 _supported_fs xfs
 _supported_os IRIX Linux
@@ -62,7 +74,8 @@ _require_scratch
 _require_scratch_shutdown
 _require_logstate
 _require_v2log 
-_require_xfs_quota
+
+QUOTA_OPTION=`_get_quota_option`
 
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -90,7 +103,7 @@ do
 
     # mount the FS
     _echofull "mount"
-    if ! _scratch_mount -o uquota >>$seqres.full 2>&1; then
+    if ! _scratch_mount $QUOTA_OPTION >>$seqres.full 2>&1; then
 	_echofull "mount failed: $MOUNT_OPTIONS"
 	continue
     fi
@@ -116,7 +129,7 @@ do
     _scratch_xfs_logprint -n >>$seqres.full 2>&1
 
     _echofull "mount with replay"
-    _scratch_mount -o uquota >>$seqres.full 2>&1 \
+    _scratch_mount $QUOTA_OPTION >>$seqres.full 2>&1 \
 	|| _fail "mount failed: $MOUNT_OPTIONS"
 
     # check on what FS looks like after log recovery
