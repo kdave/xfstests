@@ -1,5 +1,5 @@
 #! /bin/bash
-# FS QA Test No. 086
+# FS QA Test No. 054
 #
 # To test log replay with version 2 logs
 # Initially keep this simple with just creates.
@@ -39,14 +39,13 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common/log
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os IRIX Linux
 
 rm -f $seqres.full $tmp.*
 _require_scratch
 _require_scratch_shutdown
 _require_logstate
-_require_v2log
 
 echo "*** init FS"
 umount $SCRATCH_DEV >/dev/null 2>&1
@@ -56,14 +55,14 @@ _get_log_configs > $tmp.seq.params
 # Do the work for various log params which
 # should not effect the data content of the log
 # Try with and without sync'ing - sync'ing will mean that
-# the log will be written out unfilled and thus the log 
+# the log will be written out unfilled and thus the log
 # stripe can have an effect.
 #
 for s in sync nosync ; do
     cat $tmp.seq.params \
     | while read mkfs mnt restofline
     do
-	if [ "$mkfs" = "#" ]; then 
+	if [ "$mkfs" = "#" ]; then
 	    continue
 	fi
 
@@ -73,8 +72,8 @@ for s in sync nosync ; do
 
 	# mkfs the FS
 	_echofull "mkfs"
-	_scratch_mkfs_xfs >>$seqres.full 2>&1
-	if [ $? -ne 0 ] ; then 
+	_scratch_mkfs >>$seqres.full 2>&1
+	if [ $? -ne 0 ] ; then
 	    _echofull "mkfs failed: $MKFS_OPTIONS"
 	    continue
 	fi
@@ -89,7 +88,7 @@ for s in sync nosync ; do
 	# create the metadata
 	if [ $s = "sync" ]; then
 	    # generate some log traffic - but not too much
-	    # add some syncs to get the log flushed to disk 
+	    # add some syncs to get the log flushed to disk
 	    for file in $SCRATCH_MNT/{0,1,2,3,4,5,6,7,8,9}{0,1,2,3,4,5,6,7,8,9}; do
 		touch $file
 		sync
@@ -137,5 +136,5 @@ for s in sync nosync ; do
     done
 done
 
-status=0 
+status=0
 exit
