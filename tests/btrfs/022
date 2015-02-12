@@ -52,7 +52,7 @@ _basic_test()
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT/a
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
-	$BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid >> \
+	$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid >> \
 		$seqres.full 2>&1
 	[ $? -eq 0 ] || _fail "couldn't find our subvols quota group"
 	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
@@ -62,10 +62,10 @@ _basic_test()
 
 	# the shared values of both the original subvol and snapshot should
 	# match
-	a_shared=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	a_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
 	a_shared=$(echo $a_shared | awk '{ print $2 }')
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT b)
-	b_shared=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	b_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
 	b_shared=$(echo $b_shared | awk '{ print $2 }')
 	[ $b_shared -eq $a_shared ] || _fail "shared values don't match"
 }
@@ -81,12 +81,12 @@ _rescan_test()
 	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
 		$FSSTRESS_AVOID
 	sync
-	output=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
 	echo $output >> $seqres.full
 	refer=$(echo $output | awk '{ print $2 }')
 	excl=$(echo $output | awk '{ print $3 }')
 	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
-	output=$($BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT | grep $subvolid)
+	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
 	echo $output >> $seqres.full
 	[ $refer -eq $(echo $output | awk '{ print $2 }') ] || \
 		_fail "reference values don't match after rescan"
@@ -117,6 +117,8 @@ _limit_test_noexceed()
 		$seqres.full 2>&1
 	[ $? -eq 0 ] || _fail "should have been allowed to write"
 }
+
+units=`_btrfs_qgroup_units`
 
 _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
