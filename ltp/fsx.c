@@ -142,6 +142,7 @@ int	randomoplen = 1;		/* -O flag disables it */
 int	seed = 1;			/* -S flag */
 int     mapped_writes = 1;              /* -W flag disables */
 int     fallocate_calls = 1;            /* -F flag disables */
+int     keep_size_calls = 1;            /* -K flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int     zero_range_calls = 1;           /* -z flag disables */
 int	collapse_range_calls = 1;	/* -C flag disables */
@@ -907,7 +908,7 @@ do_zero_range(unsigned offset, unsigned length)
 {
 	unsigned end_offset;
 	int mode = FALLOC_FL_ZERO_RANGE;
-	int keep_size;
+	int keep_size = 0;
 
 	if (length == 0) {
 		if (!quiet && testcalls > simulatedopcount)
@@ -916,7 +917,8 @@ do_zero_range(unsigned offset, unsigned length)
 		return;
 	}
 
-	keep_size = random() % 2;
+	if (keep_size_calls)
+		keep_size = random() % 2;
 
 	end_offset = keep_size ? 0 : offset + length;
 
@@ -1018,7 +1020,7 @@ void
 do_preallocate(unsigned offset, unsigned length)
 {
 	unsigned end_offset;
-	int keep_size;
+	int keep_size = 0;
 
         if (length == 0) {
                 if (!quiet && testcalls > simulatedopcount)
@@ -1027,7 +1029,8 @@ do_preallocate(unsigned offset, unsigned length)
                 return;
         }
 
-	keep_size = random() % 2;
+	if (keep_size_calls)
+		keep_size = random() % 2;
 
 	end_offset = keep_size ? 0 : offset + length;
 
@@ -1493,7 +1496,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FHzCLN:OP:RS:WZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfl:m:no:p:qr:s:t:w:xyAD:FKHzCLN:OP:RS:WZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -1589,6 +1592,9 @@ main(int argc, char **argv)
 			break;
 		case 'F':
 			fallocate_calls = 0;
+			break;
+		case 'K':
+			keep_size_calls = 0;
 			break;
 		case 'H':
 			punch_hole_calls = 0;
@@ -1751,6 +1757,8 @@ main(int argc, char **argv)
 
 	if (fallocate_calls)
 		fallocate_calls = test_fallocate(0);
+	if (keep_size_calls)
+		keep_size_calls = test_fallocate(FALLOC_FL_KEEP_SIZE);
 	if (punch_hole_calls)
 		punch_hole_calls = test_fallocate(FALLOC_FL_PUNCH_HOLE |
 						  FALLOC_FL_KEEP_SIZE);
