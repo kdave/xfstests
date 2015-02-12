@@ -216,14 +216,35 @@ _check_log()
         | head | grep -q "<CLEAN>" || _fail "DIRTY LOG"
 }
 
+_scratch_xfs_logstate()
+{
+    _scratch_xfs_logprint -t | tee -a $seqres.full | grep -q "<CLEAN>"
+    echo $?
+}
+
+_scratch_f2fs_logstate()
+{
+    $DUMP_F2FS_PROG $SCRATCH_DEV | tee -a $seqres.full | grep -q "unmount"
+    echo $?
+}
+
 _print_logstate()
 {
-    _scratch_xfs_logprint -t | tee -a $seqres.full >$tmp.logprint
-    if grep -q "<DIRTY>" $tmp.logprint; then
-	echo "dirty log"
-    fi
-    if grep -q "<CLEAN>" $tmp.logprint; then
-	echo "clean log"
+    case "$FSTYP" in
+    xfs)
+        dirty=$(_scratch_xfs_logstate)
+        ;;
+    f2fs)
+        dirty=$(_scratch_f2fs_logstate)
+        ;;
+    *)
+        ;;
+    esac
+
+    if [ $dirty -ne 0 ]; then
+        echo "dirty log"
+    else
+        echo "clean log"
     fi
 }
 
@@ -470,6 +491,24 @@ _require_v2log()
     # otherwise presume it does support v2 logs...:)
 }
 
+_require_logstate()
+{
+    case "$FSTYP" in
+    xfs)
+        if [ -z "$XFS_LOGPRINT_PROG" ]; then
+            _notrun "This test requires xfs_logprint utility."
+        fi
+        ;;
+    f2fs)
+        if [ -z "$DUMP_F2FS_PROG" ]; then
+            _notrun "This test requires dump.f2fs utility."
+        fi
+        ;;
+    *)
+        _notrun "$FSTYP does not support log state probing."
+        ;;
+    esac
+}
 
 # make sure this script returns success
 /bin/true
