@@ -64,7 +64,7 @@ _init_flakey
 _mount_flakey
 
 # Create the file first.
-$XFS_IO_PROG -f -c "pwrite -S 0xff 0 64K" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xff 0 256K" $SCRATCH_MNT/foo | _filter_xfs_io
 
 # Now sync the file data to disk using 'sync' and not an fsync. This is because
 # in btrfs the first fsync clears the btrfs inode full fsync flag, which must
@@ -80,11 +80,11 @@ sync
 # This second msync() used to be a no-op for that btrfs bug (and the first fsync
 # didn't log the last 4Kb extent as expected too).
 $XFS_IO_PROG \
-	-c "mmap -w 0 64K"         \
+	-c "mmap -w 0 256K"         \
 	-c "mwrite -S 0xaa 0 4K"   \
-	-c "mwrite -S 0xbb 60K 4K" \
-	-c "msync -s 0K 16K"       \
-	-c "msync -s 32K 32K"      \
+	-c "mwrite -S 0xbb 252K 4K" \
+	-c "msync -s 0K 64K"       \
+	-c "msync -s 192K 64K"      \
 	-c "munmap"                \
 	$SCRATCH_MNT/foo | _filter_xfs_io
 
