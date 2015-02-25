@@ -2340,6 +2340,38 @@ _require_norecovery()
 	_scratch_unmount
 }
 
+# Does this filesystem support metadata journaling?
+# We exclude ones here that don't; otherwise we assume that it does, so the
+# test will run, fail, and motivate someone to update this test for a new
+# filesystem.
+#
+# It's possible that TEST_DEV and SCRATCH_DEV have different features (it'd be
+# odd, but possible) so check $TEST_DEV by default, but we can optionall pass
+# any dev we want.
+_require_metadata_journaling()
+{
+	if [ -z $1 ]; then
+		DEV=$TEST_DEV
+	else
+		DEV=$1
+	fi
+
+	case "$FSTYP" in
+	ext2|vfat|msdos)
+		_notrun "$FSTYP does not support metadata journaling"
+		;;
+	ext4)
+		# ext4 could be mkfs'd without a journal...
+		_require_dumpe2fs
+		$DUMPE2FS_PROG -h $DEV 2>&1 | grep -q has_journal || \
+			_notrun "$FSTYP on $DEV not configured with metadata journaling"
+		;;
+	*)
+		# by default we pass; if you need to, add your fs above!
+		;;
+	esac
+}
+
 # Does fiemap support?
 _require_fiemap()
 {
