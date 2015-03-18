@@ -81,10 +81,10 @@ modsize=`expr   4 \* $incsize`	# pause after this many increments
 [ `expr $endsize / $dbsize` -lt $dblocks ] || _notrun "Scratch device too small"
 
 nags=4
-size=`expr 120 \* 1048576`	# 120 megabytes initially
+size=`expr 125 \* 1048576`	# 120 megabytes initially
 sizeb=`expr $size / $dbsize`	# in data blocks
 echo "*** creating scratch filesystem"
-_create_scratch -lsize=5m -dsize=${size} -dagcount=${nags}
+_create_scratch -lsize=10m -dsize=${size} -dagcount=${nags}
 
 fillsize=`expr 110 \* 1048576`	# 110 megabytes of filling
 echo "*** using some initial space on scratch filesystem"
@@ -95,13 +95,13 @@ _fill_scratch $fillsize
 # Kick off more stress threads on each iteration, grow; repeat.
 #
 while [ $size -le $endsize ]; do
-	echo "*** stressing a ${size} byte filesystem"
+	echo "*** stressing filesystem"
 	echo "*** stressing a ${sizeb} block filesystem" >> $seqres.full
 	_stress_scratch
 	sleep 1
 	size=`expr $size + $incsize`
 	sizeb=`expr $size / $dbsize`	# in data blocks
-	echo "*** growing to a ${size} byte filesystem"
+	echo "*** growing filesystem"
 	echo "*** growing to a ${sizeb} block filesystem" >> $seqres.full
 	xfs_growfs -D ${sizeb} $SCRATCH_MNT \
 		| tee -a $seqres.full | _filter_mkfs 2>$tmp.growfs
