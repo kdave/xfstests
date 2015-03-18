@@ -47,6 +47,8 @@ _cleanup()
 #
 # filter out counts which will vary
 #   - extsz, blocks, agsize, agcount, device name, rtextents
+#   - log version varies for crc enabled fs
+#   - lsunit varies for 512/4k sector devices
 # filter out differences between linux and irix:
 #   - sectsz on Linux
 #   - mmr, mixed-case on IRIX
@@ -63,7 +65,7 @@ _cleanup()
 #           =                       sunit=0 blks
 #  realtime =none                   extsz=65536  blocks=N, rtextents=N
 #
-_mkfs_filter()
+mkfs_filter()
 {
    tee -a $seqres.full | \
    sed \
@@ -80,6 +82,8 @@ _mkfs_filter()
 	-e '/ *= *mmr=[0-9][0-9]* *$/d' \
 	-e 's/ *mixed-case=[YN]//' \
 	-e 's/ *ascii-ci=[01]//' \
+	-e 's/\(version=\)\([12]\)/\1N/' \
+	-e 's/\(sunit=\)\([018] blks\)/\1N blks/' \
 	-e 's/sectsz=[0-9][0-9]* *//' \
 	-e 's/, lazy-count.*//' \
 	-e '/inode-paths/d' \
@@ -145,7 +149,7 @@ do
     fi
     echo "--- mkfs=$mkfs ---"
     export MKFS_OPTIONS="$mkfs"
-    _scratch_mkfs_xfs 2>&1 | _mkfs_filter
+    _scratch_mkfs_xfs 2>&1 | mkfs_filter
     echo ""
     echo ""
 done
