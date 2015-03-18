@@ -96,9 +96,9 @@ int main(int argc, char *argv[])
 		 * Turn EEXIST into ENOTEMPTY.  E.g. XFS uses EEXIST, and that
 		 * is also accepted by the standards.
 		 *
-		 * This applies only to plain rename (flags == 0).
+		 * This applies only to plain rename and RENAME_WHITEOUT
 		 */
-		if (!flags && errno == EEXIST)
+		if (errno == EEXIST && (!flags || (flags & RENAME_WHITEOUT)))
 			errno = ENOTEMPTY;
 
 		perror("");
