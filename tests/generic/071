@@ -1,0 +1,79 @@
+#! /bin/bash
+# FS QA Test No. 071
+#
+# Test extent pre-allocation (using fallocate) into a region that already has a
+# pre-allocated extent that ends beyond the file's size. Verify that if the fs
+# is unmounted immediately after, the file's size and content are not lost.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_need_to_be_root
+_require_scratch
+_require_xfs_io_command "falloc"
+
+rm -f $seqres.full
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Create our test file with a pre-allocated extent that doesn't increase the
+# file's size.
+$XFS_IO_PROG -f -c "falloc -k 0 1M" $SCRATCH_MNT/foo
+
+# Write some data to our file.
+$XFS_IO_PROG -c "pwrite -S 0xaa 0 256K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now call fallocate again, but allowing it to increase the file's size and
+# cover a range that is entirely covered by the extent that we previously
+# pre-allocated.
+$XFS_IO_PROG -c "falloc 0 512K" $SCRATCH_MNT/foo
+
+# Now ummount and mount again the fs. After this we expect the file's size to
+# be 512Kb.
+_scratch_remount
+
+# Now check that all data we wrote before are available and the file size is
+# 512Kb.
+echo "File content after remount:"
+od -t x1 $SCRATCH_MNT/foo
+
+status=0
+exit
