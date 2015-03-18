@@ -96,6 +96,11 @@ touch $SCRATCH_MNT/mydir/x/y/z/qwerty
 # Now fsync only our top directory.
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/mydir
 
+# And fsync now our new file named 'hello', just to verify later that it has
+# the expected content and that the previous fsync on the directory 'mydir' had
+# no bad influence on this fsync.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/hello
+
 # Simulate a crash/power loss.
 _load_flakey_table $FLAKEY_DROP_WRITES
 _unmount_flakey
@@ -131,25 +136,10 @@ rm -f $SCRATCH_MNT/foo
 [ -f $SCRATCH_MNT/mydir/x/y/z/qwerty ] || \
 	echo "File mydir/x/y/z/qwerty is missing"
 
-digest_ok=no
-hello_digest=$(md5sum $SCRATCH_MNT/hello | cut -d ' ' -f 1)
-
-case "$FSTYP" in
-ext3)
-	# a 64Kb file, with all bytes having the value 0xff
-	[ $hello_digest == "ecb99e6ffea7be1e5419350f725da86b" ] && digest_ok=yes
-	;;
-*)
-	# an empty file
-	[ $hello_digest == "d41d8cd98f00b204e9800998ecf8427e" ] && digest_ok=yes
-	;;
-esac
-
-if [ $digest_ok == "yes" ]; then
-	echo "file 'hello' has expected size and content"
-else
-	echo "file 'hello' has unexpected size or content"
-fi
+# We expect our file here to have a size of 64Kb and all the bytes having the
+# value 0xff.
+echo "file 'hello' content after log replay:"
+od -t x1 $SCRATCH_MNT/hello
 
 # Now remove all files/links, under our test directory 'mydir', and verify we
 # can remove all the directories.
