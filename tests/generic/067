@@ -1,0 +1,143 @@
+#! /bin/bash
+# FS QA Test No. 067
+#
+# Some random mount/umount corner case tests
+#
+# - mount at a nonexistent mount point
+# - mount a free loop device
+# - mount with a wrong fs type specified
+# - umount an symlink to device which is not mounted
+# - umount a path with too long name
+# - lazy umount a symlink
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch
+_require_loop
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# kernel should not hang nor oops when mounting fs to nonexistent mount point
+mount_nonexistent_mnt()
+{
+	echo "# mount to nonexistent mount point" >>$seqres.full
+	rm -rf $TEST_DIR/nosuchdir
+	$MOUNT_PROG $SCRATCH_DEV $TEST_DIR/nosuchdir >>$seqres.full 2>&1
+}
+
+# fs driver should be able to handle mounting a free loop device gracefully
+# xfs ever hung, "ec53d1d xfs: don't block on buffer read errors" fixed it
+mount_free_loopdev()
+{
+	echo "# mount a free loop device" >>$seqres.full
+	loopdev=`losetup -f`
+	$MOUNT_PROG -t $FSTYP $loopdev $SCRATCH_MNT >>$seqres.full 2>&1
+}
+
+# mount with wrong fs type specified.
+# This should fail gracefully, no hang no oops are expected
+mount_wrong_fstype()
+{
+	local fs=ext4
+	if [ "$FSTYP" == "ext4" ]; then
+		fs=xfs
+	fi
+	echo "# mount with wrong fs type" >>$seqres.full
+	$MOUNT_PROG -t $fs $SCRATCH_DEV $SCRATCH_MNT >>$seqres.full 2>&1
+}
+
+# umount a symlink to device, which is not mounted.
+# This should fail gracefully, no hang no oops are expected
+umount_symlink_device()
+{
+	local symlink=$TEST_DIR/$seq.scratch_dev_symlink
+	rm -f $symlink
+	echo "# umount symlink to device, which is not mounted" >>$seqres.full
+	ln -s $SCRATCH_DEV $symlink
+	$UMOUNT_PROG $symlink >>$seqres.full 2>&1
+}
+
+# umount a path name that is 256 bytes long, this should fail gracefully,
+# and the following umount should not hang nor oops
+umount_toolong_name()
+{
+	local longname=$SCRATCH_MNT/`$PERL_PROG -e 'print "a"x256;'`
+
+	_scratch_mount 2>&1 | tee -a $seqres.full
+
+	echo "# umount a too-long name" >>$seqres.full
+	$UMOUNT_PROG $longname >>$seqres.full 2>&1
+	_scratch_unmount 2>&1 | tee -a $seqres.full
+}
+
+# lazy umount a symlink should not block following umount.
+# This is the test case described in https://lkml.org/lkml/2014/7/21/98
+lazy_umount_symlink()
+{
+	local symlink=$SCRATCH_MNT/$seq.testdir_symlink
+	echo "# lazy umount a symlink" >>$seqres.full
+	_scratch_mount 2>&1 | tee -a $seqres.full
+	mkdir -p $SCRATCH_MNT/testdir
+	rm -f $symlink
+	ln -s $SCRATCH_MNT/testdir $symlink
+
+	$UMOUNT_PROG -l $symlink >>$seqres.full 2>&1
+	# umount $SCRATCH_MNT should not be blocked
+	_scratch_unmount 2>&1 | tee -a $seqres.full
+}
+
+echo "Silence is golden"
+
+mount_nonexistent_mnt
+mount_free_loopdev
+mount_wrong_fstype
+
+umount_symlink_device
+umount_toolong_name
+lazy_umount_symlink
+
+status=0
+exit
