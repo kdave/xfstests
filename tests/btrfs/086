@@ -1,0 +1,77 @@
+#! /bin/bash
+# FS QA Test No. btrfs/086
+#
+# Test cloning a file range with a length of zero into a destination offset
+# greater than zero.
+#
+# This made btrfs create an extent state record with a start offset greater than
+# the end offset, resulting in chaos such as an infinite loop when evicting an
+# inode.
+#
+# This issue was fixed by the following linux kernel patch:
+#
+#   Btrfs: fix inode eviction infinite loop after cloning into it
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_cloner
+_need_to_be_root
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+touch $SCRATCH_MNT/foo
+touch $SCRATCH_MNT/bar
+
+# Now attempt to clone foo into bar. Because we pass a length of zero, the
+# clone ioctl will adjust the length to match the size of the file foo (minus
+# the source offset which is zero) - because the adjusted length value is
+# zero, it made btrfs create an extent state record for file bar with a start
+# offset (64k) greater then its end offset (64k - 1), which is something never
+# supposed to happen and for example it made inode eviction enter an infinite
+# loop that dumped a warning trace on each iteration.
+$CLONER_PROG -s 0 -d 65536 -l 0 $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+echo "bar file size after clone operation: $(stat -c %s $SCRATCH_MNT/bar)"
+
+status=0
+exit
