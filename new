@@ -81,11 +81,14 @@ line=0
 eof=1
 [ -f "$tdir/group" ] || usage
 
-for found in `cat $tdir/group | $AWK_PROG '{ print $1 }'`
+for found in `cat $tdir/group | tr - ' ' | $AWK_PROG '{ print $1 }'`
 do
     line=$((line+1))
-    if [ -z "$found" ] || [ "$found" == "#" ];then
-	continue
+    if [ -z "$found" ] || [ "$found" == "#" ]; then
+        continue
+    elif ! echo "$found" | grep -q "^$VALID_TEST_NAME$"; then
+        # this one is for tests not named by a number
+        continue
     fi
     i=$((i+1))
     id=`printf "%03d" $i`
@@ -100,7 +103,48 @@ if [ $eof -eq 1 ]; then
    id=`printf "%03d" $i`
 fi
 
-echo "Next test is $id"
+echo "Next test id is $id"
+
+read -p "Append a name to the ID? Test name will be $id-\$name. y,[n]: " -r
+if [[ $REPLY = [Yy] ]]; then
+	# get the new name from user
+	name=""
+	while [ "$name" = "" ]; do
+		read -p "Enter the name: "
+		if [ "$REPLY" = "" ]; then
+			echo "For canceling, use ctrl+c."
+		elif echo "$id-$REPLY" | grep -q "^$VALID_TEST_NAME$"; then
+			if [ -e "$tdir/$id-$REPLY" ]; then
+				echo "File '$id-$REPLY' already exists, use another one."
+				echo
+			else
+				name="$REPLY"
+			fi
+		else
+			echo "A name can contain only alphanumeric symbols and dash!"
+			echo
+		fi
+	done
+
+	# now find where to insert this name
+	eof=1
+	for found in `tail -n +$line $tdir/group | $AWK_PROG '{ print $1 }'`; do
+		found_id=$(echo "$found" | cut -d "-" -f 1 - )
+		line=$((line+1))
+		if [ -z "$found" ] || [ "$found" == "#" ]; then
+			continue
+		elif [ $found_id -gt $id ]; then
+			eof=0
+			break
+		fi
+	done
+	if [ $eof -eq 0 ]; then
+		# If place wasn't found, let $line be the end of the file
+		line=$((line-1))
+	fi
+	id="$id-$name"
+fi
+echo "Creating test file '$id'"
 
 if [ -f $tdir/$id ]
 then
@@ -115,7 +159,7 @@ year=`date +%Y`
 
 cat <<End-of-File >$tdir/$id
 #! /bin/bash
-# FS QA Test No. $id
+# FS QA Test $id
 #
 # what am I here for?
 #
