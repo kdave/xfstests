@@ -37,6 +37,7 @@ _cleanup()
     cd /
     rm -f $tmp.*
     umount $LOOP_MNT 2>/dev/null
+    [ -n "$LOOP_DEV" ] && losetup -d $LOOP_DEV
     rmdir $LOOP_MNT
 }
 
@@ -62,6 +63,8 @@ _filter_io()
 
 # real QA test starts here
 
+rm -f $seqres.full
+
 echo "*** create loop mount point"
 rmdir $LOOP_MNT 2>/dev/null
 mkdir -p $LOOP_MNT || _fail "cannot create loopback mount point"
@@ -84,7 +87,7 @@ _grow_loop()
 	echo
 
 	echo "*** mkfs loop file (size=$original)"
-	$MKFS_XFS_PROG -b size=$bsize -d $dparam \
+	$MKFS_XFS_PROG -m crc=0 -b size=$bsize -d $dparam \
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
@@ -107,6 +110,7 @@ _grow_loop()
 		losetup $LOOP_DEV $LOOP_IMG
 		 _check_xfs_filesystem $LOOP_DEV none none
 		losetup -d $LOOP_DEV
+		LOOP_DEV=
 	fi
 
 	rm -f $LOOP_IMG
