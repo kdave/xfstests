@@ -1,0 +1,186 @@
+#! /bin/bash
+# FS QA Test No. btrfs/092
+#
+# Test btrfs incremental send after renaming and moving directories around in a
+# way that ends up making a directory have different dentries with the same name
+# but pointing to different inodes in the parent and send snapshots, and also
+# inverting the ancestor-descendent relationship between one of those inodes and
+# some other inode.
+#
+# Cases like this made an incremental send enter an infinite lopp when building
+# path strings, leading to -ENOMEM errors when the path string reached a length
+# of PATH_MAX.
+# This issue was fixed by the following linux kernel btrfs patch:
+#
+#   Btrfs: incremental send, check if orphanized dir inode needs delayed rename
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -fr $send_files_dir
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_fssum
+_need_to_be_root
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+mkdir -p $SCRATCH_MNT/data/n1/n2
+mkdir $SCRATCH_MNT/data/n4
+mkdir -p $SCRATCH_MNT/data/t6/t7
+mkdir $SCRATCH_MNT/data/t5
+mkdir $SCRATCH_MNT/data/t7
+mkdir $SCRATCH_MNT/data/n4/t2
+mkdir $SCRATCH_MNT/data/t4
+mkdir $SCRATCH_MNT/data/t3
+mv $SCRATCH_MNT/data/t7 $SCRATCH_MNT/data/n4/t2
+mv $SCRATCH_MNT/data/t4 $SCRATCH_MNT/data/n4/t2/t7
+mv $SCRATCH_MNT/data/t5 $SCRATCH_MNT/data/n4/t2/t7/t4
+mv $SCRATCH_MNT/data/t6 $SCRATCH_MNT/data/n4/t2/t7/t4/t5
+mv $SCRATCH_MNT/data/n1/n2 $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6
+mv $SCRATCH_MNT/data/n1 $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6
+mv $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6/t7 $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6/n2
+mv $SCRATCH_MNT/data/t3 $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6/n2/t7
+
+# Filesystem looks like:
+#
+# .                                                                   (ino 256)
+# |-- data/                                                           (ino 257)
+#       |-- n4/                                                       (ino 260)
+#            |-- t2/                                                  (ino 265)
+#                 |-- t7/                                             (ino 264)
+#                      |-- t4/                                        (ino 266)
+#                           |-- t5/                                   (ino 263)
+#                                |-- t6/                              (ino 261)
+#                                     |-- n1/                         (ino 258)
+#                                     |-- n2/                         (ino 259)
+#                                          |-- t7/                    (ino 262)
+#                                               |-- t3/               (ino 267)
+#
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+
+# The sequence of directory rename operations below made the btrfs incremental
+# send implementation enter an infinite loop when building path strings. The
+# reason for this was the following:
+#
+# * While processing inode 262 it ended up orphanizing inode 264 (rename it to
+#   "/o264-6-0"). This is because the parent inode 265 has a dentry with name
+#   t7 in the parent snapshot that refers to inode 264, which is ahead of the
+#   current send progress (inode 262) and our inode 262 has the name t7 in
+#   the directory inode 265 in the send snapshot - so in order to rename inode
+#   262 to its new name/location, it orphanizes (renames) 264 before 264 is
+#   processed;
+#
+# * When it processes inode 264 it was not checking if it needed to delay its
+#   rename operation. This was incorrect because in the parent snapshot inode
+#   267 is a descendent of inode 264 and inode 267 is an ancestor of inode 264
+#   in the send snapshot, which means the rename of inode 264 must happen after
+#   inode 267 is renamed in order to avoid the infinite loops when building
+#   path strings that involved inodes 264 and 267;
+#
+# * As a consequence as soon as the send progress moved to inode 265, the
+#   following loop when building a path string for inode 264 happened:
+#
+#     start inode 264, send progress of 265 for example
+#     parent of 264 -> 267
+#     parent of 267 -> 262
+#     parent of 262 -> 259
+#     parent of 259 -> 261
+#     parent of 261 -> 263
+#     parent of 263 -> 266
+#     parent of 266 -> 264
+#       |--> back to first iteration while current path string length
+#            is <= PATH_MAX, and fail with -ENOMEM otherwise
+#
+mv $SCRATCH_MNT/data/n4/t2/t7/t4/t5/t6/n1 $SCRATCH_MNT/data/n4
+mv $SCRATCH_MNT/data/n4/t2 $SCRATCH_MNT/data/n4/n1
+mv $SCRATCH_MNT/data/n4/n1/t2/t7/t4/t5/t6/n2 $SCRATCH_MNT/data/n4/n1/t2
+mv $SCRATCH_MNT/data/n4/n1/t2/n2/t7/t3 $SCRATCH_MNT/data/n4/n1/t2
+mv $SCRATCH_MNT/data/n4/n1/t2/t7/t4/t5/t6 $SCRATCH_MNT/data/n4/n1/t2
+mv $SCRATCH_MNT/data/n4/n1/t2/t7/t4 $SCRATCH_MNT/data/n4/n1/t2/t6
+mv $SCRATCH_MNT/data/n4/n1/t2/t7 $SCRATCH_MNT/data/n4/n1/t2/t3
+mv $SCRATCH_MNT/data/n4/n1/t2/n2/t7 $SCRATCH_MNT/data/n4/n1/t2
+
+# Filesystem now looks like:
+#
+# .                                                                   (ino 256)
+# |-- data/                                                           (ino 257)
+#       |-- n4/                                                       (ino 260)
+#            |-- n1/                                                  (ino 258)
+#                 |-- t2/                                             (ino 265)
+#                      |-- n2/                                        (ino 259)
+#                      |-- t3/                                        (ino 267)
+#                      |    |-- t7                                    (ino 264)
+#                      |
+#                      |-- t6/                                        (ino 261)
+#                      |    |-- t4/                                   (ino 266)
+#                      |         |-- t5/                              (ino 263)
+#                      |
+#                      |-- t7/                                        (ino 262)
+#
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+
+run_check $FSSUM_PROG -A -f -w $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
+run_check $FSSUM_PROG -A -f -w $send_files_dir/2.fssum \
+	-x $SCRATCH_MNT/mysnap2/mysnap1 $SCRATCH_MNT/mysnap2
+
+_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
+_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
+	-f $send_files_dir/2.snap
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same content that the original filesystem had.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+run_check $FSSUM_PROG -r $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
+_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+run_check $FSSUM_PROG -r $send_files_dir/2.fssum $SCRATCH_MNT/mysnap2
+
+echo "Silence is golden"
+status=0
+exit
