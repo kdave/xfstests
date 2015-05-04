@@ -58,18 +58,7 @@ TOTAL_BLOCKS=`dumpe2fs -h $SCRATCH_DEV 2>/dev/null \
 FREE_BLOCKS=`dumpe2fs -h $SCRATCH_DEV 2>/dev/null \
 		| awk '/Free blocks:/{print $3}'`
 
-# ext3 doesn't count journal blocks as overhead, ext4 does.
-if [ $FSTYP = "ext3" ]; then
-	JOURNAL_SIZE=`dumpe2fs -h $SCRATCH_DEV 2>/dev/null \
-		| awk '/Journal size:/{print $3}' | _filter_size_to_bytes`
-	BLOCK_SIZE=`dumpe2fs -h $SCRATCH_DEV 2>/dev/null \
-		| awk '/Block size:/{print $3}'`
-	JOURNAL_BLOCKS=$(($JOURNAL_SIZE/$BLOCK_SIZE))
-else
-	JOURNAL_BLOCKS=0
-fi
-
-OVERHEAD=$(($TOTAL_BLOCKS-$FREE_BLOCKS-$JOURNAL_BLOCKS))
+OVERHEAD=$(($TOTAL_BLOCKS-$FREE_BLOCKS))
 
 #  bsddf|minixdf
 #         Set the behaviour  for  the  statfs  system  call.  The  minixdf
