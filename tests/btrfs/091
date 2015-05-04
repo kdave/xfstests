@@ -1,0 +1,102 @@
+#! /bin/bash
+# FS QA Test No. 091
+#
+# Test for incorrect exclusive reference count after cloning file
+# between subvolumes.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_need_to_be_root
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_cp_reflink
+
+rm -f $seqres.full
+
+# use largest node/leaf size (64K) to allow the test to be run on arch with
+# page size > 4k.
+NODESIZE=65536
+SUPPORT_NOINODE_CACHE="yes"
+
+run_check _scratch_mkfs "--nodesize $NODESIZE"
+
+# inode cache will also take space in fs tree, disable them to get consistent
+# result.
+# discard error output since we will check return value manually.
+_scratch_mount "-o noinode_cache" 2> /dev/null
+
+# Check for old kernel which doesn't support 'noinode_cache' mount option
+if [ $? -ne 0 ]; then
+	support_noinode_cache="no"
+	run_check _scratch_mount
+fi
+
+_run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv1
+_run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv2
+_run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv3
+
+_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+
+# if we don't support noinode_cache mount option, then we should double check
+# whether inode cache is enabled before executing the real test payload.
+if [ $SUPPORT_NOINODE_CACHE == "no" ]; then
+	EMPTY_SIZE=`$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | \
+		$SED_PROG -n '/[0-9]/p' | $AWK_PROG '{print $2}' | head -n1`
+	if [ $EMPTY_SIZE != $NODESIZE ]; then
+		_notrun "Kernel doesn't support to disable inode cache"
+	fi
+fi
+
+$XFS_IO_PROG -f -c "pwrite 0 256K" $SCRATCH_MNT/subv1/file1 | _filter_xfs_io
+cp --reflink $SCRATCH_MNT/subv1/file1 $SCRATCH_MNT/subv2/file1
+cp --reflink $SCRATCH_MNT/subv1/file1 $SCRATCH_MNT/subv3/file1
+
+# Current btrfs use tree search ioctl to show quota, which will only show info
+# in commit tree. So need to sync to update the qgroup commit tree.
+sync
+
+units=`_btrfs_qgroup_units`
+$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | $SED_PROG -n '/[0-9]/p' | \
+	$AWK_PROG '{print $2" "$3}'
+
+# success, all done
+status=0
+exit
