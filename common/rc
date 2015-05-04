@@ -1286,10 +1286,22 @@ _require_realtime()
 # this test requires that a specified command (executable) exists
 # $1 - command, $2 - name for error message
 #
+# Note: the command string might have parameters, so strip them before checking
+# whether it is executable.
 _require_command()
 {
-    [ -n "$1" ] && _cmd="$1" || _cmd="$2"
-    [ -n "$1" -a -x "$1" ] || _notrun "$_cmd utility required, skipped this test"
+	if [ $# -eq 2 ]; then
+		_name="$2"
+	elif [ $# -eq 1 ]; then
+		_name="$1"
+	else
+		_fail "usage: _require_command <command> [<name>]"
+	fi
+
+	_command=`echo "$1" | awk '{ print $1 }'`
+	if [ ! -x $command ]; then
+		_notrun "$_name utility required, skipped this test"
+	fi
 }
 
 # this test requires the device to be valid block device
