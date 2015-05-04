@@ -1,0 +1,71 @@
+#! /bin/bash
+# FS QA Test No. 001
+#
+# Test truncate orphan inodes when mounting extN.
+# ext4 used to hit WARNING, this commit fixed the issue
+#
+# 721e3eb ext4: lock i_mutex when truncating orphan inodes
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext2 ext3 ext4
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+_scratch_mkfs_sized $((16*1024*1024)) >>$seqres.full 2>&1
+_scratch_mount
+
+# create a file and get its inode number, usually it's 12, but to be accurate
+testfile=$SCRATCH_MNT/testfile
+touch $testfile
+inode=`ls -i $testfile | awk '{print $1}'`
+
+# add the inode in orphan inode list
+_scratch_unmount
+debugfs -w -R "set_super_value last_orphan $inode" $SCRATCH_DEV \
+	>>$seqres.full 2>&1
+
+# mount again to truncate orphan inode, _check_dmesg will catch the WARNING
+_scratch_mount
+
+status=0
+exit
