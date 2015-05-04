@@ -1,0 +1,104 @@
+#! /bin/bash
+# FS QA Test No. 084
+#
+# Test hardlink to unlinked file.
+#
+# Regression test for commit:
+# aae8a97 fs: Don't allow to create hardlink for deleted file
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+link_unlink_storm()
+{
+	local src=$1
+	local target=$2
+	local i=0
+
+	while true; do
+		ln -f $src $target.$i >/dev/null 2>&1
+		rm -f $target.$i >/dev/null 2>&1
+		let i=i+1
+	done
+}
+
+rm -f $seqres.full
+nr_cpu=`$here/src/feature -o`
+echo "Silence is golden"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# create, open & unlinked files so unlinked inode list is not empty
+for i in `seq 1 $nr_cpu`; do
+	testfile=$SCRATCH_MNT/$seq.unlinked.$i
+	touch $testfile
+	tail -f $testfile &
+	tail_pids="$tail_pids $!"
+done
+# give tail some time to open the file before the file is removed
+sleep 1
+rm -f $SCRATCH_MNT/$seq.unlinked.*
+
+# start link/unlink storm
+src=$SCRATCH_MNT/$seq.target
+touch $src
+for i in `seq 1 $nr_cpu`; do
+	target=$SCRATCH_MNT/$seq.target.link.$i
+	link_unlink_storm $src $target &
+	link_pids="$link_pids $!"
+done
+
+# remove & re-create target to race with link/unlink
+while true; do
+	rm -f $src
+	touch $src
+done &
+sleep 5
+kill $! >/dev/null 2>&1
+
+kill $tail_pids $link_pids >/dev/null 2>&1
+wait $tail_pids $link_pids
+
+# all done, no oops/hang expected, _check_filesystems checks SCRATCH_DEV after test
+status=0
+exit
