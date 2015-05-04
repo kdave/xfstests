@@ -1305,26 +1305,38 @@ _require_block_device()
 	fi
 }
 
+# brd based ram disks erase the device when they receive a flush command when no
+# active references are present. This causes problems for DM devices sitting on
+# top of brd devices as DM doesn't hold active references to the brd device.
+_require_sane_bdev_flush()
+{
+	echo $1 | grep -q "^/dev/ram[0-9]\+$"
+	if [ $? -eq 0 ]; then
+		_notrun "This test requires a sane block device flush"
+	fi
+}
+
 # this test requires the device mapper flakey target
 #
 _require_dm_flakey()
 {
-    # require SCRATCH_DEV to be a valid block device
-    _require_block_device $SCRATCH_DEV
-    _require_command "$DMSETUP_PROG" dmsetup
+	# require SCRATCH_DEV to be a valid block device with sane BLKFLSBUF
+	# behaviour
+	_require_block_device $SCRATCH_DEV
+	_require_sane_bdev_flush $SCRATCH_DEV
+	_require_command "$DMSETUP_PROG" dmsetup
 
-    modprobe dm-flakey >/dev/null 2>&1
-    $DMSETUP_PROG targets | grep flakey >/dev/null 2>&1
-    if [ $? -eq 0 ]
-    then
-	:
-    else
-	_notrun "This test requires dm flakey support"
-    fi
+	modprobe dm-flakey >/dev/null 2>&1
+	$DMSETUP_PROG targets | grep flakey >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_notrun "This test requires dm flakey support"
+	fi
 }
 
 _require_dm_snapshot()
 {
+	_require_block_device $SCRATCH_DEV
+	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 	modprobe dm-snapshot >/dev/null 2>&1
 	$DMSETUP_PROG targets | grep -q snapshot
