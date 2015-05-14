@@ -365,9 +365,12 @@ _scratch_mkfs_xfs()
 		mkfs_status=$?
 	fi
 
-	# output stored mkfs output
-	cat $tmp_dir.mkfserr >&2
+	# output stored mkfs output, filtering unnecessary warnings from stderr
 	cat $tmp_dir.mkfsstd
+	cat $tmp_dir.mkfserr | sed \
+		-e '/less than device physical sector/d' \
+		-e '/switching to logical sector/d' \
+		>&2
 	rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
 
 	return $mkfs_status
