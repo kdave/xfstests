@@ -75,19 +75,21 @@ dd if=/dev/zero of=$tmpfile bs=1 seek=19998630180864 count=1 >/dev/null 2>&1 \
 
 mkfs_filter()
 {
-	sed -e "s,^meta-data=.*isize,meta-data=FILE                   isize,g" \
+	sed -e 's/meta-data=[^ ]*/meta-data=FILE/' \
+	    -e 's/ *isize=[0-9]* / isize=N /' \
 	    -e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/" \
 	    -e "s/, projid32bit=[0-9]//" \
 	    -e "s/ ftype=[0-9]//" \
 	    -e "s/\(sectsz\)\(=[0-9]* *\)/\1=512   /" \
 	    -e "s/\(sunit=\)\([0-9]* blks,\)/\10 blks,/" \
+	    -e "s/, lazy-count=[0-9]//" \
 	    -e "/.*crc=/d"
 }
 
-# mkfs slightly smaller than that
+# mkfs slightly smaller than that, small log for speed.
 echo "=== mkfs.xfs ==="
-mkfs.xfs -f -bsize=4096 -dagsize=76288719b,size=3905982455b \
-	 -llazy-count=0 $tmpfile  | mkfs_filter
+mkfs.xfs -f -bsize=4096 -l size=32m -dagsize=76288719b,size=3905982455b \
+	 $tmpfile  | mkfs_filter
 
 mount -o loop $tmpfile $tmpdir || _fail "!!! failed to loopback mount"
 
