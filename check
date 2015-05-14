@@ -451,7 +451,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	mkdir -p $RESULT_BASE
 	if [ ! -d $RESULT_BASE ]; then
 		echo "failed to create results directory $RESULT_BASE"
-		exit 1;
+		status=1
+		exit
 	fi
 
 	if $OPTIONS_HAVE_SECTIONS; then
@@ -466,12 +467,14 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			echo "our local _test_mkfs routine ..."
 			cat $tmp.err
 			echo "check: failed to mkfs \$TEST_DEV using specified options"
-			exit 1
+			status=1
+			exit
 		fi
 		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
 		if [ $? -ne 1 ]; then
 			echo $out
-			exit 1
+			status=1
+			exit
 		fi
 		_prepare_test_list
 	elif [ "$OLD_MOUNT_OPTIONS" != "$MOUNT_OPTIONS" ]; then
@@ -479,7 +482,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
 		if [ $? -ne 1 ]; then
 			echo $out
-			exit 1
+			status=1
+			exit
 		fi
 	fi
 
@@ -508,12 +512,13 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	  # call the overridden mkfs - make sure the FS is built
 	  # the same as we'll create it later.
 
-	  if ! _scratch_mkfs $flag >$tmp.err 2>&1
+	  if ! _scratch_mkfs >$tmp.err 2>&1
 	  then
 	      echo "our local _scratch_mkfs routine ..."
 	      cat $tmp.err
 	      echo "check: failed to mkfs \$SCRATCH_DEV using specified options"
-	      exit 1
+	      status=1
+	      exit
 	  fi
 
 	  # call the overridden mount - make sure the FS mounts with
@@ -523,7 +528,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	      echo "our local mount routine ..."
 	      cat $tmp.err
 	      echo "check: failed to mount \$SCRATCH_DEV using specified options"
-	      exit 1
+	      status=1
+	      exit
 	  fi
 	fi
 
