@@ -970,11 +970,11 @@ _is_block_dev()
 
     _dev=$1
     if [ -L "${_dev}" ]; then
-        _dev=`readlink -f ${_dev}`
+        _dev=`readlink -f "${_dev}"`
     fi
 
     if [ -b "${_dev}" ]; then
-        src/lstat64 ${_dev} | $AWK_PROG '/Device type:/ { print $9 }'
+        src/lstat64 "${_dev}" | $AWK_PROG '/Device type:/ { print $9 }'
     fi
 }
 
@@ -1108,11 +1108,11 @@ _require_scratch_nocheck()
 		fi
 		;;
 	*)
-		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev $SCRATCH_DEV`" = "" ]
+		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev "$SCRATCH_DEV"`" = "" ]
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
-		 if [ "`_is_block_dev $SCRATCH_DEV`" = "`_is_block_dev $TEST_DEV`" ]
+		 if [ "`_is_block_dev "$SCRATCH_DEV"`" = "`_is_block_dev "$TEST_DEV"`" ]
 		 then
 		     _notrun "this test requires a valid \$SCRATCH_DEV"
 		 fi
@@ -1182,11 +1182,11 @@ _require_test()
 		fi
 		;;
 	*)
-		 if [ -z "$TEST_DEV" -o "`_is_block_dev $TEST_DEV`" = "" ]
+		 if [ -z "$TEST_DEV" ] || [ "`_is_block_dev "$TEST_DEV"`" = "" ]
 		 then
 		     _notrun "this test requires a valid \$TEST_DEV"
 		 fi
-		 if [ "`_is_block_dev $SCRATCH_DEV`" = "`_is_block_dev $TEST_DEV`" ]
+		 if [ "`_is_block_dev "$SCRATCH_DEV"`" = "`_is_block_dev "$TEST_DEV"`" ]
 		 then
 		     _notrun "this test requires a valid \$TEST_DEV"
 		 fi
@@ -2285,10 +2285,10 @@ _require_scratch_dev_pool()
 	esac
 
 	for i in $SCRATCH_DEV_POOL; do
-		if [ "`_is_block_dev $i`" = "" ]; then
+		if [ "`_is_block_dev "$i"`" = "" ]; then
 			_notrun "this test requires valid block disk $i"
 		fi
-		if [ "`_is_block_dev $i`" = "`_is_block_dev $TEST_DEV`" ]; then
+		if [ "`_is_block_dev "$i"`" = "`_is_block_dev "$TEST_DEV"`" ]; then
 			_notrun "$i is part of TEST_DEV, this test requires unique disks"
 		fi
 		if _mount | grep -q $i; then
