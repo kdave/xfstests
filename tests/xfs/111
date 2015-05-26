@@ -40,6 +40,8 @@ _supported_fs xfs
 _supported_os Linux
 _require_scratch
 
+rm -f $seqres.full
+
 [ "$XFS_FSR_PROG" = "" ] && _notrun "xfs_fsr not found"
 
 # real QA test starts here
@@ -56,16 +58,27 @@ do
     $XFS_IO_PROG -f -c "pwrite 0 512" $SCRATCH_MNT/${I} > /dev/null
     let I=$I+1
 done
+
+# Roughly the middle of the created inodes
+INO=`ls -i $SCRATCH_MNT/512 | awk '{print $1}'`
 umount $SCRATCH_DEV
 
-echo Blat inode clusters
-src/itrash $SCRATCH_DEV
+# Figure out where that middle inode starts
+BYTE=`$XFS_DB_PROG -c "convert inode $INO byte" $SCRATCH_DEV \
+	| awk '{print $2}' | sed s/[\(\)]//g`
 
-_scratch_mount
+echo Blat inode clusters
+src/itrash $SCRATCH_DEV $BYTE
+
+_scratch_mount || _fail "Couldn't mount after itrash"
 
 echo Attempting bulkstat
 #src/bstat -q $SCRATCH_MNT
-xfs_fsr $SCRATCH_MNT
+$XFS_FSR_PROG $SCRATCH_MNT | _filter_scratch
+
+# Fix up intentional corruption so test can pass
+umount $SCRATCH_DEV
+$XFS_REPAIR_PROG $SCRATCH_DEV >> $seqres.full 2>&1
 
 status=0
 exit
