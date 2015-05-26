@@ -50,7 +50,8 @@ _require_xfs_quota
 
 rm -f $seqres.full
 
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs_xfs | _filter_mkfs > /dev/null 2> $tmp.mkfs
+. $tmp.mkfs
 
 do_test()
 {
@@ -88,11 +89,16 @@ _qmount_option "uquota,gquota"
 _qmount
 do_test uquotino gquotino ug
 
-# Test user and project
+# Test user and project. Note that pquotino only exists on v5 (crc=1)
+# superblocks. Older supers reuse gquotino.
+PQUOTINO=pquotino
+if [ $_fs_has_crcs == 0 ]; then
+	PQUOTINO=gquotino
+fi
 _qmount_option "uquota,pquota"
 _qmount
 _require_prjquota $SCRATCH_DEV
-do_test uquotino pquotino up
+do_test uquotino $PQUOTINO up
 
 # success, all done
 status=0
