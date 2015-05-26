@@ -37,6 +37,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <time.h>
+#include <utime.h>
 
 int testsetup(mode_t mode, int cuserId, int cgroupId);
 int testfperm(int userId, int groupId, char* fperm);
@@ -57,13 +59,13 @@ int main( int argc, char *argv[]) {
               exresult = atoi(argv[7]);
 	      break;
       default:
-	      printf("Usage: %s <mode of file> <UID of file> <GID of file> <UID of tester> <GID of tester> <permission to test r|w|x> <expected result as 0|1>\n",argv[0]); 
+	      printf("Usage: %s <mode of file> <UID of file> <GID of file> <UID of tester> <GID of tester> <permission to test r|w|x|t|T> <expected result as 0|1>\n",argv[0]);
 	      exit(0);
    }
 
    testsetup(mode,cuserId,cgroupId);
    result=testfperm(userId,groupId,fperm);
-   system("rm test.file");
+   system("rm -f test.file");
    printf("%s a %03o file owned by (%d/%d) as user/group(%d/%d)  ",fperm,mode,cuserId,cgroupId,userId,groupId);
    if (result == exresult) {
       printf("PASS\n");
@@ -84,46 +86,55 @@ int testsetup(mode_t mode, int cuserId, int cgroupId) {
 
 int testfperm(int userId, int groupId, char* fperm) {
 
-    FILE *testfile;
-    pid_t PID;
-    int tmpi,nuthertmpi;
+    int ret;
 
-/*  SET CURRENT USER/GROUP PERMISSIONS */
+    /*  SET CURRENT USER/GROUP PERMISSIONS */
+    ret = -1;
     if(setegid(groupId)) {
-        printf("could not setegid to %d.\n",groupId);
-           seteuid(0);
-           setegid(0);
-           return(-1);
-        }   
+	printf("could not setegid to %d.\n",groupId);
+	goto out;
+    }
     if(seteuid(userId)) {
-        printf("could not seteuid to %d.\n",userId);
-           seteuid(0);
-           setegid(0);
-           return(-1);
-        }
+	printf("could not seteuid to %d.\n",userId);
+	goto out;
+    }
 
     if (!strcmp("x", fperm)) {
-          PID = fork();
-	  if (PID == 0) {
-             execlp("./test.file","test.file",NULL); 
-	     exit(0);
-	  }
-	  wait(&tmpi);
-	  nuthertmpi=WEXITSTATUS(tmpi); 
-          seteuid(0);
-          setegid(0);
-	  return(nuthertmpi);
+	int status;
+	pid_t pid;
+
+	pid = fork();
+	if (pid == 0) {
+	    execlp("./test.file","test.file",NULL);
+	    exit(0);
+	}
+	wait(&status);
+	ret = WEXITSTATUS(status);
+    } else if (!strcmp("t", fperm)) {
+	ret = utime("test.file", NULL) ? 0 : 1;
+    } else if (!strcmp("T", fperm)) {
+	time_t now = time(NULL);
+	struct utimbuf times = {
+		.actime = now - 1,
+		.modtime = now - 1
+	};
+
+	ret = utime("test.file", &times) ? 0 : 1;
     } else {
-          if((testfile=fopen("test.file",fperm))){
-            fclose(testfile);
-            seteuid(0);
-            setegid(0);
-            return (1);
-	  }
-          else {
-            seteuid(0);
-            setegid(0);
-            return (0);
-	  }
+	FILE *file;
+
+	if((file = fopen("test.file",fperm))){
+	    fclose(file);
+	    ret = 1;
+	    goto out;
+	} else {
+	    ret = 0;
+	    goto out;
+	}
     }
+
+out:
+    seteuid(0);
+    setegid(0);
+    return ret;
 }

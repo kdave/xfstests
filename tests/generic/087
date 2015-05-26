@@ -1,10 +1,21 @@
 #! /bin/bash
-# FSQA Test No. 126
+# FSQA Test No. 087
 #
-# tests various file permission options modified from CXFSQA test fs_perms
+# Check if setting the file access and modification times to the current time
+# (t) and to a specific timestamp (T) is allowed when expected.
+#
+# From utime(2): Changing timestamps is permitted when: either the process has
+# appropriate privileges, or the effective user ID equals the user ID of the
+# file, or [the process is trying to set the timestamps to the current time]
+# and the process has write permission for the file.
+#
+# Note that the last of these tests will always wrongly succeed over NFSv2.
+# For NFSv3+, that test will wrongly succeed until kernel commit
+# "Disable NFSv2 timestamp workaround for NFSv3+".
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2006 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2015 Red Hat, Inc.
+# Author: Andreas Gruenbacher <agruenba@redhat.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -50,25 +61,15 @@ QA_FS_PERMS=$here/src/fs_perms
 cd $TEST_DIR
 cp $here/src/testx ./testx.file
 
-# file_perm owner_uid owner_gid tester_uid tester_gid perm_to_test expected_result pass=1
-$QA_FS_PERMS 001 99 99 12 100 x 1
-$QA_FS_PERMS 010 99 99 200 99 x 1
-$QA_FS_PERMS 100 99 99 99 500 x 1
-$QA_FS_PERMS 002 99 99 12 100 w 1
-$QA_FS_PERMS 020 99 99 200 99 w 1
-$QA_FS_PERMS 200 99 99 99 500 w 1
-$QA_FS_PERMS 004 99 99 12 100 r 1
-$QA_FS_PERMS 040 99 99 200 99 r 1
-$QA_FS_PERMS 400 99 99 99 500 r 1
-$QA_FS_PERMS 000 99 99 99 99 r 1
-$QA_FS_PERMS 000 99 99 99 99 w 1
-$QA_FS_PERMS 000 99 99 99 99 x 1
-$QA_FS_PERMS 010 99 99 99 500 x 1
-$QA_FS_PERMS 100 99 99 200 99 x 1
-$QA_FS_PERMS 020 99 99 99 500 w 1
-$QA_FS_PERMS 200 99 99 200 99 w 1
-$QA_FS_PERMS 040 99 99 99 500 r 1
-$QA_FS_PERMS 400 99 99 200 99 r 1
+# The owner:
+$QA_FS_PERMS 600 99 99 99 99 t 1
+$QA_FS_PERMS 600 99 99 99 99 T 1
+
+# Other processes with and without write permission:
+$QA_FS_PERMS 600 99 99 100 99 t 0
+$QA_FS_PERMS 600 99 99 100 99 T 0
+$QA_FS_PERMS 660 99 99 100 99 t 1
+$QA_FS_PERMS 660 99 99 100 99 T 0
 
 rm -f ./testx.file
 
