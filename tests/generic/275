@@ -57,6 +57,8 @@ umount $SCRATCH_DEV 2>/dev/null
 _scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount
 
+# this file will get removed to create 256k of free space after ENOSPC
+# conditions are created.
 dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=256K count=1 >>$seqres.full 2>&1
 [ $? -ne 0 ] && _fail "Error creating file"
 
@@ -79,14 +81,16 @@ $DF_PROG $SCRATCH_MNT >>$seqres.full 2>&1
 _freespace=`$DF_PROG -k $SCRATCH_MNT | tail -n 1 | awk '{print $5}'`
 [ $_freespace -gt 1024 ] && _fail "could not sufficiently fill filesystem"
 
-# Try a write larger than available space
-dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=1M count=1 >>$seqres.full 2>&1
+# Try to write more than available space in chunks that will allow at least one
+# full write to succeed.
+dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=128k count=8 >>$seqres.full 2>&1
 echo "Bytes written until ENOSPC:" >>$seqres.full
 du $SCRATCH_MNT/tmp1 >>$seqres.full
 
 # And at least some of it should succeed.
 _filesize=`ls -l $SCRATCH_MNT/tmp1 | awk '{print $5}'`
-[ $_filesize -eq 0 ] && _fail "write file err: Partial write until enospc failed; wrote 0 bytes."
+[ $_filesize -lt $((128 * 1024)) ] && \
+	_fail "Partial write until enospc failed; wrote $_filesize bytes."
 
 echo "done"
 status=0
