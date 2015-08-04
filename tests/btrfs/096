@@ -1,0 +1,80 @@
+#! /bin/bash
+# FSQA Test No. 096
+#
+# Test that we can not clone an inline extent into a non-zero file offset.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_cloner
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our test files. File foo has the same 2K of data at offset 4K as file
+# bar has at its offset 0.
+$XFS_IO_PROG -f -s -c "pwrite -S 0xaa 0 4K" \
+		-c "pwrite -S 0xbb 4k 2K" \
+		-c "pwrite -S 0xcc 8K 4K" \
+		$SCRATCH_MNT/foo | _filter_xfs_io
+
+# File bar consists of a single inline extent (2K size).
+$XFS_IO_PROG -f -s -c "pwrite -S 0xbb 0 2K" \
+		$SCRATCH_MNT/bar | _filter_xfs_io
+
+# Now call the clone ioctl to clone the extent of file bar into file foo at its
+# offset 4K. This made file foo have an inline extent at offset 4K, something
+# which the btrfs code can not deal with in future IO operations because all
+# inline extents are supposed to start at an offset of 0, resulting in all sorts
+# of chaos.
+# So here we validate that the clone ioctl returns an EOPNOTSUPP, which is what
+# it returns for other cases dealing with inlined extents.
+$CLONER_PROG -s 0 -d $((4 * 1024)) -l $((2 * 1024)) \
+	$SCRATCH_MNT/bar $SCRATCH_MNT/foo
+
+# Because of the inline extent at offset 4K, the following write made the kernel
+# crash with a BUG_ON().
+$XFS_IO_PROG -c "pwrite -S 0xdd 6K 2K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+status=0
+exit
