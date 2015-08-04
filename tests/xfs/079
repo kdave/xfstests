@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 079
+#
+# Regression test for a bug in the log record checksum mechanism of XFS. Log
+# records are checksummed during recovery and a warning or mount failure occurs
+# on checksum verification failure. XFS had a bug where the checksum mechanism
+# verified different parts of a record depending on the current log buffer size.
+# This caused spurious checksum failures when a filesystem is recovered using a
+# different log buffer size from when the filesystem crashed.
+#
+# Test that log recovery succeeds with a different log buffer size from when the
+# filesystem crashed.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	killall -9 fsstress > /dev/null 2>&1
+	wait > /dev/null 2>&1
+}
+
+rm -f $seqres.full
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/log
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_v2log
+
+echo "Silence is golden."
+
+dmesg -c > /dev/null
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount "-o logbsize=32k"
+
+# Run a workload to dirty the log, wait a bit and shutdown the fs.
+$FSSTRESS_PROG -d $SCRATCH_MNT -p 4 -n 99999999 >> $seqres.full 2>&1 &
+sleep 10
+./src/godown -f $SCRATCH_MNT
+wait
+
+# Remount with a different log buffer size. Going from 32k to 64k increases the
+# log record extended header count, as the log record header can only handle 32k
+# of space.
+_scratch_unmount
+_scratch_mount "-o logbsize=64k"
+
+# The mount may not fail on v4 filesystems. Check for CRC mismatch warning
+# messages to detect failure in this case.
+dmesg -c | grep XFS | grep CRC
+
+# success, all done
+status=0
+exit
