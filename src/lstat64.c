@@ -92,23 +92,23 @@ main(int argc, char **argv)
 			printf("  Size: %-10llu", (unsigned long long)sbuf.st_size);
 		}
 
-		if (sbuf.st_mode & (S_IEXEC>>6))
+		if (sbuf.st_mode & S_IXOTH)
 			mode[9] = 'x';
-		if (sbuf.st_mode & (S_IWRITE>>6))
+		if (sbuf.st_mode & S_IWOTH)
 			mode[8] = 'w';
-		if (sbuf.st_mode & (S_IREAD>>6))
+		if (sbuf.st_mode & S_IROTH)
 			mode[7] = 'r';
-		if (sbuf.st_mode & (S_IEXEC>>3))
+		if (sbuf.st_mode & S_IXGRP)
 			mode[6] = 'x';
-		if (sbuf.st_mode & (S_IWRITE>>3))
+		if (sbuf.st_mode & S_IWGRP)
 			mode[5] = 'w';
-		if (sbuf.st_mode & (S_IREAD>>3))
+		if (sbuf.st_mode & S_IRGRP)
 			mode[4] = 'r';
-		if (sbuf.st_mode & S_IEXEC)
+		if (sbuf.st_mode & S_IXUSR)
 			mode[3] = 'x';
-		if (sbuf.st_mode & S_IWRITE)
+		if (sbuf.st_mode & S_IWUSR)
 			mode[2] = 'w';
-		if (sbuf.st_mode & S_IREAD)
+		if (sbuf.st_mode & S_IRUSR)
 			mode[1] = 'r';
 		if (sbuf.st_mode & S_ISVTX)
 			mode[9] = 't';
