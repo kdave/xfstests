@@ -92,8 +92,7 @@ create_file_from_mapping(int fd, char *map, int blocks, int blocksize)
 	int i = 0;
 
 	bufsize = sizeof(char) * blocksize;
-	buf = malloc(bufsize);
-	if (!buf)
+	if (posix_memalign((void **)&buf, 4096, bufsize))
 		return -1;
 
 	memset(buf, 'a', bufsize);
@@ -562,7 +561,7 @@ main(int argc, char **argv)
 	if (!fname)
 		usage();
 
-	fd = open(fname, O_RDWR|O_CREAT|O_TRUNC, 0644);
+	fd = open(fname, O_RDWR|O_CREAT|O_TRUNC|O_DIRECT, 0644);
 	if (fd < 0) {
 		perror("Can't open file");
 		exit(1);
