@@ -192,6 +192,24 @@ export DUMP_PROG="`set_prog_path dump`"
 export RESTORE_PROG="`set_prog_path restore`"
 export LVM_PROG="`set_prog_path lvm`"
 
+# use 'udevadm settle' or 'udevsettle' to wait for lv to be settled.
+# newer systems have udevadm command but older systems like RHEL5 don't.
+# But if neither one is available, just set it to "sleep 1" to wait for lv to
+# be settled
+UDEV_SETTLE_PROG="`set_prog_path udevadm`"
+if [ "$UDEV_SETTLE_PROG" == "" ]; then
+	# try udevsettle command
+	UDEV_SETTLE_PROG="`set_prog_path udevsettle`"
+else
+	# udevadm is available, add 'settle' as subcommand
+	UDEV_SETTLE_PROG="$UDEV_SETTLE_PROG settle"
+fi
+# neither command is available, use sleep 1
+if [ "$UDEV_SETTLE_PROG" == "" ]; then
+	UDEV_SETTLE_PROG="sleep 1"
+fi
+export UDEV_SETTLE_PROG
+
 # Generate a comparable xfsprogs version number in the form of
 # major * 10000 + minor * 100 + release
 #
