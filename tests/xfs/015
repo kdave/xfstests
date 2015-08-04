@@ -43,9 +43,16 @@ create_file()
 {
 	local dir=$1
 	local i=0
+	local in_growfs=false
 
-	while echo -n >$dir/testfile_$i; do
-		let i=$i+1
+	# keep running until failed after growfs
+	while true; do
+		[ -f $tmp.growfs ] && in_growfs=true
+		while echo -n >$dir/testfile_$i; do
+			let i=$i+1
+		done
+		$in_growfs && break
+		usleep 1000
 	done
 }
 
@@ -88,6 +95,9 @@ echo "Fork $nr_worker workers to consume free inodes in background" >>$seqres.fu
 # doubling or tripling the size couldn't reproduce
 echo "Grow fs to $((dblocks * 4)) blocks" >>$seqres.full
 $XFS_GROWFS_PROG -D $((dblocks * 4)) $SCRATCH_MNT >>$seqres.full
+
+# mark xfs_growfs finished to create_file
+touch $tmp.growfs
 
 # Wait for background create_file to hit ENOSPC
 wait
