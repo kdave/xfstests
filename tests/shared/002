@@ -1,0 +1,121 @@
+#! /bin/bash
+# FS QA Test No. 002
+#
+# Test that after syncing the filesystem, adding many xattrs to a file, syncing
+# the filesystem again, writing to the file and then doing a fsync against that
+# file, all the xattrs still exists after a power failure. That is, after the
+# fsync log/journal is replayed, the xattrs still exist and with the correct
+# values.
+#
+# This test is motivated by a bug found in btrfs.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	_cleanup_flakey
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+. ./common/attr
+
+# real QA test starts here
+
+# We create a lot of xattrs for a single file. Only btrfs and xfs are currently
+# able to store such a large mount of xattrs per file, other filesystems such
+# as ext3/4 and f2fs for example, fail with ENOSPC even if we attempt to add
+# less than 1000 xattrs with very small values.
+_supported_fs btrfs xfs
+_supported_os Linux
+_need_to_be_root
+_require_scratch
+_require_dm_flakey
+_require_attrs
+_require_metadata_journaling $SCRATCH_DEV
+
+rm -f $seqres.full
+
+_scratch_mkfs >> $seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+# Create the test file with some initial data and make sure everything is
+# durably persisted.
+$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 32k" $SCRATCH_MNT/foo | _filter_xfs_io
+sync
+
+# Add many small xattrs to our file.
+# We create such a large amount because it's needed to trigger the issue found
+# in btrfs - we need to have an amount that causes the fs to have at least 3
+# btree leafs with xattrs stored in them, and it must work on any leaf size
+# (maximum leaf/node size is 64Kb).
+num_xattrs=2000
+for ((i = 1; i <= $num_xattrs; i++)); do
+	name="user.attr_$(printf "%04d" $i)"
+	$SETFATTR_PROG -n $name -v "val_$(printf "%04d" $i)" $SCRATCH_MNT/foo
+done
+
+# Sync the filesystem to force a commit of the current btrfs transaction, this
+# is a necessary condition to trigger the bug on btrfs.
+sync
+
+# Now update our file's data and fsync the file.
+# After a successful fsync, if the fsync log/journal is replayed we expect to
+# see all the xattrs we added before with the same values (and the updated file
+# data of course). Btrfs used to delete some of these xattrs when it replayed
+# its fsync log/journal.
+$XFS_IO_PROG -c "pwrite -S 0xbb 8K 16K" \
+		-c "fsync" \
+		$SCRATCH_MNT/foo | _filter_xfs_io
+
+# Simulate a crash/power loss.
+_load_flakey_table $FLAKEY_DROP_WRITES
+_unmount_flakey
+
+# Allow writes again and mount. This makes the fs replay its fsync log.
+_load_flakey_table $FLAKEY_ALLOW_WRITES
+_mount_flakey
+
+echo "File content after crash and log replay:"
+od -t x1 $SCRATCH_MNT/foo
+
+echo "File xattrs after crash and log replay:"
+for ((i = 1; i <= $num_xattrs; i++)); do
+	name="user.attr_$(printf "%04d" $i)"
+	echo -n "$name="
+	$GETFATTR_PROG --absolute-names -n $name --only-values $SCRATCH_MNT/foo
+	echo
+done
+
+status=0
+exit
