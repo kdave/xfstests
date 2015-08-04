@@ -1,0 +1,130 @@
+#!/bin/bash
+# FS QA Test No. xfs/076
+#
+# Verify that a filesystem with sparse inode support can allocate inodes in the
+# event of free space fragmentation. This test is generic in nature but
+# primarily relevant to filesystems that implement dynamic inode allocation
+# (e.g., XFS).
+#
+# The test is inspired by inode allocation limitations on XFS when available
+# free space is fragmented. XFS allocates inodes 64 at a time and thus requires
+# an extent of length that depends on inode size (64 * isize / blksize).
+#
+# The test creates a small, sparse inode enabled filesystem. It fragments free
+# space, allocates inodes to ENOSPC and then verifies that most of the available
+# inodes (.i.e., free space) have been consumed.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT 2>/dev/null
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_consume_freesp()
+{
+	file=$1
+
+	# consume nearly all available space (leave ~1MB)
+	avail=`_get_available_space $SCRATCH_MNT`
+	filesizemb=$((avail / 1024 / 1024 - 1))
+	$XFS_IO_PROG -fc "falloc 0 ${filesizemb}m" $file
+}
+
+# Allocate inodes in a directory until failure.
+_alloc_inodes()
+{
+	dir=$1
+
+	i=0
+	while [ true ]; do
+		touch $dir/$i 2>> $seqres.full || break
+		i=$((i + 1))
+	done
+}
+
+# real QA test starts here
+_supported_os Linux
+
+_require_scratch
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fpunch"
+_require_xfs_sparse_inodes
+
+rm -f $seqres.full
+
+_scratch_mkfs "-d size=50m -m crc=1 -i sparse" |
+	_filter_mkfs > /dev/null 2> $tmp.mkfs
+. $tmp.mkfs	# for isize
+
+_scratch_mount
+
+# Calculate the fs inode chunk size based on the inode size and fixed 64-inode
+# record. This value is used as the target level of free space fragmentation
+# induced by the test (i.e., max size of free extents). We don't need to go
+# smaller than a full chunk because the XFS block allocator tacks on alignment
+# requirements to the size of the requested allocation. In other words, a chunk
+# sized free chunk is not enough to guarantee a successful chunk sized
+# allocation.
+CHUNK_SIZE=$((isize * 64))
+
+_consume_freesp $SCRATCH_MNT/spc
+
+# Now that the fs is nearly full, punch holes in every other $CHUNK_SIZE range
+# of the space consumer file. This should ensure that most freed extents are not
+# contiguous with any others and thus sufficiently fragment free space. After
+# each hole punch, allocate as many inodes as possible into the newly freed
+# space. Note that we start at the end of the file and work backwards as a
+# reverse allocation pattern increases the chances of both left and right sparse
+# record merges.
+offset=`stat -c "%s" $SCRATCH_MNT/spc`
+offset=$((offset - $CHUNK_SIZE * 2))
+while [ $offset -ge 0 ]; do
+	$XFS_IO_PROG -c "fpunch $offset $CHUNK_SIZE" $SCRATCH_MNT/spc \
+		2>> $seqres.full || _fail "fpunch failed"
+
+	# allocate as many inodes as possible
+	mkdir -p $SCRATCH_MNT/offset.$offset > /dev/null 2>&1
+	_alloc_inodes $SCRATCH_MNT/offset.$offset
+
+	offset=$((offset - $CHUNK_SIZE * 2))
+done
+
+# check that we've hit at least 95% inode usage
+iusepct=`_get_used_inode_percent $SCRATCH_MNT`
+_within_tolerance "iusepct" $iusepct 100 5 0 -v
+
+status=0
+exit

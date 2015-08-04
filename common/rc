@@ -1449,6 +1449,18 @@ _require_xfs_sysfs()
 	fi
 }
 
+# this test requires the xfs sparse inode feature
+#
+_require_xfs_sparse_inodes()
+{
+	_scratch_mkfs_xfs_supported -m crc=1 -i sparse > /dev/null 2>&1 \
+		|| _notrun "mkfs.xfs does not support sparse inodes"
+	_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+		|| _notrun "kernel does not support sparse inodes"
+	umount $SCRATCH_MNT
+}
+
 # this test requires that external log/realtime devices are not in use
 #
 _require_nonexternal()
@@ -2724,6 +2736,18 @@ _get_used_inode()
 	echo $nr_inode
 }
 
+_get_used_inode_percent()
+{
+	if [ -z "$1" ]; then
+		echo "Usage: _get_used_inode_percent <mnt>"
+		exit 1
+	fi
+	local pct_inode;
+	pct_inode=`$DF_PROG -i $1 | tail -1 | awk '{ print $6 }' | \
+		   sed -e 's/%//'`
+	echo $pct_inode
+}
+
 _get_free_inode()
 {
 	if [ -z "$1" ]; then
@@ -2733,6 +2757,19 @@ _get_free_inode()
 	local nr_inode;
 	nr_inode=`$DF_PROG -i $1 | tail -1 | awk '{print $5}'`
 	echo $nr_inode
+}
+
+# get the available space in bytes
+#
+_get_available_space()
+{
+	if [ -z "$1" ]; then
+		echo "Usage: _get_available_space <mnt>"
+		exit 1
+	fi
+	local avail_kb;
+	avail_kb=`$DF_PROG $1 | tail -n1 | awk '{ print $5 }'`
+	echo $((avail_kb * 1024))
 }
 
 # get btrfs profile configs being tested
