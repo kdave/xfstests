@@ -1,0 +1,97 @@
+#! /bin/bash
+# FSQA Test No. 106
+#
+# Test that if we remove one hard link from an inode, evict the inode, fsync the
+# inode, power fail and then mount the filesystem, the hard link we removed does
+# not exists anymore and the filesystem metadata is in a consistent state.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_flakey
+_require_metadata_journaling $SCRATCH_DEV
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+# Create our test file with 2 hard links.
+mkdir $SCRATCH_MNT/testdir
+touch $SCRATCH_MNT/testdir/foo
+ln $SCRATCH_MNT/testdir/foo $SCRATCH_MNT/testdir/bar
+
+# Make sure everything done so far is durably persisted.
+sync
+
+# Now remove one of the links, trigger inode eviction and then fsync our
+# inode.
+unlink $SCRATCH_MNT/testdir/bar
+echo 2 > /proc/sys/vm/drop_caches
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/testdir/foo
+
+# Silently drop all writes on our scratch device to simulate a power failure.
+_load_flakey_table $FLAKEY_DROP_WRITES
+_unmount_flakey
+
+# Allow writes again and mount the fs to trigger log/journal replay.
+_load_flakey_table $FLAKEY_ALLOW_WRITES
+_mount_flakey
+
+# Now verify our directory entries.
+echo "Entries in testdir:"
+ls -1 $SCRATCH_MNT/testdir
+
+# If we remove our inode, its parent should become empty and therefore we should
+# be able to remove the parent.
+rm -f $SCRATCH_MNT/testdir/*
+rmdir $SCRATCH_MNT/testdir
+
+_unmount_flakey
+
+# The fstests framework will call fsck against our filesystem which will verify
+# that all metadata is in a consistent state.
+
+status=0
+exit
