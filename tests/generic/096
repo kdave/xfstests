@@ -1,0 +1,64 @@
+#! /bin/bash
+# FS QA Test 096
+#
+# Exercise the situation that cause ext4 to BUG_ON() when we use
+# zero range to zero a range which starts within the isize but ends
+# past the isize but still in the same block. This particular problem
+# has only been seen on systems with page_size > block_size.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc., Lukas Czerner <lczerner@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os IRIX Linux
+_require_scratch
+_require_xfs_io_command "fzero"
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+# Use smaller scratch fs to shorten the test time
+_scratch_mkfs_sized $((512 * 1024 * 1024)) >>$seqres.full 2>&1
+_scratch_mount
+
+testfile=$SCRATCH_MNT/$seq.$$
+$XFS_IO_PROG -f -c "pwrite 4096 512" -c "fzero 4351 512" $testfile >> $seqres.full 2>&1
+
+# success, all done
+status=0
+exit
