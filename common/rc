@@ -2973,6 +2973,33 @@ _get_device_size()
 	grep `_short_dev $1` /proc/partitions | awk '{print $3}'
 }
 
+# check dmesg log for WARNING/Oops/etc.
+_check_dmesg()
+{
+	if [ ! -f ${RESULT_DIR}/check_dmesg ]; then
+		return 0
+	fi
+	rm -f ${RESULT_DIR}/check_dmesg
+
+	# search the dmesg log of last run of $seqnum for possible failures
+	# use sed \cregexpc address type, since $seqnum contains "/"
+	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
+		tac >$seqres.dmesg
+	grep -q -e "kernel BUG at" \
+	     -e "WARNING:" \
+	     -e "BUG:" \
+	     -e "Oops:" \
+	     -e "possible recursive locking detected" \
+	     $seqres.dmesg
+	if [ $? -eq 0 ]; then
+		echo "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
+		return 1
+	else
+		rm -f $seqres.dmesg
+		return 0
+	fi
+}
+
 # don't check dmesg log after test
 _disable_dmesg_check()
 {

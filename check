@@ -396,32 +396,6 @@ _check_filesystems()
 	fi
 }
 
-_check_dmesg()
-{
-	if [ ! -f ${RESULT_DIR}/check_dmesg ]; then
-		return
-	fi
-	rm -f ${RESULT_DIR}/check_dmesg
-
-	# search the dmesg log of last run of $seqnum for possible failures
-	# use sed \cregexpc address type, since $seqnum contains "/"
-	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
-		tac >$seqres.dmesg
-	grep -q -e "kernel BUG at" \
-	     -e "WARNING:" \
-	     -e "BUG:" \
-	     -e "Oops:" \
-	     -e "possible recursive locking detected" \
-	     $seqres.dmesg
-	if [ $? -eq 0 ]; then
-		echo "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
-		err=true
-	else
-		rm -f $seqres.dmesg
-	fi
-}
-
-
 _prepare_test_list
 
 if $OPTIONS_HAVE_SECTIONS; then
@@ -542,7 +516,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 
 	    # the filename for the test and the name output are different.
 	    # we don't include the tests/ directory in the name output.
-	    seqnum=`echo $seq | sed -e "s;$SRC_DIR/;;"`
+	    export seqnum=`echo $seq | sed -e "s;$SRC_DIR/;;"`
 
 	    # Similarly, the result directory needs to replace the tests/
 	    # part of the test location.
@@ -593,7 +567,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		[ ! -x $seq ] && chmod u+x $seq # ensure we can run it
 		$LOGGER_PROG "run xfstest $seqnum"
 		if [ -w /dev/kmsg ]; then
-			date_time=`date +"%F %T"`
+			export date_time=`date +"%F %T"`
 			echo "run fstests $seqnum at $date_time" > /dev/kmsg
 			# _check_dmesg depends on this log in dmesg
 			touch ${RESULT_DIR}/check_dmesg
@@ -663,7 +637,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		    try="$try $seqnum"
 		    n_try=`expr $n_try + 1`
 		    _check_filesystems
-		    _check_dmesg
+		    _check_dmesg || err=true
 		fi
 
 	    fi
