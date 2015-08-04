@@ -2981,10 +2981,15 @@ _check_dmesg()
 	fi
 	rm -f ${RESULT_DIR}/check_dmesg
 
+	# default filter is a simple cat command, caller could provide a
+	# customized filter and pass the name through the first argument, to
+	# filter out intentional WARNINGs or Oopses
+	filter=${1:-cat}
+
 	# search the dmesg log of last run of $seqnum for possible failures
 	# use sed \cregexpc address type, since $seqnum contains "/"
 	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
-		tac >$seqres.dmesg
+		tac | $filter >$seqres.dmesg
 	grep -q -e "kernel BUG at" \
 	     -e "WARNING:" \
 	     -e "BUG:" \
