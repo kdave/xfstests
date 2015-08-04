@@ -18,6 +18,7 @@
 
 #include <lib/hsm.h>
 
+#include <unistd.h>
 #include <string.h>
 #include <malloc.h>
 #include <getopt.h>

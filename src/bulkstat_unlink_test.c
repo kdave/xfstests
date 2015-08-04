@@ -3,12 +3,14 @@
  * Test bulkstat doesn't returned unlinked inodes.
  * Mark Goodwin <markgw@sgi.com> Fri Jul 20 09:13:57 EST 2007
  */
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <xfs/xfs.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <string.h>
 
 int
 main(int argc, char *argv[])

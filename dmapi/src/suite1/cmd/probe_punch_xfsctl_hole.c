@@ -18,8 +18,11 @@
 
 #include <lib/hsm.h>
 
+#include <unistd.h>
 #include <getopt.h>
 #include <string.h>
+#include <fcntl.h>
+
 
 
 /*---------------------------------------------------------------------------

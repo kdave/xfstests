@@ -6,11 +6,13 @@
  * This is a modified version of bulkstat_unlink_test.c to reproduce a specific
  * problem see pv 969192
  */
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <xfs/xfs.h>
 #include <unistd.h>
+#include <string.h>
 
 int
 main(int argc, char *argv[])

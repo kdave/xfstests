@@ -23,6 +23,7 @@
 
 #include <unistd.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 #include <lib/hsm.h>
 

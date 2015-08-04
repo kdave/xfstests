@@ -47,17 +47,17 @@ int	argc;
 char	**argv;
 {
 	int fd, err, elapsed;
-	char *buf, *goodbuf;
+	char *buf = NULL, *goodbuf = NULL;
 	time_t starttime;
         char *filename="testfile";
- 	int c;
+	int c;
 
-if(argc != 3)
-        {        printf("Usage: trunc -f testfilename\n");
-                exit(1);
+	if (argc != 3) {
+		printf("Usage: trunc -f testfilename\n");
+		exit(1);
         }
 
-while((c=getopt(argc,argv,"f:"))!=EOF) {
+	while((c=getopt(argc,argv,"f:"))!=EOF) {
 		switch (c) {
 		case 'f':
 			filename = optarg;

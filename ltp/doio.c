@@ -29,6 +29,7 @@
 
 #include "global.h"
 
+#include <stdarg.h>
 #include <sys/uio.h>	/* for struct iovec (readv)*/
 #include <sys/mman.h>	/* for mmap(2) */
 #include <sys/ipc.h>	/* for i/o buffer in shared memory */
