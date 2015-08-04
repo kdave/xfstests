@@ -1,0 +1,141 @@
+#! /bin/bash
+# FS QA Test generic/095
+#
+# Concurrent mixed I/O (buffer I/O, aiodio, mmap, splice) on the same files
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+iodepth=$((16 * LOAD_FACTOR))
+iodepth_batch=$((8 * LOAD_FACTOR))
+numjobs=$((5 * LOAD_FACTOR))
+fio_config=$tmp.fio
+cat >$fio_config <<EOF
+[global]
+bs=8k
+iodepth=$iodepth
+iodepth_batch=$iodepth_batch
+randrepeat=1
+size=1m
+directory=$SCRATCH_MNT
+numjobs=$numjobs
+[job1]
+ioengine=sync
+bs=1k
+direct=1
+rw=randread
+filename=file1:file2
+[job2]
+ioengine=libaio
+rw=randwrite
+direct=1
+filename=file1:file2
+[job3]
+bs=1k
+ioengine=posixaio
+rw=randwrite
+direct=1
+filename=file1:file2
+[job4]
+ioengine=splice
+direct=1
+rw=randwrite
+filename=file1:file2
+[job5]
+bs=1k
+ioengine=sync
+rw=randread
+filename=file1:file2
+[job6]
+ioengine=posixaio
+rw=randwrite
+filename=file1:file2
+[job7]
+ioengine=splice
+rw=randwrite
+filename=file1:file2
+[job8]
+ioengine=mmap
+rw=randwrite
+bs=1k
+filename=file1:file2
+[job9]
+ioengine=mmap
+rw=randwrite
+direct=1
+filename=file1:file2
+EOF
+# with ioengine=mmap and direct=1, fio requires bs to be at least pagesize,
+# which is a fio built-in var.
+echo 'bs=$pagesize' >> $fio_config
+
+rm -f $seqres.full
+_require_fio $fio_config
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+echo "Silence is golden"
+$FIO_PROG $fio_config >>$seqres.full 2>&1
+
+# xfs generates WARNINGs on purpose when applications mix buffered/mmap IO with
+# direct IO on the same file. On the other hand, this fio job has been proven
+# to be potent, we don't want to simply _disable_dmesg_check which could miss
+# other potential bugs. So filter out the intentional WARNINGs, make sure test
+# doesn't fail because of this warning and fails on other WARNINGs.
+filter_xfs_dmesg()
+{
+	local warn1="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_dio_aio_write.*"
+	local warn2="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_read_iter.*"
+	sed -e "s#$warn1#Intentional warnings in xfs_file_dio_aio_write#" \
+	    -e "s#$warn2#Intentional warnings in xfs_file_read_iter#"
+}
+
+# umount before checking dmesg in case umount triggers any WARNING or Oops
+_scratch_unmount
+
+if [ "$FSTYP" == "xfs" ]; then
+	_check_dmesg filter_xfs_dmesg
+else
+	_check_dmesg
+fi
+status=$?
+exit
