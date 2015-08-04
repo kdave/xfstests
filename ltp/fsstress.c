@@ -258,6 +258,7 @@ int		procid;
 int		rtpct;
 unsigned long	seed = 0;
 ino_t		top_ino;
+int		cleanup = 0;
 int		verbose = 0;
 int		verifiable_log = 0;
 sig_atomic_t	should_stop = 0;
@@ -331,7 +332,7 @@ int main(int argc, char **argv)
 	xfs_error_injection_t	        err_inj;
 	struct sigaction action;
 	int		loops = 1;
-	const char	*allopts = "d:e:f:i:l:m:M:n:o:p:rs:S:vVwx:X:zH";
+	const char	*allopts = "cd:e:f:i:l:m:M:n:o:p:rs:S:vVwx:X:zH";
 
 	errrange = errtag = 0;
 	umask(0);
@@ -340,6 +341,9 @@ int main(int argc, char **argv)
 	myprog = argv[0];
 	while ((c = getopt(argc, argv, allopts)) != -1) {
 		switch (c) {
+		case 'c':
+			cleanup = 1;
+			break;
 		case 'd':
 			dirname = optarg;
 			break;
@@ -862,6 +866,7 @@ doproc(void)
 {
 	struct stat64	statbuf;
 	char		buf[10];
+	char		cmd[64];
 	int		opno;
 	int		rval;
 	opdesc_t	*p;
@@ -907,6 +912,10 @@ doproc(void)
 	}
 errout:
 	chdir("..");
+	if (cleanup) {
+		sprintf(cmd, "rm -rf %s", buf);
+		system(cmd);
+	}
 }
 
 /*
@@ -1579,10 +1588,11 @@ void
 usage(void)
 {
 	printf("Usage: %s -H   or\n", myprog);
-	printf("       %s [-d dir][-e errtg][-f op_name=freq][-l loops][-n nops]\n",
+	printf("       %s [-c][-d dir][-e errtg][-f op_name=freq][-l loops][-n nops]\n",
 		myprog);
 	printf("          [-p nproc][-r len][-s seed][-v][-w][-x cmd][-z][-S][-X ncmd]\n");
 	printf("where\n");
+	printf("   -c               clean up the test directory after each run\n");
 	printf("   -d dir           specifies the base directory for operations\n");
 	printf("   -e errtg         specifies error injection stuff\n");
 	printf("   -f op_name=freq  changes the frequency of option name to freq\n");
