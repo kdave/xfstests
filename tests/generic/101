@@ -1,0 +1,117 @@
+#! /bin/bash
+# FSQA Test No. 101
+#
+# Test that if we truncate a file to a smaller size, then truncate it to its
+# original size or a larger size, then fsyncing it and a power failure happens,
+# the file will have the range [first_truncate_size, last_size[ with all bytes
+# having a value of 0x00 if we read it the next time the filesystem is mounted.
+#
+# This test is motivated by a bug found in btrfs.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_flakey
+_require_metadata_journaling $SCRATCH_DEV
+
+# This test was motivated by an issue found in btrfs when the btrfs no-holes
+# feature is enabled (introduced in kernel 3.14). So enable the feature if the
+# fs being tested is btrfs.
+if [ $FSTYP == "btrfs" ]; then
+	_require_btrfs_fs_feature "no_holes"
+	_require_btrfs_mkfs_feature "no-holes"
+	MKFS_OPTIONS="$MKFS_OPTIONS -O no-holes"
+fi
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+# Create our test files and make sure everything is durably persisted.
+$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 64K"         \
+		-c "pwrite -S 0xbb 64K 61K"       \
+		$SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xee 0 64K"         \
+		-c "pwrite -S 0xff 64K 61K"       \
+		$SCRATCH_MNT/bar | _filter_xfs_io
+sync
+
+# Now truncate our file foo to a smaller size (64Kb) and then truncate it to the
+# size it had before the shrinking truncate (125Kb). Then fsync our file. If a
+# power failure happens after the fsync, we expect our file to have a size of
+# 125Kb, with the first 64Kb of data having the value 0xaa and the second 61Kb
+# of data having the value 0x00.
+$XFS_IO_PROG -c "truncate 64K" \
+		-c "truncate 125K" \
+		-c "fsync" \
+		$SCRATCH_MNT/foo
+
+# Do something similar to our file bar, but the first truncation sets the file
+# size to 0 and the second truncation expands the size to the double of what it
+# was initially.
+$XFS_IO_PROG -c "truncate 0" \
+		-c "truncate 253K" \
+		-c "fsync" \
+		$SCRATCH_MNT/bar
+
+_load_flakey_table $FLAKEY_DROP_WRITES
+_unmount_flakey
+
+# Allow writes again, mount to trigger log replay and validate file contents.
+_load_flakey_table $FLAKEY_ALLOW_WRITES
+_mount_flakey
+
+# We expect foo to have a size of 125Kb, the first 64Kb of data all having the
+# value 0xaa and the remaining 61Kb to be a hole (all bytes with value 0x00).
+echo "File foo content after log replay:"
+od -t x1 $SCRATCH_MNT/foo
+
+# We expect bar to have a size of 253Kb and no extents (any byte read from bar
+# has the value 0x00).
+echo "File bar content after log replay:"
+od -t x1 $SCRATCH_MNT/bar
+
+status=0
+exit
