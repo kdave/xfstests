@@ -1,0 +1,92 @@
+#! /bin/bash
+# FSQA Test No. 103
+#
+# Test attribute fork teardown. This test is inspired by a regression in XFS
+# that resulted in problematic removal of inodes with remote attribute forks
+# without attribute extents. The attribute fork condition is created by
+# attempting to set larger attribute values on a filesystem that is at or near
+# ENOSPC.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+_cleanup()
+{
+        cd /
+        rm -f $tmp.*
+}
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15 25
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_attrs
+_require_xfs_io_command "falloc"
+
+rm -f $seqres.full
+
+_consume_freesp()
+{
+	file=$1
+
+	# consume nearly all available space (leave ~512kB)
+	avail=`_get_available_space $SCRATCH_MNT`
+	filesizekb=$((avail / 1024 - 512))
+	$XFS_IO_PROG -fc "falloc 0 ${filesizekb}k" $file
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+for i in $(seq 0 63); do
+	touch $SCRATCH_MNT/$seq.$i
+done
+
+# Generate a large attribute value and consume the rest of the space in the
+# filesystem.
+$XFS_IO_PROG -fc "pwrite 0 64k" $SCRATCH_MNT/attrval > /dev/null 2>&1
+_consume_freesp $SCRATCH_MNT/spc
+
+# Set attributes on the test files. These should start to hit ENOSPC.
+for i in $(seq 0 63); do
+	$SETFATTR_PROG -n user.test -v "`cat $SCRATCH_MNT/attrval`" \
+		$SCRATCH_MNT/$seq.$i >> $seqres.full 2>&1
+done
+
+# Remove the files with attributes to test attribute fork teardown. Problems
+# result in dmesg output.
+rm -f $SCRATCH_MNT/$seq.*
+
+echo Silence is golden.
+
+status=0
+exit
