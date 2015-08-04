@@ -37,6 +37,8 @@ randomize=false
 export here=`pwd`
 xfile=""
 
+DUMP_OUTPUT=false
+
 # start the initialisation work now
 iam=check
 
@@ -74,6 +76,7 @@ check options
     -n			show me, do not run tests
     -T			output timestamps
     -r			randomize test order
+    -d			dump test output to stdout
     --large-fs		optimise scratch device for large filesystems
     -s section		run only specified section from config file
 
@@ -237,6 +240,7 @@ while [ $# -gt 0 ]; do
         -r)	randomize=true ;;
 
 	-T)	timestamp=true ;;
+	-d)	DUMP_OUTPUT=true ;;
 
 	--large-fs) export LARGE_SCRATCH_DEV=yes ;;
 	--extra-space=*) export SCRATCH_DEV_EMPTY_SPACE=${r#*=} ;;
@@ -585,8 +589,14 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			# _check_dmesg depends on this log in dmesg
 			touch ${RESULT_DIR}/check_dmesg
 		fi
-		./$seq >$tmp.rawout 2>&1
-		sts=$?
+		if [ "$DUMP_OUTPUT" = true ]; then
+			./$seq 2>&1 | tee $tmp.rawout
+			# Because $? would get tee's return code
+			sts=${PIPESTATUS[0]}
+		else
+			./$seq >$tmp.rawout 2>&1
+			sts=$?
+		fi
 		$timestamp && _timestamp
 		stop=`_wallclock`
 
