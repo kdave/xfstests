@@ -1,0 +1,83 @@
+#! /bin/bash
+# FS QA Test 005
+#
+# Test corruption issue in converting file with a hole at the beginning to
+# non-extent based format
+#
+# These two commits fixed the corruption:
+# ext4: be more strict when migrating to non-extent based file
+# ext4: correctly migrate a file with a hole at the beginning
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_command "$CHATTR_PROG" chattr
+
+rm -f $seqres.full
+
+echo "Silence is golden"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+testfile=$SCRATCH_MNT/$seq.attrtest
+touch $testfile
+$CHATTR_PROG -e $testfile >>$seqres.full 2>&1
+if [ $? -ne 0 ]; then
+	_notrun "Clearing extent flag not supported, old chattr and/or kernel?"
+fi
+
+rm -f $testfile
+# skip the first 4k and write to the second 4k, leave the first 4k as a hole
+$XFS_IO_PROG -fc "pwrite 4k 4k" -c "fsync" $testfile >>$seqres.full 2>&1
+
+# convert to non-extent based file format, buggy ext4 moves the data blocks to
+# the beginning of the file, but extent status cache still marks that region as
+# a hole
+$CHATTR_PROG -e $testfile >>$seqres.full 2>&1
+
+# delayed allocation writes to the "hole", reclaim the same data block again,
+# results in i_blocks corruption
+$XFS_IO_PROG -c "pwrite 0 4k" $testfile >>$seqres.full 2>&1
+
+# success, all done
+status=0
+exit
