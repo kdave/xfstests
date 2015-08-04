@@ -779,7 +779,6 @@ main(int argc, char *argv[])
     char	*p;
     extern char	*optarg;
     extern int	optind;
-    extern int	errno;
     int fail_count = 0;; 
     
     atexit(cleanup);
