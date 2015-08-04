@@ -1,0 +1,143 @@
+#! /bin/bash
+# FS QA Test 077
+#
+# test UUID modification of CRC-enabled filesystems
+#
+# CRC-enabled / V5 superblock filesystems have a UUID stamped into
+# every piece of metadata, and a mechanism was added later to allow
+# changing the user-visible UUID by copying the original UUID (which
+# matches all the existing metadata) to a new superblock location.
+# Exercise some of that behavior.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_xfs_crc
+_require_meta_uuid
+
+# Takes 2 args, 2nd optional:
+#  1: generate, rewrite, or restore
+#  2: Expected UUID after the action.  Blank if new uuid generated
+# After the action check the fs, and make sure it can be mounted
+# Sets NEW_UUID to the resulting UUID.
+_test_uuid()
+{
+	ACTION=$1
+	EXPECTED_UUID=$2
+
+	$XFS_DB_PROG -x -c "uuid $ACTION" $SCRATCH_DEV \
+					| _filter_uuid $EXPECTED_UUID
+	NEW_UUID=`$XFS_DB_PROG -c "uuid"  $SCRATCH_DEV | awk '{print $NF}'`
+	_check_scratch_fs
+	_scratch_mount || _fail "Mount failed after UUID $ACTION"
+	_scratch_unmount
+
+}
+
+_fs_has_META_UUID()
+{
+	FS=$1
+	$XFS_DB_PROG -r -c version $FS | grep -q META_UUID
+}
+
+rm -f $seqres.full
+
+_scratch_mkfs_xfs -m crc=1 >> $seqres.full 2>&1 || _fail "mkfs failed"
+
+ORIG_UUID=`$XFS_DB_PROG -c "uuid" $SCRATCH_DEV | awk '{print $NF}'`
+
+_scratch_mount
+# Put some stuff on the fs
+$FSSTRESS_PROG -d $SCRATCH_MNT -n 100 -p 4 >> $seqres.full 2>&1
+_scratch_unmount
+
+# Can xfs_db change it?
+
+echo "== Generate new UUID"
+_test_uuid generate
+[ "$NEW_UUID" == "$ORIG_UUID" ] && _fail "Failed to change UUID"
+_fs_has_META_UUID $SCRATCH_DEV || _fail "META_UUID feature not set"
+
+# This should be a no-op
+echo "== Rewrite UUID"
+_test_uuid rewrite $NEW_UUID
+_fs_has_META_UUID $SCRATCH_DEV || _fail "META_UUID feature not set"
+
+# Can we change it back?
+echo "== Restore old UUID"
+_test_uuid restore $ORIG_UUID
+[ "$NEW_UUID" != "$ORIG_UUID" ] && _fail "Failed to restore UUID"
+_fs_has_META_UUID $SCRATCH_DEV && _fail "META_UUID feature should not be not set"
+
+# This should be a no-op too.
+echo "== Rewrite UUID"
+_test_uuid rewrite $ORIG_UUID
+_fs_has_META_UUID $SCRATCH_DEV && _fail "META_UUID feature should not be not set"
+
+# Ok, now what does xfs_copy do; it changes UUID by default
+
+IMGFILE=$TEST_DIR/$seq.copy.img
+rm -f $IMGFILE
+
+# xfs_copy changes the UUID by default
+echo "== xfs_copy with new UUID"
+$XFS_COPY_PROG $SCRATCH_DEV $IMGFILE 2>&1 >> $seqres.full || \
+	_fail "xfs_copy (new UUID) failed"
+_check_xfs_filesystem $IMGFILE none none || _fail "Copy looks corrupted"
+# The copy should have META_UUID feature set
+_fs_has_META_UUID $IMGFILE || _fail "META_UUID feature not set on copy"
+_scratch_mount || _fail "Mount failed after UUID rewrite"
+_scratch_unmount
+
+rm -f $IMGFILE
+
+# duplicating the UUID should be fine too
+echo "== xfs_copy with duplicate UUID"
+$XFS_COPY_PROG -d $SCRATCH_DEV $IMGFILE 2>&1 >> $seqres.full || \
+	_fail "xfs_copy (duplicate) failed"
+_check_xfs_filesystem $IMGFILE none none || _fail "Duplicate copy looks corrupted"
+# The copy should not have META_UUID feature set
+_fs_has_META_UUID $IMGFILE && _fail "META_UUID feature should not be set on copy"
+
+# success, all done
+status=0
+exit
