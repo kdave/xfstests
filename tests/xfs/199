@@ -49,18 +49,22 @@ _supported_os Linux
 
 _require_scratch
 
-# clear any mkfs options so taht we can directly specify the options we need to
+get_features()
+{
+	xfs_db -x $SCRATCH_DEV -c "sb" -c "print $1" | awk '// {print $3}'
+}
+
+# clear any mkfs options so that we can directly specify the options we need to
 # be able to test the features bitmask behaviour correctly.
 MKFS_OPTIONS=
-_scratch_mkfs_xfs -m crc=0 -l lazy-count=1 -i projid32bit=0 >/dev/null 2>&1
+_scratch_mkfs_xfs -m crc=0 -l lazy-count=1 >/dev/null 2>&1
 
-#
-# Print the current flags.  Just a dummy so that the test breaks
-# in an obvious way when the default feature flags changed in mkfs
-#
-echo "Default feature2 flags:"
-xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print features2'
-xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print bad_features2'
+# Grab the initial configuration. This checks mkfs sets the fields properly, and
+# gives us the values the resultant tests should be the same as for testing at
+# the end of the test. We don't hard code feature values, because that makes the
+# test break every time we change mkfs feature defaults.
+f2=`get_features features2`
+bf2=`get_features bad_features2`
 
 #
 # Now clear the normal flags
@@ -70,8 +74,7 @@ xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
 
 _scratch_mount
 umount $SCRATCH_MNT
-echo "Features 2 after mount rw:"
-xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print features2'
+rwf2=`get_features features2`
 
 #
 # Clear the normal flags again for the second rount.
@@ -85,8 +88,11 @@ xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
 _scratch_mount -o ro
 _scratch_mount -o remount,rw
 umount $SCRATCH_MNT
-echo "Features 2 after mount ro and remount rw:"
-xfs_db -x $SCRATCH_DEV -c 'sb' -c 'print features2'
+rof2=`get_features features2`
+
+[ "$f2" != "$bf2" ] && echo "mkfs: features2 $f2 != bad_features2 $bf2"
+[ "$f2" != "$rwf2" ] && echo "mount rw: old features2 $f2 != new features2 $rwf2"
+[ "$f2" != "$rof2" ] && echo "ro->rw: old features2 $f2 != new features2 $rof2"
 
 # success, all done
 echo "*** done"
