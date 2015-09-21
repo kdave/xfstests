@@ -1863,7 +1863,12 @@ _check_xfs_filesystem()
     fi
 
     extra_mount_options=""
+    extra_options=""
     device=$1
+    if [ -f $device ];then
+       extra_options="-f"
+    fi
+
     if [ "$2" != "none" ]; then
 	extra_log_options="-l$2"
         extra_mount_options="-ologdev=$2"
@@ -1919,7 +1924,7 @@ _check_xfs_filesystem()
         ok=0
     fi
 
-    $XFS_REPAIR_PROG -n $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+    $XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
     if [ $? -ne 0 ]
     then
         echo "_check_xfs_filesystem: filesystem on $device is inconsistent (r) (see $seqres.full)"
