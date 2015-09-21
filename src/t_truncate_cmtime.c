@@ -53,17 +53,18 @@ int do_test(const char *file, int is_ftrunc)
 		exit(EXIT_FAILURE);
 	}
 
+	/* Test [f]truncate(2) down */
 	sleep(1);
 	if (is_ftrunc) {
 		ret = ftruncate(fd, 0);
 		if (ret == -1) {
-			perror("ftruncate(2) failed");
+			perror("ftruncate(2) down failed");
 			exit(EXIT_FAILURE);
 		}
 	} else {
 		ret = truncate(file, 0);
 		if (ret == -1) {
-			perror("truncate(2) failed");
+			perror("truncate(2) down failed");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -75,15 +76,47 @@ int do_test(const char *file, int is_ftrunc)
 		exit(EXIT_FAILURE);
 	}
 
-	/* Check whether timestamps got updated */
+	/* Check whether timestamps got updated on [f]truncate(2) down */
 	if (statbuf1.st_ctime == statbuf2.st_ctime) {
 		fprintf(stderr, "ctime not updated after %s\n",
-			is_ftrunc ? "ftruncate" : "truncate");
+			is_ftrunc ? "ftruncate" : "truncate" " down");
 		ret++;
 	}
 	if (statbuf1.st_mtime == statbuf2.st_mtime) {
 		fprintf(stderr, "mtime not updated after %s\n",
-			is_ftrunc ? "ftruncate" : "truncate");
+			is_ftrunc ? "ftruncate" : "truncate" " down");
+		ret++;
+	}
+
+	/* Test [f]truncate(2) up */
+	sleep(1);
+	if (is_ftrunc) {
+		ret = ftruncate(fd, 123);
+		if (ret == -1) {
+			perror("ftruncate(2) up failed");
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		ret = truncate(file, 123);
+		if (ret == -1) {
+			perror("truncate(2) up failed");
+			exit(EXIT_FAILURE);
+		}
+	}
+	ret = fstat(fd, &statbuf1);
+	if (ret == -1) {
+		perror("fstat(2) failed");
+		exit(EXIT_FAILURE);
+	}
+	/* Check whether timestamps got updated on [f]truncate(2) up */
+	if (statbuf1.st_ctime == statbuf2.st_ctime) {
+		fprintf(stderr, "ctime not updated after %s\n",
+			is_ftrunc ? "ftruncate" : "truncate" " up");
+		ret++;
+	}
+	if (statbuf1.st_mtime == statbuf2.st_mtime) {
+		fprintf(stderr, "mtime not updated after %s\n",
+			is_ftrunc ? "ftruncate" : "truncate" " up");
 		ret++;
 	}
 
