@@ -211,11 +211,20 @@ _mount_ops_filter()
 
 }
 
+# Used for mounting non-scratch devices (e.g. loop, dm constructs)
+# with the safe set of scratch mount options (e.g. loop image may be
+# hosted on $SCRATCH_DEV, so can't use external scratch devices).
+_common_dev_mount_options()
+{
+	echo $MOUNT_OPTIONS $SELINUX_MOUNT_OPTIONS $*
+}
+
 _scratch_mount_options()
 {
-    _scratch_options mount
+	_scratch_options mount
 
-    echo $SCRATCH_OPTIONS $MOUNT_OPTIONS $SELINUX_MOUNT_OPTIONS $* $SCRATCH_DEV $SCRATCH_MNT
+	echo `_common_dev_mount_options $*` $SCRATCH_OPTIONS \
+					$SCRATCH_DEV $SCRATCH_MNT
 }
 
 _scratch_mount()

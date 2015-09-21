@@ -1,0 +1,79 @@
+##/bin/bash
+#
+# Copyright (c) 2015 Oracle.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# common functions for setting up and tearing down a dmerror device
+
+# this test requires the device mapper error target
+#
+_dmerror_required()
+{
+	_require_command "$DMSETUP_PROG" dmsetup
+
+	_require_block_device $SCRATCH_DEV
+	_require_sane_bdev_flush $SCRATCH_DEV
+
+	modprobe dm-mod >/dev/null 2>&1
+	$DMSETUP_PROG targets | grep error >/dev/null 2>&1
+	[ $? -ne 0 ] && _notrun "This test requires dm error support"
+}
+
+_dmerror_init()
+{
+	local dm_backing_dev=$SCRATCH_DEV
+
+	$DMSETUP_PROG remove error-test > /dev/null 2>&1
+
+	local blk_dev_size=`blockdev --getsz $dm_backing_dev`
+
+	DMERROR_DEV='/dev/mapper/error-test'
+
+	DMLINEAR_TABLE="0 $blk_dev_size linear $dm_backing_dev 0"
+
+	$DMSETUP_PROG create error-test --table "$DMLINEAR_TABLE" || \
+		_fatal "failed to create dm linear device"
+
+	DMERROR_TABLE="0 $blk_dev_size error $dm_backing_dev 0"
+}
+
+_dmerror_mount_options()
+{
+	echo `_common_dev_mount_options $*` $DMERROR_DEV $SCRATCH_MNT
+}
+
+_dmerror_mount()
+{
+	_mount -t $FSTYP `_dmerror_mount_options $*`
+}
+
+_dmerror_cleanup()
+{
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	$DMSETUP_PROG remove error-test > /dev/null 2>&1
+}
+
+_dmerror_load_table()
+{
+	$DMSETUP_PROG suspend error-test
+	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
+
+	$DMSETUP_PROG load error-test --table "$DMERROR_TABLE"
+	[ $? -ne 0 ] && _fail "dmsetup failed to load error table"
+
+	$DMSETUP_PROG resume error-test
+	[ $? -ne 0 ] && _fail  "dmsetup resume failed"
+}
