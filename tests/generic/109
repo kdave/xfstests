@@ -1,0 +1,96 @@
+#! /bin/bash
+# FS QA Test No. 109
+#
+# Test rename for various sizes of directories. This is motivated by a bug
+# in XFS where directory entry file type was not updated properly on rename.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Jan Kara <jack@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+echo "Silence is golden"
+
+filldir()
+{
+	for (( i = 0; i < $1; i++ )); do
+		echo -n > "fname$i"
+	done
+}
+
+# Test renaming of file, symlink over file, symlink, non-existent
+# name
+renamedir()
+{
+	touch fs1
+	touch fs2
+	touch fs3
+	touch fd1
+	touch fd2
+	ln -s foo ss1
+	ln -s foo ss2
+	ln -s foo ss3
+	ln -s foo sd1
+	ln -s foo sd2
+
+	mv -T fs1 fd1
+	mv -T fs2 sd1
+	mv -T fs3 ed1
+
+	mv -T ss1 fd2
+	mv -T ss2 sd2
+	mv -T ss3 ed2
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+# Test different directory sizes to test various directory formats
+for f in 1 2 3 4 5 8 12 18 27 40 60 90 135 202 303 454 681 1020 1530 2295; do
+	mkdir $SCRATCH_MNT/dir$f
+	pushd $SCRATCH_MNT/dir$f >/dev/null
+	filldir $f
+	renamedir
+	popd >/dev/null
+done
+
+exit
