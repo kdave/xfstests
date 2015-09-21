@@ -32,15 +32,6 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 
-do_pwrite()
-{
-	offset=`expr $1 \* 512`
-	end=`expr $2 \* 512`
-	length=`expr $end - $offset`
-
-	xfs_io -d -f $file -c "pwrite $offset $length" >/dev/null
-}
-
 _cleanup()
 {
 	umount $SCRATCH_MNT
@@ -56,6 +47,17 @@ _supported_fs xfs
 _supported_os Linux
 
 file=$SCRATCH_MNT/f
+
+min_align=`_min_dio_alignment $SCRATCH_DEV`
+
+do_pwrite()
+{
+	offset=`expr $1 \* $min_align`
+	end=`expr $2 \* $min_align`
+	length=`expr $end - $offset`
+
+	xfs_io -d -f $file -c "pwrite $offset $length" >/dev/null
+}
 
 _require_scratch
 
