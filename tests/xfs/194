@@ -50,6 +50,11 @@ rm -f $seqres.full
 # For this test we use block size = 1/8 page size
 pgsize=`$here/src/feature -s`
 blksize=`expr $pgsize / 8`
+secsize=`_min_dio_alignment $SCRATCH_DEV`
+
+if [ $secsize -gt $blksize ];then
+	_notrun "sector size($secsize) too large for platform page size($pgsize)"
+fi
 
 # Filter out file mountpoint and physical location info
 # Input:
@@ -209,7 +214,7 @@ xfs_io \
 -c "truncate `expr $blksize / 2`" \
 -c "truncate `expr $blksize + 1`" \
 -c "pwrite -S 0x22 -b $blksize `expr $pgsize / 2` $blksize" \
--c "pwrite -S 0x33 -b 512 `expr $blksize \* 2` 512" \
+-c "pwrite -S 0x33 -b $secsize `expr $blksize \* 2` $secsize" \
 -t -d -f $SCRATCH_MNT/testfile4 >> $seqres.full
 
 xfs_bmap -v $SCRATCH_MNT/testfile4 | _filter_bmap
