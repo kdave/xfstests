@@ -69,15 +69,8 @@ _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
 # create, open & unlinked files so unlinked inode list is not empty
-for i in `seq 1 $nr_cpu`; do
-	testfile=$SCRATCH_MNT/$seq.unlinked.$i
-	touch $testfile
-	tail -f $testfile &
-	tail_pids="$tail_pids $!"
-done
-# give tail some time to open the file before the file is removed
-sleep 1
-rm -f $SCRATCH_MNT/$seq.unlinked.*
+src/multi_open_unlink -f $SCRATCH_MNT/$seq.unlinked -n $nr_cpu &
+open_pid=$!
 
 # start link/unlink storm
 src=$SCRATCH_MNT/$seq.target
@@ -96,8 +89,8 @@ done &
 sleep 5
 kill $! >/dev/null 2>&1
 
-kill $tail_pids $link_pids >/dev/null 2>&1
-wait $tail_pids $link_pids
+kill $open_pid $link_pids >/dev/null 2>&1
+wait $open_pid $link_pids
 
 # all done, no oops/hang expected, _check_filesystems checks SCRATCH_DEV after test
 status=0
