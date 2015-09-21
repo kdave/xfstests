@@ -2747,8 +2747,11 @@ _require_meta_uuid()
 	# This will create a crc fs on $SCRATCH_DEV
 	_require_xfs_crc
 
-	$XFS_DB_PROG -x -c "uuid generate" $SCRATCH_DEV >/dev/null 2>&1 \
-	   || _notrun "Userspace doesn't support meta_uuid feature"
+	$XFS_DB_PROG -x -c "uuid restore" $SCRATCH_DEV 2>&1 \
+	   | grep -q "invalid UUID\|supported on V5 fs" \
+	   && _notrun "Userspace doesn't support meta_uuid feature"
+
+	$XFS_DB_PROG -x -c "uuid generate" $SCRATCH_DEV >/dev/null 2>&1
 
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support meta_uuid feature"
