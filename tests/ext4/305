@@ -53,19 +53,18 @@ DEV_BASENAME=$(_short_dev $SCRATCH_DEV)
 echo "Start test on device $SCRATCH_DEV, basename $DEV_BASENAME" >$seqres.full
 _scratch_mkfs >>$seqres.full 2>&1
 
-while true;do
-	mount $SCRATCH_DEV $SCRATCH_MNT
-	umount $SCRATCH_DEV
+while true; do
+	cat /proc/fs/ext4/$DEV_BASENAME/mb_groups > /dev/null 2>&1
 done &
 PIDS=$!
 
-while true;do
-	cat /proc/fs/ext4/$DEV_BASENAME/mb_groups > /dev/null 2>&1
-done &
-PIDS="$PIDS $!"
-
-# sleep for 180s, in most cases a buggy kernel could hit BUG_ON within 3 minutes
-sleep 180
+# 30 loops is enough to crash a buggy kernel
+i=0
+while [ $i -lt 30 ]; do
+	mount $SCRATCH_DEV $SCRATCH_MNT
+	umount $SCRATCH_DEV
+	let i=i+1
+done
 
 # no BUG_ON, all done
 kill $PIDS >/dev/null 2>&1
