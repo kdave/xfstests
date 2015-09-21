@@ -1409,6 +1409,17 @@ _require_scratch_ext4_crc()
 	umount $SCRATCH_MNT
 }
 
+# this test requires the xfs kernel support crc feature on scratch device
+#
+_require_scratch_xfs_crc()
+{
+	_scratch_mkfs_xfs >/dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+	   || _notrun "Kernel doesn't support crc feature"
+	xfs_info $SCRATCH_MNT | grep -q 'crc=1' || _notrun "crc feature not supported by this filesystem"
+	umount $SCRATCH_MNT
+}
+
 # this test requires the bigalloc feature to be available in mkfs.ext4
 #
 _require_ext4_mkfs_bigalloc()
