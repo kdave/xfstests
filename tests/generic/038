@@ -105,18 +105,30 @@ trim_loop()
 # the fallocate calls happen. So we don't really care if they all succeed or
 # not, the goal is just to keep metadata space usage growing while data block
 # groups are deleted.
+#
+# Creating 200,000 files sequentially is really slow, so speed it up a bit
+# by doing it concurrently with 4 threads in 4 separate directories.
+nr_files=$((50000 * LOAD_FACTOR))
 create_files()
 {
 	local prefix=$1
 
-	for ((i = 1; i <= 400000; i++)); do
-		$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 3900" \
-			$SCRATCH_MNT/"${prefix}_$i" &> /dev/null
-		if [ $? -ne 0 ]; then
-			echo "Failed creating file ${prefix}_$i" >>$seqres.full
-			break
-		fi
+	for ((n = 0; n < 4; n++)); do
+		mkdir $SCRATCH_MNT/$n
+		(
+               for ((i = 1; i <= $nr_files; i++)); do
+			$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 3900" \
+				$SCRATCH_MNT/$n/"${prefix}_$i" &> /dev/null
+			if [ $? -ne 0 ]; then
+				echo "Failed creating file $n/${prefix}_$i" >>$seqres.full
+				break
+			fi
+		done
+		) &
+		create_pids[$n]=$!
 	done
+
+	wait ${create_pids[@]}
 
 }
 
