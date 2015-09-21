@@ -2,9 +2,9 @@
 # FS QA Test No. generic/064
 #
 # Test multiple fallocate insert/collapse range calls on same file.
-# Call insert range a single alternate block multiple times until the file
-# is left with 100 extents and as much number of extents. And Call collapse
-# range about the previously inserted ranges to test merge code of collapse
+# Call insert range on alternate blocks multiple times until the file
+# is left with 50 extents and as many holes. Then call collapse range
+# on the previously inserted ranges to test merge code of collapse
 # range. Also check for data integrity and file system consistency.
 #-----------------------------------------------------------------------
 # Copyright (c) 2015 Samsung Electronics.  All Rights Reserved.
@@ -59,7 +59,7 @@ length=$(($BLOCKS * $BSIZE))
 # Write file
 _do "$XFS_IO_PROG -f -c \"pwrite 0 $length\" -c fsync $src"
 cp $src $dest
-extent_before=`$XFS_IO_PROG -c "fiemap -v" $dest | grep "^ *[0-9]*:" |wc -l`
+extent_before=`_count_extents $dest`
 
 # Insert alternate blocks
 for (( j=0; j < $(($BLOCKS/2)); j++ )); do
@@ -67,8 +67,10 @@ for (( j=0; j < $(($BLOCKS/2)); j++ )); do
 	_do "$XFS_IO_PROG -c \"finsert $offset $BSIZE\" $dest"
 done
 
-# Check if 100 extents are present
-$XFS_IO_PROG -c "fiemap -v" $dest | grep "^ *[0-9]*:" |wc -l
+# Check if 50 extents are present, allowing some slop for file systems
+# that don't have ideal allocation behavior
+num_extents=`_count_extents $dest`
+_within_tolerance "Extent count after inserts" $num_extents 50 0 6% -v
 
 _check_scratch_fs
 if [ $? -ne 0 ]; then
@@ -82,7 +84,7 @@ for (( j=0; j < $(($BLOCKS/2)); j++ )); do
 	_do "$XFS_IO_PROG -c \"fcollapse $offset $BSIZE\" $dest"
 done
 
-extent_after=`$XFS_IO_PROG -c "fiemap -v" $dest | grep "^ *[0-9]*:" |wc -l`
+extent_after=`_count_extents $dest`
 if [ $extent_before -ne $extent_after ]; then
 	echo "extents mismatched before = $extent_before after = $extent_after"
 fi
