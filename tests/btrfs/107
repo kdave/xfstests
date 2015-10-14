@@ -1,0 +1,83 @@
+#! /bin/bash
+# FS QA Test 107
+#
+# Test that calling fallocate against a range which is already
+# allocated does not truncate beyond EOF
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/defrag
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_need_to_be_root
+
+# Use 64K file size to match any sectorsize
+# And with a unaligned tailing range to ensure it will be at least 2 pages
+filesize=$(( 64 * 1024 + 1024 ))
+
+# Fallocate a range that will not cover the tailing page
+fallocrange=$(( 64 * 1024 ))
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+$XFS_IO_PROG -f -c "pwrite 0 $filesize" $SCRATCH_MNT/foo | _filter_xfs_io
+sync
+orig_extent_nr=`_extent_count $SCRATCH_MNT/foo`
+
+# As all space are allocated and even written to disk, this falloc
+# should do nothing with extent modification.
+$XFS_IO_PROG -f -c "falloc 0 $fallocrange" $SCRATCH_MNT/foo
+sync
+new_extent_nr=`_extent_count $SCRATCH_MNT/foo`
+
+echo "orig: $orig_extent_nr, new: $new_extent_nr" >> $seqres.full
+
+if [ "x$orig_extent_nr" != "x$new_extent_nr" ]; then
+	echo "Extent beyond EOF is re-truncated"
+	echo "orig_extent_nr: $orig_extent_nr new_extent_nr: $new_extent_nr"
+fi
+
+# success, all done
+status=0
+exit
