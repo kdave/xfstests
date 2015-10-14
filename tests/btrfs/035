@@ -67,9 +67,23 @@ echo "attempting ioctl (src.clone1 src)"
 $CLONER_PROG -s 0 -d 0 -l ${snap_src_sz} \
 	$SCRATCH_MNT/src.clone1 $SCRATCH_MNT/src
 
+# The clone operation should have failed. If it did not it meant we had data
+# loss, because file "src.clone1" has an inline extent which is 10 bytes long
+# while file "src" has an inline extent which is 20 bytes long. The clone
+# operation would remove the inline extent of "src" and then copy the inline
+# extent from "src.clone1" into "src", which means we would lose the last 10
+# bytes of data from "src" (on read we would get 0x00 as the value for any
+# of those 10 bytes, because the file's size remains as 20 bytes).
+echo "File src data after attempt to clone from src.clone1 into src:"
+od -t x1 $SCRATCH_MNT/src
+
 snap_src_sz=`ls -lah $SCRATCH_MNT/src.clone2 | awk '{print $5}'`
 echo "attempting ioctl (src.clone2 src)"
 $CLONER_PROG -s 0 -d 0 -l ${snap_src_sz} \
 	$SCRATCH_MNT/src.clone2 $SCRATCH_MNT/src
+
+# The clone operation should have succeeded.
+echo "File src data after attempt to clone from src.clone2 into src:"
+od -t x1 $SCRATCH_MNT/src
 
 status=0 ; exit
