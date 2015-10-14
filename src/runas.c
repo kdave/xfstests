@@ -48,11 +48,9 @@ main(int argc, char **argv)
 	int c;
         uid_t uid = -1;
         gid_t gid = -1;
-        int pid;
         char **cmd;
         gid_t sgids[SUP_MAX];
         int sup_cnt = 0;
-	int status;
 	char *p;
 
 	prog = basename(argv[0]);
@@ -99,56 +97,30 @@ main(int argc, char **argv)
 	} 
 
         if (gid != -1) {
-	    if (setegid(gid) == -1) {
-		fprintf(stderr, "%s: setegid(%d) failed: %s\n",
+	    if (setgid(gid) == -1) {
+		fprintf(stderr, "%s: setgid(%d) failed: %s\n",
 			prog, (int)gid, strerror(errno));
 		exit(1);
-	    }	
+	    }
         }
 
-        if (sup_cnt > 0) {
+	if (gid != -1 || sup_cnt != 0) {
 	    if (setgroups(sup_cnt, sgids) == -1) {
 		fprintf(stderr, "%s: setgroups() failed: %s\n",
 			prog, strerror(errno));
 		exit(1);
-	    }	
+	    }
 	}
 
         if (uid != -1) {
-	    if (seteuid(uid) == -1) {
-		fprintf(stderr, "%s: seteuid(%d) failed: %s\n",
+	    if (setuid(uid) == -1) {
+		fprintf(stderr, "%s: setuid(%d) failed: %s\n",
 			prog, (int)uid, strerror(errno));
 		exit(1);
-	    }	
+	    }
         }
 
-	pid = fork();
-	if (pid == -1) {
-            fprintf(stderr, "%s: fork failed: %s\n",
-	            prog, strerror(errno));
-            exit(1);
-        }
-	if (pid == 0) {
-            execv(cmd[0], cmd);
-            fprintf(stderr, "%s: %s\n", cmd[0], strerror(errno));
-            exit(errno);
-	}
-
-        wait(&status);
-	if (WIFSIGNALED(status)) {
-	    fprintf(stderr, "%s: command terminated with signal %d\n", 
-                 prog, WTERMSIG(status));
-	    exit(1);
-	}
-	else if (WIFEXITED(status)) {
-	    exit(WEXITSTATUS(status));
-        }
-	else {
-	    fprintf(stderr, "%s: command bizarre wait status 0x%x\n", 
-               prog, status);
-	    exit(1);
-	}
-
-	exit(0);
-	/* NOTREACHED */
+	execvp(cmd[0], cmd);
+	fprintf(stderr, "%s: %s\n", cmd[0], strerror(errno));
+	exit(1);
 }
