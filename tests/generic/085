@@ -41,6 +41,16 @@ _cleanup()
 	cleanup_dmdev
 }
 
+cleanup_dmdev()
+{
+	# in case it's still suspended and/or mounted
+	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
+	$UMOUNT_PROG $lvdev >/dev/null 2>&1
+
+	$DMSETUP_PROG remove $node >>$seqres.full 2>&1
+	$DMSETUP_PROG mknodes >/dev/null 2>&1
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -50,7 +60,7 @@ _supported_fs generic
 _supported_os Linux
 _require_scratch
 _require_block_device $SCRATCH_DEV
-_require_command $DMSETUP_PROG
+_require_dm_target linear
 _require_freeze
 
 setup_dmdev()
@@ -59,16 +69,6 @@ setup_dmdev()
 	$DMSETUP_PROG create $node --table "$table" >>$seqres.full 2>&1 && \
 	$DMSETUP_PROG mknodes >/dev/null 2>&1
 	return $?
-}
-
-cleanup_dmdev()
-{
-	# in case it's still suspended and/or mounted
-	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
-	$UMOUNT_PROG $lvdev >/dev/null 2>&1
-
-	$DMSETUP_PROG remove $node >>$seqres.full 2>&1
-	$DMSETUP_PROG mknodes >/dev/null 2>&1
 }
 
 rm -f $seqres.full

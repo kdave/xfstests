@@ -1346,32 +1346,22 @@ _require_sane_bdev_flush()
 	fi
 }
 
-# this test requires the device mapper flakey target
-#
-_require_dm_flakey()
+# this test requires a specific device mapper target
+_require_dm_target()
 {
+	_target=$1
+
 	# require SCRATCH_DEV to be a valid block device with sane BLKFLSBUF
 	# behaviour
 	_require_block_device $SCRATCH_DEV
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
-	modprobe dm-flakey >/dev/null 2>&1
-	$DMSETUP_PROG targets | grep flakey >/dev/null 2>&1
-	if [ $? -ne 0 ]; then
-		_notrun "This test requires dm flakey support"
-	fi
-}
+	modprobe dm-$_target >/dev/null 2>&1
 
-_require_dm_snapshot()
-{
-	_require_block_device $SCRATCH_DEV
-	_require_sane_bdev_flush $SCRATCH_DEV
-	_require_command "$DMSETUP_PROG" dmsetup
-	modprobe dm-snapshot >/dev/null 2>&1
-	$DMSETUP_PROG targets | grep -q snapshot
+	$DMSETUP_PROG targets 2>&1 | grep -q ^$_target
 	if [ $? -ne 0 ]; then
-		_notrun "This test requires dm snapshot support"
+		_notrun "This test requires dm $_target support"
 	fi
 }
 
