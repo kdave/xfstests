@@ -1,0 +1,131 @@
+#! /bin/bash
+# FS QA Test No. 137
+#
+# Ensure that we can reflink and dedupe blocks within the same file...
+#   - Create a file with three distinct blocks ABB
+#   - Reflink block zero to the multiple-of-three blocks
+#   - Reflink block one to the multiple-of-five blocks
+#   - Dedupe block two to the multiple-of-seven blocks
+#   - Check that we successfully avoid deduping with holes, unwritten
+#     extents, and non-matches; but actually dedupe real matches.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_test_dedupe
+_require_xfs_io_command "falloc"
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original file blocks"
+BLKSZ=65536
+_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x62 $BLKSZ $((BLKSZ * 2)) "$TESTDIR/file1" >> "$seqres.full"
+
+NR_BLKS=1024
+
+echo "fallocate half the file"
+"$XFS_IO_PROG" -f -c "falloc $((NR_BLKS * BLKSZ / 2)) $((NR_BLKS * BLKSZ / 2))" "$TESTDIR/file1" >> "$seqres.full"
+
+echo "Reflink block zero to the threes"
+seq 1 $((NR_BLKS / 3)) | while read nr; do
+	_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file1" $((nr * 3 * BLKSZ)) \
+			$BLKSZ >> "$seqres.full"
+done
+
+echo "Reflink block one to the fives"
+seq 1 $((NR_BLKS / 5)) | while read nr; do
+	_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file1" \
+			$((nr * 5 * BLKSZ)) $BLKSZ >> "$seqres.full"
+done
+
+echo "Dedupe block two to the sevens"
+seq 1 $((NR_BLKS / 7)) | while read nr; do
+	_dedupe_range "$TESTDIR/file1" $((BLKSZ * 2)) "$TESTDIR/file1" \
+			$((nr * 7 * BLKSZ)) $BLKSZ >> "$seqres.full"
+done
+
+_test_remount
+
+echo "Check block mappings"
+md5sum "$TESTDIR/file1" | _filter_test_dir
+
+crcZ=$(_md5_range_checksum /dev/zero 0 $BLKSZ)
+crc0=$(_md5_range_checksum "$TESTDIR/file1" 0 $BLKSZ)
+crc1=$(_md5_range_checksum "$TESTDIR/file1" $BLKSZ $BLKSZ)
+crc2=$(_md5_range_checksum "$TESTDIR/file1" $((BLKSZ * 2)) $BLKSZ)
+
+check_block() {
+	lblk="$1"
+	rem7=$((lblk % 7))
+	rem5=$((lblk % 5))
+	rem3=$((lblk % 3))
+
+	crc=$(_md5_range_checksum "$TESTDIR/file1" $((lblk * BLKSZ)) $BLKSZ)
+
+	if [ $rem7 -eq 0 ]; then
+		if [ $rem5 -eq 0 ]; then
+			test $crc2 = $crc || echo "lblk $lblk doesn't match block 2"
+		elif [ $rem3 -eq 0 ]; then
+			test $crc0 = $crc || echo "lblk $lblk doesn't match block 0"
+		elif [ $lblk -lt $((NR_BLKS / 2)) ]; then
+			test $crcZ = $crc || echo "lblk $lblk isn't zeroed"
+		fi
+	elif [ $rem5 -eq 0 ]; then
+		test $crc1 = $crc || echo "lblk $lblk doesn't match block 1"
+	elif [ $rem3 -eq 0 ]; then
+		test $crc0 = $crc || echo "lblk $lblk doesn't match block 0"
+	elif [ $lblk -lt $((NR_BLKS / 2)) ]; then
+		test $crcZ = $crc || echo "lblk $lblk isn't zeroed"
+	fi
+}
+
+seq 3 $((NR_BLKS - 1)) | while read lblk; do
+	err="$(check_block $lblk)"
+	test -n "$err" && echo "$lblk: $err"
+done
+
+# success, all done
+status=0
+exit

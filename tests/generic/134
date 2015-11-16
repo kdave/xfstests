@@ -1,0 +1,128 @@
+#! /bin/bash
+# FS QA Test No. 134
+#
+# Ensure that we can reflink the last block of a file whose size isn't
+# block-aligned.
+#   - Create two 'a' files file whose size isn't block-aligned.
+#   - Create two 'b' files file whose size isn't block-aligned.
+#   - Reflink the last block of file1 to the last block in file2 and file3.
+#   - Check that files 1-2 match, 3-4 don't match, and that nothing matches 3.
+#   - Check that the ends of 1-3 match, and 1-3 do not match the end of file4.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original files"
+BLKSZ=65536
+_pwrite_byte 0x61 0 $((BLKSZ + 37)) "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((BLKSZ + 37)) "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x62 0 $((BLKSZ + 37)) "$TESTDIR/file3" >> "$seqres.full"
+_pwrite_byte 0x62 0 $((BLKSZ + 37)) "$TESTDIR/file4" >> "$seqres.full"
+_test_remount
+
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+md5sum "$TESTDIR/file4" | _filter_test_dir
+
+C1="$(_md5_checksum $TESTDIR/file1)"
+C2="$(_md5_checksum $TESTDIR/file2)"
+C3="$(_md5_checksum $TESTDIR/file3)"
+C4="$(_md5_checksum $TESTDIR/file4)"
+
+test "${C1}" = "${C2}" || echo "file1 and file2 should match"
+test "${C1}" != "${C3}" || echo "file1 and file3 should not match"
+test "${C1}" != "${C4}" || echo "file1 and file4 should not match"
+test "${C2}" != "${C3}" || echo "file2 and file3 should not match"
+test "${C2}" != "${C4}" || echo "file2 and file4 should not match"
+test "${C3}" = "${C4}" || echo "file3 and file4 should match"
+
+echo "Reflink the last blocks together, 1-2 1-3"
+_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $BLKSZ 37 >> "$seqres.full"
+_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file3" $BLKSZ 37 >> "$seqres.full"
+_test_remount
+
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+md5sum "$TESTDIR/file4" | _filter_test_dir
+
+C1="$(_md5_checksum $TESTDIR/file1)"
+C2="$(_md5_checksum $TESTDIR/file2)"
+C3="$(_md5_checksum $TESTDIR/file3)"
+C4="$(_md5_checksum $TESTDIR/file4)"
+
+echo "Compare files"
+test "${C1}" = "${C2}" || echo "file1 and file2 should match"
+test "${C1}" != "${C3}" || echo "file1 and file3 should not match"
+test "${C1}" != "${C4}" || echo "file1 and file4 should not match"
+test "${C2}" != "${C3}" || echo "file2 and file3 should not match"
+test "${C2}" != "${C4}" || echo "file2 and file4 should not match"
+test "${C3}" != "${C4}" || echo "file3 and file4 should match"
+
+echo "Compare sections"
+_compare_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $BLKSZ 37 \
+       || echo "End sections of files 1-2 do not match"
+
+_compare_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file3" $BLKSZ 37 \
+       || echo "End sections of files 1-3 do not match"
+
+_compare_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file4" $BLKSZ 37 \
+       || echo "End sections of files 1-4 do not match (intentional)"
+
+_compare_range "$TESTDIR/file2" $BLKSZ "$TESTDIR/file3" $BLKSZ 37 \
+       || echo "End sections of files 2-3 do not match"
+
+_compare_range "$TESTDIR/file2" $BLKSZ "$TESTDIR/file4" $BLKSZ 37 \
+       || echo "End sections of files 2-4 do not match (intentional)"
+
+_compare_range "$TESTDIR/file3" $BLKSZ "$TESTDIR/file4" $BLKSZ 37 \
+       || echo "End sections of files 3-4 do not match (intentional)"
+
+# success, all done
+status=0
+exit
