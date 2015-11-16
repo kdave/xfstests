@@ -63,15 +63,6 @@ _require_dm_target flakey
 _require_attrs
 _require_metadata_journaling $SCRATCH_DEV
 
-_crash_and_mount()
-{
-	# Simulate a crash/power loss.
-	_load_flakey_table $FLAKEY_DROP_WRITES
-	_unmount_flakey
-	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
-}
-
 rm -f $seqres.full
 
 _scratch_mkfs >> $seqres.full 2>&1
@@ -91,7 +82,7 @@ sync
 $SETFATTR_PROG -x user.attr2 $SCRATCH_MNT/foobar
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foobar
 
-_crash_and_mount
+_flakey_drop_and_remount
 
 # After the fsync log is replayed, the file should have only 2 xattrs, the ones
 # named user.attr1 and user.attr3. The btrfs fsync log replay bug left the file
@@ -111,7 +102,7 @@ ln $SCRATCH_MNT/foobar $SCRATCH_MNT/foobar_link
 touch $SCRATCH_MNT/qwerty
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/qwerty
 
-_crash_and_mount
+_flakey_drop_and_remount
 
 # Now only the xattr with name user.attr3 should be set in our file.
 echo "xattr names and values after second fsync log replay:"

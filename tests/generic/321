@@ -63,11 +63,9 @@ _directory_test()
 	_mount_flakey
 	mkdir $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar
-	_load_flakey_table $FLAKEY_DROP_WRITES
-	_unmount_flakey
 
-	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
+	_flakey_drop_and_remount
+
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
 	_unmount_flakey
 	_check_scratch_fs $FLAKEY_DEV
@@ -85,11 +83,9 @@ _rename_test()
 	mv $SCRATCH_MNT/foo $SCRATCH_MNT/bar/foo
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar/foo
-	_load_flakey_table $FLAKEY_DROP_WRITES
-	_unmount_flakey
 
-	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
+	_flakey_drop_and_remount\
+
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
 	_ls_l $SCRATCH_MNT/bar | tail -n +2 | awk '{ print $1, $9 }'
 	_unmount_flakey
@@ -114,11 +110,9 @@ _replay_rename_test()
 	setfattr -n user.foo -v blah $SCRATCH_MNT/bar/foo >> $seqres.full 2>&1
 
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar/foo
-	_load_flakey_table $FLAKEY_DROP_WRITES
-	_unmount_flakey
 
-	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
+	_flakey_drop_and_remount
+
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
 	_ls_l $SCRATCH_MNT/bar | tail -n +2 | awk '{ print $1, $9 }'
 	_unmount_flakey

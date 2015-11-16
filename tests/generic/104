@@ -72,13 +72,7 @@ ln $SCRATCH_MNT/testdir/bar $SCRATCH_MNT/testdir/bar_link
 ln $SCRATCH_MNT/testdir/foo $SCRATCH_MNT/testdir/foo_link
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/testdir/bar
 
-# Silently drop all writes on our scratch device to simulate a power failure.
-_load_flakey_table $FLAKEY_DROP_WRITES
-_unmount_flakey
-
-# Allow writes again and mount the fs to trigger log/journal replay.
-_load_flakey_table $FLAKEY_ALLOW_WRITES
-_mount_flakey
+_flakey_drop_and_remount
 
 # Now verify both our files have a link count of 2.
 echo "Link count for file foo: $(stat -c %h $SCRATCH_MNT/testdir/foo)"

@@ -129,11 +129,6 @@ $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
 echo "File digest before power failure:"
 md5sum $SCRATCH_MNT/foo | _filter_scratch
 
-# Silently drop all writes and ummount to simulate a crash/power failure.
-_load_flakey_table $FLAKEY_DROP_WRITES
-_unmount_flakey
-
-# Allow writes again, mount to trigger log replay and validate file contents.
 # During log replay, the btrfs delayed references implementation used to run the
 # deletion of back references before the addition of new back references, which
 # made the addition fail as it didn't find the key in the extent tree that it
@@ -142,8 +137,7 @@ _unmount_flakey
 # log replay - when running the delayed references at transaction commit time,
 # btrfs was applying the deletion before the insertion, resulting in a failure
 # of the insertion that ended up turning the fs into read-only mode.
-_load_flakey_table $FLAKEY_ALLOW_WRITES
-_mount_flakey
+_flakey_drop_and_remount
 
 echo "File digest after log replay:"
 md5sum $SCRATCH_MNT/foo | _filter_scratch

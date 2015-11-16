@@ -74,3 +74,18 @@ _load_flakey_table()
 	$DMSETUP_PROG resume flakey-test
 	[ $? -ne 0 ] && _fatal  "failed to resumeflakey-test"
 }
+
+# Silently drop all writes and unmount/remount to simulate a crash/power
+# failure.
+_flakey_drop_and_remount()
+{
+	_load_flakey_table $FLAKEY_DROP_WRITES
+	_unmount_flakey
+
+	if [ "x$1" = "xyes" ]; then
+		_check_scratch_fs $FLAKEY_DEV
+	fi
+
+	_load_flakey_table $FLAKEY_ALLOW_WRITES
+	_mount_flakey
+}

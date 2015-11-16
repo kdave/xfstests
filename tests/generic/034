@@ -75,15 +75,11 @@ touch $SCRATCH_MNT/test_dir/bar
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/test_dir
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/test_dir/bar
 
-_load_flakey_table $FLAKEY_DROP_WRITES
-_unmount_flakey
-
-_load_flakey_table $FLAKEY_ALLOW_WRITES
 # In the original btrfs bug, log replay would update the directory's inode
 # i_size incorrectly - it would sum again the size of dentry 'foo' (3) to
 # the inode's i_size, which is incorrect because the dentry was already
 # persisted before (in the fs/subvol tree).
-_mount_flakey
+_flakey_drop_and_remount
 
 [ -f $SCRATCH_MNT/test_dir/foo ] || echo "file foo is missing"
 [ -f $SCRATCH_MNT/test_dir/bar ] || echo "file bar is missing"
