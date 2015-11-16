@@ -187,10 +187,10 @@ static int do_lseek(int testnum, int subtest, int fd, off_t filsz, int origin,
 		ret = !(errno == ENXIO);
 	} else {
 
-		x = fprintf(stdout, "%02d.%02d %s expected %ld or %ld, got %ld. ",
+		x = fprintf(stdout, "%02d.%02d %s expected %lld or %lld, got %lld. ",
 			    testnum, subtest,
 			    (origin == SEEK_HOLE) ? "SEEK_HOLE" : "SEEK_DATA",
-			    (long)exp, (long)exp2, (long)pos);
+			    (long long)exp, (long long)exp2, (long long)pos);
 		ret = !(pos == exp || pos == exp2);
 	}
 
