@@ -1,0 +1,103 @@
+#! /bin/bash
+# FS QA Test No. 152
+#
+# Ensure that punching all copies of a file reflinked N times releases the blocks
+#   - Record fs block usage (0)
+#   - Create a file and some reflink copies
+#   - Record fs block usage (1)
+#   - Punch some blocks of the copies
+#   - Record fs block usage (2)
+#   - Punch all blocks of the copies
+#   - Compare fs block usage to (2), (1), and (0)
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_cp_reflink
+_require_xfs_io_command "fpunch"
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original file blocks"
+BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
+BLKS=2000
+MARGIN=100
+SZ=$((BLKSZ * BLKS))
+FREE_BLOCKS0=$(stat -f "$TESTDIR" -c '%f')
+NR=4
+_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+sync
+
+echo "Create the reflink copies"
+for i in `seq 2 $NR`; do
+	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file$i"
+done
+_test_remount
+FREE_BLOCKS1=$(stat -f "$TESTDIR" -c '%f')
+
+echo "Punch most of the blocks"
+"$XFS_IO_PROG" -f -c "fpunch 0 $SZ" "$TESTDIR/file2"
+"$XFS_IO_PROG" -f -c "fpunch 0 $((SZ / 2))" "$TESTDIR/file3"
+"$XFS_IO_PROG" -f -c "fpunch $((SZ / 2)) $((SZ / 2))" "$TESTDIR/file4"
+_test_remount
+FREE_BLOCKS2=$(stat -f "$TESTDIR" -c '%f')
+
+echo "Punch all the files"
+for i in `seq 2 $NR`; do
+	"$XFS_IO_PROG" -f -c "fpunch 0 $SZ" "$TESTDIR/file$i"
+done
+"$XFS_IO_PROG" -f -c "fpunch 0 $SZ" "$TESTDIR/file1"
+_test_remount
+FREE_BLOCKS3=$(stat -f "$TESTDIR" -c '%f')
+#echo $FREE_BLOCKS0 $FREE_BLOCKS1 $FREE_BLOCKS2 $FREE_BLOCKS3
+
+_within_tolerance "free blocks after reflink" $FREE_BLOCKS1 $((FREE_BLOCKS0 - BLKS)) $MARGIN -v
+
+_within_tolerance "free blocks after punching some reflink copies" $FREE_BLOCKS2 $FREE_BLOCKS1 $MARGIN -v
+
+_within_tolerance "free blocks after punching all copies" $FREE_BLOCKS3 $FREE_BLOCKS0 $MARGIN -v
+
+# success, all done
+status=0
+exit
