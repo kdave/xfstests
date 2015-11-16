@@ -1,0 +1,116 @@
+#! /bin/bash
+# FS QA Test No. 148
+#
+# Ensure that truncating the last block in a reflinked file CoWs appropriately:
+#   - Create a file that doesn't end on a block boundary
+#   - Create two reflink clones of the file
+#   - Shorten one of the clones with truncate
+#   - Lengthen the other clone with truncate
+#   - Check that the reflinked areas are still there.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_cp_reflink
+_require_xfs_io_command "truncate"
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original files"
+BLKSZ=65536
+_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x62 $BLKSZ 37 "$TESTDIR/file1" >> "$seqres.full"
+
+_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2"
+_cp_reflink "$TESTDIR/file1" "$TESTDIR/file3"
+
+_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x62 $BLKSZ 34 "$TESTDIR/file2.chk" >> "$seqres.full"
+
+_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+_pwrite_byte 0x62 $BLKSZ 37 "$TESTDIR/file3.chk" >> "$seqres.full"
+_pwrite_byte 0x00 $((BLKSZ + 37)) 3 "$TESTDIR/file3.chk" >> "$seqres.full"
+_test_remount
+
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+md5sum "$TESTDIR/file2.chk" | _filter_test_dir
+md5sum "$TESTDIR/file3.chk" | _filter_test_dir
+
+C1="$(_md5_checksum "$TESTDIR/file1")"
+C2="$(_md5_checksum "$TESTDIR/file2")"
+C3="$(_md5_checksum "$TESTDIR/file3")"
+
+test "${C1}" = "${C2}" || echo "file1 and file2 should match"
+test "${C1}" = "${C3}" || echo "file1 and file3 should match"
+test "${C2}" = "${C3}" || echo "file2 and file3 should match"
+
+echo "truncate files"
+"$XFS_IO_PROG" -f -c "truncate $((BLKSZ + 34))" "$TESTDIR/file2"
+"$XFS_IO_PROG" -f -c "truncate $((BLKSZ + 40))" "$TESTDIR/file3"
+_test_remount
+
+echo "Compare files"
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+md5sum "$TESTDIR/file2.chk" | _filter_test_dir
+md5sum "$TESTDIR/file3.chk" | _filter_test_dir
+
+C1="$(_md5_checksum "$TESTDIR/file1")"
+C2="$(_md5_checksum "$TESTDIR/file2")"
+C3="$(_md5_checksum "$TESTDIR/file3")"
+
+test "${C1}" != "${C2}" || echo "file1 and file2 should not match"
+test "${C1}" != "${C3}" || echo "file1 and file3 should not match"
+test "${C2}" != "${C3}" || echo "file2 and file3 should not match"
+
+echo "Compare against check files"
+cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || echo "file2 and file2.chk do not match"
+cmp -s "$TESTDIR/file3" "$TESTDIR/file3.chk" || echo "file3 and file3.chk do not match"
+
+# success, all done
+status=0
+exit
