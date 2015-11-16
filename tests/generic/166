@@ -1,0 +1,93 @@
+#! /bin/bash
+# FS QA Test No. 166
+#
+# Test for races or FS corruption when DIO writing to a file that's also
+# the source of a reflink operation.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".*
+    wait
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_scratch_reflink
+_require_cp_reflink
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+TESTDIR="$SCRATCH_MNT/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+loops=1024
+nr_loops=$((loops - 1))
+BLKSZ=65536
+
+echo "Initialize file"
+echo > "$seqres.full"
+_pwrite_byte 0x61 0 $((loops * BLKSZ)) "$TESTDIR/file1" >> "$seqres.full"
+_scratch_remount
+
+# Snapshot creator...
+snappy() {
+	n=0
+	while [ ! -e "$TESTDIR/finished" ]; do
+		_cp_reflink "$TESTDIR/file1" "$TESTDIR/snap_$n" || break
+		n=$((n + 1))
+	done
+}
+
+echo "Snapshot a file undergoing directio rewrite"
+snappy &
+seq $nr_loops -1 0 | while read i; do
+	_pwrite_byte 0x63 $((i * BLKSZ)) $BLKSZ -d "$TESTDIR/file1" >> "$seqres.full"
+done
+touch $TESTDIR/finished
+wait
+
+echo "Check for damage"
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+echo "Done"
+
+# success, all done
+status=0
+exit
