@@ -1,0 +1,74 @@
+#! /bin/bash
+# FS QA Test No. 159
+#
+# Check that we can't reflink immutable files
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+ #   rm -rf "$tmp".* "$TESTDIR1"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_lsattr
+_require_test_reflink
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+TESTDIR1="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR1"
+mkdir "$TESTDIR1"
+
+echo "Create the original files"
+BLKSZ="$(stat -f $TESTDIR1 -c '%S')"
+BLKS=1000
+MARGIN=50
+SZ=$((BLKSZ * BLKS))
+FREE_BLOCKS0=$(stat -f $TESTDIR1 -c '%f')
+NR=4
+_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file2" >> "$seqres.full"
+sync
+
+echo "Try reflink on immutable files"
+$CHATTR_PROG +i $TESTDIR1/file1 $TESTDIR1/file2
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file2" 0 $BLKSZ 2>&1 | _filter_test_dir
+$CHATTR_PROG -i $TESTDIR1/file1 $TESTDIR1/file2
+
+# success, all done
+status=0
+exit

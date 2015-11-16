@@ -1,0 +1,122 @@
+#! /bin/bash
+# FS QA Test No. 157
+#
+# Check that various invalid reflink scenarios are rejected.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR1"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_scratch_reflink
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+TESTDIR1="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR1"
+mkdir "$TESTDIR1"
+
+TESTDIR2=$SCRATCH_MNT/test-$seq
+rm -rf "$TESTDIR2"
+mkdir "$TESTDIR2"
+
+echo "Create the original files"
+BLKSZ="$(stat -f $TESTDIR1 -c '%S')"
+BLKS=1000
+MARGIN=50
+SZ=$((BLKSZ * BLKS))
+FREE_BLOCKS0=$(stat -f $TESTDIR1 -c '%f')
+NR=4
+_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file2" >> "$seqres.full"
+_pwrite_byte 0x61 0 $SZ "$TESTDIR2/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $SZ "$TESTDIR2/file2" >> "$seqres.full"
+mkdir "$TESTDIR1/dir1"
+seq 1 $((2 * BLKSZ / 250)) | while read f; do
+	touch "$TESTDIR1/dir1/$f"
+done
+mknod "$TESTDIR1/dev1" b 8 0
+mkfifo "$TESTDIR1/fifo1"
+sync
+
+echo "Try cross-device reflink"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR2/file1" 0 $BLKSZ
+
+echo "Try unaligned reflink"
+_reflink_range "$TESTDIR1/file1" 37 "$TESTDIR1/file1" 59 23
+
+echo "Try overlapping reflink"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file1" 1 $((BLKSZ * 2))
+
+echo "Try reflink past EOF"
+_reflink_range "$TESTDIR1/file1" $(( (BLKS + 10) * BLKSZ)) "$TESTDIR1/file1" 0 $BLKSZ
+
+echo "Try to reflink a dir"
+_reflink_range "$TESTDIR1/dir1" 0 "$TESTDIR1/file2" 0 $BLKSZ
+
+echo "Try to reflink a device"
+_reflink_range "$TESTDIR1/dev1" 0 "$TESTDIR1/file2" 0 $BLKSZ
+
+echo "Try to reflink to a dir"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dir1" 0 $BLKSZ
+
+echo "Try to reflink to a device"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dev1" 0 $BLKSZ
+
+echo "Try to reflink to a fifo"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/fifo1" 0 $BLKSZ -n
+
+echo "Try to reflink an append-only file"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file3" 0 $BLKSZ -a
+
+echo "Reflink two files"
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file2" 0 $BLKSZ >> "$seqres.full"
+_reflink_range "$TESTDIR2/file1" 0 "$TESTDIR2/file2" 0 $BLKSZ >> "$seqres.full"
+
+echo "Check scratch fs"
+umount $SCRATCH_MNT
+_check_scratch_fs
+
+# success, all done
+status=0
+exit
