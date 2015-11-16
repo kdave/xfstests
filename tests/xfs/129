@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test No. 129
+#
+# Ensure that we can create enough distinct reflink entries to force creation
+# of a multi-level refcount btree, and that metadump will successfully copy
+# said block.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    umount "$SCRATCH_MNT" > /dev/null 2>&1
+    rm -rf "$tmp".* "$TESTDIR" "$METADUMP_FILE"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+
+rm -f "$seqres.full"
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+TESTDIR="$SCRATCH_MNT/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+METADUMP_FILE="$TEST_DIR/${seq}_metadump"
+
+echo "Create the original file blocks"
+BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
+NR_BLKS=$((4 * BLKSZ / 12))
+_pwrite_byte 0x61 0 $((BLKSZ * NR_BLKS)) "$TESTDIR/file1" >> "$seqres.full"
+
+echo "Reflink every other block"
+seq 1 $((NR_BLKS / 2)) | while read nr; do
+	_reflink_range  "$TESTDIR/file1" $((nr * 2 * BLKSZ)) \
+			"$TESTDIR/file2" $((nr * 2 * BLKSZ)) $BLKSZ >> "$seqres.full"
+done
+
+echo "Create metadump file"
+_scratch_unmount
+_scratch_metadump "$METADUMP_FILE"
+
+# Now restore the obfuscated one back and take a look around
+echo "Restore metadump"
+xfs_mdrestore "$METADUMP_FILE" "$TEST_DIR/image"
+_mount -t $FSTYP "$TEST_DIR/image" "$SCRATCH_MNT"
+umount "$SCRATCH_MNT"
+
+echo "Check restored fs"
+_check_generic_filesystem "$METADUMP_FILE"
+
+# success, all done
+status=0
+exit
