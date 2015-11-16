@@ -1,0 +1,185 @@
+##/bin/bash
+# Routines for reflinking, deduping, and comparing parts of files.
+#-----------------------------------------------------------------------
+#  Copyright (c) 2015 Oracle.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Oracle Corporation, 500 Oracle Parkway,
+#  Redwood Shores, CA 94065, USA, or: http://www.oracle.com/
+#-----------------------------------------------------------------------
+
+# Check that cp has a reflink argument
+_require_cp_reflink()
+{
+       cp --help | grep -q reflink || \
+               _notrun "This test requires a cp with --reflink support."
+}
+
+# Given 2 files, verify that they have the same mapping but different
+# inodes - i.e. an undisturbed reflink
+# Silent if so, make noise if not
+_verify_reflink()
+{
+       # not a hard link or symlink?
+       cmp -s  <(stat -c '%i' $1) <(stat -c '%i' $2) \
+               && echo "$1 and $2 are not reflinks: same inode number"
+
+       # same mapping?
+       diff -u <($XFS_IO_PROG -c "fiemap" $1 | grep -v $1) \
+               <($XFS_IO_PROG -c "fiemap" $2 | grep -v $2) \
+               || echo "$1 and $2 are not reflinks: different extents"
+}
+
+# New reflink/dedupe helpers
+
+# this test requires the test fs support reflink...
+_require_test_reflink()
+{
+	_require_test
+	_require_xfs_io_command "reflink"
+
+	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
+	"$XFS_IO_PROG" -f -c "reflink $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" > /dev/null
+	if [ ! -s "$TEST_DIR/file2" ]; then
+		rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
+		_notrun "Reflink not supported by test filesystem type: $FSTYP"
+	fi
+	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
+}
+
+# this test requires the scratch fs support reflink...
+_require_scratch_reflink()
+{
+	_require_scratch
+	_require_xfs_io_command "reflink"
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
+	"$XFS_IO_PROG" -f -c "reflink $SCRATCH_MNT/file1 0 0 65536" "$SCRATCH_MNT/file2" > /dev/null
+	if [ ! -s "$SCRATCH_MNT/file2" ]; then
+		_scratch_unmount
+		_notrun "Reflink not supported by scratch filesystem type: $FSTYP"
+	fi
+	_scratch_unmount
+}
+
+# this test requires the test fs support dedupe...
+_require_test_dedupe()
+{
+	_require_test
+	_require_xfs_io_command "dedupe"
+
+	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file2" > /dev/null
+	testio="$("$XFS_IO_PROG" -f -c "dedupe $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" 2>&1)"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
+	echo $testio | grep -q "Inappropriate ioctl for device" && \
+		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
+	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
+}
+
+# this test requires the scratch fs support dedupe...
+_require_scratch_dedupe()
+{
+	_require_scratch
+	_require_xfs_io_command "dedupe"
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file2" > /dev/null
+	testio="$("$XFS_IO_PROG" -f -c "dedupe $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" 2>&1)"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
+	echo $testio | grep -q "Inappropriate ioctl for device" && \
+		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
+	_scratch_unmount
+}
+
+# Prints a range of a file as a hex dump
+_read_range() {
+	file="$1"
+	offset="$2"
+	len="$3"
+	xfs_io_args="$4"
+
+	$XFS_IO_PROG $xfs_io_args -f -c "pread -q -v $offset $len" "$file" | cut -d ' ' -f '3-18'
+}
+
+# Compare ranges of two files
+_compare_range() {
+	file1="$1"
+	offset1="$2"
+	file2="$3"
+	offset2="$4"
+	len="$5"
+
+	cmp -s <(_read_range "$file1" "$offset1" "$len") \
+	       <(_read_range "$file2" "$offset2" "$len")
+}
+
+# Prints the md5 checksum of a hexdump of a part of a given file
+_md5_range_checksum() {
+	file="$1"
+	offset="$2"
+	len="$3"
+
+	md5sum <(_read_range "$file" "$offset" "$len") | cut -d ' ' -f 1
+}
+
+# Reflink some file1 into file2 via cp
+_cp_reflink() {
+	file1="$1"
+	file2="$2"
+
+	cp --reflink=always "$file1" "$file2"
+}
+
+# Reflink some file1 into file2
+_reflink() {
+	file1="$1"
+	file2="$2"
+
+	"$XFS_IO_PROG" -f -c "reflink $file1" "$file2"
+}
+
+# Reflink some part of file1 into another part of file2
+_reflink_range() {
+	file1="$1"
+	offset1="$2"
+	file2="$3"
+	offset2="$4"
+	len="$5"
+	xfs_io_args="$6"
+
+	"$XFS_IO_PROG" $xfs_io_args -f -c "reflink $file1 $offset1 $offset2 $len" "$file2"
+}
+
+# Dedupe some part of file1 into another part of file2
+_dedupe_range() {
+	file1="$1"
+	offset1="$2"
+	file2="$3"
+	offset2="$4"
+	len="$5"
+	xfs_io_args="$6"
+
+	"$XFS_IO_PROG" $xfs_io_args -f -c "dedupe $file1 $offset1 $offset2 $len" "$file2"
+}

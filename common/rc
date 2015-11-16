@@ -82,6 +82,27 @@ _md5_checksum()
 	md5sum $1 | cut -d ' ' -f1
 }
 
+# Write a byte into a range of a file
+_pwrite_byte() {
+	pattern="$1"
+	offset="$2"
+	len="$3"
+	file="$4"
+	xfs_io_args="$5"
+
+	"$XFS_IO_PROG" $xfs_io_args -f -c "pwrite -S $pattern $offset $len" "$file"
+}
+
+# mmap-write a byte into a range of a file
+_mwrite_byte() {
+	pattern="$1"
+	offset="$2"
+	len="$3"
+	mmap_len="$4"
+	file="$5"
+
+	"$XFS_IO_PROG" -f -c "mmap -rw 0 $mmap_len" -c "mwrite -S $pattern $offset $len" "$file"
+}
 
 # ls -l w/ selinux sometimes puts a dot at the end:
 # -rwxrw-r--. id1 id2 file1
@@ -2569,12 +2590,6 @@ _require_ugid_map()
 	fi
 }
 
-_require_cp_reflink()
-{
-       cp --help | grep -q reflink || \
-               _notrun "This test requires a cp with --reflink support."
-}
-
 _require_fssum()
 {
 	FSSUM_PROG=$here/src/fssum
@@ -2586,21 +2601,6 @@ _require_cloner()
 	CLONER_PROG=$here/src/cloner
 	[ -x $CLONER_PROG ] || \
 		_notrun "cloner binary not present at $CLONER_PROG"
-}
-
-# Given 2 files, verify that they have the same mapping but different
-# inodes - i.e. an undisturbed reflink
-# Silent if so, make noise if not
-_verify_reflink()
-{
-       # not a hard link or symlink?
-       cmp -s  <(stat -c '%i' $1) <(stat -c '%i' $2) \
-               && echo "$1 and $2 are not reflinks: same inode number"
-
-       # same mapping?
-       diff -u <($XFS_IO_PROG -c "fiemap" $1 | grep -v $1) \
-               <($XFS_IO_PROG -c "fiemap" $2 | grep -v $2) \
-               || echo "$1 and $2 are not reflinks: different extents"
 }
 
 _require_atime()
@@ -2762,6 +2762,15 @@ _require_btrfs_dev_del_by_devid()
 	$BTRFS_UTIL_PROG device delete --help | egrep devid > /dev/null 2>&1
 	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old "\
 			"(must support 'btrfs device delete <devid> /<mnt>')"
+}
+
+_require_test_lsattr()
+{
+	testio=$(lsattr -d $TEST_DIR 2>&1)
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "lsattr not supported by test filesystem type: $FSTYP"
+	echo $testio | grep -q "Inappropriate ioctl for device" && \
+		_notrun "lsattr not supported by test filesystem type: $FSTYP"
 }
 
 _get_total_inode()
