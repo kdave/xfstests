@@ -1,0 +1,152 @@
+#! /bin/bash
+# FS QA Test No. 138
+#
+# Ensuring that copy on write through the page cache works:
+#   - Reflink two files together
+#   - Write to the beginning, middle, and end
+#   - Check that the files are now different where we say they're different.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_cp_reflink
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original files"
+BLKSZ=65536
+_pwrite_byte 0x61 0 $((BLKSZ * 48 - 3)) "$TESTDIR/file1" >> "$seqres.full"
+_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((BLKSZ * 48 - 3)) "$TESTDIR/file3" >> "$seqres.full"
+_test_remount
+
+echo "Compare files"
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+
+cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || echo "Files 1-2 do not match"
+cmp -s "$TESTDIR/file1" "$TESTDIR/file3" || echo "Files 1-3 do not match"
+cmp -s "$TESTDIR/file2" "$TESTDIR/file3" || echo "Files 2-3 do not match"
+
+echo "pagecache CoW the second file"
+_pwrite_byte 0x62 0 17 "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x62 0 17 "$TESTDIR/file3" >> "$seqres.full"
+
+_pwrite_byte 0x62 $((BLKSZ * 16 - 34)) 17 "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x62 $((BLKSZ * 16 - 34)) 17 "$TESTDIR/file3" >> "$seqres.full"
+
+_pwrite_byte 0x62 $((BLKSZ * 48 - 8)) 17 "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x62 $((BLKSZ * 48 - 8)) 17 "$TESTDIR/file3" >> "$seqres.full"
+_test_remount
+
+echo "Compare files"
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$TESTDIR/file3" | _filter_test_dir
+
+cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || echo "Files 1-2 do not match (intentional)"
+cmp -s "$TESTDIR/file1" "$TESTDIR/file3" || echo "Files 1-3 do not match (intentional)"
+cmp -s "$TESTDIR/file2" "$TESTDIR/file3" || echo "Files 2-3 do not match"
+
+echo "Compare the CoW'd section to the before file"
+_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 17 \
+       || echo "Start sections do not match (intentional)"
+
+_compare_range  "$TESTDIR/file1" $((BLKSZ * 16 - 34)) \
+		"$TESTDIR/file2" $((BLKSZ * 16 - 34)) 17 \
+       || echo "Middle sections do not match (intentional)"
+
+_compare_range  "$TESTDIR/file1" $((BLKSZ * 48 - 8)) \
+		"$TESTDIR/file2" $((BLKSZ * 48 - 8)) 17 \
+       || echo "End sections do not match (intentional)"
+
+echo "Compare the CoW'd section to the after file"
+_compare_range "$TESTDIR/file2" 0 "$TESTDIR/file3" 0 17 \
+       || echo "Start sections do not match"
+
+_compare_range  "$TESTDIR/file2" $((BLKSZ * 16 - 34)) \
+		"$TESTDIR/file3" $((BLKSZ * 16 - 34)) 17 \
+       || echo "Middle sections do not match"
+
+_compare_range  "$TESTDIR/file2" $((BLKSZ * 48 - 8)) \
+		"$TESTDIR/file3" $((BLKSZ * 48 - 8)) 17 \
+       || echo "End sections do not match"
+
+echo "Compare the not CoW'd sections"
+_compare_range "$TESTDIR/file1" 18 "$TESTDIR/file2" 18 17 \
+       || echo "Start sections of 1-2 do not match"
+
+_compare_range "$TESTDIR/file2" 18 "$TESTDIR/file3" 18 17 \
+       || echo "Start sections of 2-3 do not match"
+
+
+_compare_range  "$TESTDIR/file1" $((BLKSZ * 16 - 17)) \
+		"$TESTDIR/file2" $((BLKSZ * 16 - 17)) 82 \
+       || echo "Middle sections of 1-2 do not match"
+
+_compare_range  "$TESTDIR/file2" $((BLKSZ * 16 - 17)) \
+		"$TESTDIR/file3" $((BLKSZ * 16 - 17)) 82 \
+       || echo "Middle sections of 2-3 do not match"
+
+_compare_range  "$TESTDIR/file1" $((BLKSZ * 48 - 108)) \
+		"$TESTDIR/file2" $((BLKSZ * 48 - 108)) 100 \
+       || echo "End sections of 1-2 do not match"
+
+_compare_range  "$TESTDIR/file2" $((BLKSZ * 48 - 108)) \
+		"$TESTDIR/file3" $((BLKSZ * 48 - 108)) 100 \
+       || echo "End sections of 2-3 do not match"
+
+
+_compare_range  "$TESTDIR/file1" $((BLKSZ * 14)) \
+		"$TESTDIR/file2" $((BLKSZ * 14)) $BLKSZ \
+       || echo "Untouched sections of 1-2 do not match"
+
+_compare_range  "$TESTDIR/file2" $((BLKSZ * 14)) \
+		"$TESTDIR/file3" $((BLKSZ * 14)) $BLKSZ \
+       || echo "Untouched sections of 2-3 do not match"
+
+# success, all done
+status=0
+exit

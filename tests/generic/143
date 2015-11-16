@@ -1,0 +1,91 @@
+#! /bin/bash
+# FS QA Test No. 143
+#
+# Ensure that reflinking a file N times and DIO CoWing the copies leaves the
+# original intact.
+#   - Create a file and record its hash
+#   - Create some reflink copies
+#   - Rewrite all the reflink copies w/ directio
+#   - Compare the contents of the original file
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_reflink
+_require_cp_reflink
+
+rm -f "$seqres.full"
+
+TESTDIR="$TEST_DIR/test-$seq"
+rm -rf "$TESTDIR"
+mkdir "$TESTDIR"
+
+echo "Create the original file blocks"
+BLKSZ=65536
+NR=9
+_pwrite_byte 0x61 0 $((BLKSZ * 256)) "$TESTDIR/file1" >> "$seqres.full"
+_test_remount
+
+md5sum "$TESTDIR/file1" | _filter_test_dir
+csum="$(_md5_checksum "$TESTDIR/file1")"
+
+echo "Create the reflink copies"
+seq 2 $NR | while read i; do
+	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file$i"
+done
+_test_remount
+
+echo "Rewrite the copies"
+seq 2 $NR | while read i; do
+	_pwrite_byte 0x62 0 $((BLKSZ * 256)) "$TESTDIR/file$i" -d >> "$seqres.full"
+done
+_test_remount
+
+echo "Examine original file"
+md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$TESTDIR/file2" | _filter_test_dir
+
+mod_csum="$(_md5_checksum "$TESTDIR/file2")"
+new_csum="$(_md5_checksum "$TESTDIR/file1")"
+test "${csum}" != "${mod_csum}" || echo "checksums do not match"
+test "${csum}" = "${new_csum}" || echo "checksums do not match"
+
+# success, all done
+status=0
+exit
