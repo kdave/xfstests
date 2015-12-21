@@ -75,9 +75,17 @@ mkdir "$TESTDIR1/dir1"
 seq 1 $((2 * BLKSZ / 250)) | while read f; do
 	touch "$TESTDIR1/dir1/$f"
 done
-mknod "$TESTDIR1/dev1" b 8 0
+mknod "$TESTDIR1/dev1" c 1 3
 mkfifo "$TESTDIR1/fifo1"
 sync
+
+_filter_enotty() {
+	sed -e 's/Inappropriate ioctl for device/Invalid argument/g'
+}
+
+_filter_einval() {
+	sed -e 's/Invalid argument/Bad file descriptor/g'
+}
 
 echo "Try cross-device reflink"
 _reflink_range "$TESTDIR1/file1" 0 "$TESTDIR2/file1" 0 $BLKSZ
@@ -98,16 +106,16 @@ echo "Try to reflink a device"
 _reflink_range "$TESTDIR1/dev1" 0 "$TESTDIR1/file2" 0 $BLKSZ
 
 echo "Try to reflink to a dir"
-_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dir1" 0 $BLKSZ
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dir1" 0 $BLKSZ 2>&1 | _filter_test_dir
 
 echo "Try to reflink to a device"
-_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dev1" 0 $BLKSZ
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/dev1" 0 $BLKSZ 2>&1 | _filter_enotty
 
 echo "Try to reflink to a fifo"
-_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/fifo1" 0 $BLKSZ -n
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/fifo1" 0 $BLKSZ -n 2>&1 | _filter_enotty
 
 echo "Try to reflink an append-only file"
-_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file3" 0 $BLKSZ -a
+_reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file3" 0 $BLKSZ -a 2>&1 | _filter_einval
 
 echo "Reflink two files"
 _reflink_range "$TESTDIR1/file1" 0 "$TESTDIR1/file2" 0 $BLKSZ >> "$seqres.full"
