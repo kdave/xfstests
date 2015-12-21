@@ -1,0 +1,101 @@
+#! /bin/bash
+# FS QA Test 133
+#
+# Test xfs_quota when project names beginning with digits.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+qa_user=""
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_xfs_quota
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+
+do_project_test()
+{
+	local qa_project=123456-project
+	local dir=$SCRATCH_MNT/project
+
+	mkdir $dir 2>/dev/null
+
+	#project quota files
+	cat >$tmp.projects <<EOF
+10:$dir
+EOF
+
+	cat >$tmp.projid <<EOF
+$qa_project:10
+EOF
+
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "project -s $qa_project" $SCRATCH_MNT >>$seqres.full 2>&1
+	[ $? -ne 0 ] && _fail "Initalize project=$qa_project Failed"
+
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "limit -p bsoft=100m bhard=200m $qa_project" $SCRATCH_MNT >>$seqres.full 2>&1
+	[ $? -ne 0 ] && _fail "Create limit for project=$qa_project Failed"
+
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "quota -p -v $qa_project" $SCRATCH_MNT 2>>$seqres.full | grep -qw $qa_project
+	[ $? -ne 0 ] && _fail "Query project=$qa_project Failed"
+
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "report -p" $SCRATCH_MNT 2>>$seqres.full | grep -qw $qa_project
+	[ $? -ne 0 ] && _fail "Report project=$qa_project Failed"
+
+	return 0
+}
+
+# Test project
+_qmount_option "uquota,pquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
+do_project_test
+
+# success, all done
+status=0
+exit
