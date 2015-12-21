@@ -1,0 +1,108 @@
+#! /bin/bash
+# FSQA Test No. 026
+#
+# Test that doing a direct IO write against a file range that contains one
+# prealloc extent and one compressed extent works correctly.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2015 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "falloc"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount "-o compress"
+
+# Create a compressed extent covering the range [700K, 800K[.
+$XFS_IO_PROG -f -s -c "pwrite -S 0xaa -b 100K 700K 100K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+# Create prealloc extent covering the range [600K, 700K[.
+$XFS_IO_PROG -c "falloc 600K 100K" $SCRATCH_MNT/foo
+
+# Write 80K of data to the range [640K, 720K[ using direct IO. This range covers
+# both the prealloc extent and the compressed extent. Because there's a
+# compressed extent in the range we are writing to, the DIO write code path ends
+# up only writing the first 60k of data, which goes to the prealloc extent, and
+# then falls back to buffered IO for writing the remaining 20K of data - because
+# that remaining data maps to a file range containing a compressed extent.
+# When falling back to buffered IO, we used to trigger an assertion when
+# releasing reserved space due to bad accounting of the inode's outstanding
+# extents counter, which was set to 1 but we ended up decrementing it by 1 twice,
+# once through the ordered extent for the 60K of data we wrote using direct IO,
+# and once through the main direct IO handler (inode.cbtrfs_direct_IO()) because
+# the direct IO write wrote less than 80K of data (60K).
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 80K 640K 80K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+# Now similar test as above but for very large write operations. This triggers
+# special cases for an inode's outstanding extents accounting, as internally
+# btrfs logically splits extents into 128Mb units.
+$XFS_IO_PROG -f -s \
+	-c "pwrite -S 0xaa -b 128M 258M 128M" \
+	-c "falloc 0 258M" \
+	$SCRATCH_MNT/bar | _filter_xfs_io
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 256M 3M 256M" $SCRATCH_MNT/bar \
+	| _filter_xfs_io
+
+# Now verify the file contents are correct and that they are the same even after
+# unmounting and mounting the fs again (or evicting the page cache).
+#
+# For file foo, all bytes in the range [0, 640K[ must have a value of 0x00, all
+# bytes in the range [640K, 720K[ must have a value of 0xbb and all bytes in the
+# range [720K, 800K[ must have a value of 0xaa.
+#
+# For file bar, all bytes in the range [0, 3M[ must havea value of 0x00, all
+# bytes in the range [3M, 259M[ must have a value of 0xbb and all bytes in the
+# range [259M, 386M[ must have a value of 0xaa.
+#
+echo "File digests before remounting the file system:"
+md5sum $SCRATCH_MNT/foo | _filter_scratch
+md5sum $SCRATCH_MNT/bar | _filter_scratch
+_scratch_remount
+echo "File digests after remounting the file system:"
+md5sum $SCRATCH_MNT/foo | _filter_scratch
+md5sum $SCRATCH_MNT/bar | _filter_scratch
+
+status=0
+exit
