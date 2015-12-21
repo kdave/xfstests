@@ -36,7 +36,7 @@ _cleanup()
     cd /
     rm -f $tmp.*
     if [ $dev_removed == 1 ]; then
-        umount $SCRATCH_MNT
+	_scratch_unmount
         _devmgt_add "${DEVHTL}"
     fi
 }
@@ -63,7 +63,7 @@ _test_raid0()
 	_scratch_mount
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_raid1()
@@ -73,7 +73,7 @@ _test_raid1()
 	_scratch_mount
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_raid10()
@@ -83,7 +83,7 @@ _test_raid10()
 	_scratch_mount
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_single()
@@ -93,7 +93,7 @@ _test_single()
 	_scratch_mount
 	dirp=`mktemp -duq $SCRATCH_MNT/dir.XXXXXX`
 	_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_add()
@@ -115,7 +115,7 @@ _test_add()
 		$BTRFS_UTIL_PROG device add ${devs[$i]} $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "device add failed"
 	done
 	$BTRFS_UTIL_PROG filesystem balance $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "balance failed"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_replace()
@@ -161,7 +161,7 @@ _test_replace()
 	$BTRFS_UTIL_PROG filesystem balance $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "dev balance failed"
 
 	# cleaup. add the removed disk
-	umount $SCRATCH_MNT
+	_scratch_unmount
 	_devmgt_add "${DEVHTL}"
 	dev_removed=0
 }
@@ -177,7 +177,7 @@ _test_remove()
 	dev_del=`echo ${SCRATCH_DEV_POOL} | awk '{print $NF}'`
 	$BTRFS_UTIL_PROG device delete $dev_del $SCRATCH_MNT || _fail "btrfs device delete failed"
 	$BTRFS_UTIL_PROG filesystem show $SCRATCH_DEV 2>&1 | grep $dev_del >> $seqres.full && _fail "btrfs still shows the deleted dev"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _test_raid0

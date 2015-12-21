@@ -46,7 +46,7 @@ _cleanup()
     _cleanup_logfiles
     rm -f $tmp.*
     echo "*** unmount"
-    umount $SCRATCH_MNT 2>/dev/null
+    _scratch_unmount 2>/dev/null
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -57,7 +57,7 @@ _require_xfs_quota
 _require_v2log
  
 echo "*** init FS"
-umount $SCRATCH_DEV >/dev/null 2>&1
+_scratch_unmount >/dev/null 2>&1
 
 # do a simple quota test to ensure DQUOT data is happening
 export MOUNT_OPTIONS="-o quota,gquota"
@@ -72,7 +72,7 @@ fi
 _scratch_mkfs_xfs "-l version=1" 1>/dev/null 2>&1
 _qmount
 src/feature -u $SCRATCH_DEV || _notrun "No quota support at mount time"
-umount $SCRATCH_MNT
+_scratch_unmount
 
 _mkfs_log "-l version=1"
 _create_log

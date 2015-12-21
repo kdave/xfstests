@@ -38,7 +38,7 @@ status=1	# failure is the default!
 _cleanup()
 {
     cd /
-    umount $SCRATCH_DEV >/dev/null 2>&1
+    _scratch_unmount >/dev/null 2>&1
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -90,7 +90,7 @@ _print_getfacls()
     $nsexec -U -M "0 $acl1 1000" -G "0 $acl1 1000" getfacl --absolute-names -n $file 2>/dev/null | _filter_scratch | _getfacl_filter_nsid
 }
 
-umount $SCRATCH_DEV >/dev/null 2>&1
+_scratch_unmount >/dev/null 2>&1
 echo "*** MKFS ***" >>$seqres.full
 echo ""             >>$seqres.full
 _scratch_mkfs       >>$seqres.full 2>&1 || _fail "mkfs failed"
@@ -109,11 +109,11 @@ _print_getfacls
 echo "*** Remounting ***"
 echo ""
 sync
-umount $SCRATCH_MNT >>$seqres.full 2>&1
+_scratch_unmount >>$seqres.full 2>&1
 _scratch_mount      >>$seqres.full 2>&1 || _fail "mount failed"
 
 _print_getfacls
 
-umount $SCRATCH_DEV >/dev/null 2>&1
+_scratch_unmount >/dev/null 2>&1
 status=0
 exit

@@ -39,7 +39,7 @@ status=1	# failure is the default!
 _cleanup()
 {
 	cd /
-	umount $SCRATCH_MNT 2>/dev/null
+	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
@@ -67,7 +67,7 @@ sleep $SLEEP_TIME
 killall -q $FSSTRESS_PROG
 wait
 sync
-umount $SCRATCH_MNT
+_scratch_unmount
 
 # now mount again, run the load again, this time with a shutdown.
 _scratch_mount
@@ -84,11 +84,11 @@ wait
 
 # for some reason fsstress processes manage to live on beyond the wait?
 sleep 5
-umount $SCRATCH_MNT
+_scratch_unmount
 
 # now recover, check the filesystem for consistency
 _scratch_mount
-umount $SCRATCH_MNT
+_scratch_unmount
 _check_scratch_fs
 
 # now clean up.
@@ -97,7 +97,7 @@ for d in $load_dir/*; do
         rm -rf $d > /dev/null 2>&1 &
 done
 wait
-umount $SCRATCH_MNT
+_scratch_unmount
 
 echo "No output is good. Failures are loud."
 

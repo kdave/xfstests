@@ -270,9 +270,14 @@ _test_mount()
     _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
 }
 
+_test_unmount()
+{
+	$UMOUNT_PROG $TEST_DEV
+}
+
 _test_remount()
 {
-    $UMOUNT_PROG $TEST_DEV
+    _test_unmount
     _test_mount
 }
 
@@ -326,7 +331,7 @@ _setup_large_xfs_fs()
 		$SCRATCH_MNT/.use_space 2>&1 > /dev/null
 	export NUM_SPACE_FILES=1
 	status=$?
-	umount $SCRATCH_MNT
+	_scratch_unmount
 	if [ $status -ne 0 ]; then
 		echo "large file prealloc failed"
 		cat $tmp_dir/mnt.err >&2
@@ -501,7 +506,7 @@ _setup_large_ext4_fs()
 	fi
 	export NUM_SPACE_FILES=$nfiles
 
-	umount $SCRATCH_MNT
+	_scratch_unmount
 	if [ $status -ne 0 ]; then
 		echo "large file prealloc failed"
 		cat $tmp_dir/mnt.err >&2
@@ -1178,7 +1183,7 @@ _require_scratch_nocheck()
             exit 1
         fi
         # and then unmount it
-        if ! $UMOUNT_PROG $SCRATCH_DEV
+        if ! _scratch_unmount
         then
             echo "failed to unmount $SCRATCH_DEV"
             exit 1
@@ -1422,7 +1427,7 @@ _require_xfs_crc()
 	_scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires the ext4 kernel support crc feature on scratch device
@@ -1433,7 +1438,7 @@ _require_scratch_ext4_crc()
 	dumpe2fs -h $SCRATCH_DEV 2> /dev/null | grep -q metadata_csum || _notrun "metadata_csum not supported by this filesystem"
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support metadata_csum feature"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires the xfs kernel support crc feature on scratch device
@@ -1444,7 +1449,7 @@ _require_scratch_xfs_crc()
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
 	xfs_info $SCRATCH_MNT | grep -q 'crc=1' || _notrun "crc feature not supported by this filesystem"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires the bigalloc feature to be available in mkfs.ext4
@@ -1462,7 +1467,7 @@ _require_ext4_bigalloc()
 	$MKFS_EXT4_PROG -F -O bigalloc $SCRATCH_DEV 512m >/dev/null 2>&1
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Ext4 kernel doesn't support bigalloc feature"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires the finobt feature to be available in mkfs.xfs
@@ -1480,7 +1485,7 @@ _require_xfs_finobt()
 	_scratch_mkfs_xfs -m crc=1,finobt=1 >/dev/null 2>&1
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support finobt feature"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires xfs sysfs attribute support
@@ -1508,7 +1513,7 @@ _require_xfs_sparse_inodes()
 	_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
 	_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel does not support sparse inodes"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 # this test requires that external log/realtime devices are not in use
@@ -2824,7 +2829,7 @@ _require_meta_uuid()
 
 	_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support meta_uuid feature"
-	umount $SCRATCH_MNT
+	_scratch_unmount
 }
 
 _require_btrfs_dev_del_by_devid()

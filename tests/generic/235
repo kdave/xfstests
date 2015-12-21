@@ -65,15 +65,15 @@ repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
 # https://bugzilla.redhat.com/show_bug.cgi?id=563267
 #
 # then you need a more recent mount binary.
-mount -o remount,ro $SCRATCH_DEV 2>&1 | tee -a $seqres.full | _filter_scratch
+_scratch_mount "-o remount,ro" 2>&1 | tee -a $seqres.full | _filter_scratch
 touch $SCRATCH_MNT/failed 2>&1 | tee -a $seqres.full | _filter_scratch
-mount -o remount,rw $SCRATCH_DEV 2>&1 | tee -a $seqres.full | _filter_scratch
+_scratch_mount "-o remount,rw" 2>&1 | tee -a $seqres.full | _filter_scratch
 
 $XFS_IO_PROG -c 'pwrite 0 8k' -c 'fsync' \
 			$SCRATCH_MNT/testfile >>$seqres.full 2>&1
 repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
 
-umount $SCRATCH_DEV 2>/dev/null
+_scratch_unmount 2>/dev/null
 
 status=0
 exit

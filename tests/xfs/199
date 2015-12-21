@@ -35,7 +35,7 @@ status=1	# failure is the default!
 _cleanup()
 {
 	cd /
-	umount $SCRATCH_MNT >/dev/null 2>&1
+	_scratch_unmount >/dev/null 2>&1
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -73,7 +73,7 @@ echo "Clearing features2:"
 xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
 
 _scratch_mount
-umount $SCRATCH_MNT
+_scratch_unmount
 rwf2=`get_features features2`
 
 #
@@ -87,7 +87,7 @@ xfs_db -x $SCRATCH_DEV -c 'sb' -c 'write features2 0'
 #
 _scratch_mount -o ro
 _scratch_mount -o remount,rw
-umount $SCRATCH_MNT
+_scratch_unmount
 rof2=`get_features features2`
 
 [ "$f2" != "$bf2" ] && echo "mkfs: features2 $f2 != bad_features2 $bf2"
