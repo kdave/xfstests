@@ -77,7 +77,9 @@ for i in `seq 9 -1 0`; do
 	$XFS_IO_PROG -fs -c "pwrite -b $bsize $((i * bsize)) $bsize" $fragfile \
 					> /dev/null
 done
-_defrag --before 10 --after 1 $fragfile
+
+# Accept fewer fragments than we might expect; we don't have perfect control.
+_defrag --max_before 10 --min_before 5 --after 1 $fragfile
 
 echo "Write backwards sync leaving holes - defrag should do nothing" | tee -a $seqres.full
 for i in `seq 31 -2 0`; do

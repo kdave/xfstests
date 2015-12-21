@@ -53,15 +53,24 @@ _check_extent_count()
 	max=$2
 	ext_cnt=$3
 
-	[ "$min" -gt "$ext_cnt" ] && _fail "Found $ext_cnt extents  min:$max"
-	[ "$max" -ne -1 ] && [ "$ext_cnt" -gt "$max" ] && _fail "Found $ext_cnt max: $max"
+	# Return failure if $3 isn't between $1 and $2; let caller decide
+	# action if it's not, we just return status here.
+	if [ "$min" -gt "$ext_cnt" ]; then
+		echo "Found $ext_cnt extents  min:$max"
+		return 1;
+	fi
+	if [ "$max" -ne -1 ] && [ "$ext_cnt" -gt "$max" ]; then
+		echo "Found $ext_cnt max: $max"
+		return 1;
+	fi
 
 	if [ $max -ne $min ]; then
 	    echo "in_range($min, $max)"
 	else
 	    echo "$ext_cnt"
 	fi
-	return $ext_cnt
+	# success
+	return 0
 }
 
 # Defrag file, check it, and remove it.
@@ -129,6 +138,7 @@ _defrag()
 	echo -n "Before: "
 	ext_before=$(_extent_count $1)
 	_check_extent_count $min_before $max_before $ext_before
+	[ $? -eq 0 ] || _notrun "Could not adequately fragment file"
 
 	[ ! -z $csum ] && CSUM_BEFORE=`md5sum $1`
 	STAT_BEFORE=`stat -c "a: %x m: %y c: %z" $1`
@@ -141,6 +151,7 @@ _defrag()
 	echo -n "After: "
 	ext_after=$(_extent_count $1)
 	_check_extent_count $min_after $max_after $ext_after
+	[ $? -eq 0 ] || _fail "Failed to adequately defragment file"
 
 	[ "$ext_before" -lt "$ext_after" ] && \
 		_fail "Number of extents increased after defragmentation," \
