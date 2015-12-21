@@ -1,0 +1,163 @@
+#! /bin/bash
+# FS QA Test No. 238
+#
+# See what happens if we DIO CoW blocks 2-4 of a page's worth of blocks when
+# the surrounding blocks vary between unwritten/regular/delalloc/hole.
+#
+# This test is dependent on the system page size, so we cannot use md5 in
+# the golden output; we can only compare to a check file.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_scratch_reflink
+_require_xfs_io_command "falloc"
+
+rm -f "$seqres.full"
+
+PAGESZ=$(getconf PAGE_SIZE)
+BLKSZ=$((PAGESZ / 4))
+
+echo "Format and mount"
+_scratch_mkfs_blocksized $BLKSZ > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+TESTDIR="$SCRATCH_MNT/test-$seq"
+rm -rf $TESTDIR
+mkdir $TESTDIR
+
+REAL_BLKSZ=$(stat -f -c '%S' $TESTDIR)
+test "$REAL_BLKSZ" != "$BLKSZ" && _notrun "Failed to format with small blocksize."
+
+runtest() {
+	echo "runtest $1 $2"
+	b2=$1
+	b4=$2
+	dir=$3
+
+	echo "Create the original files"
+	mkdir -p "$dir"
+	_pwrite_byte 0x61 0 $PAGESZ "$dir/file1" >> "$seqres.full"
+
+	"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$dir/file2" >> "$seqres.full"
+	"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$dir/file2.chk" >> "$seqres.full"
+
+	case "$b2" in
+	"regular")
+		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		;;
+	"unwritten")
+		"$XFS_IO_PROG" -f -c "falloc -k $BLKSZ $BLKSZ" "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x00 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		;;
+	"hole")
+		;;
+	esac
+
+
+
+	case "$b4" in
+	"regular")
+		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		;;
+	"unwritten")
+		"$XFS_IO_PROG" -f -c "falloc -k $((BLKSZ * 3)) $BLKSZ" "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x00 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		;;
+	"hole")
+		;;
+	esac
+
+	_reflink_range "$dir/file1" $BLKSZ "$dir/file2" $((BLKSZ * 2)) $BLKSZ >> "$seqres.full"
+	_pwrite_byte 0x61 $((BLKSZ * 2)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+	_scratch_remount
+
+	echo "Compare files"
+	! cmp -s "$dir/file1" "$dir/file2" || _fail "file1 and file2 don't match."
+	cmp -s "$dir/file2" "$dir/file2.chk" || _fail "file2 and file2.chk don't match."
+
+	echo "CoW and unmount"
+	if [ "$b2" = "delalloc" ]; then
+		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+	fi
+
+	if [ "$b4" = "delalloc" ]; then
+		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+	fi
+
+	"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 $BLKSZ $((BLKSZ * 3))" "$dir/file2" >> "$seqres.full"
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $BLKSZ $((BLKSZ * 3))" "$dir/file2.chk" >> "$seqres.full"
+	_scratch_remount
+
+	echo "Compare files"
+	! cmp -s "$dir/file1" "$dir/file2" || _fail "file1 and file2 don't match."
+	cmp -s "$dir/file2" "$dir/file2.chk" || _fail "file2 and file2.chk don't match."
+}
+
+runtest regular delalloc "$TESTDIR/r-d"
+runtest regular unwritten "$TESTDIR/r-u"
+runtest regular hole "$TESTDIR/r-h"
+runtest regular regular "$TESTDIR/r-r"
+
+runtest hole delalloc "$TESTDIR/h-d"
+runtest hole unwritten "$TESTDIR/h-u"
+runtest hole hole "$TESTDIR/h-h"
+runtest hole regular "$TESTDIR/h-r"
+
+runtest unwritten delalloc "$TESTDIR/u-d"
+runtest unwritten unwritten "$TESTDIR/u-u"
+runtest unwritten hole "$TESTDIR/u-h"
+runtest unwritten regular "$TESTDIR/u-r"
+
+runtest delalloc delalloc "$TESTDIR/d-d"
+runtest delalloc unwritten "$TESTDIR/d-u"
+runtest delalloc hole "$TESTDIR/d-h"
+runtest delalloc regular "$TESTDIR/d-r"
+
+echo "Check for damage"
+umount "$SCRATCH_MNT"
+_check_scratch_fs
+
+# success, all done
+status=0
+exit

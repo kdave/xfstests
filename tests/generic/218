@@ -1,0 +1,97 @@
+#! /bin/bash
+# FS QA Test No. 218
+#
+# See what happens if we CoW blocks 2-4 of a page's worth of blocks when the
+# second block is a hole.
+#
+# This test is dependent on the system page size, so we cannot use md5 in
+# the golden output; we can only compare to a check file.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf "$tmp".* "$TESTDIR"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_scratch_reflink
+_require_xfs_io_command "falloc"
+
+rm -f "$seqres.full"
+
+PAGESZ=$(getconf PAGE_SIZE)
+BLKSZ=$((PAGESZ / 4))
+
+echo "Format and mount"
+_scratch_mkfs_blocksized $BLKSZ > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+TESTDIR="$SCRATCH_MNT/test-$seq"
+rm -rf $TESTDIR
+mkdir $TESTDIR
+
+REAL_BLKSZ=$(stat -f -c '%S' $TESTDIR)
+test "$REAL_BLKSZ" != "$BLKSZ" && _notrun "Failed to format with small blocksize."
+
+echo "Create the original files"
+_pwrite_byte 0x61 0 $PAGESZ "$TESTDIR/file1" >> "$seqres.full"
+
+"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$TESTDIR/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$TESTDIR/file2.chk" >> "$seqres.full"
+
+_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $((BLKSZ * 2)) $BLKSZ >> "$seqres.full"
+_pwrite_byte 0x61 $((BLKSZ * 2)) $BLKSZ "$TESTDIR/file2.chk" >> "$seqres.full"
+_scratch_remount
+
+echo "Compare files"
+! cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || _fail "file1 and file2 don't match."
+cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || _fail "file2 and file2.chk don't match."
+
+echo "CoW and unmount"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $((BLKSZ + 17)) $((BLKSZ * 3 - 34))" "$TESTDIR/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $((BLKSZ + 17)) $((BLKSZ * 3 - 34))" "$TESTDIR/file2.chk" >> "$seqres.full"
+_scratch_remount
+
+echo "Compare files"
+! cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || _fail "file1 and file2 don't match."
+cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || _fail "file2 and file2.chk don't match."
+
+echo "Check for damage"
+umount "$SCRATCH_MNT"
+_check_scratch_fs
+
+# success, all done
+status=0
+exit
