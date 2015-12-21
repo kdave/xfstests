@@ -57,22 +57,29 @@ mkdir $send_files_dir
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-# Create our test file with a single extent of 64K starting at file offset 128K.
-$XFS_IO_PROG -f -c "pwrite -S 0xaa 128K 64K" $SCRATCH_MNT/foo | _filter_xfs_io
+BLOCK_SIZE=$(get_block_size $SCRATCH_MNT)
+
+# Create our test file with a single extent of 16 blocks starting at a file
+# offset mapped by 32nd block.
+$XFS_IO_PROG -f -c "pwrite -S 0xaa $((32 * $BLOCK_SIZE)) $((16 * $BLOCK_SIZE))" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
 # Now clone parts of the original extent into lower offsets of the file.
 #
 # The first clone operation adds a file extent item to file offset 0 that points
-# to our initial extent with a data offset of 16K. The corresponding data back
-# reference in the extent tree has an offset of 18446744073709535232, which is
-# the result of file_offset - data_offset = 0 - 16K.
-#
-# The second clone operation adds a file extent item to file offset 16K that
-# points to our initial extent with a data offset of 48K. The corresponding data
-# back reference in the extent tree has an offset of 18446744073709518848, which
-# is the result of file_offset - data_offset = 16K - 48K.
+# to our initial extent with a data offset of 4 blocks. The corresponding data back
+# reference in the extent tree has a large value for the 'offset' field, which is
+# the result of file_offset - data_offset = 0 - (file offset of 4th block).  For
+# example in case of 4k block size, it will be 0 - 16k = 18446744073709535232.
+
+# The second clone operation adds a file extent item to file offset mapped by
+# 4th block that points to our initial extent with a data offset of 12
+# blocks. The corresponding data back reference in the extent tree has a large
+# value for the 'offset' field, which is the result of file_offset - data_offset
+# = (file offset of 4th block) - (file offset of 12th block). For example in
+# case of 4k block size, it will be 16K - 48K = 18446744073709518848.
 #
 # Those large back reference offsets (result of unsigned arithmetic underflow)
 # confused the back reference walking code (used by an incremental send and
@@ -83,10 +90,10 @@ _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 # "BTRFS error (device sdc): did not find backref in send_root. inode=257, \
 #  offset=0, disk_byte=12845056 found extent=12845056"
 #
-$CLONER_PROG -s $(((128 + 16) * 1024)) -d 0 -l $((16 * 1024)) \
+$CLONER_PROG -s $(((32 + 4) * $BLOCK_SIZE)) -d 0 -l $((4 * $BLOCK_SIZE)) \
 	$SCRATCH_MNT/foo $SCRATCH_MNT/foo
-$CLONER_PROG -s $(((128 + 48) * 1024)) -d $((16 * 1024)) -l $((16 * 1024)) \
-	$SCRATCH_MNT/foo $SCRATCH_MNT/foo
+$CLONER_PROG -s $(((32 + 12) * $BLOCK_SIZE)) -d $((4 * $BLOCK_SIZE)) \
+	     -l $((4 * $BLOCK_SIZE)) $SCRATCH_MNT/foo $SCRATCH_MNT/foo
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
@@ -94,8 +101,8 @@ _run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
 _run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
 	-f $send_files_dir/2.snap
 
-echo "File digest in the original filesystem:"
-md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
+echo "File contents in the original filesystem:"
+od -t x1 $SCRATCH_MNT/mysnap2/foo | _filter_od
 
 # Now recreate the filesystem by receiving both send streams and verify we get
 # the same file contents that the original filesystem had.
@@ -106,8 +113,8 @@ _scratch_mount
 _run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
 _run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
 
-echo "File digest in the new filesystem:"
-md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
+echo "File contents in the new filesystem:"
+od -t x1 $SCRATCH_MNT/mysnap2/foo | _filter_od
 
 status=0
 exit
