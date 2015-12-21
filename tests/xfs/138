@@ -1,0 +1,83 @@
+#! /bin/bash
+# FS QA Test 138
+#
+# Test xfs_quota when user or names beginning with digits.
+# For example, create a 'limit' for a user or group named
+# '12345678-abcd', then query this user and group.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_quota
+
+# need user and group named 123456-fsgqa
+_require_user 123456-fsgqa
+_require_group 123456-fsgqa
+
+_scratch_mkfs_xfs >/dev/null 2>&1
+_qmount_option "uquota,gquota"
+_qmount
+
+# user test
+xfs_quota -x -c "limit -u bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT >>$seqres.full 2>&1
+[ $? -ne 0 ] && _fail "Create limit for user 123456-fsgqa Failed"
+xfs_quota -x -c "quota -u -v 123456-fsgqa" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
+[ $? -ne 0 ] && _fail "Query user 123456-fsgqa Failed"
+xfs_quota -x -c "report -u" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
+[ $? -ne 0 ] && _fail "Report user 123456-fsgqa Failed"
+
+# group test
+xfs_quota -x -c "limit -g bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT >>$seqres.full 2>&1
+[ $? -ne 0 ] && _fail "Create limit for group 123456-fsgqa Failed"
+xfs_quota -x -c "quota -g -v 123456-fsgqa" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
+[ $? -ne 0 ] && _fail "Query group 123456-fsgqa Failed"
+xfs_quota -x -c "report -u" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
+[ $? -ne 0 ] && _fail "Report group 123456-fsgqa Failed"
+
+# success, all done
+status=0
+exit
