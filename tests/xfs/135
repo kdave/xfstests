@@ -1,0 +1,71 @@
+#! /bin/bash
+# FS QA Test No. 135
+#
+# This test verifies that the xfsprogs log formatting infrastructure works
+# correctly for various log stripe unit values. The log is formatted with xfs_db
+# and verified with xfs_logprint.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat, Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+rm -f $seqres.full
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/log
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_v2log
+_require_xfs_db_command "logformat"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+
+# Reformat the log with various log stripe unit sizes and see if logprint dumps
+# any errors. Use a cycle value larger than 1 so the log is actually written
+# (the log is zeroed when cycle == 1).
+for i in 16 32 64 128 256; do
+	lsunit=$((i * 1024))
+	$XFS_DB_PROG -x -c "logformat -c 3 -s $lsunit" $SCRATCH_DEV | \
+		tee -a $seqres.full
+	# don't redirect error output so it causes test failure
+	$XFS_LOGPRINT_PROG $SCRATCH_DEV >> $seqres.full
+done
+
+# success, all done
+status=0
+exit
