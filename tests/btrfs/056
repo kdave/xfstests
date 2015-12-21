@@ -68,33 +68,42 @@ test_btrfs_clone_fsync_log_recover()
 	MOUNT_OPTIONS="$MOUNT_OPTIONS $2"
 	_mount_flakey
 
-	# Create a file with 4 extents and 1 hole, all with a size of 8Kb each.
-	# The hole is in the range [16384, 24576[.
-	$XFS_IO_PROG -s -f -c "pwrite -S 0x01 -b 8192 0 8192" \
-			-c "pwrite -S 0x02 -b 8192 8192 8192" \
-			-c "pwrite -S 0x04 -b 8192 24576 8192" \
-			-c "pwrite -S 0x05 -b 8192 32768 8192" \
-		$SCRATCH_MNT/foo | _filter_xfs_io
+	BLOCK_SIZE=$(get_block_size $SCRATCH_MNT)
 
-	# Clone destination file, 1 extent of 96kb.
-	$XFS_IO_PROG -f -c "pwrite -S 0xff -b 98304 0 98304" -c "fsync" \
-		$SCRATCH_MNT/bar | _filter_xfs_io
+	EXTENT_SIZE=$((2 * $BLOCK_SIZE))
 
-	# Clone second half of the 2nd extent, the 8kb hole, the 3rd extent
+	# Create a file with 4 extents and 1 hole, all with a size of
+	# 2 blocks each.
+	# The hole is in the block range [4, 5].
+	$XFS_IO_PROG -s -f -c "pwrite -S 0x01 -b $EXTENT_SIZE 0 $EXTENT_SIZE" \
+			-c "pwrite -S 0x02 -b $EXTENT_SIZE $((2 * $BLOCK_SIZE)) $EXTENT_SIZE" \
+			-c "pwrite -S 0x04 -b $EXTENT_SIZE $((6 * $BLOCK_SIZE)) $EXTENT_SIZE" \
+			-c "pwrite -S 0x05 -b $EXTENT_SIZE $((8 * $BLOCK_SIZE)) $EXTENT_SIZE" \
+		$SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
+
+	# Clone destination file, 1 extent of 24 blocks.
+	$XFS_IO_PROG -f -c "pwrite -S 0xff -b $((24 * $BLOCK_SIZE)) 0 $((24 * $BLOCK_SIZE))" \
+		     -c "fsync" $SCRATCH_MNT/bar | _filter_xfs_io_blocks_modified
+
+	# Clone second half of the 2nd extent, the 2 block hole, the 3rd extent
 	# and the first half of the 4th extent into file bar.
-	$CLONER_PROG -s 12288 -d 0 -l 24576 $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+	$CLONER_PROG -s $((3 * $BLOCK_SIZE)) -d 0 -l $((6 * $BLOCK_SIZE)) \
+		     $SCRATCH_MNT/foo $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar
 
 	# Test small files too consisting of 1 inline extent
-	$XFS_IO_PROG -f -c "pwrite -S 0x00 -b 3500 0 3500" -c "fsync" \
-		$SCRATCH_MNT/foo2 | _filter_xfs_io
+	EXTENT_SIZE=$(($BLOCK_SIZE - 48))
+	$XFS_IO_PROG -f -c "pwrite -S 0x00 -b $EXTENT_SIZE 0 $EXTENT_SIZE" -c "fsync" \
+		$SCRATCH_MNT/foo2 | _filter_xfs_io_blocks_modified
 
-	$XFS_IO_PROG -f -c "pwrite -S 0xcc -b 1000 0 1000" -c "fsync" \
-		$SCRATCH_MNT/bar2 | _filter_xfs_io
+	EXTENT_SIZE=$(($BLOCK_SIZE - 1048))
+	$XFS_IO_PROG -f -c "pwrite -S 0xcc -b $EXTENT_SIZE 0 $EXTENT_SIZE" -c "fsync" \
+		$SCRATCH_MNT/bar2 | _filter_xfs_io_blocks_modified
 
 	# Clone the entire foo2 file into bar2, overwriting all data in bar2
 	# and increasing its size.
-	$CLONER_PROG -s 0 -d 0 -l 3500 $SCRATCH_MNT/foo2 $SCRATCH_MNT/bar2
+	EXTENT_SIZE=$(($BLOCK_SIZE - 48))
+	$CLONER_PROG -s 0 -d 0 -l $EXTENT_SIZE $SCRATCH_MNT/foo2 $SCRATCH_MNT/bar2
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar2
 
 	_flakey_drop_and_remount yes
@@ -102,10 +111,10 @@ test_btrfs_clone_fsync_log_recover()
 	# Verify the cloned range was persisted by fsync and the log recovery
 	# code did its work well.
 	echo "Verifying file bar content"
-	od -t x1 $SCRATCH_MNT/bar
+	od -t x1 $SCRATCH_MNT/bar | _filter_od
 
 	echo "Verifying file bar2 content"
-	od -t x1 $SCRATCH_MNT/bar2
+	od -t x1 $SCRATCH_MNT/bar2 | _filter_od
 
 	_unmount_flakey
 
