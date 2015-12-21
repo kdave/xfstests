@@ -1,0 +1,86 @@
+#! /bin/bash
+# FS QA Test No. f2fs/001
+#
+# Test inline_data behaviors when filesystem is full.
+#
+# The inline_data feature was introduced in ext4 and f2fs as follows.
+#  ext4 : http://lwn.net/Articles/468678/
+#  f2fs : http://lwn.net/Articles/573408/
+#
+# The basic idea is embedding small-sized file's data into relatively large
+# inode space.
+# In ext4, up to 132 bytes of data can be stored in 256 bytes-sized inode.
+# In f2fs, up to 3.4KB of data can be embedded into 4KB-sized inode block.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2014 Jaegeuk Kim.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_supported_fs f2fs
+_supported_os Linux
+_require_scratch
+
+testfile=$SCRATCH_MNT/testfile
+dummyfile=$SCRATCH_MNT/dummyfile
+
+# build 4GB filesystem
+_scratch_mkfs_sized $((4 * 1024 * 1024 * 1024)) > /dev/null 2>&1
+_scratch_mount
+
+echo "==== create small file ===="
+$XFS_IO_PROG -t -f -c "pwrite -S 0x58 0 40" $testfile | _filter_xfs_io
+
+# -ENOSPC should be triggered
+echo "==== Fullfill the partition ===="
+$XFS_IO_PROG -t -f -c "falloc 0 5g" $dummyfile | _filter_xfs_io
+
+# -ENOSPC should be triggered without any panic
+echo "==== change i_size & write data ===="
+$XFS_IO_PROG							\
+	-c "truncate 96"					\
+	-c "pwrite -S 0x58 8192 4096"				\
+$testfile | _filter_xfs_io
+
+echo "==== check data contents ===="
+hexdump -C $testfile
+_scratch_remount
+hexdump -C $testfile
+
+rm $testfile
+rm $dummyfile
+
+status=0
+exit
