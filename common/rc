@@ -2188,6 +2188,18 @@ _full_platform_details()
      echo "$os/$platform $host $kernel"
 }
 
+_get_os_name()
+{
+	if [ "`uname`" == "IRIX64" ] || [ "`uname`" == "IRIX" ]; then
+		echo 'irix'
+	elif [ "`uname`" == "Linux" ]; then
+		echo 'linux'
+	else
+		echo Unknown operating system: `uname`
+		exit
+	fi
+}
+
 _link_out_file()
 {
 	if [ -z "$1" -o -z "$2" ]; then
@@ -2195,14 +2207,8 @@ _link_out_file()
 		exit
 	fi
 	rm -f $2
-	if [ "`uname`" == "IRIX64" ] || [ "`uname`" == "IRIX" ]; then
-		ln -s $1.irix $2
-	elif [ "`uname`" == "Linux" ]; then
-		ln -s $1.linux $2
-	else
-		echo Error test $seq does not run on the operating system: `uname`
-		exit
-	fi
+	SUFFIX=$(_get_os_name())
+	ln -s $1.$SUFFIX $2
 }
 
 _die()
