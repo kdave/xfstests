@@ -72,7 +72,9 @@ echo "SCSI debug device $SCSI_DEBUG_DEV" >>$seqres.full
 # create striped volume with 4MB stripe size
 $LVM_PROG pvcreate -f $SCSI_DEBUG_DEV $SCRATCH_DEV >>$seqres.full 2>&1
 $LVM_PROG vgcreate -f $vgname $SCSI_DEBUG_DEV $SCRATCH_DEV >>$seqres.full 2>&1
-$LVM_PROG lvcreate --yes -i 2 -I 4m -l 100%FREE -n $lvname $vgname \
+# We use yes pipe instead of 'lvcreate --yes' because old version of lvm
+# (like 2.02.95 in RHEL6) don't support --yes option
+yes | $LVM_PROG lvcreate -i 2 -I 4m -l 100%FREE -n $lvname $vgname \
 	>>$seqres.full 2>&1
 # wait for lv creation to fully complete
 $UDEV_SETTLE_PROG >>$seqres.full 2>&1
