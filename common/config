@@ -246,6 +246,7 @@ case "$HOSTOS" in
         export XFS_FSR_PROG="`set_prog_path xfs_fsr`"
         export MKFS_NFS_PROG="false"
         export MKFS_CIFS_PROG="false"
+        export MKFS_OVERLAY_PROG="false"
         export MKFS_REISER4_PROG="`set_prog_path mkfs.reiser4`"
         ;;
 esac
@@ -283,6 +284,9 @@ _mount_opts()
 		;;
 	cifs)
 		export MOUNT_OPTIONS=$CIFS_MOUNT_OPTIONS
+		;;
+	overlay)
+		export MOUNT_OPTIONS=$OVERLAY_MOUNT_OPTIONS
 		;;
 	ext2|ext3|ext4|ext4dev)
 		# acls & xattrs aren't turned on by default on ext$FOO
@@ -488,8 +492,11 @@ get_next_config() {
 	fi
 
 	echo $TEST_DEV | grep -qE ":|//" > /dev/null 2>&1
-	if [ ! -b "$TEST_DEV" -a "$?" != "0" ]; then
+	if [ ! -b "$TEST_DEV" -a "$?" != "0" -a "$FSTYP" != "overlay" ]; then
 		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a block device or a network filesystem"
+		exit 1
+	elif [ "$FSTYP" == "overlay" -a ! -d "$TEST_DEV" ]; then
+		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a directory for overlay"
 		exit 1
 	fi
 
@@ -511,8 +518,11 @@ get_next_config() {
 	fi
 
 	echo $SCRATCH_DEV | grep -qE ":|//" > /dev/null 2>&1
-	if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" ]; then
+	if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" -a "$FSTYP" != "overlay" ]; then
 		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a block device or a network filesystem"
+		exit 1
+	elif [ ! -z "$SCRATCH_DEV" -a "$FSTYP" == "overlay" -a ! -d "$SCRATCH_DEV" ]; then
+		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a directory for overlay"
 		exit 1
 	fi
 

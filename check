@@ -53,13 +53,6 @@ timestamp=${TIMESTAMP:=false}
 
 rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist
 
-# we need common/config
-if ! . ./common/config
-then
-    echo "$iam: failed to source common/config"
-    exit 1
-fi
-
 SRC_GROUPS="generic shared"
 export SRC_DIR="tests"
 
@@ -70,6 +63,7 @@ usage()
 check options
     -nfs                test NFS
     -cifs               test CIFS
+    -overlay		test overlay
     -tmpfs              test TMPFS
     -l			line mode diff
     -udiff		show unified diff (default)
@@ -207,9 +201,10 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-\? | -h | --help) usage ;;
 
-	-nfs)	FSTYP=nfs ;;
-	-cifs)	FSTYP=cifs ;;
-	-tmpfs)	FSTYP=tmpfs ;;
+	-nfs)		FSTYP=nfs ;;
+	-cifs)		FSTYP=cifs ;;
+	-overlay)	FSTYP=overlay ;;
+	-tmpfs)		FSTYP=tmpfs ;;
 
 	-g)	group=$2 ; shift ;
 		GROUP_LIST="$GROUP_LIST ${group//,/ }"
@@ -259,6 +254,13 @@ while [ $# -gt 0 ]; do
 
 	shift
 done
+
+# we need common/config, source it after processing args, overlay needs FSTYP
+# set before sourcing common/config
+if ! . ./common/config; then
+	echo "$iam: failed to source common/config"
+	exit 1
+fi
 
 # Process tests from command line now.
 if $have_test_arg; then

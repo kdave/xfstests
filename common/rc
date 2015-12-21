@@ -147,6 +147,8 @@ case "$FSTYP" in
 	 ;;
     cifs)
 	 ;;
+    overlay)
+	 ;;
     reiser4)
 	 [ "$MKFS_REISER4_PROG" = "" ] && _fatal "mkfs.reiser4 not found"
 	 ;;
@@ -240,22 +242,85 @@ _common_dev_mount_options()
 	echo $MOUNT_OPTIONS $SELINUX_MOUNT_OPTIONS $*
 }
 
+_overlay_basic_mount_options()
+{
+	echo "-o lowerdir=$1/lower,upperdir=$1/upper,workdir=$1/work"
+}
+
+_overlay_mount_options()
+{
+	echo `_common_dev_mount_options` \
+	     `_overlay_basic_mount_options $1` \
+	     $OVERLAY_MOUNT_OPTIONS
+}
+
 _scratch_mount_options()
 {
 	_scratch_options mount
 
+	if [ "$FSTYP" == "overlay" ]; then
+		echo `_overlay_mount_options $SCRATCH_DEV`
+		return 0
+	fi
 	echo `_common_dev_mount_options $*` $SCRATCH_OPTIONS \
 					$SCRATCH_DEV $SCRATCH_MNT
 }
 
+# Given a dir, set up 3 subdirectories and mount on the given mnt.
+# The dir is used as the mount device so it can be seen from df or mount
+_overlay_mount()
+{
+	local dir=$1
+	local mnt=$2
+	shift 2
+	mkdir -p $dir/upper
+	mkdir -p $dir/lower
+	mkdir -p $dir/work
+
+	$MOUNT_PROG -t overlay $SELINUX_MOUNT_OPTIONS \
+		    -o lowerdir=$dir/lower \
+		    -o upperdir=$dir/upper \
+		    -o workdir=$dir/work   \
+		    $OVERLAY_MOUNT_OPTIONS $* \
+		    $dir $mnt
+}
+
+_overlay_test_mount()
+{
+	_overlay_mount $TEST_DEV $TEST_DIR $*
+}
+
+_overlay_scratch_mount()
+{
+	_overlay_mount $SCRATCH_DEV $SCRATCH_MNT $*
+}
+
+_overlay_test_unmount()
+{
+	$UMOUNT_PROG $TEST_DIR
+}
+
+_overlay_scratch_unmount()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
 _scratch_mount()
 {
+    if [ "$FSTYP" == "overlay" ]; then
+        _overlay_scratch_mount $*
+        return $?
+    fi
     _mount -t $FSTYP `_scratch_mount_options $*`
 }
 
 _scratch_unmount()
 {
-    $UMOUNT_PROG $SCRATCH_DEV
+	if [ "$FSTYP" == "overlay" ]; then
+		_overlay_scratch_unmount
+	else
+		$UMOUNT_PROG $SCRATCH_DEV
+	fi
 }
 
 _scratch_remount()
@@ -266,13 +331,21 @@ _scratch_remount()
 
 _test_mount()
 {
+    if [ "$FSTYP" == "overlay" ]; then
+        _overlay_test_mount $*
+        return $?
+    fi
     _test_options mount
     _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
 }
 
 _test_unmount()
 {
-	$UMOUNT_PROG $TEST_DEV
+	if [ "$FSTYP" == "overlay" ]; then
+		_overlay_test_unmount
+	else
+		$UMOUNT_PROG $TEST_DEV
+	fi
 }
 
 _test_remount()
@@ -571,6 +644,9 @@ _test_mkfs()
     cifs)
 	# do nothing for cifs
 	;;
+    overlay)
+	# do nothing for overlay
+	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
 	;;
@@ -591,6 +667,9 @@ _mkfs_dev()
     case $FSTYP in
     nfs*)
 	# do nothing for nfs
+	;;
+    overlay)
+	# do nothing for overlay
 	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* 2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
@@ -640,6 +719,11 @@ _scratch_mkfs()
 	;;
     cifs)
 	# unable to re-create CIFS, just remove all files in $SCRATCH_MNT to
+	# avoid EEXIST caused by the leftover files created in previous runs
+        _scratch_cleanup_files
+	;;
+    overlay)
+	# unable to re-create overlay, remove all files in $SCRATCH_MNT to
 	# avoid EEXIST caused by the leftover files created in previous runs
         _scratch_cleanup_files
 	;;
@@ -1149,6 +1233,14 @@ _require_scratch_nocheck()
 		     _notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
+	overlay)
+		if [ -z "$SCRATCH_DEV" -o ! -d "$SCRATCH_DEV" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV as ovl base dir"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	tmpfs)
 		if [ -z "$SCRATCH_DEV" -o ! -d "$SCRATCH_MNT" ];
 		then
@@ -1221,6 +1313,14 @@ _require_test()
 		fi
 		if [ ! -d "$TEST_DIR" ]; then
 		     _notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
+	overlay)
+		if [ -z "$TEST_DEV" -o ! -d "$TEST_DEV" ]; then
+			_notrun "this test requires a valid \$TEST_DEV as ovl base dir"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
 		fi
 		;;
 	tmpfs)
@@ -1823,27 +1923,29 @@ _umount_or_remount_ro()
 
 _mount_or_remount_rw()
 {
-    if [ $# -ne 3 ]
-    then
-	echo "Usage: _mount_or_remount_rw <opts> <device> <mountpoint>" 1>&2
-	exit 1
-    fi
-    mount_opts=$1
-    device=$2
-    mountpoint=$3
+	if [ $# -ne 3 ]; then
+		echo "Usage: _mount_or_remount_rw <opts> <dev> <mnt>" 1>&2
+		exit 1
+	fi
+	mount_opts=$1
+	device=$2
+	mountpoint=$3
 
-    if [ $USE_REMOUNT -eq 0 ]
-    then
-        if ! _mount -t $FSTYP $mount_opts $device $mountpoint
-        then
-            echo "!!! failed to remount $device on $mountpoint"
-            return 0 # ok=0
-        fi
-    else
-        _remount $device rw
-    fi
+	if [ $USE_REMOUNT -eq 0 ]; then
+		if [ "$FSTYP" != "overlay" ]; then
+			_mount -t $FSTYP $mount_opts $device $mountpoint
+		else
+			_overlay_mount $device $mountpoint
+		fi
+		if [ $? -ne 0 ]; then
+			echo "!!! failed to remount $device on $mountpoint"
+			return 0 # ok=0
+		fi
+	else
+		_remount $device rw
+	fi
 
-    return 1 # ok=1
+	return 1 # ok=1
 }
 
 # Check a generic filesystem in no-op mode; this assumes that the
@@ -2137,6 +2239,9 @@ _check_test_fs()
     cifs)
 	# no way to check consistency for cifs
 	;;
+    overlay)
+	# no way to check consistency for overlay
+	;;
     udf)
 	# do nothing for now
 	;;
@@ -2177,6 +2282,9 @@ _check_scratch_fs()
 	;;
     cifs)
 	# Don't know how to check a CIFS filesystem, yet.
+	;;
+    overlay)
+	# no way to check consistency for overlay
 	;;
     btrfs)
 	_check_btrfs_filesystem $device
@@ -3180,7 +3288,8 @@ init_rc()
 	if [ "`_fs_type $TEST_DEV`" != "$FSTYP" ]
 	then
 		echo "common/rc: Error: \$TEST_DEV ($TEST_DEV) is not a MOUNTED $FSTYP filesystem"
-		$DF_PROG $TEST_DEV
+		# raw $DF_PROG cannot handle NFS/CIFS/overlay correctly
+		_df_device $TEST_DEV
 		exit 1
 	fi
 	# Figure out if we need to add -F ("foreign", deprecated) option to xfs_io
