@@ -2200,15 +2200,52 @@ _get_os_name()
 	fi
 }
 
+_link_out_file_named()
+{
+	export FEATURES=$2
+	SUFFIX=$(perl -e '
+		my %feathash;
+		my $feature, $result, $suffix, $opts;
+
+		foreach $feature (split(/,/, $ENV{"FEATURES"})) {
+			$feathash{$feature} = 1;
+		}
+		$result = "default";
+		while (<>) {
+			my $found = 1;
+
+			chomp;
+			($opts, $suffix) = split(/ *: */);
+			foreach my $opt (split(/,/, $opts)) {
+				if (!exists($feathash{$opt})) {
+					$found = 0;
+					last;
+				}
+			}
+			if ($found == 1) {
+				$result = $suffix;
+				last;
+			}
+		}
+		print $result
+		' <$seqfull.cfg)
+	rm -f $1
+	SRC=$(basename $1)
+	ln -fs $SRC.$SUFFIX $1
+}
+
 _link_out_file()
 {
-	if [ -z "$1" -o -z "$2" ]; then
-		echo Error must pass src and dst.
-		exit
+	if [ $# -eq 0 ]; then
+		FEATURES="$(_get_os_name)"
+		if [ -n "$MOUNT_OPTIONS" ]; then
+			FEATURES=$FEATURES,${MOUNT_OPTIONS##"-o "}
+		fi
+	else
+		FEATURES=$1
 	fi
-	rm -f $2
-	SUFFIX=$(_get_os_name())
-	ln -s $1.$SUFFIX $2
+
+	_link_out_file_named $seqfull.out "$FEATURES"
 }
 
 _die()
