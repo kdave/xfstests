@@ -58,31 +58,35 @@ test_clone_and_read_compressed_extent()
 	_scratch_mkfs >>$seqres.full 2>&1
 	_scratch_mount $mount_opts
 
-	# Create our test file with a single extent of 64Kb that is going to be
-	# compressed no matter which compression algorithm is used (zlib/lzo).
-	$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K 64K" \
-		$SCRATCH_MNT/foo | _filter_xfs_io
+	PAGE_SIZE=$(get_page_size)
+
+	# Create our test file with 16 pages worth of data in a single extent
+	# that is going to be compressed no matter which compression algorithm
+	# is used (zlib/lzo).
+	$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K $((16 * $PAGE_SIZE))" \
+		     $SCRATCH_MNT/foo | _filter_xfs_io_pages_modified
 
 	# Now clone the compressed extent into an adjacent file offset.
-	$CLONER_PROG -s 0 -d $((64 * 1024)) -l $((64 * 1024)) \
+	$CLONER_PROG -s 0 -d $((16 * $PAGE_SIZE)) -l $((16 * $PAGE_SIZE)) \
 		$SCRATCH_MNT/foo $SCRATCH_MNT/foo
 
-	echo "File digest before unmount:"
-	md5sum $SCRATCH_MNT/foo | _filter_scratch
+	echo "File contents before unmount:"
+	od -t x1 $SCRATCH_MNT/foo | _filter_od
 
 	# Remount the fs or clear the page cache to trigger the bug in btrfs.
-	# Because the extent has an uncompressed length that is a multiple of
-	# 16 pages, all the pages belonging to the second range of the file
-	# (64K to 128K), which points to the same extent as the first range
-	# (0K to 64K), had their contents full of zeroes instead of the byte
-	# 0xaa. This was a bug exclusively in the read path of compressed
-	# extents, the correct data was stored on disk, btrfs just failed to
-	# fill in the pages correctly.
+	# Because the extent has an uncompressed length that is a multiple of 16
+	# pages, all the pages belonging to the second range of the file that is
+	# mapped by the page index range [16, 31], which points to the same
+	# extent as the first file range mapped by the page index range [0, 15],
+	# had their contents full of zeroes instead of the byte 0xaa. This was a
+	# bug exclusively in the read path of compressed extents, the correct
+	# data was stored on disk, btrfs just failed to fill in the pages
+	# correctly.
 	_scratch_remount
 
-	echo "File digest after remount:"
+	echo "File contents after remount:"
 	# Must match the digest we got before.
-	md5sum $SCRATCH_MNT/foo | _filter_scratch
+	od -t x1 $SCRATCH_MNT/foo | _filter_od
 }
 
 echo -e "\nTesting with zlib compression..."
