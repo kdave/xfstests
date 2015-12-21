@@ -56,31 +56,37 @@ test_clone_and_read_compressed_extent()
 	_scratch_mkfs >>$seqres.full 2>&1
 	_scratch_mount $mount_opts
 
+	BLOCK_SIZE=$(get_block_size $SCRATCH_MNT)
+
 	# Create a test file with a single extent that is compressed (the
 	# data we write into it is highly compressible no matter which
 	# compression algorithm is used, zlib or lzo).
-	$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K 4K"        \
-			-c "pwrite -S 0xbb 4K 8K"        \
-			-c "pwrite -S 0xcc 12K 4K"       \
-			$SCRATCH_MNT/foo | _filter_xfs_io
+	$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K $((1 * $BLOCK_SIZE))" \
+		-c "pwrite -S 0xbb $((1 * $BLOCK_SIZE)) $((2 * $BLOCK_SIZE))" \
+		-c "pwrite -S 0xcc $((3 * $BLOCK_SIZE)) $((1 * $BLOCK_SIZE))" \
+		$SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
+
 
 	# Now clone our extent into an adjacent offset.
-	$CLONER_PROG -s $((4 * 1024)) -d $((16 * 1024)) -l $((8 * 1024)) \
-		$SCRATCH_MNT/foo $SCRATCH_MNT/foo
+	$CLONER_PROG -s $((1 * $BLOCK_SIZE)) -d $((4 * $BLOCK_SIZE)) \
+		     -l $((2 * $BLOCK_SIZE)) $SCRATCH_MNT/foo $SCRATCH_MNT/foo
 
 	# Same as before but for this file we clone the extent into a lower
 	# file offset.
-	$XFS_IO_PROG -f -c "pwrite -S 0xaa 8K 4K"         \
-			-c "pwrite -S 0xbb 12K 8K"        \
-			-c "pwrite -S 0xcc 20K 4K"        \
-			$SCRATCH_MNT/bar | _filter_xfs_io
+	$XFS_IO_PROG -f \
+		-c "pwrite -S 0xaa $((2 * $BLOCK_SIZE)) $((1 * $BLOCK_SIZE))" \
+		-c "pwrite -S 0xbb $((3 * $BLOCK_SIZE)) $((2 * $BLOCK_SIZE))" \
+		-c "pwrite -S 0xcc $((5 * $BLOCK_SIZE)) $((1 * $BLOCK_SIZE))" \
+		$SCRATCH_MNT/bar | _filter_xfs_io_blocks_modified
 
-	$CLONER_PROG -s $((12 * 1024)) -d 0 -l $((8 * 1024)) \
+	$CLONER_PROG -s $((3 * $BLOCK_SIZE)) -d 0 -l $((2 * $BLOCK_SIZE)) \
 		$SCRATCH_MNT/bar $SCRATCH_MNT/bar
 
-	echo "File digests before unmounting filesystem:"
-	md5sum $SCRATCH_MNT/foo | _filter_scratch
-	md5sum $SCRATCH_MNT/bar | _filter_scratch
+	echo "File contents before unmounting filesystem:"
+	echo "foo:"
+	od -t x1 $SCRATCH_MNT/foo | _filter_od
+	echo "bar:"
+	od -t x1 $SCRATCH_MNT/bar | _filter_od
 
 	# Evicting the inode or clearing the page cache before reading again
 	# the file would also trigger the bug - reads were returning all bytes
@@ -91,10 +97,12 @@ test_clone_and_read_compressed_extent()
 	# ranges that point to the same compressed extent.
 	_scratch_remount
 
-	echo "File digests after mounting filesystem again:"
-	# Must match the same digests we got before.
-	md5sum $SCRATCH_MNT/foo | _filter_scratch
-	md5sum $SCRATCH_MNT/bar | _filter_scratch
+	echo "File contents after mounting filesystem again:"
+	# Must match the same contents we got before.
+	echo "foo:"
+	od -t x1 $SCRATCH_MNT/foo | _filter_od
+	echo "bar:"
+	od -t x1 $SCRATCH_MNT/bar | _filter_od
 }
 
 echo -e "\nTesting with zlib compression..."
