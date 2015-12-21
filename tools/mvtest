@@ -1,0 +1,55 @@
+#!/bin/sh
+
+# Renumber a test
+dir="$(dirname "$0")"
+
+if [ -z "$1" ] || [ "$1" = "--help" ]; then
+	echo "Usage: $0 path_to_test new_path_to_test"
+	exit 1
+fi
+
+src="$1"
+dest="$2"
+
+die() {
+	echo "$@"
+	exit 1
+}
+
+append() {
+	out="$1"
+	shift
+	echo "$@" >> "${out}"
+}
+
+test "${src}" != "${dest}" || die "Test \"${src}\" is the same as dest."
+test -e "tests/${src}" || die "Test \"${src}\" does not exist."
+test ! -e "tests/${dest}" || die "Test \"${src}\" already exists."
+
+sid="$(basename "${src}")"
+did="$(basename "${dest}")"
+
+sgroup="$(basename "$(dirname "tests/${src}")")"
+dgroup="$(basename "$(dirname "tests/${dest}")")"
+
+sgroupfile="tests/${sgroup}/group"
+dgroupfile="tests/${sgroup}/group"
+
+git mv "tests/${src}" "tests/${dest}"
+git mv "tests/${src}.out" "tests/${dest}.out"
+sed -e "s/^# FS QA Test No. ${sid}$/# FS QA Test No. ${did}/g" -i "tests/${dest}"
+sed -e "s/^QA output created by ${sid}$/QA output created by ${did}/g" -i "tests/${dest}.out"
+sed -e "s/test-${sid}/test-${did}/g" -i "tests/${dest}.out"
+
+grpline="$(grep "^${sid} " "${sgroupfile}")"
+newgrpline="$(echo "${grpline}" | sed -e "s/^${sid} /${did} /g")"
+
+sed -e "/^${sid}.*$/d" -i "${sgroupfile}"
+cp "${dgroupfile}" "${dgroupfile}.new"
+append "${dgroupfile}.new" "${newgrpline}"
+"${dir}/sort-group.py" "${dgroupfile}.new"
+mv "${dgroupfile}.new" "${dgroupfile}"
+
+echo "Moved \"${src}\" to \"${dest}\"."
+
+exit 0

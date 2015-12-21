@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+import sys
+
+# Sort a group list, carefully preserving comments.
+
+def xfstest_key(key):
+	'''Extract the numeric part of a test name if possible.'''
+	k = 0
+
+	assert type(key) == str
+
+	# No test number at all...
+	if not key[0].isdigit():
+		return key
+
+	# ...otherwise extract as much number as we can.
+	for digit in key:
+		if digit.isdigit():
+			k = k * 10 + int(digit)
+		else:
+			return k
+	return k
+
+def read_group(fd):
+	'''Read the group list, carefully attaching comments to the next test.'''
+	tests = {}
+	comments = None
+
+	for line in fd:
+		sline = line.strip()
+		tokens = sline.split()
+		if len(tokens) == 0 or tokens[0] == '#':
+			if comments == None:
+				comments = []
+			comments.append(sline)
+		else:
+			tests[tokens[0]] = (comments, tokens[1:])
+			comments = None
+	return tests
+
+def sort_keys(keys):
+	'''Separate keys into integer and non-integer tests.'''
+	int_keys = []
+	int_xkeys = []
+	str_keys = []
+
+	# Sort keys into integer(ish) tests and other
+	for key in keys:
+		xkey = xfstest_key(key)
+		if type(xkey) == int:
+			int_keys.append(key)
+			int_xkeys.append(xkey)
+		else:
+			str_keys.append(key)
+	return (int_keys, int_xkeys, str_keys)
+
+def write_sorted(tests, fd):
+	def dump_xkey(xkey):
+		(comments, tokens) = tests[key]
+		if comments:
+			for c in comments:
+				fd.write('%s\n' % c)
+		fd.write('%s %s\n' % (key, ' '.join(tokens)))
+	'''Print tests (and comments) in number order.'''
+
+	(int_keys, ignored, str_keys) = sort_keys(tests.keys())
+	for key in sorted(int_keys, key = xfstest_key):
+		dump_xkey(key)
+	for key in sorted(str_keys):
+		dump_xkey(key)
+
+def sort_main():
+	if '--help' in sys.argv[1:]:
+		print('Usage: %s groupfiles' % sys.argv[0])
+		sys.exit(0)
+
+	for arg in sys.argv[1:]:
+		with open(arg, 'r+') as fd:
+			x = read_group(fd)
+			fd.seek(0, 0)
+			write_sorted(x, fd)
+
+def nextid_main():
+	if '--help' in sys.argv[1:]:
+		print('Usage: %s group[/startid] ' % sys.argv[0])
+		sys.exit(0)
+
+	if len(sys.argv) != 2:
+		print('Specify exactly one group name.')
+		sys.exit(1)
+
+	c = sys.argv[1].split('/')
+	if len(c) > 1:
+		startid = int(c[1])
+	else:
+		startid = 1
+	group = c[0]
+
+	with open('tests/%s/group' % group, 'r') as fd:
+		x = read_group(fd)
+		xkeys = {int(x) for x in sort_keys(x.keys())[1]}
+
+		xid = startid
+		while xid in xkeys:
+			xid += 1
+		print('%s/%d' % (group, xid))
+
+if __name__ == '__main__':
+	if 'nextid' in sys.argv[0]:
+		nextid_main()
+	else:
+		sort_main()
