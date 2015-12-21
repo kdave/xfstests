@@ -67,36 +67,41 @@ mkdir $send_files_dir
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount "-o compress"
 
-# Create the file with a single extent of 128K. This creates a metadata file
-# extent item with a data start offset of 0 and a logical length of 128K.
-$XFS_IO_PROG -f -c "pwrite -S 0xaa 64K 128K" -c "fsync" \
-	$SCRATCH_MNT/foo | _filter_xfs_io
+BLOCK_SIZE=$(get_block_size $SCRATCH_MNT)
 
-# Now rewrite the range 64K to 112K of our file. This will make the inode's
-# metadata continue to point to the 128K extent we created before, but now
-# with an extent item that points to the extent with a data start offset of
-# 112K and a logical length of 16K.
-# That metadata file extent item is associated with the logical file offset
-# at 176K and covers the logical file range 176K to 192K.
-$XFS_IO_PROG -c "pwrite -S 0xbb 64K 112K" -c "fsync" \
-	$SCRATCH_MNT/foo | _filter_xfs_io
+# Create the file with a single extent of 32 blocks. This creates a metadata
+# file extent item with a data start offset of 0 and a logical length of
+# 32 blocks.
+$XFS_IO_PROG -f -c "pwrite -S 0xaa $((16 * $BLOCK_SIZE)) $((32 * $BLOCK_SIZE))" \
+	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
 
-# Now rewrite the range 180K to 12K. This will make the inode's metadata
-# continue to point the the 128K extent we created earlier, with a single
-# extent item that points to it with a start offset of 112K and a logical
-# length of 4K.
-# That metadata file extent item is associated with the logical file offset
-# at 176K and covers the logical file range 176K to 180K.
-$XFS_IO_PROG -c "pwrite -S 0xcc 180K 12K" -c "fsync" \
-	$SCRATCH_MNT/foo | _filter_xfs_io
+# Now rewrite the block range [16, 28[ of our file. This will make
+# the inode's metadata continue to point to the single 32 block extent
+# we created before, but now with an extent item that points to the
+# extent with a data start offset referring to the 28th block and a
+# logical length of 4 blocks.
+# That metadata file extent item is associated with the block range
+# [44, 48[.
+$XFS_IO_PROG -c "pwrite -S 0xbb $((16 * $BLOCK_SIZE)) $((28 * $BLOCK_SIZE))" \
+	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
+
+
+# Now rewrite the block range [45, 48[. This will make the inode's
+# metadata continue to point the 32 block extent we created earlier,
+# with a single extent item that points to it with a start offset
+# referring to the 28th block and a logical length of 1 block.
+# That metadata file extent item is associated with the block range
+# [44, 45[.
+$XFS_IO_PROG -c "pwrite -S 0xcc $((45 * $BLOCK_SIZE)) $((3 * $BLOCK_SIZE))" \
+	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
-# Now clone that same region of the 128K extent into a new file, so that it
+# Now clone that same region of the 32 block extent into a new file, so that it
 # gets referenced twice and the incremental send operation below decides to
 # issue a clone operation instead of copying the data.
 touch $SCRATCH_MNT/bar
-$CLONER_PROG -s $((176 * 1024)) -d $((176 * 1024)) -l $((4 * 1024)) \
+$CLONER_PROG -s $((44 * $BLOCK_SIZE)) -d $((44 * $BLOCK_SIZE)) -l $BLOCK_SIZE \
 	$SCRATCH_MNT/foo $SCRATCH_MNT/bar
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
@@ -105,10 +110,13 @@ _run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
 _run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
 	-f $send_files_dir/2.snap
 
-echo "File digests in the original filesystem:"
-md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/bar | _filter_scratch
+echo "File contents in the original filesystem:"
+echo "mysnap1/foo"
+od -t x1 $SCRATCH_MNT/mysnap1/foo | _filter_od
+echo "mysnap2/foo"
+od -t x1 $SCRATCH_MNT/mysnap2/foo | _filter_od
+echo "mysnap2/bar"
+od -t x1 $SCRATCH_MNT/mysnap2/bar | _filter_od
 
 # Now recreate the filesystem by receiving both send streams and verify we get
 # the same file contents that the original filesystem had.
@@ -119,10 +127,13 @@ _scratch_mount
 _run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
 _run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
 
-echo "File digests in the new filesystem:"
-md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/bar | _filter_scratch
+echo "File contents in the new filesystem:"
+echo "mysnap1/foo"
+od -t x1 $SCRATCH_MNT/mysnap1/foo | _filter_od
+echo "mysnap2/foo"
+od -t x1 $SCRATCH_MNT/mysnap2/foo | _filter_od
+echo "mysnap2/bar"
+od -t x1 $SCRATCH_MNT/mysnap2/bar | _filter_od
 
 status=0
 exit
