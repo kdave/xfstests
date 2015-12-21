@@ -234,6 +234,11 @@ _filter_hole_fiemap()
 	_coalesce_extents
 }
 
+#     10000 Unwritten preallocated extent
+#     01000 Doesn't begin on stripe unit
+#     00100 Doesn't end   on stripe unit
+#     00010 Doesn't begin on stripe width
+#     00001 Doesn't end   on stripe width
 _filter_bmap()
 {
 	awk '
@@ -241,11 +246,11 @@ _filter_bmap()
 			print $1, $2, $3;
 			next;
 		}
-		$7 ~ /10000/ {
+		$7 ~ /1[01][01][01][01]/ {
 			print $1, $2, "unwritten";
 			next;
 		}
-		$7 ~ /00000/ {
+		$7 ~ /0[01][01][01][01]/ {
 			print $1, $2, "data"
 		}' |
 	_coalesce_extents
