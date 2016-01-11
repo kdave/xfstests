@@ -3343,6 +3343,20 @@ get_page_size()
 }
 
 
+run_fsx()
+{
+	echo fsx $@
+	args=`echo $@ | sed -e "s/ BSIZE / $bsize /g" -e "s/ PSIZE / $psize /g"`
+	set -- $here/ltp/fsx $args $FSX_AVOID $TEST_DIR/junk
+	echo "$@" >>$seqres.full
+	rm -f $TEST_DIR/junk
+	"$@" 2>&1 | tee -a $seqres.full >$tmp.fsx
+	if [ ${PIPESTATUS[0]} -ne 0 ]; then
+		cat $tmp.fsx
+		exit 1
+	fi
+}
+
 init_rc
 
 ################################################################################

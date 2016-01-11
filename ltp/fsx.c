@@ -1557,16 +1557,20 @@ int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 
 #endif
 
+#define test_fallocate(mode) __test_fallocate(mode, #mode)
+
 int
-test_fallocate(int mode)
+__test_fallocate(int mode, const char *mode_str)
 {
 #ifdef HAVE_LINUX_FALLOC_H
 	int ret = 0;
 	if (!lite) {
 		if (fallocate(fd, mode, 0, 1) && errno == EOPNOTSUPP) {
 			if(!quiet)
-				warn("main: filesystem does not support "
-				     "fallocate mode 0x%x, disabling!\n", mode);
+				fprintf(stderr,
+					"main: filesystem does not support "
+					"fallocate mode %s, disabling!\n",
+					mode_str);
 		} else {
 			ret = 1;
 			ftruncate(fd, 0);
@@ -1862,8 +1866,7 @@ main(int argc, char **argv)
 	if (keep_size_calls)
 		keep_size_calls = test_fallocate(FALLOC_FL_KEEP_SIZE);
 	if (punch_hole_calls)
-		punch_hole_calls = test_fallocate(FALLOC_FL_PUNCH_HOLE |
-						  FALLOC_FL_KEEP_SIZE);
+		punch_hole_calls = test_fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE);
 	if (zero_range_calls)
 		zero_range_calls = test_fallocate(FALLOC_FL_ZERO_RANGE);
 	if (collapse_range_calls)
