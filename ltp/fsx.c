@@ -1881,7 +1881,7 @@ main(int argc, char **argv)
 		prterr("close");
 		report_failure(99);
 	}
-	prt("All operations completed A-OK!\n");
+	prt("All %lu operations completed A-OK!\n", testcalls);
 
 	exit(0);
 	return 0;
