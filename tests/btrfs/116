@@ -1,0 +1,76 @@
+#! /bin/bash
+# FSQA Test No. 116
+#
+# Verify that when a fitrim operation is made against a btrfs filesystem, the
+# ranges [0, 64Kb[ and [68Kb, 1Mb[ of the device are not discarded, they remain
+# with the content they had before the fitrim operation. These regions of the
+# device are reserved for a boot loader to use at its will.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_need_to_be_root
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# Write to the [0, 64Kb[ and [68Kb, 1Mb[ ranges of the device. These ranges are
+# reserved for a boot loader to use (GRUB for example) and btrfs should never
+# use them - neither for allocating metadata/data nor should trim/discard them.
+# The range [64Kb, 68Kb[ is used for the primary superblock of the filesystem.
+$XFS_IO_PROG -c "pwrite -S 0xfd 0 64K" $SCRATCH_DEV | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite -S 0xfd 68K 956K" $SCRATCH_DEV | _filter_xfs_io
+
+# Now mount the filesystem and perform a fitrim against it.
+_scratch_mount
+_require_batched_discard $SCRATCH_MNT
+$FSTRIM_PROG $SCRATCH_MNT
+
+# Now unmount the filesystem and verify the content of the ranges was not
+# modified (no trim/discard happened on them).
+_scratch_unmount
+echo "Content of the ranges [0, 64Kb] and [68Kb, 1Mb[ after fitrim:"
+od -t x1 -N $((64 * 1024)) $SCRATCH_DEV
+od -t x1 -j $((68 * 1024)) -N $((956 * 1024)) $SCRATCH_DEV
+
+status=0
+exit
