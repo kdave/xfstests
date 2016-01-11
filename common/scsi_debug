@@ -57,7 +57,15 @@ _get_scsi_debug_dev()
 
 _put_scsi_debug_dev()
 {
-	sleep 1
 	lsmod | grep -wq scsi_debug || return
+
+	n=2
+	# use redirection not -q option of modprobe here, because -q of old
+	# modprobe is only quiet when the module is not found, not when the
+	# module is in use.
+	while [ $n -ge 0 ] && ! modprobe -nr scsi_debug >/dev/null 2>&1; do
+		sleep 1
+		n=$((n-1))
+	done
 	rmmod scsi_debug || _fail "Could not remove scsi_debug module"
 }
