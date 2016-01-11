@@ -914,11 +914,10 @@ do_punch_hole(unsigned offset, unsigned length)
 
 #ifdef FALLOC_FL_ZERO_RANGE
 void
-do_zero_range(unsigned offset, unsigned length)
+do_zero_range(unsigned offset, unsigned length, int keep_size)
 {
 	unsigned end_offset;
 	int mode = FALLOC_FL_ZERO_RANGE;
-	int keep_size = 0;
 
 	if (length == 0) {
 		if (!quiet && testcalls > simulatedopcount)
@@ -926,9 +925,6 @@ do_zero_range(unsigned offset, unsigned length)
 			log4(OP_SKIPPED, OP_ZERO_RANGE, offset, length);
 		return;
 	}
-
-	if (keep_size_calls)
-		keep_size = random() % 2;
 
 	end_offset = keep_size ? 0 : offset + length;
 
@@ -966,7 +962,7 @@ do_zero_range(unsigned offset, unsigned length)
 
 #else
 void
-do_zero_range(unsigned offset, unsigned length)
+do_zero_range(unsigned offset, unsigned length, int keep_size)
 {
 	return;
 }
@@ -1080,10 +1076,9 @@ do_insert_range(unsigned offset, unsigned length)
 #ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
-do_preallocate(unsigned offset, unsigned length)
+do_preallocate(unsigned offset, unsigned length, int keep_size)
 {
 	unsigned end_offset;
-	int keep_size = 0;
 
         if (length == 0) {
                 if (!quiet && testcalls > simulatedopcount)
@@ -1091,9 +1086,6 @@ do_preallocate(unsigned offset, unsigned length)
                 log4(OP_SKIPPED, OP_FALLOCATE, offset, length);
                 return;
         }
-
-	if (keep_size_calls)
-		keep_size = random() % 2;
 
 	end_offset = keep_size ? 0 : offset + length;
 
@@ -1132,7 +1124,7 @@ do_preallocate(unsigned offset, unsigned length)
 }
 #else
 void
-do_preallocate(unsigned offset, unsigned length)
+do_preallocate(unsigned offset, unsigned length, int keep_size)
 {
 	return;
 }
@@ -1211,6 +1203,7 @@ test(void)
 	unsigned long	size = maxoplen;
 	unsigned long	rv = random();
 	unsigned long	op;
+	int		keep_size = 0;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
 		writefileimage();
@@ -1235,6 +1228,17 @@ test(void)
 		op = rv % OP_MAX_LITE;
 	else
 		op = rv % OP_MAX_FULL;
+
+	switch(op) {
+	case OP_FALLOCATE:
+		if (fallocate_calls && size && keep_size_calls)
+			keep_size = random() % 2;
+		break;
+	case OP_ZERO_RANGE:
+		if (zero_range_calls && size && keep_size_calls)
+			keep_size = random() % 2;
+		break;
+	}
 
 	switch (op) {
 	case OP_MAPREAD:
@@ -1306,7 +1310,7 @@ test(void)
 
 	case OP_FALLOCATE:
 		TRIM_OFF_LEN(offset, size, maxfilelen);
-		do_preallocate(offset, size);
+		do_preallocate(offset, size, keep_size);
 		break;
 
 	case OP_PUNCH_HOLE:
@@ -1315,7 +1319,7 @@ test(void)
 		break;
 	case OP_ZERO_RANGE:
 		TRIM_OFF_LEN(offset, size, file_size);
-		do_zero_range(offset, size);
+		do_zero_range(offset, size, keep_size);
 		break;
 	case OP_COLLAPSE_RANGE:
 		TRIM_OFF_LEN(offset, size, file_size - 1);
