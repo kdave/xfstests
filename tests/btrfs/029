@@ -39,7 +39,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    _scratch_unmount &>/dev/null
     cd /
     rm -f $tmp.*
 }
@@ -56,55 +55,49 @@ _supported_os Linux
 _require_test
 _require_scratch
 _require_cp_reflink
+_need_to_be_root
 
-SOURCE_DIR=$TEST_DIR/test-$seq
-CROSS_DEV_DIR=$SCRATCH_MNT/test-$seq
-# mount point & target for twice-mounted device
-TEST_DIR2=$TEST_DIR/mount2
-DUAL_MOUNT_DIR=$SCRATCH_MNT/test-bis-$seq
-
-rm -rf $SOURCE_DIR
-mkdir $SOURCE_DIR
+reflink_test_dir=$TEST_DIR/test-$seq
+rm -rf $reflink_test_dir
+mkdir $reflink_test_dir
 
 rm -f $seqres.full
 
 _scratch_mkfs > /dev/null 2>&1
-$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $SOURCE_DIR/original \
- >> $seqres.full
+_scratch_mount
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/original >> $seqres.full
 
 _filter_testdirs()
 {
     _filter_test_dir | _filter_scratch
 }
 
-_create_reflinks_to()
+_create_reflinks()
 {
     # auto reflink, should fall back to non-reflink
-    rm -rf $1; mkdir $1
+    rm -rf $2
     echo "reflink=auto:"
-    cp --reflink=auto $SOURCE_DIR/original $1/copy
-    md5sum $SOURCE_DIR/original | _filter_testdirs
-    md5sum $1/copy | _filter_testdirs
+    cp --reflink=auto $1 $2
+    md5sum $1 | _filter_testdirs
+    md5sum $2 | _filter_testdirs
 
     # always reflink, should fail outright
-    rm -rf $1; mkdir $1
+    rm -rf $2
     echo "reflink=always:"
-    cp --reflink=always $SOURCE_DIR/original $1/copyfail > $seqres.full 2>&1 \
-	|| echo "cp reflink failed"
+    cp --reflink=always $1 $2 >> $seqres.full 2>&1 || echo "cp reflink failed"
 
     # The failed target actually gets created by cp:
-    ls $1/copyfail | _filter_testdirs
+    ls $2 | _filter_testdirs
 }
 
 echo "test reflinks across different devices"
-_scratch_mount
-_create_reflinks_to $CROSS_DEV_DIR
-_scratch_unmount
+_create_reflinks $SCRATCH_MNT/original $reflink_test_dir/copy
 
 echo "test reflinks across different mountpoints of same device"
-mount $TEST_DEV $SCRATCH_MNT || _fail "Couldn't double-mount $TEST_DEV"
-_create_reflinks_to $DUAL_MOUNT_DIR
-_scratch_unmount
+rm -rf $reflink_test_dir/*
+_mount $SCRATCH_DEV $reflink_test_dir
+_create_reflinks $SCRATCH_MNT/original $reflink_test_dir/copy
+$UMOUNT_PROG $reflink_test_dir
 
 # success, all done
 status=0
