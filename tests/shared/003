@@ -1,0 +1,70 @@
+#! /bin/bash
+# FS QA Test 003
+#
+# Test mount a needs_recovery partition with noload option.
+# ext4 used to Oops until part of this commit:
+#
+# 744692d ext4: use ext4_get_block_write in buffer write
+#
+# Also test on ext2/3.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2015 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext2 ext3 ext4
+_supported_os Linux
+
+# nofsck as we modify sb via debugfs
+_require_scratch_nocheck
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+echo "Silence is golden"
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# set needs_recovery feature bit
+debugfs -w -R "feature +needs_recovery" $SCRATCH_DEV \
+	>>$seqres.full 2>&1
+
+# mount with noload option
+_scratch_mount "-o noload" >>$seqres.full 2>&1
+
+# success, all done
+status=0
+exit
