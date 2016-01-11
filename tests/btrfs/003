@@ -29,6 +29,7 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 dev_removed=0
+removed_dev_htl=""
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
@@ -37,7 +38,7 @@ _cleanup()
     rm -f $tmp.*
     if [ $dev_removed == 1 ]; then
 	_scratch_unmount
-        _devmgt_add "${DEVHTL}"
+	_devmgt_add "${removed_dev_htl}"
     fi
 }
 
@@ -125,7 +126,6 @@ _test_replace()
 	local n=${#devs[@]}
 	local ds
 	local d
-	local DEVHTL=""
 
 	# exclude the first and the last disk in the disk pool
 	n=$(($n-1))
@@ -142,10 +142,10 @@ _test_replace()
 
 	# retrive the HTL for this scsi disk
 	d=`echo $ds|cut -d"/" -f3`
-	DEVHTL=`ls -l /sys/class/block/${d} | rev | cut -d "/" -f 3 | rev`
+	removed_dev_htl=`ls -l /sys/class/block/${d} | rev | cut -d "/" -f 3 | rev`
 
 	#fail disk
-	_devmgt_remove ${DEVHTL} $ds
+	_devmgt_remove ${removed_dev_htl} $ds
 	dev_removed=1
 
 	$BTRFS_UTIL_PROG filesystem show $SCRATCH_DEV | grep "Some devices missing" >> $seqres.full || _fail \
@@ -162,7 +162,7 @@ _test_replace()
 
 	# cleaup. add the removed disk
 	_scratch_unmount
-	_devmgt_add "${DEVHTL}"
+	_devmgt_add "${removed_dev_htl}"
 	dev_removed=0
 }
 
