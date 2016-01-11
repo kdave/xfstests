@@ -447,10 +447,10 @@ check_buffers(unsigned offset, unsigned size)
 			if (c != t) {
 			        if (n < 16) {
 					bad = short_at(&temp_buf[i]);
-				        prt("0x%5x\t0x%04x\t0x%04x", offset,
+				        prt("0x%05x\t0x%04x\t0x%04x", offset,
 				            short_at(&good_buf[offset]), bad);
 					op = temp_buf[offset & 1 ? i+1 : i];
-				        prt("\t0x%5x\n", n);
+				        prt("\t0x%05x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
 						  "the bad data may be %u\n",
