@@ -46,18 +46,41 @@ _dmerror_mount()
 	_mount -t $FSTYP `_dmerror_mount_options $*`
 }
 
+_dmerror_unmount()
+{
+	umount $SCRATCH_MNT
+}
+
 _dmerror_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
 	$DMSETUP_PROG remove error-test > /dev/null 2>&1
 }
 
-_dmerror_load_table()
+_dmerror_load_error_table()
 {
-	$DMSETUP_PROG suspend error-test
+	suspend_opt="--nolockfs"
+	[ $# -gt 1 ] && [ $2 -eq 1 ] && suspend_opt=""
+
+	$DMSETUP_PROG suspend $suspend_opt error-test
 	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
 
 	$DMSETUP_PROG load error-test --table "$DMERROR_TABLE"
+	[ $? -ne 0 ] && _fail "dmsetup failed to load error table"
+
+	$DMSETUP_PROG resume error-test
+	[ $? -ne 0 ] && _fail  "dmsetup resume failed"
+}
+
+_dmerror_load_working_table()
+{
+	suspend_opt="--nolockfs"
+	[ $# -gt 1 ] && [ $2 -eq 1 ] && suspend_opt=""
+
+	$DMSETUP_PROG suspend $suspend_opt error-test
+	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
+
+	$DMSETUP_PROG load error-test --table "$DMLINEAR_TABLE"
 	[ $? -ne 0 ] && _fail "dmsetup failed to load error table"
 
 	$DMSETUP_PROG resume error-test
