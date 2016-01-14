@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test No. 209
+#
+# Make sure setting cowextsz on a directory propagates it to subfiles.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_fiemap
+_require_xfs_io_command "cowextsize"
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Set extsz and cowextsz on directory"
+$XFS_IO_PROG -c "cowextsize 1048576" $testdir >> $seqres.full
+
+echo "Create a fake tree structure"
+seq 1 2 | while read nr; do
+	mkdir "$testdir/dir-$nr"
+	seq 1 4 | while read nnr; do
+		touch "$testdir/dir-$nr/file-$nnr"
+	done
+done
+_scratch_remount
+
+echo "Check cowextsize settings"
+seq 1 2 | while read nr; do
+	seq 1 4 | while read nnr; do
+		file="$testdir/dir-$nr/file-$nnr"
+		$XFS_IO_PROG -c "cowextsize" $file
+	done
+done
+
+# success, all done
+status=0
+exit

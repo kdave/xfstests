@@ -1,0 +1,101 @@
+#! /bin/bash
+# FS QA Test No. 207
+#
+# Test setting the extsz and cowextsz hints:
+# - Ensure that we can set both on a zero-byte file.
+# - Ensure that we can set only cowextsz on a many-byte file.
+# - Ensure that whatever we set we get back later.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_fiemap
+_require_xfs_io_command "cowextsize"
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create the original files"
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 0" $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 1048576" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 0" $testdir/file3 >> $seqres.full
+_scratch_remount
+
+echo "Set extsz and cowextsz on zero byte file"
+$XFS_IO_PROG -c "extsize 1048576" $testdir/file1 | _filter_scratch
+$XFS_IO_PROG -c "cowextsize 1048576" $testdir/file1 | _filter_scratch
+
+echo "Set extsz and cowextsz on 1Mbyte file"
+$XFS_IO_PROG -c "extsize 1048576" $testdir/file2 | _filter_scratch
+$XFS_IO_PROG -c "cowextsize 1048576" $testdir/file2 | _filter_scratch
+_scratch_remount
+
+echo "Check extsz and cowextsz settings on zero byte file"
+$XFS_IO_PROG -c "extsize" $testdir/file1 | _filter_scratch
+$XFS_IO_PROG -c "cowextsize" $testdir/file1 | _filter_scratch
+
+echo "Check extsz and cowextsz settings on 1Mbyte file"
+$XFS_IO_PROG -c "extsize" $testdir/file2 | _filter_scratch
+$XFS_IO_PROG -c "cowextsize" $testdir/file2 | _filter_scratch
+
+echo "Set cowextsize and check flag"
+$XFS_IO_PROG -c "cowextsize 1048576" $testdir/file3 | _filter_scratch
+_scratch_remount
+
+$XFS_IO_PROG -c "stat" $testdir/file3 | grep 'fsxattr.xflags' | _filter_scratch
+$XFS_IO_PROG -c "cowextsize" $testdir/file3 | _filter_scratch
+
+echo "Unset cowextsize and check flag"
+$XFS_IO_PROG -c "cowextsize 0" $testdir/file3 | _filter_scratch
+_scratch_remount
+
+$XFS_IO_PROG -c "stat" $testdir/file3 | grep 'fsxattr.xflags' | _filter_scratch
+$XFS_IO_PROG -c "cowextsize" $testdir/file3 | _filter_scratch
+
+status=0
+exit

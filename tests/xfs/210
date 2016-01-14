@@ -1,0 +1,108 @@
+#! /bin/bash
+# FS QA Test No. 210
+#
+# During reflink, XFS should carry the cowextsz setting to the destination file
+# if the destination file size is less than the size of the source file, the
+# length is the size of the source file, both offsets are zero, and the
+# destination does not already have a cowextsz setting.  It should not do so
+# otherwise.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_fiemap
+_require_xfs_io_command "cowextsize"
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create initial file"
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 131072" $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -c "cowextsize 1048576" $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 1" $testdir/file4 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 262144" $testdir/file7 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 262144" $testdir/file9 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 0 262144" $testdir/file10 >> $seqres.full
+
+echo "Reflink to an empty file"
+_reflink_range $testdir/file1 0 $testdir/file2 0 0 >> $seqres.full
+
+echo "Reflink to an empty file that already has cowextsz"
+$XFS_IO_PROG -f -c "cowextsize 524288" $testdir/file3 >> $seqres.full
+_reflink_range $testdir/file1 0 $testdir/file3 0 0 >> $seqres.full
+
+echo "Reflink to a small file"
+_reflink_range $testdir/file1 0 $testdir/file4 0 0 >> $seqres.full
+
+echo "Reflink to a nonzero offset"
+_reflink_range $testdir/file1 0 $testdir/file5 65536 0 >> $seqres.full
+
+echo "Reflink from a nonzero offset"
+_reflink_range $testdir/file1 65536 $testdir/file6 0 0 >> $seqres.full
+
+echo "Reflink to a larger file"
+_reflink_range $testdir/file1 0 $testdir/file7 0 0 >> $seqres.full
+
+echo "Reflink less than the whole source file"
+_reflink_range $testdir/file1 0 $testdir/file8 0 65536 >> $seqres.full
+
+echo "cp reflink to a larger file"
+_cp_reflink $testdir/file1 $testdir/file9 >> $seqres.full
+
+echo "cp reflink to a larger file with cowextsize"
+$XFS_IO_PROG -f -c "cowextsize 524288" $testdir/file10 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file10 >> $seqres.full
+
+echo "Check cowextsz"
+for i in `seq 1 10`; do
+	$XFS_IO_PROG -c "cowextsize" $testdir/file$i | _filter_scratch
+done
+
+# success, all done
+status=0
+exit
