@@ -3053,6 +3053,28 @@ _require_test_lsattr()
 		_notrun "lsattr not supported by test filesystem type: $FSTYP"
 }
 
+_require_xfs_test_rmapbt()
+{
+	_require_test
+
+	if [ "$(xfs_info "$TEST_DIR" | grep -c "rmapbt=1")" -ne 1 ]; then
+		_notrun "rmapbt not supported by test filesystem type: $FSTYP"
+	fi
+}
+
+_require_xfs_scratch_rmapbt()
+{
+	_require_scratch
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	if [ "$(xfs_info "$SCRATCH_MNT" | grep -c "rmapbt=1")" -ne 1 ]; then
+		_scratch_unmount
+		_notrun "rmapbt not supported by scratch filesystem type: $FSTYP"
+	fi
+	_scratch_unmount
+}
+
 _get_total_inode()
 {
 	if [ -z "$1" ]; then

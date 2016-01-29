@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 234
+#
+# Ensure that we can create enough distinct rmap entries to force creation
+# of a multi-level rmap btree, and that metadump will successfully copy
+# said block.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    umount $SCRATCH_MNT > /dev/null 2>&1
+    rm -rf $tmp.* $metadump_file $TEST_DIR/image
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/xfs
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_loop
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command "fpunch"
+
+rm -f $seqres.full
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+metadump_file=$TEST_DIR/${seq}_metadump
+
+echo "Create the original file blocks"
+blksz="$(stat -f $testdir -c '%S')"
+nr_blks=$((4 * blksz / 12))
+_pwrite_byte 0x61 0 $((blksz * nr_blks)) $testdir/file1 >> $seqres.full
+sync
+
+echo "Punch every other block"
+seq 1 2 $((nr_blks - 1)) | while read nr; do
+	$XFS_IO_PROG -c "fpunch $((nr * blksz)) $blksz" $testdir/file1 >> $seqres.full
+done
+
+echo "Create metadump file"
+_scratch_unmount
+_scratch_metadump $metadump_file
+
+# Now restore the obfuscated one back and take a look around
+echo "Restore metadump"
+xfs_mdrestore $metadump_file $TEST_DIR/image
+_mount -t $FSTYP $TEST_DIR/image $SCRATCH_MNT
+umount $SCRATCH_MNT
+
+echo "Check restored fs"
+_check_generic_filesystem $metadump_file
+
+# success, all done
+status=0
+exit
