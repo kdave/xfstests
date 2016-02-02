@@ -416,6 +416,30 @@ if [ -f "$HOST_OPTIONS" ]; then
 	fi
 fi
 
+_check_device()
+{
+	local name=$1
+	local dev_needed=$2
+	local dev=$3
+
+	if [ -z "$dev" ]; then
+		if [ "$dev_needed" == "required" ]; then
+			_fatal "common/config: $name is required but not defined!"
+		fi
+		return
+	fi
+
+	echo $dev | grep -qE ":|//" > /dev/null 2>&1
+	network_dev=$?
+	if [ "$FSTYP" == "overlay" ]; then
+		if [ ! -d "$dev" ]; then
+			_fatal "common/config: $name ($dev) is not a directory for overlay"
+		fi
+	elif [ ! -b "$dev" -a "$network_dev" != "0" ]; then
+		_fatal "common/config: $name ($dev) is not a block device or a network filesystem"
+	fi
+}
+
 # Parse config section options. This function will parse all the configuration
 # within a single section which name is passed as an argument. For section
 # name format see comments in get_config_sections().
@@ -449,10 +473,13 @@ get_next_config() {
 	local OLD_TEST_FS_MOUNT_OPTS=$TEST_FS_MOUNT_OPTS
 	local OLD_MKFS_OPTIONS=$MKFS_OPTIONS
 	local OLD_FSCK_OPTIONS=$FSCK_OPTIONS
+	local OLD_USE_EXTERNAL=$USE_EXTERNAL
 
 	unset MOUNT_OPTIONS
 	unset MKFS_OPTIONS
 	unset FSCK_OPTIONS
+	unset USE_EXTERNAL
+
 	# We might have deduced SCRATCH_DEV from the SCRATCH_DEV_POOL in the previous
 	# run, so we have to unset it now.
 	if [ "$SCRATCH_DEV_NOT_SET" == "true" ]; then
@@ -466,11 +493,20 @@ get_next_config() {
 		[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
 		[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 		[ -z "$FSCK_OPTIONS" ] && _fsck_opts
+
+		# clear the external devices if we are not using them
+		if [ -z "$USE_EXTERNAL" ]; then
+			unset TEST_RTDEV
+			unset TEST_LOGDEV
+			unset SCRATCH_RTDEV
+			unset SCRATCH_LOGDEV
+		fi
 	else
 		[ -z "$MOUNT_OPTIONS" ] && export MOUNT_OPTIONS=$OLD_MOUNT_OPTIONS
 		[ -z "$TEST_FS_MOUNT_OPTS" ] && export TEST_FS_MOUNT_OPTS=$OLD_TEST_FS_MOUNT_OPTS
 		[ -z "$MKFS_OPTIONS" ] && export MKFS_OPTIONS=$OLD_MKFS_OPTIONS
 		[ -z "$FSCK_OPTIONS" ] && export FSCK_OPTIONS=$OLD_FSCK_OPTIONS
+		[ -z "$USE_EXTERNAL" ] && export USE_EXTERNAL=$OLD_USE_EXTERNAL
 	fi
 
 	# set default RESULT_BASE
@@ -491,15 +527,7 @@ get_next_config() {
 		exit 1
 	fi
 
-	echo $TEST_DEV | grep -qE ":|//" > /dev/null 2>&1
-	if [ ! -b "$TEST_DEV" -a "$?" != "0" -a "$FSTYP" != "overlay" ]; then
-		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a block device or a network filesystem"
-		exit 1
-	elif [ "$FSTYP" == "overlay" -a ! -d "$TEST_DEV" ]; then
-		echo "common/config: Error: \$TEST_DEV ($TEST_DEV) is not a directory for overlay"
-		exit 1
-	fi
-
+	_check_device TEST_DEV required $TEST_DEV
 	if [ ! -d "$TEST_DIR" ]; then
 		echo "common/config: Error: \$TEST_DIR ($TEST_DIR) is not a directory"
 		exit 1
@@ -517,18 +545,17 @@ get_next_config() {
 		export SCRATCH_DEV_NOT_SET=true
 	fi
 
-	echo $SCRATCH_DEV | grep -qE ":|//" > /dev/null 2>&1
-	if [ ! -z "$SCRATCH_DEV" -a ! -b "$SCRATCH_DEV" -a "$?" != "0" -a "$FSTYP" != "overlay" ]; then
-		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a block device or a network filesystem"
-		exit 1
-	elif [ ! -z "$SCRATCH_DEV" -a "$FSTYP" == "overlay" -a ! -d "$SCRATCH_DEV" ]; then
-		echo "common/config: Error: \$SCRATCH_DEV ($SCRATCH_DEV) is not a directory for overlay"
-		exit 1
-	fi
-
+	_check_device SCRATCH_DEV optional $SCRATCH_DEV
 	if [ ! -z "$SCRATCH_MNT" -a ! -d "$SCRATCH_MNT" ]; then
 		echo "common/config: Error: \$SCRATCH_MNT ($SCRATCH_MNT) is not a directory"
 		exit 1
+	fi
+
+	if [ -n "$USE_EXTERNAL" ]; then
+		_check_device TEST_RTDEV optional $TEST_RTDEV
+		_check_device TEST_LOGDEV optional $TEST_LOGDEV
+		_check_device SCRATCH_RTDEV optional $SCRATCH_RTDEV
+		_check_device SCRATCH_LOGDEV optional $SCRATCH_LOGDEV
 	fi
 }
 
