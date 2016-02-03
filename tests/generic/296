@@ -1,15 +1,11 @@
 #! /bin/bash
-# FS QA Test No. 196
+# FS QA Test No. 296
 #
-# Ensuring that copy on write in direct-io mode works when the CoW
-# range originally covers multiple extents, some regular, some not.
-#   - Create two files.
-#   - Reflink the odd blocks of the first file into the second file.
-#   - directio CoW across the halfway mark, starting with the unwritten extent.
-#   - Check that the files are now different where we say they're different.
+# - Create two reflinked files a byte longer than a block.
+# - Rewrite the whole file.
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2015, Oracle and/or its affiliates.  All Rights Reserved.
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -37,7 +33,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf $tmp.* $testdir
+    rm -rf $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -48,8 +44,7 @@ _cleanup()
 # real QA test starts here
 _supported_os Linux
 _require_scratch_reflink
-_require_xfs_io_command "falloc"
-_require_odirect
+_require_cp_reflink
 
 rm -f $seqres.full
 
@@ -60,29 +55,35 @@ _scratch_mount >> $seqres.full 2>&1
 testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
-echo "Create the original files"
 blksz=65536
-nr=64
+nr=128
 filesize=$((blksz * nr))
-_weave_reflink_regular $blksz $nr $testdir/file1 $testdir/file3 >> $seqres.full
+bufnr=16
+bufsize=$((blksz * bufnr))
+
+real_blksz=$(stat -f -c '%S' "$testdir")
+_require_fs_space $SCRATCH_MNT $((filesize / 1024 * 3 * 5 / 4))
+
+echo "Create the original files"
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $bufsize 0 $((filesize + 1))" $testdir/file1 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $bufsize 0 $((filesize + 1))" $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
-md5sum $testdir/file3 | _filter_scratch
-md5sum $testdir/file3.chk | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file2.chk | _filter_scratch
 
-echo "directio CoW across the transition"
-cowoff=$((filesize / 4))
-cowsz=$((filesize / 2))
-$XFS_IO_PROG -d -f -c "pwrite -S 0x63 -b $cowsz $cowoff $cowsz" $testdir/file3 >> $seqres.full
-_pwrite_byte 0x63 $cowoff $cowsz $testdir/file3.chk >> $seqres.full
+echo "CoW and unmount"
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $real_blksz 0 $((filesize + 1))" -c "fdatasync" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $real_blksz 0 $((filesize + 1))" -c "fdatasync" $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
-md5sum $testdir/file3 | _filter_scratch
-md5sum $testdir/file3.chk | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file2.chk | _filter_scratch
 
 # success, all done
 status=0

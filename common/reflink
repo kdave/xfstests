@@ -295,3 +295,69 @@ _weave_reflink_rainbow_delalloc() {
 		_pwrite_byte 0x62 $((blksz * i)) $blksz $dfile.chk
 	done
 }
+
+# Make the source file have interleaved regular blocks and reflinked blocks
+_sweave_reflink_regular() {
+	blksz=$1
+	nr=$2
+	sfile=$3
+	dfile=$4
+
+	_pwrite_byte 0x61 0 $((blksz * nr)) $sfile
+	_pwrite_byte 0x62 0 $((blksz * nr)) $dfile
+	_pwrite_byte 0x61 0 $((blksz * nr)) $sfile.chk
+	seq 1 2 $((nr - 1)) | while read i; do
+		_reflink_range $sfile $((blksz * i)) $dfile $((blksz * i)) $blksz
+	done
+}
+
+# Make the source file have interleaved unwritten blocks and reflinked blocks
+_sweave_reflink_unwritten() {
+	blksz=$1
+	nr=$2
+	sfile=$3
+	dfile=$4
+
+	$XFS_IO_PROG -f -c "falloc 0 $((blksz * nr))" $sfile
+	_pwrite_byte 0x00 0 $((blksz * nr)) $sfile.chk
+	_pwrite_byte 0x62 0 $((blksz * nr)) $dfile
+	seq 1 2 $((nr - 1)) | while read i; do
+		_pwrite_byte 0x61 $((blksz * i)) $blksz $sfile
+		_pwrite_byte 0x61 $((blksz * i)) $blksz $sfile.chk
+	done
+	seq 1 2 $((nr - 1)) | while read i; do
+		_reflink_range $sfile $((blksz * i)) $dfile $((blksz * i)) $blksz
+	done
+}
+
+# Make the source file have interleaved holes and reflinked blocks
+_sweave_reflink_holes() {
+	blksz=$1
+	nr=$2
+	sfile=$3
+	dfile=$4
+
+	$XFS_IO_PROG -f -c "truncate $((blksz * nr))" $sfile
+	_pwrite_byte 0x00 0 $((blksz * nr)) $sfile.chk
+	_pwrite_byte 0x62 0 $((blksz * nr)) $dfile
+	seq 1 2 $((nr - 1)) | while read i; do
+		_pwrite_byte 0x61 $((blksz * i)) $blksz $sfile
+		_pwrite_byte 0x61 $((blksz * i)) $blksz $sfile.chk
+	done
+	seq 1 2 $((nr - 1)) | while read i; do
+		_reflink_range $sfile $((blksz * i)) $dfile $((blksz * i)) $blksz
+	done
+}
+
+# For a file created with _sweave_reflink_holes, fill the holes with delalloc
+# extents
+_sweave_reflink_holes_delalloc() {
+	blksz=$1
+	nr=$2
+	sfile=$3
+
+	seq 0 2 $((nr - 1)) | while read i; do
+		_pwrite_byte 0x64 $((blksz * i)) $blksz $sfile
+		_pwrite_byte 0x64 $((blksz * i)) $blksz $sfile.chk
+	done
+}
