@@ -187,33 +187,3 @@ _dedupe_range() {
 
 	"$XFS_IO_PROG" $xfs_io_args -f -c "dedupe $file1 $offset1 $offset2 $len" "$file2"
 }
-
-# Create fs of certain blocksize on scratch device
-# _scratch_mkfs_blocksized blocksize
-_scratch_mkfs_blocksized()
-{
-    blocksize=$1
-
-    re='^[0-9]+$'
-    if ! [[ $blocksize =~ $re ]] ; then
-        _notrun "error: _scratch_mkfs_sized: block size \"$blocksize\" not an integer."
-    fi
-
-    case $FSTYP in
-    xfs)
-	# don't override MKFS_OPTIONS that set a block size.
-	echo $MKFS_OPTIONS |egrep -q "b?size="
-	if [ $? -eq 0 ]; then
-		_scratch_mkfs_xfs
-	else
-		_scratch_mkfs_xfs -b size=$blocksize
-	fi
-	;;
-    ext2|ext3|ext4|ocfs2)
-	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
-	;;
-    *)
-	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_blocksized"
-	;;
-    esac
-}
