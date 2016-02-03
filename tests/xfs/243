@@ -1,0 +1,165 @@
+#! /bin/bash
+# FS QA Test No. 243
+#
+# Ensuring that copy on write in buffered mode works when the CoW
+# range originally covers multiple extents, some unwritten, some not.
+#   - Set cowextsize hint.
+#   - Create a file with the following repeating sequence of blocks:
+#     1. reflinked
+#     2. unwritten
+#     3. hole
+#     4. regular block
+#     5. delalloc
+#   - CoW across the halfway mark, starting with the unwritten extent.
+#   - Check that the files are now different where we say they're different.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fpunch"
+_require_cp_reflink
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create the original files"
+blksz=65536
+nr=64
+filesize=$((blksz * nr))
+
+$XFS_IO_PROG -c "cowextsize $((blksz * 16))" $testdir >> $seqres.full
+_pwrite_byte 0x61 0 $filesize $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesize" $testdir/file3 >> $seqres.full
+# 0 blocks are reflinked
+seq 0 5 $nr | while read f; do
+	_reflink_range $testdir/file1 $((blksz * f)) $testdir/file3 $((blksz * f)) $blksz >> $seqres.full
+	_pwrite_byte 0x61 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
+done
+# 1 blocks are unwritten
+seq 1 5 $nr | while read f; do
+	$XFS_IO_PROG -f -c "falloc $((blksz * f)) $blksz" $testdir/file3 >> $seqres.full
+	_pwrite_byte 0x00 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
+done
+# 2 blocks are holes
+seq 2 5 $nr | while read f; do
+	_pwrite_byte 0x00 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
+done
+# 3 blocks are regular
+seq 3 5 $nr | while read f; do
+	_pwrite_byte 0x71 $((blksz * f)) $blksz $testdir/file3 >> $seqres.full
+	_pwrite_byte 0x71 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
+done
+sync
+# 4 blocks are delalloc (do later)
+seq 4 5 $nr | while read f; do
+	_pwrite_byte 0x62 $((blksz * f)) $blksz $testdir/file3 >> $seqres.full
+	_pwrite_byte 0x62 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
+done
+
+# 10 blocks are cow'd
+seq 0 10 $((nr/2)) | while read f; do
+	_pwrite_byte 0x61 $((blksz * f)) 1 $testdir/file3 >> $seqres.full
+	_pwrite_byte 0x61 $((blksz * f)) 1 $testdir/file3.chk >> $seqres.full
+done
+
+echo "Compare files"
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
+
+echo "Dump extents"
+$XFS_IO_PROG -c "cowextsize" $testdir/file3 | _filter_scratch
+echo "Delayed allocation CoW extents:"
+test $(_xfs_bmapx_find cow $testdir/file3 delalloc) -gt 0 || \
+	echo "Expected to find a delalloc CoW extent"
+echo "Shared data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '100000$') -gt 0 || \
+	echo "Expected to find a shared data extent"
+echo "Unwritten data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '10000$') -gt 0 || \
+	echo "Expected to find an unwritten data extent"
+echo "Hole data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 hole) -gt 0 || \
+	echo "Expected to find a hole data extent"
+echo "Regular data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '000000$') -gt 0 || \
+	echo "Expected to find a regular data extent"
+
+sync
+
+echo "Dump extents after sync"
+$XFS_IO_PROG -c "cowextsize" $testdir/file3 | _filter_scratch
+echo "Delayed allocation CoW extents:"
+test $(_xfs_bmapx_find cow $testdir/file3 -v hole ) -gt 0 || \
+	echo "Expected to find a regular CoW extent"
+echo "Real CoW extents:"
+test $(_xfs_bmapx_find cow $testdir/file3 delalloc ) -eq 0 || \
+	echo "Expected to find zero delalloc CoW extent"
+echo "Shared data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '100000$') -gt 0 || \
+	echo "Expected to find a shared data extent"
+echo "Unwritten data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '10000$') -gt 0 || \
+	echo "Expected to find an unwritten data extent"
+echo "Hole data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 hole) -gt 0 || \
+	echo "Expected to find a hole data extent"
+echo "Regular data extents:"
+test $(_xfs_bmapx_find data $testdir/file3 '000000$') -gt 0 || \
+	echo "Expected to find a regular data extent"
+
+_scratch_remount
+
+echo "Compare files"
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
+
+# success, all done
+status=0
+exit
