@@ -1,0 +1,99 @@
+#! /bin/bash
+# FS QA Test No. 298
+#
+# See how well reflink handles SIGKILL in the middle of a slow reflink.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.* $TEST_DIR/before $TEST_DIR/after
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_scratch_reflink
+_require_cp_reflink
+_require_command "$(which timeout)" "timeout"
+
+test $FSTYP == "nfs"  && _notrun "NFS can't interrupt clone operations"
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create a one block file"
+blksz="$(stat -f $testdir -c '%S')"
+_pwrite_byte 0x61 0 $blksz $testdir/file1 >> $seqres.full
+
+fnr=26		# 2^26 reflink extents should be enough to find a slow op?
+timeout=8	# guarantee a good long run...
+echo "Find a reflink size that takes a long time"
+truncate -s $(( (2 ** i) * blksz)) $testdir/file1
+for i in $(seq 0 $fnr); do
+	echo " ++ Reflink size $i, $((2 ** i)) blocks" >> $seqres.full
+	n=$(( (2 ** i) * blksz))
+	touch $TEST_DIR/before
+	$XFS_IO_PROG -f -c "reflink $testdir/file1 0 $n $n" $testdir/file1 >> $seqres.full 2>&1
+	touch $TEST_DIR/after
+	before=$(stat -c '%Y' $TEST_DIR/before)
+	after=$(stat -c '%Y' $TEST_DIR/after)
+	delta=$((after - before))
+	test $delta -gt $timeout && break
+done
+
+echo "Try to kill reflink after a shorter period of time"
+kill_after=2	# give us a shorter time to die
+n=$(stat -c '%s' $testdir/file1)
+echo "performing kill test on $n bytes..." >> $seqres.full
+touch $TEST_DIR/before
+urk=$(timeout -s KILL ${kill_after}s $XFS_IO_PROG -f -c "reflink $testdir/file1 0 $n $n" $testdir/file1 >> $seqres.full 2>&1)
+touch $TEST_DIR/after
+before=$(stat -c '%Y' $TEST_DIR/before)
+after=$(stat -c '%Y' $TEST_DIR/after)
+delta=$((after - before))
+echo "reflink of $n bytes took $delta seconds" >> $seqres.full
+test $delta -gt $timeout && _fail "reflink didn't stop in time, n=$n t=$delta"
+
+echo "Check scratch fs"
+sleep 2		# give it a few seconds to actually die...
+
+# success, all done
+status=0
+exit
