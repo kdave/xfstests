@@ -69,7 +69,11 @@ _scratch_remount
 snappy() {
 	n=0
 	while [ ! -e $testdir/finished ]; do
-		_cp_reflink $testdir/file1 $testdir/snap_$n || break
+		out="$(_cp_reflink $testdir/file1 $testdir/snap_$n 2>&1)"
+		res=$?
+		echo "$out" | grep -q "No space left" && break
+		test -n "$out" && echo "$out"
+		test $res -ne 0 && break
 		n=$((n + 1))
 	done
 }
