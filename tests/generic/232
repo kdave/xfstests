@@ -71,23 +71,14 @@ _require_scratch
 _require_quota
 _need_to_be_root
 
-_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mkfs > $seqres.full 2>&1
 _scratch_mount "-o usrquota,grpquota"
 chmod 777 $SCRATCH_MNT
 quotacheck -u -g $SCRATCH_MNT 2>/dev/null
 quotaon -u -g $SCRATCH_MNT 2>/dev/null
 
-if ! _fsstress; then
-	_scratch_unmount 2>/dev/null
-	exit
-fi
-
-if ! _check_quota_usage; then
-	_scratch_unmount 2>/dev/null
-	status=1
-	exit
-fi
-
-_scratch_unmount 2>/dev/null
+_fsstress
+_check_quota_usage
+_scratch_unmount
 status=0
 exit
