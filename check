@@ -73,6 +73,7 @@ check options
     -d			dump test output to stdout
     --large-fs		optimise scratch device for large filesystems
     -s section		run only specified section from config file
+    -S section		exclude the specified section from the config file
 
 testlist options
     -g group[,group...]	include tests from these groups
@@ -228,6 +229,7 @@ while [ $# -gt 0 ]; do
 	        fi
 		;;
 	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
+	-S)	EXCLUDE_SECTION="$EXCLUDE_SECTION $2"; shift ;;
 	-l)	diff="diff" ;;
 	-udiff)	diff="$diff -u" ;;
 
@@ -421,6 +423,20 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		for s in $RUN_SECTION; do
 			if [ $section == $s ]; then
 				skip=false
+				break;
+			fi
+		done
+		if $skip; then
+			continue
+		fi
+	fi
+
+	# Did this section get excluded?
+	if [ ! -z "$EXCLUDE_SECTION" ]; then
+		skip=false
+		for s in $EXCLUDE_SECTION; do
+			if [ $section == $s ]; then
+				skip=true
 				break;
 			fi
 		done

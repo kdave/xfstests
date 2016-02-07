@@ -20,7 +20,8 @@ usage()
 
 	echo "Usage: $0 [options]"'
 
-	-s section		run only specified section(s) from config file
+	-s section	run only specified section(s) from config file
+	-S section	exclude the specified section from the config file
 '
 	exit 0
 }
@@ -29,6 +30,7 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-\? | -h | --help) usage ;;
 	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
+	-S)	EXCLUDE_SECTION="$EXCLUDE_SECTION $2"; shift ;;
 	*)	usage ;;
 	esac
 	shift
@@ -51,6 +53,20 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		for s in $RUN_SECTION; do
 			if [ $section == $s ]; then
 				skip=false
+				break;
+			fi
+		done
+		if $skip; then
+			continue
+		fi
+	fi
+
+	# Did this section get excluded?
+	if [ ! -z "$EXCLUDE_SECTION" ]; then
+		skip=false
+		for s in $EXCLUDE_SECTION; do
+			if [ $section == $s ]; then
+				skip=true
 				break;
 			fi
 		done
