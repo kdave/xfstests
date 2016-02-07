@@ -707,9 +707,17 @@ _mkfs_dev()
 # remove all files in $SCRATCH_MNT, useful when testing on NFS/CIFS
 _scratch_cleanup_files()
 {
-	_scratch_mount
-	rm -rf $SCRATCH_MNT/*
-	_scratch_unmount
+	case $FSTYP in
+	overlay)
+		# $SCRATCH_DEV is a valid directory in overlay case
+		rm -rf $SCRATCH_DEV/*
+		;;
+	*)
+		_scratch_mount
+		rm -rf $SCRATCH_MNT/*
+		_scratch_unmount
+		;;
+	esac
 }
 
 _scratch_mkfs()
