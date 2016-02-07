@@ -74,10 +74,22 @@ progout=$tmp.output
 
 cat >$cprog <<EOF
 #include <stdio.h>
-#include <xfs/libxlog.h>
 EOF
+for hdr in /usr/include/xfs/xfs*.h; do
+	echo "#include <$(echo "$hdr" | sed -e 's|/usr/include/||g')>" >> $cprog
+done
+
+# missing:
+# xfs_attr_shortform_t
+# xfs_trans_header_t
 
 cat >$tmp.ignore <<EOF
+xfs_buf_log_format_t
+xfs_attr3_icleaf_hdr
+xfs_da3_icnode_hdr
+xfs_dir3_icfree_hdr
+xfs_dir3_icleaf_hdr
+xfs_name
 xfs_alloctype_t
 xfs_buf_cancel_t
 xfs_bmbt_rec_32_t
@@ -177,11 +189,16 @@ echo 'int main(int argc, char *argv[]) {' >>$cprog
 #
 cat /usr/include/xfs/xfs*.h | indent |\
 _attribute_filter |\
-tee $seqres.full |\
-egrep '} *xfs_.*_t' |\
+egrep '(} *xfs_.*_t|^struct xfs_[a-z0-9_]*$)' > /tmp/barf
+
+cat /usr/include/xfs/xfs*.h | indent |\
+_attribute_filter |\
+egrep '(} *xfs_.*_t|^struct xfs_[a-z0-9_]*$)' |\
 egrep -v -f $tmp.ignore |\
-awk '{sub(/[;,]/,"",$2); print "printf(\"sizeof(", $2, ") = %d\\n\", sizeof(", $2, "));"}' \
->>$cprog
+sed -e 's/^.*}[[:space:]]*//g' -e 's/;.*$//g' -e 's/_t, /_t\n/g' |\
+sort | uniq |\
+awk '{printf("printf(\"sizeof(%s) = \\%zu\\n\", sizeof(%s));\n", $0, $0);}' |\
+cat >> $cprog
 
 #
 # Look at offsets of key ones which differ in lengths
@@ -192,7 +209,7 @@ cat /usr/include/xfs/xfs*.h | indent |\
 awk '
    /typedef struct xfs_sb/ { structon = 1; next }
    structon && $2 ~ /^sb_/ { sub(/[;,]/,"",$2)
-                             print "printf(\"offsetof(xfs_sb_t,", $2, ") = %d\\n\", offsetof(xfs_sb_t,", $2, "));"; next}
+                             printf("printf(\"offsetof(xfs_sb_t, %s) = \\%zu\\n\", offsetof(xfs_sb_t, %s));", $2, $2); next}
    structon && /}/ { structon = 0; next}
 '>>$cprog
 
