@@ -1,0 +1,131 @@
+#! /bin/bash
+# FS QA Test 244
+#
+# test out "sparse" quota ids retrieved by Q_GETNEXTQUOTA
+#
+# Designed to use the new Q_GETNEXTQUOTA quotactl
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cat $tmp.IDs >> $seqres.full
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+_require_quota
+_require_scratch
+
+scratch_unmount 2>/dev/null
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount "-o usrquota,grpquota"
+quotacheck -u -g $SCRATCH_MNT 2>/dev/null
+quotaon $SCRATCH_MNT 2>/dev/null
+_scratch_unmount
+
+TYPES="u g"
+MOUNT_OPTIONS="-o usrquota,grpquota"
+
+_qmount
+quotaon $SCRATCH_MNT 2>/dev/null
+
+# Ok, do we even have GETNEXTQUOTA?  Querying ID 0 should work.
+$here/src/test-nextquota -i 0 -u -d $SCRATCH_DEV &> $seqres.full || \
+	_notrun "No GETNEXTQUOTA support"
+
+echo "Launch all quotas"
+
+# Ideally we'd carefully test edge conditions of "sparse"
+# quota ids at beginnings and ends of otherwise empty disk
+# blocks, etc, but that's pretty fs-specific.
+# So just spray a bunch of random IDs into quota, and make
+# sure we get them all back.
+
+ITERATIONS=100
+
+# A few extra on the off chance we get dups
+for I in `seq 1 $(($ITERATIONS+10))`; do
+	ID=`od -N 4 -t uL -An /dev/urandom | tr -d " "`
+	echo $ID >> $tmp.1
+done
+
+# sort & uniq to remove dups & facilitate reading them back
+# On the off chance we got ID 0, remove it.
+sort -n $tmp.1 | uniq | head -n ${ITERATIONS} | grep -vw 0 > $tmp.IDs
+
+# Populate a bunch of random quotas on the filesystem:
+for TYPE in u g; do
+	for ID in `cat $tmp.IDs`; do
+		setquota -${TYPE} $ID $ID $ID $ID $ID $SCRATCH_MNT
+		touch ${SCRATCH_MNT}/${ID}
+		chown ${ID} ${SCRATCH_MNT}/${ID}
+	done
+done
+
+# remount just for kicks, make sure we get it off disk
+_scratch_unmount
+_qmount
+quotaon $SCRATCH_MNT 2>/dev/null
+
+# Read them back by iterating based on quotas returned.
+# This should match what we set, even if we don't directly
+# ask for each exact id, but just ask for "next" id after
+# each one we got back last.
+for TYPE in u g; do
+	# root is always there but not in our random IDs; start at 1
+	NEXT=1
+	for ID in `cat $tmp.IDs`; do
+		echo "Trying ID $NEXT expecting $ID" >> $seqres.full
+		Q=`$here/src/test-nextquota -i $NEXT -${TYPE} -d $SCRATCH_DEV` \
+			 || _fail "test-nextquota failed: $Q"
+		echo $Q >> $seqres.full
+		# ID and its inode limits should match
+		echo "$Q" | grep -qw ${ID} || _fail "Didn't get id $ID"
+		# Get the ID returned from the test
+		NEXT=`echo "$Q" | grep ^id | awk '{print $NF}' | head -n 1`
+		# Advance that ID by one, and ask for another search
+		let NEXT=NEXT+1
+	done
+done
+
+# success, all done
+status=0
+exit
