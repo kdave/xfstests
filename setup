@@ -15,22 +15,64 @@
 # along with this program; if not, write the Free Software Foundation,
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #
+usage()
+{
+
+	echo "Usage: $0 [options]"'
+
+	-s section		run only specified section(s) from config file
+'
+	exit 0
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-\? | -h | --help) usage ;;
+	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
+	*)	usage ;;
+	esac
+	shift
+done
+
 if ! . ./common/config
 then
     echo "check: failed to source common/config"
     exit 1
 fi
 
-[ "$USE_EXTERNAL"    = yes ] || USE_EXTERNAL=no
-[ "$USE_LBD_PATCH"   = yes ] || USE_LBD_PATCH=no
-[ "$LARGE_SCRATCH_DEV"  = yes ] || LARGE_SCRATCH_DEV=no
-[ "$USE_ATTR_SECURE" = yes ] || USE_ATTR_SECURE=no
-[ -z "$FSTYP" ] && FSTYP="xfs"
+for section in $HOST_OPTIONS_SECTIONS; do
+	OLD_FSTYP=$FSTYP
+	OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
+	get_next_config $section
 
-cat <<EOF
+	# Do we need to run only some sections ?
+	if [ ! -z "$RUN_SECTION" ]; then
+		skip=true
+		for s in $RUN_SECTION; do
+			if [ $section == $s ]; then
+				skip=false
+				break;
+			fi
+		done
+		if $skip; then
+			continue
+		fi
+	fi
+
+	[ "$USE_EXTERNAL"    = yes ] || USE_EXTERNAL=no
+	[ "$USE_LBD_PATCH"   = yes ] || USE_LBD_PATCH=no
+	[ "$LARGE_SCRATCH_DEV"  = yes ] || LARGE_SCRATCH_DEV=no
+	[ "$USE_ATTR_SECURE" = yes ] || USE_ATTR_SECURE=no
+	[ -z "$FSTYP" ] && FSTYP="xfs"
+
+	cat <<EOF
+SECTION       -- $section
+
 TEST: DIR=$TEST_DIR DEV=$TEST_DEV rt=[$TEST_RTDEV] log=[$TEST_LOGDEV]
 TAPE: dev=[$TAPE_DEV] rmt=[$RMT_TAPE_DEV] rmtirix=[$RMT_TAPE_USER@$RMT_IRIXTAPE_DEV]
 SCRATCH: MNT=$SCRATCH_MNT DEV=$SCRATCH_DEV rt=[$SCRATCH_RTDEV] log=[$SCRATCH_LOGDEV]
 VARIABLES: external=$USE_EXTERNAL largeblk=$USE_LBD_PATCH fstyp=$FSTYP
 	   large_scratch_dev=$LARGE_SCRATCH_DEV attrsecure=$USE_ATTR_SECURE
+--------
 EOF
+done
