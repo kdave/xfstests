@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -50,30 +50,30 @@ _require_cp_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original files"
-BLKSZ=65536
-_pwrite_byte 0x61 0 $((BLKSZ * 256)) "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((BLKSZ * 256)) "$TESTDIR/file2" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((BLKSZ * 2)) "$TESTDIR/file2.chk" >> "$seqres.full"
-_pwrite_byte 0x61 $((BLKSZ * 2)) $((BLKSZ * 255)) "$TESTDIR/file2.chk" >> "$seqres.full"
-_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $((BLKSZ * 2)) 0 >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 0 $((blksz * 256)) "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x62 0 $((blksz * 256)) "$testdir/file2" >> "$seqres.full"
+_pwrite_byte 0x62 0 $((blksz * 2)) "$testdir/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x61 $((blksz * 2)) $((blksz * 255)) "$testdir/file2.chk" >> "$seqres.full"
+_reflink_range "$testdir/file1" $blksz "$testdir/file2" $((blksz * 2)) 0 >> "$seqres.full"
 _test_remount
 
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file2.chk" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file2.chk" | _filter_test_dir
 
-C1="$(_md5_checksum "$TESTDIR/file1")"
-C2="$(_md5_checksum "$TESTDIR/file2")"
+c1="$(_md5_checksum "$testdir/file1")"
+c2="$(_md5_checksum "$testdir/file2")"
 
-test "${C1}" != "${C2}" || echo "file1 and file2 should not match"
+test "${c1}" != "${c2}" || echo "file1 and file2 should not match"
 
 echo "Compare against check files"
-cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || echo "file2 and file2.chk do not match"
+cmp -s "$testdir/file2" "$testdir/file2.chk" || echo "file2 and file2.chk do not match"
 
 # success, all done
 status=0

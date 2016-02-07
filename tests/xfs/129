@@ -35,7 +35,7 @@ _cleanup()
 {
     cd /
     umount "$SCRATCH_MNT" > /dev/null 2>&1
-    rm -rf "$tmp".* "$TESTDIR" "$METADUMP_FILE" "$TEST_DIR/image"
+    rm -rf "$tmp".* "$testdir" "$metadump_file" "$TEST_DIR/image"
 }
 
 # get standard environment, filters and checks
@@ -54,34 +54,34 @@ rm -f "$seqres.full"
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
-METADUMP_FILE="$TEST_DIR/${seq}_metadump"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
+metadump_file="$TEST_DIR/${seq}_metadump"
 
 echo "Create the original file blocks"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-NR_BLKS=$((4 * BLKSZ / 12))
-_pwrite_byte 0x61 0 $((BLKSZ * NR_BLKS)) "$TESTDIR/file1" >> "$seqres.full"
+blksz="$(stat -f "$testdir" -c '%S')"
+nr_blks=$((4 * blksz / 12))
+_pwrite_byte 0x61 0 $((blksz * nr_blks)) "$testdir/file1" >> "$seqres.full"
 
 echo "Reflink every other block"
-seq 1 2 $((NR_BLKS - 1)) | while read nr; do
-	_reflink_range  "$TESTDIR/file1" $((nr * BLKSZ)) \
-			"$TESTDIR/file2" $((nr * BLKSZ)) $BLKSZ >> "$seqres.full"
+seq 1 2 $((nr_blks - 1)) | while read nr; do
+	_reflink_range  "$testdir/file1" $((nr * blksz)) \
+			"$testdir/file2" $((nr * blksz)) $blksz >> "$seqres.full"
 done
 
 echo "Create metadump file"
 _scratch_unmount
-_scratch_metadump "$METADUMP_FILE"
+_scratch_metadump "$metadump_file"
 
 # Now restore the obfuscated one back and take a look around
 echo "Restore metadump"
-xfs_mdrestore "$METADUMP_FILE" "$TEST_DIR/image"
+xfs_mdrestore "$metadump_file" "$TEST_DIR/image"
 _mount -t $FSTYP "$TEST_DIR/image" "$SCRATCH_MNT"
 umount "$SCRATCH_MNT"
 
 echo "Check restored fs"
-_check_generic_filesystem "$METADUMP_FILE"
+_check_generic_filesystem "$metadump_file"
 
 # success, all done
 status=0

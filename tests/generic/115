@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -f $tmp.* "$TESTDIR"
+    rm -f $tmp.* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -53,31 +53,31 @@ _require_test
 
 rm -f $seqres.full
 
-TESTDIR1=$TEST_DIR/test-$seq
-rm -rf $TESTDIR1
-mkdir $TESTDIR1
+testdir1=$TEST_DIR/test-$seq
+rm -rf $testdir1
+mkdir $testdir1
 
 echo "Create the original files and reflink dirs"
-$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $TESTDIR1/original \
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $testdir1/original \
     >> $seqres.full
-cp --reflink $TESTDIR1/original $TESTDIR1/copy
+cp --reflink $testdir1/original $testdir1/copy
 
-_verify_reflink $TESTDIR1/original $TESTDIR1/copy
+_verify_reflink $testdir1/original $testdir1/copy
 
 echo "Move orig & reflink copy to subdir and md5sum:"
-mkdir $TESTDIR1/subdir
-mv $TESTDIR1/original $TESTDIR1/subdir/original_moved
-mv $TESTDIR1/copy $TESTDIR1/subdir/copy_moved
-_verify_reflink $TESTDIR1/subdir/original_moved \
-    $TESTDIR1/subdir/copy_moved
+mkdir $testdir1/subdir
+mv $testdir1/original $testdir1/subdir/original_moved
+mv $testdir1/copy $testdir1/subdir/copy_moved
+_verify_reflink $testdir1/subdir/original_moved \
+    $testdir1/subdir/copy_moved
 
-md5sum $TESTDIR1/subdir/original_moved | _filter_test_dir
-md5sum $TESTDIR1/subdir/copy_moved | _filter_test_dir
+md5sum $testdir1/subdir/original_moved | _filter_test_dir
+md5sum $testdir1/subdir/copy_moved | _filter_test_dir
 
 echo "remove orig from subdir and md5sum reflink copy:"
-rm $TESTDIR1/subdir/original_moved
-md5sum $TESTDIR1/subdir/copy_moved | _filter_test_dir
-rm -rf $TESTDIR1/subdir
+rm $testdir1/subdir/original_moved
+md5sum $testdir1/subdir/copy_moved | _filter_test_dir
+rm -rf $testdir1/subdir
 
 # success, all done
 status=0

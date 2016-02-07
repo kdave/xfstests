@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR1"
+    rm -rf "$tmp".* "$testdir1"
 }
 
 # get standard environment, filters and checks
@@ -54,30 +54,30 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 # Well let's hope the maximum reflink count is (less than (ha!)) 2^32...
 
 echo "Create a one block file"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $BLKSZ "$TESTDIR/file2" >> "$seqres.full"
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2" >> "$seqres.full"
+blksz="$(stat -f "$testdir" -c '%S')"
+_pwrite_byte 0x61 0 $blksz "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x62 0 $blksz "$testdir/file2" >> "$seqres.full"
+_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
 
 nr=32
 fnr=32
 for i in $(seq 0 $fnr); do
-	echo " ++ Reflink size $i, $(( (2 ** i) * BLKSZ)) bytes" | tee -a "$seqres.full"
-	n=$(( (2 ** i) * BLKSZ))
-	_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file1" $n $n >> "$seqres.full" || break
+	echo " ++ Reflink size $i, $(( (2 ** i) * blksz)) bytes" | tee -a "$seqres.full"
+	n=$(( (2 ** i) * blksz))
+	_reflink_range "$testdir/file1" 0 "$testdir/file1" $n $n >> "$seqres.full" || break
 done
 
 nrf=$((nr - fnr))
 echo "Clone $((2 ** nrf)) files"
 seq 0 $((2 ** nrf)) | while read i; do
-	_cp-reflink "$TESTDIR/file1" "$TESTDIR/file1-$i"
+	_cp-reflink "$testdir/file1" "$testdir/file1-$i"
 done
 
 echo "Check scratch fs"

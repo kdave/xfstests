@@ -39,7 +39,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -54,44 +54,44 @@ _require_cp_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original file blocks"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-BLKS=2000
-MARGIN=100
-SZ=$((BLKSZ * BLKS))
-FREE_BLOCKS0=$(stat -f "$TESTDIR" -c '%f')
-NR=7
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+blksz="$(stat -f "$testdir" -c '%S')"
+blks=2000
+margin=100
+sz=$((blksz * blks))
+free_blocks0=$(stat -f "$testdir" -c '%f')
+nr=7
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
 sync
 
 echo "Create the reflink copies"
-for i in `seq 2 $NR`; do
-	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file.$i"
+for i in `seq 2 $nr`; do
+	_cp_reflink "$testdir/file1" "$testdir/file.$i"
 done
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/survivor"
+_cp_reflink "$testdir/file1" "$testdir/survivor"
 _test_remount
-FREE_BLOCKS1=$(stat -f "$TESTDIR" -c '%f')
+free_blocks1=$(stat -f "$testdir" -c '%f')
 
 echo "Delete most of the files"
-rm -rf "$TESTDIR"/file*
+rm -rf "$testdir"/file*
 _test_remount
-FREE_BLOCKS2=$(stat -f "$TESTDIR" -c '%f')
+free_blocks2=$(stat -f "$testdir" -c '%f')
 
 echo "Delete all the files"
-rm -rf "$TESTDIR"/*
+rm -rf "$testdir"/*
 _test_remount
-FREE_BLOCKS3=$(stat -f "$TESTDIR" -c '%f')
-#echo $FREE_BLOCKS0 $FREE_BLOCKS1 $FREE_BLOCKS2 $FREE_BLOCKS3
+free_blocks3=$(stat -f "$testdir" -c '%f')
+#echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3
 
-_within_tolerance "free blocks after reflink" $FREE_BLOCKS1 $((FREE_BLOCKS0 - BLKS)) $MARGIN -v
+_within_tolerance "free blocks after reflink" $free_blocks1 $((free_blocks0 - blks)) $margin -v
 
-_within_tolerance "free blocks after deleting some reflink copies" $FREE_BLOCKS2 $FREE_BLOCKS1 $MARGIN -v
+_within_tolerance "free blocks after deleting some reflink copies" $free_blocks2 $free_blocks1 $margin -v
 
-_within_tolerance "free blocks after deleting all copies" $FREE_BLOCKS3 $FREE_BLOCKS0 $MARGIN -v
+_within_tolerance "free blocks after deleting all copies" $free_blocks3 $free_blocks0 $margin -v
 
 # success, all done
 status=0

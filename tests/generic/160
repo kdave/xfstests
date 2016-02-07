@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR1"
+    rm -rf "$tmp".* "$testdir1"
 }
 
 # get standard environment, filters and checks
@@ -49,25 +49,25 @@ _require_test_dedupe
 rm -f "$seqres.full"
 
 echo "Format and mount"
-TESTDIR1="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR1"
-mkdir "$TESTDIR1"
+testdir1="$TEST_DIR/test-$seq"
+rm -rf "$testdir1"
+mkdir "$testdir1"
 
 echo "Create the original files"
-BLKSZ="$(stat -f $TESTDIR1 -c '%S')"
-BLKS=1000
-MARGIN=50
-SZ=$((BLKSZ * BLKS))
-FREE_BLOCKS0=$(stat -f $TESTDIR1 -c '%f')
-NR=4
-_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file2" >> "$seqres.full"
+blksz="$(stat -f $testdir1 -c '%S')"
+blks=1000
+margin=50
+sz=$((blksz * blks))
+free_blocks0=$(stat -f $testdir1 -c '%f')
+nr=4
+_pwrite_byte 0x61 0 $sz "$testdir1/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir1/file2" >> "$seqres.full"
 sync
 
 echo "Try dedupe on immutable files"
-$CHATTR_PROG +i $TESTDIR1/file1 $TESTDIR1/file2
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/file2" 0 $BLKSZ 2>&1 | _filter_test_dir
-$CHATTR_PROG -i $TESTDIR1/file1 $TESTDIR1/file2
+$CHATTR_PROG +i $testdir1/file1 $testdir1/file2
+_dedupe_range "$testdir1/file1" 0 "$testdir1/file2" 0 $blksz 2>&1 | _filter_test_dir
+$CHATTR_PROG -i $testdir1/file1 $testdir1/file2
 
 # success, all done
 status=0

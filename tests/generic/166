@@ -52,24 +52,24 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 loops=1024
 nr_loops=$((loops - 1))
-BLKSZ=65536
+blksz=65536
 
 echo "Initialize file"
 echo > "$seqres.full"
-_pwrite_byte 0x61 0 $((loops * BLKSZ)) "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((loops * blksz)) "$testdir/file1" >> "$seqres.full"
 _scratch_remount
 
 # Snapshot creator...
 snappy() {
 	n=0
-	while [ ! -e "$TESTDIR/finished" ]; do
-		_cp_reflink "$TESTDIR/file1" "$TESTDIR/snap_$n" || break
+	while [ ! -e "$testdir/finished" ]; do
+		_cp_reflink "$testdir/file1" "$testdir/snap_$n" || break
 		n=$((n + 1))
 	done
 }
@@ -77,9 +77,9 @@ snappy() {
 echo "Snapshot a file undergoing directio rewrite"
 snappy &
 seq $nr_loops -1 0 | while read i; do
-	_pwrite_byte 0x63 $((i * BLKSZ)) $BLKSZ -d "$TESTDIR/file1" >> "$seqres.full"
+	_pwrite_byte 0x63 $((i * blksz)) $blksz -d "$testdir/file1" >> "$seqres.full"
 done
-touch $TESTDIR/finished
+touch $testdir/finished
 wait
 
 echo "Check for damage"

@@ -33,7 +33,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -52,26 +52,26 @@ echo "Format and mount"
 _scratch_mkfs -d agsize=$((32 * 1048576)) > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
+blksz="$(stat -f "$testdir" -c '%S')"
 
 echo "Create the original files"
-SZ=$((48 * 1048576))
-NR=$((SZ / BLKSZ))
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2" >> "$seqres.full"
+sz=$((48 * 1048576))
+nr=$((sz / blksz))
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
+_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
 _scratch_remount
 
 echo "CoW every other block"
-_pwrite_byte 0x62 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x62 0 $sz "$testdir/file1" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-#filefrag -v "$TESTDIR/file1" "$TESTDIR/file2"
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+#filefrag -v "$testdir/file1" "$testdir/file2"
 
 echo "Check scratch fs"
 umount "$SCRATCH_MNT"

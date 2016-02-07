@@ -41,7 +41,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -62,59 +62,59 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
-BLKSZ=65536
-NR=64
-_pwrite_byte 0x61 0 $((BLKSZ * NR)) "$TESTDIR/file1" >> "$seqres.full"
-$XFS_IO_PROG -f -c "truncate $((BLKSZ * NR))" "$TESTDIR/file3" >> "$seqres.full"
+blksz=65536
+nr=64
+_pwrite_byte 0x61 0 $((blksz * nr)) "$testdir/file1" >> "$seqres.full"
+$XFS_IO_PROG -f -c "truncate $((blksz * nr))" "$testdir/file3" >> "$seqres.full"
 # 0 blocks are reflinked
-seq 0 5 $NR | while read f; do
-	_reflink_range "$TESTDIR/file1" $((BLKSZ * f)) "$TESTDIR/file3" $((BLKSZ * f)) $BLKSZ >> "$seqres.full"
-	_pwrite_byte 0x61 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+seq 0 5 $nr | while read f; do
+	_reflink_range "$testdir/file1" $((blksz * f)) "$testdir/file3" $((blksz * f)) $blksz >> "$seqres.full"
+	_pwrite_byte 0x61 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
 done
 sync
 # 1 blocks are unwritten
-seq 1 5 $NR | while read f; do
-	$XFS_IO_PROG -f -c "falloc $((BLKSZ * f)) $BLKSZ" "$TESTDIR/file3" >> "$seqres.full"
-	_pwrite_byte 0x00 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+seq 1 5 $nr | while read f; do
+	$XFS_IO_PROG -f -c "falloc $((blksz * f)) $blksz" "$testdir/file3" >> "$seqres.full"
+	_pwrite_byte 0x00 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
 done
 sync
 # 2 blocks are holes
-seq 2 5 $NR | while read f; do
-	_pwrite_byte 0x00 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+seq 2 5 $nr | while read f; do
+	_pwrite_byte 0x00 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
 done
 # 3 blocks are regular
-seq 3 5 $NR | while read f; do
-	_pwrite_byte 0x71 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3" >> "$seqres.full"
-	_pwrite_byte 0x71 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+seq 3 5 $nr | while read f; do
+	_pwrite_byte 0x71 $((blksz * f)) $blksz "$testdir/file3" >> "$seqres.full"
+	_pwrite_byte 0x71 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
 done
 sync
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file3" | _filter_scratch
-md5sum "$TESTDIR/file3.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file3" | _filter_scratch
+md5sum "$testdir/file3.chk" | _filter_scratch
 
 echo "directio CoW across the transition"
 # 4 blocks are delalloc (do later)
-seq 4 5 $NR | while read f; do
-	_pwrite_byte 0x62 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3" >> "$seqres.full"
-	_pwrite_byte 0x62 $((BLKSZ * f)) $BLKSZ "$TESTDIR/file3.chk" >> "$seqres.full"
+seq 4 5 $nr | while read f; do
+	_pwrite_byte 0x62 $((blksz * f)) $blksz "$testdir/file3" >> "$seqres.full"
+	_pwrite_byte 0x62 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
 done
 # now cow
-"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 -b $((BLKSZ * NR / 2)) $((BLKSZ * NR / 4)) $((BLKSZ * NR / 2))" "$TESTDIR/file3" >> "$seqres.full"
-_pwrite_byte 0x63 $((BLKSZ * NR / 4)) $((BLKSZ * NR / 2)) "$TESTDIR/file3.chk" >> "$seqres.full"
+"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 -b $((blksz * nr / 2)) $((blksz * nr / 4)) $((blksz * nr / 2))" "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x63 $((blksz * nr / 4)) $((blksz * nr / 2)) "$testdir/file3.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file3" | _filter_scratch
-md5sum "$TESTDIR/file3.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file3" | _filter_scratch
+md5sum "$testdir/file3.chk" | _filter_scratch
 
 echo "Check for damage"
 umount "$SCRATCH_MNT"

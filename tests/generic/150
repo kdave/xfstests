@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -50,28 +50,28 @@ _require_cp_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original file blocks"
-BLKSZ="$(stat -f $TESTDIR -c '%S')"
-BLKS=2000
-MARGIN=100
-SZ=$((BLKSZ * BLKS))
-NR=7
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+blksz="$(stat -f $testdir -c '%S')"
+blks=2000
+margin=100
+sz=$((blksz * blks))
+nr=7
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
 sync
-FREE_BLOCKS0=$(stat -f "$TESTDIR" -c '%f')
+free_blocks0=$(stat -f "$testdir" -c '%f')
 
 echo "Create the reflink copies"
-for i in `seq 2 $NR`; do
-	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file.$i"
+for i in `seq 2 $nr`; do
+	_cp_reflink "$testdir/file1" "$testdir/file.$i"
 done
 _test_remount
-FREE_BLOCKS1=$(stat -f "$TESTDIR" -c '%f')
+free_blocks1=$(stat -f "$testdir" -c '%f')
 
-_within_tolerance "free blocks after reflink" $FREE_BLOCKS1 $FREE_BLOCKS0 $MARGIN -v
+_within_tolerance "free blocks after reflink" $free_blocks1 $free_blocks0 $margin -v
 
 # success, all done
 status=0

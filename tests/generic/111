@@ -37,7 +37,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -f $tmp.* "$TESTDIR"
+    rm -f $tmp.* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -53,55 +53,55 @@ _require_xfs_io_command "fiemap"
 _require_cp_reflink
 _require_test
 
-TESTDIR1=$TEST_DIR/test-$seq
-rm -rf $TESTDIR1
-mkdir $TESTDIR1
+testdir1=$TEST_DIR/test-$seq
+rm -rf $testdir1
+mkdir $testdir1
 
 _checksum_files() {
     for F in original/file1 original/subdir/file2 \
                  copy1/file1 copy1/subdir/file2 \
                  copy2/file1 copy2/subdir/file2
         do
-            md5sum $TESTDIR1/$F | _filter_test_dir
+            md5sum $testdir1/$F | _filter_test_dir
         done
 }
 
 rm -f $seqres.full
 
-mkdir $TESTDIR1/original
-mkdir $TESTDIR1/original/subdir
+mkdir $testdir1/original
+mkdir $testdir1/original/subdir
 
 echo "Create the original files and reflink dirs"
-$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $TESTDIR1/original/file1 \
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $testdir1/original/file1 \
     >> $seqres.full 2>&1
 $XFS_IO_PROG -f -c 'pwrite -S 0x62 0 11000' \
-    $TESTDIR1/original/subdir/file2 >> $seqres.full 2>&1
-cp --recursive --reflink $TESTDIR1/original $TESTDIR1/copy1
-cp --recursive --reflink $TESTDIR1/copy1 $TESTDIR1/copy2
+    $testdir1/original/subdir/file2 >> $seqres.full 2>&1
+cp --recursive --reflink $testdir1/original $testdir1/copy1
+cp --recursive --reflink $testdir1/copy1 $testdir1/copy2
 
-_verify_reflink $TESTDIR1/original/file1 $TESTDIR1/copy1/file1
-_verify_reflink $TESTDIR1/original/subdir/file2 \
-    $TESTDIR1/copy1/subdir/file2
-_verify_reflink $TESTDIR1/original/file1 $TESTDIR1/copy2/file1
-_verify_reflink $TESTDIR1/original/subdir/file2 \
-    $TESTDIR1/copy2/subdir/file2
+_verify_reflink $testdir1/original/file1 $testdir1/copy1/file1
+_verify_reflink $testdir1/original/subdir/file2 \
+    $testdir1/copy1/subdir/file2
+_verify_reflink $testdir1/original/file1 $testdir1/copy2/file1
+_verify_reflink $testdir1/original/subdir/file2 \
+    $testdir1/copy2/subdir/file2
 
 echo "Original md5sums:"
 _checksum_files
 
 echo "Overwrite original/file1 and original/subdir/file2 with new data"
-$XFS_IO_PROG -c 'pwrite -S 0x63 0 13000' $TESTDIR1/original/file1 \
+$XFS_IO_PROG -c 'pwrite -S 0x63 0 13000' $testdir1/original/file1 \
     >> $seqres.full 2>&1
 $XFS_IO_PROG -c 'pwrite -S 0x64 5000 1000' \
-    $TESTDIR1/original/subdir/file2 >> $seqres.full 2>&1
+    $testdir1/original/subdir/file2 >> $seqres.full 2>&1
 echo "md5sums now:"
 _checksum_files
 
 echo "Overwrite copy1/file1 and copy1/subdir/file2 with new data"
-$XFS_IO_PROG -c 'pwrite -S 0x65 0 9000' $TESTDIR1/copy1/file1 \
+$XFS_IO_PROG -c 'pwrite -S 0x65 0 9000' $testdir1/copy1/file1 \
     >> $seqres.full 2>&1
 $XFS_IO_PROG -c 'pwrite -S 0x66 5000 25000' \
-    $TESTDIR1/copy1/subdir/file2 >> $seqres.full 2>&1
+    $testdir1/copy1/subdir/file2 >> $seqres.full 2>&1
 echo "md5sums now:"
 _checksum_files
 

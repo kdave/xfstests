@@ -50,24 +50,24 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 loops=512
 nr_loops=$((loops - 1))
-BLKSZ=65536
+blksz=65536
 
 echo "Initialize files"
 echo > "$seqres.full"
-_pwrite_byte 0x61 0 $((loops * BLKSZ)) "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $((loops * BLKSZ)) "$TESTDIR/file2" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((loops * blksz)) "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((loops * blksz)) "$testdir/file2" >> "$seqres.full"
 _scratch_remount
 
 overwrite() {
-	while [ ! -e "$TESTDIR/finished" ]; do
+	while [ ! -e "$testdir/finished" ]; do
 		seq $nr_loops -1 0 | while read i; do
-			_pwrite_byte 0x61 $((i * BLKSZ)) $BLKSZ "$TESTDIR/file1" >> "$seqres.full"
+			_pwrite_byte 0x61 $((i * blksz)) $blksz "$testdir/file1" >> "$seqres.full"
 		done
 	done
 }
@@ -76,13 +76,13 @@ echo "Dedupe and rewrite the file!"
 overwrite &
 for i in `seq 1 2`; do
 	seq $nr_loops -1 0 | while read i; do
-		_dedupe_range   "$TESTDIR/file1" $((i * BLKSZ)) \
-				"$TESTDIR/file2" $((i * BLKSZ)) $BLKSZ >> "$seqres.full"
+		_dedupe_range   "$testdir/file1" $((i * blksz)) \
+				"$testdir/file2" $((i * blksz)) $blksz >> "$seqres.full"
 		[ $? -ne 0 ] && break
 	done
 done
 echo "Finished dedupeing"
-touch "$TESTDIR/finished"
+touch "$testdir/finished"
 wait
 
 echo "Check fs"

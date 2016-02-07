@@ -33,7 +33,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR1"
+    rm -rf "$tmp".* "$testdir1"
 }
 
 # get standard environment, filters and checks
@@ -53,36 +53,36 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Reformat with appropriate size"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-NR_BLKS=10240
+blksz="$(stat -f "$testdir" -c '%S')"
+nr_blks=10240
 umount "$SCRATCH_MNT"
-SZ_BYTES=$((NR_BLKS * 8 * BLKSZ))
-if [ $SZ_BYTES -lt $((32 * 1048576)) ]; then
-	SZ_BYTES=$((32 * 1048576))
+sz_bytes=$((nr_blks * 8 * blksz))
+if [ $sz_bytes -lt $((32 * 1048576)) ]; then
+	sz_bytes=$((32 * 1048576))
 fi
-_scratch_mkfs_sized $SZ_BYTES >> "$seqres.full" 2>&1
+_scratch_mkfs_sized $sz_bytes >> "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create a big file and reflink it"
-_pwrite_byte 0x61 0 $((BLKSZ * NR_BLKS)) "$TESTDIR/bigfile" >> "$seqres.full" 2>&1
-_cp_reflink "$TESTDIR/bigfile" "$TESTDIR/clonefile"
+_pwrite_byte 0x61 0 $((blksz * nr_blks)) "$testdir/bigfile" >> "$seqres.full" 2>&1
+_cp_reflink "$testdir/bigfile" "$testdir/clonefile"
 sync
 
 echo "Allocate the rest of the space"
-NR_FREE="$(stat -f -c '%f' "$TESTDIR")"
-touch "$TESTDIR/file0" "$TESTDIR/file1"
-_pwrite_byte 0x61 0 $((BLKSZ * NR_FREE)) "$TESTDIR/eat_my_space" >> "$seqres.full" 2>&1
+nr_free="$(stat -f -c '%f' "$testdir")"
+touch "$testdir/file0" "$testdir/file1"
+_pwrite_byte 0x61 0 $((blksz * nr_free)) "$testdir/eat_my_space" >> "$seqres.full" 2>&1
 sync
 
 echo "CoW the big file"
-out="$(_pwrite_byte 0x62 0 $((BLKSZ * NR_BLKS)) "$TESTDIR/bigfile" 2>&1)"
+out="$(_pwrite_byte 0x62 0 $((blksz * nr_blks)) "$testdir/bigfile" 2>&1)"
 echo "${out}" | grep -q "No space left on device" || echo "CoW should have failed with ENOSPC"
 echo "${out}" >> "$seqres.full" 2>&1
 echo "${out}"
@@ -90,13 +90,13 @@ echo "${out}"
 echo "Remount and try CoW again"
 _scratch_remount
 
-out="$(_pwrite_byte 0x62 0 $((BLKSZ * NR_BLKS)) "$TESTDIR/bigfile" 2>&1)"
+out="$(_pwrite_byte 0x62 0 $((blksz * nr_blks)) "$testdir/bigfile" 2>&1)"
 echo "${out}" | grep -q "No space left on device" || echo "CoW should have failed with ENOSPC"
 echo "${out}" >> "$seqres.full" 2>&1
 echo "${out}"
 
-#filefrag -v $TESTDIR/bigfile
-#filefrag -v $TESTDIR/clonefile
+#filefrag -v $testdir/bigfile
+#filefrag -v $testdir/clonefile
 
 echo "Check scratch fs"
 umount "$SCRATCH_MNT"

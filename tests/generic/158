@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR1"
+    rm -rf "$tmp".* "$testdir1"
 }
 
 # get standard environment, filters and checks
@@ -52,32 +52,32 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR1="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR1"
-mkdir "$TESTDIR1"
+testdir1="$TEST_DIR/test-$seq"
+rm -rf "$testdir1"
+mkdir "$testdir1"
 
-TESTDIR2=$SCRATCH_MNT/test-$seq
-rm -rf "$TESTDIR2"
-mkdir "$TESTDIR2"
+testdir2=$SCRATCH_MNT/test-$seq
+rm -rf "$testdir2"
+mkdir "$testdir2"
 
 echo "Create the original files"
-BLKSZ="$(stat -f $TESTDIR1 -c '%S')"
-BLKS=1000
-MARGIN=50
-SZ=$((BLKSZ * BLKS))
-FREE_BLOCKS0=$(stat -f $TESTDIR1 -c '%f')
-NR=4
-_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file2" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR1/file3" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR2/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR2/file2" >> "$seqres.full"
-mkdir "$TESTDIR1/dir1"
-seq 1 $((2 * BLKSZ / 250)) | while read f; do
-	touch "$TESTDIR1/dir1/$f"
+blksz="$(stat -f $testdir1 -c '%S')"
+blks=1000
+margin=50
+sz=$((blksz * blks))
+free_blocks0=$(stat -f $testdir1 -c '%f')
+nr=4
+_pwrite_byte 0x61 0 $sz "$testdir1/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir1/file2" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir1/file3" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir2/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir2/file2" >> "$seqres.full"
+mkdir "$testdir1/dir1"
+seq 1 $((2 * blksz / 250)) | while read f; do
+	touch "$testdir1/dir1/$f"
 done
-mknod "$TESTDIR1/dev1" c 1 3
-mkfifo "$TESTDIR1/fifo1"
+mknod "$testdir1/dev1" c 1 3
+mkfifo "$testdir1/fifo1"
 sync
 
 _filter_enotty() {
@@ -89,38 +89,38 @@ _filter_eperm() {
 }
 
 echo "Try cross-device dedupe"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR2/file1" 0 $BLKSZ
+_dedupe_range "$testdir1/file1" 0 "$testdir2/file1" 0 $blksz
 
 echo "Try unaligned dedupe"
-_dedupe_range "$TESTDIR1/file1" 37 "$TESTDIR1/file1" 59 23
+_dedupe_range "$testdir1/file1" 37 "$testdir1/file1" 59 23
 
 echo "Try overlapping dedupe"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/file1" 1 $((BLKSZ * 2))
+_dedupe_range "$testdir1/file1" 0 "$testdir1/file1" 1 $((blksz * 2))
 
 echo "Try dedupe past EOF"
-_dedupe_range "$TESTDIR1/file1" $(( (BLKS + 10) * BLKSZ)) "$TESTDIR1/file1" 0 $BLKSZ
+_dedupe_range "$testdir1/file1" $(( (blks + 10) * blksz)) "$testdir1/file1" 0 $blksz
 
 echo "Try to dedupe a dir"
-_dedupe_range "$TESTDIR1/dir1" 0 "$TESTDIR1/file2" 0 $BLKSZ
+_dedupe_range "$testdir1/dir1" 0 "$testdir1/file2" 0 $blksz
 
 echo "Try to dedupe a device"
-_dedupe_range "$TESTDIR1/dev1" 0 "$TESTDIR1/file2" 0 $BLKSZ 2>&1 | _filter_enotty
+_dedupe_range "$testdir1/dev1" 0 "$testdir1/file2" 0 $blksz 2>&1 | _filter_enotty
 
 echo "Try to dedupe to a dir"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/dir1" 0 $BLKSZ 2>&1 | _filter_test_dir
+_dedupe_range "$testdir1/file1" 0 "$testdir1/dir1" 0 $blksz 2>&1 | _filter_test_dir
 
 echo "Try to dedupe to a device"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/dev1" 0 $BLKSZ 2>&1 | _filter_eperm
+_dedupe_range "$testdir1/file1" 0 "$testdir1/dev1" 0 $blksz 2>&1 | _filter_eperm
 
 echo "Try to dedupe to a fifo"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/fifo1" 0 $BLKSZ -n 2>&1 | _filter_eperm
+_dedupe_range "$testdir1/file1" 0 "$testdir1/fifo1" 0 $blksz -n 2>&1 | _filter_eperm
 
 echo "Try to dedupe an append-only file"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/file3" 0 $BLKSZ -a >> "$seqres.full"
+_dedupe_range "$testdir1/file1" 0 "$testdir1/file3" 0 $blksz -a >> "$seqres.full"
 
 echo "Dedupe two files"
-_dedupe_range "$TESTDIR1/file1" 0 "$TESTDIR1/file2" 0 $BLKSZ >> "$seqres.full"
-_dedupe_range "$TESTDIR2/file1" 0 "$TESTDIR2/file2" 0 $BLKSZ >> "$seqres.full"
+_dedupe_range "$testdir1/file1" 0 "$testdir1/file2" 0 $blksz >> "$seqres.full"
+_dedupe_range "$testdir2/file1" 0 "$testdir2/file2" 0 $blksz >> "$seqres.full"
 
 echo "Check scratch fs"
 _scratch_unmount

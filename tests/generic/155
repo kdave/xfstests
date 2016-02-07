@@ -42,7 +42,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -58,56 +58,56 @@ _require_xfs_io_command "fzero"
 
 rm -f "$seqres.full"
 
-TESTDIR=$TEST_DIR/test-$seq
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original file blocks"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-BLKS=2000
-MARGIN=100
-SZ=$((BLKSZ * BLKS))
-FREE_BLOCKS0=$(stat -f "$TESTDIR" -c '%f')
-NR=4
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+blksz="$(stat -f "$testdir" -c '%S')"
+blks=2000
+margin=100
+sz=$((blksz * blks))
+free_blocks0=$(stat -f "$testdir" -c '%f')
+nr=4
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
 _test_remount
 
 echo "Create the reflink copies"
-for i in `seq 2 $NR`; do
-	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file$i"
+for i in `seq 2 $nr`; do
+	_cp_reflink "$testdir/file1" "$testdir/file$i"
 done
 _test_remount
-FREE_BLOCKS1=$(stat -f "$TESTDIR" -c '%f')
+free_blocks1=$(stat -f "$testdir" -c '%f')
 
 echo "Rewrite some of the blocks"
-"$XFS_IO_PROG" -f -c "fzero 0 $SZ" "$TESTDIR/file2" >> "$seqres.full"
-_pwrite_byte 0x63 0 $((SZ / 2)) "$TESTDIR/file3" -d >> "$seqres.full"
-_mwrite_byte 0x64 $((SZ / 2)) $((SZ / 2)) $SZ "$TESTDIR/file4" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "fzero 0 $sz" "$testdir/file2" >> "$seqres.full"
+_pwrite_byte 0x63 0 $((sz / 2)) "$testdir/file3" -d >> "$seqres.full"
+_mwrite_byte 0x64 $((sz / 2)) $((sz / 2)) $sz "$testdir/file4" >> "$seqres.full"
 _test_remount
-FREE_BLOCKS2=$(stat -f "$TESTDIR" -c '%f')
+free_blocks2=$(stat -f "$testdir" -c '%f')
 
 echo "Rewrite all the files"
-_pwrite_byte 0x62 0 $SZ "$TESTDIR/file2" -d >> "$seqres.full"
-_mwrite_byte 0x63 0 $SZ $SZ "$TESTDIR/file3" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "fzero 0 $SZ" $TESTDIR/file4 >> "$seqres.full"
+_pwrite_byte 0x62 0 $sz "$testdir/file2" -d >> "$seqres.full"
+_mwrite_byte 0x63 0 $sz $sz "$testdir/file3" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "fzero 0 $sz" $testdir/file4 >> "$seqres.full"
 _test_remount
-FREE_BLOCKS3=$(stat -f "$TESTDIR" -c '%f')
+free_blocks3=$(stat -f "$testdir" -c '%f')
 
 echo "Rewrite the original file"
-_pwrite_byte 0x65 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+_pwrite_byte 0x65 0 $sz "$testdir/file1" >> "$seqres.full"
 _test_remount
-FREE_BLOCKS4=$(stat -f "$TESTDIR" -c '%f')
-#echo $FREE_BLOCKS0 $FREE_BLOCKS1 $FREE_BLOCKS2 $FREE_BLOCKS3 $FREE_BLOCKS4
+free_blocks4=$(stat -f "$testdir" -c '%f')
+#echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3 $free_blocks4
 
-_within_tolerance "free blocks after reflinking" $FREE_BLOCKS1 $((FREE_BLOCKS0 - BLKS)) $MARGIN -v
+_within_tolerance "free blocks after reflinking" $free_blocks1 $((free_blocks0 - blks)) $margin -v
 
-_within_tolerance "free blocks after partially CoWing some copies" $FREE_BLOCKS2 $((FREE_BLOCKS1 - (2 * BLKS))) $MARGIN -v
+_within_tolerance "free blocks after partially CoWing some copies" $free_blocks2 $((free_blocks1 - (2 * blks))) $margin -v
 
-_within_tolerance "free blocks after CoWing all copies" $FREE_BLOCKS3 $((FREE_BLOCKS2 - BLKS)) $MARGIN -v
+_within_tolerance "free blocks after CoWing all copies" $free_blocks3 $((free_blocks2 - blks)) $margin -v
 
-_within_tolerance "free blocks after overwriting original" $FREE_BLOCKS4 $FREE_BLOCKS3 $MARGIN -v
+_within_tolerance "free blocks after overwriting original" $free_blocks4 $free_blocks3 $margin -v
 
-_within_tolerance "free blocks after all tests" $FREE_BLOCKS4 $((FREE_BLOCKS0 - (4 * BLKS))) $MARGIN -v
+_within_tolerance "free blocks after all tests" $free_blocks4 $((free_blocks0 - (4 * blks))) $margin -v
 
 # success, all done
 status=0

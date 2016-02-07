@@ -38,7 +38,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -54,47 +54,47 @@ _require_xfs_io_command "falloc"
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original file blocks"
-BLKSZ=65536
-_pwrite_byte 0x61 0 $BLKSZ "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x62 $BLKSZ $((BLKSZ * 2)) "$TESTDIR/file1" >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 0 $blksz "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x62 $blksz $((blksz * 2)) "$testdir/file1" >> "$seqres.full"
 
-NR_BLKS=1024
+nr_blks=1024
 
 echo "fallocate half the file"
-"$XFS_IO_PROG" -f -c "falloc $((NR_BLKS * BLKSZ / 2)) $((NR_BLKS * BLKSZ / 2))" "$TESTDIR/file1" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "falloc $((nr_blks * blksz / 2)) $((nr_blks * blksz / 2))" "$testdir/file1" >> "$seqres.full"
 
 echo "Reflink block zero to the threes"
-seq 1 $((NR_BLKS / 3)) | while read nr; do
-	_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file1" $((nr * 3 * BLKSZ)) \
-			$BLKSZ >> "$seqres.full"
+seq 1 $((nr_blks / 3)) | while read nr; do
+	_reflink_range "$testdir/file1" 0 "$testdir/file1" $((nr * 3 * blksz)) \
+			$blksz >> "$seqres.full"
 done
 
 echo "Reflink block one to the fives"
-seq 1 $((NR_BLKS / 5)) | while read nr; do
-	_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file1" \
-			$((nr * 5 * BLKSZ)) $BLKSZ >> "$seqres.full"
+seq 1 $((nr_blks / 5)) | while read nr; do
+	_reflink_range "$testdir/file1" $blksz "$testdir/file1" \
+			$((nr * 5 * blksz)) $blksz >> "$seqres.full"
 done
 
 echo "Dedupe block two to the sevens"
-seq 1 $((NR_BLKS / 7)) | while read nr; do
-	_dedupe_range "$TESTDIR/file1" $((BLKSZ * 2)) "$TESTDIR/file1" \
-			$((nr * 7 * BLKSZ)) $BLKSZ >> "$seqres.full" 2>&1
+seq 1 $((nr_blks / 7)) | while read nr; do
+	_dedupe_range "$testdir/file1" $((blksz * 2)) "$testdir/file1" \
+			$((nr * 7 * blksz)) $blksz >> "$seqres.full" 2>&1
 done
 
 _test_remount
 
 echo "Check block mappings"
-md5sum "$TESTDIR/file1" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
 
-crcZ=$(_md5_range_checksum /dev/zero 0 $BLKSZ)
-crc0=$(_md5_range_checksum "$TESTDIR/file1" 0 $BLKSZ)
-crc1=$(_md5_range_checksum "$TESTDIR/file1" $BLKSZ $BLKSZ)
-crc2=$(_md5_range_checksum "$TESTDIR/file1" $((BLKSZ * 2)) $BLKSZ)
+crcZ=$(_md5_range_checksum /dev/zero 0 $blksz)
+crc0=$(_md5_range_checksum "$testdir/file1" 0 $blksz)
+crc1=$(_md5_range_checksum "$testdir/file1" $blksz $blksz)
+crc2=$(_md5_range_checksum "$testdir/file1" $((blksz * 2)) $blksz)
 
 check_block() {
 	lblk="$1"
@@ -102,26 +102,26 @@ check_block() {
 	rem5=$((lblk % 5))
 	rem3=$((lblk % 3))
 
-	crc=$(_md5_range_checksum "$TESTDIR/file1" $((lblk * BLKSZ)) $BLKSZ)
+	crc=$(_md5_range_checksum "$testdir/file1" $((lblk * blksz)) $blksz)
 
 	if [ $rem7 -eq 0 ]; then
 		if [ $rem5 -eq 0 ]; then
 			test $crc2 = $crc || echo "lblk $lblk doesn't match block 2"
 		elif [ $rem3 -eq 0 ]; then
 			test $crc0 = $crc || echo "lblk $lblk doesn't match block 0"
-		elif [ $lblk -lt $((NR_BLKS / 2)) ]; then
+		elif [ $lblk -lt $((nr_blks / 2)) ]; then
 			test $crcZ = $crc || echo "lblk $lblk isn't zeroed"
 		fi
 	elif [ $rem5 -eq 0 ]; then
 		test $crc1 = $crc || echo "lblk $lblk doesn't match block 1"
 	elif [ $rem3 -eq 0 ]; then
 		test $crc0 = $crc || echo "lblk $lblk doesn't match block 0"
-	elif [ $lblk -lt $((NR_BLKS / 2)) ]; then
+	elif [ $lblk -lt $((nr_blks / 2)) ]; then
 		test $crcZ = $crc || echo "lblk $lblk isn't zeroed"
 	fi
 }
 
-seq 3 $((NR_BLKS - 1)) | while read lblk; do
+seq 3 $((nr_blks - 1)) | while read lblk; do
 	err="$(check_block $lblk)"
 	test -n "$err" && echo "$lblk: $err"
 done

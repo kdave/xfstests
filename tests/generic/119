@@ -36,7 +36,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -50,119 +50,119 @@ _require_test_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR=$TEST_DIR/test-$seq
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
-BLKSZ=65536
-_pwrite_byte 0x61 0 $((BLKSZ * 8)) "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((BLKSZ * 8)) "$TESTDIR/file2" >> "$seqres.full"
-_pwrite_byte 0x63 0 $((BLKSZ * 8)) "$TESTDIR/file3" >> "$seqres.full"
-_pwrite_byte 0x64 0 $((BLKSZ * 8)) "$TESTDIR/file4" >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 0 $((blksz * 8)) "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x62 0 $((blksz * 8)) "$testdir/file2" >> "$seqres.full"
+_pwrite_byte 0x63 0 $((blksz * 8)) "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x64 0 $((blksz * 8)) "$testdir/file4" >> "$seqres.full"
 _test_remount
 
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file3" | _filter_test_dir
-md5sum "$TESTDIR/file4" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file3" | _filter_test_dir
+md5sum "$testdir/file4" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 8)) \
+_compare_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 8)) \
        || echo "Files 1-2 do not match (intentional)"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $((BLKSZ * 8)) \
+_compare_range "$testdir/file1" 0 "$testdir/file3" 0 $((blksz * 8)) \
        || echo "Files 1-3 do not match (intentional)"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file4" 0 $((BLKSZ * 8)) \
+_compare_range "$testdir/file1" 0 "$testdir/file4" 0 $((blksz * 8)) \
        || echo "Files 1-4 do not match (intentional)"
 
 echo "Reflink the first four blocks together, 1-2 3-4"
-free_before="$(stat -f -c '%a' "$TESTDIR")"
-_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 4)) >> "$seqres.full"
-_reflink_range "$TESTDIR/file3" 0 "$TESTDIR/file4" 0 $((BLKSZ * 4)) >> "$seqres.full"
+free_before="$(stat -f -c '%a' "$testdir")"
+_reflink_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 4)) >> "$seqres.full"
+_reflink_range "$testdir/file3" 0 "$testdir/file4" 0 $((blksz * 4)) >> "$seqres.full"
 _test_remount
-free_after="$(stat -f -c '%a' "$TESTDIR")"
+free_after="$(stat -f -c '%a' "$testdir")"
 echo "freesp changed by $free_before -> $free_after" >> "$seqres.full"
 
 echo "Compare sections"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file3" | _filter_test_dir
-md5sum "$TESTDIR/file4" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file3" | _filter_test_dir
+md5sum "$testdir/file4" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 4)) \
        || echo "Sections of file 1-2 do not match"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file1" 0 "$testdir/file3" 0 $((blksz * 4)) \
        || echo "Sections of file 1-3 do not match (intentional)"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file4" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file1" 0 "$testdir/file4" 0 $((blksz * 4)) \
        || echo "Sections of file 1-4 do not match (intentional)"
 
-_compare_range "$TESTDIR/file2" 0 "$TESTDIR/file3" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file2" 0 "$testdir/file3" 0 $((blksz * 4)) \
        || echo "Sections of file 2-3 do not match (intentional)"
 
-_compare_range "$TESTDIR/file2" 0 "$TESTDIR/file4" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file2" 0 "$testdir/file4" 0 $((blksz * 4)) \
        || echo "Sections of file 2-4 do not match (intentional)"
 
-_compare_range "$TESTDIR/file3" 0 "$TESTDIR/file4" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file3" 0 "$testdir/file4" 0 $((blksz * 4)) \
        || echo "Sections of file 3-4 do not match"
 
 echo "Reflink the first two blocks together, 1-3 1-4"
-free_before="$(stat -f -c '%a' $TESTDIR)"
-_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $((BLKSZ * 2)) >> "$seqres.full"
-_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file4" 0 $((BLKSZ * 2)) >> "$seqres.full"
+free_before="$(stat -f -c '%a' $testdir)"
+_reflink_range "$testdir/file1" 0 "$testdir/file3" 0 $((blksz * 2)) >> "$seqres.full"
+_reflink_range "$testdir/file1" 0 "$testdir/file4" 0 $((blksz * 2)) >> "$seqres.full"
 _test_remount
-free_after="$(stat -f -c '%a' $TESTDIR)"
+free_after="$(stat -f -c '%a' $testdir)"
 echo "freesp changed by $free_before -> $free_after" >> "$seqres.full"
 
 echo "Compare sections"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file3" | _filter_test_dir
-md5sum "$TESTDIR/file4" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file3" | _filter_test_dir
+md5sum "$testdir/file4" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 2)) \
        || echo "Sections of files 1-2 do not match"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" 0 "$testdir/file3" 0 $((blksz * 2)) \
        || echo "Sections of files 1-3 do not match"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file4" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" 0 "$testdir/file4" 0 $((blksz * 2)) \
        || echo "Sections of files 1-4 do not match"
 
-_compare_range "$TESTDIR/file2" 0 "$TESTDIR/file3" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file2" 0 "$testdir/file3" 0 $((blksz * 2)) \
        || echo "Sections of files 2-3 do not match"
 
-_compare_range "$TESTDIR/file2" 0 "$TESTDIR/file4" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file2" 0 "$testdir/file4" 0 $((blksz * 2)) \
        || echo "Sections of files 2-4 do not match"
 
-_compare_range "$TESTDIR/file3" 0 "$TESTDIR/file4" 0 $((BLKSZ * 2)) \
+_compare_range "$testdir/file3" 0 "$testdir/file4" 0 $((blksz * 2)) \
        || echo "Sections of files 3-4 do not match"
 
 echo "Compare previously reflinked sections"
-_compare_range "$TESTDIR/file1" $((BLKSZ * 2)) "$TESTDIR/file2" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" $((blksz * 2)) "$testdir/file2" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 1-2 do not match"
 
-_compare_range "$TESTDIR/file1" $((BLKSZ * 2)) "$TESTDIR/file3" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" $((blksz * 2)) "$testdir/file3" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 1-3 do not match (intentional)"
 
-_compare_range "$TESTDIR/file1" $((BLKSZ * 2)) "$TESTDIR/file4" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" $((blksz * 2)) "$testdir/file4" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 1-4 do not match (intentional)"
 
-_compare_range "$TESTDIR/file2" $((BLKSZ * 2)) "$TESTDIR/file3" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file2" $((blksz * 2)) "$testdir/file3" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 2-3 do not match (intentional)"
 
-_compare_range "$TESTDIR/file2" $((BLKSZ * 2)) "$TESTDIR/file4" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file2" $((blksz * 2)) "$testdir/file4" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 2-4 do not match (intentional)"
 
-_compare_range "$TESTDIR/file3" $((BLKSZ * 2)) "$TESTDIR/file4" \
-		$((BLKSZ * 2)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file3" $((blksz * 2)) "$testdir/file4" \
+		$((blksz * 2)) $((blksz * 2)) \
        || echo "Sections of file 3-4 do not match"
 
 # success, all done

@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -48,29 +48,29 @@ _require_xfs_io_command "fpunch"
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original files"
-BLKSZ=65536
-NR=512
-_pwrite_byte 0x61 0 $((BLKSZ * NR)) "$TESTDIR/file1" >> "$seqres.full"
+blksz=65536
+nr=512
+_pwrite_byte 0x61 0 $((blksz * nr)) "$testdir/file1" >> "$seqres.full"
 
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2"
+_cp_reflink "$testdir/file1" "$testdir/file2"
 _test_remount
 
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
 
 echo "Write and punch"
-_pwrite_byte 0x62 0 $((BLKSZ * 256)) "$TESTDIR/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "fpunch $BLKSZ $((BLKSZ * 254))" "$TESTDIR/file2"
+_pwrite_byte 0x62 0 $((blksz * 256)) "$testdir/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "fpunch $blksz $((blksz * 254))" "$testdir/file2"
 _test_remount
 
 echo "Compare results"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
 
 # success, all done
 status=0

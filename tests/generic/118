@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -49,43 +49,43 @@ _require_test_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original files"
-BLKSZ=65536
-_pwrite_byte 0x61 $((BLKSZ * 2)) $((BLKSZ * 6)) "$TESTDIR/file1" >> "$seqres.full"
-_pwrite_byte 0x62 $((BLKSZ * 2)) $((BLKSZ * 6)) "$TESTDIR/file2" >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 $((blksz * 2)) $((blksz * 6)) "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x62 $((blksz * 2)) $((blksz * 6)) "$testdir/file2" >> "$seqres.full"
 _test_remount
 
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 8)) \
+_compare_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 8)) \
        || echo "Files do not match (intentional)"
 
 echo "Reflink the middle blocks together"
-free_before="$(stat -f -c '%a' "$TESTDIR")"
-_reflink_range "$TESTDIR/file1" $((BLKSZ * 4)) "$TESTDIR/file2" \
-		$((BLKSZ * 4)) $((BLKSZ * 2)) >> "$seqres.full"
+free_before="$(stat -f -c '%a' "$testdir")"
+_reflink_range "$testdir/file1" $((blksz * 4)) "$testdir/file2" \
+		$((blksz * 4)) $((blksz * 2)) >> "$seqres.full"
 _test_remount
-free_after="$(stat -f -c '%a' "$TESTDIR")"
+free_after="$(stat -f -c '%a' "$testdir")"
 echo "freesp changed by $free_before -> $free_after" >> "$seqres.full"
 
 echo "Compare sections"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file2" 0 $((BLKSZ * 4)) \
+_compare_range "$testdir/file1" 0 "$testdir/file2" 0 $((blksz * 4)) \
        || echo "Start sections do not match (intentional)"
 
-_compare_range "$TESTDIR/file1" $((BLKSZ * 4)) "$TESTDIR/file2" \
-		$((BLKSZ * 4)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" $((blksz * 4)) "$testdir/file2" \
+		$((blksz * 4)) $((blksz * 2)) \
        || echo "Middle sections do not match"
 
-_compare_range "$TESTDIR/file1" $((BLKSZ * 6)) "$TESTDIR/file2" \
-		$((BLKSZ * 6)) $((BLKSZ * 2)) \
+_compare_range "$testdir/file1" $((blksz * 6)) "$testdir/file2" \
+		$((blksz * 6)) $((blksz * 2)) \
        || echo "End sections do not match (intentional)"
 
 # success, all done

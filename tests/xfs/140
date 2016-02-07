@@ -33,7 +33,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -52,33 +52,33 @@ echo "Format and mount"
 _scratch_mkfs -d agsize=$((32 * 1048576)) > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
-BLKSZ="$(stat -f -c '%S' "$TESTDIR")"
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
+blksz="$(stat -f -c '%S' "$testdir")"
 
 echo "Create the original files"
-SZ=$((48 * 1048576))
-NR=$((SZ / BLKSZ))
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2" >> "$seqres.full"
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file2.chk" >> "$seqres.full"
+sz=$((48 * 1048576))
+nr=$((sz / blksz))
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
+_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
+_pwrite_byte 0x61 0 $sz "$testdir/file2.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || echo "file1 and file2 do not match"
-cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || echo "file2 and file2.chk do not match"
+cmp -s "$testdir/file1" "$testdir/file2" || echo "file1 and file2 do not match"
+cmp -s "$testdir/file2" "$testdir/file2.chk" || echo "file2 and file2.chk do not match"
 
 echo "CoW every other block"
-seq 1 2 $((NR - 1)) | while read f; do
-	_pwrite_byte 0x62 $((f * BLKSZ)) $BLKSZ "$TESTDIR/file2" >> "$seqres.full"
-	_pwrite_byte 0x62 $((f * BLKSZ)) $BLKSZ "$TESTDIR/file2.chk" >> "$seqres.full"
+seq 1 2 $((nr - 1)) | while read f; do
+	_pwrite_byte 0x62 $((f * blksz)) $blksz "$testdir/file2" >> "$seqres.full"
+	_pwrite_byte 0x62 $((f * blksz)) $blksz "$testdir/file2.chk" >> "$seqres.full"
 done
 _scratch_remount
 
 echo "Compare files"
-! cmp -s "$TESTDIR/file1" "$TESTDIR/file2" || echo "file1 and file2 must not match"
-cmp -s "$TESTDIR/file2" "$TESTDIR/file2.chk" || echo "file2 and file2.chk do not match"
+! cmp -s "$testdir/file1" "$testdir/file2" || echo "file1 and file2 must not match"
+cmp -s "$testdir/file2" "$testdir/file2.chk" || echo "file2 and file2.chk do not match"
 
 echo "Check scratch fs"
 umount "$SCRATCH_MNT"

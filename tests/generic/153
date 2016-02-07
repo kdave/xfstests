@@ -39,7 +39,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -55,47 +55,47 @@ _require_xfs_io_command "fcollapse"
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original file blocks"
-BLKSZ="$(stat -f "$TESTDIR" -c '%S')"
-BLKS=2000
-MARGIN=100
-SZ=$((BLKSZ * BLKS))
-FREE_BLOCKS0=$(stat -f "$TESTDIR" -c '%f')
-NR=4
-_pwrite_byte 0x61 0 $SZ "$TESTDIR/file1" >> "$seqres.full"
+blksz="$(stat -f "$testdir" -c '%S')"
+blks=2000
+margin=100
+sz=$((blksz * blks))
+free_blocks0=$(stat -f "$testdir" -c '%f')
+nr=4
+_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
 _test_remount
 
 echo "Create the reflink copies"
-for i in `seq 2 $NR`; do
-	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file$i"
+for i in `seq 2 $nr`; do
+	_cp_reflink "$testdir/file1" "$testdir/file$i"
 done
 _test_remount
-FREE_BLOCKS1=$(stat -f "$TESTDIR" -c '%f')
+free_blocks1=$(stat -f "$testdir" -c '%f')
 
 echo "Collapse most of the blocks"
-"$XFS_IO_PROG" -f -c "fcollapse 0 $(((BLKS - 1) * BLKSZ))" $TESTDIR/file2
-"$XFS_IO_PROG" -f -c "fcollapse 0 $((SZ / 2))" $TESTDIR/file3
-"$XFS_IO_PROG" -f -c "fcollapse $((SZ / 2)) $(( ((BLKS / 2) - 1) * BLKSZ))" $TESTDIR/file4
+"$XFS_IO_PROG" -f -c "fcollapse 0 $(((blks - 1) * blksz))" $testdir/file2
+"$XFS_IO_PROG" -f -c "fcollapse 0 $((sz / 2))" $testdir/file3
+"$XFS_IO_PROG" -f -c "fcollapse $((sz / 2)) $(( ((blks / 2) - 1) * blksz))" $testdir/file4
 _test_remount
-FREE_BLOCKS2=$(stat -f "$TESTDIR" -c '%f')
+free_blocks2=$(stat -f "$testdir" -c '%f')
 
 echo "Collpase nearly all the files"
-"$XFS_IO_PROG" -f -c "fcollapse 0 $(( ((BLKS / 2) - 1) * BLKSZ))" $TESTDIR/file3
-"$XFS_IO_PROG" -f -c "fcollapse 0 $((SZ / 2))" $TESTDIR/file4
-"$XFS_IO_PROG" -f -c "fcollapse 0 $(( (BLKS - 1) * BLKSZ))" $TESTDIR/file1
+"$XFS_IO_PROG" -f -c "fcollapse 0 $(( ((blks / 2) - 1) * blksz))" $testdir/file3
+"$XFS_IO_PROG" -f -c "fcollapse 0 $((sz / 2))" $testdir/file4
+"$XFS_IO_PROG" -f -c "fcollapse 0 $(( (blks - 1) * blksz))" $testdir/file1
 _test_remount
-FREE_BLOCKS3=$(stat -f "$TESTDIR" -c '%f')
-#echo $FREE_BLOCKS0 $FREE_BLOCKS1 $FREE_BLOCKS2 $FREE_BLOCKS3
+free_blocks3=$(stat -f "$testdir" -c '%f')
+#echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3
 
-_within_tolerance "free blocks after reflink" $FREE_BLOCKS1 $((FREE_BLOCKS0 - BLKS)) $MARGIN -v
+_within_tolerance "free blocks after reflink" $free_blocks1 $((free_blocks0 - blks)) $margin -v
 
-_within_tolerance "free blocks after fcollapsing some reflink copies" $FREE_BLOCKS2 $FREE_BLOCKS1 $MARGIN -v
+_within_tolerance "free blocks after fcollapsing some reflink copies" $free_blocks2 $free_blocks1 $margin -v
 
-_within_tolerance "free blocks after fcollapsing all copies" $FREE_BLOCKS3 $FREE_BLOCKS0 $MARGIN -v
+_within_tolerance "free blocks after fcollapsing all copies" $free_blocks3 $free_blocks0 $margin -v
 
 # success, all done
 status=0

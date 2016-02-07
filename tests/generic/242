@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -55,40 +55,40 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf $testdir
+mkdir $testdir
 
-BLKSZ=65536
-NR=6400
-BSZ=1280
+blksz=65536
+nr=6400
+bsz=1280
 
-FREE_BLOCKS=$(stat -f -c '%a' "$TESTDIR")
-REAL_BLKSZ=$(stat -f -c '%S' "$TESTDIR")
-SPACE_NEEDED=$(((BLKSZ * NR * 3) * 5 / 4))
-SPACE_AVAIL=$((FREE_BLOCKS * REAL_BLKSZ))
-test $SPACE_NEEDED -gt $SPACE_AVAIL && _notrun "Not enough space. $SPACE_AVAIL < $SPACE_NEEDED"
+free_blocks=$(stat -f -c '%a' "$testdir")
+real_blksz=$(stat -f -c '%S' "$testdir")
+space_needed=$(((blksz * nr * 3) * 5 / 4))
+space_avail=$((free_blocks * real_blksz))
+test $space_needed -gt $space_avail && _notrun "Not enough space. $space_avail < $space_needed"
 
 echo "Create the original files"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((BLKSZ * BSZ)) 0 $((BLKSZ * NR))" "$TESTDIR/file1" >> "$seqres.full"
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((BLKSZ * BSZ)) 0 $((BLKSZ * NR))" "$TESTDIR/file2.chk" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file1" >> "$seqres.full"
+_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file2" | _filter_scratch
-md5sum "$TESTDIR/file2.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file2" | _filter_scratch
+md5sum "$testdir/file2.chk" | _filter_scratch
 
 echo "CoW and unmount"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((BLKSZ * BSZ)) 0 $((BLKSZ * NR))" "$TESTDIR/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((BLKSZ * BSZ)) 0 $((BLKSZ * NR))" "$TESTDIR/file2.chk" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file2" | _filter_scratch
-md5sum "$TESTDIR/file2.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file2" | _filter_scratch
+md5sum "$testdir/file2.chk" | _filter_scratch
 
 echo "Check for damage"
 umount "$SCRATCH_MNT"

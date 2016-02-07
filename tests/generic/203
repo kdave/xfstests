@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -51,31 +51,31 @@ echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
-BLKSZ=65536
-_pwrite_byte 0x61 0 $((BLKSZ + 17)) "$TESTDIR/file1" >> "$seqres.full"
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file2"
-_pwrite_byte 0x61 0 $((BLKSZ + 17)) "$TESTDIR/file2.chk" >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 0 $((blksz + 17)) "$testdir/file1" >> "$seqres.full"
+_cp_reflink "$testdir/file1" "$testdir/file2"
+_pwrite_byte 0x61 0 $((blksz + 17)) "$testdir/file2.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file2" | _filter_scratch
-md5sum "$TESTDIR/file2.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file2" | _filter_scratch
+md5sum "$testdir/file2.chk" | _filter_scratch
 
 echo "CoW and unmount"
-"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 $BLKSZ $BLKSZ" "$TESTDIR/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $BLKSZ $BLKSZ" "$TESTDIR/file2.chk" >> "$seqres.full"
+"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 $blksz $blksz" "$testdir/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $blksz $blksz" "$testdir/file2.chk" >> "$seqres.full"
 _scratch_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_scratch
-md5sum "$TESTDIR/file2" | _filter_scratch
-md5sum "$TESTDIR/file2.chk" | _filter_scratch
+md5sum "$testdir/file1" | _filter_scratch
+md5sum "$testdir/file2" | _filter_scratch
+md5sum "$testdir/file2.chk" | _filter_scratch
 
 echo "Check for damage"
 umount "$SCRATCH_MNT"

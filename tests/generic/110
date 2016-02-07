@@ -37,7 +37,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -f $tmp.* "$TESTDIR"
+    rm -f $tmp.* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -53,37 +53,37 @@ _require_xfs_io_command "fiemap"
 _require_cp_reflink
 _require_test
 
-TESTDIR1=$TEST_DIR/test-$seq
-rm -rf $TESTDIR1
-mkdir $TESTDIR1
+testdir1=$TEST_DIR/test-$seq
+rm -rf $testdir1
+mkdir $testdir1
 
 _checksum_files() {
     for F in original copy1 copy2
     do
-        md5sum $TESTDIR1/$F | _filter_test_dir
+        md5sum $testdir1/$F | _filter_test_dir
     done
 }
 
 rm -f $seqres.full
 
 echo "Create the original file and reflink to copy1, copy2"
-$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $TESTDIR1/original \
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $testdir1/original \
     >> $seqres.full 2>&1
-cp --reflink $TESTDIR1/original $TESTDIR1/copy1
-cp --reflink $TESTDIR1/copy1 $TESTDIR1/copy2
-_verify_reflink $TESTDIR1/original $TESTDIR1/copy1
-_verify_reflink $TESTDIR1/original $TESTDIR1/copy2
+cp --reflink $testdir1/original $testdir1/copy1
+cp --reflink $testdir1/copy1 $testdir1/copy2
+_verify_reflink $testdir1/original $testdir1/copy1
+_verify_reflink $testdir1/original $testdir1/copy2
 echo "Original md5sums:"
 _checksum_files
 
 echo "Overwrite original file with new data"
-$XFS_IO_PROG -c 'pwrite -S 0x62 0 9000' $TESTDIR1/original \
+$XFS_IO_PROG -c 'pwrite -S 0x62 0 9000' $testdir1/original \
     >> $seqres.full 2>&1
 echo "md5sums after overwriting original:"
 _checksum_files
 
 echo "Overwrite copy1 with different new data"
-$XFS_IO_PROG -c 'pwrite -S 0x63 0 9000' $TESTDIR1/copy1 \
+$XFS_IO_PROG -c 'pwrite -S 0x63 0 9000' $testdir1/copy1 \
     >> $seqres.full 2>&1
 echo "md5sums after overwriting copy1:"
 _checksum_files

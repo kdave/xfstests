@@ -37,7 +37,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -52,37 +52,37 @@ _require_cp_reflink
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original file blocks"
-BLKSZ=65536
-NR=9
-_pwrite_byte 0x61 0 $((BLKSZ * 256)) "$TESTDIR/file1" >> "$seqres.full"
+blksz=65536
+nr=9
+_pwrite_byte 0x61 0 $((blksz * 256)) "$testdir/file1" >> "$seqres.full"
 _test_remount
 
-md5sum "$TESTDIR/file1" | _filter_test_dir
-csum="$(_md5_checksum "$TESTDIR/file1")"
+md5sum "$testdir/file1" | _filter_test_dir
+csum="$(_md5_checksum "$testdir/file1")"
 
 echo "Create the reflink copies"
-seq 2 $NR | while read i; do
-	_cp_reflink "$TESTDIR/file1" "$TESTDIR/file$i"
+seq 2 $nr | while read i; do
+	_cp_reflink "$testdir/file1" "$testdir/file$i"
 done
 _test_remount
 
 echo "Rewrite the copies"
-seq 2 $NR | while read i; do
-	_pwrite_byte 0x62 0 $((BLKSZ * 256)) "$TESTDIR/file$i" >> "$seqres.full"
+seq 2 $nr | while read i; do
+	_pwrite_byte 0x62 0 $((blksz * 256)) "$testdir/file$i" >> "$seqres.full"
 done
 _test_remount
 
 echo "Examine original file"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
 
-mod_csum="$(_md5_checksum "$TESTDIR/file2")"
-new_csum="$(_md5_checksum "$TESTDIR/file1")"
+mod_csum="$(_md5_checksum "$testdir/file2")"
+new_csum="$(_md5_checksum "$testdir/file1")"
 test "${csum}" != "${mod_csum}" || echo "checksums do not match"
 test "${csum}" = "${new_csum}" || echo "checksums do not match"
 

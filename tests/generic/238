@@ -36,7 +36,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -51,19 +51,19 @@ _require_xfs_io_command "falloc"
 
 rm -f "$seqres.full"
 
-PAGESZ=$(getconf PAGE_SIZE)
-BLKSZ=$((PAGESZ / 4))
+pagesz=$(getconf PAGE_SIZE)
+blksz=$((pagesz / 4))
 
 echo "Format and mount"
-_scratch_mkfs_blocksized $BLKSZ > "$seqres.full" 2>&1
+_scratch_mkfs_blocksized $blksz > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-TESTDIR="$SCRATCH_MNT/test-$seq"
-rm -rf $TESTDIR
-mkdir $TESTDIR
+testdir="$SCRATCH_MNT/test-$seq"
+rm -rf $testdir
+mkdir $testdir
 
-REAL_BLKSZ=$(stat -f -c '%S' $TESTDIR)
-test "$REAL_BLKSZ" != "$BLKSZ" && _notrun "Failed to format with small blocksize."
+real_blksz=$(stat -f -c '%S' $testdir)
+test "$real_blksz" != "$blksz" && _notrun "Failed to format with small blocksize."
 
 runtest() {
 	echo "runtest $1 $2"
@@ -73,19 +73,19 @@ runtest() {
 
 	echo "Create the original files"
 	mkdir -p "$dir"
-	_pwrite_byte 0x61 0 $PAGESZ "$dir/file1" >> "$seqres.full"
+	_pwrite_byte 0x61 0 $pagesz "$dir/file1" >> "$seqres.full"
 
-	"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$dir/file2" >> "$seqres.full"
-	"$XFS_IO_PROG" -f -c "truncate $PAGESZ" "$dir/file2.chk" >> "$seqres.full"
+	"$XFS_IO_PROG" -f -c "truncate $pagesz" "$dir/file2" >> "$seqres.full"
+	"$XFS_IO_PROG" -f -c "truncate $pagesz" "$dir/file2.chk" >> "$seqres.full"
 
 	case "$b2" in
 	"regular")
-		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		_pwrite_byte 0x61 $blksz $blksz "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $blksz $blksz "$dir/file2.chk" >> "$seqres.full"
 		;;
 	"unwritten")
-		"$XFS_IO_PROG" -f -c "falloc -k $BLKSZ $BLKSZ" "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x00 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		"$XFS_IO_PROG" -f -c "falloc -k $blksz $blksz" "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x00 $blksz $blksz "$dir/file2.chk" >> "$seqres.full"
 		;;
 	"hole")
 		;;
@@ -95,19 +95,19 @@ runtest() {
 
 	case "$b4" in
 	"regular")
-		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		_pwrite_byte 0x61 $((blksz * 3)) $blksz "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $((blksz * 3)) $blksz "$dir/file2.chk" >> "$seqres.full"
 		;;
 	"unwritten")
-		"$XFS_IO_PROG" -f -c "falloc -k $((BLKSZ * 3)) $BLKSZ" "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x00 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		"$XFS_IO_PROG" -f -c "falloc -k $((blksz * 3)) $blksz" "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x00 $((blksz * 3)) $blksz "$dir/file2.chk" >> "$seqres.full"
 		;;
 	"hole")
 		;;
 	esac
 
-	_reflink_range "$dir/file1" $BLKSZ "$dir/file2" $((BLKSZ * 2)) $BLKSZ >> "$seqres.full"
-	_pwrite_byte 0x61 $((BLKSZ * 2)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+	_reflink_range "$dir/file1" $blksz "$dir/file2" $((blksz * 2)) $blksz >> "$seqres.full"
+	_pwrite_byte 0x61 $((blksz * 2)) $blksz "$dir/file2.chk" >> "$seqres.full"
 	_scratch_remount
 
 	echo "Compare files"
@@ -116,17 +116,17 @@ runtest() {
 
 	echo "CoW and unmount"
 	if [ "$b2" = "delalloc" ]; then
-		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x61 $BLKSZ $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		_pwrite_byte 0x61 $blksz $blksz "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $blksz $blksz "$dir/file2.chk" >> "$seqres.full"
 	fi
 
 	if [ "$b4" = "delalloc" ]; then
-		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2" >> "$seqres.full"
-		_pwrite_byte 0x61 $((BLKSZ * 3)) $BLKSZ "$dir/file2.chk" >> "$seqres.full"
+		_pwrite_byte 0x61 $((blksz * 3)) $blksz "$dir/file2" >> "$seqres.full"
+		_pwrite_byte 0x61 $((blksz * 3)) $blksz "$dir/file2.chk" >> "$seqres.full"
 	fi
 
-	"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 $BLKSZ $((BLKSZ * 3))" "$dir/file2" >> "$seqres.full"
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $BLKSZ $((BLKSZ * 3))" "$dir/file2.chk" >> "$seqres.full"
+	"$XFS_IO_PROG" -d -f -c "pwrite -S 0x63 $blksz $((blksz * 3))" "$dir/file2" >> "$seqres.full"
+	"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $blksz $((blksz * 3))" "$dir/file2.chk" >> "$seqres.full"
 	_scratch_remount
 
 	echo "Compare files"
@@ -134,25 +134,25 @@ runtest() {
 	cmp -s "$dir/file2" "$dir/file2.chk" || _fail "file2 and file2.chk don't match."
 }
 
-runtest regular delalloc "$TESTDIR/r-d"
-runtest regular unwritten "$TESTDIR/r-u"
-runtest regular hole "$TESTDIR/r-h"
-runtest regular regular "$TESTDIR/r-r"
+runtest regular delalloc "$testdir/r-d"
+runtest regular unwritten "$testdir/r-u"
+runtest regular hole "$testdir/r-h"
+runtest regular regular "$testdir/r-r"
 
-runtest hole delalloc "$TESTDIR/h-d"
-runtest hole unwritten "$TESTDIR/h-u"
-runtest hole hole "$TESTDIR/h-h"
-runtest hole regular "$TESTDIR/h-r"
+runtest hole delalloc "$testdir/h-d"
+runtest hole unwritten "$testdir/h-u"
+runtest hole hole "$testdir/h-h"
+runtest hole regular "$testdir/h-r"
 
-runtest unwritten delalloc "$TESTDIR/u-d"
-runtest unwritten unwritten "$TESTDIR/u-u"
-runtest unwritten hole "$TESTDIR/u-h"
-runtest unwritten regular "$TESTDIR/u-r"
+runtest unwritten delalloc "$testdir/u-d"
+runtest unwritten unwritten "$testdir/u-u"
+runtest unwritten hole "$testdir/u-h"
+runtest unwritten regular "$testdir/u-r"
 
-runtest delalloc delalloc "$TESTDIR/d-d"
-runtest delalloc unwritten "$TESTDIR/d-u"
-runtest delalloc hole "$TESTDIR/d-h"
-runtest delalloc regular "$TESTDIR/d-r"
+runtest delalloc delalloc "$testdir/d-d"
+runtest delalloc unwritten "$testdir/d-u"
+runtest delalloc hole "$testdir/d-h"
+runtest delalloc regular "$testdir/d-r"
 
 echo "Check for damage"
 umount "$SCRATCH_MNT"

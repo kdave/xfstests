@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$TESTDIR"
+    rm -rf "$tmp".* "$testdir"
 }
 
 # get standard environment, filters and checks
@@ -52,90 +52,90 @@ _require_xfs_io_command "truncate"
 
 rm -f "$seqres.full"
 
-TESTDIR="$TEST_DIR/test-$seq"
-rm -rf "$TESTDIR"
-mkdir "$TESTDIR"
+testdir="$TEST_DIR/test-$seq"
+rm -rf "$testdir"
+mkdir "$testdir"
 
 echo "Create the original files"
-BLKSZ=65536
-_pwrite_byte 0x61 0 $((BLKSZ * 5 + 37)) "$TESTDIR/file1" >> "$seqres.full"
+blksz=65536
+_pwrite_byte 0x61 0 $((blksz * 5 + 37)) "$testdir/file1" >> "$seqres.full"
 
-_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $BLKSZ \
-		$((BLKSZ * 4 + 37)) >> "$seqres.full"
+_reflink_range "$testdir/file1" $blksz "$testdir/file2" $blksz \
+		$((blksz * 4 + 37)) >> "$seqres.full"
 
-"$XFS_IO_PROG" -f -c "truncate $((BLKSZ * 5 + 37))" "$TESTDIR/file3" >> "$seqres.full"
-_reflink_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $BLKSZ >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "truncate $((blksz * 5 + 37))" "$testdir/file3" >> "$seqres.full"
+_reflink_range "$testdir/file1" 0 "$testdir/file3" 0 $blksz >> "$seqres.full"
 
-"$XFS_IO_PROG" -f -c "truncate $((BLKSZ * 5 + 37))" "$TESTDIR/file4" >> "$seqres.full"
-_reflink_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file4" $BLKSZ $BLKSZ >> "$seqres.full"
-_reflink_range "$TESTDIR/file1" $((BLKSZ * 3)) "$TESTDIR/file4" $((BLKSZ * 3)) \
-		$BLKSZ >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "truncate $((blksz * 5 + 37))" "$testdir/file4" >> "$seqres.full"
+_reflink_range "$testdir/file1" $blksz "$testdir/file4" $blksz $blksz >> "$seqres.full"
+_reflink_range "$testdir/file1" $((blksz * 3)) "$testdir/file4" $((blksz * 3)) \
+		$blksz >> "$seqres.full"
 
-_cp_reflink "$TESTDIR/file1" "$TESTDIR/file5"
+_cp_reflink "$testdir/file1" "$testdir/file5"
 _test_remount
 
 echo "Compare sections"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file3" | _filter_test_dir
-md5sum "$TESTDIR/file4" | _filter_test_dir
-md5sum "$TESTDIR/file5" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file3" | _filter_test_dir
+md5sum "$testdir/file4" | _filter_test_dir
+md5sum "$testdir/file5" | _filter_test_dir
 
-_compare_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file2" $BLKSZ \
-		$((BLKSZ * 4 + 37)) \
+_compare_range "$testdir/file1" $blksz "$testdir/file2" $blksz \
+		$((blksz * 4 + 37)) \
 	|| echo "shared parts of files 1-2 changed"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file3" 0 $BLKSZ \
+_compare_range "$testdir/file1" 0 "$testdir/file3" 0 $blksz \
 	|| echo "shared parts of files 1-3 changed"
 
-_compare_range "$TESTDIR/file1" $BLKSZ "$TESTDIR/file4" $BLKSZ $BLKSZ \
+_compare_range "$testdir/file1" $blksz "$testdir/file4" $blksz $blksz \
 	|| echo "shared parts of files 1-4 changed"
 
-_compare_range "$TESTDIR/file1" 0 "$TESTDIR/file5" 0 $((BLKSZ * 5 + 37)) \
+_compare_range "$testdir/file1" 0 "$testdir/file5" 0 $((blksz * 5 + 37)) \
 	|| echo "shared parts of files 1-5 changed"
 
 echo "Compare files"
-C1="$(_md5_checksum "$TESTDIR/file1")"
-C2="$(_md5_checksum "$TESTDIR/file2")"
-C3="$(_md5_checksum "$TESTDIR/file3")"
-C4="$(_md5_checksum "$TESTDIR/file4")"
-C5="$(_md5_checksum "$TESTDIR/file5")"
+c1="$(_md5_checksum "$testdir/file1")"
+c2="$(_md5_checksum "$testdir/file2")"
+c3="$(_md5_checksum "$testdir/file3")"
+c4="$(_md5_checksum "$testdir/file4")"
+c5="$(_md5_checksum "$testdir/file5")"
 
-test "${C1}" != "${C2}" || echo "file1 and file2 should not match"
-test "${C1}" != "${C3}" || echo "file1 and file3 should not match"
-test "${C1}" != "${C4}" || echo "file1 and file4 should not match"
-test "${C1}"  = "${C5}" || echo "file1 and file5 should match"
-test "${C2}" != "${C3}" || echo "file2 and file3 should not match"
-test "${C2}" != "${C4}" || echo "file2 and file4 should not match"
-test "${C2}" != "${C5}" || echo "file2 and file5 should not match"
-test "${C3}" != "${C4}" || echo "file3 and file4 should not match"
-test "${C3}" != "${C5}" || echo "file3 and file5 should not match"
-test "${C4}" != "${C5}" || echo "file4 and file5 should not match"
+test "${c1}" != "${c2}" || echo "file1 and file2 should not match"
+test "${c1}" != "${c3}" || echo "file1 and file3 should not match"
+test "${c1}" != "${c4}" || echo "file1 and file4 should not match"
+test "${c1}"  = "${c5}" || echo "file1 and file5 should match"
+test "${c2}" != "${c3}" || echo "file2 and file3 should not match"
+test "${c2}" != "${c4}" || echo "file2 and file4 should not match"
+test "${c2}" != "${c5}" || echo "file2 and file5 should not match"
+test "${c3}" != "${c4}" || echo "file3 and file4 should not match"
+test "${c3}" != "${c5}" || echo "file3 and file5 should not match"
+test "${c4}" != "${c5}" || echo "file4 and file5 should not match"
 
 echo "falloc everything"
-"$XFS_IO_PROG" -f -c "falloc 0 $((BLKSZ * 5))" "$TESTDIR/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "falloc 0 $((BLKSZ * 5))" "$TESTDIR/file3" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "falloc 0 $((BLKSZ * 5))" "$TESTDIR/file4" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "falloc 0 $((blksz * 5))" "$testdir/file2" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "falloc 0 $((blksz * 5))" "$testdir/file3" >> "$seqres.full"
+"$XFS_IO_PROG" -f -c "falloc 0 $((blksz * 5))" "$testdir/file4" >> "$seqres.full"
 _test_remount
 
 echo "Compare files"
-md5sum "$TESTDIR/file1" | _filter_test_dir
-md5sum "$TESTDIR/file2" | _filter_test_dir
-md5sum "$TESTDIR/file3" | _filter_test_dir
-md5sum "$TESTDIR/file4" | _filter_test_dir
-md5sum "$TESTDIR/file5" | _filter_test_dir
+md5sum "$testdir/file1" | _filter_test_dir
+md5sum "$testdir/file2" | _filter_test_dir
+md5sum "$testdir/file3" | _filter_test_dir
+md5sum "$testdir/file4" | _filter_test_dir
+md5sum "$testdir/file5" | _filter_test_dir
 
-D1="$(_md5_checksum "$TESTDIR/file1")"
-D2="$(_md5_checksum "$TESTDIR/file2")"
-D3="$(_md5_checksum "$TESTDIR/file3")"
-D4="$(_md5_checksum "$TESTDIR/file4")"
-D5="$(_md5_checksum "$TESTDIR/file5")"
+d1="$(_md5_checksum "$testdir/file1")"
+d2="$(_md5_checksum "$testdir/file2")"
+d3="$(_md5_checksum "$testdir/file3")"
+d4="$(_md5_checksum "$testdir/file4")"
+d5="$(_md5_checksum "$testdir/file5")"
 
-test "${C1}" = "${D1}" || echo "file1 should not change"
-test "${C2}" = "${D2}" || echo "file2 should not change"
-test "${C3}" = "${D3}" || echo "file3 should not change"
-test "${C4}" = "${D4}" || echo "file4 should not change"
-test "${C5}" = "${D5}" || echo "file2 should not change"
+test "${c1}" = "${d1}" || echo "file1 should not change"
+test "${c2}" = "${d2}" || echo "file2 should not change"
+test "${c3}" = "${d3}" || echo "file3 should not change"
+test "${c4}" = "${d4}" || echo "file4 should not change"
+test "${c5}" = "${d5}" || echo "file2 should not change"
 
 # success, all done
 status=0
