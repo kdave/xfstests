@@ -20,6 +20,7 @@
 #include <strings.h>
 #include <sys/file.h>
 #include <sys/mman.h>
+#include <stdbool.h>
 #ifdef HAVE_ERR_H
 #include <err.h>
 #endif
