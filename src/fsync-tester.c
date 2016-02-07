@@ -12,6 +12,7 @@
 static int test_fd;
 static char *buf;
 static char *fname;
+static int openflags = O_RDWR;
 
 /*
  * Just creates a random file, overwriting the file in a random number of loops
@@ -139,7 +140,7 @@ static int test_three(int *max_blocks, int prealloc, int rand_fsync,
 			if (drop_caches) {
 				close(test_fd);
 				drop_all_caches();
-				test_fd = open(fname, O_RDWR);
+				test_fd = open(fname, openflags);
 				if (test_fd < 0) {
 					test_fd = 0;
 					fprintf(stderr, "Error re-opening file: %d\n",
@@ -381,7 +382,6 @@ int main(int argc, char **argv)
 	long int test = 1;
 	long int tmp;
 	int ret = 0;
-	int flags = O_RDWR|O_CREAT|O_TRUNC;
 
 	if (argc < 2)
 		usage();
@@ -435,7 +435,7 @@ int main(int argc, char **argv)
 	srandom(seed);
 
 	if (direct_io) {
-		flags |= O_DIRECT;
+		openflags |= O_DIRECT;
 		ret = posix_memalign((void **)&buf, getpagesize(), 4096);
 		if (ret) {
 			fprintf(stderr, "Error allocating buf: %d\n", ret);
@@ -449,7 +449,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	test_fd = open(fname, flags, 0644);
+	test_fd = open(fname, openflags | O_CREAT | O_TRUNC, 0644);
 	if (test_fd < 0) {
 		fprintf(stderr, "Error opening file %d (%s)\n", errno,
 			strerror(errno));
