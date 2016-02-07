@@ -1,0 +1,81 @@
+#! /bin/bash
+# FS QA Test 001
+#
+# Test copy up files from lower dir that are <, =, > 4G in size.
+#
+# Kernel commit 0480334fa604 ("ovl: use O_LARGEFILE in ovl_copy_up()")
+# fixed bug when copying up large file from lower dir.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# overlay copy_up doesn't deal with sparse file well, holes will be filled by
+# zeros, so at least (4G + 4G + 8k) free space is needed on $SCRATCH_DEV,
+# where $SCRATCH_DEV is actually a test dir used in overlay testing
+_require_fs_space $SCRATCH_DEV $((4*1024*1024*2 + 8))
+
+# Create test files with different sizes in lower dir
+lowerdir=$SCRATCH_DEV/$OVERLAY_LOWER_DIR
+mkdir -p $lowerdir
+touch $lowerdir/zero_size
+$XFS_IO_PROG -fc "pwrite 0 4k" $lowerdir/less_than_4g >>$seqres.full
+$XFS_IO_PROG -fc "pwrite 4294963200 4k" $lowerdir/4gfile >>$seqres.full
+$XFS_IO_PROG -fc "pwrite 4g 4k" $lowerdir/larger_than_4g >>$seqres.full
+
+_scratch_mount
+
+echo "Silence is golden"
+
+# Open the files should succeed, no errors are expected (e.g. EFBIG)
+for f in $SCRATCH_MNT/*; do
+	$XFS_IO_PROG -c "open" $f >>$seqres.full
+done
+
+# success, all done
+status=0
+exit
