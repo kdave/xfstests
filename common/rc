@@ -953,6 +953,49 @@ _scratch_xfs_repair()
     $XFS_REPAIR_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
+# Repair scratch filesystem.  Returns 0 if the FS is good to go (either no
+# errors found or errors were fixed) and nonzero otherwise; also spits out
+# a complaint on stderr if fsck didn't tell us that the FS is good to go.
+_repair_scratch_fs()
+{
+    case $FSTYP in
+    xfs)
+        _scratch_xfs_repair "$@" 2>&1
+	res=$?
+	if [ "$res" -eq 2 ]; then
+		echo "xfs_repair returns $res; replay log?"
+		_scratch_mount
+		res=$?
+		if [ "$res" -gt 0 ]; then
+			echo "mount returns $res; zap log?"
+			_scratch_xfs_repair -L 2>&1
+			echo "log zap returns $?"
+		else
+			umount "$SCRATCH_MNT"
+		fi
+		_scratch_xfs_repair "$@" 2>&1
+		res=$?
+	fi
+	test $res -ne 0 && >&2 echo "xfs_repair failed, err=$res"
+	return $res
+        ;;
+    *)
+        # Let's hope fsck -y suffices...
+        fsck -t $FSTYP -y $SCRATCH_DEV 2>&1
+	res=$?
+	case $res in
+	0|1|2)
+		res=0
+		;;
+	*)
+		>&2 echo "fsck.$FSTYP failed, err=$res"
+		;;
+	esac
+	return $res
+        ;;
+    esac
+}
+
 _get_pids_by_name()
 {
     if [ $# -ne 1 ]
