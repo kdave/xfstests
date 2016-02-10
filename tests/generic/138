@@ -23,8 +23,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -48,103 +48,103 @@ _supported_os Linux
 _require_test_reflink
 _require_cp_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
-testdir="$TEST_DIR/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
 blksz=65536
-_pwrite_byte 0x61 0 $((blksz * 48 - 3)) "$testdir/file1" >> "$seqres.full"
-_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x61 0 $((blksz * 48 - 3)) "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((blksz * 48 - 3)) $testdir/file1 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
+_pwrite_byte 0x61 0 $((blksz * 48 - 3)) $testdir/file3 >> $seqres.full
 _test_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file3" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file3 | _filter_test_dir
 
-cmp -s "$testdir/file1" "$testdir/file2" || echo "Files 1-2 do not match"
-cmp -s "$testdir/file1" "$testdir/file3" || echo "Files 1-3 do not match"
-cmp -s "$testdir/file2" "$testdir/file3" || echo "Files 2-3 do not match"
+cmp -s $testdir/file1 $testdir/file2 || echo "Files 1-2 do not match"
+cmp -s $testdir/file1 $testdir/file3 || echo "Files 1-3 do not match"
+cmp -s $testdir/file2 $testdir/file3 || echo "Files 2-3 do not match"
 
 echo "pagecache CoW the second file"
-_pwrite_byte 0x62 0 17 "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x62 0 17 "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x62 0 17 $testdir/file2 >> $seqres.full
+_pwrite_byte 0x62 0 17 $testdir/file3 >> $seqres.full
 
-_pwrite_byte 0x62 $((blksz * 16 - 34)) 17 "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x62 $((blksz * 16 - 34)) 17 "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x62 $((blksz * 16 - 34)) 17 $testdir/file2 >> $seqres.full
+_pwrite_byte 0x62 $((blksz * 16 - 34)) 17 $testdir/file3 >> $seqres.full
 
-_pwrite_byte 0x62 $((blksz * 48 - 8)) 17 "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x62 $((blksz * 48 - 8)) 17 "$testdir/file3" >> "$seqres.full"
+_pwrite_byte 0x62 $((blksz * 48 - 8)) 17 $testdir/file2 >> $seqres.full
+_pwrite_byte 0x62 $((blksz * 48 - 8)) 17 $testdir/file3 >> $seqres.full
 _test_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file3" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file3 | _filter_test_dir
 
-cmp -s "$testdir/file1" "$testdir/file2" || echo "Files 1-2 do not match (intentional)"
-cmp -s "$testdir/file1" "$testdir/file3" || echo "Files 1-3 do not match (intentional)"
-cmp -s "$testdir/file2" "$testdir/file3" || echo "Files 2-3 do not match"
+cmp -s $testdir/file1 $testdir/file2 || echo "Files 1-2 do not match (intentional)"
+cmp -s $testdir/file1 $testdir/file3 || echo "Files 1-3 do not match (intentional)"
+cmp -s $testdir/file2 $testdir/file3 || echo "Files 2-3 do not match"
 
 echo "Compare the CoW'd section to the before file"
-_compare_range "$testdir/file1" 0 "$testdir/file2" 0 17 \
+_compare_range $testdir/file1 0 $testdir/file2 0 17 \
        || echo "Start sections do not match (intentional)"
 
-_compare_range  "$testdir/file1" $((blksz * 16 - 34)) \
-		"$testdir/file2" $((blksz * 16 - 34)) 17 \
+_compare_range  $testdir/file1 $((blksz * 16 - 34)) \
+		$testdir/file2 $((blksz * 16 - 34)) 17 \
        || echo "Middle sections do not match (intentional)"
 
-_compare_range  "$testdir/file1" $((blksz * 48 - 8)) \
-		"$testdir/file2" $((blksz * 48 - 8)) 17 \
+_compare_range  $testdir/file1 $((blksz * 48 - 8)) \
+		$testdir/file2 $((blksz * 48 - 8)) 17 \
        || echo "End sections do not match (intentional)"
 
 echo "Compare the CoW'd section to the after file"
-_compare_range "$testdir/file2" 0 "$testdir/file3" 0 17 \
+_compare_range $testdir/file2 0 $testdir/file3 0 17 \
        || echo "Start sections do not match"
 
-_compare_range  "$testdir/file2" $((blksz * 16 - 34)) \
-		"$testdir/file3" $((blksz * 16 - 34)) 17 \
+_compare_range  $testdir/file2 $((blksz * 16 - 34)) \
+		$testdir/file3 $((blksz * 16 - 34)) 17 \
        || echo "Middle sections do not match"
 
-_compare_range  "$testdir/file2" $((blksz * 48 - 8)) \
-		"$testdir/file3" $((blksz * 48 - 8)) 17 \
+_compare_range  $testdir/file2 $((blksz * 48 - 8)) \
+		$testdir/file3 $((blksz * 48 - 8)) 17 \
        || echo "End sections do not match"
 
 echo "Compare the not CoW'd sections"
-_compare_range "$testdir/file1" 18 "$testdir/file2" 18 17 \
+_compare_range $testdir/file1 18 $testdir/file2 18 17 \
        || echo "Start sections of 1-2 do not match"
 
-_compare_range "$testdir/file2" 18 "$testdir/file3" 18 17 \
+_compare_range $testdir/file2 18 $testdir/file3 18 17 \
        || echo "Start sections of 2-3 do not match"
 
 
-_compare_range  "$testdir/file1" $((blksz * 16 - 17)) \
-		"$testdir/file2" $((blksz * 16 - 17)) 82 \
+_compare_range  $testdir/file1 $((blksz * 16 - 17)) \
+		$testdir/file2 $((blksz * 16 - 17)) 82 \
        || echo "Middle sections of 1-2 do not match"
 
-_compare_range  "$testdir/file2" $((blksz * 16 - 17)) \
-		"$testdir/file3" $((blksz * 16 - 17)) 82 \
+_compare_range  $testdir/file2 $((blksz * 16 - 17)) \
+		$testdir/file3 $((blksz * 16 - 17)) 82 \
        || echo "Middle sections of 2-3 do not match"
 
-_compare_range  "$testdir/file1" $((blksz * 48 - 108)) \
-		"$testdir/file2" $((blksz * 48 - 108)) 100 \
+_compare_range  $testdir/file1 $((blksz * 48 - 108)) \
+		$testdir/file2 $((blksz * 48 - 108)) 100 \
        || echo "End sections of 1-2 do not match"
 
-_compare_range  "$testdir/file2" $((blksz * 48 - 108)) \
-		"$testdir/file3" $((blksz * 48 - 108)) 100 \
+_compare_range  $testdir/file2 $((blksz * 48 - 108)) \
+		$testdir/file3 $((blksz * 48 - 108)) 100 \
        || echo "End sections of 2-3 do not match"
 
 
-_compare_range  "$testdir/file1" $((blksz * 14)) \
-		"$testdir/file2" $((blksz * 14)) $blksz \
+_compare_range  $testdir/file1 $((blksz * 14)) \
+		$testdir/file2 $((blksz * 14)) $blksz \
        || echo "Untouched sections of 1-2 do not match"
 
-_compare_range  "$testdir/file2" $((blksz * 14)) \
-		"$testdir/file3" $((blksz * 14)) $blksz \
+_compare_range  $testdir/file2 $((blksz * 14)) \
+		$testdir/file3 $((blksz * 14)) $blksz \
        || echo "Untouched sections of 2-3 do not match"
 
 # success, all done

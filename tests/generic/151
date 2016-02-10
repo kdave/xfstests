@@ -27,8 +27,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -39,7 +39,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -52,39 +52,40 @@ _supported_os Linux
 _require_test_reflink
 _require_cp_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
-testdir="$TEST_DIR/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original file blocks"
-blksz="$(stat -f "$testdir" -c '%S')"
+blksz="$(stat -f $testdir -c '%S')"
 blks=2000
 margin='15%'
 sz=$((blksz * blks))
-free_blocks0=$(stat -f "$testdir" -c '%f')
+free_blocks0=$(stat -f $testdir -c '%f')
 nr=7
-_pwrite_byte 0x61 0 $sz "$testdir/file1" >> "$seqres.full"
+filesize=$((blksz * nr))
+_pwrite_byte 0x61 0 $sz $testdir/file1 >> $seqres.full
 sync
 
 echo "Create the reflink copies"
 for i in `seq 2 $nr`; do
-	_cp_reflink "$testdir/file1" "$testdir/file.$i"
+	_cp_reflink $testdir/file1 $testdir/file.$i
 done
-_cp_reflink "$testdir/file1" "$testdir/survivor"
+_cp_reflink $testdir/file1 $testdir/survivor
 _test_remount
-free_blocks1=$(stat -f "$testdir" -c '%f')
+free_blocks1=$(stat -f $testdir -c '%f')
 
 echo "Delete most of the files"
-rm -rf "$testdir"/file*
+rm -rf $testdir/file*
 _test_remount
-free_blocks2=$(stat -f "$testdir" -c '%f')
+free_blocks2=$(stat -f $testdir -c '%f')
 
 echo "Delete all the files"
-rm -rf "$testdir"/*
+rm -rf $testdir/*
 _test_remount
-free_blocks3=$(stat -f "$testdir" -c '%f')
+free_blocks3=$(stat -f $testdir -c '%f')
 #echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3
 
 _within_tolerance "free blocks after reflink" $free_blocks1 $((free_blocks0 - blks)) $margin -v

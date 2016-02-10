@@ -20,8 +20,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir1"
+    rm -rf $tmp.* $testdir1
 }
 
 # get standard environment, filters and checks
@@ -46,19 +46,18 @@ _supported_os Linux
 _require_test_reflink
 _require_scratch_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
 testdir1="$TEST_DIR/test-$seq"
-rm -rf "$testdir1"
-mkdir "$testdir1"
+rm -rf $testdir1
+mkdir $testdir1
 
 testdir2=$SCRATCH_MNT/test-$seq
-rm -rf "$testdir2"
-mkdir "$testdir2"
+mkdir $testdir2
 
 echo "Create the original files"
 blksz="$(stat -f $testdir1 -c '%S')"
@@ -67,16 +66,17 @@ margin='7%'
 sz=$((blksz * blks))
 free_blocks0=$(stat -f $testdir1 -c '%f')
 nr=4
-_pwrite_byte 0x61 0 $sz "$testdir1/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $sz "$testdir1/file2" >> "$seqres.full"
-_pwrite_byte 0x61 0 $sz "$testdir2/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $sz "$testdir2/file2" >> "$seqres.full"
-mkdir "$testdir1/dir1"
+filesize=$((blksz * nr))
+_pwrite_byte 0x61 0 $sz $testdir1/file1 >> $seqres.full
+_pwrite_byte 0x61 0 $sz $testdir1/file2 >> $seqres.full
+_pwrite_byte 0x61 0 $sz $testdir2/file1 >> $seqres.full
+_pwrite_byte 0x61 0 $sz $testdir2/file2 >> $seqres.full
+mkdir $testdir1/dir1
 seq 1 $((2 * blksz / 250)) | while read f; do
-	touch "$testdir1/dir1/$f"
+	touch $testdir1/dir1/$f
 done
-mknod "$testdir1/dev1" c 1 3
-mkfifo "$testdir1/fifo1"
+mknod $testdir1/dev1 c 1 3
+mkfifo $testdir1/fifo1
 sync
 
 _filter_enotty() {
@@ -88,38 +88,38 @@ _filter_einval() {
 }
 
 echo "Try cross-device reflink"
-_reflink_range "$testdir1/file1" 0 "$testdir2/file1" 0 $blksz
+_reflink_range $testdir1/file1 0 $testdir2/file1 0 $blksz
 
 echo "Try unaligned reflink"
-_reflink_range "$testdir1/file1" 37 "$testdir1/file1" 59 23
+_reflink_range $testdir1/file1 37 $testdir1/file1 59 23
 
 echo "Try overlapping reflink"
-_reflink_range "$testdir1/file1" 0 "$testdir1/file1" 1 $((blksz * 2))
+_reflink_range $testdir1/file1 0 $testdir1/file1 1 $((blksz * 2))
 
 echo "Try reflink past EOF"
-_reflink_range "$testdir1/file1" $(( (blks + 10) * blksz)) "$testdir1/file1" 0 $blksz
+_reflink_range $testdir1/file1 $(( (blks + 10) * blksz)) $testdir1/file1 0 $blksz
 
 echo "Try to reflink a dir"
-_reflink_range "$testdir1/dir1" 0 "$testdir1/file2" 0 $blksz
+_reflink_range $testdir1/dir1 0 $testdir1/file2 0 $blksz
 
 echo "Try to reflink a device"
-_reflink_range "$testdir1/dev1" 0 "$testdir1/file2" 0 $blksz
+_reflink_range $testdir1/dev1 0 $testdir1/file2 0 $blksz
 
 echo "Try to reflink to a dir"
-_reflink_range "$testdir1/file1" 0 "$testdir1/dir1" 0 $blksz 2>&1 | _filter_test_dir
+_reflink_range $testdir1/file1 0 $testdir1/dir1 0 $blksz 2>&1 | _filter_test_dir
 
 echo "Try to reflink to a device"
-_reflink_range "$testdir1/file1" 0 "$testdir1/dev1" 0 $blksz 2>&1 | _filter_enotty
+_reflink_range $testdir1/file1 0 $testdir1/dev1 0 $blksz 2>&1 | _filter_enotty
 
 echo "Try to reflink to a fifo"
-_reflink_range "$testdir1/file1" 0 "$testdir1/fifo1" 0 $blksz -n 2>&1 | _filter_enotty
+_reflink_range $testdir1/file1 0 $testdir1/fifo1 0 $blksz -n 2>&1 | _filter_enotty
 
 echo "Try to reflink an append-only file"
-_reflink_range "$testdir1/file1" 0 "$testdir1/file3" 0 $blksz -a 2>&1 | _filter_einval
+_reflink_range $testdir1/file1 0 $testdir1/file3 0 $blksz -a 2>&1 | _filter_einval
 
 echo "Reflink two files"
-_reflink_range "$testdir1/file1" 0 "$testdir1/file2" 0 $blksz >> "$seqres.full"
-_reflink_range "$testdir2/file1" 0 "$testdir2/file2" 0 $blksz >> "$seqres.full"
+_reflink_range $testdir1/file1 0 $testdir1/file2 0 $blksz >> $seqres.full
+_reflink_range $testdir2/file1 0 $testdir2/file2 0 $blksz >> $seqres.full
 
 # success, all done
 status=0

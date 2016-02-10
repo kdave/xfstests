@@ -28,8 +28,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -40,7 +40,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-#    rm -rf "$tmp".* "$testdir"
+#    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -54,88 +54,91 @@ _require_scratch_reflink
 _require_cp_reflink
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
-test "$FSTYP" = "btrfs" && _notrun "Can't fragment free space on btrfs."
+test $FSTYP = "btrfs" && _notrun "Can't fragment free space on btrfs."
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 _fragment_freesp()
 {
-	file="$1"
+	file=$1
 
 	# consume nearly all available space (leave ~1MB)
 	avail=`_get_available_space $SCRATCH_MNT`
 	echo "$avail bytes left"
 	filesize=$((avail - 1048576))
-	$XFS_IO_PROG -fc "truncate $filesize" "$file"
+	$XFS_IO_PROG -fc "truncate $filesize" $file
 
 	chunks=20
 	chunksizemb=$((filesize / chunks / 1048576))
 	seq 1 $chunks | while read f; do
 		echo "$((f * chunksizemb)) file size $f / 20"
-		$XFS_IO_PROG -fc "falloc -k $(( (f - 1) * chunksizemb))m ${chunksizemb}m" "$file"
+		$XFS_IO_PROG -fc "falloc -k $(( (f - 1) * chunksizemb))m ${chunksizemb}m" $file
 	done
 
 	chunks=100
 	chunksizemb=$((filesize / chunks / 1048576))
 	seq 80 $chunks | while read f; do
 		echo "$((f * chunksizemb)) file size $f / $chunks"
-		$XFS_IO_PROG -fc "falloc -k $(( (f - 1) * chunksizemb))m ${chunksizemb}m" "$file"
+		$XFS_IO_PROG -fc "falloc -k $(( (f - 1) * chunksizemb))m ${chunksizemb}m" $file
 	done
 
 	filesizemb=$((filesize / 1048576))
-	$XFS_IO_PROG -fc "falloc -k 0 ${filesizemb}m" "$file"
+	$XFS_IO_PROG -fc "falloc -k 0 ${filesizemb}m" $file
 
 	# Try again anyway
 	avail=`_get_available_space $SCRATCH_MNT`
-	$XFS_IO_PROG -fc "pwrite -S 0x65 0 $avail" "${file}.${i}"
+	$XFS_IO_PROG -fc "pwrite -S 0x65 0 $avail" ${file}.${i}
 
 	# Punch out whatever we need
 	seq 1 $((nr * 4)) | while read f; do
-		$XFS_IO_PROG -f -c "fpunch $((f * 2 * blksz)) $blksz" "$file"
+		$XFS_IO_PROG -f -c "fpunch $((f * 2 * blksz)) $blksz" $file
 	done
 }
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf $testdir
+testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
 echo "Create the original files"
 blksz=65536
 nr=1024
-_pwrite_byte 0x61 0 $((blksz * nr)) "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((blksz * nr)) "$testdir/file2" >> "$seqres.full"
+filesize=$((blksz * nr))
+_pwrite_byte 0x61 0 $filesize $testdir/file1 >> $seqres.full
+_pwrite_byte 0x62 0 $filesize $testdir/file2 >> $seqres.full
 seq 0 2 $((nr-1)) | while read f; do
-	_reflink_range "$testdir/file1" $((blksz * f)) "$testdir/file3" $((blksz * f)) $blksz >> "$seqres.full"
-	_pwrite_byte 0x61 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
+	_reflink_range $testdir/file1 $((blksz * f)) $testdir/file3 $((blksz * f)) $blksz >> $seqres.full
+	_pwrite_byte 0x61 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
 done
 seq 1 2 $((nr-1)) | while read f; do
-	_reflink_range "$testdir/file2" $((blksz * f)) "$testdir/file3" $((blksz * f)) $blksz >> "$seqres.full"
-	_pwrite_byte 0x62 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
+	_reflink_range $testdir/file2 $((blksz * f)) $testdir/file3 $((blksz * f)) $blksz >> $seqres.full
+	_pwrite_byte 0x62 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
 done
 _scratch_remount
-_fragment_freesp "$testdir/bigfile" >> "$seqres.full" 2>&1
+_fragment_freesp $testdir/bigfile >> $seqres.full 2>&1
+filesize=$((blksz * nr))
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file2" | _filter_scratch
-md5sum "$testdir/file3" | _filter_scratch
-md5sum "$testdir/file3.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
 
 echo "CoW with multiple extents?"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * nr / 2)) $((blksz * nr / 4)) $((blksz * nr / 2))" "$testdir/file3" >> "$seqres.full"
-_pwrite_byte 0x63 $((blksz * nr / 4)) $((blksz * nr / 2)) "$testdir/file3.chk" >> "$seqres.full"
+cowoff=$((filesize / 4))
+cowsz=$((filesize / 2))
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $cowsz $cowoff $cowsz" $testdir/file3 >> $seqres.full
+_pwrite_byte 0x63 $cowoff $cowsz $testdir/file3.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file2" | _filter_scratch
-md5sum "$testdir/file3" | _filter_scratch
-md5sum "$testdir/file3.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
 
 # success, all done
 status=0

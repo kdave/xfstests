@@ -20,8 +20,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -32,7 +32,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir1"
+    rm -rf $tmp.* $testdir1
 }
 
 # get standard environment, filters and checks
@@ -46,12 +46,12 @@ _supported_os Linux
 _require_test_lsattr
 _require_test_dedupe
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 echo "Format and mount"
 testdir1="$TEST_DIR/test-$seq"
-rm -rf "$testdir1"
-mkdir "$testdir1"
+rm -rf $testdir1
+mkdir $testdir1
 
 echo "Create the original files"
 blksz="$(stat -f $testdir1 -c '%S')"
@@ -60,13 +60,14 @@ margin='7%'
 sz=$((blksz * blks))
 free_blocks0=$(stat -f $testdir1 -c '%f')
 nr=4
-_pwrite_byte 0x61 0 $sz "$testdir1/file1" >> "$seqres.full"
-_pwrite_byte 0x61 0 $sz "$testdir1/file2" >> "$seqres.full"
+filesize=$((blksz * nr))
+_pwrite_byte 0x61 0 $sz $testdir1/file1 >> $seqres.full
+_pwrite_byte 0x61 0 $sz $testdir1/file2 >> $seqres.full
 sync
 
 echo "Try dedupe on immutable files"
 $CHATTR_PROG +i $testdir1/file1 $testdir1/file2
-_dedupe_range "$testdir1/file1" 0 "$testdir1/file2" 0 $blksz 2>&1 | _filter_test_dir
+_dedupe_range $testdir1/file1 0 $testdir1/file2 0 $blksz 2>&1 | _filter_test_dir
 $CHATTR_PROG -i $testdir1/file1 $testdir1/file2
 
 # success, all done

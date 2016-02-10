@@ -24,8 +24,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -36,7 +36,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -49,50 +49,49 @@ _supported_os Linux
 _require_scratch_reflink
 _require_xfs_io_command "falloc"
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 pagesz=$(getconf PAGE_SIZE)
 blksz=$((pagesz / 4))
 
 echo "Format and mount"
-_scratch_mkfs_blocksized $blksz > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs_blocksized $blksz > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf $testdir
+testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
 real_blksz=$(stat -f -c '%S' $testdir)
-test "$real_blksz" != "$blksz" && _notrun "Failed to format with small blocksize."
+test $real_blksz != $blksz && _notrun "Failed to format with small blocksize."
 
 echo "Create the original files"
-_pwrite_byte 0x61 0 $pagesz "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $pagesz $testdir/file1 >> $seqres.full
 
-"$XFS_IO_PROG" -f -c "truncate $pagesz" "$testdir/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "truncate $pagesz" "$testdir/file2.chk" >> "$seqres.full"
+$XFS_IO_PROG -f -c "truncate $pagesz" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $pagesz" $testdir/file2.chk >> $seqres.full
 
-_reflink_range "$testdir/file1" $blksz "$testdir/file2" $((blksz * 2)) $blksz >> "$seqres.full"
-_pwrite_byte 0x61 $((blksz * 2)) $blksz "$testdir/file2.chk" >> "$seqres.full"
+_reflink_range $testdir/file1 $blksz $testdir/file2 $((blksz * 2)) $blksz >> $seqres.full
+_pwrite_byte 0x61 $((blksz * 2)) $blksz $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-! cmp -s "$testdir/file1" "$testdir/file2" || _fail "file1 and file2 don't match."
-cmp -s "$testdir/file2" "$testdir/file2.chk" || _fail "file2 and file2.chk don't match."
+! cmp -s $testdir/file1 $testdir/file2 || _fail "file1 and file2 don't match."
+cmp -s $testdir/file2 $testdir/file2.chk || _fail "file2 and file2.chk don't match."
 
 echo "CoW and unmount"
-_pwrite_byte 0x61 $blksz $blksz "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x61 $blksz $blksz "$testdir/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x61 $blksz $blksz $testdir/file2 >> $seqres.full
+_pwrite_byte 0x61 $blksz $blksz $testdir/file2.chk >> $seqres.full
 
-_pwrite_byte 0x61 $((blksz * 3)) $blksz "$testdir/file2" >> "$seqres.full"
-_pwrite_byte 0x61 $((blksz * 3)) $blksz "$testdir/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x61 $((blksz * 3)) $blksz $testdir/file2 >> $seqres.full
+_pwrite_byte 0x61 $((blksz * 3)) $blksz $testdir/file2.chk >> $seqres.full
 
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $((blksz + 17)) $((blksz * 3 - 34))" "$testdir/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 $((blksz + 17)) $((blksz * 3 - 34))" "$testdir/file2.chk" >> "$seqres.full"
+$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz + 17)) $((blksz * 3 - 34))" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz + 17)) $((blksz * 3 - 34))" $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-! cmp -s "$testdir/file1" "$testdir/file2" || _fail "file1 and file2 don't match."
-cmp -s "$testdir/file2" "$testdir/file2.chk" || _fail "file2 and file2.chk don't match."
+! cmp -s $testdir/file1 $testdir/file2 || _fail "file1 and file2 don't match."
+cmp -s $testdir/file2 $testdir/file2.chk || _fail "file2 and file2.chk don't match."
 
 # success, all done
 status=0

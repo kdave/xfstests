@@ -22,8 +22,8 @@
 #-----------------------------------------------------------------------
 #
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 7 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".*
+    rm -rf $tmp.*
     wait
 }
 
@@ -48,28 +48,27 @@ _supported_os Linux
 _require_scratch_reflink
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
 
 loops=1024
 nr_loops=$((loops - 1))
 blksz=65536
 
 echo "Initialize files"
-echo > "$seqres.full"
-_pwrite_byte 0x61 0 $((loops * blksz)) "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((loops * blksz)) "$testdir/file2" >> "$seqres.full"
+echo > $seqres.full
+_pwrite_byte 0x61 0 $((loops * blksz)) $testdir/file1 >> $seqres.full
+_pwrite_byte 0x62 0 $((loops * blksz)) $testdir/file2 >> $seqres.full
 _scratch_remount
 
 # Direct I/O overwriter...
 overwrite() {
-	while [ ! -e "$testdir/finished" ]; do
+	while [ ! -e $testdir/finished ]; do
 		seq $nr_loops -1 0 | while read i; do
-			_pwrite_byte 0x63 $((i * blksz)) $blksz "$testdir/file2" >> "$seqres.full"
+			_pwrite_byte 0x63 $((i * blksz)) $blksz $testdir/file2 >> $seqres.full
 		done
 	done
 }
@@ -78,12 +77,12 @@ echo "Reflink and write the target"
 overwrite &
 seq 1 10 | while read j; do
 	seq 0 $nr_loops | while read i; do
-		_reflink_range  "$testdir/file1" $((i * blksz)) \
-				"$testdir/file2" $((i * blksz)) $blksz >> "$seqres.full"
+		_reflink_range  $testdir/file1 $((i * blksz)) \
+				$testdir/file2 $((i * blksz)) $blksz >> $seqres.full
 		[ $? -ne 0 ] && exit
 	done
 done
-touch "$testdir/finished"
+touch $testdir/finished
 wait
 
 # success, all done

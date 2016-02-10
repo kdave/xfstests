@@ -20,7 +20,7 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
+seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
@@ -32,8 +32,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    umount "$SCRATCH_MNT" > /dev/null 2>&1
-    rm -rf "$tmp".* "$testdir" "$metadump_file"
+    umount $SCRATCH_MNT > /dev/null 2>&1
+    rm -rf $tmp.* $testdir $metadump_file
 }
 
 # get standard environment, filters and checks
@@ -48,24 +48,23 @@ _require_realtime
 _require_scratch_reflink
 _require_cp_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 echo "Format and mount scratch device"
-_scratch_mkfs >> "$seqres.full"
+_scratch_mkfs >> $seqres.full
 _scratch_mount
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
 
 echo "Create the original file blocks"
 blksz=65536
-$XFS_IO_PROG -R -f -c "truncate $blksz" "$testdir/file1"
+$XFS_IO_PROG -R -f -c "truncate $blksz" $testdir/file1
 
 echo "Reflink every block"
-_cp_reflink "$testdir/file1" "$testdir/file2" 2>&1 | _filter_scratch
+_cp_reflink $testdir/file1 $testdir/file2 2>&1 | _filter_scratch
 
-test -s "$testdir/file2" && _fail "Should not be able to reflink a realtime file."
+test -s $testdir/file2 && _fail "Should not be able to reflink a realtime file."
 
 # success, all done
 status=0

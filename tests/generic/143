@@ -25,8 +25,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -37,7 +37,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -50,41 +50,42 @@ _supported_os Linux
 _require_test_reflink
 _require_cp_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
-testdir="$TEST_DIR/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original file blocks"
 blksz=65536
 nr=9
-_pwrite_byte 0x61 0 $((blksz * 256)) "$testdir/file1" >> "$seqres.full"
+filesize=$((blksz * nr))
+_pwrite_byte 0x61 0 $((blksz * 256)) $testdir/file1 >> $seqres.full
 _test_remount
 
-md5sum "$testdir/file1" | _filter_test_dir
-csum="$(_md5_checksum "$testdir/file1")"
+md5sum $testdir/file1 | _filter_test_dir
+csum=$(_md5_checksum $testdir/file1)
 
 echo "Create the reflink copies"
 seq 2 $nr | while read i; do
-	_cp_reflink "$testdir/file1" "$testdir/file$i"
+	_cp_reflink $testdir/file1 $testdir/file$i
 done
 _test_remount
 
 echo "Rewrite the copies"
 seq 2 $nr | while read i; do
-	_pwrite_byte 0x62 0 $((blksz * 256)) "$testdir/file$i" -d >> "$seqres.full"
+	_pwrite_byte 0x62 0 $((blksz * 256)) $testdir/file$i -d >> $seqres.full
 done
 _test_remount
 
 echo "Examine original file"
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
 
-mod_csum="$(_md5_checksum "$testdir/file2")"
-new_csum="$(_md5_checksum "$testdir/file1")"
-test "${csum}" != "${mod_csum}" || echo "checksums do not match"
-test "${csum}" = "${new_csum}" || echo "checksums do not match"
+mod_csum=$(_md5_checksum $testdir/file2)
+new_csum=$(_md5_checksum $testdir/file1)
+test ${csum} != ${mod_csum} || echo "checksums do not match"
+test ${csum} = ${new_csum} || echo "checksums do not match"
 
 # success, all done
 status=0

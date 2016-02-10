@@ -23,8 +23,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -49,47 +49,47 @@ _require_test_reflink
 _require_cp_reflink
 _require_xfs_io_command "fpunch"
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
-testdir="$TEST_DIR/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
 blksz=65536
-_pwrite_byte 0x61 0 $((blksz * 3)) "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((blksz * 3)) $testdir/file1 >> $seqres.full
 
-_cp_reflink "$testdir/file1" "$testdir/file2"
+_cp_reflink $testdir/file1 $testdir/file2
 
-_pwrite_byte 0x61 0 $((blksz * 3)) "$testdir/file2.chk" >> "$seqres.full"
-_pwrite_byte 0x00 $((blksz - 17)) $((blksz + 17)) "$testdir/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x61 0 $((blksz * 3)) $testdir/file2.chk >> $seqres.full
+_pwrite_byte 0x00 $((blksz - 17)) $((blksz + 17)) $testdir/file2.chk >> $seqres.full
 _test_remount
 
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file2.chk" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
 
-c1="$(_md5_checksum "$testdir/file1")"
-c2="$(_md5_checksum "$testdir/file2")"
+c1=$(_md5_checksum $testdir/file1)
+c2=$(_md5_checksum $testdir/file2)
 
-test "${c1}" = "${c2}" || echo "file1 and file2 should match"
+test ${c1} = ${c2} || echo "file1 and file2 should match"
 
 echo "fpunch files"
-"$XFS_IO_PROG" -f -c "fpunch $((blksz - 17)) $((blksz + 17))" "$testdir/file2"
+$XFS_IO_PROG -f -c "fpunch $((blksz - 17)) $((blksz + 17))" $testdir/file2
 _test_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file2.chk" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
 
-c1="$(_md5_checksum "$testdir/file1")"
-c2="$(_md5_checksum "$testdir/file2")"
+c1=$(_md5_checksum $testdir/file1)
+c2=$(_md5_checksum $testdir/file2)
 
-test "${c1}" != "${c2}" || echo "file1 and file2 should not match"
+test ${c1} != ${c2} || echo "file1 and file2 should not match"
 
 echo "Compare against check files"
-cmp -s "$testdir/file2" "$testdir/file2.chk" || echo "file2 and file2.chk do not match"
+cmp -s $testdir/file2 $testdir/file2.chk || echo "file2 and file2.chk do not match"
 
 # success, all done
 status=0

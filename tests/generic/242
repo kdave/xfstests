@@ -23,8 +23,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -35,7 +35,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -48,47 +48,48 @@ _supported_os Linux
 _require_scratch_reflink
 _require_cp_reflink
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf $testdir
+testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
 blksz=65536
 nr=6400
-bsz=1280
+filesize=$((blksz * nr))
+bufnr=1280
+bufsize=$((blksz * bufnr))
 
-free_blocks=$(stat -f -c '%a' "$testdir")
-real_blksz=$(stat -f -c '%S' "$testdir")
-space_needed=$(((blksz * nr * 3) * 5 / 4))
+free_blocks=$(stat -f -c '%a' $testdir)
+real_blksz=$(stat -f -c '%S' $testdir)
+space_needed=$(((filesize * 3) * 5 / 4))
 space_avail=$((free_blocks * real_blksz))
 test $space_needed -gt $space_avail && _notrun "Not enough space. $space_avail < $space_needed"
 
 echo "Create the original files"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file1" >> "$seqres.full"
-_cp_reflink "$testdir/file1" "$testdir/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2.chk" >> "$seqres.full"
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $bufsize 0 $filesize" $testdir/file1 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $bufsize 0 $filesize" $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file2" | _filter_scratch
-md5sum "$testdir/file2.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file2.chk | _filter_scratch
 
 echo "CoW and unmount"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2" >> "$seqres.full"
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * bsz)) 0 $((blksz * nr))" "$testdir/file2.chk" >> "$seqres.full"
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $bufsize 0 $filesize" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $bufsize 0 $filesize" $testdir/file2.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file2" | _filter_scratch
-md5sum "$testdir/file2.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file2 | _filter_scratch
+md5sum $testdir/file2.chk | _filter_scratch
 
 # success, all done
 status=0

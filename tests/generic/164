@@ -22,7 +22,7 @@
 #-----------------------------------------------------------------------
 #
 
-seq=`basename "$0"`
+seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 7 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".*
+    rm -rf $tmp.*
     wait
 }
 
@@ -49,22 +49,21 @@ _require_scratch_reflink
 _require_cp_reflink
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
 
 loops=512
 nr_loops=$((loops - 1))
 blksz=65536
 
 echo "Initialize files"
-echo > "$seqres.full"
-_pwrite_byte 0x61 0 $((loops * blksz)) "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((loops * blksz)) "$testdir/file2" >> "$seqres.full"
-_cp_reflink "$testdir/file1" "$testdir/file3"
+echo > $seqres.full
+_pwrite_byte 0x61 0 $((loops * blksz)) $testdir/file1 >> $seqres.full
+_pwrite_byte 0x62 0 $((loops * blksz)) $testdir/file2 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file3
 _scratch_remount
 
 fbytes() {
@@ -72,8 +71,8 @@ fbytes() {
 }
 
 reader() {
-	while [ ! -e "$testdir/finished" ]; do
-		_read_range "$testdir/file3" 0 $((loops * blksz)) | fbytes
+	while [ ! -e $testdir/finished ]; do
+		_read_range $testdir/file3 0 $((loops * blksz)) | fbytes
 	done
 }
 
@@ -81,18 +80,18 @@ echo "Reflink and reread the files!"
 reader &
 for i in `seq 1 2`; do
 	seq $nr_loops -1 0 | while read i; do
-		_reflink_range  "$testdir/file1" $((i * blksz)) \
-				"$testdir/file3" $((i * blksz)) $blksz >> "$seqres.full"
+		_reflink_range  $testdir/file1 $((i * blksz)) \
+				$testdir/file3 $((i * blksz)) $blksz >> $seqres.full
 		[ $? -ne 0 ] && break
 	done
 	seq $nr_loops -1 0 | while read i; do
-		_reflink_range  "$testdir/file2" $((i * blksz)) \
-				"$testdir/file3" $((i * blksz)) $blksz >> "$seqres.full"
+		_reflink_range  $testdir/file2 $((i * blksz)) \
+				$testdir/file3 $((i * blksz)) $blksz >> $seqres.full
 		[ $? -ne 0 ] && break
 	done
 done
 echo "Finished reflinking"
-touch "$testdir/finished"
+touch $testdir/finished
 wait
 
 # success, all done

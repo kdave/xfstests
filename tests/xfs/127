@@ -21,8 +21,8 @@
 #-----------------------------------------------------------------------
 #
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -33,7 +33,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -f "$tmp".*
+    rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -48,27 +48,26 @@ _require_scratch_reflink
 _require_cp_reflink
 
 echo "Format and mount"
-_scratch_mkfs -d size=$((2 * 4096 * 4096)) -l size=4194304 > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs -d size=$((2 * 4096 * 4096)) -l size=4194304 > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
 
 echo "Create the original file and reflink to copy1, copy2"
-blksz="$(stat -f "$testdir" -c '%S')"
-_pwrite_byte 0x61 0 $((blksz * 14 + 71)) "$testdir/original" >> "$seqres.full"
-_cp_reflink "$testdir/original" "$testdir/copy1"
-_cp_reflink "$testdir/copy1" "$testdir/copy2"
+blksz="$(stat -f $testdir -c '%S')"
+_pwrite_byte 0x61 0 $((blksz * 14 + 71)) $testdir/original >> $seqres.full
+_cp_reflink $testdir/original $testdir/copy1
+_cp_reflink $testdir/copy1 $testdir/copy2
 
 echo "Grow fs"
-"$XFS_GROWFS_PROG" "$SCRATCH_MNT" 2>&1 |  _filter_growfs >> "$seqres.full"
+$XFS_GROWFS_PROG $SCRATCH_MNT 2>&1 |  _filter_growfs >> $seqres.full
 _scratch_remount
 
 echo "Create more reflink copies"
-_cp_reflink "$testdir/original" "$testdir/copy3"
+_cp_reflink $testdir/original $testdir/copy3
 
-xfs_info "$SCRATCH_MNT" >> "$seqres.full"
+xfs_info $SCRATCH_MNT >> $seqres.full
 
 # success, all done
 status=0

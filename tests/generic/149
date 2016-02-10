@@ -24,8 +24,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -36,7 +36,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -50,86 +50,86 @@ _require_test_reflink
 _require_cp_reflink
 _require_xfs_io_command "fzero"
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
-testdir="$TEST_DIR/test-$seq"
-rm -rf "$testdir"
-mkdir "$testdir"
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
 
 echo "Create the original files"
 blksz=65536
-_pwrite_byte 0x61 0 $blksz "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x62 $blksz $blksz "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x63 $((blksz * 2)) $blksz "$testdir/file1" >> "$seqres.full"
+_pwrite_byte 0x61 0 $blksz $testdir/file1 >> $seqres.full
+_pwrite_byte 0x62 $blksz $blksz $testdir/file1 >> $seqres.full
+_pwrite_byte 0x63 $((blksz * 2)) $blksz $testdir/file1 >> $seqres.full
 
-_cp_reflink "$testdir/file1" "$testdir/file2"
-_cp_reflink "$testdir/file1" "$testdir/file3"
-_cp_reflink "$testdir/file1" "$testdir/file4"
+_cp_reflink $testdir/file1 $testdir/file2
+_cp_reflink $testdir/file1 $testdir/file3
+_cp_reflink $testdir/file1 $testdir/file4
 
-_pwrite_byte 0x00 0 $blksz "$testdir/file2.chk" >> "$seqres.full"
-_pwrite_byte 0x62 $blksz $blksz "$testdir/file2.chk" >> "$seqres.full"
-_pwrite_byte 0x63 $((blksz * 2)) $blksz "$testdir/file2.chk" >> "$seqres.full"
+_pwrite_byte 0x00 0 $blksz $testdir/file2.chk >> $seqres.full
+_pwrite_byte 0x62 $blksz $blksz $testdir/file2.chk >> $seqres.full
+_pwrite_byte 0x63 $((blksz * 2)) $blksz $testdir/file2.chk >> $seqres.full
 
-_pwrite_byte 0x61 0 $blksz "$testdir/file3.chk" >> "$seqres.full"
-_pwrite_byte 0x00 $blksz $blksz "$testdir/file3.chk" >> "$seqres.full"
-_pwrite_byte 0x63 $((blksz * 2)) $blksz "$testdir/file3.chk" >> "$seqres.full"
+_pwrite_byte 0x61 0 $blksz $testdir/file3.chk >> $seqres.full
+_pwrite_byte 0x00 $blksz $blksz $testdir/file3.chk >> $seqres.full
+_pwrite_byte 0x63 $((blksz * 2)) $blksz $testdir/file3.chk >> $seqres.full
 
-_pwrite_byte 0x61 0 $blksz "$testdir/file4.chk" >> "$seqres.full"
-_pwrite_byte 0x62 $blksz $blksz "$testdir/file4.chk" >> "$seqres.full"
-_pwrite_byte 0x00 $((blksz * 2)) $blksz "$testdir/file4.chk" >> "$seqres.full"
+_pwrite_byte 0x61 0 $blksz $testdir/file4.chk >> $seqres.full
+_pwrite_byte 0x62 $blksz $blksz $testdir/file4.chk >> $seqres.full
+_pwrite_byte 0x00 $((blksz * 2)) $blksz $testdir/file4.chk >> $seqres.full
 _test_remount
 
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file3" | _filter_test_dir
-md5sum "$testdir/file4" | _filter_test_dir
-md5sum "$testdir/file2.chk" | _filter_test_dir
-md5sum "$testdir/file3.chk" | _filter_test_dir
-md5sum "$testdir/file4.chk" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file3 | _filter_test_dir
+md5sum $testdir/file4 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
+md5sum $testdir/file3.chk | _filter_test_dir
+md5sum $testdir/file4.chk | _filter_test_dir
 
-c1="$(_md5_checksum "$testdir/file1")"
-c2="$(_md5_checksum "$testdir/file2")"
-c3="$(_md5_checksum "$testdir/file3")"
-c4="$(_md5_checksum "$testdir/file4")"
+c1=$(_md5_checksum $testdir/file1)
+c2=$(_md5_checksum $testdir/file2)
+c3=$(_md5_checksum $testdir/file3)
+c4=$(_md5_checksum $testdir/file4)
 
-test "${c1}" = "${c2}" || echo "file1 and file2 should match"
-test "${c1}" = "${c3}" || echo "file1 and file3 should match"
-test "${c1}" = "${c4}" || echo "file1 and file4 should match"
-test "${c2}" = "${c3}" || echo "file2 and file3 should match"
-test "${c2}" = "${c4}" || echo "file2 and file4 should match"
-test "${c3}" = "${c4}" || echo "file3 and file4 should match"
+test ${c1} = ${c2} || echo "file1 and file2 should match"
+test ${c1} = ${c3} || echo "file1 and file3 should match"
+test ${c1} = ${c4} || echo "file1 and file4 should match"
+test ${c2} = ${c3} || echo "file2 and file3 should match"
+test ${c2} = ${c4} || echo "file2 and file4 should match"
+test ${c3} = ${c4} || echo "file3 and file4 should match"
 
 echo "fzero files"
-"$XFS_IO_PROG" -f -c "fzero 0 $blksz" "$testdir/file2"
-"$XFS_IO_PROG" -f -c "fzero $blksz $blksz" "$testdir/file3"
-"$XFS_IO_PROG" -f -c "fzero $((blksz * 2)) $blksz" "$testdir/file4"
+$XFS_IO_PROG -f -c "fzero 0 $blksz" $testdir/file2
+$XFS_IO_PROG -f -c "fzero $blksz $blksz" $testdir/file3
+$XFS_IO_PROG -f -c "fzero $((blksz * 2)) $blksz" $testdir/file4
 _test_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_test_dir
-md5sum "$testdir/file2" | _filter_test_dir
-md5sum "$testdir/file3" | _filter_test_dir
-md5sum "$testdir/file4" | _filter_test_dir
-md5sum "$testdir/file2.chk" | _filter_test_dir
-md5sum "$testdir/file3.chk" | _filter_test_dir
-md5sum "$testdir/file4.chk" | _filter_test_dir
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+md5sum $testdir/file3 | _filter_test_dir
+md5sum $testdir/file4 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
+md5sum $testdir/file3.chk | _filter_test_dir
+md5sum $testdir/file4.chk | _filter_test_dir
 
-c1="$(_md5_checksum "$testdir/file1")"
-c2="$(_md5_checksum "$testdir/file2")"
-c3="$(_md5_checksum "$testdir/file3")"
-c4="$(_md5_checksum "$testdir/file4")"
+c1=$(_md5_checksum $testdir/file1)
+c2=$(_md5_checksum $testdir/file2)
+c3=$(_md5_checksum $testdir/file3)
+c4=$(_md5_checksum $testdir/file4)
 
-test "${c1}" != "${c2}" || echo "file1 and file2 should not match"
-test "${c1}" != "${c3}" || echo "file1 and file3 should not match"
-test "${c1}" != "${c4}" || echo "file1 and file4 should not match"
-test "${c2}" != "${c3}" || echo "file2 and file3 should not match"
-test "${c2}" != "${c4}" || echo "file2 and file4 should not match"
-test "${c3}" != "${c4}" || echo "file3 and file4 should not match"
+test ${c1} != ${c2} || echo "file1 and file2 should not match"
+test ${c1} != ${c3} || echo "file1 and file3 should not match"
+test ${c1} != ${c4} || echo "file1 and file4 should not match"
+test ${c2} != ${c3} || echo "file2 and file3 should not match"
+test ${c2} != ${c4} || echo "file2 and file4 should not match"
+test ${c3} != ${c4} || echo "file3 and file4 should not match"
 
 echo "Compare against check files"
-cmp -s "$testdir/file2" "$testdir/file2.chk" || echo "file2 and file2.chk do not match"
-cmp -s "$testdir/file3" "$testdir/file3.chk" || echo "file3 and file3.chk do not match"
-cmp -s "$testdir/file4" "$testdir/file4.chk" || echo "file4 and file4.chk do not match"
+cmp -s $testdir/file2 $testdir/file2.chk || echo "file2 and file2.chk do not match"
+cmp -s $testdir/file3 $testdir/file3.chk || echo "file3 and file3.chk do not match"
+cmp -s $testdir/file4 $testdir/file4.chk || echo "file4 and file4.chk do not match"
 
 # success, all done
 status=0

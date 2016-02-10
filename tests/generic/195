@@ -26,8 +26,8 @@
 # Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #-----------------------------------------------------------------------
 
-seq=`basename "$0"`
-seqres="$RESULT_DIR/$seq"
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
 here=`pwd`
@@ -38,7 +38,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    rm -rf "$tmp".* "$testdir"
+    rm -rf $tmp.* $testdir
 }
 
 # get standard environment, filters and checks
@@ -51,37 +51,39 @@ _supported_os Linux
 _require_scratch_reflink
 _require_xfs_io_command "falloc"
 
-rm -f "$seqres.full"
+rm -f $seqres.full
 
 echo "Format and mount"
-_scratch_mkfs > "$seqres.full" 2>&1
-_scratch_mount >> "$seqres.full" 2>&1
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
 
-testdir="$SCRATCH_MNT/test-$seq"
-rm -rf $testdir
+testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
 echo "Create the original files"
 blksz=65536
 nr=64
+filesize=$((blksz * nr))
 _weave_reflink_holes $blksz $nr $testdir/file1 $testdir/file3 >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file3" | _filter_scratch
-md5sum "$testdir/file3.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
 
 echo "CoW across the transition"
+cowoff=$((filesize / 4))
+cowsz=$((filesize / 2))
 _weave_reflink_holes_delalloc $blksz $nr $testdir/file3 >> $seqres.full
-"$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * nr / 2)) $((blksz * nr / 4)) $((blksz * nr / 2))" "$testdir/file3" >> "$seqres.full"
-_pwrite_byte 0x63 $((blksz * nr / 4)) $((blksz * nr / 2)) "$testdir/file3.chk" >> "$seqres.full"
+$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $cowsz $cowoff $cowsz" $testdir/file3 >> $seqres.full
+_pwrite_byte 0x63 $cowoff $cowsz $testdir/file3.chk >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
-md5sum "$testdir/file1" | _filter_scratch
-md5sum "$testdir/file3" | _filter_scratch
-md5sum "$testdir/file3.chk" | _filter_scratch
+md5sum $testdir/file1 | _filter_scratch
+md5sum $testdir/file3 | _filter_scratch
+md5sum $testdir/file3.chk | _filter_scratch
 
 # success, all done
 status=0
