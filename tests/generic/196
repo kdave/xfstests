@@ -63,13 +63,7 @@ mkdir $testdir
 echo "Create the original files"
 blksz=65536
 nr=64
-_pwrite_byte 0x61 0 $((blksz * nr)) "$testdir/file1" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((blksz * nr)) "$testdir/file3" >> "$seqres.full"
-_pwrite_byte 0x62 0 $((blksz * nr)) "$testdir/file3.chk" >> "$seqres.full"
-seq 0 2 $((nr-1)) | while read f; do
-	_reflink_range "$testdir/file1" $((blksz * f)) "$testdir/file3" $((blksz * f)) $blksz >> "$seqres.full"
-	_pwrite_byte 0x61 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
-done
+_weave_reflink_regular $blksz $nr $testdir/file1 $testdir/file3 >> $seqres.full
 _scratch_remount
 
 echo "Compare files"

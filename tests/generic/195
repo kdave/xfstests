@@ -64,13 +64,7 @@ mkdir $testdir
 echo "Create the original files"
 blksz=65536
 nr=64
-_pwrite_byte 0x61 0 $((blksz * nr)) "$testdir/file1" >> "$seqres.full"
-$XFS_IO_PROG -f -c "truncate $((blksz * nr))" "$testdir/file3" >> "$seqres.full"
-_pwrite_byte 0x00 0 $((blksz * nr)) "$testdir/file3.chk" >> "$seqres.full"
-seq 0 2 $((nr-1)) | while read f; do
-	_reflink_range "$testdir/file1" $((blksz * f)) "$testdir/file3" $((blksz * f)) $blksz >> "$seqres.full"
-	_pwrite_byte 0x61 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
-done
+_weave_reflink_holes $blksz $nr $testdir/file1 $testdir/file3 >> $seqres.full
 _scratch_remount
 
 echo "Compare files"
@@ -79,10 +73,7 @@ md5sum "$testdir/file3" | _filter_scratch
 md5sum "$testdir/file3.chk" | _filter_scratch
 
 echo "CoW across the transition"
-seq 1 2 $((nr-1)) | while read f; do
-	_pwrite_byte 0x62 $((blksz * f)) $blksz "$testdir/file3" >> "$seqres.full"
-	_pwrite_byte 0x62 $((blksz * f)) $blksz "$testdir/file3.chk" >> "$seqres.full"
-done
+_weave_reflink_holes_delalloc $blksz $nr $testdir/file3 >> $seqres.full
 "$XFS_IO_PROG" -f -c "pwrite -S 0x63 -b $((blksz * nr / 2)) $((blksz * nr / 4)) $((blksz * nr / 2))" "$testdir/file3" >> "$seqres.full"
 _pwrite_byte 0x63 $((blksz * nr / 4)) $((blksz * nr / 2)) "$testdir/file3.chk" >> "$seqres.full"
 _scratch_remount
