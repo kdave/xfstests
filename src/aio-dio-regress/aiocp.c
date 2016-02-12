@@ -190,7 +190,7 @@ static void wr_done(io_context_t ctx, struct iocb *iocb, long res, long res2)
 	--busy;
 	free_iocb(iocb);
 	if (debug)
-		write(2, "w", 1);
+		fprintf(stderr, "w");
 }
 
 /*
@@ -225,7 +225,7 @@ static void rd_done(io_context_t ctx, struct iocb *iocb, long res, long res2)
 			io_error("io_submit write", res);
 	}
 	if (debug)
-		write(2, "r", 1);
+		fprintf(stderr, "r");
 	if (debug > 1)
 		printf("%d", iosize);
 }
@@ -404,7 +404,6 @@ int main(int argc, char *const *argv)
 	memset(&myctx, 0, sizeof(myctx));
 	io_queue_init(aio_maxio, &myctx);
 	tocopy = howmany(length, aio_blksize);
-printf("tocopy=%d len=%d blk=%d\n", tocopy, length, aio_blksize);
 	if (init_iocb(aio_maxio, aio_blksize) < 0) {
 		fprintf(stderr, "Error allocating the i/o buffers\n");
 		exit(1);
