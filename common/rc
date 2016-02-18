@@ -1852,12 +1852,13 @@ _user_do()
 
 _require_xfs_io_command()
 {
-	if [ $# -ne 1 ]
+	if [ -z "$1" ]
 	then
-		echo "Usage: _require_xfs_io_command command" 1>&2
+		echo "Usage: _require_xfs_io_command command [switch]" 1>&2
 		exit 1
 	fi
 	command=$1
+	param=$2
 
 	testfile=$TEST_DIR/$$.xfs_io
 	case $command in
@@ -1887,6 +1888,10 @@ _require_xfs_io_command()
 		_notrun "xfs_io $command support is missing"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs?)"
+
+	test -z "$param" && return
+	$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \
+		_notrun "xfs_io $command doesn't support $param"
 }
 
 # check that xfs_db supports a specific command
