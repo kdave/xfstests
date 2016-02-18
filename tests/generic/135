@@ -41,19 +41,8 @@ _supported_os Linux IRIX
 
 _require_odirect
 _require_scratch
-_scratch_mkfs >/dev/null 2>&1
-
-_umount_mount()
-{
-    CWD=`pwd`
-    cd /
-    # pipe error into /dev/null, in case not mounted (after _require_scratch)
-    _scratch_unmount 2>/dev/null
-    _scratch_mount
-    cd "$CWD"
-}
-
-_umount_mount
+_scratch_mkfs >/dev/null
+_scratch_mount
 
 cd $SCRATCH_MNT
 
@@ -71,7 +60,9 @@ $XFS_IO_PROG -f -c 'pwrite -b 4k -S 0x78 0 4k' trunc_file > /dev/null
 $XFS_IO_PROG -f -c 'truncate 2k' trunc_file > /dev/null
 $XFS_IO_PROG -c 'pwrite 1k 0 1k' trunc_file > /dev/null
 
-_umount_mount
+pushd / > /dev/null
+_scratch_cycle_mount
+popd > /dev/null
 
 # check file size and contents
 od -Ad -x async_file

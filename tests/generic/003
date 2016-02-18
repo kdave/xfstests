@@ -107,9 +107,8 @@ file1_stat_after_second_access=`_stat $TPATH/dir1/file1`
 _compare_stat_times NNN "$file1_stat_after_first_access" \
 	"$file1_stat_after_second_access" "after accessing file1 second time"
 
-# Remounting with nodiratime option
-_scratch_unmount
-_scratch_mount "-o nodiratime"
+# Mounting with nodiratime option
+_scratch_cycle_mount "nodiratime"
 file1_stat_after_remount=`_stat $TPATH/dir1/file1`
 _compare_stat_times NNN "$file1_stat_after_second_access" \
 	"$file1_stat_after_remount" "for file1 after remount"
@@ -134,9 +133,8 @@ dir2_stat_after_file_access=`_stat $TPATH/dir2`
 _compare_stat_times NNN "$dir2_stat_after_file_creation" \
 	"$dir2_stat_after_file_access" "for dir2 after file access"
 
-# Remounting with noatime option, creating a file and accessing it
-_scratch_unmount
-_scratch_mount "-o noatime"
+# Mounting with noatime option, creating a file and accessing it
+_scratch_cycle_mount "noatime"
 echo "ccc" > $TPATH/dir2/file3
 file3_stat_before_first_access=`_stat $TPATH/dir2/file3`
 sleep 1
@@ -158,10 +156,9 @@ file1_stat_after_change=`_stat $TPATH/dir1/file1_renamed`
 _compare_stat_times NNY "$file1_stat_after_modify" \
 	"$file1_stat_after_change" "after changing file1"
 
-# Remounting with strictatime option and
+# Mounting with strictatime option and
 # accessing a previously created file twice
-_scratch_unmount
-_scratch_mount "-o strictatime"
+_scratch_cycle_mount "strictatime"
 cat $TPATH/dir2/file3 > /dev/null
 file3_stat_after_second_access=`_stat $TPATH/dir2/file3`
 _compare_stat_times YNN "$file3_stat_after_first_access" \
@@ -189,13 +186,12 @@ if [ "$FSTYP" = "btrfs" ]; then
 		"$file3_stat_readonly_after_access" "for file in readonly subvol"
 fi
 
-# Remounting read-only. Access time should never be updated, despite the
+# Mounting read-only. Access time should never be updated, despite the
 # strictatime mount option.
 sleep 1
 dir2_stat_before_ro_mount=`_stat $TPATH/dir2`
 file3_stat_before_ro_mount=`_stat $TPATH/dir2/file3`
-_scratch_unmount
-_scratch_mount "-o ro,strictatime"
+_scratch_cycle_mount "ro,strictatime"
 ls $TPATH/dir2 > /dev/null
 cat $TPATH/dir2/file3 > /dev/null
 dir2_stat_after_ro_mount=`_stat $TPATH/dir2`

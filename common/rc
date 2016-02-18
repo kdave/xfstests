@@ -329,10 +329,28 @@ _scratch_unmount()
 	esac
 }
 
+_scratch_remount()
+{
+    local opts="$1"
+
+    if test -n "$opts"; then
+	mount -o "remount,$opts" $SCRATCH_MNT
+    fi
+}
+
 _scratch_cycle_mount()
 {
+    local opts="$1"
+
+    if [ "$FSTYP" = tmpfs ]; then
+	_scratch_remount "$opts"
+	return
+    fi
+    if test -n "$opts"; then
+	opts="-o $opts"
+    fi
     _scratch_unmount
-    _scratch_mount
+    _scratch_mount "$opts"
 }
 
 _test_mount()
@@ -356,6 +374,9 @@ _test_unmount()
 
 _test_cycle_mount()
 {
+    if [ "$FSTYP" = tmpfs ]; then
+	return
+    fi
     _test_unmount
     _test_mount
 }
