@@ -72,32 +72,32 @@ free_blocks0=$(stat -f $testdir -c '%f')
 nr=4
 filesize=$((blksz * nr))
 _pwrite_byte 0x61 0 $sz $testdir/file1 >> $seqres.full
-_test_remount
+_test_cycle_mount
 
 echo "Create the reflink copies"
 for i in `seq 2 $nr`; do
 	_cp_reflink $testdir/file1 $testdir/file$i
 done
-_test_remount
+_test_cycle_mount
 free_blocks1=$(stat -f $testdir -c '%f')
 
 echo "Rewrite some of the blocks"
 $XFS_IO_PROG -f -c "fzero 0 $sz" $testdir/file2 >> $seqres.full
 _pwrite_byte 0x63 0 $((sz / 2)) $testdir/file3 -d >> $seqres.full
 _mwrite_byte 0x64 $((sz / 2)) $((sz / 2)) $sz $testdir/file4 >> $seqres.full
-_test_remount
+_test_cycle_mount
 free_blocks2=$(stat -f $testdir -c '%f')
 
 echo "Rewrite all the files"
 _pwrite_byte 0x62 0 $sz $testdir/file2 -d >> $seqres.full
 _mwrite_byte 0x63 0 $sz $sz $testdir/file3 >> $seqres.full
 $XFS_IO_PROG -f -c "fzero 0 $sz" $testdir/file4 >> $seqres.full
-_test_remount
+_test_cycle_mount
 free_blocks3=$(stat -f $testdir -c '%f')
 
 echo "Rewrite the original file"
 _pwrite_byte 0x65 0 $sz $testdir/file1 >> $seqres.full
-_test_remount
+_test_cycle_mount
 free_blocks4=$(stat -f $testdir -c '%f')
 #echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3 $free_blocks4
 

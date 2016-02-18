@@ -62,7 +62,7 @@ blksz=65536
 nr=9
 filesize=$((blksz * nr))
 _pwrite_byte 0x61 0 $((blksz * 256)) $testdir/file1 >> $seqres.full
-_test_remount
+_test_cycle_mount
 
 md5sum $testdir/file1 | _filter_test_dir
 csum=$(_md5_checksum $testdir/file1)
@@ -71,13 +71,13 @@ echo "Create the reflink copies"
 seq 2 $nr | while read i; do
 	_cp_reflink $testdir/file1 $testdir/file$i
 done
-_test_remount
+_test_cycle_mount
 
 echo "Rewrite the copies"
 seq 2 $nr | while read i; do
 	_pwrite_byte 0x62 0 $((blksz * 256)) $testdir/file$i -d >> $seqres.full
 done
-_test_remount
+_test_cycle_mount
 
 echo "Examine original file"
 md5sum $testdir/file1 | _filter_test_dir
