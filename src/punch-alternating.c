@@ -14,6 +14,7 @@
 int main(int argc, char *argv[])
 {
 	struct stat	s;
+	struct statfs	sf;
 	off_t		offset;
 	int		fd;
 	blksize_t	blksz;
@@ -35,8 +36,12 @@ int main(int argc, char *argv[])
 	if (error)
 		goto err;
 
+	error = fstatfs(fd, &sf);
+	if (error)
+		goto err;
+
 	sz = s.st_size;
-	blksz = s.st_blksize;
+	blksz = sf.f_bsize;
 
 	mode = FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE;
 	for (offset = 0; offset < sz; offset += blksz * 2) {
