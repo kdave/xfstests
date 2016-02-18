@@ -47,8 +47,6 @@ _cleanup()
 rm -f $seqres.full
 
 # real QA test starts here
-
-# Modify as appropriate.
 _supported_fs xfs
 _supported_os Linux
 _require_scratch
@@ -63,20 +61,20 @@ _qmount_option "uquota,gquota"
 _qmount
 
 # user test
-xfs_quota -x -c "limit -u bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT >>$seqres.full 2>&1
-[ $? -ne 0 ] && _fail "Create limit for user 123456-fsgqa Failed"
-xfs_quota -x -c "quota -u -v 123456-fsgqa" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
-[ $? -ne 0 ] && _fail "Query user 123456-fsgqa Failed"
-xfs_quota -x -c "report -u" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
-[ $? -ne 0 ] && _fail "Report user 123456-fsgqa Failed"
+echo "== user test =="
+$XFS_QUOTA_PROG -x -c "limit -u bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT
+echo "=== quota command output ==="
+$XFS_QUOTA_PROG -c "quota -u -b -N -v 123456-fsgqa" $SCRATCH_MNT | _filter_quota
+echo "=== report command output ==="
+$XFS_QUOTA_PROG -x -c "report -u -b -N" $SCRATCH_MNT | grep -v "^root " | _filter_quota
 
 # group test
-xfs_quota -x -c "limit -g bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT >>$seqres.full 2>&1
-[ $? -ne 0 ] && _fail "Create limit for group 123456-fsgqa Failed"
-xfs_quota -x -c "quota -g -v 123456-fsgqa" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
-[ $? -ne 0 ] && _fail "Query group 123456-fsgqa Failed"
-xfs_quota -x -c "report -u" $SCRATCH_MNT 2>>$seqres.full | grep -qw 123456-fsgqa
-[ $? -ne 0 ] && _fail "Report group 123456-fsgqa Failed"
+echo "== group test =="
+$XFS_QUOTA_PROG -x -c "limit -g bsoft=100m bhard=200m 123456-fsgqa" $SCRATCH_MNT
+echo "=== quota command output ==="
+$XFS_QUOTA_PROG -c "quota -g -b -N -v 123456-fsgqa" $SCRATCH_MNT | _filter_quota
+echo "=== report command output ==="
+$XFS_QUOTA_PROG -x -c "report -u -b -N" $SCRATCH_MNT | grep -v "^root " | _filter_quota
 
 # success, all done
 status=0

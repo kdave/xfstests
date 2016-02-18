@@ -46,8 +46,6 @@ _cleanup()
 rm -f $seqres.full
 
 # real QA test starts here
-
-# Modify as appropriate.
 _supported_fs xfs
 _supported_os Linux
 _require_scratch
@@ -72,22 +70,18 @@ $qa_project:10
 EOF
 
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "project -s $qa_project" $SCRATCH_MNT >>$seqres.full 2>&1
-	[ $? -ne 0 ] && _fail "Initalize project=$qa_project Failed"
+		-c "project -s $qa_project" $SCRATCH_MNT > /dev/null
 
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "limit -p bsoft=100m bhard=200m $qa_project" $SCRATCH_MNT >>$seqres.full 2>&1
-	[ $? -ne 0 ] && _fail "Create limit for project=$qa_project Failed"
+		-c "limit -p bsoft=100m bhard=200m $qa_project" $SCRATCH_MNT
 
+	echo "=== quota command output ==="
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid \
+		-c "quota -p -v -b $qa_project" $SCRATCH_MNT | _filter_quota
+
+	echo "=== report command output ==="
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "quota -p -v $qa_project" $SCRATCH_MNT 2>>$seqres.full | grep -qw $qa_project
-	[ $? -ne 0 ] && _fail "Query project=$qa_project Failed"
-
-	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "report -p" $SCRATCH_MNT 2>>$seqres.full | grep -qw $qa_project
-	[ $? -ne 0 ] && _fail "Report project=$qa_project Failed"
-
-	return 0
+		-c "report -p -N -b" $SCRATCH_MNT | _filter_quota
 }
 
 # Test project
