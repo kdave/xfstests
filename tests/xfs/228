@@ -75,7 +75,7 @@ real_blksz=$(stat -f -c '%S' $testdir)
 internal_blks=$((filesize / real_blksz))
 $XFS_IO_PROG -c "cowextsize $((blksz * 16))" $testdir >> $seqres.full
 _weave_reflink_rainbow $blksz $nr $testdir/file1 $testdir/file3 >> $seqres.full
-_scratch_remount
+_scratch_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
@@ -89,7 +89,7 @@ _weave_reflink_rainbow_delalloc $blksz $nr $testdir/file3 >> $seqres.full
 # now cow
 $XFS_IO_PROG -d -f -c "pwrite -S 0x63 -b $cowsz $cowoff $cowsz" $testdir/file3 >> $seqres.full
 _pwrite_byte 0x63 $cowoff $cowsz $testdir/file3.chk >> $seqres.full
-_scratch_remount
+_scratch_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch

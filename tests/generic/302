@@ -72,7 +72,7 @@ internal_blks=$((filesize / real_blksz))
 echo "Create the original files"
 $XFS_IO_PROG -f -c "pwrite -S 0x61 -b $bufsize 0 $((filesize + 1))" $testdir/file1 >> $seqres.full
 _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
-_scratch_remount
+_scratch_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
@@ -82,7 +82,7 @@ echo "CoW and unmount"
 for i in `seq 1 8`; do
 	$XFS_IO_PROG -d -f -c "pwrite -R -S 0x63 -b $real_blksz 0 $filesize" $testdir/file2 >> $seqres.full
 done
-_scratch_remount
+_scratch_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
