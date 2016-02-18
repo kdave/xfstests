@@ -3128,6 +3128,22 @@ _xfs_bmapx_find() {
 	"$XFS_IO_PROG" -c "bmap -${param}lpv" "$file" | grep -c "$@"
 }
 
+_require_chattr()
+{
+    attribute=$1
+
+    touch $TEST_DIR/syscalltest
+    chattr "+$attribute" $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
+    status=$?
+    chattr "-$attribute" $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
+    if [ "$status" -ne 0 ]; then
+      _notrun "file system doesn't support chattr +$attribute"
+    fi
+    cat $TEST_DIR/syscalltest.out >> $seqres.full
+
+    rm -f $TEST_DIR/syscalltest.out
+}
+
 _get_total_inode()
 {
 	if [ -z "$1" ]; then
