@@ -1,0 +1,96 @@
+#! /bin/bash
+# FSQA Test No. 335
+#
+# Test that if we move one file between directories, fsync the parent directory
+# of the old directory, power fail and remount the filesystem, the file is not
+# lost and it's located at the destination directory.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_metadata_journaling $SCRATCH_DEV
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+# Create our test directories and the file we will later check if it has
+# disappeared.
+mkdir -p $SCRATCH_MNT/a/b
+mkdir $SCRATCH_MNT/c
+touch $SCRATCH_MNT/a/b/foo
+
+# Make sure everything is durably persisted.
+sync
+
+# Now move our test file into a new parent directory.
+mv $SCRATCH_MNT/a/b/foo $SCRATCH_MNT/c/
+
+# Create a new file inside the parent directory of the directory where our test
+# file foo was previously at. This is just to ensure the fsync we do next
+# against that parent directory actually does something and it's not a noop.
+touch $SCRATCH_MNT/a/bar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/a
+
+echo "Filesystem content before power failure:"
+ls -R $SCRATCH_MNT/a $SCRATCH_MNT/c | _filter_scratch
+
+# Simulate a power failure / crash and remount the filesystem, so that the
+# journal/log is replayed.
+_flakey_drop_and_remount
+
+# We expect our file foo to exist, have an entry in the new parent
+# directory (c/) and not have anymore an entry in the old parent directory
+# (a/b/).
+# The new file named bar should also exist.
+echo "Filesystem content after power failure:"
+# Must match what we had before the power failure.
+ls -R $SCRATCH_MNT/a $SCRATCH_MNT/c | _filter_scratch
+
+_unmount_flakey
+
+status=0
+exit
