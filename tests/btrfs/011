@@ -79,6 +79,9 @@ workout()
 	local target_dev="`echo ${SCRATCH_DEV_POOL} | awk '{print $NF}'`"
 	local fssize
 
+	echo >> $seqres.full
+	echo "---------workout \"$1\" $2 $3 $4-----------" >> $seqres.full
+
 	if [ "`echo $SCRATCH_DEV_POOL | wc -w`" -lt `expr $num_devs4raid + 1` ]; then
 		echo "Skip workout $1 $2 $3 $4" >> $seqres.full
 		echo "Too few devices in SCRATCH_DEV_POOL $SCRATCH_DEV_POOL, required: " `expr $num_devs4raid + 1` >> $seqres.full
@@ -112,6 +115,9 @@ workout()
 	fi
 
 	_scratch_mount
+
+	echo "$BTRFS_UTIL_PROG filesystem show" >> $seqres.full
+	$BTRFS_UTIL_PROG filesystem show >> $seqres.full
 
 	# Generate metadata and some minimal user data, generate 500 times
 	# 20K extents in the data chunk and fill up metadata with inline
@@ -219,8 +225,10 @@ btrfs_replace_test()
 
 	if [ "${with_cancel}Q" = "cancelQ" ]; then
 		# background the replace operation (no '-B' option given)
+		echo "$BTRFS_UTIL_PROG replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT" >> $seqres.full
 		$BTRFS_UTIL_PROG replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "btrfs replace start failed"
 		sleep 1
+		echo "$BTRFS_UTIL_PROG replace cancel $SCRATCH_MNT" >> $seqres.full
 		$BTRFS_UTIL_PROG replace cancel $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "btrfs replace cancel failed"
 
 		# 'replace status' waits for the replace operation to finish
@@ -235,6 +243,7 @@ btrfs_replace_test()
 			# a sync in the middle of the replace operation.
 			(sleep 1; sync) > /dev/null 2>&1 &
 		fi
+		echo "$BTRFS_UTIL_PROG replace start -Bf $replace_options $source_dev $target_dev $SCRATCH_MNT" >> $seqres.full
 		$BTRFS_UTIL_PROG replace start -Bf $replace_options $source_dev $target_dev $SCRATCH_MNT >> $seqres.full 2>&1 || _fail "btrfs replace start failed"
 
 		$BTRFS_UTIL_PROG replace status $SCRATCH_MNT > $tmp.tmp 2>&1
@@ -266,6 +275,11 @@ btrfs_replace_test()
 	_scratch_unmount > /dev/null 2>&1
 	if [ "${with_cancel}Q" != "cancelQ" ]; then
 		# after the replace operation, use the target_dev for everything
+		echo "$BTRFS_UTIL_PROG filesystem show -d" >> $seqres.full
+		$BTRFS_UTIL_PROG filesystem show -d >> $seqres.full
+		echo "$BTRFS_UTIL_PROG filesystem show" >> $seqres.full
+		$BTRFS_UTIL_PROG filesystem show >> $seqres.full
+		echo "_check_btrfs_filesystem $target_dev" >> $seqres.full
 		_check_btrfs_filesystem $target_dev
 		_mount -t $FSTYP `_scratch_mount_options | sed "s&${SCRATCH_DEV}&${target_dev}&"`
 	else
