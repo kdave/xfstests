@@ -1,0 +1,72 @@
+#! /bin/bash
+# FSQA Test No. 337
+#
+# Test that the filesystem's implementation of the listxattrs system call lists
+# all the xattrs an inode has.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_attrs
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our test file with a few xattrs. The first 3 xattrs have a name that
+# when given as input to a crc32c function result in the same checksum. This
+# made btrfs list only one of the xattrs through listxattrs system call (because
+# it packs xattrs with the same name checksum into the same btree item).
+touch $SCRATCH_MNT/testfile
+$SETFATTR_PROG -n user.foobar -v 123 $SCRATCH_MNT/testfile
+$SETFATTR_PROG -n user.WvG1c1Td -v qwerty $SCRATCH_MNT/testfile
+$SETFATTR_PROG -n user.J3__T_Km3dVsW_ -v hello $SCRATCH_MNT/testfile
+$SETFATTR_PROG -n user.something -v pizza $SCRATCH_MNT/testfile
+$SETFATTR_PROG -n user.ping -v pong $SCRATCH_MNT/testfile
+
+# Now call getfattr with --dump, which calls the listxattrs system call.
+# It should list all the xattrs we have set before.
+$GETFATTR_PROG --absolute-names --dump $SCRATCH_MNT/testfile | _filter_scratch
+
+status=0
+exit
