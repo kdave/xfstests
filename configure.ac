@@ -34,7 +34,9 @@ AC_HEADER_STDC
 			cifs/ioctl.h		\
     ])
 
-AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[#include <xfs/libxfs.h>])
+AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[
+#define _GNU_SOURCE
+#include <xfs/libxfs.h>])
 
 AC_PACKAGE_NEED_UUIDCOMPARE
 

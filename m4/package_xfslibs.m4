@@ -1,27 +1,29 @@
 AC_DEFUN([AC_PACKAGE_NEED_XFS_XFS_H],
-  [ AC_CHECK_HEADERS([xfs/xfs.h])
+  [ AC_CHECK_HEADERS([xfs/xfs.h],,,[#define _GNU_SOURCE])
     if test "$ac_cv_header_xfs_xfs_h" != "yes"; then
         echo
         echo 'FATAL ERROR: cannot find a valid <xfs/xfs.h> header file.'
-        echo 'Run "make install-qa" from the xfsprogs source.'
+        echo 'Run "make install-dev" from the xfsprogs source.'
         exit 1
     fi
   ])
 
 AC_DEFUN([AC_PACKAGE_WANT_LIBXFS_H],
-  [ AC_CHECK_HEADERS([xfs/libxfs.h], [ have_libxfs=true ], [ have_libxfs=false ])
+  [ AC_CHECK_HEADERS([xfs/libxfs.h], [ have_libxfs=true ],
+    [ have_libxfs=false ], [#define _GNU_SOURCE])
     AC_SUBST(have_libxfs)
   ])
 
 AC_DEFUN([AC_PACKAGE_WANT_XLOG_ASSIGN_LSN],
   [ AC_CHECK_DECL(xlog_assign_lsn,
-      [ have_xlog_assign_lsn=true ], [ have_xlog_assign_lsn=false ],
-      [[#include <xfs/libxfs.h>]])
+      [ have_xlog_assign_lsn=true ], [ have_xlog_assign_lsn=false ], [[
+#define _GNU_SOURCE
+#include <xfs/libxfs.h>]])
     AC_SUBST(have_xlog_assign_lsn)
   ])
 
 AC_DEFUN([AC_PACKAGE_NEED_XFS_XQM_H],
-  [ AC_CHECK_HEADERS([xfs/xqm.h])
+  [ AC_CHECK_HEADERS([xfs/xqm.h],,,[#define _GNU_SOURCE])
     if test "$ac_cv_header_xfs_xqm_h" != "yes"; then
         echo
         echo 'FATAL ERROR: cannot find a valid <xfs/xqm.h> header file.'
@@ -99,7 +101,10 @@ AC_DEFUN([AC_PACKAGE_NEED_IRIX_LIBHANDLE],
 
 AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
   [ AC_MSG_CHECKING([xfsctl from xfs/xfs.h])
-    AC_TRY_LINK([#include <xfs/xfs.h>], [ int x = xfsctl(0, 0, 0, 0); ],
+    AC_TRY_LINK([
+#define _GNU_SOURCE
+#include <xfs/xfs.h> ],
+      [ int x = xfsctl(0, 0, 0, 0); ],
       [ echo ok ],
       [ echo
         echo 'FATAL ERROR: cannot find required macros in the XFS headers.'
