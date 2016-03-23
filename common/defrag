@@ -27,9 +27,14 @@ _require_defrag()
         DEFRAG_PROG="$XFS_FSR_PROG"
 	;;
     ext4|ext4dev)
-	DEFRAG_PROG="$E4DEFRAG_PROG"
+	echo $MOUNT_OPTIONS | grep -q dax
+	if [ $? -eq 0 ]; then
+		_notrun "$FSTYP defragmentation not supported with DAX"
+	else
+		DEFRAG_PROG="$E4DEFRAG_PROG"
+	fi
 	dumpe2fs -h $SCRATCH_DEV 2> /dev/null | grep -wq extent || \
-	     _notrun "file system does not have extents, needed for defrag"
+		_notrun "file system does not have extents, needed for defrag"
 	;;
     btrfs)
 	DEFRAG_PROG="$BTRFS_UTIL_PROG filesystem defragment"
