@@ -56,6 +56,7 @@ run_test()
 {
 	local mkfs_opts=$1
 	local subvol_mnt=$TEST_DIR/$seq.mnt
+	local stop_file=$TEST_DIR/$seq.stop.$$
 
 	echo "Test $mkfs_opts" >>$seqres.full
 
@@ -77,15 +78,18 @@ run_test()
 	balance_pid=$!
 	echo "$balance_pid" >>$seqres.full
 
+	# make sure the stop sign is not there
+	rm -f $stop_file
 	echo -n "Start subvolume worker: " >>$seqres.full
-	_btrfs_stress_subvolume $SCRATCH_DEV $SCRATCH_MNT subvol_$$ $subvol_mnt >/dev/null 2>&1 &
+	_btrfs_stress_subvolume $SCRATCH_DEV $SCRATCH_MNT subvol_$$ $subvol_mnt $stop_file >/dev/null 2>&1 &
 	subvol_pid=$!
 	echo "$subvol_pid" >>$seqres.full
 
 	echo "Wait for fsstress to exit and kill all background workers" >>$seqres.full
 	wait $fsstress_pid
 
-	kill $balance_pid $subvol_pid
+	touch $stop_file
+	kill $balance_pid
 	wait
 	# wait for the balance operation to finish
 	while ps aux | grep "balance start" | grep -qv grep; do
