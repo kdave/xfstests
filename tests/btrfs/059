@@ -44,6 +44,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/filter.btrfs
 
 # real QA test starts here
 _supported_fs btrfs
@@ -61,24 +62,29 @@ mkdir $SCRATCH_MNT/testdir
 echo "Setting compression flag in the directory..."
 chattr +c $SCRATCH_MNT/testdir
 echo "Directory compression property value:"
-$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir compression
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir compression | \
+	_filter_btrfs_compress_property
 
 touch $SCRATCH_MNT/testdir/file1
 echo "file1 compression property value:"
-$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file1 compression
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file1 compression | \
+	_filter_btrfs_compress_property
 
 echo "Clearing compression flag from directory..."
 chattr -c $SCRATCH_MNT/testdir
 echo "Directory compression property value:"
-$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir compression
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir compression | \
+	_filter_btrfs_compress_property
 
 touch $SCRATCH_MNT/testdir/file2
 echo "file2 compression property value:"
-$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file2 compression
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file2 compression | \
+	_filter_btrfs_compress_property
 
 touch $SCRATCH_MNT/testdir/file1
 echo "file1 compression property value:"
-$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file1 compression
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT/testdir/file1 compression | \
+	_filter_btrfs_compress_property
 
 status=0
 exit
