@@ -1,5 +1,5 @@
 #! /bin/bash
-# FS QA Test No. 006
+# FS QA Test No. 339
 #
 # Test that directory hash entries are place in the correct order.
 # commit f5ea110 ("xfs: add CRCs to dir2/da node blocks") left the
@@ -34,29 +34,37 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    cd /
-    rm -f $tmp.*
+	cd /
+	rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
-. ./common/repair
 
 # real QA test starts here
-
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 _require_scratch
+_require_test_program "dirhash_collide"
 
-_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-_scratch_mount | _filter_scratch
+rm -f $seqres.full
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
 
-mkdir $SCRATCH_MNT/x
-$here/src/dirhash_collide -d -n 10000 $SCRATCH_MNT/x
-_scratch_unmount 2>&1 | _filter_scratch
+echo "Silence is golden"
 
-_scratch_xfs_repair 2>&1 | _filter_repair
+testdir=$SCRATCH_MNT/$seq.$$
+mkdir -p $testdir
+$here/src/dirhash_collide -d -n 10000 $testdir >>$seqres.full 2>&1
+
+# check the scratch device
+_scratch_unmount
+_check_scratch_fs
+
+# remove all test dirs and let test harness check scratch fs again
+_scratch_mount
+rm -rf $testdir
 
 # success, all done
 status=0
