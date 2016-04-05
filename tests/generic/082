@@ -36,6 +36,11 @@ _cleanup()
 	rm -f $tmp.*
 }
 
+_filter_project_quota()
+{
+    grep -v "^project quota on"
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -64,7 +69,7 @@ quotaon $SCRATCH_MNT >>$seqres.full 2>&1
 # just ignored, but quota is still on. This may change in future, let's
 # re-consider the case then.
 _scratch_mount "-o remount,ro,nosuchopt" >>$seqres.full 2>&1
-quotaon -p $SCRATCH_MNT | _filter_scratch
+quotaon -p $SCRATCH_MNT | _filter_scratch | _filter_project_quota
 # second remount should succeed, no oops or hang expected
 _scratch_mount "-o remount,ro" || _fail "second remount,ro failed"
 
