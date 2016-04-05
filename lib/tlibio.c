@@ -209,7 +209,7 @@ int	*max;
  * This function will allow someone to set the debug level.
  ***********************************************************************/
 int
-lio_set_debug(level)
+lio_set_debug(int level)
 {
     int old;
 
