@@ -77,6 +77,10 @@ rm -f $seqres.full
 # fstrim loop below.
 fallocate_loop()
 {
+	# Wait for running subcommand before exitting so that
+	# mountpoint is not busy when we try to unmount it
+	trap "wait; exit" SIGTERM
+
 	local name=$1
 	while true; do
 		$XFS_IO_PROG -f -c "falloc -k 0 1G" \
@@ -90,6 +94,10 @@ fallocate_loop()
 
 trim_loop()
 {
+	# Wait for running subcommand before exitting so that
+	# mountpoint is not busy when we try to unmount it
+	trap "wait; exit" SIGTERM
+
 	while true; do
 		$FSTRIM_PROG $SCRATCH_MNT
 	done
@@ -115,7 +123,9 @@ create_files()
 	for ((n = 0; n < 4; n++)); do
 		mkdir $SCRATCH_MNT/$n
 		(
-               for ((i = 1; i <= $nr_files; i++)); do
+		trap "wait; exit" SIGTERM
+
+		for ((i = 1; i <= $nr_files; i++)); do
 			$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 3900" \
 				$SCRATCH_MNT/$n/"${prefix}_$i" &> /dev/null
 			if [ $? -ne 0 ]; then
@@ -151,9 +161,6 @@ create_files "foobar"
 kill ${fallocate_pids[@]}
 kill ${trim_pids[@]}
 wait
-
-# Sleep a bit, otherwise umount fails often with EBUSY (TODO: investigate why).
-sleep 3
 
 # The fstests framework will now check for fs consistency with fsck.
 # The trimming was racy and caused some btree nodes to get full of zeroes on
