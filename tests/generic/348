@@ -1,0 +1,84 @@
+#! /bin/bash
+# FSQA Test No. 348
+#
+# Test creating a symlink, fsync its parent directory, power fail and mount
+# again the filesystem. After these steps the symlink should exist and its
+# content must match what we specified when we created it (must not be empty
+# or point to something else).
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_metadata_journaling $SCRATCH_DEV
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+mkdir $SCRATCH_MNT/testdir1
+# Make sure it's durably persisted.
+sync
+
+# Create our symlinks and fsync their parent directories.
+# We test both the case where the parent directory is new (not yet durably
+# persisted) and where the parent existed long time before.
+ln -s $SCRATCH_MNT/foo1 $SCRATCH_MNT/testdir1/bar1
+$XFS_IO_PROG -c fsync $SCRATCH_MNT/testdir1
+mkdir $SCRATCH_MNT/testdir2
+ln -s $SCRATCH_MNT/foo2 $SCRATCH_MNT/testdir2/bar2
+$XFS_IO_PROG -c fsync $SCRATCH_MNT/testdir2
+
+# After a power failure and mounting again the filesystem, we expect to see the
+# symlinks and we expect them to point to foo1 and foo2.
+_flakey_drop_and_remount
+
+echo "Symlink contents after log replay:"
+readlink $SCRATCH_MNT/testdir1/bar1 | _filter_scratch
+readlink $SCRATCH_MNT/testdir2/bar2 | _filter_scratch
+
+_unmount_flakey
+status=0
+exit
