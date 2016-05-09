@@ -1,0 +1,89 @@
+#! /bin/bash
+# FS QA Test No. 705
+#
+# Test fallocate(ZERO_RANGE) on a block device, which should be able to
+# WRITE SAME (or equivalent) the range.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/scsi_debug
+
+# real QA test starts here
+_supported_os Linux
+_require_scsi_debug
+_require_xfs_io_command "fzero"
+
+echo "Create and format"
+dev=$(_get_scsi_debug_dev 512 512 0 4 "lbpws=1 lbpws10=1")
+_pwrite_byte 0x62 0 4m $dev >> $seqres.full
+
+echo "Zero range"
+$XFS_IO_PROG -c "fzero -k 512k 1m" $dev
+
+echo "Zero range without keep_size"
+$XFS_IO_PROG -c "fzero 384k 64k" $dev
+
+echo "Zero range past EOD"
+$XFS_IO_PROG -c "fzero -k 3m 4m" $dev
+
+echo "Check contents"
+md5sum $dev | sed -e "s|$dev|SCSI_DEBUG_DEV|g"
+
+echo "Zero range to MAX_LFS_FILESIZE"
+# zod = MAX_LFS_FILESIZE
+case "$(getconf LONG_BIT)" in
+"32")
+	zod=$(( ($(getconf PAGE_SIZE) << ($(getconf LONG_BIT) - 1) ) - 1))
+	;;
+"64")
+	zod=9223372036854775807
+	;;
+*)
+	_fail "sizeof(long) == $(getconf LONG_BIT)?"
+	;;
+esac
+$XFS_IO_PROG -c "fzero -k 0 $zod" $dev
+
+echo "Check contents"
+md5sum $dev | sed -e "s|$dev|SCSI_DEBUG_DEV|g"
+
+echo "Destroy device"
+_put_scsi_debug_dev
+
+# success, all done
+status=0
+exit

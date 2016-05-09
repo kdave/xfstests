@@ -40,13 +40,17 @@ _get_scsi_debug_dev()
 	logical=${2-512}
 	unaligned=${3-0}
 	size=${4-128}
+	test -n "$4" && shift
+	test -n "$3" && shift
+	test -n "$2" && shift
+	test -n "$1" && shift
 
 	phys_exp=0
 	while [ $logical -lt $physical ]; do
 		let physical=physical/2
 		let phys_exp=phys_exp+1
 	done
-	opts="sector_size=$logical physblk_exp=$phys_exp lowest_aligned=$unaligned dev_size_mb=$size"
+	opts="sector_size=$logical physblk_exp=$phys_exp lowest_aligned=$unaligned dev_size_mb=$size $@"
 	echo "scsi_debug options $opts" >> $seqres.full
 	modprobe scsi_debug $opts
 	[ $? -eq 0 ] || _fail "scsi_debug modprobe failed"

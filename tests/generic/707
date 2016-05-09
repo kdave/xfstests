@@ -1,0 +1,130 @@
+#! /bin/bash
+# FS QA Test No. 707
+#
+# Test the unsupported fallocate flags on a block device.  No collapse
+# or insert range, no regular fallocate, no forgetting keep-space on
+# zero range, no punching past EOD, no requests that aren't aligned
+# with the logicalsector size, and make sure the fallbacks work for
+# devices that don't support write_same or discard.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/scsi_debug
+
+# real QA test starts here
+_supported_os Linux
+_require_scsi_debug
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "finsert"
+_require_xfs_io_command "fcollapse"
+_require_xfs_io_command "fzero"
+_require_xfs_io_command "fpunch"
+
+
+echo "Create and format"
+dev=$(_get_scsi_debug_dev 4096 4096 0 4 "lbpws=1 lbpws10=1")
+_pwrite_byte 0x62 0 4m $dev >> $seqres.full
+$XFS_IO_PROG -c "fsync" $dev
+
+echo "Regular fallocate"
+$XFS_IO_PROG -c "falloc 64k 64k" $dev
+
+echo "Insert range"
+$XFS_IO_PROG -c "finsert 128k 64k" $dev
+
+echo "Collapse range"
+$XFS_IO_PROG -c "fcollapse 256k 64k" $dev
+
+echo "Unaligned zero range"
+$XFS_IO_PROG -c "fzero -k 512 512" $dev
+
+echo "Unaligned punch"
+$XFS_IO_PROG -c "fpunch 512 512" $dev
+
+echo "Zero range past MAX_LFS_FILESIZE keep size"
+# zod = MAX_LFS_FILESIZE
+case "$(getconf LONG_BIT)" in
+"32")
+	zod=$(( ($(getconf PAGE_SIZE) << ($(getconf LONG_BIT) - 1) ) - 1))
+	;;
+"64")
+	zod=9223372036854775807
+	;;
+*)
+	_fail "sizeof(long) == $(getconf LONG_BIT)?"
+	;;
+esac
+$XFS_IO_PROG -c "fzero -k 512k $zod" $dev
+
+echo "Zero range past MAX_LFS_FILESIZE"
+$XFS_IO_PROG -c "fzero 512k $zod" $dev
+
+echo "Zero range to MAX_LFS_FILESIZE fail w/o keepsize"
+$XFS_IO_PROG -c "fzero 0 $zod" $dev
+
+echo "Zero range starts past EOD"
+$XFS_IO_PROG -c "fzero -k 900m 1m" $dev
+
+echo "Punch starts past EOD"
+$XFS_IO_PROG -c "fpunch 900m 1m" $dev
+
+echo "Check contents"
+md5sum $dev | sed -e "s|$dev|SCSI_DEBUG_DEV|g"
+
+echo "Destroy device"
+_put_scsi_debug_dev
+
+echo "Create w/o unmap or writesame and format"
+dev=$(_get_scsi_debug_dev 512 512 0 4 "lbpws=0 lbpws10=0 lbpu=0 write_same_length=0 unmap_max_blocks=0")
+_pwrite_byte 0x62 0 4m $dev >> $seqres.full
+$XFS_IO_PROG -c "fsync" $dev
+
+echo "Zero punch, no fallback available"
+$XFS_IO_PROG -c "fpunch 512k 512k" $dev
+
+echo "Zero range, write fallback"
+$XFS_IO_PROG -c "fzero -k 1536k 512k" $dev
+
+echo "Check contents"
+md5sum $dev | sed -e "s|$dev|SCSI_DEBUG_DEV|g"
+
+echo "Destroy device"
+_put_scsi_debug_dev
+
+# success, all done
+status=0
+exit
