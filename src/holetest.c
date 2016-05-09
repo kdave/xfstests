@@ -61,6 +61,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <getopt.h>
+#include <sys/wait.h>
 
 #define THREADS 2
 
@@ -68,6 +69,26 @@ long page_size;
 long page_offs[THREADS];
 int use_wr[THREADS];
 int prefault = 0;
+int use_fork = 0;
+
+uint64_t get_id(void)
+{
+	if (!use_fork)
+		return (uint64_t) pthread_self();
+	return getpid();
+}
+
+void prefault_mapping(char *addr, long npages)
+{
+	long i;
+
+	for (i = 0; i < npages; i++) {
+		if (addr[i * page_size] != 0) {
+			fprintf(stderr, "Prefaulting found non-zero value in "
+				"page %ld: %d\n", i, (int)addr[i * page_size]);
+		}
+	}
+}
 
 void *pt_page_marker(void *args)
 {
@@ -75,7 +96,10 @@ void *pt_page_marker(void *args)
 	char *va = (char *)a[1];
 	long npages = (long)a[2];
 	long pgoff = (long)a[3];
-	uint64_t tid = (uint64_t)pthread_self();
+	uint64_t tid = get_id();
+
+	if (prefault && use_fork)
+		prefault_mapping(va, npages);
 
 	va += pgoff;
 
@@ -92,7 +116,7 @@ void *pt_write_marker(void *args)
 	int fd = (long)a[0];
 	long npages = (long)a[2];
 	long pgoff = (long)a[3];
-	uint64_t tid = (uint64_t)pthread_self();
+	uint64_t tid = get_id();
 	long i;
 
 	/* mark pages */
@@ -123,15 +147,8 @@ int test_this(int fd, loff_t sz)
 		exit(20);
 	}
 
-	if (prefault) {
-		for (i = 0; i < npages; i++) {
-			if (vastart[i * page_size] != 0) {
-				fprintf(stderr, "Prefaulting found non-zero "
-					"value in page %d: %d\n", i,
-					vastart[i * page_size]);
-			}
-		}
-	}
+	if (prefault && !use_fork)
+		prefault_mapping(vastart, npages);
 
 	/* prepare the thread args */
 	for (i = 0; i < THREADS; i++) {
@@ -142,20 +159,49 @@ int test_this(int fd, loff_t sz)
 	}
 
 	for (i = 0; i < THREADS; i++) {
-		/* start two threads */
-		if (pthread_create(&t[i], NULL,
+		if (!use_fork) {
+			/* start two threads */
+			if (pthread_create(&t[i], NULL,
 				   use_wr[i] ? pt_write_marker : pt_page_marker,
 				   &targs[i])) {
-			perror("pthread_create");
-			exit(21);
+				perror("pthread_create");
+				exit(21);
+			}
+			tid[i] = (uint64_t)t[i];
+			printf("INFO: thread %d created\n", i);
+		} else {
+			/*
+			 * Flush stdout before fork, otherwise some lines get
+			 * duplicated... ?!?!?
+			 */
+			fflush(stdout);
+			tid[i] = fork();
+			if (tid[i] < 0) {
+				int j;
+
+				perror("fork");
+				for (j = 0; j < i; j++)
+					waitpid(tid[j], NULL, 0);
+				exit(21);
+			}
+			/* Child? */
+			if (!tid[i]) {
+				if (use_wr[i])
+					pt_write_marker(&targs[i]);
+				else
+					pt_page_marker(&targs[i]);
+				exit(0);
+			}
+			printf("INFO: process %d created\n", i);
 		}
-		tid[i] = (uint64_t)t[i];
-		printf("INFO: thread %d created\n", i);
 	}
 
 	/* wait for them to finish */
 	for (i = 0; i < THREADS; i++)
-		pthread_join(t[i], NULL);
+		if (!use_fork)
+			pthread_join(t[i], NULL);
+		else
+			waitpid(tid[i], NULL, 0);
 
 	/* check markers on each page */
 	errcnt = 0;
@@ -196,7 +242,7 @@ int main(int argc, char **argv)
 	for (i = 1; i < THREADS; i++)
 		page_offs[i] = page_offs[i-1] + step;
 
-	while ((opt = getopt(argc, argv, "fwr")) > 0) {
+	while ((opt = getopt(argc, argv, "fwrF")) > 0) {
 		switch (opt) {
 		case 'f':
 			/* ignore errors */
@@ -210,6 +256,10 @@ int main(int argc, char **argv)
 			/* prefault mmapped area by reading it */
 			prefault = 1;
 			break;
+		case 'F':
+			/* create processes instead of threads */
+			use_fork = 1;
+			break;
 		default:
 			fprintf(stderr, "ERROR: Unknown option character.\n");
 			exit(1);
@@ -217,7 +267,7 @@ int main(int argc, char **argv)
 	}
 
 	if (optind != argc - 2) {
-		fprintf(stderr, "ERROR: usage: holetest [-fwr] "
+		fprintf(stderr, "ERROR: usage: holetest [-fwrF] "
 			"FILENAME FILESIZEinMB\n");
 		exit(1);
 	}
