@@ -191,8 +191,7 @@ int main(int argc, char **argv)
 	 *
 	 * 1. explictly zero-filled
 	 * 2. posix_fallocated
-	 * 3. fallocated
-	 * 4. ftruncated
+	 * 3. ftruncated
 	 */
 
 
@@ -270,39 +269,6 @@ int main(int argc, char **argv)
 		perror("unlink()");
 		exit(10);
 	}
-
-	/*
-	 * fallocated
-	 */
-	printf("\nINFO: fallocate test...\n");
-
-#ifdef HAVE_FALLOCATE
-	/* create the file */
-	fd = open(path, O_RDWR | O_EXCL | O_CREAT, 0644);
-	if (fd < 0) {
-		perror(path);
-		exit(11);
-	}
-
-	/* fill it to size */
-	if (fallocate(fd, 0, 0, sz)) {
-		perror("fallocate()");
-		exit(12);
-	}
-
-	/* test it */
-	errcnt = test_this(fd, sz);
-	toterr += errcnt;
-	close(fd);
-	if (stoponerror && errcnt > 0)
-		exit(13);
-
-	/* cleanup */
-	if (unlink(path)) {
-		perror("unlink()");
-		exit(14);
-	}
-#endif
 
 	/*
 	 * ftruncated
