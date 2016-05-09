@@ -60,18 +60,20 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
+#include <getopt.h>
 
 #define THREADS 2
 
 long page_size;
 long page_offs[THREADS];
+int use_wr[THREADS];
 
 void *pt_page_marker(void *args)
 {
 	void **a = args;
-	char *va = (char *)a[0];
-	long npages = (long)a[1];
-	long pgoff = (long)a[2];
+	char *va = (char *)a[1];
+	long npages = (long)a[2];
+	long pgoff = (long)a[3];
 	uint64_t tid = (uint64_t)pthread_self();
 
 	va += pgoff;
@@ -83,13 +85,28 @@ void *pt_page_marker(void *args)
 	return NULL;
 }  /* pt_page_marker() */
 
+void *pt_write_marker(void *args)
+{
+	void **a = args;
+	int fd = (long)a[0];
+	long npages = (long)a[2];
+	long pgoff = (long)a[3];
+	uint64_t tid = (uint64_t)pthread_self();
+	long i;
+
+	/* mark pages */
+	for (i = 0; i < npages; i++)
+		pwrite(fd, &tid, sizeof(tid), i * page_size + pgoff);
+
+	return NULL;
+}
 
 int test_this(int fd, loff_t sz)
 {
 	long npages;
 	char *vastart;
 	char *va;
-	void *targs[THREADS][3];
+	void *targs[THREADS][4];
 	pthread_t t[THREADS];
 	uint64_t tid[THREADS];
 	int errcnt;
@@ -107,14 +124,17 @@ int test_this(int fd, loff_t sz)
 
 	/* prepare the thread args */
 	for (i = 0; i < THREADS; i++) {
-		targs[i][0] = vastart;
-		targs[i][1] = (void *)npages;
-		targs[i][2] = (void *)page_offs[i];
+		targs[i][0] = (void *)(long)fd;
+		targs[i][1] = vastart;
+		targs[i][2] = (void *)npages;
+		targs[i][3] = (void *)page_offs[i];
 	}
 
 	for (i = 0; i < THREADS; i++) {
 		/* start two threads */
-		if (pthread_create(&t[i], NULL, pt_page_marker, &targs[i])) {
+		if (pthread_create(&t[i], NULL,
+				   use_wr[i] ? pt_write_marker : pt_page_marker,
+				   &targs[i])) {
 			perror("pthread_create");
 			exit(21);
 		}
@@ -157,6 +177,7 @@ int main(int argc, char **argv)
 	int toterr = 0;
 	int i, step;
 	char *endch;
+	int opt;
 
 	page_size = getpagesize();
 	step = page_size / THREADS;
@@ -164,22 +185,29 @@ int main(int argc, char **argv)
 	for (i = 1; i < THREADS; i++)
 		page_offs[i] = page_offs[i-1] + step;
 
-	/* process command line */
-	argc--; argv++;
-	/* ignore errors? */
-	if ((argc == 3) && !strcmp(argv[0], "-f")) {
-		stoponerror = 0;
-		argc--;
-		argv++;
+	while ((opt = getopt(argc, argv, "fw")) > 0) {
+		switch (opt) {
+		case 'f':
+			/* ignore errors */
+			stoponerror = 0;
+			break;
+		case 'w':
+			/* use writes instead of mmap for one thread */
+			use_wr[0] = 1;
+			break;
+		default:
+			fprintf(stderr, "ERROR: Unknown option character.\n");
+			exit(1);
+		}
 	}
-	/* file name and size */
-	if (argc != 2 || argv[0][0] == '-') {
-		fprintf(stderr, "ERROR: usage: holetest [-f] "
+
+	if (optind != argc - 2) {
+		fprintf(stderr, "ERROR: usage: holetest [-fw] "
 			"FILENAME FILESIZEinMB\n");
 		exit(1);
 	}
-	path = argv[0];
-	sz = strtol(argv[1], &endch, 10);
+	path = argv[optind];
+	sz = strtol(argv[optind + 1], &endch, 10);
 	if (*endch || sz < 1) {
 		fprintf(stderr, "ERROR: bad FILESIZEinMB\n");
 		exit(1);
