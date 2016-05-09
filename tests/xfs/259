@@ -51,32 +51,33 @@ testfile=$TEST_DIR/259.image
 # Test various sizes slightly less than 4 TB. Need to handle different
 # minimum block sizes for CRC enabled filesystems, but use a small log so we
 # don't write lots of zeros unnecessarily.
-xfs_info $TEST_DIR | _filter_mkfs 2> $tmp.mkfs > /dev/null
-. $tmp.mkfs
-if [ $_fs_has_crcs -eq 1 ]; then
-	blocksize=1024
-	sizes_to_check="1024 2048 4096"
-	echo "Trying to make (4 TB - 512) B long xfs fs image"
-else
-	blocksize=512
-	sizes_to_check="512 1024 2048 4096"
-fi
-
+sizes_to_check="4096 2048 1024 512"
+blocksizes="4096 2048 1024 512"
 four_TB=$(_math "2^42")
+# The initial value of _fs_has_crcs is not important, because we start testing
+# with 4096 block size, it only matters for 512 block size test
+_fs_has_crcs=0
 for del in $sizes_to_check; do
-	ddseek=$(_math "$four_TB - $del")
-	echo "Trying to make (4 TB - $del) B long xfs fs image"
-	rm -f "$testfile"
-	dd if=/dev/zero "of=$testfile" bs=1 count=0 seek=$ddseek \
-					>/dev/null 2>&1 || echo "dd failed"
-	lofile=$(losetup -f)
-	losetup $lofile "$testfile"
-	"$MKFS_XFS_PROG" -l size=32m -b size=$blocksize $lofile \
-					>/dev/null || echo "mkfs failed!"
-	sync
-	losetup -d $lofile
+	for bs in $blocksizes; do
+		echo "Trying to make (4TB - ${del}B) long xfs, block size $bs"
+		# skip tests with 512 block size if the fs created has crc
+		# enabled by default
+		if [ $_fs_has_crcs -eq 1 -a $bs -eq 512 ]; then
+			break;
+		fi
+		ddseek=$(_math "$four_TB - $del")
+		rm -f "$testfile"
+		dd if=/dev/zero "of=$testfile" bs=1 count=0 seek=$ddseek \
+			>/dev/null 2>&1 || echo "dd failed"
+		lofile=$(losetup -f)
+		losetup $lofile "$testfile"
+		$MKFS_XFS_PROG -l size=32m -b size=$bs $lofile |  _filter_mkfs \
+			>/dev/null 2> $tmp.mkfs || echo "mkfs failed!"
+		. $tmp.mkfs
+		sync
+		losetup -d $lofile
+	done
 done
 
 status=0
-
 exit
