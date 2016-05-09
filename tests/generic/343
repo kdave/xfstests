@@ -1,0 +1,86 @@
+#! /bin/bash
+# FSQA Test No. 343
+#
+# Test that if we create a hard link for a file F in some directory A, then move
+# some directory or file B from its parent directory C into directory A, fsync
+# file F, power fail and mount the filesystem, the directory/file B is located
+# only at directory A and both links for file F exist.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_metadata_journaling $SCRATCH_DEV
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+# Create our test directories and files.
+mkdir $SCRATCH_MNT/x
+mkdir $SCRATCH_MNT/y
+touch $SCRATCH_MNT/x/foo
+mkdir $SCRATCH_MNT/y/z
+touch $SCRATCH_MNT/y/foo2
+
+# Make sure everything is durably persisted.
+sync
+
+# Now add a link to foo at directory x, move directory z and file foo2 from
+# directory y to directory x and fsync foo's inode. We expect that after a
+# log replay we see the new link for foo's inode and that z and foo2 are only
+# located at directory x.
+ln $SCRATCH_MNT/x/foo $SCRATCH_MNT/x/bar
+mv $SCRATCH_MNT/y/z $SCRATCH_MNT/x/z
+mv $SCRATCH_MNT/y/foo2 $SCRATCH_MNT/x/foo2
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/x/bar
+_flakey_drop_and_remount
+
+echo "Filesystem contents after log replay:"
+ls -R $SCRATCH_MNT/x $SCRATCH_MNT/y | _filter_scratch
+
+_unmount_flakey
+status=0
+exit
