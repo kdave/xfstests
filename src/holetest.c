@@ -67,6 +67,7 @@
 long page_size;
 long page_offs[THREADS];
 int use_wr[THREADS];
+int prefault = 0;
 
 void *pt_page_marker(void *args)
 {
@@ -120,6 +121,16 @@ int test_this(int fd, loff_t sz)
 	if (MAP_FAILED == vastart) {
 		perror("mmap()");
 		exit(20);
+	}
+
+	if (prefault) {
+		for (i = 0; i < npages; i++) {
+			if (vastart[i * page_size] != 0) {
+				fprintf(stderr, "Prefaulting found non-zero "
+					"value in page %d: %d\n", i,
+					vastart[i * page_size]);
+			}
+		}
 	}
 
 	/* prepare the thread args */
@@ -185,7 +196,7 @@ int main(int argc, char **argv)
 	for (i = 1; i < THREADS; i++)
 		page_offs[i] = page_offs[i-1] + step;
 
-	while ((opt = getopt(argc, argv, "fw")) > 0) {
+	while ((opt = getopt(argc, argv, "fwr")) > 0) {
 		switch (opt) {
 		case 'f':
 			/* ignore errors */
@@ -195,6 +206,10 @@ int main(int argc, char **argv)
 			/* use writes instead of mmap for one thread */
 			use_wr[0] = 1;
 			break;
+		case 'r':
+			/* prefault mmapped area by reading it */
+			prefault = 1;
+			break;
 		default:
 			fprintf(stderr, "ERROR: Unknown option character.\n");
 			exit(1);
@@ -202,7 +217,7 @@ int main(int argc, char **argv)
 	}
 
 	if (optind != argc - 2) {
-		fprintf(stderr, "ERROR: usage: holetest [-fw] "
+		fprintf(stderr, "ERROR: usage: holetest [-fwr] "
 			"FILENAME FILESIZEinMB\n");
 		exit(1);
 	}
