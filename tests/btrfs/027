@@ -1,0 +1,119 @@
+#! /bin/bash
+# FS QA Test 027
+#
+# Test replace of a missing device on various data and metadata profiles.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_supported_os Linux
+# we check scratch dev after each loop
+_require_scratch_nocheck
+_require_scratch_dev_pool 5
+_require_scratch_dev_pool_equal_size
+_btrfs_get_profile_configs replace-missing
+_require_command "$WIPEFS_PROG" wipefs
+
+run_test()
+{
+	local mkfs_opts=$1
+	local saved_scratch_dev_pool=$SCRATCH_DEV_POOL
+	local replace_dev=`echo $SCRATCH_DEV_POOL | awk '{print $NF}'`
+
+	echo "Test $mkfs_opts" >>$seqres.full
+
+	SCRATCH_DEV_POOL=`echo $SCRATCH_DEV_POOL | sed -e "s# *$replace_dev *##"`
+	_scratch_pool_mkfs $mkfs_opts >>$seqres.full 2>&1
+	# make sure we created btrfs with desired options
+	if [ $? -ne 0 ]; then
+		echo "mkfs $mkfs_opts failed"
+		SCRATCH_DEV_POOL=$saved_scratch_dev_pool
+		return
+	fi
+	_scratch_mount >>$seqres.full 2>&1
+
+	local missing_dev=`echo $SCRATCH_DEV_POOL | awk '{print $2}'`
+	local missing_dev_id=`$BTRFS_UTIL_PROG fi show $SCRATCH_MNT | grep $missing_dev | awk '{print $2}'`
+
+	# get some data on the filesystem so there's something to replace
+	dd if=/dev/urandom of="$SCRATCH_MNT"/file1 bs=1M count=1 \
+		>>$seqres.full 2>&1
+	dd if=/dev/urandom of="$SCRATCH_MNT"/file2 bs=1M count=2 \
+		>>$seqres.full 2>&1
+	dd if=/dev/urandom of="$SCRATCH_MNT"/file3 bs=1M count=4 \
+		>>$seqres.full 2>&1
+
+	# nuke a device and remount in degraded mode
+	_scratch_unmount
+	$WIPEFS_PROG -a "$missing_dev" >>$seqres.full 2>&1
+	_scratch_mount -o degraded >>$seqres.full 2>&1
+
+	# replace $missing_dev with $replace_dev and scrub it to double-check
+	$BTRFS_UTIL_PROG replace start -B -r $missing_dev_id $replace_dev \
+		$SCRATCH_MNT -f >>$seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		echo "btrfs replace failed"
+		SCRATCH_DEV_POOL=$saved_scratch_dev_pool
+		return
+	fi
+	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		echo "btrfs scrub failed"
+		SCRATCH_DEV_POOL=$saved_scratch_dev_pool
+		return
+	fi
+
+	_scratch_unmount
+	# we called _require_scratch_nocheck instead of _require_scratch
+	# do check after test for each profile config
+	_check_scratch_fs
+	SCRATCH_DEV_POOL=$saved_scratch_dev_pool
+}
+
+echo "Silence is golden"
+for t in "${_btrfs_profile_configs[@]}"; do
+	run_test "$t"
+done
+
+status=0
+exit
