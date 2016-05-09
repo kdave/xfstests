@@ -1,0 +1,239 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# common functions for setting up and tearing down a dmthin device
+
+# SOOO many devices!
+# Create the 2 pool devices on lvs so we can build the whole thing
+# from a single scratch device
+
+# Backing data dev
+DMTHIN_DATA_NAME="thin-data"
+DMTHIN_DATA_DEV="/dev/mapper/$DMTHIN_DATA_NAME"
+# Backing metadata dev
+DMTHIN_META_NAME="thin-meta"
+DMTHIN_META_DEV="/dev/mapper/$DMTHIN_META_NAME"
+# Backing pool dev (combination of above)
+DMTHIN_POOL_NAME="thin-pool"
+DMTHIN_POOL_DEV="/dev/mapper/$DMTHIN_POOL_NAME"
+# Thin volume
+DMTHIN_VOL_NAME="thin-vol"
+DMTHIN_VOL_DEV="/dev/mapper/$DMTHIN_VOL_NAME"
+
+_dmthin_cleanup()
+{
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	$DMSETUP_PROG remove $DMTHIN_VOL_NAME> /dev/null 2>&1
+	$DMSETUP_PROG remove $DMTHIN_POOL_NAME> /dev/null 2>&1
+	$DMSETUP_PROG remove $DMTHIN_META_NAME> /dev/null 2>&1
+	$DMSETUP_PROG remove $DMTHIN_DATA_NAME> /dev/null 2>&1
+}
+
+_dmthin_check_fs()
+{
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	_check_scratch_fs $DMTHIN_VOL_DEV
+}
+
+# Set up a dm-thin device on $SCRATCH_DEV
+#
+# All arguments are optional, and in this order; defaults follows:
+# data_dev_size: half of $SCRATCH_DEV
+# virtual_size: 10x $data_dev_size
+# cluster_size: 512k
+# low_water: 100M
+#
+# You may specify 0 to 4 of these arguments, but they
+# must be in the above order.
+_dmthin_init()
+{
+	local data_dev_size=$1	# Backing pool data size in sectors
+	local virtual_size=$2	# Virtual size in sectors
+	local cluster_size=$3   # cluster/alloc size, sectors
+	local low_water=$4	# low water mark, sectors
+
+	local dm_backing_dev=$SCRATCH_DEV
+	local blk_dev_size=`blockdev --getsz $dm_backing_dev`
+
+	local pool_id=$RANDOM
+
+	# Default to something small-ish
+	if [ -z "$data_dev_size" ]; then
+		data_dev_size=$(($blk_dev_size / 2))
+	fi
+
+	# Default to something big-is; 10x backing
+	if [ -z "$virtual_size" ]; then
+		virtual_size=$(($data_dev_size * 10))
+	fi
+
+	# Default to 512k
+	if [ -z "$cluster_size" ]; then
+		cluster_size=1024	# 512k in sectors
+	fi
+
+	# Default to 100M
+	if [ -z "$low_water" ]; then
+		low_water=204800	# 100M, in sectors
+	fi
+
+	# Need to make linear metadata and data devs.  From kernel docs:
+	# As a guide, we suggest you calculate the number of bytes to use in the
+	# metadata device as 48 * $data_dev_size / $data_block_size but round it up
+	# to 2MB (4096 sectors) if the answer is smaller.
+	# So do that:
+
+	local meta_dev_size=$((48 * $data_dev_size / $cluster_size))
+	if [ "$meta_dev_size" -lt "4096" ]; then
+		meta_dev_size=4096	# 2MB
+	fi
+
+	# scratch dev gets a metadata vol & data vol, start at this offset
+	local meta_dev_offset=10240
+
+	local total_data_dev_size=$(($meta_dev_offset + $meta_dev_size + $data_dev_size))
+	if [ "$total_data_dev_size" -gt "$blk_dev_size" ]; then
+		_notrun "$SCRATCH_DEV too small"
+	fi
+
+	# Unmount & tear down old stuff
+	_dmthin_cleanup
+
+	# Metadata device
+	DMTHIN_META_TABLE="0 $meta_dev_size linear $dm_backing_dev $meta_dev_offset"
+	$DMSETUP_PROG create $DMTHIN_META_NAME --table "$DMTHIN_META_TABLE" || \
+		_fatal "failed to create dm thin meta device"
+
+	# Data device
+	local data_dev_offset=$((meta_dev_offset + $meta_dev_size))
+	DMTHIN_DATA_TABLE="0 $data_dev_size linear $dm_backing_dev $data_dev_offset"
+	$DMSETUP_PROG create $DMTHIN_DATA_NAME --table "$DMTHIN_DATA_TABLE" || \
+		_fatal "failed to create dm thin data device"
+
+	# Zap the pool metadata dev
+	dd if=/dev/zero of=$DMTHIN_META_DEV bs=4096 count=1 &>/dev/null
+
+	# Thin pool
+	# "start length thin-pool metadata_dev data_dev data_block_size low_water_mark"
+	DMTHIN_POOL_TABLE="0 $data_dev_size thin-pool $DMTHIN_META_DEV $DMTHIN_DATA_DEV $cluster_size $low_water"
+	$DMSETUP_PROG create $DMTHIN_POOL_NAME --table "$DMTHIN_POOL_TABLE" || \
+		_fatal "failed to create dm thin pool device"
+
+	# Thin volume
+	$DMSETUP_PROG message $DMTHIN_POOL_DEV 0 "create_thin $pool_id" || \
+		_fatal "failed to message pool device"
+
+	# start length thin pool_dev dev_id [external_origin_dev]
+	DMTHIN_VOL_TABLE="0 $virtual_size thin $DMTHIN_POOL_DEV $pool_id"
+	$DMSETUP_PROG create $DMTHIN_VOL_NAME --table "$DMTHIN_VOL_TABLE" || \
+		_fatal "failed to create dm thin volume device"
+
+}
+
+# for internal use
+_dmthin_reload_table()
+{
+	local dev_name=$1
+	local table="$2"
+
+	$DMSETUP_PROG suspend $dev_name || \
+		_fail  "dmsetup suspend of $dev_name failed"
+
+	$DMSETUP_PROG load $dev_name --table "$table" || \
+		_fail "dmsetup failed to reload $dev_name table"
+
+	$DMSETUP_PROG resume $dev_name || \
+		_fail  "dmsetup resume of $dev_name failed"
+
+}
+
+# Grow the dm-thin device by the given amount
+# Argument is number of sectors to add, if not specified
+# defaults to 1/4 of the $SCRATCH_DEV size
+_dmthin_grow()
+{
+	local add_sectors=$1	# Number of sectors to add
+
+	local dm_backing_dev=$SCRATCH_DEV
+	local blk_dev_size=`blockdev --getsz $dm_backing_dev`
+
+	# Get current sizes & values
+	local   meta_dev_size=`$DMSETUP_PROG table | grep $DMTHIN_META_NAME | awk '{print $3}'`
+	local meta_dev_offset=`$DMSETUP_PROG table | grep $DMTHIN_META_NAME | awk '{print $6}'`
+	local   data_dev_size=`$DMSETUP_PROG table | grep $DMTHIN_DATA_NAME | awk '{print $3}'`
+	local   pool_dev_size=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $3}'`
+	local    cluster_size=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $7}'`
+	local       low_water=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $8}'`
+
+	# default to 25% growth
+	if [ -z "$add_sectors" ]; then
+		add_sectors=$(($data_dev_size / 4))
+	fi
+
+	local data_dev_offset=$(($meta_dev_offset + $meta_dev_size))
+
+	# Figure new sizes
+	data_dev_size=$(($data_dev_size + $add_sectors))
+	pool_dev_size=$(($pool_dev_size + $add_sectors))
+
+	# Can we do this?
+	local total_data_dev_size=$(($meta_dev_offset + $meta_dev_size + $data_dev_size))
+	if [ "$total_data_dev_size" -gt "$blk_dev_size" ]; then
+		_fail "$SCRATCH_DEV too small"
+	fi
+
+	# Grow the data device
+	DMTHIN_DATA_TABLE="0 $data_dev_size linear $dm_backing_dev $data_dev_offset"
+	_dmthin_reload_table $DMTHIN_DATA_NAME "$DMTHIN_DATA_TABLE"
+
+	# Grow the pool
+	DMTHIN_POOL_TABLE="0 $data_dev_size thin-pool $DMTHIN_META_DEV $DMTHIN_DATA_DEV $cluster_size $low_water"
+	_dmthin_reload_table $DMTHIN_POOL_NAME "$DMTHIN_POOL_TABLE"
+}
+
+# Queue IOs when full
+_dmthin_set_queue()
+{
+	local   data_dev_size=`$DMSETUP_PROG table | grep $DMTHIN_DATA_NAME | awk '{print $3}'`
+	local    cluster_size=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $7}'`
+	local       low_water=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $8}'`
+
+	DMTHIN_POOL_TABLE="0 $data_dev_size thin-pool $DMTHIN_META_DEV $DMTHIN_DATA_DEV $cluster_size $low_water"
+	_dmthin_reload_table $DMTHIN_POOL_NAME "$DMTHIN_POOL_TABLE"
+}
+
+# Fail IOs when full
+_dmthin_set_fail()
+{
+	local   data_dev_size=`$DMSETUP_PROG table | grep $DMTHIN_DATA_NAME | awk '{print $3}'`
+	local    cluster_size=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $7}'`
+	local       low_water=`$DMSETUP_PROG table | grep $DMTHIN_POOL_NAME | awk '{print $8}'`
+
+	DMTHIN_POOL_TABLE="0 $data_dev_size thin-pool $DMTHIN_META_DEV $DMTHIN_DATA_DEV $cluster_size $low_water 1 error_if_no_space"
+	_dmthin_reload_table $DMTHIN_POOL_NAME "$DMTHIN_POOL_TABLE"
+}
+
+_dmthin_mount_options()
+{
+	echo `_common_dev_mount_options $*` $DMTHIN_VOL_DEV $SCRATCH_MNT
+}
+
+_dmthin_mount()
+{
+	_mount -t $FSTYP `_dmthin_mount_options $*`
+}
