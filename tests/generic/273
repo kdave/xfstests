@@ -57,6 +57,7 @@ _threads_set()
 
 _file_create()
 {
+	block_size=$1
 	_i=0
 
 	if ! mkdir $SCRATCH_MNT/origin
@@ -70,11 +71,11 @@ _file_create()
 
 	_disksize=`$DF_PROG -B 1 $SCRATCH_MNT | tail -1 | $AWK_PROG '{ print $5 }'`
 	_disksize=$(($_disksize / 3))
-	_num=$(($_disksize / $count / $threads / 4096))
+	_num=$(($_disksize / $count / $threads / $block_size))
 	_count=$count
 	while [ $_i -lt $_num ]
 	do
-		dd if=/dev/zero of=file_$_i bs=4096 count=$_count >/dev/null 2>&1
+		dd if=/dev/zero of=file_$_i bs=$block_size count=$_count >/dev/null 2>&1
 		_i=$(($_i + 1))
 	done
 
@@ -105,9 +106,10 @@ _do_workload()
 {
 	_pids=""
 	_pid=1
+	block_size=$(get_block_size $SCRATCH_MNT)
 	
 	_threads_set
-	_file_create
+	_file_create $block_size
 
 	_threads=$threads
 
