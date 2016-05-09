@@ -273,6 +273,22 @@ _overlay_mount()
 	local dir=$1
 	local mnt=$2
 	shift 2
+
+	local upper_fst=$(df --output=fstype $dir | tail -1)
+	case "$upper_fst" in
+	xfs)
+		if ! xfs_info $dir | grep -q "ftype=1" ; then
+			_notrun "upper fs needs to support d_type"
+		fi
+		;;
+	ext2|ext3|ext4)
+		if ! tune2fs -l $(df --output=source $dir | tail -1) | \
+		   grep -q filetype ; then
+			_notrun "upper fs needs to support d_type"
+		fi
+		;;
+	esac
+
 	mkdir -p $dir/$OVERLAY_UPPER_DIR
 	mkdir -p $dir/$OVERLAY_LOWER_DIR
 	mkdir -p $dir/$OVERLAY_WORK_DIR
