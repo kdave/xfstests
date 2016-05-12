@@ -87,17 +87,24 @@ fi
 src/feature -p $SCRATCH_DEV
 [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
 
+report_quota()
+{
+    $XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		    -c "repquota -inN -p" $SCRATCH_DEV | \
+		    tr -s '[:space:]' | _filter_project_quota
+}
+
 mkdir $dir
 $XFS_IO_PROG -r -c "chproj -R 1" -c "chattr -R +P" $dir
 
-xfs_quota -D $tmp.projects -P $tmp.projid -x \
+$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
     -c "limit -p bsoft=100m bhard=100m 1" $SCRATCH_DEV
-xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -inN -p" $SCRATCH_DEV | tr -s '[:space:]'
+report_quota
+
 touch $dir/1
 touch $dir/2
 cp $dir/2 $dir/3
-
-xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -inN -p" $SCRATCH_DEV | tr -s '[:space:]'
+report_quota
 
 if [ "$HOSTOS" == "IRIX" ] ; then
     mkfile 1M $TEST_DIR/6
@@ -107,12 +114,11 @@ fi
 
 #try cp to dir
 cp $TEST_DIR/6 $dir/6
-xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -inN -p" $SCRATCH_DEV | tr -s '[:space:]'
+report_quota
 
 #try mv to dir
 mv $TEST_DIR/6 $dir/7
-
-xfs_quota -D $tmp.projects -P $tmp.projid -x -c "repquota -inN -p" $SCRATCH_DEV | tr -s '[:space:]'
+report_quota
 
 # success, all done
 status=0
