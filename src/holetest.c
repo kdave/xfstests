@@ -70,6 +70,7 @@ long page_offs[THREADS];
 int use_wr[THREADS];
 int prefault = 0;
 int use_fork = 0;
+int use_private = 0;
 
 uint64_t get_id(void)
 {
@@ -90,24 +91,52 @@ void prefault_mapping(char *addr, long npages)
 	}
 }
 
+int verify_mapping(char *vastart, long npages, uint64_t *expect)
+{
+	int errcnt = 0;
+	int i;
+	char *va;
+
+	for (va = vastart; npages > 0; va += page_size, npages--) {
+		for (i = 0; i < THREADS; i++) {
+			if (*(uint64_t*)(va + page_offs[i]) != expect[i]) {
+				printf("ERROR: thread %d, "
+				       "offset %08lx, %08lx != %08lx\n", i,
+				       (va + page_offs[i] - vastart),
+				       *(uint64_t*)(va + page_offs[i]),
+				       expect[i]);
+				errcnt++;
+			}
+		}
+	}
+	return errcnt;
+}
+
 void *pt_page_marker(void *args)
 {
 	void **a = args;
 	char *va = (char *)a[1];
 	long npages = (long)a[2];
-	long pgoff = (long)a[3];
+	long i;
+	long pgoff = page_offs[(long)a[3]];
 	uint64_t tid = get_id();
+	long errors = 0;
 
 	if (prefault && use_fork)
 		prefault_mapping(va, npages);
 
-	va += pgoff;
-
 	/* mark pages */
-	for (; npages > 0; va += page_size, npages--)
-		*(uint64_t *)(va) = tid;
+	for (i = 0; i < npages; i++)
+		*(uint64_t *)(va + pgoff + i * page_size) = tid;
 
-	return NULL;
+	if (use_private && use_fork) {
+		uint64_t expect[THREADS] = {};
+
+		expect[(long)a[3]] = tid;
+		errors = verify_mapping(va, npages, expect);
+	}
+
+	return (void *)errors;
 }  /* pt_page_marker() */
 
 void *pt_write_marker(void *args)
@@ -115,7 +144,7 @@ void *pt_write_marker(void *args)
 	void **a = args;
 	int fd = (long)a[0];
 	long npages = (long)a[2];
-	long pgoff = (long)a[3];
+	long pgoff = page_offs[(long)a[3]];
 	uint64_t tid = get_id();
 	long i;
 
@@ -130,18 +159,18 @@ int test_this(int fd, loff_t sz)
 {
 	long npages;
 	char *vastart;
-	char *va;
 	void *targs[THREADS][4];
 	pthread_t t[THREADS];
 	uint64_t tid[THREADS];
-	int errcnt;
+	int errcnt = 0;
 	int i;
 
 	npages = sz / page_size;
 	printf("INFO: sz = %llu\n", (unsigned long long)sz);
 
 	/* mmap it */
-	vastart = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	vastart = mmap(NULL, sz, PROT_READ | PROT_WRITE,
+		       use_private ? MAP_PRIVATE : MAP_SHARED, fd, 0);
 	if (MAP_FAILED == vastart) {
 		perror("mmap()");
 		exit(20);
@@ -155,7 +184,7 @@ int test_this(int fd, loff_t sz)
 		targs[i][0] = (void *)(long)fd;
 		targs[i][1] = vastart;
 		targs[i][2] = (void *)npages;
-		targs[i][3] = (void *)page_offs[i];
+		targs[i][3] = (void *)(long)i;
 	}
 
 	for (i = 0; i < THREADS; i++) {
@@ -186,40 +215,58 @@ int test_this(int fd, loff_t sz)
 			}
 			/* Child? */
 			if (!tid[i]) {
+				void *ret;
+
 				if (use_wr[i])
-					pt_write_marker(&targs[i]);
+					ret = pt_write_marker(&targs[i]);
 				else
-					pt_page_marker(&targs[i]);
-				exit(0);
+					ret = pt_page_marker(&targs[i]);
+				exit(ret ? 1 : 0);
 			}
 			printf("INFO: process %d created\n", i);
 		}
 	}
 
 	/* wait for them to finish */
-	for (i = 0; i < THREADS; i++)
-		if (!use_fork)
-			pthread_join(t[i], NULL);
-		else
-			waitpid(tid[i], NULL, 0);
+	for (i = 0; i < THREADS; i++) {
+		if (!use_fork) {
+			void *status;
+
+			pthread_join(t[i], &status);
+			if (status)
+				errcnt++;
+		} else {
+			int status;
+
+			waitpid(tid[i], &status, 0);
+			if (!WIFEXITED(status) || WEXITSTATUS(status) > 0)
+				errcnt++;
+		}
+	}
 
 	/* check markers on each page */
-	errcnt = 0;
-	for (va = vastart; npages > 0; va += page_size, npages--) {
-		for (i = 0; i < THREADS; i++) {
-			if (*(uint64_t*)(va + page_offs[i]) != tid[i]) {
-				printf("ERROR: thread %d, "
-				       "offset %08lx, %08lx != %08lx\n", i,
-				       (va + page_offs[i] - vastart),
-				       *(uint64_t*)(va + page_offs[i]), tid[i]);
-				errcnt += 1;
-			}
+	/* For private mappings & fork we should see no writes happen */
+	if (use_private && use_fork)
+		for (i = 0; i < THREADS; i++)
+			tid[i] = 0;
+	errcnt = verify_mapping(vastart, npages, tid);
+	munmap(vastart, sz);
+
+	if (use_private) {
+		/* Check that no writes propagated into original file */
+		for (i = 0; i < THREADS; i++)
+			tid[i] = 0;
+		vastart = mmap(NULL, sz, PROT_READ, MAP_PRIVATE, fd, 0);
+		if (vastart == MAP_FAILED) {
+			perror("mmap()");
+			exit(20);
 		}
+		errcnt += verify_mapping(vastart, npages, tid);
+		munmap(vastart, sz);
 	}
 
 	printf("INFO: %d error(s) detected\n", errcnt);
 
-	munmap(vastart, sz);
 
 	return errcnt;
 }
@@ -242,7 +289,7 @@ int main(int argc, char **argv)
 	for (i = 1; i < THREADS; i++)
 		page_offs[i] = page_offs[i-1] + step;
 
-	while ((opt = getopt(argc, argv, "fwrF")) > 0) {
+	while ((opt = getopt(argc, argv, "fwrFp")) > 0) {
 		switch (opt) {
 		case 'f':
 			/* ignore errors */
@@ -260,6 +307,10 @@ int main(int argc, char **argv)
 			/* create processes instead of threads */
 			use_fork = 1;
 			break;
+		case 'p':
+			/* Use private mappings for testing */
+			use_private = 1;
+			break;
 		default:
 			fprintf(stderr, "ERROR: Unknown option character.\n");
 			exit(1);
@@ -267,10 +318,16 @@ int main(int argc, char **argv)
 	}
 
 	if (optind != argc - 2) {
-		fprintf(stderr, "ERROR: usage: holetest [-fwrF] "
+		fprintf(stderr, "ERROR: usage: holetest [-fwrFp] "
 			"FILENAME FILESIZEinMB\n");
 		exit(1);
 	}
+	if (use_private && use_wr[0]) {
+		fprintf(stderr, "ERROR: Combinations of writes and private"
+			"mappings not supported.\n");
+		exit(1);
+	}
+
 	path = argv[optind];
 	sz = strtol(argv[optind + 1], &endch, 10);
 	if (*endch || sz < 1) {
