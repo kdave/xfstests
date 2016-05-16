@@ -1,0 +1,92 @@
+#! /bin/bash
+# FS QA Test 353
+#
+# Check if fiemap ioctl returns correct SHARED flag on reflinked file
+# before and after sync the fs
+#
+# Btrfs has a bug in checking shared extent, which can only handle metadata
+# already committed to disk, but not delayed extent tree modification.
+# This caused SHARED flag only occurs after sync.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+. ./common/punch
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+_require_fiemap
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+blocksize=64k
+file1="$SCRATCH_MNT/file1"
+file2="$SCRATCH_MNT/file2"
+
+# write the initial file
+_pwrite_byte 0xcdcdcdcd 0 $blocksize $file1 | _filter_xfs_io
+
+# reflink initial file
+_reflink_range $file1 0 $file2 0 $blocksize | _filter_xfs_io
+
+# check their fiemap to make sure it's correct
+echo "before sync:"
+echo "$file1" | _filter_scratch
+$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags
+echo "$file2" | _filter_scratch
+$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags
+
+# sync and recheck, to make sure the fiemap doesn't change just
+# due to sync
+sync
+echo "after sync:"
+echo "$file1" | _filter_scratch
+$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags
+echo "$file2" | _filter_scratch
+$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags
+
+# success, all done
+status=0
+exit
