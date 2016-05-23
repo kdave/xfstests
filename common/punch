@@ -218,6 +218,23 @@ _filter_fiemap()
 	_coalesce_extents
 }
 
+_filter_fiemap_flags()
+{
+	$AWK_PROG '
+		$3 ~ /hole/ {
+			print $1, $2, $3;
+			next;
+		}
+		$5 ~ /0x[[:xdigit:]]*8[[:xdigit:]][[:xdigit:]]/ {
+			print $1, $2, "unwritten";
+			next;
+		}
+		$5 ~ /0x[[:xdigit:]]+/ {
+			print $1, $2, $5;
+		}' |
+	_coalesce_extents
+}
+
 # Filters fiemap output to only print the 
 # file offset column and whether or not
 # it is an extent or a hole

@@ -1,0 +1,98 @@
+#! /bin/bash
+# FS QA Test 352
+#
+# Test fiemap ioctl on heavily deduped file
+#
+# This test case will check if reserved extent map searching go
+# without problem and return correct SHARED flag.
+# Which btrfs will soft lock up and return wrong shared flag.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+. ./common/punch
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+_require_fiemap
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+blocksize=$((128 * 1024))
+file="$SCRATCH_MNT/tmp"
+
+# Golden output is for $LOAD_FACTOR == 1 case
+orig_nr=8192
+orig_last_extent=$(($orig_nr * $blocksize / 512))
+orig_end=$(($orig_last_extent + $blocksize / 512 - 1))
+
+# Real output
+nr=$(($orig_nr * $LOAD_FACTOR))
+last_extent=$(($nr * $blocksize / 512))
+end=$(($last_extent + $blocksize / 512 - 1))
+
+# write the initial block for later reflink
+_pwrite_byte 0xcdcdcdcd 0 $blocksize $file | _filter_xfs_io
+
+# use reflink to create the rest of the file, whose all extents are all
+# pointing to the first extent
+for i in $(seq 1 $nr); do
+	_reflink_range $file 0 $file $(($i * $blocksize)) $blocksize > /dev/null
+done
+
+# then call fiemap on that file to test both the shared flag and if
+# reserved extent mapping search will cause soft lockup
+$XFS_IO_PROG -c "fiemap -v" $file | _filter_fiemap_flags > $tmp.out
+cat $tmp.out >> $seqres.full
+
+# refact the $LOAD_FACTOR to 1 to match the golden output
+sed -i -e "s/$(($last_extent - 1))/$(($orig_last_extent - 1))/" \
+	-e "s/$last_extent/$orig_last_extent/" \
+	-e "s/$end/$orig_end/" $tmp.out
+cat $tmp.out
+
+# success, all done
+status=0
+exit
