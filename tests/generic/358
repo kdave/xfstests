@@ -1,0 +1,80 @@
+#! /bin/bash
+# FS QA Test No. 358
+#
+# Share an extent amongst a bunch of files such that the refcount
+# stays the same while the rate of change of the set of owners is
+# steadily increasing.  For example, an extent of 32 blocks is owned
+# by 32 files.  At block 1, change one of the owners.  At block 2,
+# change 2 of the owners, and so on.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+	wait
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_scratch_reflink
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+blocks=64
+blksz=65536
+
+echo "Initialize file"
+_pwrite_byte 0x61 0 $((blocks * blksz)) $testdir/file >> $seqres.full
+
+echo "Share the file n-ways"
+seq 1 $((blocks - 1)) | while read nr; do
+	_reflink_range $testdir/file 0 $testdir/file$nr.0 0 $((nr * blksz)) >> $seqres.full
+	seq $nr $((blocks - 1)) | while read nnr; do
+		_reflink_range $testdir/file $((nnr * blksz)) $testdir/file$nr.$nnr $((nnr * blksz)) $blksz >> $seqres.full
+	done
+done
+_scratch_cycle_mount
+
+echo "Check output"
+md5sum $testdir/file $testdir/file*.0 | _filter_scratch
+
+# success, all done
+status=0
+exit
