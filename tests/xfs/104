@@ -88,9 +88,14 @@ sizeb=`expr $size / $dbsize`	# in data blocks
 echo "*** creating scratch filesystem"
 _create_scratch -lsize=10m -dsize=${size} -dagcount=${nags}
 
-fillsize=`expr 110 \* 1048576`	# 110 megabytes of filling
 echo "*** using some initial space on scratch filesystem"
-_fill_scratch $fillsize
+for i in `seq 125 -1 90`; do
+	fillsize=`expr $i \* 1048576`
+	out="$(_fill_scratch $fillsize 2>&1)"
+	echo "$out" | grep -q 'No space left on device' && continue
+	test -n "${out}" && echo "$out"
+	break
+done
 
 #
 # Grow the filesystem while actively stressing it...
