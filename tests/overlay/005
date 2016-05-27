@@ -1,0 +1,115 @@
+#! /bin/bash
+# FS QA Test 005
+#
+# Memleak in overlayfs copy-up error handling path leads to panic
+# when unmount the underlying fs.
+# Kernel commit ab79efab0 fixed this issue.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_destroy_loop_device $fs_loop_dev
+	_destroy_loop_device $upper_loop_dev
+	rm -f $lower_img
+	rm -f $upper_img
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_loop
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# setup loop images fs for overlayfs
+lower_img=${SCRATCH_DEV}/${seq}.$$.img
+$XFS_IO_PROG -f -c "truncate 120m" $lower_img >>$seqres.full 2>&1
+fs_loop_dev=`_create_loop_device $lower_img`
+$MKFS_XFS_PROG -f -n ftype=1 $fs_loop_dev >>$seqres.full 2>&1
+
+# only 20m for upper dir
+upper_img=${SCRATCH_DEV}/$$.${seq}.img
+$XFS_IO_PROG -f -c "truncate 20m" $upper_img >>$seqres.full 2>&1
+upper_loop_dev=`_create_loop_device $upper_img`
+$MKFS_XFS_PROG -f -n ftype=1 $upper_loop_dev >>$seqres.full 2>&1
+
+# mount underlying xfs
+mkdir -p ${SCRATCH_DEV}/lowermnt
+mkdir -p ${SCRATCH_DEV}/uppermnt
+$MOUNT_PROG $fs_loop_dev ${SCRATCH_DEV}/lowermnt
+$MOUNT_PROG $upper_loop_dev ${SCRATCH_DEV}/uppermnt
+
+# prepare dirs
+mkdir -p ${SCRATCH_DEV}/lowermnt/lower
+mkdir -p ${SCRATCH_DEV}/uppermnt/upper
+mkdir -p ${SCRATCH_DEV}/uppermnt/work
+
+lowerd=${SCRATCH_DEV}/lowermnt/lower
+upperd=${SCRATCH_DEV}/uppermnt/upper
+workd=${SCRATCH_DEV}/uppermnt/work
+
+# Create test file in lower dir, with too big a size for
+# upper dir to copy up.
+$XFS_IO_PROG -f -c "truncate 48m" ${lowerd}/test_file \
+	>>$seqres.full 2>&1
+
+# mount new overlayfs
+$MOUNT_PROG -t overlay $SELINUX_MOUNT_OPTIONS \
+	    -o lowerdir=$lowerd -o upperdir=$upperd \
+	    -o workdir=$workd \
+	    $SCRATCH_DEV $SCRATCH_MNT
+
+# the open call triggers copy-up and it will fail ENOSPC
+$XFS_IO_PROG -f -c "o" ${SCRATCH_MNT}/test_file \
+	>>$seqres.full 2>&1
+
+# unmount overlayfs
+$UMOUNT_PROG $SCRATCH_MNT
+
+# unmount undelying xfs, this tiggers panic if memleak happens
+$UMOUNT_PROG ${SCRATCH_DEV}/uppermnt
+$UMOUNT_PROG ${SCRATCH_DEV}/lowermnt
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
