@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 7 15
 _cleanup()
 {
     cd /
-    rm -rf $tmp.*
+    rm -rf $tmp.* $finished_file
     wait
 }
 
@@ -53,6 +53,8 @@ _scratch_mkfs > $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 
 testdir=$SCRATCH_MNT/test-$seq
+finished_file=/tmp/finished
+rm -rf $finished_file
 mkdir $testdir
 
 loops=512
@@ -71,7 +73,7 @@ fbytes() {
 }
 
 reader() {
-	while [ ! -e $testdir/finished ]; do
+	while [ ! -e $finished_file ]; do
 		_read_range $testdir/file3 0 $((loops * blksz)) | fbytes
 	done
 }
@@ -91,7 +93,7 @@ for i in `seq 1 2`; do
 	done
 done
 echo "Finished reflinking"
-touch $testdir/finished
+touch $finished_file
 wait
 
 # success, all done

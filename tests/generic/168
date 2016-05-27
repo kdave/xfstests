@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 7 15
 _cleanup()
 {
     cd /
-    rm -rf $tmp.*
+    rm -rf $tmp.* $finished_file
     wait
 }
 
@@ -52,6 +52,8 @@ _scratch_mkfs > $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 
 testdir=$SCRATCH_MNT/test-$seq
+finished_file=/tmp/finished
+rm -rf $finished_file
 mkdir $testdir
 
 loops=1024
@@ -66,7 +68,7 @@ _scratch_cycle_mount
 
 # Direct I/O overwriter...
 overwrite() {
-	while [ ! -e $testdir/finished ]; do
+	while [ ! -e $finished_file ]; do
 		seq $nr_loops -1 0 | while read i; do
 			_pwrite_byte 0x63 $((i * blksz)) $blksz $testdir/file2 >> $seqres.full
 		done
@@ -82,7 +84,7 @@ seq 1 10 | while read j; do
 		[ $? -ne 0 ] && exit
 	done
 done
-touch $testdir/finished
+touch $finished_file
 wait
 
 # success, all done

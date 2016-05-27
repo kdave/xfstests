@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 7 15
 _cleanup()
 {
     cd /
-    rm -rf $tmp.*
+    rm -rf $tmp.* $finished_file $abort_file
     wait
 }
 
@@ -53,6 +53,10 @@ _scratch_mkfs_sized $((400 * 1048576)) > $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 
 testdir=$SCRATCH_MNT/test-$seq
+finished_file=/tmp/finished
+rm -rf $finished_file
+abort_file=/tmp/abort
+rm -rf $abort_file
 mkdir $testdir
 
 loops=1024
@@ -67,7 +71,7 @@ _scratch_cycle_mount
 # Snapshot creator...
 snappy() {
 	n=0
-	while [ ! -e $testdir/finished ]; do
+	while [ ! -e $finished_file ]; do
 		out="$(_cp_reflink $testdir/file1 $testdir/snap_$n 2>&1)"
 		res=$?
 		echo $out | grep -q "No space left" && break
@@ -75,7 +79,7 @@ snappy() {
 		test $res -ne 0 && break
 		n=$((n + 1))
 	done
-	touch $testdir/abort
+	touch $abort_file
 }
 
 echo "Snapshot a file undergoing buffered rewrite"
@@ -84,13 +88,13 @@ seq 1 1000 | while read j; do
 	seq $nr_loops -1 0 | while read i; do
 		out="$(_pwrite_byte 0x63 $((i * blksz)) $blksz $testdir/file1 2>&1)"
 		echo $out >> $seqres.full
-		echo $out | grep -q "No space left" && touch $testdir/abort
-		echo $out | grep -qi "error" && touch $testdir/abort
-		test -e $testdir/abort && break
+		echo $out | grep -q "No space left" && touch $abort_file
+		echo $out | grep -qi "error" && touch $abort_file
+		test -e $abort_file && break
 	done
-	test -e $testdir/abort && break
+	test -e $abort_file && break
 done
-touch $testdir/finished
+touch $finished_file
 wait
 
 # success, all done
