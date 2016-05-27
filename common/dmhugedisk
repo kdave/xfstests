@@ -1,0 +1,60 @@
+##/bin/bash
+# Routines for creating huge (fake) disks
+#-----------------------------------------------------------------------
+#  Copyright (c) 2016 Oracle.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Oracle Corporation, 500 Oracle Parkway,
+#  Redwood Shores, CA 94065, USA, or: http://www.oracle.com/
+#-----------------------------------------------------------------------
+
+_require_dmhugedisk()
+{
+	_require_dm_target zero
+	_require_dm_target snapshot
+}
+
+_dmhugedisk_init()
+{
+	test -z "$1" && _fatal "must specify sector count to _dmhugedisk_init"
+	local dm_backing_dev=$SCRATCH_DEV
+
+	$DMSETUP_PROG remove huge-test > /dev/null 2>&1
+	$DMSETUP_PROG remove huge-test-zero > /dev/null 2>&1
+
+	local blk_dev_size=$1
+
+	DMHUGEDISK_ZERO='/dev/mapper/huge-test-zero'
+	DMHUGEDISK_DEV='/dev/mapper/huge-test'
+
+	DMHUGEDISK_ZERO_TABLE="0 $blk_dev_size zero"
+	DMHUGEDISK_DEV_TABLE="0 $blk_dev_size snapshot $DMHUGEDISK_ZERO $SCRATCH_DEV N 512"
+
+	$DMSETUP_PROG create huge-test-zero --table "$DMHUGEDISK_ZERO_TABLE" || \
+		_fatal "failed to create dm huge zero device"
+	$DMSETUP_PROG create huge-test --table "$DMHUGEDISK_DEV_TABLE" || \
+		_fatal "failed to create dm huge device"
+}
+
+_dmhugedisk_cleanup()
+{
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	# wait for device to be fully settled so that 'dmsetup remove' doesn't
+	# fail due to EBUSY
+	$UDEV_SETTLE_PROG >/dev/null 2>&1
+	$DMSETUP_PROG remove huge-test > /dev/null 2>&1
+	$DMSETUP_PROG remove huge-test-zero > /dev/null 2>&1
+}

@@ -1,0 +1,119 @@
+#! /bin/bash
+# FS QA Test No. 310
+#
+# Create a file with more than 2^21 extents (the max length of a bmbt record).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	umount $SCRATCH_MNT > /dev/null 2>&1
+	_dmhugedisk_cleanup
+	rm -rf $tmp.*
+	_scratch_mkfs >/dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmhugedisk
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch
+_require_xfs_io_command "falloc"
+
+rm -f $seqres.full
+
+# Figure out block size
+echo "Figure out block size"
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount >> $seqres.full
+
+is_rmap=$(xfs_info $SCRATCH_MNT | grep -c "rmapbt=1")
+test $is_rmap -gt 0 || _notrun "rmap not supported on scratch fs"
+
+testdir=$SCRATCH_MNT/test-$seq
+blksz="$(stat -f $SCRATCH_MNT -c '%S')"
+
+umount $SCRATCH_MNT
+
+echo "Format huge device"
+_dmhugedisk_init $((blksz * 2 * 4400))	# a little over 2^22 blocks
+_mkfs_dev -d agcount=2 $DMHUGEDISK_DEV
+_mount $DMHUGEDISK_DEV $SCRATCH_MNT
+xfs_info $SCRATCH_MNT >> $seqres.full
+
+echo "Create the original file blocks"
+mkdir $testdir
+blksz="$(stat -f $testdir -c '%S')"
+nr_blks=2100000	# 2^21 plus a little more
+$XFS_IO_PROG -f -c "falloc 0 $((nr_blks * blksz))" $testdir/file1 >> $seqres.full
+
+echo "Check extent count"
+xfs_bmap -l -p -v $testdir/file1 | grep '^[[:space:]]*1:' -q && xfs_bmap -l -p -v $testdir/file1
+inum=$(stat -c '%i' $testdir/file1)
+umount $SCRATCH_MNT
+
+echo "Check bmap count"
+nr_bmaps=$(xfs_db -c "inode $inum" -c "bmap" $DMHUGEDISK_DEV | grep 'data offset' | wc -l)
+test $nr_bmaps -gt 1 || xfs_db -c "inode $inum" -c "bmap" $DMHUGEDISK_DEV
+#xfs_db -c "agf 0" -c p -c "inode $inum" -c "bmap" $DMHUGEDISK_DEV
+
+echo "Check rmap count"
+nr_rmaps=$(xfs_db -c 'agf 0' -c 'addr rmaproot' -c 'p' $DMHUGEDISK_DEV | grep ",$inum,[0-9]*,1,0,0" | wc -l)
+test $nr_rmaps -eq 1 || xfs_db -c 'agf 0' -c 'addr rmaproot' -c 'p' $DMHUGEDISK_DEV | grep ",$inum,[0-9]*,1,0,0"
+
+echo "Check and fake-repair huge filesystem" | tee -a $seqres.full
+$XFS_DB_PROG -c 'check' $DMHUGEDISK_DEV
+$XFS_REPAIR_PROG -n $DMHUGEDISK_DEV >> $seqres.full 2>&1
+test $? -eq 0 || echo "xfs_repair -n failed, see $seqres.full"
+
+echo "Real repair huge filesystem" | tee -a $seqres.full
+$XFS_REPAIR_PROG $DMHUGEDISK_DEV >> $seqres.full 2>&1
+test $? -eq 0 || echo "xfs_repair failed, see $seqres.full"
+
+echo "Check bmap count again"
+nr_bmaps=$(xfs_db -c "inode $inum" -c "bmap" $DMHUGEDISK_DEV | grep 'data offset' | wc -l)
+test $nr_bmaps -gt 1 || xfs_db -c "inode $inum" -c "bmap" $DMHUGEDISK_DEV
+
+echo "Check rmap count again"
+nr_rmaps=$(xfs_db -c 'agf 0' -c 'addr rmaproot' -c 'p' $DMHUGEDISK_DEV | grep ",$inum,[0-9]*,1,0,0" | wc -l)
+test $nr_rmaps -eq 1 || xfs_db -c 'agf 0' -c 'addr rmaproot' -c 'p' $DMHUGEDISK_DEV | grep ",$inum,[0-9]*,1,0,0"
+
+echo "Check and fake-repair huge filesystem again" | tee -a $seqres.full
+$XFS_DB_PROG -c 'check' $DMHUGEDISK_DEV
+$XFS_REPAIR_PROG -n $DMHUGEDISK_DEV >> $seqres.full 2>&1
+_dmhugedisk_cleanup
+
+echo "Done"
+
+# success, all done
+status=0
+exit
