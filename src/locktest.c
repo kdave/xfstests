@@ -95,7 +95,7 @@ static char	*filename = 0;
 static int	debug = 0;
 static int	server = 1;
 static int	maxio = 8192;
-static int	port = 7890;
+static int	port = 0;
 static int 	testnumber = -1;
 static int	saved_errno = 0;
 
@@ -898,6 +898,20 @@ main(int argc, char *argv[])
 	    exit(1);
 	    /*NOTREACHED*/
 	}
+
+	if (port == 0) {
+	        socklen_t addr_len = sizeof(myAddr);
+
+		if (getsockname(s_fd, &myAddr, &addr_len)) {
+		    perror("getsockname");
+		    exit(1);
+		}
+
+		port = ntohs(myAddr.sin_port);
+	}
+
+	printf("server port: %d\n", port);
+	fflush(stdout);
 
 	c_fd = accept(s_fd, NULL, NULL);
 	if (c_fd == INVALID_SOCKET) {

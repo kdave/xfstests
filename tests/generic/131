@@ -49,20 +49,17 @@ _require_test_fcntl_advisory_locks
 
 TESTFILE=$TEST_DIR/lock_file
 
-# Grab a port which is hopefully unused
-if [ $$ -gt 1024 -a $$ -lt 32000 ]; then
-    PORT=$$
-elif [ $$ -lt 1024 ]; then
-    PORT=$(($$+1024))
-elif [ $$ -gt 32000 ]; then
-    PORT=$(($$%30000+1024))
-fi
-
 # Start the server
-src/locktest -p $PORT $TESTFILE 2>&1 > $TEST_DIR/server.out &
+src/locktest $TESTFILE 2>&1 > $TEST_DIR/server.out &
 locktest_pid1=$!
 
 sleep 1
+
+PORT=$(cat $TEST_DIR/server.out | grep "^server port: " | awk '{print $3}')
+if [ -z $PORT ]; then
+	echo "Could not get server port"
+	exit 1
+fi
 
 # Start the client
 src/locktest -p $PORT -h localhost $TESTFILE 2>&1 > $TEST_DIR/client.out
