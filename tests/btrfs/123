@@ -1,0 +1,85 @@
+#! /bin/bash
+# FS QA Test 123
+#
+# Test if btrfs leaks qgroup numbers for data extents
+#
+# Due to balance code is doing trick tree block swap, which doing
+# non-standard extent reference update, qgroup can't handle it correctly,
+# and leads to corrupted qgroup numbers.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs
+# Need to use inline extents to fill metadata rapidly
+_scratch_mount "-o max_inline=2048"
+
+# create 64K inlined metadata, which will ensure there is a 2-level
+# metadata. Even for maximum nodesize(64K)
+for i in $(seq 32); do
+	_pwrite_byte 0xcdcdcdcd 0 2k $SCRATCH_MNT/small_$i | _filter_xfs_io
+done
+
+# then a large data write to make the quota corruption obvious enough
+_pwrite_byte 0xcdcdcdcd 0 32m $SCRATCH_MNT/large | _filter_xfs_io
+sync
+
+# enable quota and rescan to get correct number
+_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+
+# now balance data block groups to corrupt qgroup
+_run_btrfs_util_prog balance start -d $SCRATCH_MNT
+
+_scratch_unmount
+# generate a qgroup report and look for inconsistent groups
+$BTRFS_UTIL_PROG check --qgroup-report $SCRATCH_DEV 2>&1 | \
+		grep -E "Counts for qgroup.*are different"
+
+# success, all done
+status=0
+exit
