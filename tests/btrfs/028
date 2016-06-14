@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test 028
+#
+# Test if qgroup can handle extent de-reference during reallocation.
+# "extent de-reference" means that reducing an extent's reference count
+# or freeing an extent.
+# Although current qgroup can handle it, we still need to prevent any
+# regression which may break current qgroup.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs
+_scratch_mount
+
+_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+
+# Increase the probability of generating de-refer extent, and decrease
+# other.
+args=`_scale_fsstress_args -z \
+	-f write=10 -f unlink=10 \
+	-f creat=10 -f fsync=10 \
+	-f fsync=10 -n 100000 -p 2 \
+	-d $SCRATCH_MNT/stress_dir`
+echo "Run fsstress $args" >>$seqres.full
+$FSSTRESS_PROG $args >/dev/null 2>&1 &
+fsstress_pid=$!
+
+echo "Start balance" >>$seqres.full
+_btrfs_stress_balance -d $SCRATCH_MNT >/dev/null 2>&1 &
+balance_pid=$!
+
+# 30s is enough to trigger bug
+sleep $((30*$TIME_FACTOR))
+kill $fsstress_pid $balance_pid
+wait
+
+# kill _btrfs_stress_balance can't end balance, so call btrfs balance cancel
+# to cancel running or paused balance.
+$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+
+_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+
+_scratch_unmount
+
+# generate a qgroup report and look for inconsistent groups
+$BTRFS_UTIL_PROG check --qgroup-report $SCRATCH_DEV 2>&1 | \
+	grep -E "Counts for qgroup.*are different"
+echo "Silence is golden"
+status=0
+
+exit
