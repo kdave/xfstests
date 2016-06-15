@@ -1,0 +1,106 @@
+#! /bin/bash
+# FS QA Test 021
+#
+# Regression test for commit:
+# 688f869 ext4: Initialize fsync transaction ids in ext4_new_inode()
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_dumpe2fs
+
+# 8M in bytes
+fssize=$((8 * 1024 * 1024))
+_scratch_mkfs_sized $fssize >> $seqres.full 2>&1
+
+blocksize=`$DUMPE2FS_PROG -h $SCRATCH_DEV 2>/dev/null | grep "Block size" | \
+	awk '{print $3}'`
+offset=0
+found=0
+# this is the jbd2 journal superblock magic number on disk, in big endian
+magic="c0 3b 39 98"
+
+while [ $offset -lt $fssize ]; do
+	if od -j $offset -N 4 -t x1 $SCRATCH_DEV | \
+	   grep -i "$magic" >/dev/null; then
+		echo "Found journal: $offset" >> $seqres.full
+		found=1
+		break
+	fi
+	offset=$((offset + blocksize))
+done
+if [ $found -ne 1 ]; then
+	echo "Found no journal"
+	exit
+fi
+
+# Overwrite journal.s_squence to 0x 81d1a480
+# 0x81d1a480 is hex form of 2178000000, and jbd2 journal is big endian on
+# disk, the s_squence offset to the beginning of journal superblock is 24
+# we do this to let jbd2 start to run with a initial big transaction id,
+# which will reduce the time taken to trigger this bug.
+xfs_io  -c "pwrite -S 0x81 $((offset+24)) 1" \
+	-c "pwrite -S 0xd1 $((offset+25)) 1" \
+	-c "pwrite -S 0xa4 $((offset+26)) 1" \
+	-c "pwrite -S 0x80 $((offset+27)) 1" $SCRATCH_DEV >> $seqres.full 2>&1
+
+trans_id=`$DUMPE2FS_PROG $SCRATCH_DEV 2>/dev/null | grep "Journal sequence" | \
+	awk '{print $NF}'`
+echo "Initial transaction id is $trans_id"
+_scratch_mount
+
+do_fdatasync_work()
+{
+	while [ 1 ]; do
+		$XFS_IO_PROG -f -c "fdatasync" $SCRATCH_MNT/testfile
+	done
+}
+
+do_fdatasync_work &
+datasync_work_pid=$!
+sleep 10
+kill $datasync_work_pid >/dev/null 2>&1
+
+# success, all done
+status=0
+exit
