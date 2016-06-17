@@ -1,0 +1,93 @@
+#! /bin/bash
+# FS QA Test No. 327
+#
+# Create 100 reflinked files, CoW them all, and see if xfs_repair will
+# clear the reflink flag.  There was a buffer handling bug in xfs_repair
+# that (fortunately) triggered asserts in the rmap code when clearing
+# the reflink flag.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_scratch_unmount > /dev/null 2>&1
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_cp_reflink
+_require_scratch_reflink
+
+rm -f $seqres.full
+
+nr=128 # spanning at least one inode chunk tickles a bug in xfs_repair
+echo "Format filesystem"
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount >> $seqres.full
+
+echo "Create files"
+_pwrite_byte 0x66 0 1 $SCRATCH_MNT/file.0 >> $seqres.full
+seq 1 $nr | while read i; do
+	_cp_reflink $SCRATCH_MNT/file.0 $SCRATCH_MNT/file.$i
+done
+sync
+
+echo "Check files"
+for i in 0 $((nr / 2)) $nr; do
+	md5sum $SCRATCH_MNT/file.$i | _filter_scratch
+	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i | _filter_scratch
+done
+
+echo "CoW all files"
+seq 1 $nr | while read i; do
+	echo m >> $SCRATCH_MNT/file.$i
+done
+
+echo "Repair filesystem"
+_scratch_unmount
+_repair_scratch_fs >> $seqres.full
+_scratch_mount
+
+echo "Check files again"
+for i in 0 $((nr / 2)) $nr; do
+	md5sum $SCRATCH_MNT/file.$i | _filter_scratch
+	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i | _filter_scratch
+done
+
+echo "Done"
+
+# success, all done
+status=0
+exit
