@@ -1,0 +1,93 @@
+##/bin/bash
+# Routines for injecting errors into filesystems
+#-----------------------------------------------------------------------
+#  Copyright (c) 2016 Oracle.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#
+#  Contact information: Oracle Corporation, 500 Oracle Parkway,
+#  Redwood Shores, CA 94065, USA, or: http://www.oracle.com/
+#-----------------------------------------------------------------------
+. ./common/log
+
+# Tests whether $FSTYP is one of the filesystems that supports error injection
+_require_error_injection()
+{
+	case "$FSTYP" in
+	"xfs")
+		grep -q 'debug 1' /proc/fs/xfs/stat || \
+			_notrun "XFS error injection requires CONFIG_XFS_DEBUG"
+		;;
+	*)
+		_notrun "Error injection not supported on filesystem type: $FSTYP"
+	esac
+}
+
+# Requires that xfs_io inject command knows about this error type
+_require_xfs_io_error_injection()
+{
+	type="$1"
+	_require_error_injection
+
+	# NOTE: We can't actually test error injection here because xfs
+	# hasn't always range checked the argument to xfs_errortag_add.
+	# We also don't want to trip an error before we're ready to deal
+	# with it.
+
+	$XFS_IO_PROG -x -c 'inject' $TEST_DIR | grep -q "$type" || \
+		_notrun "XFS error injection $type unknown."
+}
+
+# Inject an error into the test fs
+_test_inject_error()
+{
+	type="$1"
+
+	$XFS_IO_PROG -x -c "inject $type" $TEST_DIR
+}
+
+# Inject an error into the scratch fs
+_scratch_inject_error()
+{
+	type="$1"
+
+	$XFS_IO_PROG -x -c "inject $type" $SCRATCH_MNT
+}
+
+# Unmount and remount the scratch device, dumping the log
+_scratch_inject_logprint()
+{
+	local opts="$1"
+
+	if test -n "$opts"; then
+		opts="-o $opts"
+	fi
+	_scratch_unmount
+	_scratch_dump_log
+	_scratch_mount "$opts"
+}
+
+# Unmount and remount the test device, dumping the log
+_test_inject_logprint()
+{
+	local opts="$1"
+
+	if test -n "$opts"; then
+		opts="-o $opts"
+	fi
+	_test_unmount
+	_test_dump_log
+	_test_mount "$opts"
+}

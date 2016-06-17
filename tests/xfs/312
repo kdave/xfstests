@@ -1,0 +1,102 @@
+#! /bin/bash
+# FS QA Test No. 312
+#
+# Reflink a file with a few dozen extents, CoW a few blocks, and rm.
+# Inject an error during block remap to test log recovery.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_scratch_unmount > /dev/null 2>&1
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+. ./common/inject
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_cp_reflink
+_require_scratch_reflink
+_require_xfs_io_error_injection "bmap_finish_one"
+
+rm -f $seqres.full
+
+blksz=65536
+blks=64
+sz=$((blksz * blks))
+echo "Format filesystem"
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount >> $seqres.full
+
+echo "Create files"
+_pwrite_byte 0x66 0 $sz $SCRATCH_MNT/file1 >> $seqres.full
+_cp_reflink $SCRATCH_MNT/file1 $SCRATCH_MNT/file2
+_cp_reflink $SCRATCH_MNT/file1 $SCRATCH_MNT/file3
+
+# Punch holes in file3
+seq 1 2 $blks | while read off; do
+	$XFS_IO_PROG -c "fpunch $((off * blksz)) $blksz" $SCRATCH_MNT/file3 >> $seqres.full
+done
+sync
+
+echo "Check files"
+md5sum $SCRATCH_MNT/file1 | _filter_scratch
+md5sum $SCRATCH_MNT/file2 | _filter_scratch
+md5sum $SCRATCH_MNT/file3 | _filter_scratch
+
+echo "Inject error"
+_scratch_inject_error "bmap_finish_one"
+
+echo "CoW a few blocks"
+$XFS_IO_PROG -c "pwrite -W -S 0x67 -b $sz $((10 * blksz)) $((10 * blksz))" $SCRATCH_MNT/file2 >> $seqres.full
+
+echo "FS should be shut down, touch will fail"
+touch $SCRATCH_MNT/badfs 2>&1 | _filter_scratch
+
+echo "Remount to replay log"
+_scratch_inject_logprint >> $seqres.full
+
+echo "FS should be online, touch should succeed"
+touch $SCRATCH_MNT/goodfs
+
+echo "Check files again"
+md5sum $SCRATCH_MNT/file1 | _filter_scratch
+md5sum $SCRATCH_MNT/file2 | _filter_scratch
+md5sum $SCRATCH_MNT/file3 | _filter_scratch
+
+echo "Done"
+
+# success, all done
+status=0
+exit
