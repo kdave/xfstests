@@ -156,7 +156,20 @@ _require_attr_v1
 
 rm -f $seqres.full
 
-_scratch_mkfs -i attr=2,size=512 -l lazy-count=1 >/dev/null 2>&1
+_scratch_mkfs -i attr=2,size=512 -l lazy-count=1 | _filter_mkfs \
+	>>$seqres.full 2>$tmp.mkfs
+# import crc status and attr version
+. $tmp.mkfs
+
+# _scratch_mkfs may ignore $MKFS_OPTIONS if mkfs fails due to conflicts between
+# $MKFS_OPTIONS and the provided mkfs options, which could result in creating
+# an XFS we don't want. Check crc status and attr version to be sure.
+if [ $_fs_has_crcs -eq 1 ]; then
+	_notrun "attr v1 not supported on $SCRATCH_DEV"
+fi
+if [ $attr -ne 2 ]; then
+	_notrun "need attr v2 on $SCRATCH_DEV"
+fi
 
 # set inum to root dir ino
 # we'll add in dirents and EAs into the root directory
