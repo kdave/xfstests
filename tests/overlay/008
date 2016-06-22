@@ -1,0 +1,85 @@
+#! /bin/bash
+# FS QA Test 008
+#
+# Create file/dir over whiteout by another user, uid/gid of the file/dir should
+# be current fsuid/fsgid, not the mounter's.
+#
+# This upstream kernel patch fixed the issue
+# d0e13f5 ovl: fix uid/gid when creating over whiteout
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_user
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create test file on lower dir, and chown to fsgqa user
+lowerdir=$SCRATCH_DEV/$OVERLAY_LOWER_DIR
+mkdir $lowerdir
+touch $lowerdir/testfile
+chown fsgqa:fsgqa $lowerdir/testfile
+
+# chown upperdir to fsgqa user, so new file/dir can be created by the user
+upperdir=$SCRATCH_DEV/$OVERLAY_UPPER_DIR
+mkdir $upperdir
+chown fsgqa:fsgqa $upperdir
+
+_scratch_mount
+
+# Remove testfile, whiteout created in lowerdir
+rm -f $SCRATCH_MNT/testfile
+
+# Create new file over whiteout and check the file ownership
+_user_do "touch $SCRATCH_MNT/testfile"
+stat -c %U:%G-%F $SCRATCH_MNT/testfile
+
+# Create new dir over whiteout and check ownership again
+rm -f $SCRATCH_MNT/testfile
+_user_do "mkdir $SCRATCH_MNT/testfile"
+stat -c %U:%G-%F $SCRATCH_MNT/testfile
+
+# success, all done
+status=0
+exit
