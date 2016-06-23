@@ -802,6 +802,65 @@ _scratch_mkfs()
     esac
 }
 
+# Helper function to get a spare or replace-target device from
+# configured SCRATCH_DEV_POLL, must call _scratch_dev_pool_get()
+# before _spare_dev_get(). Replace-target-device/Spare-device will
+# be assigned to SPARE_DEV.
+# As of now only one replace-target-device/spare-device can be
+# assigned.
+#
+# Usage:
+#  _scratch_dev_pool_get() <ndevs>
+#     _spare_dev_get()
+#     :: do stuff
+#     _spare_dev_put()
+#  _scratch_dev_pool_put()
+#
+_spare_dev_get()
+{
+	typeset -p SCRATCH_DEV_POOL_SAVED >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_fail "Bug: unset val, must call _scratch_dev_pool_get before _spare_dev_get"
+	fi
+
+	if [ -z "$SCRATCH_DEV_POOL_SAVED" ]; then
+		_fail "Bug: str empty, must call _scratch_dev_pool_get before _spare_dev_get"
+	fi
+
+	# Check if the spare is already assigned
+	typeset -p SPARE_DEV >/dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		if [ ! -z "$SPARE_DEV" ]; then
+			_fail "Bug: SPARE_DEV = $SPARE_DEV already assigned"
+		fi
+	fi
+
+	local ndevs=`echo $SCRATCH_DEV_POOL| wc -w`
+	local config_ndevs=`echo $SCRATCH_DEV_POOL_SAVED| wc -w`
+
+	if [ $ndevs -eq $config_ndevs ]; then
+		_notrun "All devs used no spare"
+	fi
+	# Get a dev that is not used
+	local devs[]="( $SCRATCH_DEV_POOL_SAVED )"
+	SPARE_DEV=${devs[@]:$ndevs:1}
+	export SPARE_DEV
+}
+
+_spare_dev_put()
+{
+	typeset -p SPARE_DEV >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_fail "Bug: unset val, must call _spare_dev_get before its put"
+	fi
+
+	if [ -z "$SPARE_DEV" ]; then
+		_fail "Bug: str empty, must call _spare_dev_get before its put"
+	fi
+
+	export SPARE_DEV=""
+}
+
 #
 # Generally test cases will have..
 #   _require_scratch_dev_pool X
