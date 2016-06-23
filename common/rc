@@ -802,6 +802,61 @@ _scratch_mkfs()
     esac
 }
 
+#
+# Generally test cases will have..
+#   _require_scratch_dev_pool X
+# to make sure it has the enough scratch devices including
+# replace-target and spare device. Now arg1 here is the
+# required number of scratch devices by a-test-case excluding
+# the replace-target and spare device. So this function will
+# set SCRATCH_DEV_POOL to the specified number of devices.
+#
+# Usage:
+#  _scratch_dev_pool_get() <ndevs>
+#     :: do stuff
+#
+#  _scratch_dev_pool_put()
+#
+_scratch_dev_pool_get()
+{
+	if [ $# -ne 1 ]; then
+		_fail "Usage: _scratch_dev_pool_get ndevs"
+	fi
+
+	local test_ndevs=$1
+	local config_ndevs=`echo $SCRATCH_DEV_POOL| wc -w`
+	local devs[]="( $SCRATCH_DEV_POOL )"
+
+	typeset -p config_ndevs >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_fail "Bug: cant find SCRATCH_DEV_POOL ndevs"
+	fi
+
+	if [ $config_ndevs -lt $test_ndevs ]; then
+		_notrun "Need at least test requested number of ndevs $test_ndevs"
+	fi
+
+	SCRATCH_DEV_POOL_SAVED=${SCRATCH_DEV_POOL}
+	export SCRATCH_DEV_POOL_SAVED
+	SCRATCH_DEV_POOL=${devs[@]:0:$test_ndevs}
+	export SCRATCH_DEV_POOL
+}
+
+_scratch_dev_pool_put()
+{
+	typeset -p SCRATCH_DEV_POOL_SAVED >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_fail "Bug: unset val, must call _scratch_dev_pool_get before _scratch_dev_pool_put"
+	fi
+
+	if [ -z "$SCRATCH_DEV_POOL_SAVED" ]; then
+		_fail "Bug: str empty, must call _scratch_dev_pool_get before _scratch_dev_pool_put"
+	fi
+
+	export SCRATCH_DEV_POOL=$SCRATCH_DEV_POOL_SAVED
+	export SCRATCH_DEV_POOL_SAVED=""
+}
+
 _scratch_pool_mkfs()
 {
     case $FSTYP in
