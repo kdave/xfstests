@@ -2926,8 +2926,17 @@ _require_cloner()
 		_notrun "cloner binary not present at $CLONER_PROG"
 }
 
+# skip test if MKFS_OPTIONS contains the given string
+_exclude_scratch_mount_option()
+{
+	if echo $MOUNT_OPTIONS | grep -q "$1"; then
+		_notrun "mount option \"$1\" not allowed in this test"
+	fi
+}
+
 _require_atime()
 {
+	_exclude_scratch_mount_option "noatime"
 	if [ "$FSTYP" == "nfs" ]; then
 		_notrun "atime related mount options have no effect on NFS"
 	fi
