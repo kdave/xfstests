@@ -72,15 +72,19 @@ _filter_btrfs_compress_property()
 	sed -e "s/compression=\(lzo\|zlib\)/COMPRESSION=XXX/g"
 }
 
-# filter name of the property from the output, optionally verify against $1
+# filter error messages from btrfs prop, optionally verify against $1
 # recognized message(s):
 #  "object is not compatible with property: label"
+#  "invalid value for property:{, value}"
+#  "failed to {get,set} compression for $PATH[.:]: Invalid argument"
 _filter_btrfs_prop_error()
 {
 	if ! [ -z "$1" ]; then
-		sed -e "s/\(compatible with property\): $1/\1/"
+		sed -e "s#\(compatible with property\): $1#\1#" \
+		    -e "s#^\(.*failed to [sg]et compression for $1\)[:.] \(.*\)#\1: \2#"
 	else
-		sed -e "s/^\(.*compatible with property\).*/\1/"
+		sed -e "s#^\(.*compatible with property\).*#\1#" \
+		    -e "s#^\(.*invalid value for property\)[:.].*#\1#"
 	fi
 }
 
