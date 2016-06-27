@@ -37,8 +37,6 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common/filter
 . ./common/attr
 
-runas=$here/src/runas
-
 TARGET_DIR=$SCRATCH_MNT
 [ "$FSTYP" == "xfs" ] && TARGET_DIR=$TEST_DIR
 
@@ -83,8 +81,7 @@ _supported_os IRIX
 _require_test
 _acl_setup_ids
 _require_acls
-
-[ -x $runas ] || _notrun "$runas executable not found"
+_require_runas
 
 # get dir
 #export FILE_SYS=xfs
@@ -137,35 +134,35 @@ chacl u::r-x,g::---,o::--- file1 2>&1
 _acl_list file1
 # change to owner
 echo "Expect to PASS" 
-$runas -u $acl1 -g $acl1 ./file1 2>&1
+_runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to FAIL" 
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 
 echo ""
 echo "--- Test group permissions ---"
 chacl u::---,g::r-x,o::--- file1 2>&1
 _acl_list file1
 echo "Expect to FAIL - acl1 is owner" 
-$runas -u $acl1 -g $acl1 ./file1 2>&1
+_runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to PASS - acl2 matches group" 
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to PASS - acl2 matches sup group" 
-$runas -u $acl2 -g $acl3 -s $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl3 -s $acl2 ./file1 2>&1
 echo "Expect to FAIL - acl3 is not in group" 
-$runas -u $acl3 -g $acl3 ./file1 2>&1
+_runas -u $acl3 -g $acl3 ./file1 2>&1
 
 echo ""
 echo "--- Test other permissions ---"
 chacl u::---,g::---,o::r-x file1 2>&1
 _acl_list file1
 echo "Expect to FAIL - acl1 is owner" 
-$runas -u $acl1 -g $acl1 ./file1 2>&1
+_runas -u $acl1 -g $acl1 ./file1 2>&1
 echo "Expect to FAIL - acl2 is in group" 
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to FAIL - acl2 is in sup. group" 
-$runas -u $acl2 -g $acl3 -s $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl3 -s $acl2 ./file1 2>&1
 echo "Expect to PASS - acl3 is not owner or in group" 
-$runas -u $acl3 -g $acl3 ./file1 2>&1
+_runas -u $acl3 -g $acl3 ./file1 2>&1
 
 #-------------------------------------------------------
 
@@ -181,9 +178,9 @@ _acl_list file1
 echo "Expect to PASS - USER ACE matches user"
 chacl u::---,g::---,o::---,u:$acl2:r-x,m::rwx file1 2>&1
 _acl_list file1
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to FAIL - USER ACE does not match user"
-$runas -u $acl3 -g $acl3 ./file1 2>&1
+_runas -u $acl3 -g $acl3 ./file1 2>&1
 
 echo ""
 echo "--- Test adding a GROUP ACE ---"
@@ -194,11 +191,11 @@ _acl_list file1
 chacl u::---,g::---,o::---,g:$acl2:r-x,m::rwx file1 2>&1
 _acl_list file1 | _acl_filter_id
 echo "Expect to PASS - GROUP ACE matches group"
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 echo "Expect to PASS - GROUP ACE matches sup group"
-$runas -u $acl2 -g $acl1 -s $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl1 -s $acl2 ./file1 2>&1
 echo "Expect to FAIL - GROUP ACE does not match group"
-$runas -u $acl3 -g $acl3 ./file1 2>&1
+_runas -u $acl3 -g $acl3 ./file1 2>&1
 
 #-------------------------------------------------------
 
@@ -209,17 +206,17 @@ echo "--- Test MASK ---"
 chacl u::---,g::---,o::---,g:$acl2:r-x,m::-w- file1 2>&1
 _acl_list file1
 echo "Expect to FAIL as MASK prohibits execution"
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 
 # user
 chacl u::---,g::---,o::---,u:$acl2:r-x,m::-w- file1 2>&1
 echo "Expect to FAIL as MASK prohibits execution"
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 
 # user
 chacl u::---,g::---,o::---,u:$acl2:r-x,m::r-x file1 2>&1
 echo "Expect to PASS as MASK allows execution"
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 
 #-------------------------------------------------------
 
@@ -228,11 +225,11 @@ echo "--- Test ACE priority ---"
 
 chacl o::rwx,g::rwx,u:$acl1:rwx,u::---,m::rwx file1 2>&1
 echo "Expect to FAIL as should match on owner"
-$runas -u $acl1 -g $acl2 ./file1 2>&1
+_runas -u $acl1 -g $acl2 ./file1 2>&1
 
 chacl o::---,g::---,u:$acl2:rwx,u::---,m::rwx file1 2>&1
 echo "Expect to PASS as should match on user"
-$runas -u $acl2 -g $acl2 ./file1 2>&1
+_runas -u $acl2 -g $acl2 ./file1 2>&1
 
 #-------------------------------------------------------
 

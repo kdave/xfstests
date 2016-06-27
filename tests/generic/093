@@ -30,7 +30,6 @@ seqres=$RESULT_DIR/$seq
 
 here=`pwd`
 tmp=/tmp/$$
-runas=$here/src/runas
 status=1	# FAILure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -60,8 +59,7 @@ _supported_os IRIX
 
 _require_test
 _require_attrs
-
-[ -x $runas ] || _notrun "$runas executable not found"
+_require_runas
 
 rm -f $seqres.full
 
@@ -101,7 +99,7 @@ echo "----"
 
 echo "append to file as user without caps"
 # in particular user doesn't have FSETID or SETFCAP
-$runas -u $uid $tmp.append
+_runas -u $uid $tmp.append
 
 echo "cat file"
 echo "----"
@@ -113,7 +111,7 @@ ls -P $file | _testfilter
 
 # try again when it doesn't have the EA
 echo "append to file as user without caps a 2nd time"
-$runas -u $uid $tmp.append
+_runas -u $uid $tmp.append
 
 echo "ls -P on file"
 ls -P $file | _testfilter
@@ -128,7 +126,7 @@ chmod 700 $file
 chown root $file 
 
 echo "as non-root try to append to file"
-$runas -u $uid $tmp.append 2>&1 | _filefilter
+_runas -u $uid $tmp.append 2>&1 | _filefilter
 
 echo "restore perms on file"
 chmod 777 $file
@@ -140,7 +138,7 @@ echo "list EA on file"
 ${ATTR_PROG} -R -l $file | _filefilter
 
 echo "as non-root try to append to file"
-$runas -u $uid $tmp.append 2>&1 | _filefilter
+_runas -u $uid $tmp.append 2>&1 | _filefilter
 
 echo "list EA on file"
 ${ATTR_PROG} -R -l $file | _filefilter
@@ -148,7 +146,7 @@ ${ATTR_PROG} -R -l $file | _filefilter
 chown $uid $file
 chmod ugo+w $TEST_DIR
 echo "as non-root call writemod"
-$runas -u $uid src/writemod $file 2>&1 | _filefilter
+_runas -u $uid src/writemod $file 2>&1 | _filefilter
 
 echo "cat file"
 echo "----"

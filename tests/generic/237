@@ -29,7 +29,6 @@ echo "QA output created by $seq"
 
 here=`pwd`
 tmp=/tmp/$$
-runas=$here/src/runas
 status=1        # FAILure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -50,8 +49,7 @@ _supported_fs generic
 # only Linux supports fallocate
 _supported_os Linux
 _require_test
-
-[ -x $runas ] || _notrun "$runas executable not found"
+_require_runas
 
 rm -f $seqres.full
 
@@ -68,7 +66,7 @@ touch file1
 chown $acl1.$acl1 file1
 
 echo "Expect to FAIL"
-$runas -u $acl2 -g $acl2 -- setfacl -m u::rwx file1 2>&1 | sed 's/^setfacl: \/.*file1: Operation not permitted$/setfacl: file1: Operation not permitted/'
+_runas -u $acl2 -g $acl2 -- setfacl -m u::rwx file1 2>&1 | sed 's/^setfacl: \/.*file1: Operation not permitted$/setfacl: file1: Operation not permitted/'
 
 echo "Test over."
 # success, all done
