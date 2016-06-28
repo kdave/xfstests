@@ -1,0 +1,90 @@
+#! /bin/bash
+# FS QA Test 370
+#
+# RichACL write-vs-append test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_scratch_richacl
+_require_richacl_prog
+_require_runas
+
+_scratch_mkfs_richacl >> $seqres.full
+_scratch_mount
+
+cd $SCRATCH_MNT
+
+r()
+{
+	echo "--- runas -u 99 -g 99 $*"
+	_runas -u 99 -g 99 -- "$@"
+}
+
+touch a b c d e f
+$SETRICHACL_PROG --set 'owner@:rwp::allow' a
+$SETRICHACL_PROG --set 'owner@:rwp::allow u:99:w::allow' b
+$SETRICHACL_PROG --set 'owner@:rwp::allow u:99:p::allow' c
+$SETRICHACL_PROG --set 'owner@:rwp::allow u:99:wp::allow' d
+$SETRICHACL_PROG --set 'u:99:a::deny owner@:rwp::allow u:99:w::allow' e
+$SETRICHACL_PROG --set 'u:99:w::deny owner@:rwp::allow u:99:p::allow' f
+
+r sh -c 'echo a > a'
+r sh -c 'echo b > b'
+r sh -c 'echo c > c'
+r sh -c 'echo d > d'
+r sh -c 'echo e > e'
+r sh -c 'echo f > f'
+
+r sh -c 'echo A >> a'
+r sh -c 'echo B >> b'
+r sh -c 'echo C >> c'
+r sh -c 'echo D >> d'
+r sh -c 'echo E >> e'
+r sh -c 'echo F >> f'
+
+# success, all done
+status=0
+exit

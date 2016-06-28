@@ -1,0 +1,118 @@
+#! /bin/bash
+# FS QA Test 363
+#
+# RichACL auto-inheritance test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_scratch_richacl
+_require_richacl_prog
+
+_scratch_mkfs_richacl >> $seqres.full
+_scratch_mount
+
+cd $SCRATCH_MNT
+
+umask 022
+
+mkdir d1
+$SETRICHACL_PROG --modify owner@:rwpxd:fd:allow,u:101:rw:fd:deny d1
+$SETRICHACL_PROG --modify u:102:rw:f:deny d1
+$SETRICHACL_PROG --modify u:103:rw:d:deny d1
+$SETRICHACL_PROG --modify g:101:rw:fdi:deny d1
+
+$SETRICHACL_PROG --modify flags:a d1
+
+$GETRICHACL_PROG --numeric --raw d1
+
+mkdir d1/d2
+touch d1/d3
+
+# Mode bits derived from inherited ACEs
+$GETRICHACL_PROG --numeric --raw d1/d2
+
+$GETRICHACL_PROG --numeric --raw d1/d3
+
+mkdir d1/d2/d4
+touch d1/d2/d4/d5
+
+# Protected files
+mkdir d1/d6
+touch d1/d7
+
+$GETRICHACL_PROG --numeric --raw d1/d2/d4
+
+$GETRICHACL_PROG --numeric --raw d1/d2/d4/d5
+
+# Clear protected flag from all the ACLs
+$SETRICHACL_PROG --modify flags:a d1/d2
+$SETRICHACL_PROG --modify flags:a d1/d3
+$SETRICHACL_PROG --modify flags:a d1/d2/d4
+$SETRICHACL_PROG --modify flags:a d1/d2/d4/d5
+
+$GETRICHACL_PROG --numeric d1 | sed -e 's/:fd:deny/:fd:allow/' > acl.txt
+cat acl.txt
+
+$SETRICHACL_PROG --set-file acl.txt d1
+
+$GETRICHACL_PROG --numeric --raw d1
+
+$GETRICHACL_PROG --numeric --raw d1/d2
+
+$GETRICHACL_PROG --numeric --raw d1/d3
+
+$GETRICHACL_PROG --numeric --raw d1/d2/d4
+
+$GETRICHACL_PROG --numeric --raw d1/d2/d4/d5
+
+# No automatic inheritance for protected files
+$GETRICHACL_PROG --numeric --raw d1/d6
+
+$GETRICHACL_PROG --numeric --raw d1/d7
+
+# success, all done
+status=0
+exit

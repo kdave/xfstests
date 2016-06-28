@@ -2005,6 +2005,67 @@ _runas()
 	"$here/src/runas" "$@"
 }
 
+_require_richacl_prog()
+{
+	_require_command "$GETRICHACL_PROG" getrichacl
+	_require_command "$SETRICHACL_PROG" setrichacl
+}
+
+_require_scratch_richacl_xfs()
+{
+	_scratch_mkfs_xfs_supported -m richacl=1 >/dev/null 2>&1 \
+		|| _notrun "mkfs.xfs doesn't have richacl feature"
+	_scratch_mkfs_xfs -m richacl=1 >/dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+		|| _notrun "kernel doesn't support richacl feature on $FSTYP"
+	_scratch_unmount
+}
+
+_require_scratch_richacl_ext4()
+{
+	_scratch_mkfs -O richacl >/dev/null 2>&1 \
+		|| _notrun "can't mkfs $FSTYP with option -O richacl"
+	_scratch_mount >/dev/null 2>&1 \
+		|| _notrun "kernel doesn't support richacl feature on $FSTYP"
+	_scratch_unmount
+}
+
+_require_scratch_richacl_support()
+{
+	_scratch_mount
+	$GETFATTR_PROG -n system.richacl >/dev/null 2>&1 \
+		|| _notrun "this test requires richacl support on \$SCRATCH_DEV"
+	_scratch_unmount
+}
+
+_require_scratch_richacl()
+{
+	case "$FSTYP" in
+	xfs)    _require_scratch_richacl_xfs
+		;;
+	ext4)   _require_scratch_richacl_ext4
+		;;
+	nfs*|cifs|overlay)
+		_require_scratch_richacl_support
+		;;
+	*)      _notrun "this test requires richacl support on \$SCRATCH_DEV"
+		;;
+	esac
+}
+
+_scratch_mkfs_richacl()
+{
+	case "$FSTYP" in
+	xfs)    _scratch_mkfs_xfs -m richacl=1
+		;;
+	ext4)   _scratch_mkfs -O richacl
+		;;
+	nfs*|cifs|overlay)
+		_scratch_mkfs
+		;;
+	esac
+}
+
 # check that a FS on a device is mounted
 # if so, return mount point
 #

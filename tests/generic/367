@@ -1,0 +1,85 @@
+#! /bin/bash
+# FS QA Test 367
+#
+# RichACL create test
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_scratch_richacl
+_require_richacl_prog
+_require_runas
+
+_scratch_mkfs_richacl >> $seqres.full
+_scratch_mount
+
+cd $SCRATCH_MNT
+
+r()
+{
+	echo "--- runas -u 99 -g 99 $*"
+	_runas -u 99 -g 99 -- "$@"
+}
+
+# Create directories as root with different permissions
+mkdir d1 d2 d3
+$SETRICHACL_PROG --set 'u:99:wx::allow' d2
+$SETRICHACL_PROG --set 'u:99:px::allow' d3
+
+# Cannot create files or directories without permissions
+r touch d1/f
+r mkdir d1/d
+
+# Can create files with add_file (w) permission
+r touch d2/f
+r mkdir d2/d
+
+# Can create directories with add_subdirectory (p) permission
+r touch d3/f
+r mkdir d3/d
+
+# success, all done
+status=0
+exit
