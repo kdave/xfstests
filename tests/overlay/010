@@ -1,0 +1,78 @@
+#! /bin/bash
+# FS QA Test 010
+#
+# Remove dir which contains whiteout from lower dir.
+#
+# The following kernel commit fixed the kernel crash on the removal
+# 84889d4 ovl: check dentry positiveness in ovl_cleanup_whiteouts()
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Need two lower dirs in this test, and we mount overlay ourselves,
+# create upper and workdir as well
+lowerdir1=$SCRATCH_DEV/$OVERLAY_LOWER_DIR.1
+lowerdir2=$SCRATCH_DEV/$OVERLAY_LOWER_DIR.2
+upperdir=$SCRATCH_DEV/$OVERLAY_UPPER_DIR
+workdir=$SCRATCH_DEV/$OVERLAY_WORK_DIR
+mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
+
+# One lowerdir contains test dir and test files, the other contains whiteout
+mkdir -p $lowerdir1/testdir $lowerdir2/testdir
+touch $lowerdir1/testdir/a $lowerdir1/testdir/b
+mknod $lowerdir2/testdir/a c 0 0
+
+# Mount overlayfs and remove testdir, which led to kernel crash
+$MOUNT_PROG -t overlay -o lowerdir=$lowerdir2:$lowerdir1 \
+	    -o upperdir=$upperdir,workdir=$workdir \
+	    $SCRATCH_DEV $SCRATCH_MNT
+rm -rf $SCRATCH_MNT/testdir
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
