@@ -1928,12 +1928,17 @@ _require_xfs_db_command()
 # check that kernel and filesystem support direct I/O
 _require_odirect()
 {
-       testfile=$TEST_DIR/$$.direct
-       $XFS_IO_PROG -F -f -d -c "pwrite 0 20k" $testfile > /dev/null 2>&1
-       if [ $? -ne 0 ]; then
-               _notrun "O_DIRECT is not supported"
-       fi
-       rm -f $testfile 2>&1 > /dev/null
+	if [ $FSTYP = "ext4" ] ; then
+		if echo "$MOUNT_OPTIONS" | grep -q "test_dummy_encryption"; then
+			_notrun "ext4 encryption doesn't support O_DIRECT"
+		fi
+	fi
+	testfile=$TEST_DIR/$$.direct
+	$XFS_IO_PROG -F -f -d -c "pwrite 0 20k" $testfile > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_notrun "O_DIRECT is not supported"
+	fi
+	rm -f $testfile 2>&1 > /dev/null
 }
 
 # Check that a fs has enough free space (in 1024b blocks)
