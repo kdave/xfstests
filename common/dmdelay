@@ -1,0 +1,90 @@
+##/bin/bash
+#
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# common functions for setting up and tearing down a dmdelay device
+
+DELAY_NONE=0
+DELAY_READ=1
+
+echo $MOUNT_OPTIONS | grep -q dax
+if [ $? -eq 0 ]; then
+	_notrun "Cannot run tests with DAX on dmdelay devices"
+fi
+
+_init_delay()
+{
+	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+	DELAY_DEV=/dev/mapper/delay-test
+	DELAY_TABLE="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 0"
+	DELAY_TABLE_RDELAY="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 10000 $SCRATCH_DEV 0 0"
+	$DMSETUP_PROG create delay-test --table "$DELAY_TABLE" || \
+		_fatal "failed to create delay device"
+	$DMSETUP_PROG mknodes > /dev/null 2>&1
+}
+
+_mount_delay()
+{
+	_scratch_options mount
+	$MOUNT_PROG -t $FSTYP `_common_dev_mount_options` $SCRATCH_OPTIONS \
+		$DELAY_DEV $SCRATCH_MNT
+}
+
+_unmount_delay()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+_cleanup_delay()
+{
+	# If dmsetup load fails then we need to make sure to do resume here
+	# otherwise the umount will hang
+	$DMSETUP_PROG resume delay-test > /dev/null 2>&1
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	# wait for device to be fully settled so that 'dmsetup remove' doesn't
+	# fail due to EBUSY
+	$UDEV_SETTLE_PROG >/dev/null 2>&1
+	$DMSETUP_PROG remove delay-test > /dev/null 2>&1
+	$DMSETUP_PROG mknodes > /dev/null 2>&1
+}
+
+# _load_delay_table <table> [lockfs]
+#
+# This defaults to --nolockfs, which doesn't freeze_fs() before loading the new
+# table
+_load_delay_table()
+{
+	table="$DELAY_TABLE"
+	[ $1 -eq $DELAY_READ ] && table="$DELAY_TABLE_RDELAY"
+
+	suspend_opt="--nolockfs"
+	[ $# -gt 1 ] && [ $2 -eq 1 ] && suspend_opt=""
+
+	# run a suspend/resume cycle to avoid excessive resume delays once a
+	# delay is introduced below
+	$DMSETUP_PROG suspend $suspend_opt delay-test
+	$DMSETUP_PROG resume $suspend_opt delay-test
+
+	$DMSETUP_PROG suspend $suspend_opt delay-test
+	[ $? -ne 0 ] && _fatal "failed to suspend delay-test"
+
+	$DMSETUP_PROG load delay-test --table "$table"
+	[ $? -ne 0 ] && _fatal "failed to load table into delay-test"
+
+	$DMSETUP_PROG resume delay-test
+	[ $? -ne 0 ] && _fatal  "failed to resume delay-test"
+}
