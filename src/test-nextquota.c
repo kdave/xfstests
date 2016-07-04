@@ -74,6 +74,7 @@ int main(int argc, char *argv[])
 	int verbose = 0;
 	uint id = 0, idflag = 0;
 	char *device = NULL;
+	char *tmp;
 	struct nextdqblk dqb;
 	struct fs_disk_quota xqb;
 
@@ -92,7 +93,11 @@ int main(int argc, char *argv[])
 			typeflag++;
 			break;
 		case 'i':
-			id = atoi(optarg);
+			id = (uint) strtoul(optarg, &tmp, 0);
+			if (*tmp) {
+				fprintf(stderr, "Bad id: %s\n", optarg);
+				exit(1);
+			}
 			idflag++;
 			break;
 		case 'd':
