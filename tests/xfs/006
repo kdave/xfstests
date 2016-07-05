@@ -1,0 +1,116 @@
+#! /bin/bash
+# FS QA Test 006
+#
+# Test xfs' "fail at unmount" error handling configuration. Stop
+# XFS from retrying to writeback forever at unmount.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_dmerror_cleanup
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmerror
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_dm_target error
+_require_scratch
+_require_fs_sysfs error/fail_at_unmount
+
+_scratch_mkfs > $seqres.full 2>&1
+_dmerror_init
+_dmerror_mount
+
+# Enable fail_at_unmount, so XFS stops retrying on errors at unmount
+# time. _fail the test if we fail to set it to 1, because the test
+# probably will hang in such case and block subsequent tests.
+_set_fs_sysfs_attr $DMERROR_DEV error/fail_at_unmount 1
+attr=`_get_fs_sysfs_attr $DMERROR_DEV error/fail_at_unmount`
+if [ "$attr" != "1" ]; then
+	_fail "Failed to set error/fail_at_unmount: $attr"
+fi
+
+# Make sure all will be configured to retry forever by default, except
+# for ENODEV, which is an unrecoverable error, so it will be configured
+# to not retry on error by default.
+for e in default EIO ENOSPC; do
+	_set_fs_sysfs_attr $DMERROR_DEV \
+			   error/metadata/${e}/max_retries -1
+	echo -n "error/metadata/${e}/max_retries="
+	_get_fs_sysfs_attr $DMERROR_DEV error/metadata/${e}/max_retries
+
+	_set_fs_sysfs_attr $DMERROR_DEV \
+			   error/metadata/${e}/retry_timeout_seconds 0
+	echo -n "error/metadata/${e}/retry_timeout_seconds="
+	_get_fs_sysfs_attr $DMERROR_DEV \
+			   error/metadata/${e}/retry_timeout_seconds
+done
+
+# start a metadata-intensive workload, but no data allocation operation.
+# Because uncompleted new space allocation I/Os may cause XFS to shutdown
+# after loading error table.
+$FSSTRESS_PROG -z -n 5000 -p 10 \
+	       -f creat=10 \
+	       -f resvsp=1 \
+	       -f truncate=1 \
+	       -f punch=1 \
+	       -f chown=5 \
+	       -f mkdir=5 \
+	       -f rmdir=1 \
+	       -f mknod=1 \
+	       -f unlink=1 \
+	       -f symlink=1 \
+	       -f rename=1 \
+	       -d $SCRATCH_MNT/fsstress >> $seqres.full 2>&1
+
+# Loading error table without "--nolockfs" option. Because "--nolockfs"
+# won't freeze fs, then some running I/Os may cause XFS to shutdown
+# prematurely. That's not what we want to test.
+_dmerror_load_error_table lockfs
+_dmerror_unmount
+
+# Mount again to replay log after loading working table, so we have a
+# consistent XFS after test.
+_dmerror_load_working_table
+_dmerror_mount
+_dmerror_unmount
+
+# success, all done
+status=0
+exit

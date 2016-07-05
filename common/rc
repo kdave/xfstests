@@ -3768,6 +3768,73 @@ run_fsx()
 	fi
 }
 
+# Test for the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
+#
+# Only one argument is needed:
+#  - attr: path name under /sys/fs/$FSTYP/DEV
+#
+# Usage example:
+#   _require_fs_sysfs error/fail_at_unmount
+_require_fs_sysfs()
+{
+	local attr=$1
+	local dname=$(_short_dev $TEST_DEV)
+
+	if [ -z "$attr" -o -z "$dname" ];then
+		_fail "Usage: _require_fs_sysfs <sysfs_attr_path>"
+	fi
+
+	if [ ! -e /sys/fs/${FSTYP}/${dname}/${attr} ];then
+		_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr}"
+	fi
+}
+
+# Write "content" into /sys/fs/$FSTYP/$DEV/$ATTR
+#
+# All arguments are necessary, and in this order:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#  - attr: path name under /sys/fs/$FSTYP/$dev
+#  - content: the content of $attr
+#
+# Usage example:
+#   _set_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount 0
+_set_fs_sysfs_attr()
+{
+	local dev=$1
+	shift
+	local attr=$1
+	shift
+	local content="$*"
+
+	if [ ! -b "$dev" -o -z "$attr" -o -z "$content" ];then
+		_fail "Usage: _set_fs_sysfs_attr <mounted_device> <attr> <content>"
+	fi
+
+	local dname=$(_short_dev $dev)
+	echo "$content" > /sys/fs/${FSTYP}/${dname}/${attr}
+}
+
+# Print the content of /sys/fs/$FSTYP/$DEV/$ATTR
+#
+# All arguments are necessary, and in this order:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#  - attr: path name under /sys/fs/$FSTYP/$dev
+#
+# Usage example:
+#   _get_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount
+_get_fs_sysfs_attr()
+{
+	local dev=$1
+	local attr=$2
+
+	if [ ! -b "$dev" -o -z "$attr" ];then
+		_fail "Usage: _get_fs_sysfs_attr <mounted_device> <attr>"
+	fi
+
+	local dname=$(_short_dev $dev)
+	cat /sys/fs/${FSTYP}/${dname}/${attr}
+}
+
 init_rc
 
 ################################################################################
