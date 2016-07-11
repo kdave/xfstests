@@ -13,9 +13,9 @@ include $(BUILDRULES)
 
 install:
 	$(INSTALL) -m 755 -d $(TARGET_DIR)
-	$(INSTALL) -m 755 [0-9]?? $(TARGET_DIR)
+	$(INSTALL) -m 755 $(TESTS) $(TARGET_DIR)
 	$(INSTALL) -m 644 group $(TARGET_DIR)
-	$(INSTALL) -m 644 [0-9]??.* $(TARGET_DIR)
+	$(INSTALL) -m 644 $(OUTFILES) $(TARGET_DIR)
 
 # Nothing.
 install-dev install-lib:
