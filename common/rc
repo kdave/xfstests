@@ -3843,6 +3843,41 @@ _get_fs_sysfs_attr()
 	cat /sys/fs/${FSTYP}/${dname}/${attr}
 }
 
+# Skip if we are running an older binary without the stricter input checks.
+# Make multiple checks to be sure that there is no regression on the one
+# selected feature check, which would skew the result.
+#
+# At first, make a common function that runs the tests and returns
+# number of failed cases.
+_mkfs_validation_check()
+{
+	local cmd="$MKFS_XFS_PROG -f -N -d file,name=/tmp/foo,size=$((1024 * 1024 * 1024))"
+	$cmd -s size=2s >/dev/null 2>&1
+	local sum=$?
+	$cmd -l version=2,su=$((256 * 1024 + 4096)) >/dev/null 2>&1
+	sum=`expr $sum + $?`
+	rm -f /tmp/foo
+	return $sum
+}
+
+# Skip the test if all calls passed - mkfs accepts invalid input
+_require_xfs_mkfs_validation()
+{
+	_mkfs_validation_check
+	if [ "$?" -eq 0 ]; then
+		_notrun "Requires newer mkfs with stricter input checks: the oldest supported version of xfsprogs is 4.7."
+	fi
+}
+
+# The oposite of _require_xfs_mkfs_validation.
+_require_xfs_mkfs_without_validation()
+{
+	_mkfs_validation_check
+	if [ "$?" -ne 0 ]; then
+		_notrun "Requires older mkfs without strict input checks: the last supported version of xfsprogs is 4.5."
+	fi
+}
+
 init_rc
 
 ################################################################################
