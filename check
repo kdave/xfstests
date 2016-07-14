@@ -543,6 +543,20 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	for seq in $list
 	do
 	    err=false
+	    if [ ! -f $seq ]; then
+	        # Try to get full name in case the user supplied only seq id
+	        # and the test has a name. A bit of hassle to find really
+	        # the test and not its sample output or helping files.
+	        bname=$(basename $seq)
+	        full_seq=$(find $(dirname $seq) -name $bname* -executable |
+	            awk '(NR == 1 || length < length(shortest)) { shortest = $0 }\
+	                END { print shortest }')
+	        if [ -f $full_seq ] \
+	            && [ x$(echo $bname | grep -o "^$VALID_TEST_ID") != x ]; then
+	            seq=$full_seq
+	            seqnum=${full_seq#*/}
+	        fi
+	    fi
 
 	    # the filename for the test and the name output are different.
 	    # we don't include the tests/ directory in the name output.
@@ -566,19 +580,6 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		if $showme; then
 			echo
 			continue
-		elif [ ! -f $seq ]; then
-			# Try to get full name in case the user supplied only seq id
-			# and the test has a name. A bit of hassle to find really
-			# the test and not its sample output or helping files.
-			bname=$(basename $seq)
-			full_seq=$(find $(dirname $seq) -name $bname* -executable |
-				awk '(NR == 1 || length < length(shortest)) { shortest = $0 }\
-					END { print shortest }')
-			if [ -f $full_seq ] \
-				&& [ x$(echo $bname | grep -o "^$VALID_TEST_ID") != x ]; then
-				seq=$full_seq
-				seqnum=${full_seq#*/}
-			fi
 		fi
 
 		if [ ! -f $seq ]; then
