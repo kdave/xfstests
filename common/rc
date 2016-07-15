@@ -473,11 +473,20 @@ _scratch_mkfs_xfs_opts()
 
 _scratch_mkfs_xfs_supported()
 {
-	mkfs_opts=$*
+	local mkfs_opts=$*
 
 	_scratch_options mkfs
 
 	$MKFS_XFS_PROG -N $MKFS_OPTIONS $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+	local mkfs_status=$?
+
+	# a mkfs failure may be caused by conflicts between $MKFS_OPTIONS and
+	# $mkfs_opts, try again without $MKFS_OPTIONS
+	if [ $mkfs_status -ne 0 -a -n "$mkfs_opts" ]; then
+		$MKFS_XFS_PROG -N $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+		mkfs_status=$?
+	fi
+	return $mkfs_status
 }
 
 _scratch_mkfs_xfs()
