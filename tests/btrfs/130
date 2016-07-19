@@ -1,0 +1,89 @@
+#! /bin/bash
+# FS QA Test 130
+#
+# Check if btrfs send can handle large deduped file, whose file extents
+# are all pointing to one extent.
+# Such file structure will cause quite large pressure to any operation which
+# iterates all backref of one extent.
+# And unfortunately, btrfs send is one of these operations, and will cause
+# softlock or OOM on systems with small memory(<4G).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_scratch_reflink
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+nr_extents=$((4096 * $LOAD_FACTOR))
+
+# Use 128K blocksize, the default value of both deduperemove or
+# inband dedupe
+blocksize=$((128 * 1024))
+file=$SCRATCH_MNT/foobar
+
+# create the initial file, whose file extents are all point to one extent
+_pwrite_byte 0xcdcdcdcd 0 $blocksize  $file | _filter_xfs_io
+
+for i in $(seq 1 $(($nr_extents - 1))); do
+	_reflink_range $file 0 $file $(($i * $blocksize)) $blocksize \
+		> /dev/null 2>&1
+done
+
+# create a RO snapshot, so we can send out the snapshot
+_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/ro_snap
+
+# send out the subvolume, and it will either:
+# 1) OOM since memory is allocated inside a O(n^3) loop
+# 2) Softlock since time consuming backref walk is called without scheduling.
+# the send destination is not important, just send will cause the problem
+_run_btrfs_util_prog send $SCRATCH_MNT/ro_snap > /dev/null 2>&1
+
+# success, all done
+status=0
+exit
