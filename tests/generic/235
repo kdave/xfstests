@@ -46,6 +46,11 @@ _require_scratch
 _require_quota
 _require_user
 
+do_repquota()
+{
+	repquota -u -g $SCRATCH_MNT  | grep -v -E '^root|^$' | _filter_scratch
+}
+
 # real QA test starts here
 rm -f $seqres.full
 
@@ -57,7 +62,7 @@ quotaon $SCRATCH_MNT 2>/dev/null
 touch $SCRATCH_MNT/testfile
 chown $qa_user:$qa_user $SCRATCH_MNT/testfile
 
-repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
+do_repquota
 
 # If remount fails with this problem:
 #
@@ -70,7 +75,7 @@ _scratch_mount "-o remount,rw" 2>&1 | tee -a $seqres.full | _filter_scratch
 
 $XFS_IO_PROG -c 'pwrite 0 8k' -c 'fsync' \
 			$SCRATCH_MNT/testfile >>$seqres.full 2>&1
-repquota -u -g $SCRATCH_MNT  | grep -v "^root" | _filter_scratch
+do_repquota
 
 _scratch_unmount 2>/dev/null
 
