@@ -34,7 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
     cd /
-    umount $SCRATCH_MNT > /dev/null 2>&1
+    _scratch_unmount > /dev/null 2>&1
     rm -rf $tmp.* $testdir $metadump_file $TEST_DIR/image
 }
 
@@ -76,8 +76,8 @@ _scratch_metadump $metadump_file
 # Now restore the obfuscated one back and take a look around
 echo "Restore metadump"
 xfs_mdrestore $metadump_file $TEST_DIR/image
-_mount -t $FSTYP $TEST_DIR/image $SCRATCH_MNT
-umount $SCRATCH_MNT
+SCRATCH_DEV=$TEST_DIR/image _scratch_mount
+SCRATCH_DEV=$TEST_DIR/image _scratch_unmount
 
 echo "Check restored fs"
 _check_generic_filesystem $metadump_file
