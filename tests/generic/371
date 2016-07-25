@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test 371
+#
+# Run write(2) and fallocate(2) in parallel and the total needed data space
+# for these operations don't exceed whole fs free data space, to see whether
+# we will get any unexpected ENOSPC error.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "falloc"
+
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+testfile1=$SCRATCH_MNT/testfile1
+testfile2=$SCRATCH_MNT/testfile2
+
+echo "Silence is golden"
+for ((i=0; i<100; i++)); do
+	$XFS_IO_PROG -fc "pwrite 0 80M" $testfile1 >/dev/null
+	rm -f $testfile1
+done &
+pids=$!
+
+for ((i=0; i<100; i++)); do
+	$XFS_IO_PROG -fc "falloc 0 80M" $testfile2 >/dev/null
+	rm -f $testfile2
+done &
+pids="$pids $!"
+
+wait $pids
+status=0
+exit
