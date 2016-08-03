@@ -2451,6 +2451,35 @@ _check_xfs_filesystem()
     fi
     rm -f $tmp.fs_check $tmp.logprint $tmp.repair
 
+    # Optionally test the index rebuilding behavior.
+    if [ -n "$TEST_XFS_REPAIR_REBUILD" ]; then
+        $XFS_REPAIR_PROG $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+        if [ $? -ne 0 ]; then
+            echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild) (see $seqres.full)"
+
+            echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild)" >>$seqres.full
+            echo "*** xfs_repair output ***"	>>$seqres.full
+            cat $tmp.repair | _fix_malloc		>>$seqres.full
+            echo "*** end xfs_repair output"	>>$seqres.full
+
+            ok=0
+        fi
+        rm -f $tmp.repair
+
+        $XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+        if [ $? -ne 0 ]; then
+            echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild-reverify) (see $seqres.full)"
+
+            echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild-reverify)" >>$seqres.full
+            echo "*** xfs_repair -n output ***"	>>$seqres.full
+            cat $tmp.repair | _fix_malloc		>>$seqres.full
+            echo "*** end xfs_repair output"	>>$seqres.full
+
+            ok=0
+        fi
+        rm -f $tmp.repair
+    fi
+
     if [ $ok -eq 0 ]
     then
         echo "*** mount output ***"		>>$seqres.full
