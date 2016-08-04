@@ -1,0 +1,183 @@
+#! /bin/bash
+# FS QA Test 022
+#
+# Test extending of i_extra_isize code
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+do_setfattr()
+{
+	$SETFATTR_PROG $@ 2>&1 | _filter_scratch
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_dumpe2fs
+_require_command "$DEBUGFS_PROG" debugfs
+_require_attrs
+
+# Use large inodes to have enough space for experimentation
+INODE_SIZE=1024
+# Block size
+BLOCK_SIZE=4096
+# We leave this amount of bytes for xattrs
+XATTR_SPACE=256
+# We grow extra_isize by this much
+GROW_EXTRA_ISIZE=80
+# We grow minimum requested isize by this much
+GROW_MIN_EXTRA_ISIZE=16
+
+export MKFS_OPTIONS="-I $INODE_SIZE -b $BLOCK_SIZE"
+_scratch_mkfs >> $seqres.full 2>&1
+
+ISIZE=$($DUMPE2FS_PROG -h $SCRATCH_DEV 2>/dev/null |
+	grep "^Desired extra isize:" | awk '{print $4}')
+# 32 bytes for header and 4 bytes for terminator
+BLOCK_XATTR_SPACE=$(($BLOCK_SIZE - 36))
+GOOD_OLD_ISIZE=128
+WANT_ISIZE=$(($INODE_SIZE-$GOOD_OLD_ISIZE-$XATTR_SPACE))
+NEW_ISIZE=$(($WANT_ISIZE+$GROW_EXTRA_ISIZE))
+NEW_MIN_ISIZE=$(($WANT_ISIZE+$GROW_MIN_EXTRA_ISIZE))
+
+if [ $WANT_ISIZE -lt $ISIZE ]; then
+	_notrun "This test requires at least $XATTR_SPACE free in the inode"
+fi
+
+$DEBUGFS_PROG -w -R "ssv want_extra_isize $WANT_ISIZE" $SCRATCH_DEV >> $seqres.full 2>&1
+$DEBUGFS_PROG -w -R "ssv min_extra_isize $WANT_ISIZE" $SCRATCH_DEV >> $seqres.full 2>&1
+
+_scratch_mount
+
+FNAMES=("empty" "couple_xattrs" "just_enough_xattrs" "one_extra_xattr"
+	"full_xattrs" "one_extra_xattr_ext" "full_xattrs_ext"
+	"full_xattrs_almost_full_ext" "full_xattrs_full_ext")
+create_xattr_file()
+{
+	FILE=$SCRATCH_MNT/${FNAMES[$1]}
+	touch $FILE
+	for (( i = 0; i < $2; i++ )); do
+		do_setfattr -n "user.$i" -v "aa" $FILE || break
+	done
+}
+
+# Test file without xattrs
+create_xattr_file 0 0
+
+# Test file with couple of xattrs but which still has enough space
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 104 bytes consumed (152 bytes still free)
+create_xattr_file 1 4
+
+# Test file with xattrs which still has just enough space
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 176 bytes consumed (80 bytes still free)
+create_xattr_file 2 7
+
+# Test file with xattrs which has one xattr which needs moving
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 200 bytes consumed (56 bytes still free)
+create_xattr_file 3 8
+
+# Test file with xattrs which has xattr space almost full
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 248 bytes consumed (8 bytes still free)
+create_xattr_file 4 10
+
+# Test file with xattrs which has one xattr which needs moving and external
+# xattr block allocated
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 200 bytes consumed (56 bytes still free)
+create_xattr_file 5 8
+do_setfattr -n "user.e0" -v "01234567890123456789012345678901234567890123456789" "$SCRATCH_MNT/${FNAMES[5]}"
+
+# Test file with xattrs which has xattr space in inode almost full and external
+# xattr block allocated
+# One xattr consumes 24 bytes + 4 bytes for header + 4 bytes for terminator
+# => 248 bytes consumed (8 bytes still free)
+create_xattr_file 6 11
+
+# Test file with xattrs which has xattr space in inode almost full and external
+# xattr block allocated and almost full so that inode can still expand to
+# s_min_extra_isize
+# 10 xattrs fit into inode, rest goes into xattr block (one xattr consumes
+# 24 bytes)
+create_xattr_file 7 $((10 + ($BLOCK_XATTR_SPACE - $GROW_MIN_EXTRA_ISIZE) / 24))
+
+# Test file with xattrs which has xattr space in inode almost full and external
+# xattr block allocated and full
+# 10 xattrs fit into inode, rest goes into xattr block (one xattr consumes
+# 24 bytes)
+create_xattr_file 8 $((10 + $BLOCK_XATTR_SPACE / 24))
+
+_scratch_unmount
+
+# Filesystem prepared, update extra_isize
+
+$DEBUGFS_PROG -w -R "ssv want_extra_isize $NEW_ISIZE" $SCRATCH_DEV >> $seqres.full 2>&1
+$DEBUGFS_PROG -w -R "ssv min_extra_isize $NEW_MIN_ISIZE" $SCRATCH_DEV >> $seqres.full 2>&1
+
+_scratch_mount
+
+# Dirty each inode to force expansion of extra_isize
+for FILE in ${FNAMES[@]}; do
+	echo "aaaa" >$SCRATCH_MNT/$FILE
+done
+
+# Dump all xattrs to see whether nothing broke
+for FILE in ${FNAMES[@]}; do
+	$GETFATTR_PROG -h -d --absolute-names $SCRATCH_MNT/$FILE 2>/dev/null | \
+		_filter_scratch | sort
+done
+
+_scratch_unmount
+
+# Dump everything via debugfs to check whether sizes got extended as expected
+for FILE in ${FNAMES[@]}; do
+	$DEBUGFS_PROG -R "stat $FILE" $SCRATCH_DEV 2>/dev/null | \
+		grep "^Size of extra inode fields:"
+done
+
+# success, all done
+status=0
+exit
