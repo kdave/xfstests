@@ -27,14 +27,19 @@ _require_defrag()
         DEFRAG_PROG="$XFS_FSR_PROG"
 	;;
     ext4|ext4dev)
-	echo $MOUNT_OPTIONS | grep -q dax
+	testfile="$TEST_DIR/$$-test.defrag"
+	donorfile="$TEST_DIR/$$-donor.defrag"
+	bsize=`get_block_size $TEST_DIR`
+	$XFS_IO_PROG -f -c "pwrite -b $bsize 0 $bsize" $testfile > /dev/null
+	cp $testfile $donorfile
+	echo $testfile | $here/src/e4compact -v -f $donorfile | \
+		grep -q "err:95"
 	if [ $? -eq 0 ]; then
-		_notrun "$FSTYP defragmentation not supported with DAX"
-	else
-		DEFRAG_PROG="$E4DEFRAG_PROG"
+		rm -f $testfile $donorfile 2>&1 > /dev/null
+		_notrun "$FSTYP test filesystem doesn't support online defrag"
 	fi
-	dumpe2fs -h $TEST_DEV 2> /dev/null | grep -wq extent || \
-		_notrun "file system does not have extents, needed for defrag"
+	rm -f $testfile $donorfile 2>&1 > /dev/null
+	DEFRAG_PROG="$E4DEFRAG_PROG"
 	;;
     btrfs)
 	DEFRAG_PROG="$BTRFS_UTIL_PROG filesystem defragment"
