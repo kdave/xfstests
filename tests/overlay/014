@@ -1,0 +1,94 @@
+#! /bin/bash
+# FS QA Test 014
+#
+# Test copy-up of lowerdir with opaque xattr set.
+#
+# When copying up a directory with opaque xattr set, the xattr was copied up as
+# well, after a remount the opaque flag is honored so the copied-up directory
+# is treated as opaque, which causes files created in the lowerdir to be hidden
+# when using multiple lower directories.
+#
+# This is fixed by "ovl: don't copy up opaqueness".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_test
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create multiple lowerdirs and upperdir, workdir, and testdir on lowerdir
+lowerdir1=$SCRATCH_DEV/lower1
+lowerdir2=$SCRATCH_DEV/lower2
+upperdir=$SCRATCH_DEV/upper
+workdir=$SCRATCH_DEV/workdir
+mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
+mkdir -p $lowerdir1/testdir/d
+
+# mount overlay with $lowerdir2 as upperdir, and remove & recreate testdir,
+# make testdir on $lowerdir2 opaque
+_overlay_mount_dirs $lowerdir1 $lowerdir2 $workdir $SCRATCH_DEV $SCRATCH_MNT
+rm -rf $SCRATCH_MNT/testdir
+mkdir -p $SCRATCH_MNT/testdir/visibledir
+_scratch_unmount
+
+# mount overlay again, with lowerdir1 and lowerdir2 as multiple lowerdirs,
+# and create a new file in testdir, triggers copyup from lowerdir,
+# copyup should not copy overlayfs private xattr
+_overlay_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir \
+		    $SCRATCH_DEV $SCRATCH_MNT
+touch $SCRATCH_MNT/testdir/visiblefile
+
+# umount and mount overlay again, buggy kernel treats the copied-up dir as
+# opaque, visibledir is not seen in merged dir.
+_scratch_unmount
+_overlay_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir \
+		    $SCRATCH_DEV $SCRATCH_MNT
+ls $SCRATCH_MNT/testdir
+
+# success, all done
+status=0
+exit
