@@ -266,6 +266,18 @@ _scratch_mount_options()
 					$SCRATCH_DEV $SCRATCH_MNT
 }
 
+# helper function to do the actual overlayfs mount operation
+_overlay_mount_dirs()
+{
+	local lowerdir=$1
+	local upperdir=$2
+	local workdir=$3
+	shift 3
+
+	$MOUNT_PROG -t overlay -o lowerdir=$lowerdir -o upperdir=$upperdir \
+		    -o workdir=$workdir $*
+}
+
 # Given a dir, set up 3 subdirectories and mount on the given mnt.
 # The dir is used as the mount device so it can be seen from df or mount
 _overlay_mount()
@@ -293,12 +305,9 @@ _overlay_mount()
 	mkdir -p $dir/$OVERLAY_LOWER_DIR
 	mkdir -p $dir/$OVERLAY_WORK_DIR
 
-	$MOUNT_PROG -t overlay $SELINUX_MOUNT_OPTIONS \
-		    -o lowerdir=$dir/$OVERLAY_LOWER_DIR \
-		    -o upperdir=$dir/$OVERLAY_UPPER_DIR \
-		    -o workdir=$dir/$OVERLAY_WORK_DIR   \
-		    $OVERLAY_MOUNT_OPTIONS $* \
-		    $dir $mnt
+	_overlay_mount_dirs $dir/$OVERLAY_LOWER_DIR $dir/$OVERLAY_UPPER_DIR \
+			    $dir/$OVERLAY_WORK_DIR $OVERLAY_MOUNT_OPTIONS \
+			    $SELINUX_MOUNT_OPTIONS $* $dir $mnt
 }
 
 _overlay_test_mount()
