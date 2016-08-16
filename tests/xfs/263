@@ -1,0 +1,97 @@
+#! /bin/bash
+# FS QA Test 263
+#
+# test xfs_quota state command
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch
+_require_xfs_quota
+
+# We could test older, non-project capable kernels but keep it simpler;
+# Only test crc and beyond (but we will test with and without the feature)
+_require_xfs_mkfs_crc
+_require_xfs_crc
+
+rm -f $seqres.full
+
+function option_string()
+{
+	VAL=$1
+	# Treat 3 options as a bit field, prjquota|grpquota|usrquota
+	OPT="rw"
+	if [ "$((VAL & 4))" -ne "0" ]; then OPT=prjquota,${OPT}; fi;
+	if [ "$((VAL & 2))" -ne "0" ]; then OPT=grpquota,${OPT}; fi;
+	if [ "$((VAL & 1))" -ne "0" ]; then OPT=usrquota,${OPT}; fi;
+	echo $OPT
+}
+
+function test_all_state()
+{
+	for I in `seq 0 7`; do
+		OPTIONS=`option_string $I`
+		echo "== Options: $OPTIONS =="
+		# Some combinations won't mount on V4 supers (grp + prj)
+		_qmount_option "$OPTIONS"
+		_scratch_mount &>> $seqres.full || continue
+		$XFS_QUOTA_PROG -x -c "state" $SCRATCH_MNT | _filter_scratch
+		_scratch_unmount
+	done
+}
+
+echo "==== NO CRC ===="
+# Control size to control inode numbers
+$MKFS_XFS_PROG -f -m crc=0 -n ftype=0 -d size=512m $SCRATCH_DEV >>$seqres.full
+test_all_state
+
+echo "==== CRC ===="
+$MKFS_XFS_PROG -f -m crc=1 -d size=512m $SCRATCH_DEV >>$seqres.full
+test_all_state
+
+status=0
+exit
