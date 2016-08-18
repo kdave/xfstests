@@ -3894,21 +3894,25 @@ _get_fs_sysfs_attr()
 #
 # At first, make a common function that runs the tests and returns
 # number of failed cases.
-_mkfs_validation_check()
+_xfs_mkfs_validation_check()
 {
-	local cmd="$MKFS_XFS_PROG -f -N -d file,name=/tmp/foo,size=$((1024 * 1024 * 1024))"
+	local tmpfile=`mktemp`
+	local cmd="$MKFS_XFS_PROG -f -N -d file,name=$tmpfile,size=1g"
+
 	$cmd -s size=2s >/dev/null 2>&1
 	local sum=$?
-	$cmd -l version=2,su=$((256 * 1024 + 4096)) >/dev/null 2>&1
+
+	$cmd -l version=2,su=260k >/dev/null 2>&1
 	sum=`expr $sum + $?`
-	rm -f /tmp/foo
+
+	rm -f $tmpfile
 	return $sum
 }
 
 # Skip the test if all calls passed - mkfs accepts invalid input
 _require_xfs_mkfs_validation()
 {
-	_mkfs_validation_check
+	_xfs_mkfs_validation_check
 	if [ "$?" -eq 0 ]; then
 		_notrun "Requires newer mkfs with stricter input checks: the oldest supported version of xfsprogs is 4.7."
 	fi
@@ -3917,7 +3921,7 @@ _require_xfs_mkfs_validation()
 # The oposite of _require_xfs_mkfs_validation.
 _require_xfs_mkfs_without_validation()
 {
-	_mkfs_validation_check
+	_xfs_mkfs_validation_check
 	if [ "$?" -ne 0 ]; then
 		_notrun "Requires older mkfs without strict input checks: the last supported version of xfsprogs is 4.5."
 	fi
