@@ -3890,6 +3890,43 @@ _get_fs_sysfs_attr()
 	cat /sys/fs/${FSTYP}/${dname}/${attr}
 }
 
+
+# Reset all xfs error handling attributes, set them to original
+# status.
+#
+# Only one argument, and it's mandatory:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#
+# Note: this function only works for XFS
+_reset_xfs_sysfs_error_handling()
+{
+	local dev=$1
+
+	if [ ! -b "$dev" -o "$FSTYP" != "xfs" ];then
+		_fail "Usage: reset_xfs_sysfs_error_handling <device>"
+	fi
+
+	_set_fs_sysfs_attr $dev error/fail_at_unmount 1
+	echo -n "error/fail_at_unmount="
+	_get_fs_sysfs_attr $dev error/fail_at_unmount
+
+	# Make sure all will be configured to retry forever by default, except
+	# for ENODEV, which is an unrecoverable error, so it will be configured
+	# to not retry on error by default.
+	for e in default EIO ENOSPC; do
+		_set_fs_sysfs_attr $dev \
+				   error/metadata/${e}/max_retries -1
+		echo -n "error/metadata/${e}/max_retries="
+		_get_fs_sysfs_attr $dev error/metadata/${e}/max_retries
+
+		_set_fs_sysfs_attr $dev \
+				   error/metadata/${e}/retry_timeout_seconds 0
+		echo -n "error/metadata/${e}/retry_timeout_seconds="
+		_get_fs_sysfs_attr $dev \
+				   error/metadata/${e}/retry_timeout_seconds
+	done
+}
+
 # Skip if we are running an older binary without the stricter input checks.
 # Make multiple checks to be sure that there is no regression on the one
 # selected feature check, which would skew the result.

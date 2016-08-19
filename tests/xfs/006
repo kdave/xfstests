@@ -57,30 +57,17 @@ _scratch_mkfs > $seqres.full 2>&1
 _dmerror_init
 _dmerror_mount
 
-# Enable fail_at_unmount, so XFS stops retrying on errors at unmount
-# time. _fail the test if we fail to set it to 1, because the test
-# probably will hang in such case and block subsequent tests.
-_set_fs_sysfs_attr $DMERROR_DEV error/fail_at_unmount 1
+# Make sure all error handling attributes are original status
+reset_xfs_sysfs_error_handling $DMERROR_DEV
+
+# Make sure fail_at_unmount is enabled, so XFS stops retrying on
+# errors at unmount time. _fail the test if we fail to set it to 1,
+# because the test probably will hang in such case and block
+# subsequent tests.
 attr=`_get_fs_sysfs_attr $DMERROR_DEV error/fail_at_unmount`
 if [ "$attr" != "1" ]; then
 	_fail "Failed to set error/fail_at_unmount: $attr"
 fi
-
-# Make sure all will be configured to retry forever by default, except
-# for ENODEV, which is an unrecoverable error, so it will be configured
-# to not retry on error by default.
-for e in default EIO ENOSPC; do
-	_set_fs_sysfs_attr $DMERROR_DEV \
-			   error/metadata/${e}/max_retries -1
-	echo -n "error/metadata/${e}/max_retries="
-	_get_fs_sysfs_attr $DMERROR_DEV error/metadata/${e}/max_retries
-
-	_set_fs_sysfs_attr $DMERROR_DEV \
-			   error/metadata/${e}/retry_timeout_seconds 0
-	echo -n "error/metadata/${e}/retry_timeout_seconds="
-	_get_fs_sysfs_attr $DMERROR_DEV \
-			   error/metadata/${e}/retry_timeout_seconds
-done
 
 # start a metadata-intensive workload, but no data allocation operation.
 # Because uncompleted new space allocation I/Os may cause XFS to shutdown
