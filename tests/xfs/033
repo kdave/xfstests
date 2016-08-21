@@ -78,10 +78,12 @@ _require_scratch
 _require_no_large_scratch_dev
 
 # devzero blows away 512byte blocks, so make 512byte inodes (at least)
-_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
 . $tmp.mkfs
-[ $isize -lt 512 ] && \
-	_scratch_mkfs_xfs -isize=512 | _filter_mkfs >/dev/null 2>&1
+if [ $isize -lt 512 ]; then
+	_scratch_mkfs_xfs -isize=512 | _filter_mkfs 2>$tmp.mkfs >/dev/null
+	. $tmp.mkfs
+fi
 
 # link correct .out file
 FEATURES=$(_get_os_name)
