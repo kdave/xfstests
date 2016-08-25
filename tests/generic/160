@@ -65,9 +65,14 @@ _pwrite_byte 0x61 0 $sz $testdir1/file1 >> $seqres.full
 _pwrite_byte 0x61 0 $sz $testdir1/file2 >> $seqres.full
 sync
 
+do_filter_output()
+{
+	_filter_test_dir | sed -e 's/Operation not permitted/Permission denied/g'
+}
+
 echo "Try dedupe on immutable files"
 $CHATTR_PROG +i $testdir1/file1 $testdir1/file2
-_dedupe_range $testdir1/file1 0 $testdir1/file2 0 $blksz 2>&1 | _filter_test_dir
+_dedupe_range $testdir1/file1 0 $testdir1/file2 0 $blksz 2>&1 | do_filter_output
 $CHATTR_PROG -i $testdir1/file1 $testdir1/file2
 
 # success, all done
