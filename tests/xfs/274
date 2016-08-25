@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test No. 274
+#
+# Check that getfsmap agrees with getbmap for reflinked files.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".* $TEST_DIR/fsmap $TEST_DIR/bmap
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command "fsmap"
+_require_test_program "punch-alternating"
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+_pwrite_byte 0x80 0 737373 $SCRATCH_MNT/f1 >> $seqres.full
+sync
+./src/punch-alternating $SCRATCH_MNT/f1 >> $seqres.full
+_cp_reflink $SCRATCH_MNT/f1 $SCRATCH_MNT/f2
+ino=$(stat -c '%i' $SCRATCH_MNT/f1)
+
+echo "Get fsmap" | tee -a $seqres.full
+$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT >> $seqres.full
+$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT | tr '[]()' '    ' > $TEST_DIR/fsmap
+
+echo "Get f1 bmap" | tee -a $seqres.full
+$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f1 >> $seqres.full
+$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f1 | grep '^[[:space:]]*[0-9]*:' | grep -v 'hole' | tr '[]()' '    ' > $TEST_DIR/bmap
+
+echo "Check f1 bmap and fsmap" | tee -a $seqres.full
+cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
+	qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 1000000$"
+	echo "${qstr}" >> $seqres.full
+	grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+	found=$(grep -c "${qstr}" $TEST_DIR/fsmap)
+	test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+done
+
+echo "Get f2 bmap" | tee -a $seqres.full
+$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f2 >> $seqres.full
+$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f2 | grep '^[[:space:]]*[0-9]*:' | grep -v 'hole' | tr '[]()' '    ' > $TEST_DIR/bmap
+
+echo "Check f2 bmap and fsmap" | tee -a $seqres.full
+cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
+	qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 1000000$"
+	echo "${qstr}" >> $seqres.full
+	grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+	found=$(grep -c "${qstr}" $TEST_DIR/fsmap)
+	test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+done
+
+# success, all done
+status=0
+exit

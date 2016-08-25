@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test No. 271
+#
+# Check that getfsmap reports the AG metadata we're expecting.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".* $TEST_DIR/fsmap $TEST_DIR/testout
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command "fsmap"
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+agcount=$(xfs_info $SCRATCH_MNT | grep agcount= | sed -e 's/^.*agcount=\([0-9]*\),.*$/\1/g')
+
+echo "Get fsmap" | tee -a $seqres.full
+$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT > $TEST_DIR/fsmap
+cat $TEST_DIR/fsmap >> $seqres.full
+
+echo "Check AG header" | tee -a $seqres.full
+grep 'static fs metadata[[:space:]]*[0-9]*[[:space:]]*(0\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
+_within_tolerance "AG header count" $(wc -l < $TEST_DIR/testout) $agcount 0 -v
+
+echo "Check freesp/rmap btrees" | tee -a $seqres.full
+grep 'per-AG metadata[[:space:]]*[0-9]*[[:space:]]*([0-9]*\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
+_within_tolerance "freesp extent count" $(wc -l < $TEST_DIR/testout) $((agcount * 3)) 0 999999 -v
+
+echo "Check inode btrees" | tee -a $seqres.full
+grep 'inode btree[[:space:]]*[0-9]*[[:space:]]*([0-9]*\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
+_within_tolerance "inode btree extent count" $(wc -l < $TEST_DIR/testout) $agcount 0 -v
+
+echo "Check inodes" | tee -a $seqres.full
+grep 'inodes[[:space:]]*[0-9]*[[:space:]]*([0-9]*\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
+_within_tolerance "inode extent count" $(wc -l < $TEST_DIR/testout) 1 0 999999 -v
+
+echo "Check journal" | tee -a $seqres.full
+grep 'journalling log' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
+_within_tolerance "journal extent count" $(wc -l < $TEST_DIR/testout) 1 0 -v
+
+# success, all done
+status=0
+exit
