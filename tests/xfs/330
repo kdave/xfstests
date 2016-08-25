@@ -1,0 +1,102 @@
+#! /bin/bash
+# FS QA Test No. 330
+#
+# Ensure that xfs_fsr handles quota correctly while defragging files.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+. ./common/quota
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_command "$XFS_FSR_PROG" "xfs_fsr"
+_require_quota
+_require_nobody
+
+do_repquota()
+{
+	repquota $SCRATCH_MNT | egrep '^(fsgqa|root|nobody)'
+}
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+export MOUNT_OPTIONS="-o usrquota,grpquota $MOUNT_OPTIONS"
+_scratch_mount >> "$seqres.full" 2>&1
+quotacheck -u -g $SCRATCH_MNT 2> /dev/null
+quotaon $SCRATCH_MNT 2> /dev/null
+
+testdir="$SCRATCH_MNT/test-$seq"
+blksz=65536
+blks=3
+mkdir "$testdir"
+
+echo "Create a many-block file"
+touch $testdir/file1
+chown nobody $testdir/file1
+touch $testdir/file2
+chown nobody $testdir/file2
+_pwrite_byte 0x62 0 $((blksz * blks)) $testdir/file1 >> $seqres.full
+_pwrite_byte 0x63 0 $blksz $testdir/file2 >> $seqres.full
+_reflink_range $testdir/file2 0 $testdir/file1 $blksz $blksz >> $seqres.full
+do_repquota
+_scratch_cycle_mount
+
+echo "Defrag the file"
+old_nextents=$(_count_extents $testdir/file1)
+$XFS_FSR_PROG -v -d $testdir/file1 >> $seqres.full
+new_nextents=$(_count_extents $testdir/file1)
+do_repquota
+
+echo "Remount the FS to see if accounting changes"
+_scratch_cycle_mount
+do_repquota
+
+echo "Check extent count"
+$XFS_IO_PROG -c 'stat -v' $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -c 'stat -v' $testdir/file2 >> $seqres.full
+echo "extents: $old_nextents -> $new_nextents" >> $seqres.full
+test $old_nextents -gt $new_nextents || echo "FAIL: $old_nextents -> $new_nextents"
+
+# success, all done
+status=0
+exit

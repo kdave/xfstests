@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test No. 328
+#
+# See how well xfs_fsr handles "defragging" a file with a hojillion extents.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_test_program "punch-alternating"
+_require_command "$XFS_FSR_PROG" "xfs_fsr"
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+testdir="$SCRATCH_MNT/test-$seq"
+mkdir "$testdir"
+
+# Setup for 16000 blocks, but we'll accept stress testing down to
+# 2^10 blocks... that should be plenty for anyone.
+fnr=$((12 + LOAD_FACTOR))
+free_blocks=$(stat -f -c '%a' "$testdir")
+blksz=$(stat -f -c '%S' "$testdir")
+space_avail=$((free_blocks * blksz))
+calc_space()
+{
+	blocks_needed=$(( 2 ** (fnr + 1) ))
+	space_needed=$((blocks_needed * blksz * 5 / 4))
+}
+calc_space
+while test $space_needed -gt $space_avail; do
+	fnr=$((fnr - 1))
+	calc_space
+done
+test $fnr -lt 10 && _notrun "Insufficient space for stress test; would only create $blocks_needed extents."
+bytes=$((blocks_needed * blksz))
+
+echo "Create a many-block file"
+echo "creating $blocks_needed blocks..." >> "$seqres.full"
+_pwrite_byte 0x62 0 $blksz $testdir/file0 >> $seqres.full
+"$XFS_IO_PROG" -f -c "pwrite -S 0x61 -b 4194304 0 $bytes" "$testdir/file1" >> "$seqres.full"
+echo "punching..." >> "$seqres.full"
+"$here/src/punch-alternating" "$testdir/file1" >> "$seqres.full"
+seq 0 2 $((2 ** (fnr + 1) )) | while read lblk; do
+	_reflink_range $testdir/file0 0 $testdir/file1 $((lblk * blksz)) $blksz >> $seqres.full
+done
+echo "...done" >> "$seqres.full"
+_scratch_cycle_mount
+
+echo "Reflink the big file"
+echo "reflinking $((blocks_needed / 2)) blocks, $((bytes / 2)) bytes" >> "$seqres.full"
+_reflink_range "$testdir/file1" 0 "$testdir/file2" 0 $bytes >> "$seqres.full"
+
+echo "Defrag the big file"
+old_nextents=$(_count_extents $testdir/file1)
+$XFS_FSR_PROG -v -d $testdir/file1 >> $seqres.full
+new_nextents=$(_count_extents $testdir/file1)
+
+echo "Check extent count"
+$XFS_IO_PROG -c 'stat -v' $testdir/file1 >> $seqres.full
+$XFS_IO_PROG -c 'stat -v' $testdir/file2 >> $seqres.full
+echo "extents: $old_nextents -> $new_nextents" >> $seqres.full
+test $old_nextents -gt $new_nextents || echo "FAIL: $old_nextents -> $new_nextents"
+
+# success, all done
+status=0
+exit
