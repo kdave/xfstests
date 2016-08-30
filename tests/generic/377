@@ -1,0 +1,87 @@
+#! /bin/bash
+# FSQA Test No. 377
+#
+# Test listxattr syscall behaviour with different buffer sizes.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 2 of
+# the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_attrs
+_require_test_program "listxattr"
+
+listxattr="$here/src/listxattr"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create a testfile with three xattrs such that the sum of namelengths of the
+# first two is bigger than the namelength of the third. This is needed for
+# the 5th testcase that tests one of the cornercases.
+testfile=${SCRATCH_MNT}/testfile
+touch $testfile
+$SETFATTR_PROG -n user.foo -v bar $testfile
+$SETFATTR_PROG -n user.ping -v pong $testfile
+$SETFATTR_PROG -n user.hello -v there $testfile
+
+# 1. Call listxattr without buffer length argument. This should succeed.
+$listxattr $testfile | sort
+
+# 2. Calling listxattr on nonexistant file should fail with -ENOENT.
+$listxattr ""
+
+# 3. Calling listxattr with buffersize not suffecient for even one xattr
+# should fail with -ERANGE.
+$listxattr $testfile 1
+
+# 4. Calling listxattr with buffersize suffecient for one xattr, but not
+# sufficient for the whole list should still fail with -ERANGE.
+$listxattr $testfile 9
+
+# 5. Calling listxattr with buffersize suffecient for the last xattr, but not
+# sufficient for the sum of first two. Should fail with -ERANGE.
+$listxattr $testfile 11
+
+# 6. Calling listxattr with buffersize bigger than needed should succeed.
+$listxattr $testfile 500 | sort
+
+status=0
+exit
