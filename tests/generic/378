@@ -1,0 +1,73 @@
+#! /bin/bash
+# FS QA Test 378
+#
+# Simple permission check on hard links.
+#
+# Overlayfs had a bug that hardlinks don't share inode, if chmod/chown/etc.
+# is performed on one of the links then the inode belonging to the other
+# one won't be updated. The following patch fixed this issue
+#
+# 51f7e52 ovl: share inode for hard link
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os IRIX Linux
+_require_test
+_require_user
+
+# Setup testfile and its hardlink
+testfile=$TEST_DIR/testfile.$seq
+testlink=$testfile.hardlink
+rm -f $testfile $testlink
+echo "You should not see this" >$testfile
+ln $testfile $testlink
+
+# remove read permission from testfile and unprivileged user should have no
+# permission to read testfile and hardlink
+chmod -r $testfile
+_user_do "cat $testfile"
+_user_do "cat $testlink"
+
+# success, all done
+status=0
+exit
