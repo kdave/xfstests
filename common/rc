@@ -3192,12 +3192,25 @@ _require_cloner()
 		_notrun "cloner binary not present at $CLONER_PROG"
 }
 
-# skip test if MKFS_OPTIONS contains the given string
+# Normalize mount options from global $MOUNT_OPTIONS
+# Convert options like "-o opt1,opt2 -oopt3" to
+# "opt1 opt2 opt3"
+_normalize_mount_options()
+{
+	echo $MOUNT_OPTIONS | sed -n 's/-o\s*\(\S*\)/\1/gp'| sed 's/,/ /g'
+}
+
+# skip test if MOUNT_OPTIONS contains the given strings
 _exclude_scratch_mount_option()
 {
-	if echo $MOUNT_OPTIONS | grep -q "$1"; then
-		_notrun "mount option \"$1\" not allowed in this test"
-	fi
+	local mnt_opts=$(_normalize_mount_options)
+
+	while [ $# -gt 0 ]; do
+		if echo $mnt_opts | grep -qw "$1"; then
+			_notrun "mount option \"$1\" not allowed in this test"
+		fi
+		shift
+	done
 }
 
 _require_atime()
