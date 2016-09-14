@@ -54,6 +54,17 @@ _require_xfs_db_blocktrash_z_command
 test -z "${FUZZ_ARGS}" && FUZZ_ARGS="-n 8 -3"
 
 rm -f $seqres.full
+
+# If we corrupt log on a CONFIG_XFS_WARN build, there will be mount related
+# WARNINGs in dmesg as expected.  We don't want to simply _disable_dmesg_check
+# which could miss other potential bugs, so filter out the intentional WARNINGs,
+# make sure test doesn't fail because of this warning and fails on other WARNINGs.
+filter_xfs_dmesg()
+{
+	local warn="WARNING:.*fs/xfs/xfs_message\.c:.*asswarn.*"
+	sed -e "s#$warn#Intentional warnings in asswarn#"
+}
+
 TESTDIR="${SCRATCH_MNT}/scratchdir"
 TESTFILE="${TESTDIR}/testfile"
 
@@ -93,7 +104,10 @@ echo "+ mount image"
 _scratch_mount 2>/dev/null && _fail "mount should not succeed"
 
 echo "+ repair fs"
-_scratch_xfs_repair >> $seqres.full 2>&1
+_repair_scratch_fs >> $seqres.full 2>&1
+
+# mount may trigger related WARNINGs, so filter them.
+_check_dmesg filter_xfs_dmesg
 
 echo "+ mount image (2)"
 _scratch_mount
