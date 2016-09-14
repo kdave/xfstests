@@ -1,0 +1,107 @@
+#! /bin/bash
+# FS QA Test 284
+#
+# Do xfs_metadump, xfs_mdrestore, xfs_copy, xfs_db, xfs_repair and mkfs.xfs
+# on mounted XFS to make sure they refuse to proceed.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $METADUMP_FILE 2>/dev/null
+	rm -f $COPY_FILE 2>/dev/null
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_test
+_require_scratch
+
+function filter_mounted()
+{
+	grep "mounted" | _filter_scratch | head -1
+}
+
+METADUMP_FILE="${TEST_DIR}/${seq}_metadump"
+COPY_FILE="${TEST_DIR}/${seq}_copyfile"
+
+# Test dump a mounted device
+# xfs_metadump should refuse to dump a mounted device
+_scratch_mount
+_scratch_metadump $METADUMP_FILE 2>&1 | filter_mounted
+_scratch_unmount
+
+# Test restore to a mounted device
+# xfs_mdrestore should refuse to restore to a mounted device
+_scratch_metadump $METADUMP_FILE
+_scratch_mount
+xfs_mdrestore $METADUMP_FILE $SCRATCH_DEV 2>&1 | filter_mounted
+_scratch_unmount
+
+# Test xfs_copy to a mounted device
+# If source is mounted, xfs_copy will print a warning, but still
+# keep on copying. If target is mounted, xfs_copy should fail.
+$XFS_COPY_PROG $SCRATCH_DEV $COPY_FILE >/dev/null
+_scratch_mount
+$XFS_COPY_PROG $COPY_FILE $SCRATCH_DEV 2>&1 | filter_mounted
+_scratch_unmount
+
+# Test xfs_db a mounted device
+# xfs_db a mounted device without readonly (-r) option should fail
+_scratch_mount
+$XFS_DB_PROG -c sb $SCRATCH_DEV 2>&1 | filter_mounted
+_scratch_unmount
+
+# Test mkfs.xfs a mounted device
+# Generally mkfs will report device is mounted, but if it can't find
+# device is mounted, it'll report device busy.
+_scratch_mount
+_scratch_mkfs 2>&1 | filter_mounted
+_scratch_unmount
+
+# Test xfs_repair (with/without modify flag) a mounted device
+# xfs_repair (with/without modify flag) a mounted device should fail(don't
+# test -d option at here)
+_scratch_mount
+_scratch_xfs_repair -n 2>&1 | filter_mounted
+_scratch_xfs_repair 2>&1 | filter_mounted
+_scratch_unmount
+
+# success, all done
+status=0
+exit
