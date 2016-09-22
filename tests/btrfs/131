@@ -1,0 +1,153 @@
+#! /bin/bash
+# FS QA Test 131
+#
+# Test free space tree mount options.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_btrfs inspect-internal
+
+mkfs_v1()
+{
+	_scratch_mkfs >/dev/null 2>&1
+	# Future proof against btrfs-progs making space_cache=v2 filesystems by
+	# default.
+	_scratch_mount -o clear_cache,space_cache=v1
+	_scratch_unmount
+}
+
+mkfs_v2()
+{
+	_scratch_mkfs >/dev/null 2>&1
+	_scratch_mount -o space_cache=v2
+	_scratch_unmount
+}
+
+check_fst_compat()
+{
+	compat_ro="$($BTRFS_UTIL_PROG inspect-internal dump-super "$SCRATCH_DEV" | \
+		     sed -rn 's/^compat_ro_flags\s+(.*)$/\1/p')"
+	if ((compat_ro & 0x1)); then
+		echo "free space tree is enabled"
+	else
+		echo "free space tree is disabled"
+	fi
+}
+
+# Mount options might interfere.
+export MOUNT_OPTIONS=""
+
+# When the free space tree is not enabled:
+# -o space_cache=v1: keep using the old free space cache
+# -o space_cache=v2: enable the free space tree
+# -o clear_cache,space_cache=v2: clear the free space cache and enable the free space tree
+# We don't check the no options case or plain space_cache as that will change
+# in the future to turn on space_cache=v2.
+
+mkfs_v1
+echo "Using free space cache"
+_scratch_mount -o space_cache=v1
+check_fst_compat
+_scratch_unmount
+
+mkfs_v1
+echo "Enabling free space tree"
+_scratch_mount -o space_cache=v2
+check_fst_compat
+_scratch_unmount
+
+mkfs_v1
+echo "Disabling free space cache and enabling free space tree"
+_scratch_mount -o clear_cache,space_cache=v2
+check_fst_compat
+_scratch_unmount
+
+# When the free space tree is enabled:
+# -o nospace_cache, -o space_cache=v1: error
+# no options, -o space_cache=v2: keep using the free space tree
+# -o clear_cache, -o clear_cache,space_cache=v2: clear and recreate the free space tree
+# -o clear_cache,nospace_cache: clear the free space tree
+# -o clear_cache,space_cache=v1: clear the free space tree, enable the free space cache
+
+mkfs_v2
+echo "Trying to mount without free space tree"
+_scratch_mount -o nospace_cache >/dev/null 2>&1 || echo "mount failed"
+_scratch_mount -o space_cache=v1 >/dev/null 2>&1 || echo "mount failed"
+
+mkfs_v2
+echo "Mounting existing free space tree"
+_scratch_mount
+check_fst_compat
+_scratch_unmount
+_scratch_mount -o space_cache=v2
+check_fst_compat
+_scratch_unmount
+
+mkfs_v2
+echo "Recreating free space tree"
+_scratch_mount -o clear_cache,space_cache=v2
+check_fst_compat
+_scratch_unmount
+mkfs_v2
+_scratch_mount -o clear_cache
+check_fst_compat
+_scratch_unmount
+
+mkfs_v2
+echo "Disabling free space tree"
+_scratch_mount -o clear_cache,nospace_cache
+check_fst_compat
+_scratch_unmount
+
+mkfs_v2
+echo "Reverting to free space cache"
+_scratch_mount -o clear_cache,space_cache=v1
+check_fst_compat
+_scratch_unmount
+
+# success, all done
+status=0
+exit
