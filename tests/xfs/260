@@ -52,10 +52,11 @@ _cleanup()
 rm -f $seqres.full
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 _require_scratch
 _require_quota
+_require_xfs_quota_foreign
 _require_user
 _require_group
 
@@ -78,12 +79,12 @@ do_test()
 	$XFS_QUOTA_PROG -x -c "limit bsoft=20M bhard=20M isoft=20 ihard=20 $type -d" $SCRATCH_MNT
 	$XFS_QUOTA_PROG -x -c "limit bsoft=40M bhard=40M isoft=40 ihard=40 $type fsgqa" $SCRATCH_MNT
 	echo "$qname blocks and inode limit"
-	$XFS_QUOTA_PROG -x -c "report $type -N -bi" $SCRATCH_MNT | _filter_spaces
+	$XFS_QUOTA_PROG -x -c "report $type -N -bi" $SCRATCH_MNT | grep -v ^root | _filter_spaces
 
 	## blocks default quota test ##
 	_user_do "$XFS_IO_PROG -f -c \"pwrite 0 30M\" -c \"fsync\" $SCRATCH_MNT/data" | _filter_xfs_io
 	echo "$qname blocks quota after write 30M data"
-	$XFS_QUOTA_PROG -x -c "report $type -N -b" $SCRATCH_MNT | _filter_spaces
+	$XFS_QUOTA_PROG -x -c "report $type -N -b" $SCRATCH_MNT | grep -v ^root | _filter_spaces
 
 	rm -f ${SCRATCH_MNT}/* >/dev/null 2>&1
 
@@ -94,22 +95,22 @@ do_test()
 	sync
 
 	echo "$qname inode quota after creating 30 inodes"
-	$XFS_QUOTA_PROG -x -c "report $type -N -i" $SCRATCH_MNT | _filter_spaces
+	$XFS_QUOTA_PROG -x -c "report $type -N -i" $SCRATCH_MNT | grep -v ^root | _filter_spaces
 
 	rm -f ${SCRATCH_MNT}/* >/dev/null 2>&1
 }
 
 ### user default quota test ###
-_scratch_mkfs_xfs >/dev/null 2>&1
-_qmount_option "uquota,gquota"
+_scratch_mkfs >/dev/null 2>&1
+_qmount_option "usrquota,grpquota"
 _qmount
 
 do_test user
 
 ### group default quota test ###
 _scratch_unmount
-_scratch_mkfs_xfs >/dev/null 2>&1
-_qmount_option "gquota,uquota"
+_scratch_mkfs >/dev/null 2>&1
+_qmount_option "grpquota,usrquota"
 _qmount
 
 do_test group

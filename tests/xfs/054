@@ -44,14 +44,15 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 cp /dev/null $seqres.full
 chmod ugo+rwx $seqres.full
 
 _require_scratch
-_require_xfs_quota
+_require_quota
+_require_xfs_quota_foreign
 
 _filter_stat()
 {
@@ -67,7 +68,7 @@ _filter_stat()
 
 _exercise()
 {
-	_scratch_mkfs_xfs >/dev/null 2>&1
+	_scratch_mkfs >/dev/null 2>&1
 	_qmount
 
 	umask 022
@@ -99,9 +100,9 @@ _exercise()
 	_scratch_unmount 2>/dev/null
 }
 
-_scratch_mkfs_xfs >> $seqres.full 2>&1 || _fail "mkfs failed!"
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed!"
 
-_qmount_option "uquota,gquota"
+_qmount_option "usrquota,grpquota"
 _qmount
 if src/feature -G $SCRATCH_DEV ; then
 	:
@@ -114,16 +115,15 @@ _qmount_option "rw" # no quota options
 echo "*** Default mount options"
 _exercise
 
-_qmount_option "uquota"
+_qmount_option "usrquota"
 echo "*** User quota mount option"
 _exercise
 
-export MOUNT_OPTIONS="-o gquota"
-_qmount_option "gquota"
+_qmount_option "grpquota"
 echo "*** Group quota mount option"
 _exercise
 
-_qmount_option "uquota,gquota"
+_qmount_option "usrquota,grpquota"
 echo "*** User and Group quota mount options"
 _exercise
 

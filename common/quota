@@ -78,6 +78,20 @@ _require_xfs_quota()
 }
 
 #
+# checks that xfs_quota can operate on foreign (non-xfs) filesystems
+# Skips check on xfs filesystems, old xfs_quota is fine there.
+# Appends "-f" to enable foreign behavior on non-xfs filesystems if available.
+#
+_require_xfs_quota_foreign()
+{
+	if [ "$FSTYP" != "xfs" ]; then
+		$XFS_QUOTA_PROG -f -V &>/dev/null || \
+		 _notrun "xfs_quota binary does not support foreign filesystems"
+		XFS_QUOTA_PROG="$XFS_QUOTA_PROG -f"
+	fi
+}
+
+#
 # checks that the XFS project quota support in the kernel is enabled.
 #
 _require_prjquota()
@@ -169,6 +183,12 @@ _qmount()
 {
     _scratch_unmount >/dev/null 2>&1
     _scratch_mount || _fail "qmount failed"
+    # xfs doesn't need these setups and quotacheck even fails on xfs
+    # redirect the output to $seqres.full for debug purpose and ignore results
+    if [ "$FSTYP" != "xfs" ]; then
+        quotacheck -ug $SCRATCH_MNT >>$seqres.full 2>&1
+        quotaon -ug $SCRATCH_MNT >>$seqres.full 2>&1
+    fi
     chmod ugo+rwx $SCRATCH_MNT
 }
 
