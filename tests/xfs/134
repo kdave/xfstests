@@ -45,11 +45,14 @@ _cleanup()
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux IRIX
 
 _require_test
-_require_xfs_quota
+_require_quota
+_require_xfs_quota_foreign
+_require_xfs_io_command "chproj"
+
 # we can't run with group quotas
 _exclude_scratch_mount_option "gquota" "grpquota"
 
@@ -68,21 +71,12 @@ cp /dev/null $seqres.full
 chmod a+rwx $seqres.full	# arbitrary users will write here
 
 _require_scratch
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
+_scratch_enable_pquota
 
-#if pquota's already in mount options then we dont need to enable
-
-EXTRA_MOUNT_OPTIONS="-o pquota"
-
-if ! _scratch_mount "$EXTRA_MOUNT_OPTIONS" >$tmp.out 2>&1
-then
-    cat $tmp.out
-    echo "!!! mount failed"
-    exit
-fi
-
-src/feature -p $SCRATCH_DEV
-[ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
+_qmount_option "prjquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
 
 report_quota()
 {

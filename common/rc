@@ -2031,6 +2031,9 @@ _require_xfs_io_command()
 
 	testfile=$TEST_DIR/$$.xfs_io
 	case $command in
+	"chproj")
+		testio=`$XFS_IO_PROG -F -f -c "chproj 0" $testfile 2>&1`
+		;;
 	"falloc" )
 		testio=`$XFS_IO_PROG -F -f -c "falloc 0 1m" $testfile 2>&1`
 		;;
@@ -2062,6 +2065,8 @@ _require_xfs_io_command()
 		_notrun "xfs_io $command support is missing"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs?)"
+	echo $testio | grep -q "foreign file active" && \
+		_notrun "xfs_io $command not supported on $FSTYP"
 
 	test -z "$param" && return
 	$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \

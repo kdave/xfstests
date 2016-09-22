@@ -46,12 +46,14 @@ _cleanup()
 rm -f $seqres.full
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 _require_scratch
-_require_xfs_quota
+_require_quota
+_require_xfs_quota_foreign
 
-_scratch_mkfs_xfs >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
+_scratch_enable_pquota
 
 do_project_test()
 {
@@ -72,20 +74,22 @@ EOF
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "project -s $qa_project" $SCRATCH_MNT > /dev/null
 
+	# We set & test inodes, because xfs vs ext4 consume differing
+	# amounts of space for an empty dir, but an inode is an inode...
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "limit -p bsoft=100m bhard=200m $qa_project" $SCRATCH_MNT
+		-c "limit -p isoft=100 ihard=200 $qa_project" $SCRATCH_MNT
 
 	echo "=== quota command output ==="
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid \
-		-c "quota -p -v -b $qa_project" $SCRATCH_MNT | _filter_quota
+		-c "quota -p -v -i $qa_project" $SCRATCH_MNT | _filter_quota
 
 	echo "=== report command output ==="
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-		-c "report -p -N -b" $SCRATCH_MNT | _filter_project_quota
+		-c "report -p -N -i" $SCRATCH_MNT | _filter_project_quota
 }
 
 # Test project
-_qmount_option "uquota,pquota"
+_qmount_option "usrquota,prjquota"
 _qmount
 _require_prjquota $SCRATCH_DEV
 do_project_test

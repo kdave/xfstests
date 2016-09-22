@@ -63,10 +63,11 @@ echo "Silence is golden."
 proj_dir="$SCRATCH_MNT/test"
 
 # Modify as appropriate.
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 
 _require_quota
+_require_xfs_quota_foreign
 _require_scratch
 
 # Make sure the hard limits reported are what was set.
@@ -115,7 +116,7 @@ _filter_quota_rpt() {
 }
 
 _quota_cmd() {
-	xfs_quota -P "$my_projid" -D "$my_projects" -x \
+	$XFS_QUOTA_PROG -P "$my_projid" -D "$my_projects" -x \
 		-c "$@" "$SCRATCH_MNT"
 }
 
@@ -124,10 +125,13 @@ _quota_cmd() {
 echo $proj_name:$proj_num > "$my_projid"
 echo $proj_num:$proj_dir > "$my_projects"
 
-_scratch_mkfs						>> "$seqres.full" 2>&1
+_scratch_mkfs					>> "$seqres.full" 2>&1
+_scratch_enable_pquota
 
-export MOUNT_OPTIONS="-opquota"
+_qmount_option "prjquota"
 _qmount
+_require_prjquota $SCRATCH_DEV
+
 mkdir -p "${proj_dir}"
 
 # Setup the project quota directory

@@ -46,11 +46,12 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common/quota
 
 # real QA test starts here
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
 
 _require_scratch
-_require_xfs_quota
+_require_quota
+_require_xfs_quota_foreign
 
 #
 # Setup temporary replacements for /etc/projects and /etc/projid
@@ -66,11 +67,13 @@ EOF
 #
 # And make sure we always use our replacements
 #
-quota_cmd="xfs_quota -D $tmp.projects -P $tmp.projid"
+quota_cmd="$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid"
 
-_scratch_mkfs_xfs >/dev/null 2>&1
-_qmount_option "pquota"
+_scratch_mkfs >/dev/null 2>&1
+_scratch_enable_pquota
+_qmount_option "prjquota"
 _qmount
+_require_prjquota $SCRATCH_DEV
 
 #
 # Create the project root

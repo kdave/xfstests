@@ -92,16 +92,30 @@ _require_xfs_quota_foreign()
 }
 
 #
-# checks that the XFS project quota support in the kernel is enabled.
+# checks that the project quota support in the kernel is enabled.
 #
 _require_prjquota()
 {
     [ -n "$1" ] && _dev="$1" || _dev="$TEST_DEV"
-    src/feature -p $_dev
+    if [ "$FSTYP" == "ext4" ]; then
+	dumpe2fs -h $_dev 2>&1 | grep -qw project || \
+		_notrun "Project quota not available on this ext4"
+    fi
+    src/feature -P $_dev
     [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
     if [ "$USE_EXTERNAL" = yes -a ! -z "$_dev" ]; then
 	_notrun "Project quotas not supported on realtime filesystem"
     fi
+}
+
+#
+# ext4 (for now) is unique in that we must enable the project quota feature
+# prior to mount.  This is a relatively new feature ...
+_scratch_enable_pquota()
+{
+	[ "$FSTYP" != "ext4" ] && return
+
+	tune2fs -O quota,project $SCRATCH_DEV >>$seqres.full 2>&1
 }
 
 #
@@ -197,6 +211,8 @@ _qmount()
 #
 _qmount_option()
 {
+	OPTS=$1
+
 	# Replace any user defined quota options
 	# with the quota option that we want.
 	# Simplest to do this rather than delete existing ones first because
@@ -209,17 +225,24 @@ _qmount_option()
 		-e 's/usrquota/QUOTA/g'    \
 		-e 's/gquota/QUOTA/g'      \
 		-e 's/grpquota/QUOTA/g'    \
-		-e 's/pquota/QUOTA/g'      \
-		-e 's/prjquota/QUOTA/g'      \
+		-e 's/\bpquota/QUOTA/g'    \
+		-e 's/prjquota/QUOTA/g'    \
 		-e 's/quota/QUOTA/g'       \
 		-e 's/uqnoenforce/QUOTA/g' \
 		-e 's/gqnoenforce/QUOTA/g' \
 		-e 's/pqnoenforce/QUOTA/g' \
 		-e 's/qnoenforce/QUOTA/g'  \
-		-e "s/QUOTA/$1/g"`
+		-e "s/QUOTA/$OPTS/g"`
 
+	# ext4 doesn't _do_ "-o pquota/prjquota" because reasons
+	# Switch it to "quota" to enable mkfs-time pquota
+	if [ "$FSTYP" == "ext4" ]; then
+		OPTS=`echo $OPTS \
+		| sed	-e 's/\bpquota/quota/g'	\
+			-e 's/prjquota/quota/g'`
+	fi
 	# Ensure we have the given quota option - duplicates are fine
-	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $1"
+	export MOUNT_OPTIONS="$MOUNT_OPTIONS -o $OPTS"
 	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seqres.full
 }
 
