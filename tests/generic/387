@@ -1,0 +1,81 @@
+#! /bin/bash
+# FS QA Test 387
+#
+# Create a heavily reflinked file, then check whether we can truncate
+# it correctly.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Fujitsu.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+
+_scratch_mkfs_sized $((32 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+testfile=$SCRATCH_MNT/testfile
+dummyfile=$SCRATCH_MNT/dummyfile
+blocksize=$((128 * 1024))
+
+# create a dummy file, which is used to occupy some fs space first.
+_pwrite_byte 0xcdcdcdcd 0 $((1 * 1024 * 1024)) $dummyfile > /dev/null
+_pwrite_byte 0xcdcdcdcd 0 $blocksize  $testfile > /dev/null
+
+echo "Silence is golden"
+for ((i = 0; i < 16384; i++)); do
+	_reflink_range $testfile 0 $testfile $(($i * $blocksize)) \
+		$blocksize > /dev/null 2>&1
+done
+
+# consume all remaining free space
+dd if=/dev/zero of=$SCRATCH_MNT/space >/dev/null 2>&1
+sync
+
+# fs is full now and fs internal operations may need some free space, for
+# example, in btrfs, transaction will need to reserve space first, so here free
+# 1MB space.
+rm -f $dummyfile
+$XFS_IO_PROG -f -c "truncate 0" $testfile
+
+status=0
+exit
