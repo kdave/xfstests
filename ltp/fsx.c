@@ -1272,7 +1272,14 @@ do {						\
 	TRIM_LEN(off, len, size);		\
 } while (0)
 
-void cleanup();
+void
+cleanup(int sig)
+{
+	if (sig)
+		prt("signal %d\n", sig);
+	prt("testcalls = %lu\n", testcalls);
+	exit(sig);
+}
 
 static int
 read_op(struct log_entry *log_entry)
@@ -1528,17 +1535,6 @@ out:
 	if (closeopen)
 		docloseopen();
 	return 1;
-}
-
-
-void
-cleanup(sig)
-	int	sig;
-{
-	if (sig)
-		prt("signal %d\n", sig);
-	prt("testcalls = %lu\n", testcalls);
-	exit(sig);
 }
 
 
