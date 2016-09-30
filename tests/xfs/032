@@ -60,6 +60,11 @@ while [ $SECTORSIZE -le $PAGESIZE ]; do
 
 		echo "=== Sector size $SECTORSIZE Block size $BLOCKSIZE ==" >> $seqres.full
 		_scratch_mkfs -s size=$SECTORSIZE -b size=$BLOCKSIZE -d size=1g >> $seqres.full 2>&1
+		# Maybe return error at here, e.g: mkfs.xfs -m crc=1 -b size=512
+		if [ $? -ne 0 ]; then
+			BLOCKSIZE=$(($BLOCKSIZE * 2))
+			continue
+		fi
 		_scratch_mount
 		# light population of the fs
 		$FSSTRESS_PROG -n 100 -d $SCRATCH_MNT >> $seqres.full 2>&1
