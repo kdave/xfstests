@@ -1,0 +1,78 @@
+#! /bin/bash
+# FS QA Test No. 876
+#
+# Create a big enough rmapbt that we tickle a fdblocks accounting bug.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_scratch
+_require_xfs_scratch_rmapbt
+_require_scratch_reflink
+_require_test_program "punch-alternating"
+
+rm -f "$seqres.full"
+
+echo "+ create scratch fs"
+_scratch_mkfs > "$seqres.full" 2>&1
+
+echo "+ mount fs image"
+_scratch_mount
+blksz="$(get_block_size $SCRATCH_MNT)"
+
+# btree header is 56 bytes; an rmapbt record is 24 bytes; and
+# a rmapbt key/pointer pair is 44 bytes.
+bt_ptrs=$(( (blksz - 56) / 44 ))
+bt_recs=$(( (blksz - 56) / 24 ))
+
+blocks=$((bt_ptrs * bt_recs + 1))
+# Need (2 * blocks * blksz) bytes for files, and 20% for metadata
+_require_fs_space $SCRATCH_MNT $(( (2 * blocks * blksz) * 5 / 4096 ))
+len=$((blocks * blksz))
+
+echo "+ make some files"
+$XFS_IO_PROG -f -c "falloc 0 $len" -c "pwrite -S 0x68 -b 1048576 0 $len" $SCRATCH_MNT/f1 >> $seqres.full
+$XFS_IO_PROG -f -c "falloc 0 $len" -c "pwrite -S 0x68 -b 1048576 0 $len" $SCRATCH_MNT/f2 >> $seqres.full
+./src/punch-alternating $SCRATCH_MNT/f1 >> "$seqres.full"
+./src/punch-alternating $SCRATCH_MNT/f2 >> "$seqres.full"
+
+# success, all done
+status=0
+exit
