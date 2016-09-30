@@ -78,12 +78,12 @@ echo "+ check fs"
 _scratch_xfs_repair -n >> $seqres.full 2>&1 || _fail "xfs_repair should not fail"
 
 echo "+ check xattr"
-$XFS_DB_PROG -x -c "inode ${inode}" -c "bmap" "${SCRATCH_DEV}" >> $seqres.full
-$XFS_DB_PROG -x -c "inode ${inode}" -c "ablock 0" -c "stack" "${SCRATCH_DEV}" | grep -q 'file attr block is unmapped' && _fail "failed to create a leaf xattr (index)"
-$XFS_DB_PROG -x -c "inode ${inode}" -c "ablock 1" -c "stack" "${SCRATCH_DEV}" | grep -q 'file attr block is unmapped' && _fail "failed to create a leaf xattr (data)"
+_scratch_xfs_db -x -c "inode ${inode}" -c "bmap" >> $seqres.full
+_scratch_xfs_db -x -c "inode ${inode}" -c "ablock 0" -c "stack" | grep -q 'file attr block is unmapped' && _fail "failed to create a leaf xattr (index)"
+_scratch_xfs_db -x -c "inode ${inode}" -c "ablock 1" -c "stack" | grep -q 'file attr block is unmapped' && _fail "failed to create a leaf xattr (data)"
 
 echo "+ corrupt xattr"
-$XFS_DB_PROG -x -c "inode ${inode}" -c 'ablock 0' -c "stack" -c "blocktrash -x 32 -o +32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" "${SCRATCH_DEV}" >> $seqres.full
+_scratch_xfs_db -x -c "inode ${inode}" -c 'ablock 0' -c "stack" -c "blocktrash -x 32 -o +32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full
 
 echo "+ mount image"
 _scratch_mount

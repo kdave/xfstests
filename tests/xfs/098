@@ -95,8 +95,8 @@ echo "+ check fs"
 _scratch_xfs_repair -n >> $seqres.full 2>&1 || _fail "xfs_repair should not fail"
 
 echo "+ corrupt image"
-logstart="$($XFS_DB_PROG -c 'sb 0' -c 'p' "${SCRATCH_DEV}" | grep '^logstart =' | cut -d ' ' -f 3)"
-logstart="$($XFS_DB_PROG -c "convert fsblock ${logstart} byte" "${SCRATCH_DEV}" | sed -e 's/^.*(\([0-9]*\).*$/\1/g')"
+logstart="$(_scratch_xfs_db -c 'sb 0' -c 'p' | grep '^logstart =' | cut -d ' ' -f 3)"
+logstart="$(_scratch_xfs_db -c "convert fsblock ${logstart} byte" | sed -e 's/^.*(\([0-9]*\).*$/\1/g')"
 logblocks="$(xfs_db -c 'sb 0' -c 'p' "${SCRATCH_DEV}" | grep '^logblocks =' | cut -d ' ' -f 3)"
 $XFS_IO_PROG -f -c "pwrite -S 0x62 ${logstart} $((logblocks * blksz))" "${SCRATCH_DEV}" >> $seqres.full
 

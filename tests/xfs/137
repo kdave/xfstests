@@ -58,7 +58,7 @@ _require_xfs_db_command "logformat"
 _scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 
 # push the log cycle ahead so we have room to move it backwards later
-$XFS_DB_PROG -x -c "logformat -c 3" $SCRATCH_DEV >> $seqres.full 2>&1
+_scratch_xfs_db -x -c "logformat -c 3" >> $seqres.full 2>&1
 
 # do some work on the fs to update metadata LSNs
 _scratch_mount
@@ -68,13 +68,13 @@ _scratch_unmount
 # Reformat to the current cycle and try to mount. This fails in most cases
 # because the sb LSN is ahead of the current LSN. If it doesn't fail, push the
 # cycle back further and try again.
-$XFS_DB_PROG -x -c "logformat" $SCRATCH_DEV >> $seqres.full 2>&1
+_scratch_xfs_db -x -c "logformat" >> $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 if [ $? != 0 ]; then
 	echo mount failure detected
 else
 	_scratch_unmount
-	$XFS_DB_PROG -x -c "logformat -c 2" $SCRATCH_DEV >> $seqres.full 2>&1
+	_scratch_xfs_db -x -c "logformat -c 2" >> $seqres.full 2>&1
 	_scratch_mount >> $seqres.full 2>&1 || echo mount failure detected
 fi
 

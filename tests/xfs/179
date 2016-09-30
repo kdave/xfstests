@@ -67,9 +67,9 @@ _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
 echo "Change reference count"
 _scratch_unmount
 echo "set refcount to -4" >> $seqres.full
-$XFS_DB_PROG -x -c 'agf 0' -c 'addr refcntroot' -c 'write recs[1].refcount 4294967292' $SCRATCH_DEV >> $seqres.full
+_scratch_xfs_db -x -c 'agf 0' -c 'addr refcntroot' -c 'write recs[1].refcount 4294967292' >> $seqres.full
 echo "check refcount after setting to -4" >> $seqres.full
-$XFS_DB_PROG -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' $SCRATCH_DEV >> $seqres.full
+_scratch_xfs_db -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' >> $seqres.full
 _scratch_mount >> $seqres.full
 
 echo "Reflink the overlinked file"
@@ -82,7 +82,7 @@ _cp_reflink $testdir/file1 $testdir/file7 >> $seqres.full
 echo "Check scratch fs"
 _scratch_unmount
 echo "check refcount after reflinking 5 more times" >> $seqres.full
-$XFS_DB_PROG -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' $SCRATCH_DEV >> $seqres.full
+_scratch_xfs_db -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' >> $seqres.full
 _scratch_mount >> $seqres.full
 
 echo "CoW a couple files"
@@ -93,7 +93,7 @@ _pwrite_byte 0x62 0 $blksz $testdir/file7 >> $seqres.full
 echo "Check scratch fs"
 _scratch_unmount
 echo "check refcount after cowing 3 files" >> $seqres.full
-$XFS_DB_PROG -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' $SCRATCH_DEV >> $seqres.full
+_scratch_xfs_db -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' >> $seqres.full
 _scratch_mount >> $seqres.full
 
 echo "Remove reflinked files"
@@ -102,7 +102,7 @@ rm -rf $testdir/file*
 echo "Check scratch fs"
 _scratch_unmount
 echo "check refcount after removing all files" >> $seqres.full
-$XFS_DB_PROG -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' $SCRATCH_DEV >> $seqres.full
+_scratch_xfs_db -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' >> $seqres.full
 _scratch_xfs_repair -o force_geometry -n >> $seqres.full 2>&1
 res=$?
 if [ $res -eq 0 ]; then

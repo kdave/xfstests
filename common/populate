@@ -275,38 +275,35 @@ __populate_find_inode() {
 
 # Check data fork format of XFS file
 __populate_check_xfs_dformat() {
-	dev="$1"
-	inode="$2"
-	format="$3"
+	inode="$1"
+	format="$2"
 
-	fmt="$($XFS_DB_PROG -c "inode ${inode}" -c 'p core.format' "${dev}" | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
+	fmt="$(_scratch_xfs_db -c "inode ${inode}" -c 'p core.format' | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
 	test "${format}" = "${fmt}" || _fail "failed to create ino ${inode} dformat expected ${format} saw ${fmt}"
 }
 
 # Check attr fork format of XFS file
 __populate_check_xfs_aformat() {
-	dev="$1"
-	inode="$2"
-	format="$3"
+	inode="$1"
+	format="$2"
 
-	fmt="$($XFS_DB_PROG -c "inode ${inode}" -c 'p core.aformat' "${dev}" | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
+	fmt="$(_scratch_xfs_db -c "inode ${inode}" -c 'p core.aformat' | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
 	test "${format}" = "${fmt}" || _fail "failed to create ino ${inode} aformat expected ${format} saw ${fmt}"
 }
 
 # Check structure of XFS directory
 __populate_check_xfs_dir() {
-	dev="$1"
-	inode="$2"
-	dtype="$3"
+	inode="$1"
+	dtype="$2"
 
 	(test -n "${leaf_lblk}" && test -n "${node_lblk}") || _fail "must define leaf_lblk and node_lblk before calling __populate_check_xfs_dir"
 	datab=0
 	leafb=0
 	freeb=0
-	#echo "== check dir ${inode} type ${dtype}" ; $XFS_DB_PROG -x -c "inode ${inode}" -c "bmap" "${SCRATCH_DEV}"
-	$XFS_DB_PROG -x -c "inode ${inode}" -c "dblock 0" -c "stack" "${SCRATCH_DEV}" | grep -q 'file data block is unmapped' || datab=1
-	$XFS_DB_PROG -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "stack" "${SCRATCH_DEV}" | grep -q 'file data block is unmapped' || leafb=1
-	$XFS_DB_PROG -x -c "inode ${inode}" -c "dblock ${node_lblk}" -c "stack" "${SCRATCH_DEV}" | grep -q 'file data block is unmapped' || freeb=1
+	#echo "== check dir ${inode} type ${dtype}" ; _scratch_xfs_db -x -c "inode ${inode}" -c "bmap"
+	_scratch_xfs_db -x -c "inode ${inode}" -c "dblock 0" -c "stack" | grep -q 'file data block is unmapped' || datab=1
+	_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "stack" | grep -q 'file data block is unmapped' || leafb=1
+	_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${node_lblk}" -c "stack" | grep -q 'file data block is unmapped' || freeb=1
 
 	case "${dtype}" in
 	"shortform"|"inline"|"local")
@@ -328,15 +325,14 @@ __populate_check_xfs_dir() {
 
 # Check structure of XFS attr
 __populate_check_xfs_attr() {
-	dev="$1"
-	inode="$2"
-	atype="$3"
+	inode="$1"
+	atype="$2"
 
 	datab=0
 	leafb=0
-	#echo "== check attr ${inode} type ${dtype}" ; $XFS_DB_PROG -x -c "inode ${inode}" -c "bmap -a" "${SCRATCH_DEV}"
-	$XFS_DB_PROG -x -c "inode ${inode}" -c "ablock 0" -c "stack" "${SCRATCH_DEV}" | grep -q 'file attr block is unmapped' || datab=1
-	$XFS_DB_PROG -x -c "inode ${inode}" -c "ablock 1" -c "stack" "${SCRATCH_DEV}" | grep -q 'file attr block is unmapped' || leafb=1
+	#echo "== check attr ${inode} type ${dtype}" ; _scratch_xfs_db -x -c "inode ${inode}" -c "bmap -a"
+	_scratch_xfs_db -x -c "inode ${inode}" -c "ablock 0" -c "stack" | grep -q 'file attr block is unmapped' || datab=1
+	_scratch_xfs_db -x -c "inode ${inode}" -c "ablock 1" -c "stack" | grep -q 'file attr block is unmapped' || leafb=1
 
 	case "${atype}" in
 	"shortform"|"inline"|"local")
@@ -378,28 +374,28 @@ _scratch_xfs_populate_check() {
 	node_lblk="$((64 * 1073741824 / blksz))"
 	umount "${SCRATCH_MNT}"
 
-	__populate_check_xfs_dformat "${SCRATCH_DEV}" "${extents_file}" "extents"
-	__populate_check_xfs_dformat "${SCRATCH_DEV}" "${btree_file}" "btree"
-	__populate_check_xfs_dir "${SCRATCH_DEV}" "${inline_dir}" "inline"
-	__populate_check_xfs_dir "${SCRATCH_DEV}" "${block_dir}" "block"
-	__populate_check_xfs_dir "${SCRATCH_DEV}" "${leaf_dir}" "leaf"
-	__populate_check_xfs_dir "${SCRATCH_DEV}" "${node_dir}" "node"
-	__populate_check_xfs_dir "${SCRATCH_DEV}" "${btree_dir}" "btree"
-	__populate_check_xfs_dformat "${SCRATCH_DEV}" "${btree_dir}" "btree"
-	__populate_check_xfs_dformat "${SCRATCH_DEV}" "${bdev}" "dev"
-	__populate_check_xfs_dformat "${SCRATCH_DEV}" "${cdev}" "dev"
-	__populate_check_xfs_attr "${SCRATCH_DEV}" "${local_attr}" "local"
-	__populate_check_xfs_attr "${SCRATCH_DEV}" "${leaf_attr}" "leaf"
-	__populate_check_xfs_attr "${SCRATCH_DEV}" "${node_attr}" "node"
-	__populate_check_xfs_attr "${SCRATCH_DEV}" "${btree_attr}" "btree"
-	__populate_check_xfs_aformat "${SCRATCH_DEV}" "${btree_attr}" "btree"
+	__populate_check_xfs_dformat "${extents_file}" "extents"
+	__populate_check_xfs_dformat "${btree_file}" "btree"
+	__populate_check_xfs_dir "${inline_dir}" "inline"
+	__populate_check_xfs_dir "${block_dir}" "block"
+	__populate_check_xfs_dir "${leaf_dir}" "leaf"
+	__populate_check_xfs_dir "${node_dir}" "node"
+	__populate_check_xfs_dir "${btree_dir}" "btree"
+	__populate_check_xfs_dformat "${btree_dir}" "btree"
+	__populate_check_xfs_dformat "${bdev}" "dev"
+	__populate_check_xfs_dformat "${cdev}" "dev"
+	__populate_check_xfs_attr "${local_attr}" "local"
+	__populate_check_xfs_attr "${leaf_attr}" "leaf"
+	__populate_check_xfs_attr "${node_attr}" "node"
+	__populate_check_xfs_attr "${btree_attr}" "btree"
+	__populate_check_xfs_aformat "${btree_attr}" "btree"
 }
 
 # Check data fork format of ext4 file
 __populate_check_ext4_dformat() {
-	dev="$1"
-	inode="$2"
-	format="$3"
+	dev="${SCRATCH_DEV}"
+	inode="$1"
+	format="$2"
 
 	extents=0
 	etree=0
@@ -424,9 +420,9 @@ __populate_check_ext4_dformat() {
 
 # Check attr fork format of ext4 file
 __populate_check_ext4_aformat() {
-	dev="$1"
-	inode="$2"
-	format="$3"
+	dev="${SCRATCH_DEV}"
+	inode="$1"
+	format="$2"
 
 	ablock=1
 	debugfs -R "stat <${inode}>" "${dev}" 2> /dev/null | grep 'File ACL: 0' -q && ablock=0
@@ -445,9 +441,9 @@ __populate_check_ext4_aformat() {
 
 # Check structure of ext4 dir
 __populate_check_ext4_dir() {
-	dev="$1"
-	inode="$2"
-	dtype="$3"
+	dev="${SCRATCH_DEV}"
+	inode="$1"
+	dtype="$2"
 
 	htree=0
 	inline=0
@@ -483,13 +479,13 @@ _scratch_ext4_populate_check() {
 	block_attr="$(__populate_find_inode "${SCRATCH_MNT}/ATTR.FMT_BLOCK")"
 	umount "${SCRATCH_MNT}"
 
-	__populate_check_ext4_dformat "${SCRATCH_DEV}" "${extents_file}" "extents"
-	__populate_check_ext4_dformat "${SCRATCH_DEV}" "${etree_file}" "etree"
-	__populate_check_ext4_dir "${SCRATCH_DEV}" "${block_dir}" "block"
-	__populate_check_ext4_dir "${SCRATCH_DEV}" "${htree_dir}" "htree"
-	__populate_check_ext4_dformat "${SCRATCH_DEV}" "${extents_slink}" "extents"
-	__populate_check_ext4_aformat "${SCRATCH_DEV}" "${local_attr}" "local"
-	__populate_check_ext4_aformat "${SCRATCH_DEV}" "${block_attr}" "block"
+	__populate_check_ext4_dformat "${extents_file}" "extents"
+	__populate_check_ext4_dformat "${etree_file}" "etree"
+	__populate_check_ext4_dir "${block_dir}" "block"
+	__populate_check_ext4_dir "${htree_dir}" "htree"
+	__populate_check_ext4_dformat "${extents_slink}" "extents"
+	__populate_check_ext4_aformat "${local_attr}" "local"
+	__populate_check_ext4_aformat "${block_attr}" "block"
 }
 
 # Populate a scratch FS and check the contents to make sure we got that
