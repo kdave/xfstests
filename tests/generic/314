@@ -39,12 +39,10 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
-. ./common/attr
 
 # real QA test starts here
 _supported_fs generic
 _require_test
-_require_acls
 _require_user
 
 rm -rf $TEST_DIR/$seq-dir
@@ -56,12 +54,10 @@ chown $qa_user:12345 $TEST_DIR/$seq-dir
 # Make parent dir sgid
 chmod 2775 $TEST_DIR/$seq-dir
 
-# Make subdirs before & after acl set
+# Make subdir
 su $qa_user -c "umask 022; mkdir $TEST_DIR/$seq-dir/subdir"
-su $qa_user -c "setfacl -m u:$qa_user:rwx,d:u:$qa_user:rwx $TEST_DIR/$seq-dir"
-su $qa_user -c "mkdir $TEST_DIR/$seq-dir/subdir2"
 
-# Both subdirs should have inherited sgid
+# Subdir should have inherited sgid
 _ls_l $TEST_DIR/$seq-dir/ | grep -v total | _filter_test_dir | awk '{print $1,$NF}'
 
 status=0
