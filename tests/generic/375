@@ -52,30 +52,44 @@ _require_runas
 _require_acls
 
 cd $TEST_DIR
-testfile=testfile.$seq
-rm -f $testfile
 
-touch $testfile
-chown 100:100 $testfile
+# try with both regular file and directory
+for filetype in regular dir; do
 
-echo '*** SGID should remain set (twice)'
-chmod 2755 $testfile
-_runas -u 100 -g 100 -- chmod 2777 $testfile
-stat -c %A $testfile
-chmod 2755 $testfile
-_runas -u 100 -g 100 -- setfacl -m u::rwx,g::rwx,o::rwx $testfile
-stat -c %A $testfile
+	case $filetype in
+	regular)
+		testfile=testfile.$seq
+		rm -f $testfile
+		touch $testfile
+		;;
+	*)
+		testfile=testdir.$seq
+		rm -rf $testfile
+		mkdir $testfile
+		;;
+	esac
 
-echo '*** SGID should be cleared (twice)'
-chmod 2755 $testfile
-_runas -u 100 -g 101 -- chmod 2777 $testfile
-stat -c %A $testfile
-chmod 2755 $testfile
-_runas -u 100 -g 101 -- setfacl -m u::rwx,g::rwx,o::rwx $testfile
-stat -c %A $testfile
+	chown 100:100 $testfile
 
-echo '*** Expected failure'
-_runas -u 101 -g 101 -- chmod 2777 $testfile
+	echo '*** SGID should remain set (twice)'
+	chmod 2755 $testfile
+	_runas -u 100 -g 100 -- chmod 2777 $testfile
+	stat -c %A $testfile
+	chmod 2755 $testfile
+	_runas -u 100 -g 100 -- setfacl -m u::rwx,g::rwx,o::rwx $testfile
+	stat -c %A $testfile
+
+	echo '*** SGID should be cleared (twice)'
+	chmod 2755 $testfile
+	_runas -u 100 -g 101 -- chmod 2777 $testfile
+	stat -c %A $testfile
+	chmod 2755 $testfile
+	_runas -u 100 -g 101 -- setfacl -m u::rwx,g::rwx,o::rwx $testfile
+	stat -c %A $testfile
+
+	echo '*** Expected failure'
+	_runas -u 101 -g 101 -- chmod 2777 $testfile
+done
 
 status=0
 exit
