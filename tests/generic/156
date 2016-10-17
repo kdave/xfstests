@@ -54,15 +54,11 @@ _cleanup()
 . ./common/attr
 . ./common/reflink
 
-if [ $FSTYP = "btrfs" ]; then
-	_notrun "btrfs doesn't handle unshare on fallocate"
-fi
-
 # real QA test starts here
 _supported_os Linux
 _require_test_reflink
 _require_cp_reflink
-_require_xfs_io_command "falloc"
+_require_xfs_io_command "funshare"
 
 rm -f $seqres.full
 
@@ -89,18 +85,18 @@ _test_cycle_mount
 free_blocks1=$(stat -f $testdir -c '%f')
 
 echo "funshare part of a file"
-$XFS_IO_PROG -f -c "falloc 0 $((sz / 2))" $testdir/file2
+$XFS_IO_PROG -f -c "funshare 0 $((sz / 2))" $testdir/file2
 _test_cycle_mount
 
 echo "funshare some of the copies"
-$XFS_IO_PROG -f -c "falloc 0 $sz" $testdir/file2
-$XFS_IO_PROG -f -c "falloc 0 $sz" $testdir/file3
+$XFS_IO_PROG -f -c "funshare 0 $sz" $testdir/file2
+$XFS_IO_PROG -f -c "funshare 0 $sz" $testdir/file3
 _test_cycle_mount
 free_blocks2=$(stat -f $testdir -c '%f')
 
 echo "funshare the rest of the files"
-$XFS_IO_PROG -f -c "falloc 0 $sz" $testdir/file4
-$XFS_IO_PROG -f -c "falloc 0 $sz" $testdir/file1
+$XFS_IO_PROG -f -c "funshare 0 $sz" $testdir/file4
+$XFS_IO_PROG -f -c "funshare 0 $sz" $testdir/file1
 _test_cycle_mount
 free_blocks3=$(stat -f $testdir -c '%f')
 
