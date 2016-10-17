@@ -3799,6 +3799,15 @@ init_rc()
 	$XFS_IO_PROG -c stat $TEST_DIR 2>&1 | grep -q "is not on an XFS filesystem" && \
 		export XFS_IO_PROG="$XFS_IO_PROG -F"
 
+	# xfs_io -i option starts an idle thread for xfs_io.
+	# With single threaded process, the file table is not shared
+	# and file structs are not reference counted.
+	# Spawning an idle thread can help detecting file struct
+	# reference leaks, so we want to enable the option whenever
+	# it is supported.
+	$XFS_IO_PROG -i -c quit 2>/dev/null && \
+		export XFS_IO_PROG="$XFS_IO_PROG -i"
+
 	# xfs_copy doesn't work on v5 xfs yet without -d option
 	if [ "$FSTYP" == "xfs" ] && [[ $MKFS_OPTIONS =~ crc=1 ]]; then
 		export XFS_COPY_PROG="$XFS_COPY_PROG -d"
