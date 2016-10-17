@@ -52,8 +52,8 @@ _require_test_reflink()
 	_require_xfs_io_command "reflink"
 
 	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
-	"$XFS_IO_PROG" -f -c "reflink $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" > /dev/null
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
+	$XFS_IO_PROG -f -c "reflink $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" > /dev/null
 	if [ ! -s "$TEST_DIR/file2" ]; then
 		rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
 		_notrun "Reflink not supported by test filesystem type: $FSTYP"
@@ -69,8 +69,8 @@ _require_scratch_reflink()
 
 	_scratch_mkfs > /dev/null
 	_scratch_mount
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
-	"$XFS_IO_PROG" -f -c "reflink $SCRATCH_MNT/file1 0 0 65536" "$SCRATCH_MNT/file2" > /dev/null
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
+	$XFS_IO_PROG -f -c "reflink $SCRATCH_MNT/file1 0 0 65536" "$SCRATCH_MNT/file2" > /dev/null
 	if [ ! -s "$SCRATCH_MNT/file2" ]; then
 		_scratch_unmount
 		_notrun "Reflink not supported by scratch filesystem type: $FSTYP"
@@ -85,9 +85,9 @@ _require_test_dedupe()
 	_require_xfs_io_command "dedupe"
 
 	rm -rf "$TEST_DIR/file1" "$TEST_DIR/file2"
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file2" > /dev/null
-	testio="$("$XFS_IO_PROG" -f -c "dedupe $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" 2>&1)"
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file1" > /dev/null
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$TEST_DIR/file2" > /dev/null
+	testio="$($XFS_IO_PROG -f -c "dedupe $TEST_DIR/file1 0 0 65536" "$TEST_DIR/file2" 2>&1)"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
 	echo $testio | grep -q "Inappropriate ioctl for device" && \
@@ -105,9 +105,9 @@ _require_scratch_dedupe()
 
 	_scratch_mkfs > /dev/null
 	_scratch_mount
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
-	"$XFS_IO_PROG" -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file2" > /dev/null
-	testio="$("$XFS_IO_PROG" -f -c "dedupe $SCRATCH_MNT/file1 0 0 65536" "$SCRATCH_MNT/file2" 2>&1)"
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file1" > /dev/null
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 65536" "$SCRATCH_MNT/file2" > /dev/null
+	testio="$($XFS_IO_PROG -f -c "dedupe $SCRATCH_MNT/file1 0 0 65536" "$SCRATCH_MNT/file2" 2>&1)"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "Dedupe not supported by test filesystem type: $FSTYP"
 	echo $testio | grep -q "Inappropriate ioctl for device" && \
@@ -161,7 +161,7 @@ _reflink() {
 	file1="$1"
 	file2="$2"
 
-	"$XFS_IO_PROG" -f -c "reflink $file1" "$file2"
+	$XFS_IO_PROG -f -c "reflink $file1" "$file2"
 }
 
 # Reflink some part of file1 into another part of file2
@@ -173,7 +173,7 @@ _reflink_range() {
 	len="$5"
 	xfs_io_args="$6"
 
-	"$XFS_IO_PROG" $xfs_io_args -f -c "reflink $file1 $offset1 $offset2 $len" "$file2"
+	$XFS_IO_PROG $xfs_io_args -f -c "reflink $file1 $offset1 $offset2 $len" "$file2"
 }
 
 # Dedupe some part of file1 into another part of file2
@@ -185,7 +185,7 @@ _dedupe_range() {
 	len="$5"
 	xfs_io_args="$6"
 
-	"$XFS_IO_PROG" $xfs_io_args -f -c "dedupe $file1 $offset1 $offset2 $len" "$file2"
+	$XFS_IO_PROG $xfs_io_args -f -c "dedupe $file1 $offset1 $offset2 $len" "$file2"
 }
 
 # Create a file of interleaved unwritten and reflinked blocks
