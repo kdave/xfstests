@@ -1,0 +1,72 @@
+#! /bin/bash
+# FS QA Test 389
+#
+# Test if O_TMPFILE files inherit POSIX Default ACLs when they are linked into
+# the namespace.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_test
+_require_xfs_io_command "flink"
+_require_acls
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+testdir="${TEST_DIR}/d.$seq"
+testfile="${testdir}/tst-tmpfile-flink"
+
+umask 022
+rm -rf ${testdir}
+mkdir -p ${testdir}
+setfacl -d -m u::rwx,g::rwx,o::rx ${testdir}
+$XFS_IO_PROG -T -m 0666 \
+	-c "pwrite 0 4096" \
+	-c "pread 0 4096" \
+	-c "flink ${testfile}" \
+	${testdir} | _filter_xfs_io
+stat -c '%a' ${testfile}
+
+# success, all done
+status=0
+exit
