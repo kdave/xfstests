@@ -52,13 +52,13 @@ _require_test
 _require_xfs_io_command "inode"
 
 # We know the root inode is there
-ROOT_INO=`ls -id $SCRATCH_MNT | awk '{print $1}'`
+ROOT_INO=`ls -id $TEST_DIR | awk '{print $1}'`
 
 touch $TEST_DIR/file
 
 $XFS_IO_PROG -c "inode"       $TEST_DIR/file
 $XFS_IO_PROG -c "inode -v"    $TEST_DIR/file | \
-		grep -vw $ROOT_INO | sed -e s/.*:/LAST:/g
+		grep -vw "^$ROOT_INO" | sed -e s/.*:/LAST:/
 
 #  These should fail, -n requires an inode
 $XFS_IO_PROG -c "inode -n"    $TEST_DIR/file 2>&1 | grep -q Query \
@@ -83,15 +83,15 @@ $XFS_IO_PROG -c "inode -n -v badnumber" $TEST_DIR/file | grep -q numeric \
 # These should all work, and return $ROOT_INO or the next inode...
 # grep out ROOT_INO (which is incorrect) when we should be getting next inode
 $XFS_IO_PROG -c "inode       $ROOT_INO" $TEST_DIR/file | \
-		sed -e s/$ROOT_INO/ROOT_INO/g
+		sed -e s/$ROOT_INO/ROOT_INO/
 $XFS_IO_PROG -c "inode -v    $ROOT_INO" $TEST_DIR/file | \
-		sed -e s/$ROOT_INO/ROOT_INO/g
+		sed -e s/$ROOT_INO/ROOT_INO/
 $XFS_IO_PROG -c "inode -n    $ROOT_INO" $TEST_DIR/file | \
-		grep -vw $ROOT_INO | sed -e s/.*/NEXT/g
+		grep -vw "^$ROOT_INO" | sed -e s/.*/NEXT/
 $XFS_IO_PROG -c "inode -nv   $ROOT_INO" $TEST_DIR/file | \
-		grep -vw $ROOT_INO | sed -e s/.*:/NEXT:/g
+		grep -vw "^$ROOT_INO" | sed -e s/.*:/NEXT:/
 $XFS_IO_PROG -c "inode -n -v $ROOT_INO" $TEST_DIR/file | \
-		grep -vw $ROOT_INO | sed -e s/.*:/NEXT:/g
+		grep -vw "^$ROOT_INO" | sed -e s/.*:/NEXT:/
 
 # Try one that doesn't exist, 2^64-2?  Should get 0
 $XFS_IO_PROG -c "inode       18446744073709551614" $TEST_DIR/file
