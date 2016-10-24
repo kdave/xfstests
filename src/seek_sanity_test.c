@@ -700,8 +700,8 @@ static int run_test(struct testrec *tr)
 
 static int test_basic_support(void)
 {
-	int ret = -1, fd;
-	off_t pos;
+	int ret = -1, fd, shift;
+	off_t pos = 0, offset = 1;
 	char *buf = NULL;
 	int bufsz, filsz;
 
@@ -715,6 +715,35 @@ static int test_basic_support(void)
 	if (ret)
 		goto out;
 
+	/* try to discover the actual alloc size */
+	while (pos == 0 && offset < alloc_size) {
+		offset <<= 1;
+		ftruncate(fd, 0);
+		pwrite(fd, "a", 1, offset);
+		pos = lseek(fd, 0, SEEK_DATA);
+	}
+
+	/* bisect */
+	shift = offset >> 2;
+	while (shift && offset < alloc_size) {
+		ftruncate(fd, 0);
+		pwrite(fd, "a", 1, offset);
+		pos = lseek(fd, 0, SEEK_DATA);
+		offset += pos ? -shift : shift;
+		shift >>= 1;
+	}
+	if (!shift)
+		offset += pos ? 0 : 1;
+	alloc_size = offset;
+
+	if (pos == -1) {
+		fprintf(stderr, "Kernel does not support llseek(2) extension "
+			"SEEK_DATA. Aborting.\n");
+		ret = -1;
+		goto out;
+	}
+
+	ftruncate(fd, 0);
 	bufsz = alloc_size * 2;
 	filsz = bufsz * 2;
 
@@ -734,12 +763,10 @@ static int test_basic_support(void)
 		goto out;
 
 	/* Is SEEK_DATA and SEEK_HOLE supported in the kernel? */
-	pos = lseek(fd, 0, SEEK_DATA);
-	if (pos != -1)
-		pos = lseek(fd, 0, SEEK_HOLE);
+	pos = lseek(fd, 0, SEEK_HOLE);
 	if (pos == -1) {
-		fprintf(stderr, "Kernel does not support llseek(2) extensions "
-			"SEEK_HOLE and/or SEEK_DATA. Aborting.\n");
+		fprintf(stderr, "Kernel does not support llseek(2) extension "
+			"SEEK_HOLE. Aborting.\n");
 		ret = -1;
 		goto out;
 	}
