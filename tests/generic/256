@@ -39,6 +39,7 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 
 # get standard environment, filters and checks
 . ./common/rc
+. ./common/populate
 . ./common/filter
 . ./common/punch
 
@@ -52,64 +53,6 @@ _require_user
 _require_test
 
 testfile=$TEST_DIR/256.$$
-
-# _fill_fs()
-#
-# Fills a file system by repeatedly creating files in the given folder
-# starting with the given file size.  Files are reduced in size when
-# they can no longer fit untill no more files can be created.
-#
-# This routine is used by _test_full_fs_punch to test that a hole may
-# still be punched when the disk is full by borrowing reserved blocks.
-# All files are created as a non root user to prevent reserved blocks
-# from being consumed.
-#
-_fill_fs() {
-	local file_size=$1
-	local dir=$2
-	local block_size=$3
-	local file_count=1
-	local bytes_written=0
-
-	if [ $# -ne 3 ]
-	then
-		echo "USAGE: _fill_fs filesize dir block size"
-		exit 1
-	fi
-
-	# Creation of files or folders
-	# must not be done as root or
-	# reserved blocks will be consumed
-	_user_do "mkdir -p $dir &> /dev/null"
-	if [ $? -ne 0 ] ; then
-		return 0
-	fi
-
-	if [ $file_size -lt $block_size ]
-	then
-		$file_size = $block_size
-	fi
-
-	while [ $file_size -ge $block_size ]
-	do
-		bytes_written=0
-		_user_do "$XFS_IO_PROG -f -c \"pwrite 0 $file_size\" $dir/$file_count.bin &> /dev/null"
-
-		if [ -f $dir/$file_count.bin ]
-		then
-			bytes_written=`$XFS_IO_PROG -c "stat"  $dir/$file_count.bin | grep stat.size | cut -d ' ' -f3`
-		fi
-
-		# If there was no room to make the file,
-		# then divide it in half, and keep going
-		if [ $bytes_written -lt $file_size ]
-		then
-			file_size=$(( $file_size / 2 ))
-		fi
-		file_count=$(( $file_count + 1 ))
-
-	done
-}
 
 # _test_full_fs_punch()
 #
@@ -144,7 +87,10 @@ _test_full_fs_punch()
 		-c "fsync" $file_name &> /dev/null
 	chmod 666 $file_name
 
-	_fill_fs $(( 1024 * 1024 * 1024 )) $path/fill $block_size
+	# All files are created as a non root user to prevent reserved blocks
+	# from being consumed.
+	_fill_fs $(( 1024 * 1024 * 1024 )) $path/fill $block_size 1 \
+		> /dev/null 2>&1
 
 	for (( i=0; i<$iterations; i++ ))
 	do
@@ -159,7 +105,7 @@ _test_full_fs_punch()
 
 		hole_offset=$(( $hole_offset + $hole_len + $hole_interval ))
 
-		_fill_fs $hole_len $path/fill.$i $block_size
+		_fill_fs $hole_len $path/fill.$i $block_size 1 > /dev/null 2>&1
 
 	done
 }

@@ -38,6 +38,7 @@ _cleanup()
 
 # get standard environment, filters and checks
 . ./common/rc
+. ./common/populate
 . ./common/filter
 . ./common/attr
 . ./common/reflink
@@ -57,6 +58,7 @@ testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
 echo "Reformat with appropriate size"
+blksz="$(get_block_size $testdir)"
 umount $SCRATCH_MNT
 
 file_size=$((168 * 1024 * 1024))
@@ -72,8 +74,7 @@ _cp_reflink $testdir/bigfile $testdir/clonefile
 sync
 
 echo "Allocate the rest of the space"
-touch $testdir/file0 $testdir/file1
-_pwrite_byte 0x61 0 $fs_size $testdir/eat_my_space >> $seqres.full 2>&1
+_fill_fs $fs_size  $testdir/space $blksz 0 >> $seqres.full 2>&1
 sync
 
 echo "CoW the big file"
