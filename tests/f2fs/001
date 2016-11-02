@@ -69,10 +69,8 @@ $XFS_IO_PROG -t -f -c "falloc 0 5g" $dummyfile | _filter_xfs_io
 
 # -ENOSPC should be triggered without any panic
 echo "==== change i_size & write data ===="
-$XFS_IO_PROG							\
-	-c "truncate 96"					\
-	-c "pwrite -S 0x58 8192 4096"				\
-$testfile | _filter_xfs_io
+$XFS_IO_PROG -c "truncate 96" -c "pwrite -S 0x58 8192 4096" $testfile 2>&1 \
+	| _filter_xfs_io_error
 
 echo "==== check data contents ===="
 hexdump -C $testfile

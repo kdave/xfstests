@@ -84,8 +84,10 @@ md5sum $testdir/file2 | _filter_scratch
 
 echo "CoW and unmount"
 $XFS_IO_PROG -f -c "cowextsize" $testdir/file2 >> $seqres.full
-$XFS_IO_PROG -d -f -c "pwrite -R -S 0x63 -b $real_blksz 0 $((filesize + 1))" $testdir/file2 >> $seqres.full
-$XFS_IO_PROG -d -f -c "pwrite -S 0x63 -b $real_blksz 0 $((filesize + 1))" $testdir/file2 >> $seqres.full
+$XFS_IO_PROG -d -f -c "pwrite -R -S 0x63 -b $real_blksz 0 $((filesize + 1))" \
+	$testdir/file2 2>&1 >> $seqres.full | _filter_xfs_io_error
+$XFS_IO_PROG -d -f -c "pwrite -S 0x63 -b $real_blksz 0 $((filesize + 1))" \
+	$testdir/file2 2>&1 >> $seqres.full | _filter_xfs_io_error
 _scratch_cycle_mount
 
 echo "Compare files"

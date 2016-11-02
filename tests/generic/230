@@ -62,23 +62,27 @@ test_enforcement()
 	# Firstly fit below block soft limit
 	echo "Write 900k..."
 	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 900k' -c fsync \
-		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | tee -a $seqres.full
+		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | \
+		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Secondly overcome block soft limit
 	echo "Rewrite 1001k..."
 	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 1001k' -c fsync \
-		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | tee -a $seqres.full
+		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | \
+		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now try to overcome block hardlimit
 	echo "Write 1000k..."
 	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 1000k' -c fsync \
-		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | tee -a $seqres.full
+		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | \
+		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now sleep for grace time and check that softlimit got enforced
 	sleep $((grace+1))
 	echo "Write 4096..."
 	su $qa_user -c "$XFS_IO_PROG -c 'truncate 0' -c 'pwrite 0 4096' \
-		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | tee -a $seqres.full
+		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | \
+		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# And now the softlimit test for inodes
 	# First reset space limits so that we don't have problems with

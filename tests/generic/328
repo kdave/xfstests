@@ -79,11 +79,13 @@ setquota -u fsgqa 0 1024 0 0 $SCRATCH_MNT
 _repquota
 
 echo "Try to dio write the whole file"
-_pwrite_byte 0x62 0 $sz $testdir/file1 -d >> $seqres.full
+_pwrite_byte 0x62 0 $sz $testdir/file1 -d 2>&1 >> $seqres.full | \
+	_filter_xfs_io_error
 _repquota
 
 echo "Try to write the whole file"
-_pwrite_byte 0x62 0 $sz $testdir/file1 >> $seqres.full
+_pwrite_byte 0x62 0 $sz $testdir/file1 2>&1 >> $seqres.full | \
+	_filter_xfs_io_error
 _repquota
 
 echo "Set hard quota to allow rewrite"

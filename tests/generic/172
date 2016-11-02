@@ -77,7 +77,8 @@ _pwrite_byte 0x61 0 $fs_size $testdir/eat_my_space >> $seqres.full 2>&1
 sync
 
 echo "CoW the big file"
-out="$(_pwrite_byte 0x62 0 $file_size $testdir/bigfile 2>&1)"
+out="$(_pwrite_byte 0x62 0 $file_size $testdir/bigfile 2>&1 | \
+	_filter_xfs_io_error)"
 echo ${out} | grep -q "No space left on device" || echo "CoW should have failed with ENOSPC"
 echo ${out} >> $seqres.full 2>&1
 echo ${out}
@@ -85,7 +86,8 @@ echo ${out}
 echo "Remount and try CoW again"
 _scratch_cycle_mount
 
-out="$(_pwrite_byte 0x62 0 $file_size $testdir/bigfile 2>&1)"
+out="$(_pwrite_byte 0x62 0 $file_size $testdir/bigfile 2>&1 | \
+	_filter_xfs_io_error)"
 echo ${out} | grep -q "No space left on device" || echo "CoW should have failed with ENOSPC"
 echo ${out} >> $seqres.full 2>&1
 echo ${out}
