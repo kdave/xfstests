@@ -1,0 +1,99 @@
+#! /bin/bash
+# FS QA Test 118
+#
+# Test xfs_fsr's handling of 2-extent files with preallocation
+#
+# An error in xfs_swap_extent_forks() incorrectly set up the
+# temporary inode's if_extents pointer to inline, leading to
+# in-memory corruption when the temporary inode was released
+# and torn down; i_itemp and d_ops got overwritten with zeros,
+# which led to an oops in xfs_trans_log_inode down the fput path.
+#
+# Fixed upstream by proper nextents counting using
+# ip->i_df.if_bytes not ip->i_d.di_nextents in xfs_swap_extent_forks
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs xfs
+_supported_os IRIX Linux
+
+_require_scratch
+_require_command "$XFS_FSR_PROG" "xfs_fsr"
+
+# 50M
+_scratch_mkfs_sized $((50 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+echo "Silence is golden"
+
+# Fragment freespace
+# The aim is to create a fragmented two-extent file *with* prealloc
+# so make the free holes big enough that a 2-extent file will have
+# preallocation added.  Let's say... 64k free chunks.
+
+$XFS_IO_PROG -fs -c "falloc 0 40000k" $SCRATCH_MNT/fill >> $seqres.full 2>&1
+sync
+
+dd if=/dev/zero of=$SCRATCH_MNT/remainder oflag=direct > /dev/null 2>&1
+
+# Free up a bunch of 64k chunks
+for i in `seq 0 68 40000`; do
+	$XFS_IO_PROG -fs -c "unresvsp ${i}k 64k" $SCRATCH_MNT/fill
+done
+
+# Create 2-extent files w/ preallocation (via extending writes)
+for I in `seq 1 64`; do
+	$XFS_IO_PROG -f -c "pwrite 0 64k" $SCRATCH_MNT/newfile-$I \
+						 >> $seqres.full 2>&1
+	$XFS_IO_PROG -f -c "pwrite 64k 64k" $SCRATCH_MNT/newfile-$I \
+						>> $seqres.full 2>&1
+done
+# sync to get extents on disk so fsr sees them
+sync
+
+# Free up some space for defragmentation temp file
+rm -f $SCRATCH_MNT/fill
+
+$XFS_FSR_PROG -vd $SCRATCH_MNT/newfile* >> $seqres.full 2>&1
+
+# success, all done
+status=0
+exit
