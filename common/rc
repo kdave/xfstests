@@ -3819,9 +3819,17 @@ init_rc()
 	$XFS_IO_PROG -i -c quit 2>/dev/null && \
 		export XFS_IO_PROG="$XFS_IO_PROG -i"
 
-	# xfs_copy doesn't work on v5 xfs yet without -d option
-	if [ "$FSTYP" == "xfs" ] && [[ $MKFS_OPTIONS =~ crc=1 ]]; then
-		export XFS_COPY_PROG="$XFS_COPY_PROG -d"
+	# xfs_copy on v5 filesystems do not require the "-d" option if xfs_db
+	# can change the UUID on v5 filesystems
+	if [ "$FSTYP" == "xfs" ]; then
+		touch /tmp/$$.img
+		$MKFS_XFS_PROG -d file,name=/tmp/$$.img,size=512m >/dev/null 2>&1
+		# xfs_db will return 0 even if it can't generate a new uuid, so
+		# check the output to make sure if it can change UUID of V5 xfs
+		$XFS_DB_PROG -x -c "uuid generate" /tmp/$$.img \
+			| grep -q "invalid UUID\|supported on V5 fs" \
+			&& export XFS_COPY_PROG="$XFS_COPY_PROG -d"
+		rm -f /tmp/$$.img
 	fi
 }
 

@@ -53,6 +53,17 @@ IMGFILE=$TEST_DIR/${seq}_copy.img
 
 echo "Silence is golden."
 
+do_copy()
+{
+	local opts="$*"
+
+	$XFS_COPY_PROG $opts $SCRATCH_DEV $IMGFILE >> $seqres.full 2>&1 || \
+		_fail "xfs_copy $opts failed for Sector size $SECTORSIZE Block size $BLOCKSIZE"
+	# Must use "-n" to get exit code; without it xfs_repair always returns 0
+	$XFS_REPAIR_PROG -n -f $IMGFILE >> $seqres.full 2>&1 || \
+		_fail "xfs_copy $opts corrupted for Sector size $SECTORSIZE Block size $BLOCKSIZE"
+}
+
 while [ $SECTORSIZE -le $PAGESIZE ]; do
 	BLOCKSIZE=$SECTORSIZE;
 
@@ -70,11 +81,11 @@ while [ $SECTORSIZE -le $PAGESIZE ]; do
 		$FSSTRESS_PROG -n 100 -d $SCRATCH_MNT >> $seqres.full 2>&1
 		_scratch_unmount
 
-		$XFS_COPY_PROG -d $SCRATCH_DEV $IMGFILE >> $seqres.full 2>&1 || \
-			_fail "Copy failed for Sector size $SECTORSIZE Block size $BLOCKSIZE"
-		# Must use "-n" to get exit code; without it xfs_repair always returns 0
-		$XFS_REPAIR_PROG -n -f $IMGFILE >> $seqres.full 2>&1 || \
-			_fail "Copy corrupted for Sector size $SECTORSIZE Block size $BLOCKSIZE"
+		# Test "duplicate" copy at first, if $XFS_COPY_PROG won't do it.
+		if [[ ! "$XFS_COPY_PROG" =~ -d ]]; then
+			do_copy -d
+		fi
+		do_copy
 
 		BLOCKSIZE=$(($BLOCKSIZE * 2));
 	done
