@@ -964,7 +964,7 @@ do_punch_hole(unsigned offset, unsigned length)
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
-		prt("%punch hole: %x to %x\n", offset, length);
+		prt("punch hole: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_punch_hole: fallocate");
 		report_failure(161);
 	}
@@ -1026,7 +1026,7 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
-		prt("%pzero range: %x to %x\n", offset, length);
+		prt("zero range: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_zero_range: fallocate");
 		report_failure(161);
 	}
@@ -1076,7 +1076,7 @@ do_collapse_range(unsigned offset, unsigned length)
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
-		prt("collapse range: %x to %x\n", offset, length);
+		prt("collapse range: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_collapse_range: fallocate");
 		report_failure(161);
 	}
@@ -1128,7 +1128,7 @@ do_insert_range(unsigned offset, unsigned length)
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
-		prt("insert range: %x to %x\n", offset, length);
+		prt("insert range: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_insert_range: fallocate");
 		report_failure(161);
 	}
@@ -1193,7 +1193,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 		prt("%lu falloc\tfrom 0x%x to 0x%x (0x%x bytes)\n", testcalls,
 				offset, offset + length, length);
 	if (fallocate(fd, keep_size ? FALLOC_FL_KEEP_SIZE : 0, (loff_t)offset, (loff_t)length) == -1) {
-	        prt("fallocate: %x to %x\n", offset, length);
+	        prt("fallocate: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_preallocate: fallocate");
 		report_failure(161);
 	}
