@@ -64,27 +64,45 @@ rm -f $seqres.full
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-# Create our test file with some data and durably persist it.
-$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 128K" $SCRATCH_MNT/foo | _filter_xfs_io
-sync
+workout()
+{
+	local need_sync=$1
 
-# Append some data to the file, increasing its size, and leave a hole between
-# the old size and the start offset if the following write. So our file gets
-# a hole in the range [128Kb, 256Kb[.
-$XFS_IO_PROG -c "pwrite -S 0xbb 256K 32K" $SCRATCH_MNT/foo | _filter_xfs_io
+	# Create our test file with some data and durably persist it.
+	$XFS_IO_PROG -t -f -c "pwrite -S 0xaa 0 128K" $SCRATCH_MNT/foo | _filter_xfs_io
+	sync
 
-# Now truncate our file to a smaller size that is in the middle of the hole we
-# previously created. On most truncate implementations the data we appended
-# before gets discarded from memory (with truncate_setsize()) and never ends
-# up being written to disk.
-$XFS_IO_PROG -c "truncate 160K" $SCRATCH_MNT/foo
+	# Append some data to the file, increasing its size, and leave a hole between
+	# the old size and the start offset if the following write. So our file gets
+	# a hole in the range [128Kb, 256Kb[.
+	$XFS_IO_PROG -c "pwrite -S 0xbb 256K 32K" $SCRATCH_MNT/foo | _filter_xfs_io
 
-_scratch_cycle_mount
+	# This 'sync' is to flush file extent on disk and update on-disk inode size.
+	# This is required to trigger a bug in btrfs truncate where it updates on-disk
+	# inode size incorrectly.
+	if [ $need_sync -eq 1 ]; then
+		sync
+	fi
 
-# We expect to see a file with a size of 160Kb, with the first 128Kb of data all
-# having the value 0xaa and the remaining 32Kb of data all having the value 0x00
-echo "File content after remount:"
-od -t x1 $SCRATCH_MNT/foo
+	# Now truncate our file to a smaller size that is in the middle of the hole we
+	# previously created.
+	# If we don't flush dirty page cache above, on most truncate
+	# implementations the data we appended before gets discarded from
+	# memory (with truncate_setsize()) and never ends up being written to
+	# disk.
+	$XFS_IO_PROG -c "truncate 160K" $SCRATCH_MNT/foo
+
+	_scratch_cycle_mount
+
+	# We expect to see a file with a size of 160Kb, with the first 128Kb of data all
+	# having the value 0xaa and the remaining 32Kb of data all having the value 0x00
+	echo "File content after remount:"
+	od -t x1 $SCRATCH_MNT/foo
+}
+
+workout 0
+# flush after each write
+workout 1
 
 status=0
 exit
