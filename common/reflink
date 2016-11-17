@@ -78,6 +78,50 @@ _require_scratch_reflink()
 	_scratch_unmount
 }
 
+# this test requires scratch fs to report explicit SHARED flag
+# e.g.
+#   0         4K         8K
+#    / File1: Extent 0  \
+#   /                    \
+#   |<- On disk Extent-->|
+#   |        /
+#   | File2 /
+#     Extent: 0
+# Fs supports explicit SHARED extent reporting should report fiemap like:
+# File1: 2 extents
+# Extent 0-4K: SHARED
+# Extent 4-8K:
+# File2: 1 extents
+# Extent 0-4K: SHARED
+#
+# Fs doesn't support explicit reporting will report fiemap like:
+# File1: 1 extent
+# Extent 0-8K: SHARED
+# File2: 1 extent
+# Extent 0-4K: SHARED
+_require_scratch_explicit_shared_extents()
+{
+	_require_scratch
+	_require_fiemap
+	_require_scratch_reflink
+	_require_xfs_io_command "reflink"
+	local nr_extents
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+
+	_pwrite_byte 0x61 0 128k $SCRATCH_MNT/file1 >/dev/null
+	_reflink_range $SCRATCH_MNT/file1 0 $SCRATCH_MNT/file2 0 64k >/dev/null
+
+	_scratch_cycle_mount
+
+	nr_extents=$(_count_extents $SCRATCH_MNT/file1)
+	if [ $nr_extents -eq 1 ]; then
+		_notrun "Explicit SHARED flag reporting not support by filesystem type: $FSTYP"
+	fi
+	_scratch_unmount
+}
+
 # this test requires the test fs support dedupe...
 _require_test_dedupe()
 {
