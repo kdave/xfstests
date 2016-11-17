@@ -1,0 +1,76 @@
+#! /bin/bash
+# FS QA Test 391
+#
+# Test two threads doing non-overlapping direct I/O in the same extents.
+# Motivated by a bug in Btrfs' direct I/O get_block function which would lead
+# to spurious -EEXIST failures from direct I/O reads.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f "$testfile"
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_xfs_io_command "falloc"
+_require_test_program "dio-interleaved"
+
+extent_size="$(($(get_block_size "$TEST_DIR") * 2))"
+num_extents=1024
+testfile="$TEST_DIR/$$-testfile"
+
+$XFS_IO_PROG -fc "truncate 0" "$testfile"
+for ((off = 0; off < num_extents * extent_size; off += extent_size)); do
+	$XFS_IO_PROG -c "falloc $off $extent_size" "$testfile"
+done
+
+# To reproduce the Btrfs bug, the extent map must not be cached in memory.
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+"$here/src/dio-interleaved" "$extent_size" "$num_extents" "$testfile"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
