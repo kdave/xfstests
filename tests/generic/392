@@ -1,0 +1,135 @@
+#! /bin/bash
+# FS QA Test 392
+#
+# Test inode's metadata after fsync or fdatasync calls.
+# In the case of fsync, filesystem should recover all the inode metadata, while
+# recovering i_blocks and i_size at least for fdatasync.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Jaegeuk Kim.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0	# failure will be detected in runtime!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/punch
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+rm -f $seqres.full
+_require_scratch
+_require_scratch_shutdown
+_require_xfs_io_command "fpunch"
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+testfile=$SCRATCH_MNT/testfile
+
+# check inode metadata after shutdown
+check_inode_metadata()
+{
+	sync_mode=$1
+
+	# fsync or fdatasync
+	if [ $sync_mode = "fsync" ]; then
+		stat_opt='-c "b: %b s: %s a: %x m: %y c: %z"'
+	else
+		stat_opt='-c "b: %b s: %s"'
+	fi
+
+	before=`stat "$stat_opt" $testfile`
+
+	$XFS_IO_PROG -c "$sync_mode" $testfile | _filter_xfs_io
+	src/godown $SCRATCH_MNT | tee -a $seqres.full
+	_scratch_cycle_mount
+
+	after=`stat "$stat_opt" $testfile`
+
+	if [ "$before" != "$after" ]; then
+		echo "Before: $before"
+		echo "After : $after"
+		status=1;	# this is a failure!
+	fi
+	echo "Before: $before" >> $seqres.full
+	echo "After : $after" >> $seqres.full
+	rm $testfile
+}
+
+# append XX KB with f{data}sync, followed by power-cut
+test_i_size()
+{
+	echo "==== i_size $2 test with $1 ====" | tee -a $seqres.full
+	$XFS_IO_PROG -f -c "truncate 4M"	\
+			-c "pwrite 0 4M"	\
+			-c "fsync"		\
+			-c "pwrite 4M $2"	\
+			$testfile >/dev/null
+	check_inode_metadata $1
+}
+
+# update times with f{data}sync, followed by power-cut
+test_i_time()
+{
+	echo "==== i_time test with $1 ====" | tee -a $seqres.full
+	$XFS_IO_PROG -f -c "truncate 4M"	\
+			-c "pwrite 0 4M"	\
+			-c "fsync"		\
+			$testfile >/dev/null
+	sleep 1
+	touch $testfile
+	check_inode_metadata $1
+}
+
+# punch XX KB with f{data}sync, followed by power-cut
+test_punch()
+{
+	echo "==== fpunch $2 test with $1 ====" | tee -a $seqres.full
+	$XFS_IO_PROG -f -c "truncate 4202496"	\
+			-c "pwrite 0 4202496"	\
+			-c "fsync"		\
+			-c "fpunch 4194304 $2"\
+			$testfile >/dev/null
+	check_inode_metadata $1
+}
+
+for i in fsync fdatasync; do
+	test_i_size $i 1024
+	test_i_size $i 4096
+	test_i_time $i
+	test_punch $i 1024
+	test_punch $i 4096
+done
+
+exit
