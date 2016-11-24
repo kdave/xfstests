@@ -1,0 +1,98 @@
+#! /bin/bash
+# FSQA Test No. 016
+#
+# Test ro/rw fd data inconsistecies
+#
+# This simple test demonstrates a known issue with overlayfs:
+# - process A opens file F for read
+# - process B writes new data to file F
+# - process A reads old data from file F
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# Create our test files.
+lowerdir=$SCRATCH_DEV/$OVERLAY_LOWER_DIR
+mkdir -p $lowerdir
+echo "This is old news" > $lowerdir/foo
+echo "This is old news" > $lowerdir/bar
+
+_scratch_mount
+
+cd $SCRATCH_MNT
+
+#
+# case #1:
+# open file for read (rofd)
+# open file for write (rwfd)
+# write to rwfd
+# read from rofd
+#
+$XFS_IO_PROG << EOF | _filter_xfs_io
+open -r foo
+open foo
+pwrite -S 0x61 0 16
+file 0
+pread -v 0 16
+EOF
+
+#
+# case #2:
+# mmap MAP_SHARED|PROT_READ of rofd
+# write to rwfd
+# read from mapped memory
+#
+$XFS_IO_PROG << EOF | _filter_xfs_io
+open -r bar
+mmap -r 0 16
+open bar
+pwrite -S 0x61 0 16
+mread -v 0 16
+EOF
+
+status=0
+exit
