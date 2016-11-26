@@ -203,8 +203,9 @@ dirstress(
         if (verbose) fprintf(stderr,"** [%d] chdir ..\n", pid);
 	error = chdir("..");
 	if (error) {
-		/* If this is multithreaded, then expecting a ENOENT here is fine */
-		if (nprocs_per_dir > 1 && errno == ENOENT) {
+		/* If this is multithreaded, then expecting a ENOENT here is fine,
+		 * and ESTALE is normal in the NFS case. */
+		if (nprocs_per_dir > 1 && (errno == ENOENT || errno == ESTALE)) {
 			return 0;
 		}
 
@@ -224,8 +225,9 @@ dirstress(
         if (verbose) fprintf(stderr,"** [%d] chdir ..\n", pid);
 	error = chdir("..");
 	if (error) {
-		/* If this is multithreaded, then expecting a ENOENT here is fine */
-		if (nprocs_per_dir > 1 && errno == ENOENT) {
+		/* If this is multithreaded, then expecting a ENOENT here is fine,
+		 * and ESTALE is normal in the NFS case. */
+		if (nprocs_per_dir > 1 && (errno == ENOENT || errno == ESTALE)) {
 			return 0;
 		}
 
