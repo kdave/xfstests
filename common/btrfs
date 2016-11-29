@@ -1,0 +1,330 @@
+#
+# Common btrfs specific functions
+#
+
+_btrfs_get_subvolid()
+{
+	mnt=$1
+	name=$2
+
+	$BTRFS_UTIL_PROG sub list $mnt | grep $name | awk '{ print $2 }'
+}
+
+# We check for btrfs and (optionally) features of the btrfs command
+_require_btrfs()
+{
+	cmd=$1
+	_require_command "$BTRFS_UTIL_PROG" btrfs
+	if [ -z "$1" ]; then
+		return 1;
+	fi
+	$BTRFS_UTIL_PROG $cmd --help >/dev/null 2>&1
+	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd)"
+}
+
+_run_btrfs_util_prog()
+{
+	run_check $BTRFS_UTIL_PROG $*
+}
+
+_require_btrfs_send_stream_version()
+{
+	$BTRFS_UTIL_PROG send 2>&1 | \
+		grep '^[ \t]*\-\-stream\-version <version>' > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		_notrun "Missing btrfs-progs send --stream-version command line option, skipped this test"
+	fi
+
+	# test if btrfs kernel supports send stream version 2
+	if [ ! -f /sys/fs/btrfs/send/stream_version ]; then
+		_notrun "Missing btrfs kernel patch for send stream version 2, skipped this test"
+	fi
+}
+
+_require_btrfs_mkfs_feature()
+{
+	if [ -z $1 ]; then
+		echo "Missing feature name argument for _require_btrfs_mkfs_feature"
+		exit 1
+	fi
+	feat=$1
+	$MKFS_BTRFS_PROG -O list-all 2>&1 | \
+		grep '^[ \t]*'"$feat"'\b' > /dev/null 2>&1
+	[ $? -eq 0 ] || \
+		_notrun "Feature $feat not supported in the available version of mkfs.btrfs"
+}
+
+_require_btrfs_fs_feature()
+{
+	if [ -z $1 ]; then
+		echo "Missing feature name argument for _require_btrfs_fs_feature"
+		exit 1
+	fi
+	feat=$1
+	modprobe btrfs > /dev/null 2>&1
+	[ -e /sys/fs/btrfs/features/$feat ] || \
+		_notrun "Feature $feat not supported by the available btrfs version"
+}
+
+_check_btrfs_filesystem()
+{
+	device=$1
+
+	# If type is set, we're mounted
+	type=`_fs_type $device`
+	ok=1
+
+	if [ "$type" = "$FSTYP" ]; then
+		# mounted ...
+		mountpoint=`_umount_or_remount_ro $device`
+	fi
+
+	btrfsck $device >$tmp.fsck 2>&1
+	if [ $? -ne 0 ]; then
+		echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $seqres.full)"
+
+		echo "_check_btrfs_filesystem: filesystem on $device is inconsistent" >>$seqres.full
+		echo "*** fsck.$FSTYP output ***"	>>$seqres.full
+		cat $tmp.fsck				>>$seqres.full
+		echo "*** end fsck.$FSTYP output"	>>$seqres.full
+
+		ok=0
+	fi
+	rm -f $tmp.fsck
+
+	if [ $ok -eq 0 ]; then
+		echo "*** mount output ***"		>>$seqres.full
+		_mount					>>$seqres.full
+		echo "*** end mount output"		>>$seqres.full
+	elif [ "$type" = "$FSTYP" ]; then
+		# was mounted ...
+		_mount_or_remount_rw "$MOUNT_OPTIONS" $device $mountpoint
+		ok=$?
+	fi
+
+	if [ $ok -eq 0 ]; then
+		status=1
+		if [ "$iam" != "check" ]; then
+			exit 1
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+_require_btrfs_dev_del_by_devid()
+{
+	$BTRFS_UTIL_PROG device delete --help | egrep devid > /dev/null 2>&1
+	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old "\
+			"(must support 'btrfs device delete <devid> /<mnt>')"
+}
+
+# get btrfs profile configs being tested
+#
+# A set of pre-set profile configs are exported via _btrfs_profile_configs
+# array. Default configs can be overridden by setting BTRFS_PROFILE_CONFIGS
+# var in the format "metadata_profile:data_profile", multiple configs can be
+# seperated by space, e.g.
+# export BTRFS_PROFILE_CONFIGS="raid0:raid0 raid1:raid1 dup:single"
+_btrfs_get_profile_configs()
+{
+	if [ "$FSTYP" != "btrfs" ]; then
+		return
+	fi
+
+	if [ -z "$BTRFS_PROFILE_CONFIGS" ]; then
+		# Default configurations to test.
+		local configs=(
+			"single:single"
+			"dup:single"
+			"raid0:raid0"
+			"raid1:raid0"
+			"raid1:raid1"
+			"raid10:raid10"
+			"raid5:raid5"
+			"raid6:raid6"
+		)
+	else
+		# User-provided configurations.
+		local configs=(${BTRFS_PROFILE_CONFIGS[@]})
+	fi
+
+	_btrfs_profile_configs=()
+	for cfg in "${configs[@]}"; do
+		local supported=true
+		local profiles=(${cfg/:/ })
+		if [ "$1" == "replace" ]; then
+			# We can't do replace with these profiles because they
+			# imply only one device ($SCRATCH_DEV), and we need to
+			# keep $SCRATCH_DEV around for _scratch_mount
+			# and _check_scratch_fs.
+			local unsupported=(
+				"dup"
+			)
+		elif [ "$1" == "replace-missing" ]; then
+			# We can't replace missing devices with these profiles
+			# because there isn't enough redundancy.
+			local unsupported=(
+				"single"
+				"dup"
+				"raid0"
+			)
+		else
+			local unsupported=()
+		fi
+		for unsupp in "${unsupported[@]}"; do
+			if [ "${profiles[0]}" == "$unsupp" -o "${profiles[1]}" == "$unsupp" ]; then
+			     if [ -z "$BTRFS_PROFILE_CONFIGS" ]; then
+				     # For the default config, just omit it.
+				     supported=false
+			     else
+				     # For user-provided config, don't run the test.
+				     _notrun "Profile $unsupp not supported for $1"
+			     fi
+			fi
+		done
+		if "$supported"; then
+			_btrfs_profile_configs+=("-m ${profiles[0]} -d ${profiles[1]}")
+		fi
+	done
+	export _btrfs_profile_configs
+}
+
+# stress btrfs by running balance operation in a loop
+_btrfs_stress_balance()
+{
+	local options=$@
+	while true; do
+		$BTRFS_UTIL_PROG balance start $options
+	done
+}
+
+# stress btrfs by creating/mounting/umounting/deleting subvolume in a loop
+_btrfs_stress_subvolume()
+{
+	local btrfs_dev=$1
+	local btrfs_mnt=$2
+	local subvol_name=$3
+	local subvol_mnt=$4
+	local stop_file=$5
+
+	mkdir -p $subvol_mnt
+	while [ ! -e $stop_file ]; do
+		$BTRFS_UTIL_PROG subvolume create $btrfs_mnt/$subvol_name
+		$MOUNT_PROG -o subvol=$subvol_name $btrfs_dev $subvol_mnt
+		$UMOUNT_PROG $subvol_mnt
+		$BTRFS_UTIL_PROG subvolume delete $btrfs_mnt/$subvol_name
+	done
+}
+
+# stress btrfs by running scrub in a loop
+_btrfs_stress_scrub()
+{
+	local btrfs_mnt=$1
+	while true; do
+		$BTRFS_UTIL_PROG scrub start -B $btrfs_mnt
+	done
+}
+
+# stress btrfs by defragmenting every file/dir in a loop and compress file
+# contents while defragmenting if second argument is not "nocompress"
+_btrfs_stress_defrag()
+{
+	local btrfs_mnt=$1
+	local compress=$2
+
+	while true; do
+		if [ "$compress" == "nocompress" ]; then
+			find $btrfs_mnt \( -type f -o -type d \) -exec \
+			$BTRFS_UTIL_PROG filesystem defrag {} \;
+		else
+			find $btrfs_mnt \( -type f -o -type d \) -exec \
+			$BTRFS_UTIL_PROG filesystem defrag -clzo {} \;
+			find $btrfs_mnt \( -type f -o -type d \) -exec \
+			$BTRFS_UTIL_PROG filesystem defrag -czlib {} \;
+		fi
+	done
+}
+
+# stress btrfs by remounting it with different compression algorithms in a loop
+# run this with fsstress running at background could exercise the compression
+# code path and ensure no race when switching compression algorithm with constant
+# I/O activity.
+_btrfs_stress_remount_compress()
+{
+	local btrfs_mnt=$1
+	while true; do
+		for algo in no zlib lzo; do
+			$MOUNT_PROG -o remount,compress=$algo $btrfs_mnt
+		done
+	done
+}
+
+# stress btrfs by replacing devices in a loop
+# Note that at least 3 devices are needed in SCRATCH_DEV_POOL and the last
+# device should be free(not used by btrfs)
+_btrfs_stress_replace()
+{
+	local btrfs_mnt=$1
+
+	# The device number in SCRATCH_DEV_POOL should be at least 3,
+	# one is SCRATCH_DEV, one is to be replaced, one is free device
+	# we won't replace SCRATCH_DEV, see below for reason
+	if [ "`echo $SCRATCH_DEV_POOL | wc -w`" -lt 3 ]; then
+		echo "_btrfs_stress_replace requires at least 3 devices in SCRATCH_DEV_POOL"
+		return
+	fi
+
+	# take the last device as the first free_dev
+	local free_dev="`echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $NF}'`"
+
+	# free_dev should be really free
+	if $BTRFS_UTIL_PROG filesystem show $btrfs_mnt | grep -q "$free_dev"; then
+		echo "_btrfs_stress_replace: $free_dev is used by btrfs"
+		return
+	fi
+
+	# dev_pool is device list being currently used by btrfs (excluding SCRATCH_DEV)
+	# and can be replaced. We don't replace SCRATCH_DEV because it will be used in
+	# _scratch_mount and _check_scratch_fs etc.
+	local dev_pool=`echo $SCRATCH_DEV_POOL | sed -e "s# *$SCRATCH_DEV *##" \
+			-e "s# *$free_dev *##"`
+
+	# set the first device in dev_pool as the first src_dev to be replaced
+	local src_dev=`echo $dev_pool | $AWK_PROG '{print $1}'`
+
+	echo "dev_pool=$dev_pool"
+	echo "free_dev=$free_dev, src_dev=$src_dev"
+	while true; do
+		echo "Replacing $src_dev with $free_dev"
+		$BTRFS_UTIL_PROG replace start -fB $src_dev $free_dev $btrfs_mnt
+		if [ $? -ne 0 ]; then
+			# don't update src_dev and free_dev if replace failed
+			continue
+		fi
+		dev_pool="$dev_pool $free_dev"
+		dev_pool=`echo $dev_pool | sed -e "s# *$src_dev *##"`
+		free_dev=$src_dev
+		src_dev=`echo $dev_pool | $AWK_PROG '{print $1}'`
+	done
+}
+
+# find the right option to force output in bytes, older versions of btrfs-progs
+# print that by default, newer print human readable numbers with unit suffix
+_btrfs_qgroup_units()
+{
+	$BTRFS_UTIL_PROG qgroup show --help 2>&1 | grep -q -- --raw && echo "--raw"
+}
+
+_require_btrfs_loadable()
+{
+	modprobe -r btrfs || _notrun "btrfs unloadable"
+	modprobe btrfs || _notrun "Can't load btrfs"
+}
+
+_reload_btrfs_ko()
+{
+	modprobe -r btrfs || _fail "btrfs unload failed"
+	modprobe btrfs || _fail "btrfs load failed"
+}
