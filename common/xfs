@@ -1,0 +1,610 @@
+#
+# XFS specific common functions.
+#
+
+_setup_large_xfs_fs()
+{
+	fs_size=$1
+	local tmp_dir=/tmp/
+
+	[ "$LARGE_SCRATCH_DEV" != yes ] && return 0
+	[ -z "$SCRATCH_DEV_EMPTY_SPACE" ] && SCRATCH_DEV_EMPTY_SPACE=0
+	[ $SCRATCH_DEV_EMPTY_SPACE -ge $fs_size ] && return 0
+
+	# calculate the size of the file we need to allocate.
+	# Default free space in the FS is 50GB, but you can specify more via
+	# SCRATCH_DEV_EMPTY_SPACE
+	file_size=$(($fs_size - 50*1024*1024*1024))
+	file_size=$(($file_size - $SCRATCH_DEV_EMPTY_SPACE))
+
+	# mount the filesystem, create the file, unmount it
+	_scratch_mount 2>&1 >$tmp_dir/mnt.err
+	local status=$?
+	if [ $status -ne 0 ]; then
+		echo "mount failed"
+		cat $tmp_dir/mnt.err >&2
+		rm -f $tmp_dir/mnt.err
+		return $status
+	fi
+	rm -f $tmp_dir/mnt.err
+
+	xfs_io -F -f \
+		-c "truncate $file_size" \
+		-c "falloc -k 0 $file_size" \
+		-c "chattr +d" \
+		$SCRATCH_MNT/.use_space 2>&1 > /dev/null
+	export NUM_SPACE_FILES=1
+	status=$?
+	_scratch_unmount
+	if [ $status -ne 0 ]; then
+		echo "large file prealloc failed"
+		cat $tmp_dir/mnt.err >&2
+		return $status
+	fi
+	return 0
+}
+
+_scratch_mkfs_xfs_opts()
+{
+	mkfs_opts=$*
+
+	# remove metadata related mkfs options if mkfs.xfs doesn't them
+	if [ -n "$XFS_MKFS_HAS_NO_META_SUPPORT" ]; then
+		mkfs_opts=`echo $mkfs_opts | sed "s/-m\s\+\S\+//g"`
+	fi
+
+	_scratch_options mkfs
+
+	$MKFS_XFS_PROG $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+}
+
+
+_scratch_mkfs_xfs_supported()
+{
+	local mkfs_opts=$*
+
+	_scratch_options mkfs
+
+	$MKFS_XFS_PROG -N $MKFS_OPTIONS $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+	local mkfs_status=$?
+
+	# a mkfs failure may be caused by conflicts between $MKFS_OPTIONS and
+	# $mkfs_opts, try again without $MKFS_OPTIONS
+	if [ $mkfs_status -ne 0 -a -n "$mkfs_opts" ]; then
+		$MKFS_XFS_PROG -N $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+		mkfs_status=$?
+	fi
+	return $mkfs_status
+}
+
+_scratch_mkfs_xfs()
+{
+	# extra mkfs options can be added by tests
+	local extra_mkfs_options=$*
+
+	local tmp_dir=/tmp/
+
+	# save mkfs output in case conflict means we need to run again.
+	# only the output for the mkfs that applies should be shown
+	_scratch_mkfs_xfs_opts $MKFS_OPTIONS $extra_mkfs_options \
+		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+	local mkfs_status=$?
+
+
+	# a mkfs failure may be caused by conflicts between
+	# $MKFS_OPTIONS and $extra_mkfs_options
+	if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
+		(
+		echo -n "** mkfs failed with extra mkfs options "
+		echo "added to \"$MKFS_OPTIONS\" by test $seq **"
+		echo -n "** attempting to mkfs using only test $seq "
+		echo "options: $extra_mkfs_options **"
+		) >> $seqres.full
+
+		# running mkfs again. overwrite previous mkfs output files
+		_scratch_mkfs_xfs_opts $extra_mkfs_options \
+			2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+		local mkfs_status=$?
+	fi
+
+	if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
+		# manually parse the mkfs output to get the fs size in bytes
+		local fs_size
+		fs_size=`cat $tmp_dir.mkfsstd | perl -ne '
+			if (/^data\s+=\s+bsize=(\d+)\s+blocks=(\d+)/) {
+				my $size = $1 * $2;
+				print STDOUT "$size\n";
+			}'`
+		_setup_large_xfs_fs $fs_size
+		mkfs_status=$?
+	fi
+
+	# output stored mkfs output, filtering unnecessary warnings from stderr
+	cat $tmp_dir.mkfsstd
+	cat $tmp_dir.mkfserr | sed \
+		-e '/less than device physical sector/d' \
+		-e '/switching to logical sector/d' \
+		>&2
+	rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
+
+	return $mkfs_status
+}
+
+# xfs_check script is planned to be deprecated. But, we want to
+# be able to invoke "xfs_check" behavior in xfstests in order to
+# maintain the current verification levels.
+_xfs_check()
+{
+	OPTS=" "
+	DBOPTS=" "
+	USAGE="Usage: xfs_check [-fsvV] [-l logdev] [-i ino]... [-b bno]... special"
+
+	while getopts "b:fi:l:stvV" c; do
+		case $c in
+			s) OPTS=$OPTS"-s ";;
+			t) OPTS=$OPTS"-t ";;
+			v) OPTS=$OPTS"-v ";;
+			i) OPTS=$OPTS"-i "$OPTARG" ";;
+			b) OPTS=$OPTS"-b "$OPTARG" ";;
+			f) DBOPTS=$DBOPTS" -f";;
+			l) DBOPTS=$DBOPTS" -l "$OPTARG" ";;
+			V) $XFS_DB_PROG -p xfs_check -V
+			   return $?
+			   ;;
+		esac
+	done
+	set -- extra $@
+	shift $OPTIND
+	case $# in
+		1) ${XFS_DB_PROG}${DBOPTS} -F -i -p xfs_check -c "check$OPTS" $1
+		   status=$?
+		   ;;
+		2) echo $USAGE 1>&1
+		   status=2
+		   ;;
+	esac
+	return $status
+}
+
+_scratch_xfs_db_options()
+{
+	SCRATCH_OPTIONS=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+		SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+	echo $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_db()
+{
+	$XFS_DB_PROG "$@" $(_scratch_xfs_db_options)
+}
+
+_scratch_xfs_logprint()
+{
+	SCRATCH_OPTIONS=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+		SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+	$XFS_LOGPRINT_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_test_xfs_logprint()
+{
+	TEST_OPTIONS=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
+		TEST_OPTIONS="-l$TEST_LOGDEV"
+	$XFS_LOGPRINT_PROG $TEST_OPTIONS $* $TEST_DEV
+}
+
+_scratch_xfs_check()
+{
+	SCRATCH_OPTIONS=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+		SCRATCH_OPTIONS="-l $SCRATCH_LOGDEV"
+	[ "$LARGE_SCRATCH_DEV" = yes ] && \
+		SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
+	_xfs_check $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+_scratch_xfs_repair()
+{
+	SCRATCH_OPTIONS=""
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+		SCRATCH_OPTIONS="-l$SCRATCH_LOGDEV"
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+		SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -r$SCRATCH_RTDEV"
+	[ "$LARGE_SCRATCH_DEV" = yes ] && SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
+	$XFS_REPAIR_PROG $SCRATCH_OPTIONS $* $SCRATCH_DEV
+}
+
+# this test requires the projid32bit feature to be available in mkfs.xfs.
+#
+_require_projid32bit()
+{
+       _scratch_mkfs_xfs_supported -i projid32bit=1 >/dev/null 2>&1 \
+	   || _notrun "mkfs.xfs doesn't have projid32bit feature"
+}
+
+_require_projid16bit()
+{
+	_scratch_mkfs_xfs_supported -i projid32bit=0 >/dev/null 2>&1 \
+	   || _notrun "16 bit project IDs not supported on $SCRATCH_DEV"
+}
+
+# this test requires the crc feature to be available in mkfs.xfs
+#
+_require_xfs_mkfs_crc()
+{
+	_scratch_mkfs_xfs_supported -m crc=1 >/dev/null 2>&1 \
+	   || _notrun "mkfs.xfs doesn't have crc feature"
+}
+
+# this test requires the xfs kernel support crc feature
+#
+_require_xfs_crc()
+{
+	_scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+	   || _notrun "Kernel doesn't support crc feature"
+	_scratch_unmount
+}
+
+# this test requires the xfs kernel support crc feature on scratch device
+#
+_require_scratch_xfs_crc()
+{
+	_scratch_mkfs_xfs >/dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+	   || _notrun "Kernel doesn't support crc feature"
+	xfs_info $SCRATCH_MNT | grep -q 'crc=1' || _notrun "crc feature not supported by this filesystem"
+	_scratch_unmount
+}
+
+# this test requires the finobt feature to be available in mkfs.xfs
+#
+_require_xfs_mkfs_finobt()
+{
+	_scratch_mkfs_xfs_supported -m crc=1,finobt=1 >/dev/null 2>&1 \
+	   || _notrun "mkfs.xfs doesn't have finobt feature"
+}
+
+# this test requires the xfs kernel support finobt feature
+#
+_require_xfs_finobt()
+{
+	_scratch_mkfs_xfs -m crc=1,finobt=1 >/dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+	   || _notrun "Kernel doesn't support finobt feature"
+	_scratch_unmount
+}
+
+# this test requires xfs sysfs attribute support
+#
+_require_xfs_sysfs()
+{
+	attr=$1
+	sysfsdir=/sys/fs/xfs
+
+	if [ ! -e $sysfsdir ]; then
+		_notrun "no kernel support for XFS sysfs attributes"
+	fi
+
+	if [ ! -z $1 ] && [ ! -e $sysfsdir/$attr ]; then
+		_notrun "sysfs attribute '$attr' is not supported"
+	fi
+}
+
+# this test requires the xfs sparse inode feature
+#
+_require_xfs_sparse_inodes()
+{
+	_scratch_mkfs_xfs_supported -m crc=1 -i sparse > /dev/null 2>&1 \
+		|| _notrun "mkfs.xfs does not support sparse inodes"
+	_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
+	_scratch_mount >/dev/null 2>&1 \
+		|| _notrun "kernel does not support sparse inodes"
+	_scratch_unmount
+}
+
+# check that xfs_db supports a specific command
+_require_xfs_db_command()
+{
+	if [ $# -ne 1 ]; then
+		echo "Usage: _require_xfs_db_command command" 1>&2
+		exit 1
+	fi
+	command=$1
+
+	_scratch_xfs_db -x -c "help" | grep $command > /dev/null || \
+		_notrun "xfs_db $command support is missing"
+}
+
+# run xfs_check and friends on a FS.
+_check_xfs_filesystem()
+{
+	if [ $# -ne 3 ]; then
+		echo "Usage: _check_xfs_filesystem device <logdev>|none <rtdev>|none" 1>&2
+		exit 1
+	fi
+
+	extra_mount_options=""
+	extra_log_options=""
+	extra_options=""
+	device=$1
+	if [ -f $device ]; then
+		extra_options="-f"
+	fi
+
+	if [ "$2" != "none" ]; then
+		extra_log_options="-l$2"
+		extra_mount_options="-ologdev=$2"
+	fi
+
+	if [ "$3" != "none" ]; then
+		extra_rt_options="-r$3"
+		extra_mount_options=$extra_mount_options" -ortdev=$3"
+	fi
+	extra_mount_options=$extra_mount_options" $MOUNT_OPTIONS"
+
+	[ "$FSTYP" != xfs ] && return 0
+
+	type=`_fs_type $device`
+	ok=1
+
+	if [ "$type" = "xfs" ]; then
+		if [ -n "$TEST_XFS_SCRUB" ] && [ -x "$XFS_SCRUB_PROG" ]; then
+			"$XFS_SCRUB_PROG" $scrubflag -vd $device >>$seqres.full
+			if [ $? -ne 0 ]; then
+				echo "filesystem on $device failed scrub (see $seqres.full)"
+				ok=0
+			fi
+		fi
+		# mounted ...
+		mountpoint=`_umount_or_remount_ro $device`
+	fi
+
+	$XFS_LOGPRINT_PROG -t $extra_log_options $device 2>&1 \
+		| tee $tmp.logprint | grep -q "<CLEAN>"
+	if [ $? -ne 0 -a "$HOSTOS" = "Linux" ]; then
+		echo "_check_xfs_filesystem: filesystem on $device has dirty log (see $seqres.full)"
+
+		echo "_check_xfs_filesystem: filesystem on $device has dirty log"   >>$seqres.full
+		echo "*** xfs_logprint -t output ***"	>>$seqres.full
+		cat $tmp.logprint			>>$seqres.full
+		echo "*** end xfs_logprint output"	>>$seqres.full
+
+		ok=0
+	fi
+
+	# xfs_check runs out of memory on large files, so even providing the test
+	# option (-t) to avoid indexing the free space trees doesn't make it pass on
+	# large filesystems. Avoid it.
+	if [ "$LARGE_SCRATCH_DEV" != yes ]; then
+		_xfs_check $extra_log_options $device 2>&1 |\
+			_fix_malloc >$tmp.fs_check
+	fi
+	if [ -s $tmp.fs_check ]; then
+		echo "_check_xfs_filesystem: filesystem on $device is inconsistent (c) (see $seqres.full)"
+
+		echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$seqres.full
+		echo "*** xfs_check output ***"		>>$seqres.full
+		cat $tmp.fs_check			>>$seqres.full
+		echo "*** end xfs_check output"		>>$seqres.full
+
+		ok=0
+	fi
+
+	$XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+	if [ $? -ne 0 ]; then
+		echo "_check_xfs_filesystem: filesystem on $device is inconsistent (r) (see $seqres.full)"
+
+		echo "_check_xfs_filesystem: filesystem on $device is inconsistent" >>$seqres.full
+		echo "*** xfs_repair -n output ***"	>>$seqres.full
+		cat $tmp.repair | _fix_malloc		>>$seqres.full
+		echo "*** end xfs_repair output"	>>$seqres.full
+
+		ok=0
+	fi
+	rm -f $tmp.fs_check $tmp.logprint $tmp.repair
+
+	# Optionally test the index rebuilding behavior.
+	if [ -n "$TEST_XFS_REPAIR_REBUILD" ]; then
+		$XFS_REPAIR_PROG $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+		if [ $? -ne 0 ]; then
+			echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild) (see $seqres.full)"
+
+			echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild)" >>$seqres.full
+			echo "*** xfs_repair output ***"	>>$seqres.full
+			cat $tmp.repair | _fix_malloc		>>$seqres.full
+			echo "*** end xfs_repair output"	>>$seqres.full
+
+			ok=0
+		fi
+		rm -f $tmp.repair
+
+		$XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+		if [ $? -ne 0 ]; then
+			echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild-reverify) (see $seqres.full)"
+
+			echo "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild-reverify)" >>$seqres.full
+			echo "*** xfs_repair -n output ***"	>>$seqres.full
+			cat $tmp.repair | _fix_malloc		>>$seqres.full
+			echo "*** end xfs_repair output"	>>$seqres.full
+
+			ok=0
+		fi
+		rm -f $tmp.repair
+	fi
+
+	if [ $ok -eq 0 ]; then
+		echo "*** mount output ***"		>>$seqres.full
+		_mount					>>$seqres.full
+		echo "*** end mount output"		>>$seqres.full
+	elif [ "$type" = "xfs" ]; then
+		_mount_or_remount_rw "$extra_mount_options" $device $mountpoint
+	fi
+
+	if [ $ok -eq 0 ]; then
+		status=1
+		if [ "$iam" != "check" ]; then
+			exit 1
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+_check_xfs_test_fs()
+{
+	TEST_LOG="none"
+	TEST_RT="none"
+	[ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
+		TEST_LOG="$TEST_LOGDEV"
+
+	[ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ] && \
+		TEST_RT="$TEST_RTDEV"
+
+	_check_xfs_filesystem $TEST_DEV $TEST_LOG $TEST_RT
+
+	# check for ipath consistency
+	if $XFS_GROWFS_PROG -n $TEST_DIR | grep -q 'inode-paths=1'; then
+		# errors go to stderr
+		xfs_check_ipaths $TEST_DIR >/dev/null
+		xfs_repair_ipaths -n $TEST_DIR >/dev/null
+	fi
+}
+
+_require_xfs_test_rmapbt()
+{
+	_require_test
+
+	if [ "$(xfs_info "$TEST_DIR" | grep -c "rmapbt=1")" -ne 1 ]; then
+		_notrun "rmapbt not supported by test filesystem type: $FSTYP"
+	fi
+}
+
+_require_xfs_scratch_rmapbt()
+{
+	_require_scratch
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	if [ "$(xfs_info "$SCRATCH_MNT" | grep -c "rmapbt=1")" -ne 1 ]; then
+		_scratch_unmount
+		_notrun "rmapbt not supported by scratch filesystem type: $FSTYP"
+	fi
+	_scratch_unmount
+}
+
+_xfs_bmapx_find()
+{
+	case "$1" in
+	"attr")
+		param="a"
+		;;
+	"cow")
+		param="c"
+		;;
+	*)
+		param="e"
+		;;
+	esac
+	shift
+	file="$1"
+	shift
+
+	$XFS_IO_PROG -c "bmap -${param}lpv" "$file" | grep -c "$@"
+}
+
+# Reset all xfs error handling attributes, set them to original
+# status.
+#
+# Only one argument, and it's mandatory:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#
+# Note: this function only works for XFS
+_reset_xfs_sysfs_error_handling()
+{
+	local dev=$1
+
+	if [ ! -b "$dev" -o "$FSTYP" != "xfs" ]; then
+		_fail "Usage: reset_xfs_sysfs_error_handling <device>"
+	fi
+
+	_set_fs_sysfs_attr $dev error/fail_at_unmount 1
+	echo -n "error/fail_at_unmount="
+	_get_fs_sysfs_attr $dev error/fail_at_unmount
+
+	# Make sure all will be configured to retry forever by default, except
+	# for ENODEV, which is an unrecoverable error, so it will be configured
+	# to not retry on error by default.
+	for e in default EIO ENOSPC; do
+		_set_fs_sysfs_attr $dev \
+				   error/metadata/${e}/max_retries -1
+		echo -n "error/metadata/${e}/max_retries="
+		_get_fs_sysfs_attr $dev error/metadata/${e}/max_retries
+
+		_set_fs_sysfs_attr $dev \
+				   error/metadata/${e}/retry_timeout_seconds 0
+		echo -n "error/metadata/${e}/retry_timeout_seconds="
+		_get_fs_sysfs_attr $dev \
+				   error/metadata/${e}/retry_timeout_seconds
+	done
+}
+
+# Skip if we are running an older binary without the stricter input checks.
+# Make multiple checks to be sure that there is no regression on the one
+# selected feature check, which would skew the result.
+#
+# At first, make a common function that runs the tests and returns
+# number of failed cases.
+_xfs_mkfs_validation_check()
+{
+	local tmpfile=`mktemp`
+	local cmd="$MKFS_XFS_PROG -f -N -d file,name=$tmpfile,size=1g"
+
+	$cmd -s size=2s >/dev/null 2>&1
+	local sum=$?
+
+	$cmd -l version=2,su=260k >/dev/null 2>&1
+	sum=`expr $sum + $?`
+
+	rm -f $tmpfile
+	return $sum
+}
+
+# Skip the test if all calls passed - mkfs accepts invalid input
+_require_xfs_mkfs_validation()
+{
+	_xfs_mkfs_validation_check
+	if [ "$?" -eq 0 ]; then
+		_notrun "Requires newer mkfs with stricter input checks: the oldest supported version of xfsprogs is 4.7."
+	fi
+}
+
+# The opposite of _require_xfs_mkfs_validation.
+_require_xfs_mkfs_without_validation()
+{
+	_xfs_mkfs_validation_check
+	if [ "$?" -ne 0 ]; then
+		_notrun "Requires older mkfs without strict input checks: the last supported version of xfsprogs is 4.5."
+	fi
+}
+
+# XFS ability to change UUIDs on V5/CRC filesystems
+#
+_require_meta_uuid()
+{
+	# This will create a crc fs on $SCRATCH_DEV
+	_require_xfs_crc
+
+	_scratch_xfs_db -x -c "uuid restore" 2>&1 \
+	   | grep -q "invalid UUID\|supported on V5 fs" \
+	   && _notrun "Userspace doesn't support meta_uuid feature"
+
+	_scratch_xfs_db -x -c "uuid generate" >/dev/null 2>&1
+
+	_scratch_mount >/dev/null 2>&1 \
+	   || _notrun "Kernel doesn't support meta_uuid feature"
+	_scratch_unmount
+}
