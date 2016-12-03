@@ -1,0 +1,73 @@
+#! /bin/bash
+# FS QA Test 394
+#
+# Make sure fs honors file size resource limit.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	ulimit -f unlimited
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# need a wrapper function so "File size limit exceeded" message can be filtered
+do_truncate()
+{
+	$XFS_IO_PROG -fc "truncate $1" $2
+}
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+
+# set max file size to 1G (in block number of 1k blocks), so it should be big
+# enough to let test run without bringing any trouble to test harness
+ulimit -f $((1024 * 1024))
+# default action to SIGXFSZ is coredump, limit core file size to 0 to avoid
+# such core files after each test run
+ulimit -c 0
+
+# exercise file size limit boundaries
+do_truncate $((1024 * 1024 * 1024 - 1))	$TEST_DIR/$seq.$$-1
+do_truncate $((1024 * 1024 * 1024))	$TEST_DIR/$seq.$$
+do_truncate $((1024 * 1024 * 1024 + 1))	$TEST_DIR/$seq.$$+1 2>&1 | \
+	grep -o "File size limit exceeded"
+
+# success, all done
+status=0
+exit
