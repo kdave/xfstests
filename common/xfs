@@ -55,7 +55,7 @@ _scratch_mkfs_xfs_opts()
 
 	_scratch_options mkfs
 
-	$MKFS_XFS_PROG $SCRATCH_OPTIONS $mkfs_opts $SCRATCH_DEV
+	echo "$MKFS_XFS_PROG $SCRATCH_OPTIONS $mkfs_opts"
 }
 
 
@@ -79,38 +79,20 @@ _scratch_mkfs_xfs_supported()
 
 _scratch_mkfs_xfs()
 {
-	# extra mkfs options can be added by tests
-	local extra_mkfs_options=$*
+	local mkfs_cmd="`_scratch_mkfs_xfs_opts`"
+	local mkfs_filter="sed -e '/less than device physical sector/d' \
+			       -e '/switching to logical sector/d'"
+	local tmp=`mktemp`
+	local mkfs_status
 
-	local tmp_dir=/tmp/
+	_scratch_do_mkfs "$mkfs_cmd" "$mkfs_filter" $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
+	mkfs_status=$?
 
-	# save mkfs output in case conflict means we need to run again.
-	# only the output for the mkfs that applies should be shown
-	_scratch_mkfs_xfs_opts $MKFS_OPTIONS $extra_mkfs_options \
-		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
-	local mkfs_status=$?
-
-
-	# a mkfs failure may be caused by conflicts between
-	# $MKFS_OPTIONS and $extra_mkfs_options
-	if [ $mkfs_status -ne 0 -a ! -z "$extra_mkfs_options" ]; then
-		(
-		echo -n "** mkfs failed with extra mkfs options "
-		echo "added to \"$MKFS_OPTIONS\" by test $seq **"
-		echo -n "** attempting to mkfs using only test $seq "
-		echo "options: $extra_mkfs_options **"
-		) >> $seqres.full
-
-		# running mkfs again. overwrite previous mkfs output files
-		_scratch_mkfs_xfs_opts $extra_mkfs_options \
-			2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
-		local mkfs_status=$?
-	fi
 
 	if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
 		# manually parse the mkfs output to get the fs size in bytes
 		local fs_size
-		fs_size=`cat $tmp_dir.mkfsstd | perl -ne '
+		fs_size=`cat $tmp.mkfsstd | perl -ne '
 			if (/^data\s+=\s+bsize=(\d+)\s+blocks=(\d+)/) {
 				my $size = $1 * $2;
 				print STDOUT "$size\n";
@@ -119,13 +101,10 @@ _scratch_mkfs_xfs()
 		mkfs_status=$?
 	fi
 
-	# output stored mkfs output, filtering unnecessary warnings from stderr
-	cat $tmp_dir.mkfsstd
-	cat $tmp_dir.mkfserr | sed \
-		-e '/less than device physical sector/d' \
-		-e '/switching to logical sector/d' \
-		>&2
-	rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
+	# output mkfs stdout and stderr
+	cat $tmp.mkfsstd
+	cat $tmp.mkfserr >&2
+	rm -f $tmp*
 
 	return $mkfs_status
 }
