@@ -1790,6 +1790,28 @@ _require_odirect()
 	rm -f $testfile 2>&1 > /dev/null
 }
 
+# Check that the filesystem supports swapfiles
+_require_scratch_swapfile()
+{
+	_require_scratch
+
+	_scratch_mkfs >/dev/null
+	_scratch_mount
+
+	# Minimum size for mkswap is 10 pages
+	local size=$(($(get_page_size) * 10))
+
+	_pwrite_byte 0x61 0 "$size" "$SCRATCH_MNT/swap" >/dev/null 2>&1
+	mkswap "$SCRATCH_MNT/swap" >/dev/null 2>&1
+	if ! swapon "$SCRATCH_MNT/swap" >/dev/null 2>&1; then
+		_scratch_unmount
+		_notrun "swapfiles are not supported"
+	fi
+
+	swapoff "$SCRATCH_MNT/swap" >/dev/null 2>&1
+	_scratch_unmount
+}
+
 # Check that a fs has enough free space (in 1024b blocks)
 #
 _require_fs_space()
