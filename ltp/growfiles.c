@@ -1455,11 +1455,12 @@ notify_others()
 	send_signals=1; /* only send signals once */
 
         for (ind=0; ind< Forker_npids; ind++) {
-	    if ( Forker_pids[ind] != Pid )
+	    if ( Forker_pids[ind] != Pid ) {
 	        if ( Debug > 1 )
 		    printf("%s%s: %d DEBUG2 %s/%d: Sending SIGUSR2 to pid %d\n",
 		        Progname, TagName, Pid, __FILE__, __LINE__, Forker_pids[ind]);
 	        kill(Forker_pids[ind], SIGUSR2);
+	    }
         }
     }
 

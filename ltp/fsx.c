@@ -939,14 +939,14 @@ do_punch_hole(unsigned offset, unsigned length)
 	if (length == 0) {
 		if (!quiet && testcalls > simulatedopcount)
 			prt("skipping zero length punch hole\n");
-			log4(OP_PUNCH_HOLE, offset, length, FL_SKIPPED);
+		log4(OP_PUNCH_HOLE, offset, length, FL_SKIPPED);
 		return;
 	}
 
 	if (file_size <= (loff_t)offset) {
 		if (!quiet && testcalls > simulatedopcount)
 			prt("skipping hole punch off the end of the file\n");
-			log4(OP_PUNCH_HOLE, offset, length, FL_SKIPPED);
+		log4(OP_PUNCH_HOLE, offset, length, FL_SKIPPED);
 		return;
 	}
 
@@ -994,8 +994,8 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	if (length == 0) {
 		if (!quiet && testcalls > simulatedopcount)
 			prt("skipping zero length zero range\n");
-			log4(OP_ZERO_RANGE, offset, length, FL_SKIPPED |
-			     (keep_size ? FL_KEEP_SIZE : FL_NONE));
+		log4(OP_ZERO_RANGE, offset, length, FL_SKIPPED |
+		     (keep_size ? FL_KEEP_SIZE : FL_NONE));
 		return;
 	}
 
