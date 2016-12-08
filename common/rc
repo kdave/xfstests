@@ -1758,6 +1758,14 @@ _require_xfs_io_command()
 		echo $testio | egrep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"open")
+		# -c "open $f" is broken in xfs_io <= 4.8. Along with the fix,
+		# a new -C flag was introduced to execute one shot commands.
+		# Check for -C flag support as an indication for the bug fix.
+		testio=`$XFS_IO_PROG -F -f -C "open $testfile" $testfile 2>&1`
+		echo $testio | egrep -q "invalid option" && \
+			_notrun "xfs_io $command support is missing"
+		;;
 	*)
 		testio=`$XFS_IO_PROG -c "$command help" 2>&1`
 	esac
