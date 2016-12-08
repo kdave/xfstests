@@ -50,6 +50,7 @@ _cleanup()
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+_require_xfs_io_command "open"
 
 rm -f $seqres.full
 
@@ -72,13 +73,12 @@ cd $SCRATCH_MNT
 # write to rwfd
 # read from rofd
 #
-$XFS_IO_PROG << EOF | _filter_xfs_io
-open -r foo
-open foo
-pwrite -S 0x61 0 16
-file 0
-pread -v 0 16
-EOF
+$XFS_IO_PROG -r foo \
+	-C "open foo" \
+	-C "pwrite -S 0x61 0 16" \
+	-C "file 0" \
+	-C "pread -v 0 16" \
+| _filter_xfs_io
 
 #
 # case #2:
@@ -86,13 +86,12 @@ EOF
 # write to rwfd
 # read from mapped memory
 #
-$XFS_IO_PROG << EOF | _filter_xfs_io
-open -r bar
-mmap -r 0 16
-open bar
-pwrite -S 0x61 0 16
-mread -v 0 16
-EOF
+$XFS_IO_PROG -r bar \
+	-C "mmap -r 0 16" \
+	-C "open bar" \
+	-C "pwrite -S 0x61 0 16" \
+	-C "mread -v 0 16" \
+| _filter_xfs_io
 
 status=0
 exit
