@@ -10,16 +10,35 @@ _btrfs_get_subvolid()
 	$BTRFS_UTIL_PROG sub list $mnt | grep $name | awk '{ print $2 }'
 }
 
+# _require_btrfs_command <command> [<subcommand>|<option>]
 # We check for btrfs and (optionally) features of the btrfs command
-_require_btrfs()
+# It can both subfunction like "inspect-internal dump-tree" and
+# options like "check --qgroup-report"
+_require_btrfs_command()
 {
-	cmd=$1
+	local cmd=$1
+	local param=$2
+	local safe_param
+
 	_require_command "$BTRFS_UTIL_PROG" btrfs
 	if [ -z "$1" ]; then
 		return 1;
 	fi
-	$BTRFS_UTIL_PROG $cmd --help >/dev/null 2>&1
+	$BTRFS_UTIL_PROG $cmd --help &> /dev/null
 	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd)"
+
+	test -z "$param" && return
+
+	# If $param is an option, replace leading "-"s for grep
+	if [ ${param:0:1} == "-" ]; then
+		safe_param=$(echo $param | sed 's/^-*//')
+		$BTRFS_UTIL_PROG $cmd --help | grep -wq $safe_param || \
+			_notrun "$BTRFS_UTIL_PROG too old (must support $cmd $param)"
+		return
+	fi
+
+	$BTRFS_UTIL_PROG $cmd $param --help &> /dev/null
+	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd $param)"
 }
 
 _run_btrfs_util_prog()
