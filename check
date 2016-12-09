@@ -281,18 +281,23 @@ if $have_test_arg; then
 			status=1
 			exit $status
 			;;
-		*)	test_dir=`dirname $1`
-			test_dir=${test_dir#$SRC_DIR/*}
-			test_name=`basename $1`
-			group_file=$SRC_DIR/$test_dir/group
+		*)	# Expand test pattern (e.g. xfs/???, *fs/001)
+			list=$(cd $SRC_DIR; echo $1)
+			for t in $list; do
+				test_dir=`dirname $t`
+				test_dir=${test_dir#$SRC_DIR/*}
+				test_name=`basename $t`
+				group_file=$SRC_DIR/$test_dir/group
 
-			if egrep "^$test_name" $group_file >/dev/null ; then
-				# in group file ... OK
-				echo $SRC_DIR/$test_dir/$test_name >>$tmp.arglist
-			else
-				# oops
-				echo "$1 - unknown test, ignored"
-			fi
+				if egrep -q "^$test_name" $group_file; then
+					# in group file ... OK
+					echo $SRC_DIR/$test_dir/$test_name \
+						>>$tmp.arglist
+				else
+					# oops
+					echo "$t - unknown test, ignored"
+				fi
+			done
 			;;
 		esac
 
