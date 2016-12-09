@@ -53,6 +53,7 @@ rm -f $seqres.full
 _supported_fs btrfs
 _supported_os Linux
 _require_scratch
+_require_btrfs_qgroup_report
 
 _scratch_mkfs
 # Need to use inline extents to fill metadata rapidly
@@ -76,9 +77,7 @@ _run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
 _run_btrfs_util_prog balance start -d $SCRATCH_MNT
 
 _scratch_unmount
-# generate a qgroup report and look for inconsistent groups
-$BTRFS_UTIL_PROG check --qgroup-report $SCRATCH_DEV 2>&1 | \
-		grep -E "Counts for qgroup.*are different"
+# qgroup will be check at _check_scratch_fs() by fstest
 
 # success, all done
 status=0

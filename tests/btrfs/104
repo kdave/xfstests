@@ -58,6 +58,7 @@ rm -f $seqres.full
 _supported_fs btrfs
 _supported_os Linux
 _require_scratch
+_require_btrfs_qgroup_report
 
 rm -f $seqres.full
 
@@ -145,21 +146,10 @@ _scratch_cycle_mount
 # referenced above.
 _run_btrfs_util_prog subvolume delete $SCRATCH_MNT/snap1
 
-# There is no way from userspace to force btrfs_drop_snapshot to run
-# at a given time (even via mount/unmount). We must wait for it to
-# start and complete. This is the shortest time on my tests systems I
-# have found which always allows drop_snapshot to run to completion.
-sleep 45
+# "btrfs filesystem sync" will trigger subvolume deletion
+_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
 
-_scratch_unmount
+# Qgroup will be checked by fstest at _check_scratch_fs()
 
-# generate a qgroup report and look for inconsistent groups
-#  - don't use _run_btrfs_util_prog here as it captures the output and
-#    we need to grep it.
-$BTRFS_UTIL_PROG check --qgroup-report $SCRATCH_DEV 2>&1 | \
-			grep -E -q "Counts for qgroup.*are different"
-if [ $? -ne 0 ]; then
-	status=0
-fi
-
+status=0
 exit

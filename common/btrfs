@@ -41,6 +41,13 @@ _require_btrfs_command()
 	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd $param)"
 }
 
+# Require extra check on btrfs qgroup numbers
+_require_btrfs_qgroup_report()
+{
+	_require_btrfs_command check --qgroup-report
+	touch ${RESULT_DIR}/require_scratch.require_qgroup_report
+}
+
 _run_btrfs_util_prog()
 {
 	run_check $BTRFS_UTIL_PROG $*
@@ -98,7 +105,20 @@ _check_btrfs_filesystem()
 		mountpoint=`_umount_or_remount_ro $device`
 	fi
 
-	btrfsck $device >$tmp.fsck 2>&1
+	if [ -f ${RESULT_DIR}/require_scratch.require_qgroup_report ]; then
+		$BTRFS_UTIL_PROG check $device --qgroup-report > $tmp.qgroup_report 2>&1
+		if grep -qE "Counts for qgroup.*are different" $tmp.qgroup_report ; then
+			echo "_check_btrfs_filesystem: filesystem on $device has wrong qgroup numbers (see $seqres.full)"
+			echo "_check_btrfs_filesystem: filesystem on $device has wrong qgroup numbers" \
+				>> $seqres.full
+			echo "*** qgroup_report.$FSTYP output ***"	>>$seqres.full
+			cat $tmp.qgroup_report				>>$seqres.full
+			echo "*** qgroup_report.$FSTYP output ***"	>>$seqres.full
+		fi
+		rm -f $tmp.qgroup_report
+	fi
+
+	$BTRFS_UTIL_PROG check $device >$tmp.fsck 2>&1
 	if [ $? -ne 0 ]; then
 		echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $seqres.full)"
 
