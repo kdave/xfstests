@@ -178,8 +178,11 @@ echo; echo
 
 _backup()
 {
-	# NB: no filtering of scratch here... (need to restore too)
-	$GETFATTR_PROG --absolute-names -dh -R -m '.' $SCRATCH_MNT >$1
+	# Note: we don't filter scratch here since we need to restore too.  But
+	# we *do* sort the output by path, since it otherwise would depend on
+	# readdir order, which on some filesystems may change after re-creating
+	# the files.
+	$GETFATTR_PROG --absolute-names -dh -R -m '.' $SCRATCH_MNT | _sort_getfattr_output >$1
 	echo BACKUP $1 >>$seqres.full
 	cat $1 >> $seqres.full
 	[ ! -s $1 ] && echo "warning: $1 (backup file) is empty"
