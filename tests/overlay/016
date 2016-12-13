@@ -64,7 +64,6 @@ echo "This is old news" > $lowerdir/bar
 
 _scratch_mount
 
-cd $SCRATCH_MNT
 
 #
 # case #1:
@@ -73,12 +72,12 @@ cd $SCRATCH_MNT
 # write to rwfd
 # read from rofd
 #
-$XFS_IO_PROG -r foo \
-	-C "open foo" \
+$XFS_IO_PROG -r $SCRATCH_MNT/foo \
+	-C "open $SCRATCH_MNT/foo" \
 	-C "pwrite -S 0x61 0 16" \
 	-C "file 0" \
 	-C "pread -v 0 16" \
-| _filter_xfs_io
+| _filter_xfs_io | _filter_scratch
 
 #
 # case #2:
@@ -86,12 +85,12 @@ $XFS_IO_PROG -r foo \
 # write to rwfd
 # read from mapped memory
 #
-$XFS_IO_PROG -r bar \
+$XFS_IO_PROG -r $SCRATCH_MNT/bar \
 	-C "mmap -r 0 16" \
-	-C "open bar" \
+	-C "open $SCRATCH_MNT/bar" \
 	-C "pwrite -S 0x61 0 16" \
 	-C "mread -v 0 16" \
-| _filter_xfs_io
+| _filter_xfs_io | _filter_scratch
 
 status=0
 exit
