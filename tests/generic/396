@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test generic/396
+#
+# Test that FS_IOC_SET_ENCRYPTION_POLICY correctly validates the fscrypt_policy
+# structure that userspace passes to it.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+dir=$SCRATCH_MNT/dir
+mkdir $dir
+
+echo -e "\n*** Invalid contents encryption mode ***"
+$XFS_IO_PROG -c "set_encpolicy -c 0xFF" $dir |& _filter_scratch
+
+echo -e "\n*** Invalid filenames encryption mode ***"
+$XFS_IO_PROG -c "set_encpolicy -n 0xFF" $dir |& _filter_scratch
+
+echo -e "\n*** Invalid flags ***"
+$XFS_IO_PROG -c "set_encpolicy -f 0xFF" $dir |& _filter_scratch
+
+echo -e "\n*** Invalid policy version ***"
+$XFS_IO_PROG -c "set_encpolicy -v 0xFF" $dir |& _filter_scratch
+
+# Currently, the only supported combination of modes is AES-256-XTS for contents
+# and AES-256-CTS for filenames.  Nothing else should be accepted.
+echo -e "\n*** Invalid combinations of modes ***"
+$XFS_IO_PROG -c "set_encpolicy -c AES-256-CTS -n AES-256-CTS" $dir |& _filter_scratch
+$XFS_IO_PROG -c "set_encpolicy -c AES-256-CTS -n AES-256-XTS" $dir |& _filter_scratch
+$XFS_IO_PROG -c "set_encpolicy -c AES-256-XTS -n AES-256-XTS" $dir |& _filter_scratch
+
+# success, all done
+status=0
+exit
