@@ -1,0 +1,158 @@
+#! /bin/bash
+# FS QA Test generic/398
+#
+# Filesystem encryption is designed to enforce that a consistent encryption
+# policy is used within a given encrypted directory tree and that an encrypted
+# directory tree does not contain any unencrypted files.  This test verifies
+# that filesystem operations that would violate this constraint fail with EPERM.
+# This does not test enforcement of this constraint on lookup, which is still
+# needed to detect offline changes.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+. ./common/renameat2
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+_requires_renameat2
+
+_new_session_keyring
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+
+# Set up two encrypted directories, with different encryption policies,
+# and one unencrypted directory.
+edir1=$SCRATCH_MNT/edir1
+edir2=$SCRATCH_MNT/edir2
+udir=$SCRATCH_MNT/udir
+mkdir $edir1 $edir2 $udir
+keydesc1=$(_generate_encryption_key)
+keydesc2=$(_generate_encryption_key)
+$XFS_IO_PROG -c "set_encpolicy $keydesc1" $edir1
+$XFS_IO_PROG -c "set_encpolicy $keydesc2" $edir2
+touch $edir1/efile1
+touch $edir2/efile2
+touch $udir/ufile
+
+
+# Test linking and moving an encrypted file into an encrypted directory with a
+# different encryption policy.  Should fail with EPERM.
+
+echo -e "\n*** Link encrypted <= encrypted ***"
+ln $edir1/efile1 $edir2/efile1 |& _filter_scratch
+
+echo -e "\n*** Rename encrypted => encrypted ***"
+mv $edir1/efile1 $edir2/efile1 |& _filter_scratch
+
+
+# Test linking and moving an unencrypted file into an encrypted directory.
+# Should fail with EPERM.
+
+echo -e "\n\n*** Link unencrypted <= encrypted ***"
+ln $udir/ufile $edir1/ufile |& _filter_scratch
+
+echo -e "\n*** Rename unencrypted => encrypted ***"
+mv $udir/ufile $edir1/ufile |& _filter_scratch
+
+
+# Test linking and moving an encrypted file into an unencrypted directory.
+# Should succeed.
+
+echo -e "\n\n*** Link encrypted <= unencrypted ***"
+ln -v $edir1/efile1 $udir/efile1 |& _filter_scratch
+rm $udir/efile1 # undo
+
+echo -e "\n*** Rename encrypted => unencrypted ***"
+mv -v $edir1/efile1 $udir/efile1 |& _filter_scratch
+mv $udir/efile1 $edir1/efile1 # undo
+
+
+# Test moving a forbidden (unencrypted, or encrypted with a different encryption
+# policy) file into an encrypted directory via an exchange (cross rename)
+# operation.  Should fail with EPERM.
+
+echo -e "\n\n*** Exchange encrypted <=> encrypted ***"
+src/renameat2 -x $edir1/efile1 $edir2/efile2 |& _filter_scratch
+
+echo -e "\n*** Exchange unencrypted <=> encrypted ***"
+src/renameat2 -x $udir/ufile $edir1/efile1 |& _filter_scratch
+
+echo -e "\n*** Exchange encrypted <=> unencrypted ***"
+src/renameat2 -x $edir1/efile1 $udir/ufile |& _filter_scratch
+
+
+# Test a file with a special type, i.e. not regular, directory, or symlink.
+# Since such files are not subject to encryption, there should be no
+# restrictions on linking or moving them into encrypted directories.
+
+echo -e "\n\n*** Special file tests ***"
+mkfifo $edir1/fifo
+mv -v $edir1/fifo $edir2/fifo | _filter_scratch
+mv -v $edir2/fifo $udir/fifo | _filter_scratch
+mv -v $udir/fifo $edir1/fifo | _filter_scratch
+mkfifo $udir/fifo
+src/renameat2 -x $udir/fifo $edir1/fifo
+ln -v $edir1/fifo $edir2/fifo | _filter_scratch
+rm $edir1/fifo $edir2/fifo $udir/fifo
+
+
+# Now test that *without* access to the encrypted key, we cannot use an exchange
+# (cross rename) operation to move a forbidden file into an encrypted directory.
+
+_unlink_encryption_key $keydesc1
+_unlink_encryption_key $keydesc2
+_scratch_cycle_mount
+efile1=$(find $edir1 -type f)
+efile2=$(find $edir2 -type f)
+
+echo -e "\n\n*** Exchange encrypted <=> encrypted without key ***"
+src/renameat2 -x $efile1 $efile2
+echo -e "\n*** Exchange encrypted <=> unencrypted without key ***"
+src/renameat2 -x $efile1 $udir/ufile
+
+# success, all done
+status=0
+exit
