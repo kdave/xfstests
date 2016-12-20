@@ -264,6 +264,22 @@ _scratch_mount_options()
 					$SCRATCH_DEV $SCRATCH_MNT
 }
 
+_supports_filetype()
+{
+	local dir=$1
+
+	local fstyp=$(df --output=fstype $dir | tail -1)
+	case "$fstyp" in
+	xfs)
+		xfs_info $dir | grep -q "ftype=1"
+		;;
+	ext2|ext3|ext4)
+		tune2fs -l $(df --output=source $dir | tail -1) | \
+		   grep -q filetype
+		;;
+	esac
+}
+
 # helper function to do the actual overlayfs mount operation
 _overlay_mount_dirs()
 {
@@ -284,20 +300,7 @@ _overlay_mount()
 	local mnt=$2
 	shift 2
 
-	local upper_fst=$(df --output=fstype $dir | tail -1)
-	case "$upper_fst" in
-	xfs)
-		if ! xfs_info $dir | grep -q "ftype=1" ; then
-			_notrun "upper fs needs to support d_type"
-		fi
-		;;
-	ext2|ext3|ext4)
-		if ! tune2fs -l $(df --output=source $dir | tail -1) | \
-		   grep -q filetype ; then
-			_notrun "upper fs needs to support d_type"
-		fi
-		;;
-	esac
+	_supports_filetype $dir || _notrun "upper fs needs to support d_type"
 
 	mkdir -p $dir/$OVERLAY_UPPER_DIR
 	mkdir -p $dir/$OVERLAY_LOWER_DIR
