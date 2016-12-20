@@ -277,6 +277,15 @@ _supports_filetype()
 		tune2fs -l $(df --output=source $dir | tail -1) | \
 		   grep -q filetype
 		;;
+	*)
+		local testfile=$dir/$$.ftype
+		touch $testfile
+		# look for DT_UNKNOWN files
+		local unknowns=$(src/t_dir_type $dir u | wc -l)
+		rm $testfile
+		# 0 unknowns is success
+		return $unknowns
+		;;
 	esac
 }
 
