@@ -1,0 +1,166 @@
+#! /bin/bash
+# FS QA Test generic/399
+#
+# Check for weaknesses in filesystem encryption involving the same ciphertext
+# being repeated.  For file contents, we fill a small filesystem with large
+# files of 0's and verify the filesystem is incompressible.  For filenames, we
+# create an identical symlink in two different directories and verify the
+# ciphertext filenames and symlink targets are different.
+#
+# This test can detect some basic cryptographic mistakes such as nonce reuse
+# (across files), initialization vector reuse (across blocks), or data somehow
+# being left in plaintext by accident.  For example, it detects the
+# initialization vector reuse bug fixed in commit 02fc59a0d28f ("f2fs/crypto:
+# fix xts_tweak initialization").
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+_require_command "$XZ_PROG" xz
+_require_command "$KEYCTL_PROG" keyctl
+
+_new_session_keyring
+
+#
+# Set up a small filesystem containing an encrypted directory.  64 MB is enough
+# for both ext4 and f2fs (f2fs doesn't support a 32 MB filesystem).  Before
+# creating the filesystem, zero out the needed portion of the device so that
+# existing data on the device doesn't contribute to the compressed size.
+#
+fs_size_in_mb=64
+fs_size=$((fs_size_in_mb * 1024 * 1024))
+dd if=/dev/zero of=$SCRATCH_DEV bs=$((1024 * 1024)) \
+	count=$fs_size_in_mb &>> $seqres.full
+MKFS_OPTIONS="$MKFS_OPTIONS -O encrypt" \
+	_scratch_mkfs_sized $fs_size &>> $seqres.full
+_scratch_mount
+
+keydesc=$(_generate_encryption_key)
+mkdir $SCRATCH_MNT/encrypted_dir
+$XFS_IO_PROG -c "set_encpolicy $keydesc" $SCRATCH_MNT/encrypted_dir
+
+# Create the "same" symlink in two different directories.
+# Later we'll check both the name and target of the symlink.
+mkdir $SCRATCH_MNT/encrypted_dir/subdir1
+mkdir $SCRATCH_MNT/encrypted_dir/subdir2
+ln -s symlink_target $SCRATCH_MNT/encrypted_dir/subdir1/symlink
+ln -s symlink_target $SCRATCH_MNT/encrypted_dir/subdir2/symlink
+
+#
+# Write files of 1 MB of all the same byte until we hit ENOSPC.  Note that we
+# must not create sparse files, since the contents of sparse files are not
+# stored on-disk.  Also, we create multiple files rather than one big file
+# because we want to test for reuse of per-file keys.
+#
+total_file_size=0
+i=1
+while true; do
+	file=$SCRATCH_MNT/encrypted_dir/file$i
+	if ! $XFS_IO_PROG -f $file -c 'pwrite 0 1M' &> $tmp.out; then
+		if ! grep -q 'No space left on device' $tmp.out; then
+			echo "FAIL: unexpected pwrite failure"
+			cat $tmp.out
+		elif [ -e $file ]; then
+			total_file_size=$((total_file_size + $(stat -c %s $file)))
+		fi
+		break
+	fi
+	total_file_size=$((total_file_size + $(stat -c %s $file)))
+	i=$((i + 1))
+	if [ $i -gt $fs_size_in_mb ]; then
+		echo "FAIL: filesystem never filled up!"
+		break
+	fi
+done
+
+# We shouldn't have been able to write more data than we had space for.
+if (( $total_file_size > $fs_size )); then
+	echo "FAIL: wrote $total_file_size bytes but should have only" \
+		"had space for $fs_size bytes at most"
+fi
+
+#
+# Unmount the filesystem and compute its compressed size.  It must be no smaller
+# than the amount of data that was written; otherwise there was a compromise in
+# the confidentiality of the data.  False positives should not be possible
+# because filesystem metadata will also contribute to the compressed size.
+#
+# Note: it's important to use a strong compressor such as xz which can detect
+# redundancy across most or all of the filesystem.  We run xz with a 64 MB
+# sliding window but use some custom settings to make it faster and use less
+# memory than the '-9' preset.  The memory needed with our settings will be
+# 64 * 6.5 = 416 MB; see xz(1).
+#
+_unlink_encryption_key $keydesc
+_scratch_unmount
+fs_compressed_size=$(head -c $fs_size $SCRATCH_DEV | \
+	xz --lzma2=dict=64M,mf=hc4,mode=fast,nice=16 | \
+	wc -c)
+
+if (( $fs_compressed_size < $total_file_size )); then
+	echo "FAIL: filesystem was compressible" \
+		"($total_file_size bytes => $fs_compressed_size bytes)"
+else
+	echo "PASS: ciphertexts were not repeated for contents"
+fi
+
+# Verify that encrypted filenames and symlink targets were not reused.  Note
+# that since the ciphertexts should be unpredictable, we cannot simply include
+# the expected names in the expected output file.
+_scratch_mount
+find $SCRATCH_MNT/encrypted_dir -type l | wc -l
+link1=$(find $SCRATCH_MNT/encrypted_dir -type l | head -1)
+link2=$(find $SCRATCH_MNT/encrypted_dir -type l | tail -1)
+[ $(basename $link1) = $(basename $link2) ] && \
+	echo "Encrypted filenames were reused!"
+[ $(readlink $link1) = $(readlink $link2) ] && \
+	echo "Encrypted symlink targets were reused!"
+
+# success, all done
+status=0
+exit
