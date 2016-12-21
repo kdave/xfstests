@@ -1,0 +1,95 @@
+#! /bin/bash
+# FSQA Test No. 401
+#
+# Test filetype feature
+#
+# This test does NOT require that file system support the d_type feature.
+# It verifies that either all file types are reported as DT_UNKNOWN
+# or all file types are reported correctly.
+#
+# For fs for which we know how to test the filetype feature (xfs|ext*)
+# verify getting DT_UNKNOWN IFF feature is disabled.
+# Special dir entries . and .. MAY be reported as DT_UNKNOWN IF filetype
+# feature is disabled (ext4), but MAY also be reported as DT_DIR in this
+# case (xfs).
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_test_program "t_dir_type"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+_scratch_mount
+
+# Create our test files.
+testdir=$SCRATCH_MNT/find-by-type
+mkdir -p $testdir
+mkdir $testdir/d
+touch $testdir/f
+ln -s $testdir/f $testdir/l
+mknod $testdir/c c 1 1
+mknod $testdir/b b 1 1
+mknod $testdir/p p
+
+# Test d_type of . and ..
+# it must be DT_DIR on fs with filetype support and it could be
+# either DR_DIR or DT_UNKNOWN on fs without filetype support
+src/t_dir_type $testdir d | grep -F '.' | sort
+
+# Test that either all file types are unknown or all are correct
+if _supports_filetype $testdir; then
+	# print real file types
+	src/t_dir_type $testdir | grep -vF '.' | sort
+else
+	# print fake dir file type for . and .. if they are DT_UNKNOWN
+	src/t_dir_type $testdir u | grep -F '.' | \
+		awk '{ print $1, "d" }' | sort
+	# list unknown files and print filename as fake file type
+	src/t_dir_type $testdir u | grep -vF '.' | \
+		awk '{ print $1, $1 }' | sort
+fi
+
+status=0
+exit
