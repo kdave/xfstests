@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test 019
+#
+# Run fsstress on lower dir and top dir at the same time
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Google, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+lowerdir=$SCRATCH_DEV/$OVERLAY_LOWER_DIR
+mkdir -p $lowerdir
+
+_scratch_mount
+
+echo "Silence is golden"
+
+d_low=$lowerdir/fsstress
+d_top=$SCRATCH_MNT/fsstress
+mkdir -p $d_low $d_top
+
+echo $FSSTRESS_PROG -s 42 -d $d_low -p 4 -n 1000 -l100 -v > $seqres.full.1
+$FSSTRESS_PROG -s 42 -d $d_low -p 4 -n 1000 -l100 -v >> $seqres.full.1 2>&1 &
+
+echo $FSSTRESS_PROG -s 42 -d $d_top -p 4 -n 1000 -l100 -v > $seqres.full.2
+$FSSTRESS_PROG -s 42 -d $d_top -p 4 -n 1000 -l100 -v >> $seqres.full.2 2>&1 &
+
+ret=0
+if ! wait %1; then
+	echo "--------------------------------------"       >>$seqres.full.1
+	echo "fsstress on lower directory returned $? - see $seqres.full.1"
+	echo "--------------------------------------"       >>$seqres.full.1
+	ret=1
+fi
+
+if ! wait %2; then
+	echo "--------------------------------------"       >>$seqres.full.2
+	echo "fsstress on overlay directory returned $? - see $seqres.full.2"
+	echo "--------------------------------------"       >>$seqres.full.2
+	ret=1
+fi
+
+cat $seqres.full.1 $seqres.full.2 > $seqres.full
+rm $seqres.full.1 $seqres.full.2
+
+if [ "$ret" -eq 1 ]; then
+	status=1
+else
+	status=0
+fi
+
+exit $status
