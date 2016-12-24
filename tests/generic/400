@@ -1,0 +1,93 @@
+#! /bin/bash
+# FS QA Test 394
+#
+# test out high quota ids retrieved by Q_GETNEXTQUOTA
+# Request for next ID near 2^32 should not wrap to 0
+#
+# Designed to use the new Q_GETNEXTQUOTA quotactl
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+_require_quota
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+
+MOUNT_OPTIONS="-o usrquota,grpquota"
+
+_qmount
+
+# Ok, do we even have GETNEXTQUOTA?  Querying ID 0 should work.
+$here/src/test-nextquota -i 0 -u -d $SCRATCH_DEV &> $seqres.full || \
+	_notrun "No GETNEXTQUOTA support"
+
+echo "Launch all quotas"
+
+# We want to create a block of quotas for an id very near
+# 2^32, then ask for the next quota after it.  The returned
+# ID should not overflow to 0.
+
+# Populate  with 2^32-4
+ID=4294967292
+setquota -u $ID $ID $ID $ID $ID $SCRATCH_MNT
+touch ${SCRATCH_MNT}/${ID}
+chown ${ID} ${SCRATCH_MNT}/${ID}
+
+# remount just for kicks, make sure we get it off disk
+_scratch_unmount
+_qmount
+
+# Ask for the next quota after $ID; should get nothing back
+# If kernelspace wraps, we'll get 0 back.
+for TYPE in u g; do
+	let NEXT=ID+1
+	echo "Ask for ID after $NEXT expecting nothing"
+	$here/src/test-nextquota -i $NEXT -${TYPE} -d $SCRATCH_DEV
+done
+
+# success, all done
+status=0
+exit

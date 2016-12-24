@@ -73,6 +73,7 @@ int main(int argc, char *argv[])
 	int cmd;
 	int type = -1, typeflag = 0;
 	int verbose = 0;
+	int retval = 0;
 	uint id = 0, idflag = 0;
 	char *device = NULL;
 	char *tmp;
@@ -140,30 +141,32 @@ int main(int argc, char *argv[])
 	cmd = QCMD(Q_GETNEXTQUOTA, type);
 	if (quotactl(cmd, device, id, (void *)&dqb) < 0) {
 		perror("Q_GETNEXTQUOTA");
-		return 1;
+		retval = 1;
+	} else {
+		/*
+		 * We only print id and inode limits because
+		 * block count varies depending on fs block size, etc;
+		 * this is just a sanity test that we can retrieve the quota,
+		 * and inode limits have the same units across both calls.
+		 */
+		printf("id        %u\n", dqb.dqb_id);
+		printf("ihard     %llu\n",
+				  (unsigned long long)dqb.dqb_ihardlimit);
+		printf("isoft     %llu\n",
+				  (unsigned long long)dqb.dqb_isoftlimit);
 	}
-
-	/*
-	 * We only print id and inode limits because
-	 * block count varies depending on fs block size, etc;
-	 * this is just a sanity test that we can retrieve the quota,
-	 * and inode limits have the same units across both calls.
-	 */
-	printf("id        %u\n", dqb.dqb_id);
-	printf("ihard     %llu\n", (unsigned long long)dqb.dqb_ihardlimit);
-	printf("isoft     %llu\n", (unsigned long long)dqb.dqb_isoftlimit);
 
 	if (verbose)
 		printf("====Q_XGETNEXTQUOTA====\n");
 	cmd = QCMD(Q_XGETNEXTQUOTA, USRQUOTA);
 	if (quotactl(cmd, device, id, (void *)&xqb) < 0) {
 		perror("Q_XGETNEXTQUOTA");
-		return 1;
+		retval = 1;
+	} else {
+		printf("id        %u\n", xqb.d_id);
+		printf("ihard     %llu\n", xqb.d_ino_hardlimit);
+		printf("isoft     %llu\n", xqb.d_ino_softlimit);
 	}
 
-	printf("id        %u\n", xqb.d_id);
-	printf("ihard     %llu\n", xqb.d_ino_hardlimit);
-	printf("isoft     %llu\n", xqb.d_ino_softlimit);
-
-	return 0;
+	return retval;
 }
