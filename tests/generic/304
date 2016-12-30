@@ -63,25 +63,32 @@ _pwrite_byte 0x61 $bigoff 1 $testdir/file3 >> $seqres.full
 _pwrite_byte 0x61 1048575 1 $testdir/file2 >> $seqres.full
 
 echo "Dedupe large single byte file"
-_dedupe_range $testdir/file1 0 $testdir/file3 0 $len >> $seqres.full
+_dedupe_range $testdir/file1 0 $testdir/file3 0 $len \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe large empty file"
-_dedupe_range $testdir/file0 0 $testdir/file4 0 $len >> $seqres.full
+_dedupe_range $testdir/file0 0 $testdir/file4 0 $len \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe past maximum file size in dest file (should fail)"
-_dedupe_range $testdir/file1 0 $testdir/file5 4611686018427322368 $len >> $seqres.full
+_dedupe_range $testdir/file1 0 $testdir/file5 4611686018427322368 $len \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe high offset to low offset"
-_dedupe_range $testdir/file1 $bigoff_64k $testdir/file6 1048576 65535 >> $seqres.full
+_dedupe_range $testdir/file1 $bigoff_64k $testdir/file6 1048576 65535 \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe past source file EOF (should fail)"
-_dedupe_range $testdir/file2 524288 $testdir/file7 0 1048576 >> $seqres.full
+_dedupe_range $testdir/file2 524288 $testdir/file7 0 1048576 \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe max size at nonzero offset (should fail)"
-_dedupe_range $testdir/file2 524288 $testdir/file8 0 $len >> $seqres.full
+_dedupe_range $testdir/file2 524288 $testdir/file8 0 $len \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe with huge off/len (should fail)"
-_dedupe_range $testdir/file2 $bigoff_64k $testdir/file9 0 $bigoff_64k >> $seqres.full
+_dedupe_range $testdir/file2 $bigoff_64k $testdir/file9 0 $bigoff_64k \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Check file creation"
 _test_cycle_mount

@@ -81,41 +81,48 @@ mkfifo $testdir1/fifo1
 sync
 
 _filter_enotty() {
+	_filter_dedupe_error | \
 	sed -e 's/Inappropriate ioctl for device/Invalid argument/g'
 }
 
 _filter_eperm() {
+	_filter_dedupe_error | \
 	sed -e 's/Permission denied/Invalid argument/g'
 }
 
 echo "Try cross-device dedupe"
-_dedupe_range $testdir1/file1 0 $testdir2/file1 0 $blksz
+_dedupe_range $testdir1/file1 0 $testdir2/file1 0 $blksz \
+	2>&1 | _filter_dedupe_error
 
 echo "Try unaligned dedupe"
-_dedupe_range $testdir1/file1 37 $testdir1/file1 59 23
+_dedupe_range $testdir1/file1 37 $testdir1/file1 59 23 \
+	2>&1 | _filter_dedupe_error
 
 echo "Try overlapping dedupe"
-_dedupe_range $testdir1/file1 0 $testdir1/file1 1 $((blksz * 2))
+_dedupe_range $testdir1/file1 0 $testdir1/file1 1 $((blksz * 2)) \
+	2>&1 | _filter_dedupe_error
 
 echo "Try dedupe from past EOF"
-_dedupe_range $testdir1/file1 $(( (blks + 10) * blksz)) $testdir1/file1 0 $blksz
+_dedupe_range $testdir1/file1 $(( (blks + 10) * blksz)) $testdir1/file1 0 $blksz \
+	2>&1 | _filter_dedupe_error
 
 echo "Try dedupe to past EOF, destination offset beyond EOF"
-_dedupe_range $testdir1/file1 0 $testdir1/file1 $(( (blks + 10) * blksz)) \
-	$blksz
+_dedupe_range $testdir1/file1 0 $testdir1/file1 $(( (blks + 10) * blksz)) $blksz \
+	2>&1 | _filter_dedupe_error
 
 echo "Try dedupe to past EOF, destination offset behind EOF"
-_dedupe_range $testdir1/file1 0 $testdir1/file1 $(( (blks - 1) * blksz)) \
-	$((blksz * 2))
+_dedupe_range $testdir1/file1 0 $testdir1/file1 $(( (blks - 1) * blksz)) $((blksz * 2)) \
+	2>&1 | _filter_dedupe_error
 
 echo "Try to dedupe a dir"
-_dedupe_range $testdir1/dir1 0 $testdir1/file2 0 $blksz
+_dedupe_range $testdir1/dir1 0 $testdir1/file2 0 $blksz 2>&1 | _filter_dedupe_error
 
 echo "Try to dedupe a device"
 _dedupe_range $testdir1/dev1 0 $testdir1/file2 0 $blksz 2>&1 | _filter_enotty
 
 echo "Try to dedupe to a dir"
-_dedupe_range $testdir1/file1 0 $testdir1/dir1 0 $blksz 2>&1 | _filter_test_dir
+_dedupe_range $testdir1/file1 0 $testdir1/dir1 0 $blksz \
+	2>&1 | _filter_test_dir | _filter_dedupe_error
 
 echo "Try to dedupe to a device"
 _dedupe_range $testdir1/file1 0 $testdir1/dev1 0 $blksz 2>&1 | _filter_eperm
@@ -124,7 +131,8 @@ echo "Try to dedupe to a fifo"
 _dedupe_range $testdir1/file1 0 $testdir1/fifo1 0 $blksz -n 2>&1 | _filter_eperm
 
 echo "Try to dedupe an append-only file"
-_dedupe_range $testdir1/file1 0 $testdir1/file3 0 $blksz -a >> $seqres.full
+_dedupe_range $testdir1/file1 0 $testdir1/file3 0 $blksz -a \
+	2>&1 >> $seqres.full | _filter_dedupe_error
 
 echo "Dedupe two files"
 _dedupe_range $testdir1/file1 0 $testdir1/file2 0 $blksz >> $seqres.full
