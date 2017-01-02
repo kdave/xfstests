@@ -87,19 +87,30 @@ testlist options
 	    exit 0
 }
 
+get_sub_group_list()
+{
+	local d=$1
+	local grp=$2
+
+	test -s "$SRC_DIR/$d/group" || return 1
+
+	local grpl=$(sed -n < $SRC_DIR/$d/group \
+		-e 's/#.*//' \
+		-e 's/$/ /' \
+		-e "s;^\($VALID_TEST_NAME\).* $grp .*;$SRC_DIR/$d/\1;p")
+	echo $grpl
+}
+
 get_group_list()
 {
-	grp=$1
+	local grp=$1
+	local grpl=""
 
 	for d in $SRC_GROUPS $FSTYP; do
 		if ! test -d "$SRC_DIR/$d" ; then
 			continue
 		fi
-		l=$(sed -n < $SRC_DIR/$d/group \
-			-e 's/#.*//' \
-			-e 's/$/ /' \
-			-e "s;^\($VALID_TEST_NAME\).* $grp .*;$SRC_DIR/$d/\1;p")
-		grpl="$grpl $l"
+		grpl="$grpl $(get_sub_group_list $d $grp)"
 	done
 	echo $grpl
 }
