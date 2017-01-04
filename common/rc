@@ -1696,6 +1696,51 @@ _run_aiodio()
     return $status
 }
 
+# this test requires y2038 sysfs switch and filesystem
+# timestamp ranges support.
+_require_y2038()
+{
+	local device=${1:-$TEST_DEV}
+	local sysfsdir=/proc/sys/fs/fs-timestamp-check-on
+
+	if [ ! -e $sysfsdir ]; then
+		_notrun "no kernel support for y2038 sysfs switch"
+	fi
+
+	local tsmin tsmax
+	read tsmin tsmax <<<$(_filesystem_timestamp_range $device)
+	if [ $tsmin -eq -1 -a $tsmax -eq -1 ]; then
+		_notrun "filesystem $FSTYP timestamp bounds are unknown"
+	fi
+}
+
+_filesystem_timestamp_range()
+{
+	device=${1:-$TEST_DEV}
+	case $FSTYP in
+	ext4)
+		if [ $(dumpe2fs -h $device 2>/dev/null | grep "Inode size:" | cut -d: -f2) -gt 128 ]; then
+			echo "-2147483648 15032385535"
+		else
+			echo "-2147483648 2147483647"
+		fi
+		;;
+
+	xfs)
+		echo "-2147483648 2147483647"
+		;;
+	jfs)
+		echo "0 4294967295"
+		;;
+	f2fs)
+		echo "-2147483648 2147483647"
+		;;
+	*)
+		echo "-1 -1"
+		;;
+	esac
+}
+
 # indicate whether YP/NIS is active or not
 #
 _yp_active()
@@ -1813,6 +1858,9 @@ _require_xfs_io_command()
 		testio=`$XFS_IO_PROG -F -f -C "open $testfile" $testfile 2>&1`
 		echo $testio | egrep -q "invalid option" && \
 			_notrun "xfs_io $command support is missing"
+		;;
+	"utimes" )
+		testio=`$XFS_IO_PROG -f -c "utimes" 0 0 0 0 $testfile 2>&1`
 		;;
 	*)
 		testio=`$XFS_IO_PROG -c "$command help" 2>&1`

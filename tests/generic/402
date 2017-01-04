@@ -1,0 +1,188 @@
+#! /bin/bash
+# FS QA Test 402
+#
+# Tests to verify policy for filesystem timestamps for
+# supported ranges:
+# 1. Verify filesystem rw mount according to sysctl
+# timestamp_supported.
+# 2. Verify timestamp clamping for timestamps beyond max
+# timestamp supported.
+#
+# Exit status 1: either or both tests above fail.
+# Exit status 0: both the above tests pass.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Deepa Dinamani.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "exit \$status" 0 1 2 3 15
+
+# Get standard environment, filters and checks.
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Prerequisites for the test run.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command utimes
+
+# Compare file timestamps obtained from stat
+# with a given timestamp.
+check_stat()
+{
+	file=$1
+	timestamp=$2
+
+	stat_timestamp=`stat -c"%X;%Y" $file`
+
+	prev_timestamp="$timestamp;$timestamp"
+	if [ $prev_timestamp != $stat_timestamp ]; then
+		echo "$prev_timestamp != $stat_timestamp" | tee -a $seqres.full
+	fi
+}
+
+run_test_individual()
+{
+	file=$1
+	timestamp=$2
+	update_time=$3
+
+	# check if the time needs update
+	if [ $update_time -eq 1 ]; then
+		echo "Updating file: $file to timestamp `date -d @$timestamp`"  >> $seqres.full
+		$XFS_IO_PROG -f -c "utimes $timestamp 0 $timestamp 0" $file
+		if [ $? -ne 0 ]; then
+			echo "Failed to update times on $file" | tee -a $seqres.full
+		fi
+	fi
+
+	tsclamp=$(($timestamp>$tsmax?$tsmax:$timestamp))
+	echo "Checking file: $file Updated timestamp is `date -d @$tsclamp`"  >> $seqres.full
+	check_stat $file $tsclamp
+}
+
+run_test()
+{
+	update_time=$1
+
+	n=1
+
+	for TIME in "${TIMESTAMPS[@]}"; do
+		run_test_individual ${SCRATCH_MNT}/test_$n $TIME $update_time
+		((n++))
+	done
+}
+
+_scratch_mkfs &>> $seqres.full 2>&1 || _fail "mkfs failed"
+_require_y2038 $SCRATCH_DEV
+
+read tsmin tsmax <<<$(_filesystem_timestamp_range $SCRATCH_DEV)
+echo min supported timestamp $tsmin $(date --date=@$tsmin) >> $seqres.full
+echo max supported timestamp $tsmax $(date --date=@$tsmax) >> $seqres.full
+
+# Test timestamps array
+
+declare -a TIMESTAMPS=(
+	$tsmin
+	0
+	$tsmax
+	$((tsmax+1))
+	4294967295
+	8589934591
+	34359738367
+)
+
+# Max timestamp is hardcoded to Mon Jan 18 19:14:07 PST 2038
+sys_tsmax=2147483647
+echo "max timestamp that needs to be supported by fs for rw mount is" \
+	"$((sys_tsmax+1)) $(date --date=@$((sys_tsmax+1)))" >> $seqres.full
+
+read ts_check <<<$(cat /proc/sys/fs/fs-timestamp-check-on)
+
+_scratch_mount
+result=$?
+
+if [ $ts_check -ne 0 ]; then
+	echo "sysctl filesystem timestamp check is on" >> $seqres.full
+	# check for mount failure if the minimum requirement for max timestamp
+	# supported is not met.
+	if [ $sys_tsmax -ge $tsmax ]; then
+		if [ $result -eq 0 ]; then
+			echo "mount test failed"  | tee -a $seqres.full
+			exit
+		fi
+	else
+		if [ $result -ne 0 ]; then
+			echo "failed to mount $SCRATCH_DEV"  | tee -a $seqres.full
+			exit
+		fi
+	fi
+else
+	# if sysctl switch is off then mount should succeed always.
+	echo "sysctl filesystem timestamp check is off" >> $seqres.full
+	if [ $result -ne 0 ]; then
+		echo "failed to mount $SCRATCH_DEV and timestamp check is off"  >> $seqres.full
+		exit
+	fi
+fi
+
+# Begin test case 1
+echo "In memory timestamps update test start" >> $seqres.full
+
+# update time on the file
+update_time=1
+
+run_test $update_time
+
+echo "In memory timestamps update complete" >> $seqres.full
+
+echo "Unmounting and mounting scratch $SCRATCH_MNT" >> $seqres.full
+
+# unmount and remount $SCRATCH_DEV
+_scratch_cycle_mount
+
+# Begin test case 2
+
+n=1
+
+# Do not update time on the file this time, just read from disk
+update_time=0
+
+echo "On disk timestamps update test start" >> $seqres.full
+
+# Re-run test
+run_test $update_time
+
+echo "On disk timestamps update test complete" >> $seqres.full
+
+echo "y2038 inode timestamp tests completed successfully"
+
+# success, all done
+status=0
+exit
