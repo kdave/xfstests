@@ -973,7 +973,7 @@ _scratch_mkfs_blocksized()
 	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
 	;;
     ocfs2)
-	yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
+	yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize -C $blocksize $SCRATCH_DEV
 	;;
     *)
 	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_blocksized"
@@ -3125,13 +3125,30 @@ _sysfs_dev()
 	echo /sys/dev/block/$_maj:$_min
 }
 
+# Get the minimum block size of a file.  Usually this is the
+# minimum fs block size, but some filesystems (ocfs2) do block
+# mappings in larger units.
+_get_file_block_size()
+{
+	if [ -z $1 ] || [ ! -d $1 ]; then
+		echo "Missing mount point argument for _get_file_block_size"
+		exit 1
+	fi
+	if [ "$FSTYP" = "ocfs2" ]; then
+		stat -c '%o' $1
+	else
+		_get_block_size $1
+	fi
+}
+
+# Get the minimum block size of an fs.
 _get_block_size()
 {
 	if [ -z $1 ] || [ ! -d $1 ]; then
 		echo "Missing mount point argument for _get_block_size"
 		exit 1
 	fi
-	echo `stat -f -c %S $1`
+	stat -f -c %S $1
 }
 
 get_page_size()
