@@ -80,7 +80,10 @@ md5sum $testdir/file2 | _filter_scratch
 echo "CoW and unmount"
 sync
 _dmerror_load_error_table
-$XFS_IO_PROG -f -c "pwrite -S 0x63 -b $bufsize 0 $filesize" -c "fdatasync" $testdir/file2 >> $seqres.full
+urk=$($XFS_IO_PROG -f -c "pwrite -S 0x63 -b $bufsize 0 $filesize" \
+	-c "fdatasync" $testdir/file2 2>&1)
+echo $urk >> $seqres.full
+echo "$urk" | grep -q "error" || _fail "pwrite did not fail"
 
 echo "Clean up the mess"
 _dmerror_unmount
