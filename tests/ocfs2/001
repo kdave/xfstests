@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 001
+#
+# Ensure that reflink works correctly with inline-data files.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs ocfs2
+_require_scratch_reflink
+_require_cp_reflink
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs --fs-features=local,unwritten,refcount,inline-data > $seqres.full 2>&1
+tunefs.ocfs2 --query '%H' $SCRATCH_DEV | grep -q 'inline-data' || \
+	_notrun "Inline data is not supported."
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+sz=65536
+echo "Create the original files"
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $sz 0 $sz" $testdir/file1 >> $seqres.full
+echo x > $testdir/file2
+echo x > $testdir/file3
+echo y > $testdir/file4
+$XFS_IO_PROG -f -c "pwrite -S 0x61 -b $sz 0 $sz" $testdir/file5 >> $seqres.full
+echo a > $testdir/file6
+_scratch_cycle_mount
+
+echo "reflink into the start of file2"
+_cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
+
+echo "reflink past the stuff in file3"
+_reflink_range $testdir/file1 0 $testdir/file3 $sz $sz >> $seqres.full
+
+echo "reflink an inline-data file to a regular one"
+_cp_reflink $testdir/file4 $testdir/file5 >> $seqres.full
+
+echo "reflink an inline-data file to another inline-data file"
+_cp_reflink $testdir/file4 $testdir/file6 >> $seqres.full
+
+echo "Verify the whole mess"
+_scratch_cycle_mount
+md5sum $testdir/file* | _filter_scratch
+
+# success, all done
+status=0
+exit
