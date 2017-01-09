@@ -1,0 +1,77 @@
+#! /bin/bash
+# FSQA Test No. 401
+#
+# Since loff_t is a signed type, it is invalid for a filesystem to load
+# an inode with i_size = -1ULL.  Unfortunately, nobody checks this,
+# which means that we can trivially DoS the VFS by creating such a file
+# and appending to it.  This causes an integer overflow in the routines
+# underlying writeback, which results in the kernel locking up.
+#
+# So, create this malformed inode and try a dio append to make sure we
+# catch this situation.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+PIDS=""
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs ext2 ext3 ext4
+_require_scratch_nocheck
+_disable_dmesg_check
+_require_command "$DEBUGFS_PROG"
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs  >> $seqres.full 2>&1
+_scratch_mount
+
+testdir=$SCRATCH_MNT
+echo m > $testdir/a
+
+echo "Corrupt filesystem"
+_scratch_unmount
+# Set the file size to the highest multiple of 512 below
+# -1 so that we can perform a dio write.
+$DEBUGFS_PROG -w -R "sif /a size 0xFFFFFFFFFFFFFE00" $SCRATCH_DEV >> $seqres.full 2>&1
+
+echo "Remount, try to append"
+_scratch_mount
+dd if=/dev/zero of=$testdir/a bs=512 count=1 oflag=direct,append conv=notrunc >> $seqres.full 2>&1 || echo "Write did not succeed (ok)."
+sync
+
+# success, all done
+status=0
+exit
