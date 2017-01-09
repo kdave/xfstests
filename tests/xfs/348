@@ -49,6 +49,10 @@ _supported_fs xfs
 _supported_os Linux
 _require_scratch
 
+# This test will corrupt fs intentionally, so there will be WARNINGs
+# in dmesg as expected
+_disable_dmesg_check
+
 rm -f $seqres.full
 
 _scratch_mkfs >>$seqres.full 2>&1
@@ -120,6 +124,18 @@ for dt in $dtypes; do
 		_scratch_xfs_repair -n 2>&1 | grep -q -v "^would fix ftype mismatch" || \
 			echo "xfs_repair should not fix ftype mismatch"
 	fi
+
+	_scratch_mount
+	for file in DIR DATA EMPTY SYMLINK CHRDEV BLKDEV FIFO; do
+		rm -f $tmp.stat.err
+		ftype=$(stat --printf=%F $testdir/$file 2>$tmp.stat.err)
+		if [ -s $tmp.stat.err ]; then
+			cat $tmp.stat.err
+		else
+			echo "stat: '$testdir/$file' is a $ftype"
+		fi | _filter_scratch
+	done
+	_scratch_unmount
 done
 
 # Repair should detect and junk all test files
