@@ -48,10 +48,8 @@ _require_cp_reflink
 _require_fiemap
 _require_quota
 _require_nobody
+_require_user
 
-_repquota() {
-	repquota $SCRATCH_MNT | egrep '^(fsgqa|root|nobody)'
-}
 rm -f $seqres.full
 
 echo "Format and mount"
@@ -67,20 +65,21 @@ mkdir $testdir
 sz=1048576
 echo "Create the original files"
 $XFS_IO_PROG -f -c "pwrite -S 0x61 -b $sz 0 $sz" $testdir/file1 >> $seqres.full
-chown fsgqa $testdir/file1
+chown $qa_user $testdir/file1
 _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 _scratch_cycle_mount
+quotaon $SCRATCH_MNT 2> /dev/null
 
 echo "Set hard quota to prevent third reflink"
-setquota -u fsgqa 0 1024 0 0 $SCRATCH_MNT
-_repquota
+setquota -u $qa_user 0 1024 0 0 $SCRATCH_MNT
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Try to reflink again"
 touch $testdir/file3
-chown fsgqa $testdir/file3
-_cp_reflink $testdir/file1 $testdir/file3 2>&1 | _filter_scratch
-_repquota
+chown $qa_user $testdir/file3
+su $qa_user -c "cp --reflink=always -f $testdir/file1 $testdir/file3" 2>&1 | _filter_scratch
+_report_quota_blocks $SCRATCH_MNT
 
 # success, all done
 status=0

@@ -53,10 +53,8 @@ _require_quota
 _require_nobody
 _require_xfs_io_command "cowextsize"
 _require_odirect
+_require_user
 
-_repquota() {
-	repquota $SCRATCH_MNT | egrep '^(fsgqa|root|nobody)'
-}
 rm -f $seqres.full
 
 echo "Format and mount"
@@ -79,27 +77,27 @@ _cp_reflink $testdir/file1 $testdir/file3 >> $seqres.full
 touch $testdir/urk
 chown nobody $testdir/urk
 touch $testdir/erk
-chown fsgqa $testdir/erk
-_repquota
+chown $qa_user $testdir/erk
+_report_quota_blocks $SCRATCH_MNT
 _scratch_cycle_mount
 
 echo "Change file ownership"
-chown fsgqa $testdir/file1
-chown fsgqa $testdir/file2
-chown fsgqa $testdir/file3
-_repquota
+chown $qa_user $testdir/file1
+chown $qa_user $testdir/file2
+chown $qa_user $testdir/file3
+_report_quota_blocks $SCRATCH_MNT
 
 echo "CoW one of the files"
 $XFS_IO_PROG -d -f -c "pwrite -S 0x63 -b $blksz $((sz - blksz)) $blksz" -c "fsync" $testdir/file2 >> $seqres.full
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Remount the FS to see if accounting changes"
 _scratch_cycle_mount
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Chown one of the files"
 chown nobody $testdir/file3
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 # success, all done
 status=0

@@ -49,10 +49,8 @@ _require_fiemap
 _require_quota
 _require_nobody
 _require_odirect
+_require_user
 
-_repquota() {
-	repquota $SCRATCH_MNT | egrep '^(fsgqa|root|nobody)'
-}
 rm -f $seqres.full
 
 echo "Format and mount"
@@ -68,39 +66,40 @@ mkdir $testdir
 sz=1048576
 echo "Create the original files"
 $XFS_IO_PROG -f -c "pwrite -S 0x61 -b $sz 0 $sz" $testdir/file1 >> $seqres.full
-chown fsgqa $testdir/file1
+chown $qa_user $testdir/file1
 _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
 _cp_reflink $testdir/file1 $testdir/file3 >> $seqres.full
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 _scratch_cycle_mount
+quotaon $SCRATCH_MNT 2> /dev/null
 
 echo "Set hard quota to prevent rewrite"
-setquota -u fsgqa 0 1024 0 0 $SCRATCH_MNT
-_repquota
+setquota -u $qa_user 0 1024 0 0 $SCRATCH_MNT
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Try to dio write the whole file"
-_pwrite_byte 0x62 0 $sz $testdir/file1 -d 2>&1 >> $seqres.full | \
+su $qa_user -c '$XFS_IO_PROG -d -c "pwrite 0 '$((sz+65536))'" '$testdir'/file1' 2>&1 >> $seqres.full | \
 	_filter_xfs_io_error
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Try to write the whole file"
-_pwrite_byte 0x62 0 $sz $testdir/file1 2>&1 >> $seqres.full | \
+su $qa_user -c '$XFS_IO_PROG -c "pwrite 0 '$((sz+65536))'" '$testdir'/file1' 2>&1 >> $seqres.full | \
 	_filter_xfs_io_error
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Set hard quota to allow rewrite"
-setquota -u fsgqa 0 8192 0 0 $SCRATCH_MNT
-_repquota
+setquota -u $qa_user 0 8192 0 0 $SCRATCH_MNT
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Try to dio write the whole file"
 _pwrite_byte 0x62 0 $sz $testdir/file1 -d >> $seqres.full
 sync
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 echo "Try to write the whole file"
 _pwrite_byte 0x62 0 $sz $testdir/file3 >> $seqres.full
 sync
-_repquota
+_report_quota_blocks $SCRATCH_MNT
 
 # success, all done
 status=0
