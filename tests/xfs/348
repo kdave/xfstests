@@ -133,6 +133,15 @@ for dt in $dtypes; do
 			cat $tmp.stat.err
 		else
 			echo "stat: '$testdir/$file' is a $ftype"
+			# Verify that readlink of a file posing as a symlink
+			# and ls of a file posing as a directory does not blow up.
+			# NOTE that ls DOES ASSERT with kernel 4.9 and XFS_DEBUG=y
+			# on malformed directory
+			if [ -d $testdir/$file ]; then
+				ls $testdir/$file &> /dev/null
+			elif [ -h $testdir/$file ]; then
+				readlink $testdir/$file &> /dev/null
+			fi
 		fi | _filter_scratch
 	done
 	_scratch_unmount
