@@ -1,0 +1,146 @@
+#! /bin/bash
+# FS QA Test 404
+#
+# Regression test which targets two nasty ext4 bugs in a logic which
+# shifts extents:
+#
+# 1) 14d981f468a1 ("ext4: Include forgotten start block on fallocate insert range")
+#
+# An incorrect right shift (insert range) for the first extent in
+# a range.
+#
+# Test tries to insert many blocks at the same offset to reproduce
+# the following layout:
+#
+#    block #0  block #1
+#    |ext0 ext1|ext2 ext3 ...|
+#         ^
+#      insert of a new block
+#
+# Because of an incorrect range first block is never reached,
+# thus ext1 is untouched, resulting to a hole at a wrong offset:
+#
+# What we got:
+#
+#    block #0   block #1
+#    |ext0 ext1|   ext2 ext3 ...|
+#               ^
+#               hole at a wrong offset
+#
+# What we expect:
+#
+#    block #0    block #1
+#    |ext0   ext1|ext2 ext3 ...|
+#         ^
+#         hole at a correct offset
+#
+# 2) 2b3864b32403 ("ext4: do not polute the extents cache while shifting extents")
+#
+# Extents status tree is filled in with outdated offsets while doing
+# extents shift, that leads to wrong data blocks.  That is why test
+# writes unique block content and checks md5sum of a result file after
+# each block insert.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Roman Penyaev.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+testfile=$TEST_DIR/$seq.file
+pattern=$tmp.pattern
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_xfs_io_command "finsert"
+
+blksize=`_get_block_size $TEST_DIR`
+
+# Generate a block with a repeating number represented as 4 bytes decimal.
+# The test generates unique pattern for each block in order to observe a
+# wrong order if any.
+function generate_pattern() {
+	blkind=$1
+	printf "%04d" $blkind | awk  '{ while (c++ < '$(($blksize/4))') \
+		printf "%s", $0 }' > $pattern
+}
+
+$XFS_IO_PROG -f -c "falloc 0 $(($blksize * 2))" $testfile \
+			 >> $seqres.full 2>&1
+
+# First block, has 0001 as a pattern
+generate_pattern 1
+$XFS_IO_PROG -c "pwrite -i $pattern        0 $blksize" $testfile \
+			 >> $seqres.full 2>&1
+
+# Second block, has 0002 as a pattern
+generate_pattern 2
+$XFS_IO_PROG -c "pwrite -i $pattern $blksize $blksize" $testfile \
+			 >> $seqres.full 2>&1
+
+# Insert 498 blocks after the first block.  We use this quite big
+# number to increase the reproduction probability.
+for (( block=3; block<=500; block++ )); do
+	$XFS_IO_PROG -c "finsert $blksize $blksize" $testfile \
+				 >> $seqres.full 2>&1
+
+	generate_pattern $block
+	$XFS_IO_PROG -c "pwrite -i $pattern $blksize $blksize" $testfile \
+				 >> $seqres.full 2>&1
+
+	# Avoid offsets in hexdump output, because block size can vary.
+	# Here we check md5 after each insert to be sure that zero blocks
+	# do not appear, targets this commit:
+	#   14d981f468a1 ("ext4: Include forgotten start block on fallocate insert range")
+	# or blocks are in correct order, this commit:
+	#   2b3864b32403 ("ext4: do not polute the extents cache while shifting extents")
+	#
+	md5=`hexdump -e '16/1 "%_p" "\n"' $testfile | md5sum`
+	printf "#%d %s\n" "$block" "$md5"
+done
+
+# Eventually output file has 500 blocks in the following order:
+#   0001 0500 0499 0498 ... 0002
+
+# success, all done
+status=0
+exit
