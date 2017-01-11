@@ -560,7 +560,7 @@ _scratch_do_mkfs()
 	shift 2
 	local extra_mkfs_options=$*
 	local mkfs_status
-	local tmp=`mktemp`
+	local tmp=`mktemp -u`
 
 	# save mkfs output in case conflict means we need to run again.
 	# only the output for the mkfs that applies should be shown
@@ -588,7 +588,7 @@ _scratch_do_mkfs()
 	cat $tmp.mkfsstd
 	eval "cat $tmp.mkfserr | $mkfs_filter" >&2
 
-	rm -f $tmp*
+	rm -f $tmp.mkfserr $tmp.mkfsstd
 	return $mkfs_status
 }
 
@@ -669,7 +669,7 @@ _scratch_mkfs_ext4()
 {
 	local mkfs_cmd="$MKFS_EXT4_PROG -F"
 	local mkfs_filter="grep -v -e ^Warning: -e \"^mke2fs \""
-	local tmp=`mktemp`
+	local tmp=`mktemp -u`
 	local mkfs_status
 
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
@@ -694,6 +694,7 @@ _scratch_mkfs_ext4()
 	# output mkfs stdout and stderr
 	cat $tmp.mkfsstd
 	cat $tmp.mkfserr >&2
+	rm -f $tmp.mkfserr $tmp.mkfsstd
 
 	return $mkfs_status
 }
@@ -736,6 +737,7 @@ _test_mkfs()
 
 _mkfs_dev()
 {
+    local tmp=`mktemp -u`
     case $FSTYP in
     nfs*)
 	# do nothing for nfs
@@ -747,30 +749,30 @@ _mkfs_dev()
 	# do nothing for pvfs2
 	;;
     udf)
-        $MKFS_UDF_PROG $MKFS_OPTIONS $* 2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+        $MKFS_UDF_PROG $MKFS_OPTIONS $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
 	;;
     btrfs)
-        $MKFS_BTRFS_PROG $MKFS_OPTIONS $* 2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+        $MKFS_BTRFS_PROG $MKFS_OPTIONS $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
 	;;
     ext2|ext3|ext4)
 	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $* \
-		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+		2>$tmp.mkfserr 1>$tmp.mkfsstd
 	;;
 
     *)
 	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* \
-		2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
+		2>$tmp.mkfserr 1>$tmp.mkfsstd
 	;;
     esac
 
     if [ $? -ne 0 ]; then
 	# output stored mkfs output
-	cat $tmp_dir.mkfserr >&2
-	cat $tmp_dir.mkfsstd
+	cat $tmp.mkfserr >&2
+	cat $tmp.mkfsstd
 	status=1
 	exit 1
     fi
-    rm -f $tmp_dir.mkfserr $tmp_dir.mkfsstd
+    rm -f $tmp.mkfserr $tmp.mkfsstd
 }
 
 # remove all files in $SCRATCH_MNT, useful when testing on NFS/CIFS
@@ -1431,6 +1433,7 @@ _do()
     (eval "echo '---' \"$_cmd\"") >>$seqres.full
     (eval "$_cmd") >$tmp._out 2>&1; ret=$?
     cat $tmp._out | _fix_malloc >>$seqres.full
+    rm -f $tmp._out
     if [ $# -eq 2 ]; then
 	if [ $ret -eq 0 ]; then
 	    echo "done"
@@ -3565,8 +3568,10 @@ run_fsx()
 	"$@" 2>&1 | tee -a $seqres.full >$tmp.fsx
 	if [ ${PIPESTATUS[0]} -ne 0 ]; then
 		cat $tmp.fsx
+		rm -f $tmp.fsx
 		exit 1
 	fi
+	rm -f $tmp.fsx
 }
 
 # Test for the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
