@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Compare test failures across runs
+#
+# Takes multiple "results" files as arguments, comprised of the
+# stdout from a ./check run, each containing a Failures: line.
+#
+# Outputs a table of failures for comparison across runs
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+filter_names() {
+	sed -e s/btrfs/b/ \
+	    -e s/cifs/c/g \
+	    -e s/f2fs/f/g \
+	    -e s/generic/g/g \
+	    -e s/overlay/o/g \
+	    -e s/shared/s/g \
+	    -e s/udf/u/g \
+	    -e s/xfs/x/g
+}
+
+# ALLFAILURES:   A B C D E F G
+# THESEFAILURES: A   C D     G
+
+# We want to print the header (ALLFAILURES) and then
+# if a run didn't fail a particular test, print spaces instead
+
+# All tests that failed in any run, all on one line, unique
+ALLFAILURES=`grep -h ^Failures: $* \
+		| tr " " "\n" \
+		| sort | uniq \
+		| filter_names \
+		| tr "\n" " " \
+		| sed -e "s/^Failures: //g"`
+
+# Header
+echo "Failures:"
+echo $ALLFAILURES
+echo $ALLFAILURES | sed -e "s/./-/g"
+
+# Per-file failures
+for FILE in $*; do
+	THESEFAILURES=`grep ^Failures: $FILE | filter_names`
+	for FAILURE in $ALLFAILURES; do
+		CELL=`echo $THESEFAILURES \
+		      | grep -wo "$FAILURE" || echo $FAILURE | sed -e "s/./ /g"`
+		echo -n "$CELL "
+	done
+	echo $FILE
+done
