@@ -268,14 +268,14 @@ _supports_filetype()
 {
 	local dir=$1
 
-	local fstyp=$(df --output=fstype $dir | tail -1)
+	local fstyp=`$DF_PROG $dir | tail -1 | $AWK_PROG '{print $2}'`
 	case "$fstyp" in
 	xfs)
 		xfs_info $dir | grep -q "ftype=1"
 		;;
 	ext2|ext3|ext4)
-		tune2fs -l $(df --output=source $dir | tail -1) | \
-		   grep -q filetype
+		local dev=`$DF_PROG $dir | tail -1 | $AWK_PROG '{print $1}'`
+		tune2fs -l $dev | grep -q filetype
 		;;
 	*)
 		local testfile=$dir/$$.ftype
