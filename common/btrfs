@@ -48,6 +48,17 @@ _require_btrfs_qgroup_report()
 	touch ${RESULT_DIR}/require_scratch.require_qgroup_report
 }
 
+_require_btrfs_dump_super()
+{
+	if [ ! -x "$BTRFS_SHOW_SUPER_PROG" ]; then
+		_require_command "$BTRFS_UTIL_PROG" btrfs
+		if ! $BTRFS_UTIL_PROG inspect-internal dump-super --help >& /dev/null; then
+			_notrun "Missing btrfs-show-super or inspect-internal dump-super"
+		fi
+		BTRFS_SHOW_SUPER_PROG="$BTRFS_UTIL_PROG inspect-internal dump-super"
+	fi
+}
+
 _run_btrfs_util_prog()
 {
 	run_check $BTRFS_UTIL_PROG $*
