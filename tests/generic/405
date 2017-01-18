@@ -1,0 +1,73 @@
+#! /bin/bash
+# FS QA Test 405
+#
+# Test mkfs against thin provision device, which has very small backing size,
+# mkfs should return error when it hits EIO.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# Initialize dmthin device with very small backing size & very big virtual
+# size, with the hope that mkfs hit EIO at mkfs time
+BACKING_SIZE=$((1 * 1024 * 1024 / 512))			# 1M
+VIRTUAL_SIZE=$((1 * 1024 * 1024 * 1024 * 1024 / 512))	# 1T
+
+_cleanup()
+{
+	_dmthin_cleanup
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmthin
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+# $SCRATCH_DEV won't be directly created filesystem on, so fsck isn't required
+_require_scratch_nocheck
+_require_dm_target thin-pool
+
+_dmthin_init $BACKING_SIZE $VIRTUAL_SIZE
+
+# try mkfs on dmthin device, expect mkfs failure if 1M isn't big enough to hold
+# all the metadata. But if mkfs returns success, we expect the filesystem is
+# consistent, make sure it doesn't currupt silently.
+$MKFS_PROG -t $FSTYP $DMTHIN_VOL_DEV >>$seqres.full 2>&1
+if [ $? -eq 0 ]; then
+	_dmthin_check_fs
+fi
+
+echo "Silence is golden"
+status=0
+exit
