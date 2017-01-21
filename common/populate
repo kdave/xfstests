@@ -606,41 +606,6 @@ _scratch_populate() {
 	esac
 }
 
-# Modify various files after a fuzzing operation
-_scratch_fuzz_modify() {
-	nr="$1"
-
-	test -z "${nr}" && nr=50000
-	echo "+++ touch ${nr} files"
-	blk_sz=$(stat -f -c '%s' ${SCRATCH_MNT})
-	$XFS_IO_PROG -f -c "pwrite -S 0x63 0 ${blk_sz}" "/tmp/afile" > /dev/null
-	date="$(date)"
-	find "${SCRATCH_MNT}/" -type f 2> /dev/null | head -n "${nr}" | while read f; do
-		setfattr -n "user.date" -v "${date}" "$f"
-		cat "/tmp/afile" >> "$f"
-		mv "$f" "$f.longer"
-	done
-	sync
-	rm -rf "/tmp/afile"
-
-	echo "+++ create files"
-	mkdir -p "${SCRATCH_MNT}/test.moo"
-	$XFS_IO_PROG -f -c 'pwrite -S 0x80 0 65536' "${SCRATCH_MNT}/test.moo/urk"
-	sync
-
-	echo "+++ remove files"
-	rm -rf "${SCRATCH_MNT}/test.moo"
-}
-
-# Try to access files after fuzzing
-_scratch_fuzz_test() {
-	echo "+++ ls -laR" >> $seqres.full
-	ls -laR "${SCRATCH_MNT}/test.1/" >/dev/null 2>&1
-
-	echo "+++ cat files" >> $seqres.full
-	(find "${SCRATCH_MNT}/test.1/" -type f -size -1048576k -print0 | xargs -0 cat) >/dev/null 2>&1
-}
-
 # Fill a file system by repeatedly creating files in the given folder
 # starting with the given file size.  Files are reduced in size when
 # they can no longer fit until no more files can be created.
