@@ -673,3 +673,47 @@ _fill_fs()
 		file_count=$((file_count + 1))
 	done
 }
+
+# Populate a scratch FS from scratch or from a cached image.
+_scratch_populate_cached() {
+	POPULATE_METADUMP="${TEST_DIR}/__populate.${FSTYP}"
+	POPULATE_METADUMP_DESCR="${TEST_DIR}/__populate.${FSTYP}.txt"
+
+	# Don't keep metadata images cached for more 48 hours...
+	rm -rf "$(find "${POPULATE_METADUMP}" -mtime +2 2>/dev/null)"
+
+	# Throw away cached image if it doesn't match our spec.
+	meta_descr="FSTYP ${FSTYP} MKFS_OPTIONS ${MKFS_OPTIONS} SIZE $(blockdev --getsz "${SCRATCH_DEV}") ARGS $@"
+	cmp -s "${POPULATE_METADUMP_DESCR}" <(echo "${meta_descr}") || rm -rf "${POPULATE_METADUMP}"
+
+	# Do we have a cached image?
+	if [ -r "${POPULATE_METADUMP}" ]; then
+		case "${FSTYP}" in
+		"xfs")
+			xfs_mdrestore "${POPULATE_METADUMP}" "${SCRATCH_DEV}" && return
+			;;
+		"ext2"|"ext3"|"ext4")
+			e2image -r "${POPULATE_METADUMP}" "${SCRATCH_DEV}" && return
+			;;
+		esac
+	fi
+
+	# Oh well, just create one from scratch
+	_scratch_mkfs
+	echo "${meta_descr}" > "${POPULATE_METADUMP_DESCR}"
+	case "${FSTYP}" in
+	"xfs")
+		_scratch_xfs_populate $@
+		_scratch_xfs_populate_check
+		_scratch_metadump "${POPULATE_METADUMP}" -a -o
+		;;
+	"ext2"|"ext3"|"ext4")
+		_scratch_ext4_populate $@
+		_scratch_ext4_populate_check
+		e2image -Q "${SCRATCH_DEV}" "${POPULATE_METADUMP}"
+		;;
+	*)
+		_fail "Don't know how to populate a ${FSTYP} filesystem."
+		;;
+	esac
+}
