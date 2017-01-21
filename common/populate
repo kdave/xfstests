@@ -166,6 +166,9 @@ _scratch_xfs_populate() {
 	mknod "${SCRATCH_MNT}/S_IFCHR" c 1 1
 	mknod "${SCRATCH_MNT}/S_IFBLK" c 1 1
 
+	# special file with an xattr
+	setfacl -P -m u:nobody:r ${SCRATCH_MNT}/S_IFCHR
+
 	# Attribute formats
 	# LOCAL
 	echo "+ local attr"
@@ -182,6 +185,18 @@ _scratch_xfs_populate() {
 	# BTREE
 	echo "+ btree attr"
 	__populate_create_attr "${SCRATCH_MNT}/ATTR.FMT_BTREE" "$((64 * blksz / 40))" true
+
+	# trusted namespace
+	touch ${SCRATCH_MNT}/ATTR.TRUSTED
+	setfattr -n trusted.moo -v urk ${SCRATCH_MNT}/ATTR.TRUSTED
+
+	# security namespace
+	touch ${SCRATCH_MNT}/ATTR.SECURITY
+	setfattr -n security.foo -v bar ${SCRATCH_MNT}/ATTR.SECURITY
+
+	# system namespace
+	touch ${SCRATCH_MNT}/ATTR.SYSTEM
+	setfacl -m u:root:r ${SCRATCH_MNT}/ATTR.SYSTEM
 
 	# FMT_EXTENTS with a remote less-than-a-block value
 	echo "+ attr extents with a remote less-than-a-block value"
@@ -305,6 +320,9 @@ _scratch_ext4_populate() {
 	mknod "${SCRATCH_MNT}/S_IFCHR" c 1 1
 	mknod "${SCRATCH_MNT}/S_IFBLK" c 1 1
 
+	# special file with an xattr
+	setfacl -P -m u:nobody:r ${SCRATCH_MNT}/S_IFCHR
+
 	# Attribute formats
 	# LOCAL
 	echo "+ local attr"
@@ -313,6 +331,18 @@ _scratch_ext4_populate() {
 	# BLOCK
 	echo "+ block attr"
 	__populate_create_attr "${SCRATCH_MNT}/ATTR.FMT_BLOCK" "$((blksz / 40))"
+
+	# trusted namespace
+	touch ${SCRATCH_MNT}/ATTR.TRUSTED
+	setfattr -n trusted.moo -v urk ${SCRATCH_MNT}/ATTR.TRUSTED
+
+	# security namespace
+	touch ${SCRATCH_MNT}/ATTR.SECURITY
+	setfattr -n security.foo -v bar ${SCRATCH_MNT}/ATTR.SECURITY
+
+	# system namespace
+	touch ${SCRATCH_MNT}/ATTR.SYSTEM
+	setfacl -m u:root:r ${SCRATCH_MNT}/ATTR.SYSTEM
 
 	# Make an unused inode
 	echo "+ empty file"
