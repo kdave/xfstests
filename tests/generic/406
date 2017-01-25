@@ -1,0 +1,74 @@
+#! /bin/bash
+# FS QA Test generic/406
+#
+# If a larger dio write (size >= 128M) got splitted, the assertion in endio
+# would complain (CONFIG_BTRFS_ASSERT is required).
+#
+# Regression test for
+#   Btrfs: adjust outstanding_extents counter properly when dio write is split
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Liu Bo.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_odirect
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# 2G / 1K
+blocksize=$(( (128 + 1) * 2 * 1024 * 1024))
+fsblock=$(( (128 + 1) * 2 * 1024))
+_require_fs_space $SCRATCH_MNT $fsblock
+
+echo "Silence is golden"
+
+$XFS_IO_PROG -f -d -c "pwrite -b ${blocksize} 0 ${blocksize}" $SCRATCH_MNT/testfile.$seq >> $seqres.full 2>&1
+
+_scratch_unmount
+
+# success, all done
+status=0
+exit
