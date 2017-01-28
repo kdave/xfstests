@@ -71,6 +71,10 @@ function option_string()
 	echo $OPT
 }
 
+filter_quota_state() {
+	sed -e 's/Inode: #[0-9]\+/Inode #XXX/g' | _filter_scratch
+}
+
 function test_all_state()
 {
 	for I in `seq 0 7`; do
@@ -79,7 +83,7 @@ function test_all_state()
 		# Some combinations won't mount on V4 supers (grp + prj)
 		_qmount_option "$OPTIONS"
 		_scratch_mount &>> $seqres.full || continue
-		$XFS_QUOTA_PROG -x -c "state" $SCRATCH_MNT | _filter_scratch
+		$XFS_QUOTA_PROG -x -c "state" $SCRATCH_MNT | filter_quota_state
 		_scratch_unmount
 	done
 }
