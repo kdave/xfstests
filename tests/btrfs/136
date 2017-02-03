@@ -1,0 +1,122 @@
+#! /bin/bash
+# FS QA Test 136
+#
+# Test btrfs-convert
+#
+# 1) create ext3 filesystem & populate it.
+# 2) upgrade ext3 filesystem to ext4.
+# 3) populate data.
+# 4) source has combination of non-extent and extent files.
+# 5) convert it to btrfs, mount and verify contents.
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Lakshmipathi.G  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_nocheck
+
+_require_command "$BTRFS_CONVERT_PROG" btrfs-convert
+_require_command "$MKFS_EXT4_PROG" mkfs.ext4
+_require_command "$E2FSCK_PROG" e2fsck
+_require_command "$TUNE2FS_PROG" tune2fs
+
+rm -f $seqres.full
+
+BLOCK_SIZE=`_get_block_size $TEST_DIR`
+EXT_MD5SUM="$tmp.ext43"
+BTRFS_MD5SUM="$tmp.btrfs"
+
+populate_data(){
+	data_path=$1
+	mkdir -p $data_path
+	args=`_scale_fsstress_args -p 20 -n 100 $FSSTRESS_AVOID -d $data_path`
+	echo "Run fsstress $args" >>$seqres.full
+	$FSSTRESS_PROG $args >/dev/null 2>&1 &
+	fsstress_pid=$!
+	wait $fsstress_pid
+}
+
+# Create & populate an ext3 filesystem
+$MKFS_EXT4_PROG -F -t ext3 -b $BLOCK_SIZE $SCRATCH_DEV > $seqres.full 2>&1 || \
+	_notrun "Could not create ext3 filesystem"
+
+# mount and populate non-extent file
+mount -t ext3 $SCRATCH_DEV $SCRATCH_MNT
+populate_data "$SCRATCH_MNT/ext3_ext4_data/ext3"
+_scratch_unmount
+
+# Upgrade it to ext4.
+$TUNE2FS_PROG -O extents,uninit_bg,dir_index $SCRATCH_DEV >> $seqres.full 2>&1
+# After Conversion, its highly recommended to run e2fsck.
+$E2FSCK_PROG -fyD $SCRATCH_DEV >> $seqres.full 2>&1
+
+# mount and populate extent file
+mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
+populate_data "$SCRATCH_MNT/ext3_ext4_data/ext4"
+
+# Compute md5 of ext3,ext4 files.
+find "$SCRATCH_MNT/ext3_ext4_data" -type f -fprint "$EXT_MD5SUM"
+sort "$EXT_MD5SUM" -o "$EXT_MD5SUM"
+_scratch_unmount
+
+# Convert non-extent & extent data to btrfs, mount it, verify the data
+$BTRFS_CONVERT_PROG $SCRATCH_DEV >> $seqres.full 2>&1 || \
+	_fail "btrfs-convert failed"
+_scratch_mount || _fail "Could not mount new btrfs fs"
+
+# Compute md5 for converted files.
+find "$SCRATCH_MNT/ext3_ext4_data" -type f -fprint "$BTRFS_MD5SUM"
+sort "$BTRFS_MD5SUM" -o "$BTRFS_MD5SUM"
+
+# Compare two md5sum files.
+btrfs_perm=`md5sum "$BTRFS_MD5SUM" | cut -f1 -d' '`
+ext_perm=`md5sum "$EXT_MD5SUM" | cut -f1 -d' '`
+
+if [ "$btrfs_perm" != "$ext_perm" ];then
+       echo "md5sum mismatch"
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
