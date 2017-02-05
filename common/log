@@ -228,6 +228,14 @@ _scratch_f2fs_logstate()
     echo $?
 }
 
+_scratch_ext4_logstate()
+{
+    $DUMPE2FS_PROG -h $SCRATCH_DEV 2> /dev/null | tee -a $seqres.full | \
+	grep "^Filesystem features" | grep -q needs_recovery
+    test $? -ne 0
+    echo $?
+}
+
 _scratch_dump_log()
 {
 	case "$FSTYP" in
@@ -236,6 +244,9 @@ _scratch_dump_log()
 		;;
 	f2fs)
 		$DUMP_F2FS_PROG $SCRATCH_DEV
+		;;
+	ext4)
+		$DUMPE2FS_PROG -h $SCRATCH_DEV
 		;;
 	*)
 		;;
@@ -251,6 +262,9 @@ _test_dump_log()
 	f2fs)
 		$DUMP_F2FS_PROG $TEST_DEV
 		;;
+	ext4)
+		$DUMPE2FS_PROG -h $TEST_DEV
+		;;
 	*)
 		;;
 	esac
@@ -264,6 +278,9 @@ _print_logstate()
         ;;
     f2fs)
         dirty=$(_scratch_f2fs_logstate)
+        ;;
+    ext4)
+        dirty=$(_scratch_ext4_logstate)
         ;;
     *)
         ;;
@@ -532,6 +549,11 @@ _require_logstate()
             _notrun "This test requires dump.f2fs utility."
         fi
         ;;
+    ext4)
+	if [ -z "$DUMPE2FS_PROG" ]; then
+		_notrun "This test requires dumpe2fs utility."
+	fi
+	;;
     *)
         _notrun "$FSTYP does not support log state probing."
         ;;
@@ -570,6 +592,22 @@ _f2fs_log_config()
     echo "  test10    active_logs=6,background_gc=on,discard,inline_data,inline_dentry"
 }
 
+_ext4_log_config()
+{
+    echo "# mkfs-opt             mount-opt"
+    echo "# ------------------------------"
+    echo "  /dev/null     data=writeback"
+    echo "  /dev/null     data=ordered"
+    echo "  /dev/null     data=journal"
+    echo "  /dev/null     data=ordered,data_err=abort"
+    echo "  /dev/null     data=writeback,nojournal_checksum"
+    echo "  /dev/null     data=ordered,nojournal_checksum"
+    echo "  /dev/null     data=journal,nojournal_checksum"
+    echo "  /dev/null     data=ordered,data_err=abort,nojournal_checksum"
+    echo "  /dev/null     data=writeback,journal_checksum"
+    echo "  /dev/null     data=ordered,journal_checksum"
+}
+
 _get_log_configs()
 {
     case "$FSTYP" in
@@ -578,6 +616,9 @@ _get_log_configs()
         ;;
     f2fs)
         _f2fs_log_config
+        ;;
+    ext4)
+        _ext4_log_config
         ;;
     *)
         _notrun "$FSTYP does not support log configs."
