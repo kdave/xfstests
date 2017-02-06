@@ -92,7 +92,7 @@ _read_modify_write()
 	do
 		FSIZE=`stat -t $i | cut -d" " -f2`
 		dd if=$i of=/dev/null obs=$FSIZE count=1 status=noxfer 2>/dev/null &
-		dd if=/dev/urandom of=$i obs=$FSIZE count=1 status=noxfer 2>/dev/null &
+		_ddt of=$i obs=$FSIZE count=1 status=noxfer 2>/dev/null &
 	done
 	wait $!
 }
@@ -114,7 +114,7 @@ _fill_blk()
 		NBLK=`stat -c "%b" $i`
 		FALLOC=$(($BLKS * $NBLK))
 		WS=$(($FALLOC - $FSIZE))
-		dd if=/dev/urandom of=$i oseek=$FSIZE obs=$WS count=1 status=noxfer 2>/dev/null &
+		_ddt of=$i oseek=$FSIZE obs=$WS count=1 status=noxfer 2>/dev/null &
 	done
 	wait $!
 }
@@ -149,7 +149,7 @@ _append_file()
 firstvol="$SCRATCH_MNT/sv1"
 $BTRFS_UTIL_PROG subvolume create $firstvol > /dev/null || _fail "btrfs subvolume create $firstvol failed"
 dirp=`mktemp -duq $firstvol/dir.XXXXXX`
-_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10 -x
+_populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10 -c
 SNAPNAME=0
 _create_snap $firstvol
 _save_checksum $firstvol $tmp.sv1.sum

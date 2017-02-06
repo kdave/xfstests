@@ -2414,6 +2414,12 @@ _die()
         exit 1
 }
 
+# convert urandom incompressible data to compressible text data
+_ddt()
+{
+	cat /dev/urandom | od | dd iflag=fullblock ${*}
+}
+
 #takes files, randomdata
 _nfiles()
 {
@@ -2425,6 +2431,8 @@ _nfiles()
                 if [ $size -gt 0 ]; then
                     if [ "$2" == "false" ]; then
                         dd if=/dev/zero of=$file bs=1024 count=$size 2>&1 | _filter_dd
+                    elif [ "$2" == "comp" ]; then
+                        _ddt of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     else
                         dd if=/dev/urandom of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     fi
@@ -2469,10 +2477,10 @@ _populate_fs()
     depth=2         # depth of tree from root to leaves
     verbose=false
     root=root       # path of initial root of directory tree
-    randomdata=false # -x data type urandom or zero
+    randomdata=false # -x data type urandom, zero or compressible
 
     OPTIND=1
-    while getopts "d:f:n:r:s:v:x" c
+    while getopts "d:f:n:r:s:v:x:c" c
     do
         case $c in
         d)      depth=$OPTARG;;
@@ -2482,6 +2490,7 @@ _populate_fs()
         v)      verbose=true;;
         r)      root=$OPTARG;;
         x)      randomdata=true;;
+        c)      randomdata=comp;;
         esac
     done
 

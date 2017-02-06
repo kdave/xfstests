@@ -123,15 +123,12 @@ workout()
 	# 20K extents in the data chunk and fill up metadata with inline
 	# extents.
 	for i in `seq 1 500`; do
-		dd if=/dev/urandom of=$SCRATCH_MNT/l$i bs=16385 count=1
-		dd if=/dev/urandom of=$SCRATCH_MNT/s$i bs=3800 count=1
+		_ddt of=$SCRATCH_MNT/l$i bs=16385 count=1
+		_ddt of=$SCRATCH_MNT/s$i bs=3800 count=1
 	done > /dev/null 2>&1
 
-	# /dev/urandom is slow but has the benefit that the generated
-	# contents does not shrink during compression.
 	# Generate a template once and quickly copy it multiple times.
-	# Obviously with online deduplication this will not work anymore.
-	dd if=/dev/urandom of=$SCRATCH_MNT/t0 bs=1M count=1 > /dev/null 2>&1
+	_ddt of=$SCRATCH_MNT/t0 bs=1M count=1 > /dev/null 2>&1
 
 	if [ "${quick}Q" = "thoroughQ" ]; then
 		# The intention of this "thorough" test is to increase
@@ -220,7 +217,7 @@ btrfs_replace_test()
 	# generate some (slow) background traffic in parallel to the
 	# replace operation. It is not a problem if cat fails early
 	# with ENOSPC.
-	cat /dev/urandom > $SCRATCH_MNT/noise 2>> $seqres.full &
+	cat /dev/urandom | od > $SCRATCH_MNT/noise 2>> $seqres.full &
 	noise_pid=$!
 
 	if [ "${with_cancel}Q" = "cancelQ" ]; then
