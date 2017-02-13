@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test No. 196
+#
+# This test stresses indirect block reservation for delayed allocation extents.
+# XFS reserves extra blocks for deferred allocation of delalloc extents. These
+# reserved blocks can be divided among more extents than anticipated if the
+# original extent for which the blocks were reserved is split into multiple
+# delalloc extents. If this scenario repeats, eventually some extents are left
+# without any indirect block reservation whatsoever. This leads to assert
+# failures and possibly other problems in XFS.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/punch
+
+# real QA test starts here
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_sysfs $(_short_dev $TEST_DEV)/drop_writes
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+sdev=$(_short_dev $SCRATCH_DEV)
+file=$SCRATCH_MNT/file.$seq
+bytes=$((64 * 1024))
+
+# create sequential delayed allocation
+$XFS_IO_PROG -f -c "pwrite 0 $bytes" $file >> $seqres.full 2>&1
+
+# Enable write drops. All buffered writes are dropped from this point on.
+echo 1 > /sys/fs/xfs/$sdev/drop_writes
+
+# Write every other 4k range to split the larger delalloc extent into many more
+# smaller extents. Use pwrite because with write failures enabled, all
+# preexisting delalloc blocks in the range of the I/O are tossed without
+# discretion. This allows manipulation of the delalloc extent without conversion
+# to real blocks (and thus releasing the indirect reservation).
+endoff=$((bytes - 4096))
+for i in $(seq 0 8192 $endoff); do
+	$XFS_IO_PROG -c "pwrite $i 4k" $file >> $seqres.full 2>&1
+done
+
+# now pwrite the opposite set to remove remaining delalloc extents
+for i in $(seq 4096 8192 $endoff); do
+	$XFS_IO_PROG -c "pwrite $i 4k" $file >> $seqres.full 2>&1
+done
+
+echo 0 > /sys/fs/xfs/$sdev/drop_writes
+
+_scratch_cycle_mount
+$XFS_IO_PROG -c 'bmap -vp' $file | _filter_bmap
+
+# Now test a buffered write workload with larger extents. Write a 100m extent,
+# split it at the 3/4 mark, then write another 100m extent that is contiguous
+# with the 1/4 portion of the split extent. Repeat several times. This pattern
+# is known to prematurely exhaust indirect reservations and cause warnings and
+# assert failures.
+rm -f $file
+for offset in $(seq 0 100 500); do
+	$XFS_IO_PROG -fc "pwrite ${offset}m 100m" $file >> $seqres.full 2>&1
+
+	punchoffset=$((offset + 75))
+	echo 1 > /sys/fs/xfs/$sdev/drop_writes
+	$XFS_IO_PROG -c "pwrite ${punchoffset}m 4k" $file >> $seqres.full 2>&1
+	echo 0 > /sys/fs/xfs/$sdev/drop_writes
+done
+
+echo "Silence is golden."
+
+status=0
+exit
