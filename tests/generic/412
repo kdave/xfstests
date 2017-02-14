@@ -1,0 +1,76 @@
+#! /bin/bash
+# FSQA Test No. 412
+#
+# Test that if we have a file with a hole, do a mix of direct IO and buffered
+# writes to it and truncate the file to a size that lies in the middle of the
+# hole, after unmounting and mounting again the filesystem, the file has a
+# correct size and no data loss happened.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2017 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_odirect
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create out test file with two extents and a hole between those extents.
+# The extent that lies beyond the hole must be written using direct IO and later
+# we truncate the file to a size that lies within the hole's range.
+$XFS_IO_PROG -f -c "pwrite -S 0x01 0K 32K" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -d -c "pwrite -S 0x02 -b 32K 64K 32K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+# Now truncate our file to a smaller size that lies behind the offset used by
+# the previous direct IO write and that lies in a file hole.
+$XFS_IO_PROG -c "truncate 60K" $SCRATCH_MNT/foo
+
+# Now get file digests before unmounting the filesystem and after mounting it
+# again. The digests should match (same file data and size in both cases).
+echo "File digest before unmounting the filesystem:"
+md5sum $SCRATCH_MNT/foo | _filter_scratch
+_scratch_cycle_mount
+echo "File digest after mounting again the filesystem:"
+md5sum $SCRATCH_MNT/foo | _filter_scratch
+
+status=0
+exit
