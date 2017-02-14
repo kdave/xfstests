@@ -160,6 +160,41 @@ _mount()
     $MOUNT_PROG `_mount_ops_filter $*`
 }
 
+# Call _mount to do mount operation but also save mountpoint to
+# MOUNTED_POINT_STACK. Note that the mount point must be the last parameter
+_get_mount()
+{
+	local mnt_point=${!#}
+
+	_mount $*
+	if [ $? -eq 0 ]; then
+		MOUNTED_POINT_STACK="$mnt_point $MOUNTED_POINT_STACK"
+	else
+		return 1
+	fi
+}
+
+# Unmount the last mounted mountpoint in MOUNTED_POINT_STACK
+# and return it to caller
+_put_mount()
+{
+	local last_mnt=`echo $MOUNTED_POINT_STACK | awk '{print $1}'`
+
+	if [ -n "$last_mnt" ]; then
+		$UMOUNT_PROG $last_mnt
+	fi
+	MOUNTED_POINT_STACK=`echo $MOUNTED_POINT_STACK | cut -d\  -f2-`
+}
+
+# Unmount all mountpoints in MOUNTED_POINT_STACK and clear the stack
+_clear_mount_stack()
+{
+	if [ -n "$MOUNTED_POINT_STACK" ]; then
+		$UMOUNT_PROG $MOUNTED_POINT_STACK
+	fi
+	MOUNTED_POINT_STACK=""
+}
+
 _scratch_options()
 {
     type=$1
