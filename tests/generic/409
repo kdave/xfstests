@@ -1,0 +1,179 @@
+#! /bin/bash
+# FS QA Test 409
+#
+# Test mount shared subtrees, verify the bind semantics:
+#
+# ---------------------------------------------------------------------------
+# |         BIND MOUNT OPERATION                                            |
+# |**************************************************************************
+# |source(A)->| shared       |       private  |       slave    | unbindable |
+# | dest(B)  |               |                |                |            |
+# |   |      |               |                |                |            |
+# |   v      |               |                |                |            |
+# |**************************************************************************
+# |  shared  | shared        |     shared     | shared & slave |  invalid   |
+# |          |               |                |                |            |
+# |non-shared| shared        |      private   |      slave     |  invalid   |
+# ***************************************************************************
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2016 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_clear_mount_stack
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch
+_require_block_device $SCRATCH_DEV
+
+fs_stress()
+{
+	local target=$1
+
+	$FSSTRESS_PROG -z -n 50 -p 3 \
+		       -f creat=5 \
+		       -f mkdir=5 \
+		       -f link=2 \
+		       -f rename=1 \
+		       -f rmdir=2 \
+		       -f unlink=1 \
+		       -f symlink=1 \
+		       -f write=1 \
+		       -f read=1 \
+		       -f chown=1 \
+		       -f getdents=1 \
+		       -f fiemap=1 \
+		       -d $target >/dev/null
+	sync
+}
+
+# prepare some mountpoint dir
+MNTHEAD=$TEST_DIR/$seq
+mkdir $MNTHEAD 2>>$seqres.full
+mpA=$MNTHEAD/"$$"_mpA
+mpB=$MNTHEAD/"$$"_mpB
+mpC=$MNTHEAD/"$$"_mpC
+mpD=$MNTHEAD/"$$"_mpD
+
+find_mnt()
+{
+	echo "------"
+	findmnt -n -o TARGET,SOURCE $SCRATCH_DEV | \
+		sed -e "s;$mpA;mpA;g" \
+		    -e "s;$mpB;mpB;g" \
+		    -e "s;$mpC;mpC;g" \
+		    -e "s;$mpD;mpD;g" | \
+		_filter_spaces | _filter_scratch | \
+		_filter_test_dir | sort
+	echo "======"
+}
+
+start_test()
+{
+	local type=$1
+
+	_scratch_mkfs >$seqres.full 2>&1
+	_get_mount $SCRATCH_DEV $MNTHEAD
+	$MOUNT_PROG --make-"${type}" $MNTHEAD
+	mkdir $mpA $mpB $mpC $mpD
+}
+
+end_test()
+{
+	_clear_mount_stack
+	rm -rf $mpA $mpB $mpC $mpD
+}
+
+bind_run()
+{
+	local source=$1
+	local dest=$2
+
+	start_test $dest
+
+	echo "bind $source on $dest"
+	_get_mount $SCRATCH_DEV $mpA
+	mkdir -p $mpA/dir 2>/dev/null
+	$MOUNT_PROG --make-shared $mpA
+	_get_mount --bind $mpA $mpB
+	$MOUNT_PROG --make-"$source" $mpB
+	# maybe unbindable at here
+	_get_mount --bind $mpB $mpC 2>/dev/null
+	if [ $? -ne 0 ]; then
+		find_mnt
+		end_test
+		return 0
+	fi
+	_get_mount --bind $mpC $mpD
+	for m in $mpA $mpB $mpC $mpD; do
+		_get_mount $SCRATCH_DEV $m/dir
+		fs_stress $m/dir
+		find_mnt
+		_put_mount
+	done
+
+	end_test
+}
+
+bind_test()
+{
+        #        source     dest
+	bind_run shared     shared
+	bind_run slave      shared
+	bind_run private    shared
+	bind_run unbindable shared
+
+	bind_run shared     slave
+	bind_run slave      slave
+	bind_run private    slave
+	bind_run unbindable slave
+
+	bind_run shared     private
+	bind_run slave      private
+	bind_run private    private
+	bind_run unbindable private
+}
+
+bind_test
+
+# success, all done
+status=0
+exit
