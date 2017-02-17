@@ -1,0 +1,97 @@
+#! /bin/bash
+# FS QA Test 138
+#
+# Test decompression in the middle of large extents. Regression test for Linux
+# kernel commit 6e78b3f7a193 ("Btrfs: fix btrfs_decompress_buf2page()").
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_btrfs_command property
+
+algos=($(_btrfs_compression_algos))
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+# Need 1GB for the uncompressed file plus <1GB for each compressed file.
+_require_fs_space $SCRATCH_MNT $((1024 * 1024 * (1 + ${#algos[@]})))
+
+# Checksum a piece in the middle of the file. This hits the unaligned case that
+# caused the original bug.
+do_csum()
+{
+	dd if="$1" bs=4K skip=555 count=100 2>>$seqres.full| md5sum | cut -d ' ' -f 1
+}
+
+# Create a large, uncompressed (but compressible) file.
+touch "${SCRATCH_MNT}/uncompressed"
+$BTRFS_UTIL_PROG property set "${SCRATCH_MNT}/uncompressed" compression ""
+_ddt of="${SCRATCH_MNT}/uncompressed" bs=1M count=1K 2>&1 | _filter_dd
+
+csum="$(do_csum "${SCRATCH_MNT}/uncompressed")"
+
+for algo in ${algos[@]}; do
+	echo "Testing ${algo}" >> $seqres.full
+
+	# Copy the same data, but with compression enabled.
+	touch "${SCRATCH_MNT}/${algo}"
+	$BTRFS_UTIL_PROG property set "${SCRATCH_MNT}/${algo}" compression "${algo}"
+	dd if="${SCRATCH_MNT}/uncompressed" of="${SCRATCH_MNT}/${algo}" bs=1M 2>&1 | _filter_dd
+
+	# The correct data is likely still cached. Cycle the mount to drop the
+	# cache and start fresh.
+	_scratch_cycle_mount
+
+	# Check the checksum.
+	compressed_csum="$(do_csum "${SCRATCH_MNT}/${algo}")"
+	if [ "${compressed_csum}" != "${csum}" ]; then
+		echo "Checksum mismatch for ${algo} (expected ${csum}, got ${compressed_csum})"
+	fi
+done
+
+echo "Silence is golden"
+
+status=0
+exit
