@@ -65,15 +65,12 @@ echo "Corrupt filesystem"
 _scratch_unmount
 $DEBUGFS_PROG -w -R "sif /a size -1" $SCRATCH_DEV >> $seqres.full 2>&1
 
+# check whether debugfs succeeds to set i_size to -1 or not
+$DEBUGFS_PROG -R "stat /a" $SCRATCH_DEV 2>&1 | grep -q "Size: 18446744073709551615" || \
+	_notrun "Could not set i_size to -1 successfully, skip test."
+
 echo "Remount, try to append"
 _scratch_mount
-
-# check whether debugfs succeeds to set i_size to -1 or not
-i_size=$(stat -c "%s" $testdir/a)
-if [ $i_size -ne -1 ]; then
-	_notrun "Could not set i_size to -1 successfully, skip test."
-fi
-
 dd if=/dev/zero of=$testdir/a bs=512 count=1 oflag=append conv=notrunc >> $seqres.full 2>&1 || echo "Write did not succeed (ok)."
 sync
 
