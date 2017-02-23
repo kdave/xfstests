@@ -1,0 +1,100 @@
+#! /bin/bash
+# FS QA Test 029
+#
+# There are dirs/files in lower dir and upper dir before
+# mounting overlayfs. After mounting, use dir in overlayfs
+# mountpoint as lowerdir to mount another overlayfs, then
+# access old files through the second overlayfs. It was
+# not working, kernel commit below fixed it.
+#
+# c4fcfc1619ea ovl: fix d_real() for stacked fs
+#
+# This reproducer was originally written by
+#     Miklos Szeredi <mszeredi@redhat.com>
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $tmp/mnt
+	rm -rf $tmp
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Preparing files
+upperdir=$SCRATCH_DEV/$OVERLAY_UPPER_DIR
+lowerdir=$SCRATCH_DEV/$OVERLAY_LOWER_DIR
+mkdir -p $upperdir/up
+echo foo > $upperdir/up/foo
+mkdir -p $lowerdir/low
+echo bar > $lowerdir/low/bar
+
+# mount overlay in SCRATCH_MNT
+_scratch_mount
+
+mkdir -p $tmp/{upper,mnt,work}
+# mount overlay again using upper dir from SCRATCH_MNT dir
+_overlay_mount_dirs $SCRATCH_MNT/up $tmp/{upper,work} \
+  overlay $tmp/mnt
+# accessing file in the second mount
+cat $tmp/mnt/foo
+$UMOUNT_PROG $tmp/mnt
+
+# mount overlay again using lower dir from SCRATCH_MNT dir
+_overlay_mount_dirs $SCRATCH_MNT/low $tmp/{upper,work} \
+  overlay $tmp/mnt
+cat $tmp/mnt/bar
+$UMOUNT_PROG $tmp/mnt
+
+# mount overlay again using SCRATCH_MNT dir
+_overlay_mount_dirs $SCRATCH_MNT/ $tmp/{upper,work} \
+  overlay $tmp/mnt
+cat $tmp/mnt/up/foo
+cat $tmp/mnt/low/bar
+
+# success, all done
+status=0
+exit
