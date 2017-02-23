@@ -63,7 +63,17 @@ inum=$(stat -c "%i" $testdir/a)
 
 echo "Corrupt filesystem"
 _scratch_unmount
-_scratch_xfs_db -x -c "inode ${inum}" -c 'write core.size -- -1' >> $seqres.full
+
+# run two xfs_db commands to set core.size regardless of the special argument "--"
+# is needed or not.
+_scratch_xfs_db -x -c "inode ${inum}" -c 'write core.size -- -1' >> $seqres.full 2>&1
+_scratch_xfs_db -x -c "inode ${inum}" -c 'write core.size -1' >> $seqres.full 2>&1
+
+# check core.size and _notrun if it's not set correctly
+i_size=`_scratch_xfs_db -c "inode ${inum}" -c "print core.size" | $AWK_PROG '{print $3}'`
+if [ $i_size -ne -1 ]; then
+	_notrun "Could not set i_size to -1 successfully, skip test."
+fi
 
 echo "Remount, try to append"
 _scratch_mount
