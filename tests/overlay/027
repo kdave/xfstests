@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test 027
+#
+# If underlying upper file is immutable, it should stays
+# untouchable in the overlayfs mount.
+#
+# Kernel commit below fixed it.
+# f2b20f6ee842 vfs: move permission checking into ...
+#
+# This reproducer was originally written by
+#     Miklos Szeredi <mszeredi@redhat.com>
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	$CHATTR_PROG -i $upperdir/foo
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_chattr
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Preparing immutable file
+upperdir=$SCRATCH_DEV/$OVERLAY_UPPER_DIR
+mkdir -p $upperdir
+touch $upperdir/foo
+$CHATTR_PROG +i $upperdir/foo
+
+# Mounting overlay
+_scratch_mount
+
+# Touching immutable file in overlay, should fail.
+# Not filtering output here because of errno returned
+# varies among kernel versions:
+#   touch: setting times of 'foo': Operation not permitted
+#   touch: cannot touch 'foo': Permission denied
+if touch $SCRATCH_MNT/foo > /dev/null 2>&1 ; then
+	echo "Test Fail, you can't change an immutable file"
+else
+	echo "Silence is golden"
+fi
+
+# success, all done
+status=0
+exit
