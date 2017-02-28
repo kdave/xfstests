@@ -457,6 +457,20 @@ _check_device()
 	fi
 }
 
+# check and return a canonical mount point path
+_canonicalize_mountpoint()
+{
+	local name=$1
+	local dir=$2
+
+	if [ ! -d "$dir" ]; then
+		_fatal "common/config: $name ($dir) is not a directory"
+	fi
+
+	# this follows symlinks and removes all trailing "/"s
+	readlink -e "$dir"
+}
+
 # Parse config section options. This function will parse all the configuration
 # within a single section which name is passed as an argument. For section
 # name format see comments in get_config_sections().
@@ -545,10 +559,7 @@ get_next_config() {
 	fi
 
 	_check_device TEST_DEV required $TEST_DEV
-	if [ ! -d "$TEST_DIR" ]; then
-		echo "common/config: Error: \$TEST_DIR ($TEST_DIR) is not a directory"
-		exit 1
-	fi
+	export TEST_DIR=`_canonicalize_mountpoint TEST_DIR $TEST_DIR`
 
 	# a btrfs tester will set only SCRATCH_DEV_POOL, we will put first of its dev
 	# to SCRATCH_DEV and rest to SCRATCH_DEV_POOL to maintain the backward compatibility
@@ -563,10 +574,7 @@ get_next_config() {
 	fi
 
 	_check_device SCRATCH_DEV optional $SCRATCH_DEV
-	if [ ! -z "$SCRATCH_MNT" -a ! -d "$SCRATCH_MNT" ]; then
-		echo "common/config: Error: \$SCRATCH_MNT ($SCRATCH_MNT) is not a directory"
-		exit 1
-	fi
+	export SCRATCH_MNT=`_canonicalize_mountpoint SCRATCH_MNT $SCRATCH_MNT`
 
 	if [ -n "$USE_EXTERNAL" ]; then
 		_check_device TEST_RTDEV optional $TEST_RTDEV
@@ -593,12 +601,12 @@ if [ -z "$CONFIG_INCLUDED" ]; then
 	[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
 	[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 	[ -z "$FSCK_OPTIONS" ] && _fsck_opts
+else
+	# canonicalize the mount points
+	# this follows symlinks and removes all trailing "/"s
+	export TEST_DIR=`_canonicalize_mountpoint TEST_DIR $TEST_DIR`
+	export SCRATCH_MNT=`_canonicalize_mountpoint SCRATCH_MNT $SCRATCH_MNT`
 fi
-
-# canonicalize the mount points
-# this follows symlinks and removes all trailing "/"s
-export TEST_DIR=`readlink -e "$TEST_DIR"`
-export SCRATCH_MNT=`readlink -e "$SCRATCH_MNT"`
 
 # make sure this script returns success
 /bin/true
