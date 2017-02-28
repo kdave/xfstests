@@ -474,7 +474,7 @@ fi
 
 for section in $HOST_OPTIONS_SECTIONS; do
 	OLD_FSTYP=$FSTYP
-	OLD_MOUNT_OPTIONS=$MOUNT_OPTIONS
+	OLD_TEST_FS_MOUNT_OPTS=$TEST_FS_MOUNT_OPTS
 	get_next_config $section
 
 	# Do we need to run only some sections ?
@@ -527,18 +527,18 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			status=1
 			exit
 		fi
-		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
-		if [ $? -ne 1 ]; then
-			echo $out
+		if ! _test_mount
+		then
+			echo "check: failed to mount $TEST_DEV on $TEST_DIR"
 			status=1
 			exit
 		fi
 		_prepare_test_list
-	elif [ "$OLD_MOUNT_OPTIONS" != "$MOUNT_OPTIONS" ]; then
+	elif [ "$OLD_TEST_FS_MOUNT_OPTS" != "$TEST_FS_MOUNT_OPTS" ]; then
 		_test_unmount 2> /dev/null
-		out=`_mount_or_remount_rw "$MOUNT_OPTIONS" $TEST_DEV $TEST_DIR`
-		if [ $? -ne 1 ]; then
-			echo $out
+		if ! _test_mount
+		then
+			echo "check: failed to mount $TEST_DEV on $TEST_DIR"
 			status=1
 			exit
 		fi
