@@ -1368,12 +1368,14 @@ _check_mounted_on()
 	local type=$5
 
 	# Note that we use -F here so grep doesn't try to interpret an NFS over
-	# IPv6 server as a regular expression
-	local mount_rec=`_mount | grep -F "$dev"`
+	# IPv6 server as a regular expression.  Because of that, we cannot use
+	# ^$dev so we use "$dev on " to avoid matching $dev to mount point field
+	# for overlay case, where $dev is a directory.
+	local mount_rec=`_mount | grep -F "$dev on "`
 	[ -n "$mount_rec" ] || return 1 # 1 = not mounted
 
 	# if it's mounted, make sure its on $mnt
-	if ! (echo $mount_rec | grep -q "$mnt")
+	if ! (echo $mount_rec | grep -q "$dev on $mnt")
 	then
 		echo "$devname=$dev is mounted but not on $mntname=$mnt - aborting"
 		echo "Already mounted result:"
