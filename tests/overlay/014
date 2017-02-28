@@ -61,16 +61,16 @@ _require_scratch
 _scratch_mkfs
 
 # Create multiple lowerdirs and upperdir, workdir, and testdir on lowerdir
-lowerdir1=$SCRATCH_DEV/lower1
-lowerdir2=$SCRATCH_DEV/lower2
-upperdir=$SCRATCH_DEV/upper
-workdir=$SCRATCH_DEV/workdir
+lowerdir1=$OVL_BASE_SCRATCH_MNT/lower1
+lowerdir2=$OVL_BASE_SCRATCH_MNT/lower2
+upperdir=$OVL_BASE_SCRATCH_MNT/upper
+workdir=$OVL_BASE_SCRATCH_MNT/workdir
 mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
 mkdir -p $lowerdir1/testdir/d
 
 # mount overlay with $lowerdir2 as upperdir, and remove & recreate testdir,
 # make testdir on $lowerdir2 opaque
-_overlay_mount_dirs $lowerdir1 $lowerdir2 $workdir $SCRATCH_DEV $SCRATCH_MNT
+_overlay_mount_dirs $lowerdir1 $lowerdir2 $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 rm -rf $SCRATCH_MNT/testdir
 mkdir -p $SCRATCH_MNT/testdir/visibledir
 # unmount overlayfs but not base fs
@@ -80,14 +80,14 @@ $UMOUNT_PROG $SCRATCH_MNT
 # and create a new file in testdir, triggers copyup from lowerdir,
 # copyup should not copy overlayfs private xattr
 _overlay_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir \
-		    $SCRATCH_DEV $SCRATCH_MNT
+		    $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 touch $SCRATCH_MNT/testdir/visiblefile
 
 # umount and mount overlay again, buggy kernel treats the copied-up dir as
 # opaque, visibledir is not seen in merged dir.
 $UMOUNT_PROG $SCRATCH_MNT
 _overlay_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir \
-		    $SCRATCH_DEV $SCRATCH_MNT
+		    $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 ls $SCRATCH_MNT/testdir
 
 # success, all done

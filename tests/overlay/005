@@ -61,31 +61,31 @@ _require_loop
 _scratch_mkfs
 
 # setup loop images fs for overlayfs
-lower_img=${SCRATCH_DEV}/${seq}.$$.img
+lower_img=${OVL_BASE_SCRATCH_MNT}/${seq}.$$.img
 $XFS_IO_PROG -f -c "truncate 120m" $lower_img >>$seqres.full 2>&1
 fs_loop_dev=`_create_loop_device $lower_img`
 $MKFS_XFS_PROG -f -n ftype=1 $fs_loop_dev >>$seqres.full 2>&1
 
 # only 20m for upper dir
-upper_img=${SCRATCH_DEV}/$$.${seq}.img
+upper_img=${OVL_BASE_SCRATCH_MNT}/$$.${seq}.img
 $XFS_IO_PROG -f -c "truncate 20m" $upper_img >>$seqres.full 2>&1
 upper_loop_dev=`_create_loop_device $upper_img`
 $MKFS_XFS_PROG -f -n ftype=1 $upper_loop_dev >>$seqres.full 2>&1
 
 # mount underlying xfs
-mkdir -p ${SCRATCH_DEV}/lowermnt
-mkdir -p ${SCRATCH_DEV}/uppermnt
-$MOUNT_PROG $fs_loop_dev ${SCRATCH_DEV}/lowermnt
-$MOUNT_PROG $upper_loop_dev ${SCRATCH_DEV}/uppermnt
+mkdir -p ${OVL_BASE_SCRATCH_MNT}/lowermnt
+mkdir -p ${OVL_BASE_SCRATCH_MNT}/uppermnt
+$MOUNT_PROG $fs_loop_dev ${OVL_BASE_SCRATCH_MNT}/lowermnt
+$MOUNT_PROG $upper_loop_dev ${OVL_BASE_SCRATCH_MNT}/uppermnt
 
 # prepare dirs
-mkdir -p ${SCRATCH_DEV}/lowermnt/lower
-mkdir -p ${SCRATCH_DEV}/uppermnt/upper
-mkdir -p ${SCRATCH_DEV}/uppermnt/work
+mkdir -p ${OVL_BASE_SCRATCH_MNT}/lowermnt/lower
+mkdir -p ${OVL_BASE_SCRATCH_MNT}/uppermnt/upper
+mkdir -p ${OVL_BASE_SCRATCH_MNT}/uppermnt/work
 
-lowerd=${SCRATCH_DEV}/lowermnt/lower
-upperd=${SCRATCH_DEV}/uppermnt/upper
-workd=${SCRATCH_DEV}/uppermnt/work
+lowerd=${OVL_BASE_SCRATCH_MNT}/lowermnt/lower
+upperd=${OVL_BASE_SCRATCH_MNT}/uppermnt/upper
+workd=${OVL_BASE_SCRATCH_MNT}/uppermnt/work
 
 # Create test file in lower dir, with too big a size for
 # upper dir to copy up.
@@ -93,7 +93,7 @@ $XFS_IO_PROG -f -c "truncate 48m" ${lowerd}/test_file \
 	>>$seqres.full 2>&1
 
 # mount new overlayfs
-_overlay_mount_dirs $lowerd $upperd $workd $SCRATCH_DEV $SCRATCH_MNT
+_overlay_mount_dirs $lowerd $upperd $workd $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
 # the open call triggers copy-up and it will fail ENOSPC
 $XFS_IO_PROG -f -c "o" ${SCRATCH_MNT}/test_file \
@@ -103,8 +103,8 @@ $XFS_IO_PROG -f -c "o" ${SCRATCH_MNT}/test_file \
 $UMOUNT_PROG $SCRATCH_MNT
 
 # unmount undelying xfs, this tiggers panic if memleak happens
-$UMOUNT_PROG ${SCRATCH_DEV}/uppermnt
-$UMOUNT_PROG ${SCRATCH_DEV}/lowermnt
+$UMOUNT_PROG ${OVL_BASE_SCRATCH_MNT}/uppermnt
+$UMOUNT_PROG ${OVL_BASE_SCRATCH_MNT}/lowermnt
 
 # success, all done
 echo "Silence is golden"
