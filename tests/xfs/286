@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test No. 286
+#
+# Race fio and xfs_scrub -y for a while to see if we crash or livelock.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1335  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_test_program "feature"
+_require_command "$KILLALL_PROG" killall
+_require_command "$TIMEOUT_PROG" timeout
+_require_scrub
+_require_scratch
+# xfs_scrub will turn on error injection itself
+_require_xfs_io_error_injection "force_repair"
+
+echo "Format and populate"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+STRESS_DIR="$SCRATCH_MNT/testdir"
+mkdir -p $STRESS_DIR
+
+cpus=$(( $(src/feature -o) * 4 * LOAD_FACTOR))
+$FSSTRESS_PROG -d $STRESS_DIR -p $cpus -n $((cpus * 100000)) $FSSTRESS_AVOID >/dev/null 2>&1 &
+$XFS_SCRUB_PROG -d -T -v -n $SCRATCH_MNT >> $seqres.full
+
+killstress() {
+	sleep $(( 60 * TIME_FACTOR ))
+	$KILLALL_PROG -q $FSSTRESS_PROG
+}
+
+echo "Concurrent repair"
+start=$(date +%s)
+end=$((start + (60 * TIME_FACTOR) ))
+killstress &
+echo "Repair started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
+while [ "$(date +%s)" -lt "$end" ]; do
+	XFS_SCRUB_FORCE_REPAIR=1 $TIMEOUT_PROG -s TERM $(( end - $(date +%s) + 2 )) $XFS_SCRUB_PROG -d -T -v -y $SCRATCH_MNT >> $seqres.full
+done
+
+echo "Test done"
+echo "Repair finished at $(date)" >> $seqres.full
+$KILLALL_PROG -q $FSSTRESS_PROG
+
+# success, all done
+status=0
+exit
