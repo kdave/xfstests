@@ -280,14 +280,32 @@ _filter_xfs_io_pages_modified()
 
 _filter_test_dir()
 {
-	sed -e "s,$TEST_DEV,TEST_DEV,g" -e "s,$TEST_DIR,TEST_DIR,g"
+	if ( echo $TEST_DIR | grep -q $TEST_DEV ); then
+		# TEST_DEV is substr of TEST_DIR (e.g. /mnt and /mnt/ovl-mnt)
+		# substitute TEST_DIR first
+		sed -e "s,$TEST_DIR,TEST_DIR,g" \
+		    -e "s,$TEST_DEV,TEST_DEV,g"
+	else
+		# TEST_DIR maybe a substr of TEST_DIR (e.g. /vdc and /dev/vdc)
+		# substitute TEST_DEV first
+		sed -e "s,$TEST_DEV,TEST_DEV,g" \
+		    -e "s,$TEST_DIR,TEST_DIR,g"
+	fi
 }
 
 _filter_scratch()
 {
-	sed -e "s,$SCRATCH_DEV,SCRATCH_DEV,g" \
-	    -e "s,$SCRATCH_MNT,SCRATCH_MNT,g" \
-	    -e "/.use_space/d"
+	if ( echo $SCRATCH_MNT | grep -q $SCRATCH_DEV ); then
+		# SCRATCH_DEV is substr of SCRATCH_MNT
+		sed -e "s,$SCRATCH_MNT,SCRATCH_MNT,g" \
+		    -e "s,$SCRATCH_DEV,SCRATCH_DEV,g" \
+		    -e "/.use_space/d"
+	else
+		# SCRATCH_MNT maybe a substr of SCRATCH_DEV
+		sed -e "s,$SCRATCH_DEV,SCRATCH_DEV,g" \
+		    -e "s,$SCRATCH_MNT,SCRATCH_MNT,g" \
+		    -e "/.use_space/d"
+	fi
 }
 
 # Turn any device in the scratch pool into SCRATCH_DEV
