@@ -277,7 +277,7 @@ _common_dev_mount_options()
 
 _overlay_basic_mount_options()
 {
-	echo "-o lowerdir=$1/$OVERLAY_LOWER_DIR,upperdir=$1/$OVERLAY_UPPER_DIR,workdir=$1/$OVERLAY_WORK_DIR"
+	echo "-o lowerdir=$1/$OVL_LOWER,upperdir=$1/$OVL_UPPER,workdir=$1/$OVL_WORK"
 }
 
 _overlay_mount_options()
@@ -336,6 +336,15 @@ _overlay_mount_dirs()
 		    -o workdir=$workdir $*
 }
 
+_overlay_mkdirs()
+{
+	local dir=$1
+
+	mkdir -p $dir/$OVL_UPPER
+	mkdir -p $dir/$OVL_LOWER
+	mkdir -p $dir/$OVL_WORK
+}
+
 # Given a dir, set up 3 subdirectories and mount on the given mnt.
 # The dir is used as the mount device so it can be seen from df or mount
 _overlay_mount()
@@ -346,12 +355,10 @@ _overlay_mount()
 
 	_supports_filetype $dir || _notrun "upper fs needs to support d_type"
 
-	mkdir -p $dir/$OVERLAY_UPPER_DIR
-	mkdir -p $dir/$OVERLAY_LOWER_DIR
-	mkdir -p $dir/$OVERLAY_WORK_DIR
+	_overlay_mkdirs $dir
 
-	_overlay_mount_dirs $dir/$OVERLAY_LOWER_DIR $dir/$OVERLAY_UPPER_DIR \
-			    $dir/$OVERLAY_WORK_DIR $OVERLAY_MOUNT_OPTIONS \
+	_overlay_mount_dirs $dir/$OVL_LOWER $dir/$OVL_UPPER \
+			    $dir/$OVL_WORK $OVERLAY_MOUNT_OPTIONS \
 			    $SELINUX_MOUNT_OPTIONS $* $dir $mnt
 }
 
