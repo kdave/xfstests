@@ -83,18 +83,15 @@ eval `$XFS_IO_PROG -x -c resblks $SCRATCH_MNT 2>&1 \
 echo "resblks gave: resblks=$resblks" >>$seqres.full
 
 # check the 'blocks' field from freesp command is OK
-#  - starting with Linux 4.10-rc the bmbt split reservation moved to be per-AG
 perl -ne '
 	BEGIN	{ $avail ='$avail' * 512 + ('$resblks' * '$dbsize');
 		  $answer="(no xfs_db free blocks line?)" }
 	/free blocks (\d+)$/	|| next;
 	$freesp = $1 * '$dbsize';
-	if ($freesp == $avail + ('$agcount') * '$dbsize' * 8) {
-		$answer = "yes";
-	} elsif ($freesp == $avail + (('$agcount' + 1) * '$dbsize' * 4)) {
+	if ($freesp >= $avail) {
 		$answer = "yes";
 	} else {
-		$answer = "no ($freesp != $avail)";
+		$answer = "no ($freesp < $avail)";
 	}
 	END	{ print "$answer\n" }
 	' <$tmp.xfs_db >$tmp.ans
