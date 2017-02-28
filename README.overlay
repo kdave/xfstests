@@ -16,3 +16,31 @@ use the same partitions as base fs for overlayfs directories
 and set TEST_DIR/SCRATCH_MNT values to overlay mount points, i.e.:
 /mnt/test/ovl-mnt and /mnt/scratch/ovl-mnt, for the context of
 individual tests.
+
+'./check -overlay' does not support mkfs and fsck on the base fs, so
+the base fs should be pre-formatted before starting the -overlay run.
+An easy way to accomplish this is by running './check <some test>' once,
+before running './check -overlay'.
+
+Because of the lack of mkfs support, multi-section config files are only
+partly supported with './check -overlay'. Only multi-section files that
+do not change FSTYP and MKFS_OPTIONS can be safely used with -overlay.
+
+For example, the following multi-section config file can be used to
+run overlay tests on the same base fs, but with different mount options:
+
+ [xfs]
+ TEST_DEV=/dev/sda5
+ TEST_DIR=/mnt/test
+ SCRATCH_DEV=/dev/sda6
+ SCRATCH_MNT=/mnt/scratch
+ FSTYP=xfs
+
+ [xfs_pquota]
+ MOUNT_OPTIONS="-o pquota"
+ TEST_FS_MOUNT_OPTS="-o noatime"
+ OVERLAY_MOUNT_OPTIONS="-o redirect_dir=off"
+
+In the example above, MOUNT_OPTIONS will be used to mount the base scratch fs,
+TEST_FS_MOUNT_OPTS will be used to mount the base test fs and
+OVERLAY_MOUNT_OPTIONS will be used to mount both test and scratch overlays.

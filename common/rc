@@ -363,24 +363,80 @@ _overlay_mount()
 			    $SELINUX_MOUNT_OPTIONS $* $dir $mnt
 }
 
+_overlay_base_test_mount()
+{
+	if [ -z "$OVL_BASE_TEST_DEV" -o -z "$OVL_BASE_TEST_DIR" ] || \
+		_check_mounted_on OVL_BASE_TEST_DEV $OVL_BASE_TEST_DEV \
+				OVL_BASE_TEST_DIR $OVL_BASE_TEST_DIR
+	then
+		# no base fs or already mounted
+		return 0
+	elif [ $? -ne 1 ]
+	then
+		# base fs mounted but not on mount point
+		return 1
+	fi
+
+	_mount $TEST_FS_MOUNT_OPTS \
+		$SELINUX_MOUNT_OPTIONS \
+		$OVL_BASE_TEST_DEV $OVL_BASE_TEST_DIR
+}
+
 _overlay_test_mount()
 {
-	_overlay_mount $OVL_BASE_TEST_DIR $TEST_DIR $*
+	_overlay_base_test_mount && \
+		_overlay_mount $OVL_BASE_TEST_DIR $TEST_DIR $*
+}
+
+_overlay_base_scratch_mount()
+{
+	if [ -z "$OVL_BASE_SCRATCH_DEV" -o -z "$OVL_BASE_SCRATCH_MNT" ] || \
+		_check_mounted_on OVL_BASE_SCRATCH_DEV $OVL_BASE_SCRATCH_DEV \
+				OVL_BASE_SCRATCH_MNT $OVL_BASE_SCRATCH_MNT
+	then
+		# no base fs or already mounted
+		return 0
+	elif [ $? -ne 1 ]
+	then
+		# base fs mounted but not on mount point
+		return 1
+	fi
+
+	_mount $OVL_BASE_MOUNT_OPTIONS \
+		$SELINUX_MOUNT_OPTIONS \
+		$OVL_BASE_SCRATCH_DEV $OVL_BASE_SCRATCH_MNT
+}
+
+_overlay_base_scratch_unmount()
+{
+	[ -n "$OVL_BASE_SCRATCH_DEV" -a -n "$OVL_BASE_SCRATCH_MNT" ] || return 0
+
+	$UMOUNT_PROG $OVL_BASE_SCRATCH_MNT
 }
 
 _overlay_scratch_mount()
 {
-	_overlay_mount $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT $*
+	_overlay_base_scratch_mount && \
+		_overlay_mount $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT $*
+}
+
+_overlay_base_test_unmount()
+{
+	[ -n "$OVL_BASE_TEST_DEV" -a -n "$OVL_BASE_TEST_DIR" ] || return 0
+
+	$UMOUNT_PROG $OVL_BASE_TEST_DIR
 }
 
 _overlay_test_unmount()
 {
 	$UMOUNT_PROG $TEST_DIR
+	_overlay_base_test_unmount
 }
 
 _overlay_scratch_unmount()
 {
 	$UMOUNT_PROG $SCRATCH_MNT
+	_overlay_base_scratch_unmount
 }
 
 _scratch_mount()
@@ -687,7 +743,10 @@ _scratch_cleanup_files()
 	overlay)
 		# Avoid rm -rf /* if we messed up
 		[ -n "$OVL_BASE_SCRATCH_MNT" ] || return 1
-		rm -rf $OVL_BASE_SCRATCH_MNT/*
+		_overlay_base_scratch_mount || return 1
+		rm -rf $OVL_BASE_SCRATCH_MNT/* || return 1
+		_overlay_mkdirs $OVL_BASE_SCRATCH_MNT
+		# leave base fs mouted so tests can setup lower/upper dir files
 		;;
 	*)
 		[ -n "$SCRATCH_MNT" ] || return 1
@@ -710,7 +769,7 @@ _scratch_mkfs()
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
 		_scratch_cleanup_files
-		return 0
+		return $?
 		;;
 	tmpfs)
 		# do nothing for tmpfs
