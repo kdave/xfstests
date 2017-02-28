@@ -82,6 +82,8 @@ export DEBUGFS_MNT=${DEBUGFS_MNT:="/sys/kernel/debug"}
 export OVL_UPPER="ovl-upper"
 export OVL_LOWER="ovl-lower"
 export OVL_WORK="ovl-work"
+# overlay mount point parent must be the base fs root
+export OVL_MNT="ovl-mnt"
 
 export PWD=`pwd`
 #export DEBUG=${DEBUG:=...} # arbitrary CFLAGS really.
@@ -445,16 +447,19 @@ _check_device()
 		if [ "$dev_needed" == "required" ]; then
 			_fatal "common/config: $name is required but not defined!"
 		fi
-		return
+		return 0
 	fi
 
-	echo $dev | grep -qE ":|//" > /dev/null 2>&1
-	network_dev=$?
+	if [ -b "$dev" ] || ( echo $dev | grep -qE ":|//" ); then
+		# block device or a network url
+		return 0
+	fi
+
 	if [ "$FSTYP" == "overlay" ]; then
 		if [ ! -d "$dev" ]; then
 			_fatal "common/config: $name ($dev) is not a directory for overlay"
 		fi
-	elif [ ! -b "$dev" -a "$network_dev" != "0" ]; then
+	else
 		_fatal "common/config: $name ($dev) is not a block device or a network filesystem"
 	fi
 }
@@ -465,12 +470,89 @@ _canonicalize_mountpoint()
 	local name=$1
 	local dir=$2
 
-	if [ ! -d "$dir" ]; then
+	if [ -d "$dir" ]; then
+		# this follows symlinks and removes all trailing "/"s
+		readlink -e "$dir"
+		return 0
+	fi
+
+	if [ "$FSTYP" != "overlay" ] || [[ "$name" == OVL_BASE_* ]]; then
 		_fatal "common/config: $name ($dir) is not a directory"
 	fi
 
-	# this follows symlinks and removes all trailing "/"s
-	readlink -e "$dir"
+	# base fs may not be mounted yet, so just check that parent dir
+	# exists (where base fs will be mounted) because we are going to
+	# mkdir the overlay mount point dir anyway
+	local base=`basename $dir`
+	local parent=`dirname $dir`
+	parent=`_canonicalize_mountpoint OVL_BASE_$name "$parent"`
+
+	# prepend the overlay mount point to canonical parent path
+	echo "$parent/$base"
+}
+
+# On check -overlay, for the non multi section config case, this
+# function is called on every test, before init_rc().
+# When SCRATCH/TEST_* vars are defined in config file, config file
+# is sourced on every test and this function overrides the vars
+# every time.
+# When SCRATCH/TEST_* vars are defined in evironment and not
+# in config file, this function is called after vars have already
+# been overriden in the previous test.
+# In that case, TEST_DEV is a directory and not a blockdev and
+# the function will return without overriding the SCRATCH/TEST_* vars.
+_overlay_config_override()
+{
+	# There are 2 options for configuring overlayfs tests:
+	#
+	# 1. (legacy) SCRATCH/TEST_DEV point to existing directories
+	#    on an already mounted fs.  In this case, the new
+	#    OVL_BASE_SCRATCH/TEST_* vars are set to use the legacy
+	#    vars values (even though they may not be mount points).
+	#
+	[ ! -d "$TEST_DEV" ] || export OVL_BASE_TEST_DIR="$TEST_DEV"
+	[ ! -d "$SCRATCH_DEV" ] || export OVL_BASE_SCRATCH_MNT="$SCRATCH_DEV"
+
+	# 2. SCRATCH/TEST_DEV point to the base fs partitions.  In this case,
+	#    the new OVL_BASE_SCRATCH/TEST_DEV/MNT vars are set to the values
+	#    of the configured base fs and SCRATCH/TEST_DEV vars are set to the
+	#    overlayfs base and mount dirs inside base fs mount.
+	[ -b "$TEST_DEV" ] || return 0
+
+	# Config file may specify base fs type, but we obay -overlay flag
+	export OVL_BASE_FSTYP="$FSTYP"
+	export FSTYP=overlay
+
+	# Store original base fs vars
+	export OVL_BASE_TEST_DEV="$TEST_DEV"
+	export OVL_BASE_TEST_DIR="$TEST_DIR"
+	export OVL_BASE_MOUNT_OPTIONS="$MOUNT_OPTIONS"
+
+	# Set TEST vars to overlay base and mount dirs inside base fs
+	export TEST_DEV="$OVL_BASE_TEST_DIR"
+	export TEST_DIR="$OVL_BASE_TEST_DIR/$OVL_MNT"
+	export MOUNT_OPTIONS="$OVERLAY_MOUNT_OPTIONS"
+
+	[ -b "$SCRATCH_DEV" ] || return 0
+
+	# Store original base fs vars
+	export OVL_BASE_SCRATCH_DEV="$SCRATCH_DEV"
+	export OVL_BASE_SCRATCH_MNT="$SCRATCH_MNT"
+
+	# Set SCRATCH vars to overlay base and mount dirs inside base fs
+	export SCRATCH_DEV="$OVL_BASE_SCRATCH_MNT"
+	export SCRATCH_MNT="$OVL_BASE_SCRATCH_MNT/$OVL_MNT"
+}
+
+_overlay_config_restore()
+{
+	export OVERLAY=true
+	[ -z "$OVL_BASE_FSTYP" ] || export FSTYP=$OVL_BASE_FSTYP
+	[ -z "$OVL_BASE_TEST_DEV" ] || export TEST_DEV=$OVL_BASE_TEST_DEV
+	[ -z "$OVL_BASE_TEST_DIR" ] || export TEST_DIR=$OVL_BASE_TEST_DIR
+	[ -z "$OVL_BASE_SCRATCH_DEV" ] || export SCRATCH_DEV=$OVL_BASE_SCRATCH_DEV
+	[ -z "$OVL_BASE_SCRATCH_MNT" ] || export SCRATCH_MNT=$OVL_BASE_SCRATCH_MNT
+	[ -z "$OVL_BASE_MOUNT_OPTIONS" ] || export MOUNT_OPTIONS=$OVL_BASE_MOUNT_OPTIONS
 }
 
 # Parse config section options. This function will parse all the configuration
@@ -499,6 +581,15 @@ parse_config_section() {
 get_next_config() {
 	if [ ! -z "$CONFIG_INCLUDED" ] && ! $OPTIONS_HAVE_SECTIONS; then
 		return 0
+	fi
+
+	# We might have overriden FSTYP and TEST/SCRATCH vars with overlay values
+	# in the previous section, so restore them to original values stored in
+	# OVL_BASE_*.
+	# We need to do this *before* old FSTYP and MOUNT_OPTIONS are recorded
+	# and *before* SCRATCH_DEV and MOUNT_OPTIONS are unset
+	if [ "$FSTYP" == "overlay" ]; then
+		_overlay_config_restore
 	fi
 
 	local OLD_FSTYP=$FSTYP
@@ -584,6 +675,14 @@ get_next_config() {
 		_check_device SCRATCH_RTDEV optional $SCRATCH_RTDEV
 		_check_device SCRATCH_LOGDEV optional $SCRATCH_LOGDEV
 	fi
+
+	# Override FSTYP from config when running ./check -overlay
+	# and maybe override base fs TEST/SCRATCH_DEV with overlay base dirs.
+	# We need to do this *after* default mount options are set by base FSTYP
+	# and *after* SCRATCH_DEV is deduced from SCRATCH_DEV_POOL
+	if [ "$OVERLAY" == "true" -o "$FSTYP" == "overlay" ]; then
+		_overlay_config_override
+	fi
 }
 
 if [ -z "$CONFIG_INCLUDED" ]; then
@@ -604,10 +703,21 @@ if [ -z "$CONFIG_INCLUDED" ]; then
 	[ -z "$MKFS_OPTIONS" ] && _mkfs_opts
 	[ -z "$FSCK_OPTIONS" ] && _fsck_opts
 else
+	# We get here for the non multi section case, on every test that sources
+	# common/rc after re-sourcing the HOST_OPTIONS config file.
+	# Because of this re-sourcing, we need to re-canonicalize the configured
+	# mount points and re-override TEST/SCRATCH_DEV overlay vars.
+
 	# canonicalize the mount points
 	# this follows symlinks and removes all trailing "/"s
 	export TEST_DIR=`_canonicalize_mountpoint TEST_DIR $TEST_DIR`
 	export SCRATCH_MNT=`_canonicalize_mountpoint SCRATCH_MNT $SCRATCH_MNT`
+
+	# Override FSTYP from config when running ./check -overlay
+	# and maybe override base fs TEST/SCRATCH_DEV with overlay base dirs
+	if [ "$OVERLAY" == "true" -o "$FSTYP" == "overlay" ]; then
+		_overlay_config_override
+	fi
 fi
 
 # make sure this script returns success

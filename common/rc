@@ -292,7 +292,7 @@ _scratch_mount_options()
 	_scratch_options mount
 
 	if [ "$FSTYP" == "overlay" ]; then
-		echo `_overlay_mount_options $SCRATCH_DEV`
+		echo `_overlay_mount_options $OVL_BASE_SCRATCH_MNT`
 		return 0
 	fi
 	echo `_common_dev_mount_options $*` $SCRATCH_OPTIONS \
@@ -343,9 +343,10 @@ _overlay_mkdirs()
 	mkdir -p $dir/$OVL_UPPER
 	mkdir -p $dir/$OVL_LOWER
 	mkdir -p $dir/$OVL_WORK
+	mkdir -p $dir/$OVL_MNT
 }
 
-# Given a dir, set up 3 subdirectories and mount on the given mnt.
+# Given a base fs dir, set up overlay directories and mount on the given mnt.
 # The dir is used as the mount device so it can be seen from df or mount
 _overlay_mount()
 {
@@ -364,12 +365,12 @@ _overlay_mount()
 
 _overlay_test_mount()
 {
-	_overlay_mount $TEST_DEV $TEST_DIR $*
+	_overlay_mount $OVL_BASE_TEST_DIR $TEST_DIR $*
 }
 
 _overlay_scratch_mount()
 {
-	_overlay_mount $SCRATCH_DEV $SCRATCH_MNT $*
+	_overlay_mount $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT $*
 }
 
 _overlay_test_unmount()
@@ -684,10 +685,12 @@ _scratch_cleanup_files()
 {
 	case $FSTYP in
 	overlay)
-		# $SCRATCH_DEV is a valid directory in overlay case
-		rm -rf $SCRATCH_DEV/*
+		# Avoid rm -rf /* if we messed up
+		[ -n "$OVL_BASE_SCRATCH_MNT" ] || return 1
+		rm -rf $OVL_BASE_SCRATCH_MNT/*
 		;;
 	*)
+		[ -n "$SCRATCH_MNT" ] || return 1
 		_scratch_mount
 		rm -rf $SCRATCH_MNT/*
 		_scratch_unmount
@@ -1425,10 +1428,13 @@ _require_scratch_nocheck()
 		fi
 		;;
 	overlay)
-		if [ -z "$SCRATCH_DEV" -o ! -d "$SCRATCH_DEV" ]; then
-			_notrun "this test requires a valid \$SCRATCH_DEV as ovl base dir"
+		if [ -z "$OVL_BASE_SCRATCH_MNT" -o ! -d "$OVL_BASE_SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$OVL_BASE_SCRATCH_MNT as ovl base dir"
 		fi
-		if [ ! -d "$SCRATCH_MNT" ]; then
+		# if $SCRATCH_MNT is derived from $OVL_BASE_SCRATCH_MNT then
+		# don't check $SCRATCH_MNT dir here because base fs may not be mounted
+		# and we will create the mount point anyway on _overlay_mount
+		if [ "$SCRATCH_MNT" != "$OVL_BASE_SCRATCH_MNT/$OVL_MNT" -a ! -d "$SCRATCH_MNT" ]; then
 			_notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
@@ -1501,8 +1507,8 @@ _require_test()
 		fi
 		;;
 	overlay)
-		if [ -z "$TEST_DEV" -o ! -d "$TEST_DEV" ]; then
-			_notrun "this test requires a valid \$TEST_DEV as ovl base dir"
+		if [ -z "$OVL_BASE_TEST_DIR" -o ! -d "$OVL_BASE_TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR as ovl base dir"
 		fi
 		if [ ! -d "$TEST_DIR" ]; then
 			_notrun "this test requires a valid \$TEST_DIR"
