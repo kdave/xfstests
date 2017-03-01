@@ -1,0 +1,93 @@
+#!/bin/bash
+# FS QA Test No. 415
+#
+# test for races between write or fpunch operations on reflinked files
+# to read operations on the target file
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (c) 2017 Plexistor Ltd. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=0    # success is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/reflink
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+_require_cp_reflink
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount || _fail "mount failed"
+_require_fs_space $SCRATCH_MNT $((250 * 1024))
+
+echo "Silence is golden"
+
+workfile=${SCRATCH_MNT}/workfile
+light_clone=${SCRATCH_MNT}/light_clone
+
+file_size=$((10 * 1024 * 1024))
+bs=`_get_block_size $SCRATCH_MNT`
+block_num=$((file_size / bs))
+reflinks_num=20
+
+$XFS_IO_PROG -f -c "pwrite 0 $file_size" $workfile >> $seqres.full
+
+for ((i=1; i<=reflinks_num; i++)); do
+	_cp_reflink $workfile ${light_clone}_$i
+done
+
+# for each block simultaneously pwrite (or fpunch) all reflinks
+# while performing pread from the targted file
+for ((block_index=0; block_index<block_num; block_index++)); do
+	for ((i=1; i<=reflinks_num; i++)); do
+		$XFS_IO_PROG -c "pread $((block_index * bs)) $bs" \
+					$workfile >> $seqres.full &
+		if [ $((block_index % 2)) -eq 0 ]; then
+			$XFS_IO_PROG -c "pwrite $((block_index * bs)) $bs" \
+					${light_clone}_$i  >> $seqres.full &
+		else
+			$XFS_IO_PROG -c "fpunch $((block_index * bs)) $bs" \
+					${light_clone}_$i >> $seqres.full &
+		fi
+	done
+	# wait for all threads to join before moving to next block
+	wait
+done
+
+# success, all done
+status=0
+exit
