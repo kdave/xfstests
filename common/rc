@@ -1761,12 +1761,22 @@ _require_scratch_ext4_crc()
 	_scratch_unmount
 }
 
-# this test requires the bigalloc feature to be available in mkfs.ext4
-#
-_require_ext4_mkfs_bigalloc()
+# Check the specified feature whether it is available in mkfs.ext4 or not.
+_require_ext4_mkfs_feature()
 {
-	$MKFS_EXT4_PROG -F -O bigalloc -n $SCRATCH_DEV 512m >/dev/null 2>&1 \
-	   || _notrun "mkfs.ext4 doesn't have bigalloc feature"
+	local feature=$1
+	local testfile=/tmp/$$.ext4_mkfs
+
+	if [ -z "$feature" ]; then
+                echo "Usage: _require_ext4_mkfs_feature feature"
+                exit 1
+        fi
+
+	touch $testfile
+	local result=$($MKFS_EXT4_PROG -F -O $feature -n $testfile 512m 2>&1)
+	rm -f $testfile
+	echo $result | grep -q "Invalid filesystem option" && \
+		_notrun "mkfs.ext4 doesn't support $feature feature"
 }
 
 # this test requires the ext4 kernel support bigalloc feature
