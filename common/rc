@@ -115,6 +115,25 @@ then
     fi
 fi
 
+_dump_err()
+{
+    err_msg="$*"
+    echo "$err_msg"
+}
+
+_dump_err2()
+{
+    err_msg="$*"
+    >2& echo "$err_msg"
+}
+
+_log_err()
+{
+    err_msg="$*"
+    echo "$err_msg" | tee -a $seqres.full
+    echo "(see $seqres.full for details)"
+}
+
 # make sure we have a standard umask
 umask 022
 
@@ -1121,7 +1140,9 @@ _repair_scratch_fs()
 		_scratch_xfs_repair "$@" 2>&1
 		res=$?
 	fi
-	test $res -ne 0 && >&2 echo "xfs_repair failed, err=$res"
+	if [ $res -ne 0 ]; then
+		_dump_err2 "xfs_repair failed, err=$res"
+	fi
 	return $res
         ;;
     *)
@@ -1133,7 +1154,7 @@ _repair_scratch_fs()
 		res=0
 		;;
 	*)
-		>&2 echo "fsck.$FSTYP failed, err=$res"
+		_dump_err2 "fsck.$FSTYP failed, err=$res"
 		;;
 	esac
 	return $res
@@ -2276,7 +2297,7 @@ _mount_or_remount_rw()
 			_overlay_mount $device $mountpoint
 		fi
 		if [ $? -ne 0 ]; then
-			echo "!!! failed to remount $device on $mountpoint"
+			_dump_err "!!! failed to remount $device on $mountpoint"
 			return 0 # ok=0
 		fi
 	else
@@ -2310,9 +2331,7 @@ _check_generic_filesystem()
     fsck -t $FSTYP $FSCK_OPTIONS $device >$tmp.fsck 2>&1
     if [ $? -ne 0 ]
     then
-        echo "_check_generic_filesystem: filesystem on $device is inconsistent (see $seqres.full)"
-
-        echo "_check_generic filesystem: filesystem on $device is inconsistent" >>$seqres.full
+	_log_err "_check_generic_filesystem: filesystem on $device is inconsistent"
         echo "*** fsck.$FSTYP output ***"	>>$seqres.full
         cat $tmp.fsck				>>$seqres.full
         echo "*** end fsck.$FSTYP output"	>>$seqres.full
@@ -3191,7 +3210,7 @@ _check_dmesg()
 	     -e "general protection fault:" \
 	     $seqres.dmesg
 	if [ $? -eq 0 ]; then
-		echo "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
+		_dump_err "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
 		return 1
 	else
 		rm -f $seqres.dmesg

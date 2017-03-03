@@ -105,9 +105,7 @@ _check_btrfs_filesystem()
 	if [ -f ${RESULT_DIR}/require_scratch.require_qgroup_report ]; then
 		$BTRFS_UTIL_PROG check $device --qgroup-report > $tmp.qgroup_report 2>&1
 		if grep -qE "Counts for qgroup.*are different" $tmp.qgroup_report ; then
-			echo "_check_btrfs_filesystem: filesystem on $device has wrong qgroup numbers (see $seqres.full)"
-			echo "_check_btrfs_filesystem: filesystem on $device has wrong qgroup numbers" \
-				>> $seqres.full
+			_log_err "_check_btrfs_filesystem: filesystem on $device has wrong qgroup numbers"
 			echo "*** qgroup_report.$FSTYP output ***"	>>$seqres.full
 			cat $tmp.qgroup_report				>>$seqres.full
 			echo "*** qgroup_report.$FSTYP output ***"	>>$seqres.full
@@ -117,9 +115,7 @@ _check_btrfs_filesystem()
 
 	$BTRFS_UTIL_PROG check $device >$tmp.fsck 2>&1
 	if [ $? -ne 0 ]; then
-		echo "_check_btrfs_filesystem: filesystem on $device is inconsistent (see $seqres.full)"
-
-		echo "_check_btrfs_filesystem: filesystem on $device is inconsistent" >>$seqres.full
+		_log_err "_check_btrfs_filesystem: filesystem on $device is inconsistent"
 		echo "*** fsck.$FSTYP output ***"	>>$seqres.full
 		cat $tmp.fsck				>>$seqres.full
 		echo "*** end fsck.$FSTYP output"	>>$seqres.full

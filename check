@@ -28,6 +28,7 @@ try=""
 n_bad=0
 sum_bad=0
 bad=""
+n_notrun=0
 notrun=""
 interrupt=true
 diff="diff -u"
@@ -37,6 +38,7 @@ randomize=false
 export here=`pwd`
 xfile=""
 brief_test_summary=false
+err_msg=""
 
 DUMP_OUTPUT=false
 
@@ -368,6 +370,7 @@ _wipe_counters()
 {
 	n_try="0"
 	n_bad="0"
+	n_notrun="0"
 	unset try notrun bad
 }
 
@@ -596,6 +599,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	for seq in $list
 	do
 	    err=false
+	    err_msg=""
 	    if [ ! -f $seq ]; then
 	        # Try to get full name in case the user supplied only seq id
 	        # and the test has a name. A bit of hassle to find really
@@ -629,14 +633,17 @@ for section in $HOST_OPTIONS_SECTIONS; do
 
 	    echo -n "$seqnum"
 
-		if $showme; then
-			echo
-			continue
-		fi
+	    if $showme; then
+		echo
+		start=0
+		stop=0
+		n_notrun=`expr $n_notrun + 1`
+		continue
+	    fi
 
-		if [ ! -f $seq ]; then
-			echo " - no such test?"
-		else
+	    if [ ! -f $seq ]; then
+		echo " - no such test?"
+	    else
 		# really going to try and run this one
 		#
 		rm -f $seqres.out.bad
@@ -684,7 +691,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 
 		if [ -f core ]
 		then
-		    echo -n " [dumped core]"
+		    err_msg="[dumped core]"
+		    echo -n " $err_msg"
 		    mv core $RESULT_BASE/$seqnum.core
 		    err=true
 		fi
@@ -695,15 +703,17 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		    $timestamp && echo " [not run]" && echo -n "	$seqnum -- "
 		    cat $seqres.notrun
 		    notrun="$notrun $seqnum"
+		    n_notrun=`expr $n_notrun + 1`
 		else
 		    if [ $sts -ne 0 ]
 		    then
-			echo -n " [failed, exit status $sts]"
+			err_msg="[failed, exit status $sts]"
+			echo -n " $err_msg"
 			err=true
 		    fi
 		    if [ ! -f $seq.out ]
 		    then
-			echo " - no qualified output"
+			_dump_err "no qualified output"
 			err=true
 		    else
 
@@ -733,6 +743,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 						" to see the entire diff)"
 				fi; } | \
 				sed -e 's/^\(.\)/    \1/'
+			    err_msg="output mismatch (see $diff $seq.out $seqres.out.bad)"
 			    err=true
 			fi
 		    fi
