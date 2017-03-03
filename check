@@ -39,7 +39,7 @@ export here=`pwd`
 xfile=""
 brief_test_summary=false
 err_msg=""
-
+do_report=false
 DUMP_OUTPUT=false
 
 # start the initialisation work now
@@ -54,7 +54,7 @@ export DIFF_LENGTH=${DIFF_LENGTH:=10}
 # by default don't output timestamps
 timestamp=${TIMESTAMP:=false}
 
-rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist
+rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist $tmp.report.*
 
 SRC_GROUPS="generic shared"
 export SRC_DIR="tests"
@@ -75,6 +75,7 @@ check options
     -r			randomize test order
     -d			dump test output to stdout
     -b			brief test summary
+    -R fmt[,fmt]	generate report in formats specified. Supported format: [xunit]
     --large-fs		optimise scratch device for large filesystems
     -s section		run only specified section from config file
     -S section		exclude the specified section from the config file
@@ -295,7 +296,10 @@ while [ $# -gt 0 ]; do
 	-T)	timestamp=true ;;
 	-d)	DUMP_OUTPUT=true ;;
 	-b)	brief_test_summary=true;;
-
+	-R)	report_fmt=$2 ; shift ;
+		REPORT_LIST="$REPORT_LIST ${report_fmt//,/ }"
+		do_report=true
+		;;
 	--large-fs) export LARGE_SCRATCH_DEV=yes ;;
 	--extra-space=*) export SCRATCH_DEV_EMPTY_SPACE=${r#*=} ;;
 
@@ -380,7 +384,12 @@ _wrapup()
 	check="$RESULT_BASE/check"
 
 	if $showme; then
-	:
+		if $needwrap; then
+			if $do_report; then
+				_make_section_report
+			fi
+			needwrap=false
+		fi
 	elif $needwrap; then
 		if [ -f $check.time -a -f $tmp.time ]; then
 			cat $check.time $tmp.time  \
@@ -431,6 +440,9 @@ _wrapup()
 			echo "Passed all $n_try tests" >>$tmp.summary
 		fi
 		echo "" >>$tmp.summary
+		if $do_report; then
+			_make_section_report
+		fi
 		needwrap=false
 	fi
 
@@ -519,6 +531,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		echo "SECTION       -- $section"
 	fi
 
+	sect_start=`_wallclock`
 	if $RECREATE_TEST_DEV || [ "$OLD_FSTYP" != "$FSTYP" ]; then
 		echo "RECREATING    -- $FSTYP on $TEST_DEV"
 		_test_unmount 2> /dev/null
@@ -623,11 +636,12 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	    group=`dirname $seq`
 	    if $OPTIONS_HAVE_SECTIONS; then
 		export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;${RESULT_BASE}/$section;"`
-		seqres="$RESULT_BASE/$section/$seqnum"
+		REPORT_DIR="$RESULT_BASE/$section"
 	    else
 		export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;$RESULT_BASE;"`
-		seqres="$RESULT_BASE/$seqnum"
+		REPORT_DIR="$RESULT_BASE"
 	    fi
+	    seqres="$REPORT_DIR/$seqnum"
 
 	    mkdir -p $RESULT_DIR
 
@@ -638,9 +652,12 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		start=0
 		stop=0
 		n_notrun=`expr $n_notrun + 1`
+		if $do_report; then
+			_make_testcase_report "list"
+		fi
 		continue
 	    fi
-
+	    tc_status="pass"
 	    if [ ! -f $seq ]; then
 		echo " - no such test?"
 	    else
@@ -704,6 +721,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		    cat $seqres.notrun
 		    notrun="$notrun $seqnum"
 		    n_notrun=`expr $n_notrun + 1`
+		    tc_status="notrun"
 		else
 		    if [ $sts -ne 0 ]
 		    then
@@ -762,10 +780,14 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		bad="$bad $seqnum"
 		n_bad=`expr $n_bad + 1`
 		quick=false
+		tc_status="fail"
 	    fi
-
+	    if $do_report; then
+		_make_testcase_report "$tc_status"
+	    fi
 	    seq="after_$seqnum"
 	done
+	sect_stop=`_wallclock`
 	interrupt=false
 	_wrapup
 	interrupt=true

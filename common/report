@@ -1,0 +1,173 @@
+#
+# Reports generator funcitons lives here
+#
+
+# List of xfstests's enviroment variables to include reports
+## TODO automate list population inside common/conf
+REPORT_ENV_LIST="$REPORT_ENV_LIST SECTION"
+REPORT_ENV_LIST="$REPORT_ENV_LIST FSTYP"
+REPORT_ENV_LIST="$REPORT_ENV_LIST PLATFORM"
+REPORT_ENV_LIST="$REPORT_ENV_LIST MKFS_OPTIONS"
+REPORT_ENV_LIST="$REPORT_ENV_LIST MOUNT_OPTIONS"
+
+REPORT_ENV_LIST="$REPORT_ENV_LIST HOST_OPTIONS"
+REPORT_ENV_LIST="$REPORT_ENV_LIST CHECK_OPTIONS"
+REPORT_ENV_LIST="$REPORT_ENV_LIST XFS_MKFS_OPTIONS"
+REPORT_ENV_LIST="$REPORT_ENV_LIST TIME_FACTOR"
+REPORT_ENV_LIST="$REPORT_ENV_LIST LOAD_FACTOR"
+
+REPORT_ENV_LIST="$REPORT_ENV_LIST TEST_DIR"
+REPORT_ENV_LIST="$REPORT_ENV_LIST TEST_DEV"
+REPORT_ENV_LIST="$REPORT_ENV_LIST SCRATCH_DEV"
+REPORT_ENV_LIST="$REPORT_ENV_LIST SCRATCH_MNT"
+
+REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_UPPER"
+REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_LOWER"
+REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_WORK"
+
+#
+# Xunit format report functions
+_xunit_add_property()
+{
+	local name="$1"
+	local value="${!name}"
+
+	if [ ! -z "$value" ]; then
+		echo -e "\t\t<property name=\"$name\" value=\"$value\"/>" >> $REPORT_DIR/result.xml
+	fi
+}
+_xunit_make_section_report()
+{
+	# xfstest:section ==> xunit:testsuite
+	local sect_name=$section
+	local sect_time=`expr $sect_stop - $sect_start`
+	local n_total=`expr $n_try + $n_notrun`
+
+	if [ $sect_name == '-no-sections-' ]; then
+		sect_name='global'
+	fi
+	local report=$tmp.report.xunit.$sect_name.xml
+	# Header
+	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $REPORT_DIR/result.xml
+	local dtime=`echo $date_time| tr  " " 'T'`
+	local stats="errors=\"$n_bad\" skipped=\"$n_notrun\" tests=\"$n_total\" time=\"$sect_time\""
+	local hw_info="hostname=\"$HOST\" timestamp=\"$dtime\" "
+	echo "<testsuite name=\"xfstests\" $stats  $hw_info >" >> $REPORT_DIR/result.xml
+
+	# Properties
+	echo -e "\t<properties>" >> $REPORT_DIR/result.xml
+	for p in $REPORT_ENV_LIST;do
+		_xunit_add_property "$p"
+	done
+	echo -e "\t</properties>" >> $REPORT_DIR/result.xml
+	cat $tmp.report.xunit.$sect_name.xml >> $REPORT_DIR/result.xml
+	echo "</testsuite>" >> $REPORT_DIR/result.xml
+	echo "Xunit report: $REPORT_DIR/result.xml"
+}
+
+_xunit_make_testcase_report()
+{
+	local test_status="$1"
+	local test_time=`expr $stop - $start`
+	local strip="$SRC_DIR/"
+	local test_name=${seq#$strip}
+	local sect_name=$section
+
+	# TODO: other places may also win if no-section mode will be named like 'default/global'
+	if [ $sect_name == '-no-sections-' ]; then
+		sect_name='global'
+
+	fi
+	local report=$tmp.report.xunit.$sect_name.xml
+
+	echo -e "\t<testcase classname=\"xfstests.$sect_name\" name=\"$test_name\" time=\"$test_time\">" >> $report
+	case $test_status in
+	"pass")
+		;;
+	"notrun")
+		if [ -f $seqres.notrun ]; then
+			local msg=`cat $seqres.notrun`
+			echo -e "\t\t<skipped message=\"$msg\" />" >> $report
+		else
+			echo -e "\t\t<skipped/>" >> $report
+		fi
+		;;
+	"list")
+		echo -e "\t\t<skipped/>" >> $report
+		;;
+	"fail")
+		if [ -z "$err_msg" ]; then
+			err_msg="Test $sequm failed, reason unknown"
+		fi
+		echo -e "\t\t<failure message=\"$err_msg\" type=\"TestFail\" />" >> $report
+		if [ -s $seqres.full ]; then
+			echo -e "\t\t<system-out>" >> $report
+			printf	'<![CDATA[\n' >>$report
+			cat $seqres.full | tr -dc '[:print:][:space:]' >>$report
+			printf ']]>\n'	>>$report
+			echo -e "\t\t</system-out>" >> $report
+		fi
+		if [ -f $seqres.dmesg ]; then
+			echo -e "\t\t<system-err>" >> $report
+			printf	'<![CDATA[\n' >>$report
+			cat $seqres.dmesg | tr -dc '[:print:][:space:]' >>$report
+			printf ']]>\n'	>>$report
+			echo -e "\t\t</system-err>" >> $report
+		elif [ -s $seqres.out.bad ]; then
+			echo -e "\t\t<system-err>" >> $report
+			printf	'<![CDATA[\n' >>$report
+			$diff $seq.out $seqres.out.bad >>$report
+			printf ']]>\n'	>>$report
+			echo -e "\t\t</system-err>" >> $report
+		fi
+		;;
+	*)
+		echo -e "\t\t<failure message=\"Unknown ret_state=$ret_state\" type=\"TestFail\"/>" >> $report
+		;;
+	esac
+	echo -e "\t</testcase>" >> $report
+}
+
+
+#
+#  Common report generator entry points
+_make_section_report()
+{
+	for report in $REPORT_LIST; do
+		case "$report" in
+		"xunit")
+			_xunit_make_section_report "$test_status"
+			;;
+		*)
+			_dump_err "format '$report' is not supported"
+			;;
+		esac
+	done
+}
+
+_make_testcase_report()
+{
+	test_status="$1"
+	for report in $REPORT_LIST; do
+		case "$report" in
+		"xunit")
+			_xunit_make_testcase_report "$test_status"
+			;;
+		*)
+			_dump_err "report format '$report' is not supported"
+			;;
+		esac
+	done
+}
+
+_assert_report_list() {
+	for report in $REPORT_LIST; do
+		case "$report" in
+		"xunit")
+			;;
+		*)
+			_fatal "report format '$report' is not supported"
+			;;
+		esac
+	done
+}
