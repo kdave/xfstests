@@ -34,11 +34,13 @@ trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    cd /
-    rm -f $tmp.*
-    umount $LOOP_MNT 2>/dev/null
-    [ -n "$LOOP_DEV" ] && losetup -d $LOOP_DEV
-    rmdir $LOOP_MNT
+	cd /
+	rm -f $tmp.*
+	$UMOUNT_PROG $LOOP_MNT 2>/dev/null
+	[ -n "$LOOP_DEV" ] && _destroy_loop_device $LOOP_DEV 2>/dev/null
+	# try to keep the image file if test fails
+	[ $status -eq 0 ] && rm -f $LOOP_IMG
+	rmdir $LOOP_MNT
 }
 
 # get standard environment, filters and checks
@@ -52,6 +54,7 @@ _supported_os Linux
 _require_test
 # Must have loop device
 _require_loop
+_require_xfs_io_command "truncate"
 
 LOOP_IMG=$TEST_DIR/$seq.fs
 LOOP_MNT=$TEST_DIR/$seq.mnt
@@ -77,9 +80,12 @@ _grow_loop()
 	check=$4
 	agsize=$5
 
-	dparam="file,name=$LOOP_IMG,size=$original"
+	$XFS_IO_PROG -f -c "truncate $original" $LOOP_IMG
+	LOOP_DEV=`_create_loop_device $LOOP_IMG`
+
+	dparam=""
 	if [ -n "$agsize" ]; then
-		dparam="$dparam,agsize=$agsize"
+		dparam="-d agsize=$agsize"
 	fi
 
 	echo
@@ -87,46 +93,43 @@ _grow_loop()
 	echo
 
 	echo "*** mkfs loop file (size=$original)"
-	mkfs_crc_opts="-m crc=0"
-	if [ -n "$XFS_MKFS_HAS_NO_META_SUPPORT" ]; then
-		mkfs_crc_opts=""
+	mkfs_crc_opts=""
+	if [ $bsize -lt 1024 -a -z "$XFS_MKFS_HAS_NO_META_SUPPORT" ]; then
+		mkfs_crc_opts="-m crc=0"
 	fi
-	$MKFS_XFS_PROG $mkfs_crc_opts -b size=$bsize -d $dparam \
+	$MKFS_XFS_PROG $mkfs_crc_opts -b size=$bsize $dparam $LOOP_DEV \
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
+	_destroy_loop_device $LOOP_DEV
 	$XFS_IO_PROG -c "pwrite $new_size $bsize" $LOOP_IMG | _filter_io
+	LOOP_DEV=`_create_loop_device $LOOP_IMG`
 	echo "*** mount loop filesystem"
-	mount -t xfs -o loop $LOOP_IMG $LOOP_MNT
+	$MOUNT_PROG -t xfs $LOOP_DEV $LOOP_MNT
 
 	echo "*** grow loop filesystem"
-	#xfs_growfs $LOOP_MNT 2>&1 | grep -e "^data" #| _filter_growfs 2>/dev/null
 	$XFS_GROWFS_PROG $LOOP_MNT 2>&1 |  _filter_growfs 2>&1
 
 	echo "*** unmount"
-	umount $LOOP_MNT > /dev/null 2>&1
+	$UMOUNT_PROG -d $LOOP_MNT && LOOP_DEV=
 
 	# Large grows takes forever to check..
 	if [ "$check" -gt "0" ]
 	then
 		echo "*** check"
-		LOOP_DEV=`losetup -f`
-		losetup $LOOP_DEV $LOOP_IMG
-		 _check_xfs_filesystem $LOOP_DEV none none
-		losetup -d $LOOP_DEV
-		LOOP_DEV=
+		_check_xfs_filesystem $LOOP_IMG none none
 	fi
 
 	rm -f $LOOP_IMG
 }
 
 # Wes' problem sizes...
-_grow_loop 168024b 1376452608 4096 1
+_grow_loop $((168024*4096)) 1376452608 4096 1
 
 # Some other blocksize cases...
-_grow_loop 168024b 1376452608 2048 1
-_grow_loop 168024b 1376452608 512 1 16m
-_grow_loop 168024b 688230400 1024 1
+_grow_loop $((168024*2048)) 1376452608 2048 1
+_grow_loop $((168024*512)) 1376452608 512 1 16m
+_grow_loop $((168024*1024)) 688230400 1024 1
 
 # Other corner cases suggested by dgc
 # also the following doesn't check if the filesystem is consistent.
