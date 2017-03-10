@@ -1,0 +1,118 @@
+#! /bin/bash
+# FS QA Test 417
+#
+# Test orphan inode / unlinked list processing on RO mount & RW transition
+#
+# A filesystem that crashes with open but unlinked inodes should
+# be consistent after a ro, ro->rw, or rw mount cycle.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_scratch_shutdown
+_require_metadata_journaling $SCRATCH_DEV
+_require_test_program "multi_open_unlink"
+
+
+function create_dirty_orphans() {
+
+	_scratch_mount
+
+	num_files=200
+	num_eas=1
+	ea_val_size=1024
+
+	# sleep for ages and we will kill this pid when we are ready
+	delay=100
+
+	echo "open and unlink $num_files files with EAs"
+	src/multi_open_unlink -f $SCRATCH_MNT/test_file \
+		-n $num_files -s $delay -e $num_eas -v $ea_val_size &
+	pid=$!
+
+	# time to create and unlink all the files
+	sleep 3
+
+	echo "godown"
+	src/godown -v -f $SCRATCH_MNT >> $seqres.full
+
+	# kill the multi_open_unlink
+	kill $pid 2>/dev/null
+	wait $pid 2>/dev/null
+	pid=""
+
+	_scratch_unmount
+}
+
+# Does a regular rw mount handle the orphan list?
+echo "mount dirty orphans rw, then unmount"
+create_dirty_orphans
+_scratch_mount
+_scratch_unmount
+# We should be clean at this point
+echo "check fs consistency"
+_check_scratch_fs
+
+# Does a ro mount handle the orphan list?
+echo "mount dirty orphans ro, then unmount"
+create_dirty_orphans
+_scratch_mount -o ro
+_scratch_unmount
+# We should be clean at this point
+echo "check fs consistency"
+_check_scratch_fs
+
+# Does a mount with ro->rw transition handle orphan list?
+echo "mount dirty orphans ro and remount rw, then unmount"
+create_dirty_orphans
+_scratch_mount -o ro
+_scratch_remount rw
+_scratch_unmount
+# We should be clean at this point
+echo "check fs consistency"
+_check_scratch_fs
+
+# success, all done
+status=0
+exit
