@@ -1462,24 +1462,19 @@ _check_mounted_on()
 	local mnt=$4
 	local type=$5
 
-	# Note that we use -F here so grep doesn't try to interpret an NFS over
-	# IPv6 server as a regular expression.  Because of that, we cannot use
-	# ^$dev so we use "$dev on " to avoid matching $dev to mount point field
-	# for overlay case, where $dev is a directory.
-	local mount_rec=`_mount | grep -F "$dev on "`
+	# find $dev as the source, and print result in "$dev $mnt" format
+	local mount_rec=`findmnt -rnc -S $dev -o SOURCE,TARGET`
 	[ -n "$mount_rec" ] || return 1 # 1 = not mounted
 
 	# if it's mounted, make sure its on $mnt
-	if ! (echo $mount_rec | grep -q "$dev on $mnt")
-	then
+	if [ "$mount_rec" != "$dev $mnt" ]; then
 		echo "$devname=$dev is mounted but not on $mntname=$mnt - aborting"
 		echo "Already mounted result:"
 		echo $mount_rec
 		return 2 # 2 = mounted on wrong mnt
 	fi
 
-	if [ -n "$type" -a "`_fs_type $dev`" != "$type" ]
-	then
+	if [ -n "$type" -a "`_fs_type $dev`" != "$type" ]; then
 		echo "$devname=$dev is mounted but not a type $type filesystem"
 		# raw $DF_PROG cannot handle NFS/CIFS/overlay correctly
 		_df_device $dev
