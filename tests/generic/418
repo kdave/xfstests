@@ -1,0 +1,122 @@
+#! /bin/bash
+# FS QA Test 418
+#
+# Test pagecache invalidation in buffer/direct write/read combination.
+#
+# Fork N children, each child writes to and reads from its own region of the
+# same test file, and check if what it reads is what it writes. The test region
+# is determined by N * blksz. Write and read operation can be either direct or
+# buffered.
+#
+# Regression test for commit c771c14baa33 ("iomap: invalidate page caches
+# should be after iomap_dio_complete() in direct write")
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_odirect
+_require_block_device $TEST_DEV
+_require_test_program "dio-invalidate-cache"
+_require_test_program "feature"
+
+diotest=$here/src/dio-invalidate-cache
+testfile=$TEST_DIR/$seq-diotest
+sectorsize=`blockdev --getss $TEST_DEV`
+pagesize=`src/feature -s`
+
+# test case array, test different write/read combinations
+# -r: use direct read
+# -w: use direct write
+# -t: truncate file to final size before test, i.e. write to hole
+# -p: fallocate whole file before test, i.e. write to allocated but unwritten extents
+# -F: fulfill whole file before test, i.e. write to allocated & written extents
+t_cases=(
+	"-w"
+	"-wt"
+	"-wp"
+	"-wF"
+	"-r"
+	"-rt"
+	"-rp"
+	"-rF"
+	"-rw"
+	"-rwt"
+	"-rwp"
+	"-rwF"
+)
+
+runtest()
+{
+	local i=0
+	local tc=""
+	local loop=$1
+	shift
+
+	for tc in ${t_cases[*]}; do
+		echo "diotest $tc $*" >> $seqres.full
+		i=0
+		while [ $i -lt $loop ]; do
+			$diotest $tc $* -f $testfile
+			if [ $? -ne 0 ]; then
+				echo "diotest $tc $* failed at loop $i" | \
+					tee -a $seqres.full
+				break
+			fi
+			let i=i+1
+		done
+	done
+}
+
+while [ $sectorsize -le $((pagesize * 2)) ]; do
+	# reproducer for the original bug
+	runtest $((10 * LOAD_FACTOR)) -b $sectorsize -n 3 -i 1
+	# try more processes and iterations
+	runtest $((5 * LOAD_FACTOR))  -b $sectorsize -n 8 -i 4
+	sectorsize=$((sectorsize * 2))
+done
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
