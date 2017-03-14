@@ -1,0 +1,79 @@
+#! /bin/bash
+# FS QA Test 139
+#
+# Check if btrfs quota limits are not reached when you constantly
+# create and delete files within the exclusive qgroup limits.
+#
+# Finally we create files to exceed the quota.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 SUSE. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+SUBVOL=$SCRATCH_MNT/subvol
+
+_run_btrfs_util_prog subvolume create $SUBVOL
+_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+_run_btrfs_util_prog qgroup limit -e 1G $SUBVOL
+
+
+# Write and delete files within 1G limits, multiple times
+for i in $(seq 1 5); do
+	for j in $(seq 1 240); do
+		$XFS_IO_PROG -f -c "pwrite 0 4m" $SUBVOL/file_$j > /dev/null
+	done
+	rm -f $SUBVOL/file*
+done
+
+# Exceed the limits here
+for j in $(seq 1 8); do
+	$XFS_IO_PROG -f -c "pwrite 0 128m" $SUBVOL/file_$j 2>&1 | _filter_xfs_io | _filter_xfs_io_error
+done
+
+# success, all done
+status=0
+exit
