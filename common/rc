@@ -167,6 +167,8 @@ case "$FSTYP" in
 	 ;;
     ceph)
 	 ;;
+    glusterfs)
+	 ;;
     overlay)
 	 ;;
     reiser4)
@@ -706,6 +708,9 @@ _test_mkfs()
     ceph)
 	# do nothing for ceph
 	;;
+    glusterfs)
+	# do nothing for glusterfs
+	;;
     overlay)
 	# do nothing for overlay
 	;;
@@ -788,7 +793,7 @@ _scratch_mkfs()
 	local mkfs_status
 
 	case $FSTYP in
-	nfs*|cifs|ceph|overlay)
+	nfs*|cifs|ceph|overlay|glusterfs)
 		# unable to re-create this fstyp, just remove all files in
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
@@ -1307,7 +1312,8 @@ _fs_type()
     # Fix the filesystem type up here so that the callers don't
     # have to bother with this quirk.
     #
-    _df_device $1 | $AWK_PROG '{ print $2 }' | sed -e 's/nfs4/nfs/'
+    _df_device $1 | $AWK_PROG '{ print $2 }' | \
+        sed -e 's/nfs4/nfs/' -e 's/fuse.glusterfs/glusterfs/'
 }
 
 # return the FS mount options of a mounted device
@@ -1489,6 +1495,15 @@ _check_mounted_on()
 _require_scratch_nocheck()
 {
     case "$FSTYP" in
+	glusterfs)
+		echo $SCRATCH_DEV | grep -q "\w:\w" > /dev/null 2>&1
+		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	nfs*|ceph)
 		echo $SCRATCH_DEV | grep -q ":/" > /dev/null 2>&1
 		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
@@ -1568,6 +1583,15 @@ _require_scratch()
 _require_test()
 {
     case "$FSTYP" in
+	glusterfs)
+		echo $TEST_DEV | grep -q "\w:\w" > /dev/null 2>&1
+		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DEV"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
 	nfs*|ceph)
 		echo $TEST_DEV | grep -q ":/" > /dev/null 2>&1
 		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
@@ -2421,6 +2445,9 @@ _check_test_fs()
     ceph)
 	# no way to check consistency for CephFS
 	;;
+    glusterfs)
+	# no way to check consistency for GlusterFS
+	;;
     overlay)
 	# no way to check consistency for overlay
 	;;
@@ -2467,6 +2494,9 @@ _check_scratch_fs()
 	;;
     ceph)
 	# no way to check consistency for CephFS
+	;;
+    glusterfs)
+	# no way to check consistency for GlusterFS
 	;;
     overlay)
 	# no way to check consistency for overlay
