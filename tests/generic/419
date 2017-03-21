@@ -1,0 +1,84 @@
+#! /bin/bash
+# FS QA Test generic/419
+#
+# Try to rename files in an encrypted directory, without access to the
+# encryption key.  This should fail with ENOKEY.  Test both a regular rename and
+# a cross rename.  This is a regression test for:
+#	173b8439e1ba ("ext4: don't allow encrypted operations without keys")
+#	363fa4e078cb ("f2fs: don't allow encrypted operations without keys")
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+. ./common/renameat2
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+_require_command "$KEYCTL_PROG" keyctl
+_requires_renameat2
+
+_new_session_keyring
+
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+
+mkdir $SCRATCH_MNT/edir
+keydesc=$(_generate_encryption_key)
+$XFS_IO_PROG -c "set_encpolicy $keydesc" $SCRATCH_MNT/edir
+echo a > $SCRATCH_MNT/edir/a
+echo b > $SCRATCH_MNT/edir/b
+_unlink_encryption_key $keydesc
+_scratch_cycle_mount
+
+# Note that because encrypted filenames are unpredictable, this needs to be
+# written in a way that does not assume any particular filenames.
+efile1=$(find $SCRATCH_MNT/edir -maxdepth 1 -type f | head -1)
+efile2=$(find $SCRATCH_MNT/edir -maxdepth 1 -type f | tail -1)
+mv $efile1 $efile2 |& _filter_scratch | sed 's|edir/[a-zA-Z0-9+,_]\+|edir/FILENAME|g'
+src/renameat2 -x $efile1 $efile2
+
+# success, all done
+status=0
+exit
