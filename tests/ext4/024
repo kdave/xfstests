@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test ext4/024
+#
+# Regression test for 0d06863f903a ("ext4: don't BUG when truncating encrypted
+# inodes on the orphan list").
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment and checks
+. ./common/rc
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+_require_command "$KEYCTL_PROG" keyctl
+
+_new_session_keyring
+
+#
+# Create an encrypted file whose size is not a multiple of the filesystem block
+# size, then add it to the orphan list.
+#
+# We create the encrypted file normally, rather than use debugfs to force the
+# inode flags to ENCRYPT|EXTENTS as done in the example listed in the commit
+# message of the kernel fix, because forcing the inode flags is incompatible
+# with some MKFS_OPTIONS such as inline_data or ^extents.
+#
+# This choice does, however, have the disadvantage that this test won't detect
+# the bug in as many situations, such as in kernels configured without
+# encryption support.
+#
+_scratch_mkfs_encrypted &>>$seqres.full
+_scratch_mount
+mkdir $SCRATCH_MNT/edir
+keydesc=$(_generate_encryption_key)
+$XFS_IO_PROG -c "set_encpolicy $keydesc" $SCRATCH_MNT/edir
+echo foo > $SCRATCH_MNT/edir/file
+inum=$(stat -c '%i' $SCRATCH_MNT/edir/file)
+_scratch_unmount
+debugfs -w -R "set_super_value s_last_orphan $inum" $SCRATCH_DEV &>>$seqres.full
+
+# Try to mount the filesystem.  This would hit a BUG() in fs/ext4/inode.c.
+_scratch_mount
+
+# success, all done
+echo "Didn't crash!"
+status=0
+exit
