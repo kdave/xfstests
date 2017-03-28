@@ -17,6 +17,7 @@
  */
 
 #include <linux/fs.h>
+#include <setjmp.h>
 #include "global.h"
 
 #ifdef HAVE_ATTR_XATTR_H
@@ -69,6 +70,8 @@ typedef enum {
 	OP_LINK,
 	OP_MKDIR,
 	OP_MKNOD,
+	OP_MREAD,
+	OP_MWRITE,
 	OP_PUNCH,
 	OP_ZERO,
 	OP_COLLAPSE,
@@ -168,6 +171,8 @@ void	getdents_f(int, long);
 void	link_f(int, long);
 void	mkdir_f(int, long);
 void	mknod_f(int, long);
+void	mread_f(int, long);
+void	mwrite_f(int, long);
 void	punch_f(int, long);
 void	zero_f(int, long);
 void	collapse_f(int, long);
@@ -208,6 +213,8 @@ opdesc_t	ops[] = {
 	{ OP_LINK, "link", link_f, 1, 1 },
 	{ OP_MKDIR, "mkdir", mkdir_f, 2, 1 },
 	{ OP_MKNOD, "mknod", mknod_f, 2, 1 },
+	{ OP_MREAD, "mread", mread_f, 2, 0 },
+	{ OP_MWRITE, "mwrite", mwrite_f, 2, 1 },
 	{ OP_PUNCH, "punch", punch_f, 1, 1 },
 	{ OP_ZERO, "zero", zero_f, 1, 1 },
 	{ OP_COLLAPSE, "collapse", collapse_f, 1, 1 },
@@ -262,6 +269,7 @@ int		cleanup = 0;
 int		verbose = 0;
 int		verifiable_log = 0;
 sig_atomic_t	should_stop = 0;
+sigjmp_buf	*sigbus_jmp = NULL;
 char		*execute_cmd = NULL;
 int		execute_freq = 1;
 struct print_string	flag_str = {0};
@@ -311,7 +319,26 @@ void	zero_freq(void);
 
 void sg_handler(int signum)
 {
-	should_stop = 1;
+	switch (signum) {
+	case SIGTERM:
+		should_stop = 1;
+		break;
+	case SIGBUS:
+		/*
+		 * Only handle SIGBUS when mmap write to a hole and no
+		 * block can be allocated due to ENOSPC, abort otherwise.
+		 */
+		if (sigbus_jmp) {
+			siglongjmp(*sigbus_jmp, -1);
+		} else {
+			printf("Unknown SIGBUS is caught, Abort!\n");
+			abort();
+		}
+		/* should not reach here */
+		break;
+	default:
+		break;
+	}
 }
 
 int main(int argc, char **argv)
@@ -527,9 +554,12 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nproc; i++) {
 		if (fork() == 0) {
-			action.sa_handler = SIG_DFL;
 			sigemptyset(&action.sa_mask);
+			action.sa_handler = SIG_DFL;
 			if (sigaction(SIGTERM, &action, 0))
+				return 1;
+			action.sa_handler = sg_handler;
+			if (sigaction(SIGBUS, &action, 0))
 				return 1;
 #ifdef HAVE_SYS_PRCTL_H
 			prctl(PR_SET_PDEATHSIG, SIGKILL);
@@ -2653,6 +2683,131 @@ mknod_f(int opno, long r)
 		printf("%d/%d: mknod add id=%d,parent=%d\n", procid, opno, id, parid);
 	}
 	free_pathname(&f);
+}
+
+#ifdef HAVE_SYS_MMAN_H
+struct print_flags mmap_flags[] = {
+	{ MAP_SHARED, "SHARED"},
+	{ MAP_PRIVATE, "PRIVATE"},
+	{ -1, NULL}
+};
+
+#define translate_mmap_flags(flags)	  \
+	({translate_flags(flags, "|", mmap_flags);})
+#endif
+
+void
+do_mmap(int opno, long r, int prot)
+{
+#ifdef HAVE_SYS_MMAN_H
+	char		*addr;
+	int		e;
+	pathname_t	f;
+	int		fd;
+	size_t		len;
+	__int64_t	lr;
+	off64_t		off;
+	int		flags;
+	struct stat64	stb;
+	int		v;
+	char		st[1024];
+	sigjmp_buf	sigbus_jmpbuf;
+
+	init_pathname(&f);
+	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
+		if (v)
+			printf("%d/%d: do_mmap - no filename\n", procid, opno);
+		free_pathname(&f);
+		return;
+	}
+	fd = open_path(&f, O_RDWR);
+	e = fd < 0 ? errno : 0;
+	check_cwd();
+	if (fd < 0) {
+		if (v)
+			printf("%d/%d: do_mmap - open %s failed %d\n",
+			       procid, opno, f.path, e);
+		free_pathname(&f);
+		return;
+	}
+	if (fstat64(fd, &stb) < 0) {
+		if (v)
+			printf("%d/%d: do_mmap - fstat64 %s failed %d\n",
+			       procid, opno, f.path, errno);
+		free_pathname(&f);
+		close(fd);
+		return;
+	}
+	inode_info(st, sizeof(st), &stb, v);
+	if (stb.st_size == 0) {
+		if (v)
+			printf("%d/%d: do_mmap - %s%s zero size\n", procid, opno,
+			       f.path, st);
+		free_pathname(&f);
+		close(fd);
+		return;
+	}
+
+	lr = ((__int64_t)random() << 32) + random();
+	off = (off64_t)(lr % stb.st_size);
+	off &= (off64_t)(~(sysconf(_SC_PAGE_SIZE) - 1));
+	len = (size_t)(random() % MIN(stb.st_size - off, FILELEN_MAX)) + 1;
+
+	flags = (random() % 2) ? MAP_SHARED : MAP_PRIVATE;
+	addr = mmap(NULL, len, prot, flags, fd, off);
+	e = (addr == MAP_FAILED) ? errno : 0;
+	if (e) {
+		if (v)
+			printf("%d/%d: do_mmap - mmap failed %s%s [%lld,%d,%s] %d\n",
+			       procid, opno, f.path, st, (long long)off,
+			       (int)len, translate_mmap_flags(flags), e);
+		free_pathname(&f);
+		close(fd);
+		return;
+	}
+
+	if (prot & PROT_WRITE) {
+		if ((e = sigsetjmp(sigbus_jmpbuf, 1)) == 0) {
+			sigbus_jmp = &sigbus_jmpbuf;
+			memset(addr, nameseq & 0xff, len);
+		}
+	} else {
+		char *buf;
+		if ((buf = malloc(len)) != NULL) {
+			memcpy(buf, addr, len);
+			free(buf);
+		}
+	}
+	munmap(addr, len);
+	/* set NULL to stop other functions from doing siglongjmp */
+	sigbus_jmp = NULL;
+
+	if (v)
+		printf("%d/%d: %s %s%s [%lld,%d,%s] %s\n",
+		       procid, opno, (prot & PROT_WRITE) ? "mwrite" : "mread",
+		       f.path, st, (long long)off, (int)len,
+		       translate_mmap_flags(flags),
+		       (e == 0) ? "0" : "Bus error");
+
+	free_pathname(&f);
+	close(fd);
+#endif
+}
+
+void
+mread_f(int opno, long r)
+{
+#ifdef HAVE_SYS_MMAN_H
+	do_mmap(opno, r, PROT_READ);
+#endif
+}
+
+void
+mwrite_f(int opno, long r)
+{
+#ifdef HAVE_SYS_MMAN_H
+	do_mmap(opno, r, PROT_WRITE);
+#endif
 }
 
 void

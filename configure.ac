@@ -32,6 +32,7 @@ AC_HEADER_STDC
 			xfs/platform_defs.h	\
 			btrfs/ioctl.h		\
 			cifs/ioctl.h		\
+			sys/mman.h		\
     ])
 
 AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[

@@ -178,4 +178,8 @@
 
 #endif /* HAVE_LINUX_FALLOC_H */
 
+#ifdef HAVE_SYS_MMAN_H
+#include <sys/mman.h>
+#endif
+
 #endif /* GLOBAL_H */
