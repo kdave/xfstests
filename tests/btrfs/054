@@ -85,9 +85,9 @@ mkdir $SCRATCH_MNT/first_subvol
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
-_run_btrfs_util_prog send $SCRATCH_MNT/mysnap2 -p $SCRATCH_MNT/mysnap1 \
-	-f $send_files_dir/2.snap
+_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/mysnap2
 
 _scratch_unmount
 _check_scratch_fs
@@ -95,11 +95,11 @@ _check_scratch_fs
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
 [ -e $SCRATCH_MNT/first_subvol ] && \
 	echo "Subvolume first_subvol was not supposed to be replicated by full send!"
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
 [ -e $SCRATCH_MNT/testdir ] && \
 	echo "Directory testdir was supposed to be deleted after incremental send!"
 

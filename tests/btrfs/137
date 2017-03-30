@@ -103,10 +103,10 @@ $XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap2/bar | _filter_fiemap
 echo
 
 # Create the send streams to apply later on a new filesystem.
-$BTRFS_UTIL_PROG send $SCRATCH_MNT/snap1 -f $send_files_dir/1.snap 2>&1 \
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1 2>&1 \
 	| _filter_scratch
-$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 \
-	-f $send_files_dir/2.snap 2>&1 | _filter_scratch
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/snap2 2>&1 | _filter_scratch
 
 # Create a new filesystem, receive the send streams and verify that the file
 # contents are the same as in the original filesystem and that the file holes
@@ -114,8 +114,8 @@ $BTRFS_UTIL_PROG send -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 \
 _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
-$BTRFS_UTIL_PROG receive $SCRATCH_MNT -f $send_files_dir/1.snap >/dev/null
-$BTRFS_UTIL_PROG receive $SCRATCH_MNT -f $send_files_dir/2.snap >/dev/null
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT >/dev/null
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT >/dev/null
 
 echo
 echo "File digests in the new filesystem:"

@@ -74,17 +74,17 @@ md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch
 
 # Save send streams for the snapshots. For the first one we use a full send
 # operation and the for the second snapshot we use an incremental send.
-_run_btrfs_util_prog send $SCRATCH_MNT/snap1 -f $send_files_dir/1.snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 \
-	-f $send_files_dir/2.snap
+_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
+_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/snap2
 
 # Create a new filesystem and receive the snapshots.
 _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -vv -f $send_files_dir/1.snap
-_run_btrfs_util_prog receive $SCRATCH_MNT -vv -f $send_files_dir/2.snap
+_run_btrfs_util_prog receive -vv -f $send_files_dir/1.snap $SCRATCH_MNT
+_run_btrfs_util_prog receive -vv -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File digests in the second filesystem:"
 # Must match the digests we got in the first filesystem.
@@ -106,9 +106,9 @@ sync
 # Now create send streams for the snapshots from this new filesystem. For the
 # first snapshot we do a full send while for the second snapshot we do an
 # incremental send.
-_run_btrfs_util_prog send $SCRATCH_MNT/snap1 -f $send_files_dir/1_2.snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 \
-	-f $send_files_dir/2_2.snap
+_run_btrfs_util_prog send -f $send_files_dir/1_2.snap $SCRATCH_MNT/snap1
+_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2_2.snap \
+	$SCRATCH_MNT/snap2
 
 # Create a new filesystem and receive the send streams we just created from the
 # second filesystem. This worked until the linux kernel 4.2, where a regression
@@ -120,8 +120,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -vv -f $send_files_dir/1_2.snap
-_run_btrfs_util_prog receive $SCRATCH_MNT -vv -f $send_files_dir/2_2.snap
+_run_btrfs_util_prog receive -vv -f $send_files_dir/1_2.snap $SCRATCH_MNT
+_run_btrfs_util_prog receive -vv -f $send_files_dir/2_2.snap $SCRATCH_MNT
 
 echo "File digests in the third filesystem:"
 # Must match the digests we got in the first and second filesystems.

@@ -66,14 +66,14 @@ echo "File digest in the first filesystem, first snapshot:"
 md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch
 
 # Save send stream for this snapshot.
-_run_btrfs_util_prog send $SCRATCH_MNT/snap1 -f $send_files_dir/1.snap
+_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
 
 # Create a new filesystem and receive the snapshot.
 _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
 
 echo "File digest in the second filesystem, first snapshot:"
 # Must match the digest we got in the first filesystem.
@@ -92,8 +92,8 @@ _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/snap2_rw \
 echo "File digest in the second filesystem, second snapshot:"
 md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch
 
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 \
-	-f $send_files_dir/2.snap
+_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/snap2
 
 # Create a new filesystem and receive both the first snapshot, through the first
 # send stream we created, and the second snapshot through the incremental send
@@ -103,12 +103,12 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
 # Receiving the second snapshot used to fail because the send stream used an
 # incorrect value for the clone sources uuid field - it used the uuid of
 # snapshot 1, which is different on each filesystem, instead of the received
 # uuid value, which is preserved across different filesystems.
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File digests in the third filesystem:"
 # Must match the digests we got in the previous filesystems.

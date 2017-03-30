@@ -125,9 +125,9 @@ run_check $FSSUM_PROG -A -f -w $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
 run_check $FSSUM_PROG -A -f -w $send_files_dir/2.fssum \
 	-x $SCRATCH_MNT/mysnap2/mysnap1 $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
-	-f $send_files_dir/2.snap
+_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/mysnap2
 
 _check_scratch_fs
 
@@ -135,10 +135,10 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
+_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $send_files_dir/2.fssum $SCRATCH_MNT/mysnap2
 
 echo "Silence is golden"

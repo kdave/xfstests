@@ -105,9 +105,9 @@ $CLONER_PROG -s $((44 * $BLOCK_SIZE)) -d $((44 * $BLOCK_SIZE)) -l $BLOCK_SIZE \
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send $SCRATCH_MNT/mysnap1 -f $send_files_dir/1.snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 $SCRATCH_MNT/mysnap2 \
-	-f $send_files_dir/2.snap
+_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/mysnap2
 
 echo "File contents in the original filesystem:"
 echo "mysnap1/foo"
@@ -123,8 +123,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/1.snap
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $send_files_dir/2.snap
+_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File contents in the new filesystem:"
 echo "mysnap1/foo"

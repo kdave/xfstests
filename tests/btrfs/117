@@ -80,10 +80,10 @@ _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/clones_snap
 
 _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
 
-_run_btrfs_util_prog send $SCRATCH_MNT/snap1 -f $tmp/1.snap
-_run_btrfs_util_prog send $SCRATCH_MNT/clones_snap -f $tmp/clones.snap
+_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/snap1
+_run_btrfs_util_prog send -f $tmp/clones.snap $SCRATCH_MNT/clones_snap
 _run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 \
-	-c $SCRATCH_MNT/clones_snap $SCRATCH_MNT/snap2 -f $tmp/2.snap
+	-c $SCRATCH_MNT/clones_snap -f $tmp/2.snap $SCRATCH_MNT/snap2
 
 echo "File digests in the original filesystem:"
 md5sum $SCRATCH_MNT/snap1/a/b/c/x | _filter_scratch
@@ -94,9 +94,9 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $tmp/1.snap
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $tmp/clones.snap
-_run_btrfs_util_prog receive $SCRATCH_MNT -f $tmp/2.snap
+_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
+_run_btrfs_util_prog receive -f $tmp/clones.snap $SCRATCH_MNT
+_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
 
 echo "File digests in the new filesystem:"
 # Should match the digests we had in the original filesystem.
