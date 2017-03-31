@@ -1,0 +1,110 @@
+#! /bin/bash
+# FS QA Test generic/421
+#
+# Test revoking an encryption key during concurrent I/O.  Regression test for
+# 1b53cf9815bb ("fscrypt: remove broken support for detecting keyring key
+# revocation").
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Google, Inc.  All Rights Reserved.
+#
+# Author: Eric Biggers <ebiggers@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption
+_require_xfs_io_command "set_encpolicy"
+_require_command "$KEYCTL_PROG" keyctl
+
+_new_session_keyring
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+
+dir=$SCRATCH_MNT/encrypted_dir
+file=$dir/file
+
+# 4 processes, 2 MB per process
+nproc=4
+slice=2
+
+# Create an encrypted file and sync its data to disk.
+rm -rf $dir
+mkdir $dir
+keydesc=$(_generate_encryption_key)
+$XFS_IO_PROG -c "set_encpolicy $keydesc" $dir
+$XFS_IO_PROG -f $file -c "pwrite 0 $((nproc*slice))M" -c "fsync" > /dev/null
+
+# Create processes to read from the encrypted file.  Use fadvise to wipe the
+# pagecache before each read, ensuring that each read actually does decryption.
+for ((proc = 0; proc < nproc; proc++)); do
+	(
+		range="$((proc * slice))M ${slice}M"
+		while [ ! -e $tmp.done ]; do
+			$XFS_IO_PROG $file -c "fadvise -d $range" \
+					   -c "pread $range" &> /dev/null
+		done
+	) &
+done
+
+# Wait a second for the readers to start up.
+sleep 1
+
+# Revoke the encryption key.
+keyid=$(_revoke_encryption_key $keydesc)
+
+# Now try to open the file again.  In buggy kernels this caused concurrent
+# readers to crash with a NULL pointer dereference during decryption.
+#
+# Note that the fix also made filenames stop "immediately" reverting to their
+# ciphertext on key revocation.  Therefore, the name of the file we're opening
+# here may be in either plaintext or ciphertext depending on the kernel version,
+# and ciphertext names are unpredictable anyway, so just use 'find' to find it.
+cat $(find $dir -type f) > /dev/null
+
+# Wait for readers to exit
+touch $tmp.done
+wait
+
+# success, all done
+echo "Didn't crash!"
+status=0
+exit
