@@ -2056,7 +2056,7 @@ _require_xfs_io_command()
 		;;
 	"fiemap")
 		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
-			-c "fiemap -v" $testfile 2>&1`
+			-c "fiemap -v $param" $testfile 2>&1`
 		;;
 	"flink" )
 		testio=`$XFS_IO_PROG -T -F -c "flink $testfile" \
@@ -2089,6 +2089,8 @@ _require_xfs_io_command()
 		_notrun "xfs_io $command support is missing"
 	echo $testio | grep -q "Operation not supported" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs?)"
+	echo $testio | grep -q "Invalid" && \
+		_notrun "xfs_io $command failed (old kernel/wrong fs/bad args?)"
 	echo $testio | grep -q "foreign file active" && \
 		_notrun "xfs_io $command not supported on $FSTYP"
 
@@ -2936,6 +2938,17 @@ _count_extents()
 _count_holes()
 {
 	$XFS_IO_PROG -c "fiemap" $1 | tail -n +2 | grep hole | wc -l
+}
+
+# Does fiemap support reporting xattr extents?
+_require_fiemap_attr()
+{
+	_require_xfs_io_command "fiemap" "-a"
+}
+
+_count_attr_extents()
+{
+	$XFS_IO_PROG -c "fiemap -a" $1 | tail -n +2 | grep -v hole | wc -l
 }
 
 # arg 1 is dev to remove and is output of the below eg.

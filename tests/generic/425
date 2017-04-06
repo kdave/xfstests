@@ -1,0 +1,92 @@
+#! /bin/bash
+# FS QA Test No. 425
+#
+# Check that FIEMAP produces some output when we require an external
+# block to hold extended attributes.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+	wait
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_scratch
+_require_attrs
+_require_fiemap_attr
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create the original files"
+testfile=$testdir/attrfile
+touch $testfile
+blk_sz=$(_get_file_block_size $SCRATCH_MNT)
+
+# Assume each attr eats at least 20 bytes.  Try to fill 2 fs blocks.
+max_attrs=$((2 * blk_sz / 20))
+
+i=0
+while [ $i -lt $max_attrs ]; do
+	n="$(printf "%010d" $i)"
+	$SETFATTR_PROG -n "user.$n" -v "$n" $testfile > $seqres.full 2>&1 || break
+	i=$((i + 1))
+done
+sync
+
+echo "Check attr extent counts"
+f1=$(_count_attr_extents $testfile)
+echo "$f1 xattr extents" >> $seqres.full
+$XFS_IO_PROG -c 'fiemap -a -v' $testfile >> $seqres.full
+test $f1 -gt 0 || echo "Expected at least one xattr extent."
+
+_scratch_cycle_mount
+
+echo "Check attr extent counts after remount"
+f1=$(_count_attr_extents $testfile)
+echo "$f1 xattr extents" >> $seqres.full
+$XFS_IO_PROG -c 'fiemap -a -v' $testfile >> $seqres.full
+test $f1 -gt 0 || echo "Expected at least one xattr extent."
+
+# success, all done
+status=0
+exit
