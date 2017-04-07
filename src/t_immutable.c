@@ -892,6 +892,21 @@ static int test_append(const char *dir)
      }
 
      errno = 0;
+     if ((fd = open(path, O_RDWR|O_APPEND)) == -1) {
+	  fprintf(stderr, "open(%s, O_RDWR|O_APPEND) failed: %s\n", path, strerror(errno));
+	  fail++;
+     } else {
+	     if (ftruncate(fd, 0) != -1) {
+		     fprintf(stderr, "ftruncate(%s, 0) did not fail\n", path);
+		     fail++;
+	     } else if (errno != EPERM) {
+		     fprintf(stderr, "ftruncate(%s, 0) did not set errno == EPERM\n", path);
+		     fail++;
+	     }
+	     close(fd);
+     }
+
+     errno = 0;
      if (truncate(path, 0) != -1) {
 	  fprintf(stderr, "truncate(%s, 0) did not fail\n", path);
 	  fail++;
