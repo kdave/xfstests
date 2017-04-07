@@ -174,6 +174,8 @@ case "$FSTYP" in
     reiser4)
 	 [ "$MKFS_REISER4_PROG" = "" ] && _fatal "mkfs.reiser4 not found"
 	 ;;
+    pvfs2)
+	;;
 esac
 
 if [ ! -z "$REPORT_LIST" ]; then
@@ -714,6 +716,9 @@ _test_mkfs()
     overlay)
 	# do nothing for overlay
 	;;
+    pvfs2)
+	# do nothing for pvfs2
+	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* $TEST_DEV > /dev/null
 	;;
@@ -737,6 +742,9 @@ _mkfs_dev()
 	;;
     overlay)
 	# do nothing for overlay
+	;;
+    pvfs2)
+	# do nothing for pvfs2
 	;;
     udf)
         $MKFS_UDF_PROG $MKFS_OPTIONS $* 2>$tmp_dir.mkfserr 1>$tmp_dir.mkfsstd
@@ -793,7 +801,7 @@ _scratch_mkfs()
 	local mkfs_status
 
 	case $FSTYP in
-	nfs*|cifs|ceph|overlay|glusterfs)
+	nfs*|cifs|ceph|overlay|glusterfs|pvfs2)
 		# unable to re-create this fstyp, just remove all files in
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
@@ -1513,6 +1521,15 @@ _require_scratch_nocheck()
 			_notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
+	pvfs2)
+		echo $SCRATCH_DEV | grep -q "://" > /dev/null 2>&1
+		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	cifs)
 		echo $SCRATCH_DEV | grep -q "//" > /dev/null 2>&1
 		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
@@ -1608,6 +1625,15 @@ _require_test()
 		fi
 		if [ ! -d "$TEST_DIR" ]; then
 		     _notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
+	pvfs2)
+		echo $TEST_DEV | grep -q "://" > /dev/null 2>&1
+		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
 		fi
 		;;
 	overlay)
@@ -2451,6 +2477,8 @@ _check_test_fs()
     overlay)
 	# no way to check consistency for overlay
 	;;
+    pvfs2)
+	;;
     udf)
 	# do nothing for now
 	;;
@@ -2500,6 +2528,8 @@ _check_scratch_fs()
 	;;
     overlay)
 	# no way to check consistency for overlay
+	;;
+    pvfs2)
 	;;
     btrfs)
 	_check_btrfs_filesystem $device
