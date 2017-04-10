@@ -1,0 +1,180 @@
+#! /bin/bash
+# FS QA Test 423
+#
+# Test the statx system call
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+# Written by David Howells (dhowells@redhat.com)
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -rf $TEST_DIR/$seq-*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_test_program "stat_test"
+_require_test_program "af_unix"
+_require_statx
+
+function check_stat () {
+	$here/src/stat_test $* || echo stat_test failed
+}
+
+function create_af_unix () {
+	$here/src/af_unix $* || echo af_unix failed
+}
+
+###############################################################################
+#
+# Check statx'ing of various types of object
+#
+# After each object is created, barring the first, we check that the creation
+# time and the change time of the new object as same as or later than the
+# corresponding timestamps on the previous object created.
+#
+###############################################################################
+echo "Test statx on a fifo"
+mkfifo -m 0600 $TEST_DIR/$seq-fifo
+check_stat $TEST_DIR/$seq-fifo \
+	   ts_order \
+	   stx_type=fifo \
+	   stx_mode=0600 \
+	   stx_rdev_major=0 \
+	   stx_rdev_minor=0 \
+	   stx_nlink=1
+
+echo "Test statx on a chardev"
+mknod -m 0600 $TEST_DIR/$seq-null c 1 3
+check_stat $TEST_DIR/$seq-null \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-fifo \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=char \
+	   stx_mode=0600 \
+	   stx_rdev_major=1 \
+	   stx_rdev_minor=3 \
+	   stx_nlink=1
+
+echo "Test statx on a directory"
+mkdir $TEST_DIR/$seq-dir
+check_stat $TEST_DIR/$seq-dir \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-null \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=dir \
+	   stx_mode=0755 \
+	   stx_rdev_major=0 \
+	   stx_rdev_minor=0
+
+echo "Test statx on a blockdev"
+mknod -m 0600 $TEST_DIR/$seq-loopy b 7 123
+check_stat $TEST_DIR/$seq-loopy \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-dir \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=block \
+	   stx_mode=0600 \
+	   stx_rdev_major=7 \
+	   stx_rdev_minor=123 \
+	   stx_nlink=1
+
+echo "Test statx on a file"
+dd if=/dev/zero of=$TEST_DIR/$seq-file bs=1024 count=20
+check_stat $TEST_DIR/$seq-file \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-loopy \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=file \
+	   stx_size=20480 \
+	   stx_rdev_major=0 \
+	   stx_rdev_minor=0 \
+	   stx_nlink=1
+
+echo "Test statx on a symlink"
+ln -s $TEST_DIR/$seq-nowhere $TEST_DIR/$seq-symlink
+check_stat $TEST_DIR/$seq-symlink \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-file \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=sym \
+	   stx_rdev_major=0 \
+	   stx_rdev_minor=0 \
+	   stx_nlink=1
+
+echo "Test statx on an AF_UNIX socket"
+create_af_unix $TEST_DIR/$seq-sock
+check_stat $TEST_DIR/$seq-sock \
+	   ts_order \
+	   ref=$TEST_DIR/$seq-symlink \
+	   ts=B,b \
+	   ts=M,m \
+	   stx_type=sock \
+	   stx_rdev_major=0 \
+	   stx_rdev_minor=0 \
+	   stx_nlink=1
+
+#
+# Test hard link creation.  Make sure that the file's ctime is now same as or
+# later than the creation time of the socket, but that the file's creation time
+# still lies somewhere between those of the directory and the socket.
+#
+echo "Test a hard link to a file"
+ln $TEST_DIR/$seq-file $TEST_DIR/$seq-link
+check_stat $TEST_DIR/$seq-link \
+	   ref=$TEST_DIR/$seq-dir \
+	   ts=B,b \
+	   ref=$TEST_DIR/$seq-sock \
+	   ts=b,B \
+	   ts=B,c \
+	   ts=C,c \
+	   ref=$TEST_DIR/$seq-file \
+	   cmp_ref \
+	   stx_nlink=2
+
+# Done.  We leave the success determination to the output comparator.
+status=0
+exit
