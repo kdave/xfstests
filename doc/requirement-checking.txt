@@ -1,0 +1,77 @@
+		   ========================================
+		   TESTING FOR REQUIREMENTS IN TEST SCRIPTS
+		   ========================================
+
+Test scripts need to indicate to the infrastructure what sorts of requirements
+they have.  This is done with _require_<xxx> macros, which may take parameters.
+
+ (1) General requirements.
+
+	_require_command "$<NAME_PROG>" <name>
+	_require_test
+	_require_test_program <name>
+	_require_xfs_io_command <name> [<switch>]
+
+ (2) System call requirements.
+
+	_require_statx
+
+
+====================
+GENERAL REQUIREMENTS
+====================
+
+_require_command "$NAME_PROG" name
+
+     The test requires an external command, called 'name' be present on the
+     system and that '$VAR' should be set with the path to that command.  $VAR
+     should then be used to refer to the command when executing it.  For
+     example:
+
+	_require_command "KILLALL_PROG" killall
+
+     to locate the killall command and then:
+
+	$KILLALL_PROG -q $FSSTRESS_PROG
+
+     to make use of it.
+
+
+_require_test
+
+     The test requires that the block device specified by $TEST_DEV be mounted
+     on $TEST_DIR.
+
+
+_require_test_program <name>
+
+     The test requires a program by the name of 'name' be present and built in
+     the src/ directory.  For example:
+
+	_require_test_program "stat_test"
+
+     requires that src/stat_test be built.
+
+
+_require_xfs_io_command <name> [<switch>]
+
+     The test requires that the xfs_io command be available, that it supports
+     command <name> and, optionally, that that command supports the specified
+     switch.  For example:
+
+	_require_xfs_io_command "falloc"
+	_require_xfs_io_command "chattr" "+/-x"
+
+     The first requires that xfs_io support the falloc command and the second
+     that it supports the chattr command and that the chattr command supports
+     the +x and -x arguments (DAX attribute).
+
+
+========================
+SYSTEM CALL REQUIREMENTS
+========================
+
+_require_statx
+
+     The test requires the use of the statx() system call and will be skipped
+     if it isn't available in the kernel.
