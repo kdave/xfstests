@@ -1,0 +1,155 @@
+#! /bin/bash
+# FS QA Test 424
+#
+# Test the statx stx_attribute flags that can be set with chattr
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+# Written by David Howells (dhowells@redhat.com)
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	$CHATTR_PROG -a -i $testfile
+	rm -f $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os IRIX Linux
+_require_test
+_require_test_program stat_test
+_require_statx
+_require_command "$CHATTR_PROG" chattr
+
+function check_stat () {
+	$here/src/stat_test $* || echo stat_test failed
+}
+
+testfile=$TEST_DIR/$seq-file
+touch $testfile
+
+# Work out what chattrs are supported on the fs under test
+a_supported=""
+c_supported=""
+d_supported=""
+i_supported=""
+a_list="0"
+c_list="0"
+d_list="0"
+i_list="0"
+
+if $CHATTR_PROG +a $testfile >&/dev/null; then
+    a_supported=1
+    a_list="+a -a"
+fi
+
+if $CHATTR_PROG +c $testfile >&/dev/null; then
+    c_supported=1
+    c_list="+c -c"
+fi
+
+if $CHATTR_PROG +d $testfile >&/dev/null; then
+    d_supported=1
+    d_list="+d -d"
+fi
+
+if $CHATTR_PROG +i $testfile >&/dev/null; then
+    i_supported=1
+    i_list="+i -i"
+fi
+
+echo "a=$a_supported d=$d_supported c=$c_supported i=$i_supported" >>$seqres.full
+
+if [ "$a_supported$c_supported$d_supported$i_supported" = "" ]; then
+	_notrun "file system doesn't support any of $CHATTR_PROG +a/+c/+d/+i"
+fi
+
+$CHATTR_PROG -a -c -d -i $testfile
+
+###############################################################################
+#
+# Now do the actual test.  We can turn on and off append (a), compressed (c),
+# immutable (i) and no-dump (d) and theoretically see the output in the
+# attribute flags.  The following associations can be seen:
+#
+#	chattr flag	stx_attributes flag
+#	+a		STATX_ATTR_APPEND
+#	+c		STATX_ATTR_COMPRESSED
+#	+d		STATX_ATTR_NODUMP
+#	+i		STATX_ATTR_IMMUTABLE
+#
+# Note, however, that if the filesystem doesn't paste this information into
+# stx_attributes, there's no way to tell the difference between cleared and
+# unset.
+#
+###############################################################################
+function try () {
+	echo Trying "$*" >>$seqres.full
+	$CHATTR_PROG ${a_supported:+$1} \
+	       ${c_supported:+$2} \
+	       ${d_supported:+$3} \
+	       ${i_supported:+$4} \
+	       $testfile
+	check_stat $testfile \
+	       ${a_supported:+attr=${1/a/append}} \
+	       ${c_supported:+attr=${2/c/compressed}} \
+	       ${d_supported:+attr=${3/d/nodump}} \
+	       ${i_supported:+attr=${4/i/immutable}} \
+	       stx_type=file \
+	       stx_size=0 \
+	       stx_rdev_major=0 \
+	       stx_rdev_minor=0 \
+	       stx_nlink=1
+}
+
+for a in $a_list; do
+	for c in $c_list; do
+		for d in $d_list; do
+			for i in $i_list; do
+				try $a $c $d $i
+			done
+		done
+	done
+done
+
+# For tradition's sake
+echo "Silence is golden"
+
+# Done.  We leave the success determination to the output comparator.
+status=0
+exit

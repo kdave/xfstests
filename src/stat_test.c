@@ -102,6 +102,30 @@ static int field_cmp(const void *_key, const void *_p)
 	return strcmp(key, p->name);
 }
 
+/*
+ * Sorted list of attribute flags for bsearch().
+ */
+struct attr_name {
+	const char	*name;
+	__u64		attr_flag;
+};
+
+static const struct attr_name attr_list[] = {
+	{ "append",	STATX_ATTR_APPEND },
+	{ "automount",	STATX_ATTR_AUTOMOUNT },
+	{ "compressed",	STATX_ATTR_COMPRESSED },
+	{ "encrypted",	STATX_ATTR_ENCRYPTED },
+	{ "immutable",	STATX_ATTR_IMMUTABLE },
+	{ "nodump",	STATX_ATTR_NODUMP },
+};
+
+static int attr_name_cmp(const void *_key, const void *_p)
+{
+	const char *key = _key;
+	const struct attr_name *p = _p;
+	return strcmp(key, p->name);
+}
+
 struct file_type {
 	const char *name;
 	mode_t mode;
@@ -128,6 +152,13 @@ void format(void)
 	fprintf(stderr, "usage: %s [-v] [-m<mask>] <testfile> [checks]\n", prog);
 	fprintf(stderr, "\t<mask> can be basic, all or a number; all is the default\n");
 	fprintf(stderr, "checks is a list of zero or more of:\n");
+	fprintf(stderr, "\tattr=[+-]<name> -- check an attribute in stx_attributes\n");
+	fprintf(stderr, "\t\tappend -- The file is marked as append only\n");
+	fprintf(stderr, "\t\tautomount -- The object is an automount point\n");
+	fprintf(stderr, "\t\tcompressed -- The file is marked as compressed\n");
+	fprintf(stderr, "\t\tencrypted -- The file is marked as encrypted\n");
+	fprintf(stderr, "\t\timmutable -- The file is marked as immutable\n");
+	fprintf(stderr, "\t\tnodump -- The file is marked as no-dump\n");
 	fprintf(stderr, "\tcmp_ref -- check that the reference file has identical stats\n");
 	fprintf(stderr, "\tref=<file> -- get reference stats from file\n");
 	fprintf(stderr, "\tstx_<field>=<val> -- statx field value check\n");
@@ -565,6 +596,40 @@ static void check_field(const struct statx *stx, char *arg)
 }
 
 /*
+ * Check attributes in stx_attributes.  When stx_attributes_mask gets in
+ * upstream, we will need to consider that also.
+ */
+static void check_attribute(const struct statx *stx, char *arg)
+{
+	const struct attr_name *p;
+	__u64 attr;
+	bool set;
+
+	verbose("check attr %s\n", arg);
+	switch (arg[0]) {
+	case '+': set = true;	break;
+	case '-': set = false;	break;
+	default:
+		bad_arg("attr flag must be marked + (set) or - (unset)\n");
+	}
+	arg++;
+
+	p = bsearch(arg, attr_list, sizeof(attr_list) / sizeof(attr_list[0]),
+		    sizeof(attr_list[0]), attr_name_cmp);
+	if (!p)
+		bad_arg("Unrecognised attr name '%s'\n", arg);
+
+	attr = p->attr_flag;
+	if (set) {
+		check(stx->stx_attributes && attr,
+		      "Attribute %s should be set\n", arg);
+	} else {
+		check(~stx->stx_attributes && attr,
+		      "Attribute %s should be unset\n", arg);
+	}
+}
+
+/*
  * Do the testing.
  */
 int main(int argc, char **argv)
@@ -669,6 +734,12 @@ int main(int argc, char **argv)
 	/* Handle additional checks the user specified */
 	for (; *argv; argv++) {
 		char *arg = *argv;
+
+		if (strncmp("attr=", arg, 5) == 0) {
+			/* attr=[+-]<attr> - check attribute flag */
+			check_attribute(&stx, arg + 5);
+			continue;
+		}
 
 		if (strcmp("cmp_ref", arg) == 0) {
 			/* cmp_ref - check ref file has same stats */
