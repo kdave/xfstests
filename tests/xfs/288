@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test 288
+#
+# When an attribute leaf block count is 0, xfs_repair should junk
+# that leaf directly (as xfsprogs commit f714016).
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_attrs
+
+# Due to xfs_db's write -d option is still not stable, and there's no
+# plan to support attr3. So only run this case on V4 XFS.
+# Please update this if xfs_db get enough improvement in one day.
+if [ -z "$XFS_MKFS_HAS_NO_META_SUPPORT" ]; then
+	mkfs_opts="-m crc=0"
+fi
+# get block size ($dbsize) from the mkfs output
+_scratch_mkfs_xfs $mkfs_opts | _filter_mkfs 2>$tmp.mkfs >/dev/null
+. $tmp.mkfs
+
+_scratch_mount
+
+touch $SCRATCH_MNT/$seq.attrfile
+inum=$(stat -c '%i' $SCRATCH_MNT/$seq.attrfile)
+
+# To get an attr block leaf, we need to extend attr format to extent
+# or btree format at least, and the max inode size is half of filesystem
+# block size, so write half of block size attr to make sure attr
+# out of local format.
+maxisize=$((dbsize/2))
+$SETFATTR_PROG -n "user.testattr${seq}" \
+	       -v "$(perl -e "print 'v' x ${maxisize};")" \
+	       $SCRATCH_MNT/$seq.attrfile
+
+_scratch_unmount
+# manually corrupt the XFS, by set the header count of attr to 0
+_scratch_xfs_db -x -c "inode $inum" \
+		   -c "ablock 0" \
+		   -c "write hdr.count 0" >> $seqres.full
+
+# make sure xfs_repair can find above corruption. If it can't, that
+# means we need to fix this bug on current xfs_repair
+_scratch_xfs_repair -n >> $seqres.full 2>&1
+if [ $? -eq 0 ];then
+	_fail "xfs_repair can't find the corruption"
+else
+	# If xfs_repair can find this corruption, then this repair
+	# should junk above leaf attribute and fix this XFS.
+	_scratch_xfs_repair >> $seqres.full 2>&1
+
+	# Old xfs_repair maybe find and fix this corruption by
+	# reset the first used heap value and the usedbytes cnt
+	# in ablock 0. That's not what we want. So check if
+	# xfs_repair has junked the whole ablock 0 by xfs_db.
+	_scratch_xfs_db -x -c "inode $inum" -c "ablock 0" | \
+		grep -q "no attribute data"
+	if [ $? -ne 0 ]; then
+		_fail "xfs_repair didn't junk the empty attr leaf"
+	fi
+fi
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
