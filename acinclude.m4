@@ -1,16 +1,7 @@
-# generated automatically by aclocal 1.11 -*- Autoconf -*-
-
-# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-# 2005, 2006, 2007, 2008, 2009  Free Software Foundation, Inc.
-# This file is free software; the Free Software Foundation
-# gives unlimited permission to copy and/or distribute it,
-# with or without modifications, as long as this notice is preserved.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY, to the extent permitted by law; without
-# even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-# PARTICULAR PURPOSE.
-
+dnl Copyright (C) 2016 Free Software Foundation, Inc.
+dnl This file is free software; the Free Software Foundation
+dnl gives unlimited permission to copy and/or distribute it,
+dnl with or without modifications, as long as this notice is preserved.
 AC_DEFUN([AC_PACKAGE_WANT_LINUX_FIEMAP_H],
   [ AC_CHECK_HEADERS([linux/fiemap.h], [ have_fiemap=true ], [ have_fiemap=false ])
     AC_SUBST(have_fiemap)
@@ -52,14 +43,3 @@ AC_DEFUN([AC_PACKAGE_WANT_OPEN_BY_HANDLE_AT],
       [ have_open_by_handle_at=false; AC_MSG_RESULT(no) ])
     AC_SUBST(have_open_by_handle_at)
   ])
-m4_include([m4/multilib.m4])
-m4_include([m4/package_acldev.m4])
-m4_include([m4/package_aiodev.m4])
-m4_include([m4/package_attrdev.m4])
-m4_include([m4/package_dmapidev.m4])
-m4_include([m4/package_gdbmdev.m4])
-m4_include([m4/package_globals.m4])
-m4_include([m4/package_ssldev.m4])
-m4_include([m4/package_utilies.m4])
-m4_include([m4/package_uuiddev.m4])
-m4_include([m4/package_xfslibs.m4])

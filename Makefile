@@ -41,10 +41,13 @@ endif
 
 SRCTAR = $(PKG_NAME)-$(PKG_VERSION).tar.gz
 
-CONFIGURE = configure include/builddefs include/config.h
+CONFIGURE = configure include/builddefs include/config.h \
+	    aclocal.m4 config.guess config.sub install-sh ltmain.sh \
+	    m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 \
+	    m4/lt~obsolete.m4
 LSRCFILES = configure configure.ac aclocal.m4 README VERSION
 LDIRT = config.log .ltdep .dep config.status config.cache confdefs.h \
-	conftest* check.log check.time
+	conftest* check.log check.time libtool
 
 ifeq ($(HAVE_BUILDDEFS), yes)
 LDIRT += $(SRCTAR)
@@ -76,12 +79,13 @@ clean:  # if configure hasn't run, nothing to clean
 endif
 
 configure: configure.ac
-	autoheader
-	autoconf
+	autoreconf --include=m4
+	libtoolize -i
 
 include/builddefs include/config.h: configure
 	./configure \
-                --libexecdir=/usr/lib
+                --libexecdir=/usr/lib \
+                --exec_prefix=/var/lib
 
 aclocal.m4::
 	aclocal --acdir=`pwd`/m4 --output=$@
