@@ -40,14 +40,11 @@ ifeq ($(HAVE_FALLOCATE), true)
 LCFLAGS += -DHAVE_FALLOCATE
 endif
 
-IRIX_TARGETS = open_unlink
-
 ifeq ($(PKG_PLATFORM),linux)
 TARGETS += $(LINUX_TARGETS)
 endif
 
 ifeq ($(PKG_PLATFORM),irix)
-TARGETS += $(IRIX_TARGETS)
 LLDLIBS += -lgen
 endif
 
