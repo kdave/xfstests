@@ -36,6 +36,10 @@ ifeq ($(HAVE_FIEMAP), true)
 LINUX_TARGETS += fiemap-tester
 endif
 
+ifeq ($(HAVE_OPEN_BY_HANDLE_AT), true)
+LINUX_TARGETS += open_by_handle
+endif
+
 ifeq ($(HAVE_FALLOCATE), true)
 LCFLAGS += -DHAVE_FALLOCATE
 endif

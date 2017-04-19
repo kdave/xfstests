@@ -37,6 +37,21 @@ AC_DEFUN([AC_PACKAGE_WANT_FALLOCATE],
       [ have_fallocate=false; AC_MSG_RESULT(no) ])
     AC_SUBST(have_fallocate)
   ])
+
+AC_DEFUN([AC_PACKAGE_WANT_OPEN_BY_HANDLE_AT],
+  [ AC_MSG_CHECKING([for open_by_handle_at])
+    AC_TRY_LINK([
+#define _GNU_SOURCE
+#include <fcntl.h>
+      ],
+      [
+          struct file_handle fh;
+          open_by_handle_at(0, &fh, 0);
+      ],
+      [ have_open_by_handle_at=true; AC_MSG_RESULT(yes) ],
+      [ have_open_by_handle_at=false; AC_MSG_RESULT(no) ])
+    AC_SUBST(have_open_by_handle_at)
+  ])
 m4_include([m4/multilib.m4])
 m4_include([m4/package_acldev.m4])
 m4_include([m4/package_aiodev.m4])
