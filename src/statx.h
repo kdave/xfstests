@@ -19,10 +19,12 @@
 #ifndef __NR_statx
 # ifdef __i386__
 #  define __NR_statx 383
-# elif defined (__ILP32__)
-#  define __NR_statx (__X32_SYSCALL_BIT + 332)
 # elif defined(__x86_64__)
-#  define __NR_statx 332
+#  if defined (__ILP32__)
+#   define __NR_statx (__X32_SYSCALL_BIT + 332)
+#  else
+#   define __NR_statx 332
+#  endif
 # endif
 #endif
 
