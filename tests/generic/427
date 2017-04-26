@@ -1,0 +1,87 @@
+#! /bin/bash
+# FS QA Test No. 427
+#
+# Try to trigger a race of free eofblocks and file extending dio writes.
+# A known bug of XFS has been fixed by "e4229d6 xfs: fix eofblocks race
+# with file extending async dio writes"
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_test_program "feature"
+_require_aiodio aio-dio-eof-race
+
+# limit the filesystem size, to save the time of filling filesystem
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >>$seqres.full 2>&1
+_scratch_mount
+
+# try to write more bytes than filesystem size to fill the filesystem,
+# then remove all these data. If we still can find these stale data in
+# a file' eofblock, then it's a bug
+$XFS_IO_PROG -f -c "pwrite -S 0x55 0 $((256 * 1024 * 1024 * 2))" \
+	     $SCRATCH_MNT/fillfs-$seq 2>/dev/null
+rm -f $SCRATCH_MNT/fillfs-$seq
+
+# open & close the file frequently, to trigger xfs_free_eofblocks
+while true; do
+	$XFS_IO_PROG -f -c open $SCRATCH_MNT/tst-aio-dio-eof-race.$seq \
+		>/dev/null 2>&1
+done &
+open_close_pid=$!
+
+nr_cpu=`$here/src/feature -o`
+fsize=$((nr_cpu * 10))
+if [ $fsize -gt 200 ]; then
+	fsize=200
+fi
+# start a background aio writer, which does several extending loops
+# internally and check data integrality
+$AIO_TEST -s $fsize -b 65536 $SCRATCH_MNT/tst-aio-dio-eof-race.$seq
+status=$?
+
+kill $open_close_pid
+wait $open_close_pid
+exit

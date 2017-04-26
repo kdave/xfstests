@@ -29,9 +29,19 @@
 
 #include <libaio.h>
 
-/* Sized to allow 4 x 512 AIOs */
-#define BUF_SIZE	2048
+unsigned long buf_size = 0;
+unsigned long size_MB = 0;
 #define IO_PATTERN	0xab
+
+void
+usage(char *progname)
+{
+	fprintf(stderr, "usage: %s [-s filesize] [-b bufsize] filename\n"
+	        "\t-s filesize: specify the minimum file size"
+	        "\t-b bufsize: buffer size",
+	        progname);
+	exit(1);
+}
 
 void
 dump_buffer(
@@ -83,24 +93,54 @@ int main(int argc, char *argv[])
 	struct iocb *iocbs[] = { &iocb1, &iocb2, &iocb3, &iocb4 };
 	void *buf;
 	struct stat statbuf;
-	char cmp_buf[BUF_SIZE];
 	int fd, err = 0;
 	off_t eof;
+	int c;
+	char *cmp_buf = NULL;
+	char *filename = NULL;
 
-	fd = open(argv[1], O_DIRECT | O_CREAT | O_TRUNC | O_RDWR, 0600);
+	while ((c = getopt(argc, argv, "s:b:")) != -1) {
+		char *endp;
+
+		switch (c) {
+		case 's':	/* XXX MB size will be extended */
+			size_MB = strtol(optarg, &endp, 0);
+			break;
+		case 'b':	/* buffer size */
+			buf_size = strtol(optarg, &endp, 0);
+			break;
+		default:
+			usage(argv[0]);
+		}
+	}
+
+	if (size_MB == 0)	/* default size is 8MB */
+		size_MB = 8;
+	if (buf_size < 2048)	/* default minimum buffer size is 2048 bytes */
+		buf_size = 2048;
+
+	if (optind == argc - 1)
+		filename = argv[optind];
+	else
+		usage(argv[0]);
+
+
+
+	fd = open(filename, O_DIRECT | O_CREAT | O_TRUNC | O_RDWR, 0600);
 	if (fd == -1) {
 		perror("open");
 		return 1;
 	}
 
-	err = posix_memalign(&buf, getpagesize(), BUF_SIZE);
+	err = posix_memalign(&buf, getpagesize(), buf_size);
 	if (err) {
 		fprintf(stderr, "error %s during %s\n",
 			strerror(err),
 			"posix_memalign");
 		return 1;
 	}
-	memset(cmp_buf, IO_PATTERN, BUF_SIZE);
+	cmp_buf = malloc(buf_size);
+	memset(cmp_buf, IO_PATTERN, buf_size);
 
 	err = io_setup(4, &ctx);
 	if (err) {
@@ -112,9 +152,9 @@ int main(int argc, char *argv[])
 
 	eof = 0;
 
-	/* Keep extending until 8MB (fairly arbitrary) */
-	while (eof < 8 * 1024 * 1024) {
-		memset(buf, IO_PATTERN, BUF_SIZE);
+	/* Keep extending until size_MB */
+	while (eof < size_MB * 1024 * 1024) {
+		memset(buf, IO_PATTERN, buf_size);
 		fstat(fd, &statbuf);
 		eof = statbuf.st_size;
 
@@ -125,10 +165,10 @@ int main(int argc, char *argv[])
 		 * management and stale block zeroing for races and can lead to
 		 * data corruption when not handled properly.
 		 */
-		io_prep_pwrite(&iocb1, fd, buf, BUF_SIZE/4, eof + 0*BUF_SIZE/4);
-		io_prep_pwrite(&iocb2, fd, buf, BUF_SIZE/4, eof + 1*BUF_SIZE/4);
-		io_prep_pwrite(&iocb3, fd, buf, BUF_SIZE/4, eof + 2*BUF_SIZE/4);
-		io_prep_pwrite(&iocb4, fd, buf, BUF_SIZE/4, eof + 3*BUF_SIZE/4);
+		io_prep_pwrite(&iocb1, fd, buf, buf_size/4, eof + 0*buf_size/4);
+		io_prep_pwrite(&iocb2, fd, buf, buf_size/4, eof + 1*buf_size/4);
+		io_prep_pwrite(&iocb3, fd, buf, buf_size/4, eof + 2*buf_size/4);
+		io_prep_pwrite(&iocb4, fd, buf, buf_size/4, eof + 3*buf_size/4);
 
 		err = io_submit(ctx, 4, iocbs);
 		if (err != 4) {
@@ -150,20 +190,20 @@ int main(int argc, char *argv[])
 		 * And then read it back.
 		 *
 		 * Using pread to keep it simple, but AIO has the same effect.
-		 * eof is the prior eof; we just wrote BUF_SIZE more.
+		 * eof is the prior eof; we just wrote buf_size more.
 		 */
-		if (pread(fd, buf, BUF_SIZE, eof) != BUF_SIZE) {
+		if (pread(fd, buf, buf_size, eof) != buf_size) {
 			perror("pread");
 			return 1;
 		}
 
 		/*
 		 * We launched 4 AIOs which, stitched together, should write
-		 * a seamless BUF_SIZE worth of IO_PATTERN to the last block.
+		 * a seamless buf_size worth of IO_PATTERN to the last block.
 		 */
-		if (memcmp(buf, cmp_buf, BUF_SIZE)) {
+		if (memcmp(buf, cmp_buf, buf_size)) {
 			printf("corruption while extending from %ld\n", eof);
-			dump_buffer(buf, 0, BUF_SIZE);
+			dump_buffer(buf, 0, buf_size);
 			return 1;
 		}
 	}
