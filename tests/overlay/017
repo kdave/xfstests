@@ -40,6 +40,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
+	cd /
 	rm -f $tmp.*
 }
 
@@ -73,7 +74,7 @@ mknod $lowerdir/fifo p
 _scratch_mount
 
 
-rm -f $tmp.before $tmp.after
+rm -f $tmp.*
 
 # Test stable stat(2) st_ino
 
@@ -89,11 +90,13 @@ done
 
 # find by inode number - expect to find file by inode number
 cat $tmp.before | while read ino f; do
-	find $f -inum $ino -maxdepth 0 | _filter_scratch
+	find $SCRATCH_MNT/ -maxdepth 1 -inum $ino | grep -q $f || \
+		echo "$f not found by ino $ino"
 done
 
 # Compare before..after - expect silence
 diff $tmp.before $tmp.after
 
+echo "Silence is golden"
 status=0
 exit
