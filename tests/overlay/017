@@ -9,7 +9,8 @@
 # - stat file A shows inode number Y != X
 #
 # Also test if d_ino of readdir entries changes after copy up
-# and if inode numbers persist after rename and drop caches.
+# and if inode numbers persist after rename, drop caches and
+# mount cycle.
 #
 #-----------------------------------------------------------------------
 #
@@ -138,6 +139,12 @@ echo 3 > /proc/sys/vm/drop_caches
 
 # Compare inode numbers before/after rename and drop caches
 check_inode_numbers $testdir $tmp.after_copyup $tmp.after_move
+
+# Verify that the inode numbers survive a mount cycle
+_scratch_cycle_mount
+
+# Compare inode numbers before/after mount cycle
+check_inode_numbers $testdir $tmp.after_move $tmp.after_cycle
 
 echo "Silence is golden"
 status=0
