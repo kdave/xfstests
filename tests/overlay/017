@@ -8,7 +8,8 @@
 # - modify A to trigger copy up
 # - stat file A shows inode number Y != X
 #
-# Also test if d_ino of readdir entries changes after copy up.
+# Also test if d_ino of readdir entries changes after copy up
+# and if inode numbers persist after rename and drop caches.
 #
 #-----------------------------------------------------------------------
 #
@@ -114,6 +115,8 @@ _scratch_mount
 
 
 rm -f $tmp.*
+testdir=$SCRATCH_MNT/test
+mkdir -p $testdir
 
 # Record inode numbers before copy up
 record_inode_numbers $SCRATCH_MNT $tmp.before
@@ -125,6 +128,16 @@ done
 
 # Compare inode numbers before/after copy up
 check_inode_numbers $SCRATCH_MNT $tmp.before $tmp.after_copyup
+
+for f in $FILES; do
+	# move to another dir
+	mv $SCRATCH_MNT/$f $testdir/
+done
+
+echo 3 > /proc/sys/vm/drop_caches
+
+# Compare inode numbers before/after rename and drop caches
+check_inode_numbers $testdir $tmp.after_copyup $tmp.after_move
 
 echo "Silence is golden"
 status=0
