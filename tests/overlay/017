@@ -34,6 +34,7 @@ seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
+here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
@@ -52,6 +53,7 @@ _cleanup()
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+_require_test_program "af_unix"
 
 rm -f $seqres.full
 
@@ -68,6 +70,7 @@ ln -s $lowerdir/file $lowerdir/symlink
 mknod $lowerdir/chrdev c 1 1
 mknod $lowerdir/blkdev b 1 1
 mknod $lowerdir/fifo p
+$here/src/af_unix $lowerdir/socket
 
 
 _scratch_mount
@@ -78,7 +81,7 @@ rm -f $tmp.*
 # Test stable stat(2) st_ino
 
 # Record inode numbers before and after copy up
-for f in dir file symlink chrdev blkdev fifo; do
+for f in dir file symlink chrdev blkdev fifo socket; do
 	ls -id $SCRATCH_MNT/$f >> $tmp.before
 	# chown -h modifies all those file types
 	chown -h 100 $SCRATCH_MNT/$f
