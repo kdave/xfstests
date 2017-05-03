@@ -254,26 +254,36 @@ _sort_getfattr_output()
 }
 
 # set maximum total attr space based on fs type
-if [ "$FSTYP" == "xfs" -o "$FSTYP" == "udf" -o "$FSTYP" == "pvfs2" ]; then
+case "$FSTYP" in
+xfs|udf|pvfs2|ceph)
 	MAX_ATTRS=1000
-else # Assume max ~1 block of attrs
+	;;
+*)
+	# Assume max ~1 block of attrs
 	BLOCK_SIZE=`_get_block_size $TEST_DIR`
 	# user.attribute_XXX="value.XXX" is about 32 bytes; leave some overhead
 	let MAX_ATTRS=$BLOCK_SIZE/40
-fi
+esac
 
 export MAX_ATTRS
 
 # Set max attr value size based on fs type
-if [ "$FSTYP" == "xfs" -o "$FSTYP" == "udf" -o "$FSTYP" == "btrfs" ]; then
+case "$FSTYP" in
+xfs|udf|btrfs)
 	MAX_ATTRVAL_SIZE=64
-elif [ "$FSTYP" == "pvfs2" ]; then
+	;;
+pvfs2)
 	MAX_ATTRVAL_SIZE=8192
-else # Assume max ~1 block of attrs
+	;;
+ceph)
+	MAX_ATTRVAL_SIZE=65536
+	;;
+*)
+	# Assume max ~1 block of attrs
 	BLOCK_SIZE=`_get_block_size $TEST_DIR`
 	# leave a little overhead
 	let MAX_ATTRVAL_SIZE=$BLOCK_SIZE-256
-fi
+esac
 
 export MAX_ATTRVAL_SIZE
 # make sure this script returns success
