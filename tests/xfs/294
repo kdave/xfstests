@@ -1,0 +1,118 @@
+#! /bin/bash
+# FS QA Test 294
+#
+# Test readdir on fragmented multi-fsb dir blocks
+#
+# If the readahead map ends with a partial multi-fsb dir
+# block, the loop at the end of xfs_dir2_leaf_readbuf() may
+# walk off the end of the mapping array, read garbage,
+# corrupt the loop control counter, and never return.
+#
+# Failure is a hang; KASAN should also catch this.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+# Author: Eric Sandeen <sandeen@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_test_program "punch-alternating"
+
+# We want to mkfs with a very specific geometry
+MKFS_OPTIONS=""
+_scratch_mkfs "-d size=512m -n size=8192 -i size=1024" >> $seqres.full 2>&1 \
+	|| _fail "mkfs failed"
+_scratch_mount
+
+# Make a ton of mostly-empty inode clusters so we can always
+# make more inodes
+mkdir $SCRATCH_MNT/tmp
+for I in `seq 1 10000`; do touch $SCRATCH_MNT/tmp/$I; done
+
+# These mostly-empty clusters will live here:
+mkdir $SCRATCH_MNT/clusters
+for I in `seq 1 32 10000`; do
+	mv $SCRATCH_MNT/tmp/$I $SCRATCH_MNT/clusters;
+done
+rm -rf $SCRATCH_MNT/tmp
+
+# Make our test dir with a couple blocks, should be contiguous
+mkdir $SCRATCH_MNT/testdir
+# roughly 20 chars per file
+for I in `seq 1 100`; do
+	touch $SCRATCH_MNT/testdir/12345678901234567890$I;
+done
+
+# Now completely fragment freespace.
+# Consume most of it:
+$XFS_IO_PROG -f -c "falloc 0 400m" $SCRATCH_MNT/fillfile ||
+	_fail "Could not allocate space"
+
+# File to fragment:
+$XFS_IO_PROG -f -c "falloc 0 70m" $SCRATCH_MNT/fragfile ||
+	_fail "Could not allocate space"
+
+df -h $SCRATCH_MNT >> $seqres.full 2>&1
+
+# Fill remaining space; let this run to failure
+dd if=/dev/zero of=$SCRATCH_MNT/spacefile1 oflag=direct >> $seqres.full 2>&1
+# Fragment our all-consuming file
+./src/punch-alternating $SCRATCH_MNT/fragfile >> $seqres.full 2>&1
+
+# Punching might have freed up large-ish swaths of metadata
+# Consume hopefully any remaining contiguous freespace
+# (and then some for good measure)
+dd conv=fsync if=/dev/zero of=$SCRATCH_MNT/spacefile2 bs=1M count=64 >> $seqres.full 2>&1
+
+# Now populate the directory so that it must allocate these
+# fragmented blocks
+for I in `seq 1 1400`; do
+	touch $SCRATCH_MNT/testdir/12345678901234567890$I;
+done
+
+# Now traverse that ugly thing!
+find $SCRATCH_MNT/testdir | sort | _filter_scratch | md5sum
+
+status=0
+exit
