@@ -84,25 +84,34 @@ _new_session_keyring()
 	$KEYCTL_PROG new_session >>$seqres.full
 }
 
-#
-# Generate a random encryption key, add it to the session keyring, and print out
-# the resulting key descriptor (example: "8bf798e1a494e1ec").  Requires the
-# keyctl program.  It's assumed the caller has already set up a test-scoped
-# session keyring using _new_session_keyring.
-#
-_generate_encryption_key()
+# Generate a key descriptor (16 character hex string)
+_generate_key_descriptor()
 {
-	# Generate a key descriptor (16 character hex string)
 	local keydesc=""
+	local i
 	for ((i = 0; i < 8; i++)); do
 		keydesc="${keydesc}$(printf "%02x" $(( $RANDOM % 256 )))"
 	done
+	echo $keydesc
+}
 
-	# Generate the actual encryption key (64 bytes)
+# Generate a raw encryption key, but don't add it to the keyring yet.
+_generate_raw_encryption_key()
+{
 	local raw=""
+	local i
 	for ((i = 0; i < 64; i++)); do
 		raw="${raw}\\x$(printf "%02x" $(( $RANDOM % 256 )))"
 	done
+	echo $raw
+}
+
+# Add the specified raw encryption key to the session keyring, using the
+# specified key descriptor.
+_add_encryption_key()
+{
+	local keydesc=$1
+	local raw=$2
 
 	#
 	# Add the key to the session keyring.  The required structure is:
@@ -134,6 +143,21 @@ _generate_encryption_key()
 	fi
 	echo -n -e "${mode}${raw}${size}" |
 		$KEYCTL_PROG padd logon $FSTYP:$keydesc @s >>$seqres.full
+}
+
+#
+# Generate a random encryption key, add it to the session keyring, and print out
+# the resulting key descriptor (example: "8bf798e1a494e1ec").  Requires the
+# keyctl program.  It's assumed the caller has already set up a test-scoped
+# session keyring using _new_session_keyring.
+#
+_generate_encryption_key()
+{
+	local keydesc=$(_generate_key_descriptor)
+	local raw=$(_generate_raw_encryption_key)
+
+	_add_encryption_key $keydesc $raw
+
 	echo $keydesc
 }
 
