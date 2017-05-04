@@ -11,6 +11,14 @@
 #include <string.h>
 #include "global.h"
 
+void usage(char *cmd)
+{
+	printf("Usage: %s [-i interval] [-s size] file\n", cmd);
+	printf("Punches every other block in the file by default,\n");
+	printf("or 'size' blocks every 'interval' blocks with options.\n");
+	exit(1);
+}
+
 int main(int argc, char *argv[])
 {
 	struct stat	s;
@@ -21,14 +29,37 @@ int main(int argc, char *argv[])
 	off_t		sz;
 	int		mode;
 	int		error;
+	int		c;
+	int		size = 1;	/* punch $SIZE blocks ... */
+	int		interval = 2;	/* every $INTERVAL blocks */
 
-	if (argc != 2) {
-		printf("Usage: %s file\n", argv[0]);
-		printf("Punches every other block in the file.\n");
-		return 1;
+	while ((c = getopt(argc, argv, "i:s:")) != EOF) {
+		switch (c) {
+		case 'i':
+			interval = atoi(optarg);
+			break;
+		case 's':
+			size = atoi(optarg);
+			break;
+		default:
+			usage(argv[0]);
+		}
 	}
 
-	fd = open(argv[1], O_WRONLY);
+	if (interval <= 0) {
+		printf("interval must be > 0\n");
+		usage(argv[0]);
+	}
+
+	if (size <= 0) {
+		printf("size must be > 0\n");
+		usage(argv[0]);
+	}
+
+	if (optind != argc - 1)
+		usage(argv[0]);
+
+	fd = open(argv[optind], O_WRONLY);
 	if (fd < 0)
 		goto err;
 
@@ -44,8 +75,8 @@ int main(int argc, char *argv[])
 	blksz = sf.f_bsize;
 
 	mode = FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE;
-	for (offset = 0; offset < sz; offset += blksz * 2) {
-		error = fallocate(fd, mode, offset, blksz);
+	for (offset = 0; offset < sz; offset += blksz * interval) {
+		error = fallocate(fd, mode, offset, blksz * size);
 		if (error)
 			goto err;
 	}
@@ -59,6 +90,6 @@ int main(int argc, char *argv[])
 		goto err;
 	return 0;
 err:
-	perror(argv[1]);
+	perror(argv[optind]);
 	return 2;
 }
