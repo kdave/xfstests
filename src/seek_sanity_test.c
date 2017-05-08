@@ -280,7 +280,7 @@ static int test09(int fd, int testnum)
 	int ret = 0;
 	char *buf = NULL;
 	int bufsz = alloc_size;
-	int filsz = 8 << 20;
+	int filsz = bufsz * 100 + bufsz;
 
 	/*
 	 * HOLE - unwritten DATA in dirty page - HOLE -
@@ -336,7 +336,7 @@ static int test08(int fd, int testnum)
 	int ret = 0;
 	char *buf = NULL;
 	int bufsz = alloc_size;
-	int filsz = 4 << 20;
+	int filsz = bufsz * 10 + bufsz;
 
 	/* HOLE - unwritten DATA in writeback page */
 	/* Each unit is bufsz */
@@ -385,7 +385,7 @@ static int test07(int fd, int testnum)
 	int ret = 0;
 	char *buf = NULL;
 	int bufsz = alloc_size;
-	int filsz = 4 << 20;
+	int filsz = bufsz * 10 + bufsz;
 
 	/* HOLE - unwritten DATA in dirty page */
 	/* Each unit is bufsz */
