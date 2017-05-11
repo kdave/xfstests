@@ -19,9 +19,10 @@
 /*
  * t_dir_type
  *
- * print directory entries, optionally filtered by d_type
+ * print directory entries and their file type, optionally filtered by d_type
+ * or by inode number.
  *
- * ./t_dir_type <path> [u|f|d|c|b|l|p|s|w]
+ * ./t_dir_type <path> [u|f|d|c|b|l|p|s|w|<ino>]
  */
 
 #include <fcntl.h>
@@ -67,6 +68,7 @@ main(int argc, char *argv[])
 	struct linux_dirent64 *d;
 	int bpos;
 	int type = -1; /* -1 means all types */
+	uint64_t ino = 0;
 	int ret = 1;
 
 	fd = open(argv[1], O_RDONLY | O_DIRECTORY);
@@ -82,6 +84,8 @@ main(int argc, char *argv[])
 			if (DT_CHAR(type) == t)
 				break;
 		/* no match ends up with type = -1 */
+		if (type < 0)
+			ino = atoll(argv[2]);
 	}
 
 	for ( ; ; ) {
@@ -96,7 +100,8 @@ main(int argc, char *argv[])
 
 		for (bpos = 0; bpos < nread;) {
 			d = (struct linux_dirent64 *) (buf + bpos);
-			if (type < 0 || type == (int)d->d_type) {
+			if ((type < 0 || type == (int)d->d_type) &&
+			    (!ino || ino == d->d_ino)) {
 				ret = 0;
 				printf("%s %c\n", d->d_name, DT_CHAR(d->d_type));
 			}
