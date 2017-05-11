@@ -63,8 +63,6 @@ rm -f $seqres.full
 _scratch_mkfs >>$seqres.full 2>&1
 
 # Create our test files.
-# Not dealing with hardlinks here, when hardlinks are broken they
-# should not preserve the inode number.
 lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
 mkdir -p $lowerdir
 mkdir $lowerdir/dir
@@ -74,8 +72,10 @@ mknod $lowerdir/chrdev c 1 1
 mknod $lowerdir/blkdev b 1 1
 mknod $lowerdir/fifo p
 $here/src/af_unix $lowerdir/socket
+touch $lowerdir/hardlink1
+ln $lowerdir/hardlink1 $lowerdir/hardlink2
 
-FILES="dir file symlink chrdev blkdev fifo socket"
+FILES="dir file symlink chrdev blkdev fifo socket hardlink1 hardlink2"
 
 # Record inode numbers in format <ino> <basename>
 function record_inode_numbers()
