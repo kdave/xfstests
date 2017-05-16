@@ -1,0 +1,35 @@
+#
+# NFS specific common functions.
+#
+
+# given an NFS export and a NFS version number, return 0 if
+# the mounted NFS is the given version. e.g.
+# _is_nfs_version $SCRATCH_DEV 4.2
+_is_nfs_version()
+{
+	local nfs_exp=$1
+	local nfs_ver=$2
+	_fs_options $1 | grep -q "vers=$2"
+}
+
+# require $TEST_DEV mounted as a given NFS version
+# e.g. _require_test_nfs_version 4.2
+_require_test_nfs_version()
+{
+	_require_test
+	if ! _is_nfs_version $TEST_DEV $1; then
+		_notrun "Test requires \$TEST_DEV mounted as NFSv$1"
+	fi
+}
+
+# require $SCRATCH_DEV mounted as a given NFS version
+# e.g. _require_scratch_nfs_version 4
+_require_scratch_nfs_version()
+{
+	_require_scratch
+	_scratch_mount
+	if ! _is_nfs_version $SCRATCH_DEV $1; then
+		_notrun "Test requires \$SCRATCH_DEV mounted as NFSv$1"
+	fi
+	_scratch_unmount
+}

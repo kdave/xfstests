@@ -1,0 +1,77 @@
+#! /bin/bash
+# FS QA Test 001
+#
+# Test nfs4_getfacl gets ACL list correctly from server when the ACL length is
+# close enough to the end of a page. On buggy NFS client getxattr could return
+# ERANGE. Upstream commit ed92d8c137b7 ("NFSv4: fix getacl ERANGE for some ACL
+# buffer sizes") fixed this bug.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc., All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $acltest.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs nfs
+_supported_os Linux
+_require_test_nfs_version 4
+_require_command $NFS4_SETFACL_PROG "nfs4_setfacl"
+_require_command $NFS4_GETFACL_PROG "nfs4_getfacl"
+
+acltest=$TEST_DIR/acltest.$seq
+rm -f $acltest.*
+touch $acltest.file $acltest.list
+
+# Setup a carefully made ACE list to make attr buffer length is close enough to
+# PAGE_SIZE (size is 4088 in this case, and this only works for 4k page size)
+# that leaves too little room for adding extra attr bitmap in this page
+echo "A::OWNER@:RW" >$acltest.list
+for ((i=9802; i < 10002; i++)); do echo "A::$i:RW" >>$acltest.list; done
+echo "A::GROUP@:RW" >>$acltest.list
+echo "A::EVERYONE@:RW" >>$acltest.list
+
+# Save ACL to testfile
+$NFS4_SETFACL_PROG -S $acltest.list $acltest.file
+
+# Dump ACL, expect correct number of ACE entries
+$NFS4_GETFACL_PROG $acltest.file >>$seqres.full 2>&1
+$NFS4_GETFACL_PROG $acltest.file | wc -l
+
+# success, all done
+status=0
+exit
