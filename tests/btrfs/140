@@ -1,0 +1,117 @@
+#! /bin/bash
+# FS QA Test 140
+#
+# Regression test for btrfs DIO read's repair during read.
+#
+# Commit 2dabb3248453 ("Btrfs: Direct I/O read: Work on sectorsized blocks")
+# introduced the regression.
+# The upstream fix is
+#	commit 2e949b0a5592 ("Btrfs: fix invalid dereference in btrfs_retry_endio")
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Liu Bo.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 2
+
+_require_btrfs_command inspect-internal dump-tree
+_require_command "$FILEFRAG_PROG" filefrag
+_require_odirect
+
+get_physical()
+{
+	# $1 is logical address
+	# print chunk tree and find devid 2 which is $SCRATCH_DEV
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
+	grep $1 -A 6 | awk '($1 ~ /stripe/ && $3 ~ /devid/ && $4 ~ /1/) { print $6 }'
+}
+
+_scratch_dev_pool_get 2
+# step 1, create a raid1 btrfs which contains one 128k file.
+echo "step 1......mkfs.btrfs" >>$seqres.full
+
+mkfs_opts="-d raid1 -b 1G"
+_scratch_pool_mkfs $mkfs_opts >>$seqres.full 2>&1
+
+# -o nospace_cache makes sure data is written to the start position of the data
+# chunk
+_scratch_mount -o nospace_cache
+
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" | _filter_xfs_io
+
+# step 2, corrupt the first 64k of one copy (on SCRATCH_DEV which is the first
+# one in $SCRATCH_DEV_POOL
+echo "step 2......corrupt file extent" >>$seqres.full
+
+${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar >> $seqres.full
+logical_in_btrfs=`${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar | _filter_filefrag | cut -d '#' -f 1`
+physical_on_scratch=`get_physical ${logical_in_btrfs}`
+
+_scratch_unmount
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical_on_scratch 64K" $SCRATCH_DEV | _filter_xfs_io
+
+_scratch_mount
+
+# step 3, 128k dio read (this read can repair bad copy)
+echo "step 3......repair the bad copy" >>$seqres.full
+
+# since raid1 consists of two copies, and the bad copy was put on stripe #1
+# while the good copy lies on stripe #0, the bad copy only gets access when the
+# reader's pid % 2 == 1 is true
+while true; do
+	$XFS_IO_PROG -d -c "pread -b 128K 0 128K" "$SCRATCH_MNT/foobar" > /dev/null &
+	pid=$!
+	wait
+	[ $((pid % 2)) == 1 ] && break
+done
+
+_scratch_unmount
+
+# check if the repair works
+$XFS_IO_PROG -d -c "pread -v -b 512 $physical_on_scratch 512" $SCRATCH_DEV | _filter_xfs_io
+
+_scratch_dev_pool_put
+# success, all done
+status=0
+exit
