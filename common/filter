@@ -418,5 +418,24 @@ _filter_ovl_dirs()
 	    -e "s,$OVL_WORK,OVL_WORK,g"
 }
 
+# interpret filefrag output,
+# eg. "physical 1234, length 10, logical 5678" -> "1234#10#5678"
+_filter_filefrag()
+{
+	perl -ne '
+	if (/blocks? of (\d+) bytes/) {
+		$blocksize = $1;
+		next
+	}
+	($ext, $logical, $physical, $length) =
+		(/^\s*(\d+):\s+(\d+)..\s+\d+:\s+(\d+)..\s+\d+:\s+(\d+):/)
+	or next;
+	($flags) = /.*:\s*(\S*)$/;
+	print $physical * $blocksize, "#",
+	      $length * $blocksize, "#",
+	      $logical * $blocksize, "#",
+	      $flags, "\n"'
+}
+
 # make sure this script returns success
 /bin/true
