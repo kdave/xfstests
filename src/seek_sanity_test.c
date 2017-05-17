@@ -246,6 +246,201 @@ out:
 }
 
 /*
+ * test file with unwritten extents, having non-contiguous dirty pages in
+ * the unwritten extent.
+ */
+static int test16(int fd, int testnum)
+{
+	int ret = 0;
+	char *buf = NULL;
+	int bufsz = sysconf(_SC_PAGE_SIZE);
+	int filsz = 4 << 20;
+
+	/* HOLE - unwritten DATA in dirty page */
+	/* Each unit is bufsz */
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* preallocate 4M space to file */
+	ret = do_fallocate(fd, 0, filsz, 0);
+	if (ret < 0) {
+		/* Report success if fs doesn't support fallocate */
+		if (errno == EOPNOTSUPP) {
+			fprintf(stdout, "Test skipped as fs doesn't support fallocate.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	ret = do_pwrite(fd, buf, bufsz, filsz/2);
+	if (ret)
+		goto out;
+
+	/* offset at the beginning */
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 1, 1);
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, bufsz, filsz/2);
+	ret += do_lseek(testnum,  6, fd, filsz, SEEK_HOLE, filsz/2,
+			filsz/2 + bufsz);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
+/*
+ * test file with unwritten extents, having page just after end of unwritten
+ * extent.
+ */
+static int test15(int fd, int testnum)
+{
+	int ret = 0;
+	char *buf = NULL;
+	int bufsz = sysconf(_SC_PAGE_SIZE);
+	int filsz = 4 << 20;
+
+	/* HOLE - unwritten DATA in dirty page */
+	/* Each unit is bufsz */
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* preallocate 4M space to file */
+	ret = do_fallocate(fd, 0, filsz, 0);
+	if (ret < 0) {
+		/* Report success if fs doesn't support fallocate */
+		if (errno == EOPNOTSUPP) {
+			fprintf(stdout, "Test skipped as fs doesn't support fallocate.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	/* One page written just after end of unwritten extent... */
+	ret = do_pwrite(fd, buf, bufsz, filsz);
+	if (ret)
+		goto out;
+
+	/* offset at the beginning */
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 1, 1);
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, bufsz, filsz);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
+/*
+ * test file with unwritten extents, only have pagevec worth of dirty pages
+ * in page cache, a hole and then another page.
+ */
+static int test14(int fd, int testnum)
+{
+	int ret = 0;
+	char *buf = NULL;
+	int bufsz = sysconf(_SC_PAGE_SIZE) * 14;
+	int filsz = 4 << 20;
+
+	/* HOLE - unwritten DATA in dirty page */
+	/* Each unit is bufsz */
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* preallocate 4M space to file */
+	ret = do_fallocate(fd, 0, filsz, 0);
+	if (ret < 0) {
+		/* Report success if fs doesn't support fallocate */
+		if (errno == EOPNOTSUPP) {
+			fprintf(stdout, "Test skipped as fs doesn't support fallocate.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	ret = do_pwrite(fd, buf, bufsz, 3 * bufsz);
+	if (ret)
+		goto out;
+
+	/* offset at the beginning */
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_HOLE, 3 * bufsz, 4 * bufsz);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, 1, 1);
+	ret += do_lseek(testnum,  6, fd, filsz, SEEK_DATA, bufsz, 3 * bufsz);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
+/*
+ * test file with unwritten extents, only have pagevec worth of dirty pages
+ * in page cache.
+ */
+static int test13(int fd, int testnum)
+{
+	int ret = 0;
+	char *buf = NULL;
+	int bufsz = sysconf(_SC_PAGE_SIZE) * 14;
+	int filsz = 4 << 20;
+
+	/* HOLE - unwritten DATA in dirty page */
+	/* Each unit is bufsz */
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* preallocate 4M space to file */
+	ret = do_fallocate(fd, 0, filsz, 0);
+	if (ret < 0) {
+		/* Report success if fs doesn't support fallocate */
+		if (errno == EOPNOTSUPP) {
+			fprintf(stdout, "Test skipped as fs doesn't support fallocate.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	/* offset at the beginning */
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 1, 1);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
+/*
  * Test huge file to check for overflows of block counts due to usage of
  * 32-bit types.
  */
@@ -678,6 +873,10 @@ struct testrec seek_tests[] = {
        { 10, test10, "Test a huge file for offset overflow" },
        { 11, test11, "Test a huge file for block number signed" },
        { 12, test12, "Test a huge file for block number overflow" },
+       { 13, test13, "Test file with unwritten extents, only have pagevec dirty pages" },
+       { 14, test14, "Test file with unwritten extents, small hole after pagevec dirty pages" },
+       { 15, test15, "Test file with unwritten extents, page after unwritten extent" },
+       { 16, test16, "Test file with unwritten extents, non-contiguous dirty pages" },
 };
 
 static int run_test(struct testrec *tr)
@@ -786,7 +985,7 @@ out:
 
 void usage(char *cmd)
 {
-	fprintf(stdout, "Usage: %s [-t] base_file_path\n", cmd);
+	fprintf(stdout, "Usage: %s [-t] [-s <starttest>] [-e <endtest>] base_file_path\n", cmd);
 	exit(1);
 }
 
@@ -797,11 +996,36 @@ int main(int argc, char **argv)
 	int opt;
 	int check_support = 0;
 	int numtests = sizeof(seek_tests) / sizeof(struct testrec);
+	int teststart, testend;
 
-	while ((opt = getopt(argc, argv, "t")) != -1) {
+	/*
+	 * First twelve tests are used by generic/285. To run these is the
+	 * default. Further tests are run e.g. by generic/436. They are not
+	 * run by default in order to not regress older kernels.
+	 */
+	teststart = 1;
+	testend = 12;
+
+	while ((opt = getopt(argc, argv, "ts:e:")) != -1) {
 		switch (opt) {
 		case 't':
 			check_support++;
+			break;
+		case 's':
+			teststart = strtol(optarg, NULL, 10);
+			if (teststart <= 0 || teststart > numtests) {
+				fprintf(stdout, "Invalid starting test: %s\n",
+					optarg);
+				usage(argv[0]);
+			}
+			break;
+		case 'e':
+			testend = strtol(optarg, NULL, 10);
+			if (testend <= 0 || testend > numtests) {
+				fprintf(stdout, "Invalid final test: %s\n",
+					optarg);
+				usage(argv[0]);
+			}
 			break;
 		default:
 			usage(argv[0]);
@@ -812,6 +1036,11 @@ int main(int argc, char **argv)
 	if (optind != argc - 1)
 		usage(argv[0]);
 
+	if (teststart > testend) {
+		fprintf(stdout, "Starting test is larger than final test!\n");
+		usage(argv[0]);
+	}
+
 	base_file_path = (char *)strdup(argv[optind]);
 
 	ret = test_basic_support();
@@ -819,9 +1048,12 @@ int main(int argc, char **argv)
 		goto out;
 
 	for (i = 0; i < numtests; ++i) {
-		ret = run_test(&seek_tests[i]);
-		if (ret)
-			break;
+		if (seek_tests[i].test_num >= teststart &&
+		    seek_tests[i].test_num <= testend) {
+			ret = run_test(&seek_tests[i]);
+			if (ret)
+				break;
+		}
 	}
 
 out:
