@@ -280,6 +280,7 @@ int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
 int	attr_remove_path(pathname_t *, const char *, int);
 int	attr_set_path(pathname_t *, const char *, const char *, const int, int);
 void	check_cwd(void);
+void	cleanup_flist(void);
 int	creat_path(pathname_t *, mode_t);
 void	dcache_enter(int, int);
 void	dcache_init(void);
@@ -794,6 +795,25 @@ check_cwd(void)
 #endif
 }
 
+/*
+ * go thru flist and release all entries
+ *
+ * NOTE: this function shouldn't be called until the end of a process
+ */
+void
+cleanup_flist(void)
+{
+	flist_t	*flp;
+	int	i;
+
+	for (i = 0, flp = flist; i < FT_nft; i++, flp++) {
+		flp->nslots = 0;
+		flp->nfiles = 0;
+		free(flp->fents);
+		flp->fents = NULL;
+	}
+}
+
 int
 creat_path(pathname_t *name, mode_t mode)
 {
@@ -945,6 +965,7 @@ errout:
 	if (cleanup) {
 		sprintf(cmd, "rm -rf %s", buf);
 		system(cmd);
+		cleanup_flist();
 	}
 }
 
