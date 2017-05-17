@@ -2038,9 +2038,10 @@ _require_xfs_io_command()
 		echo "Usage: _require_xfs_io_command command [switch]" 1>&2
 		exit 1
 	fi
-	command=$1
+	local command=$1
 	shift
-	param="$*"
+	local param="$*"
+	local param_checked=0
 
 	testfile=$TEST_DIR/$$.xfs_io
 	case $command in
@@ -2055,6 +2056,7 @@ _require_xfs_io_command()
 		;;
 	"falloc" )
 		testio=`$XFS_IO_PROG -F -f -c "falloc $param 0 1m" $testfile 2>&1`
+		param_checked=1
 		;;
 	"fpunch" | "fcollapse" | "zero" | "fzero" | "finsert" | "funshare")
 		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
@@ -2063,6 +2065,7 @@ _require_xfs_io_command()
 	"fiemap")
 		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
 			-c "fiemap -v $param" $testfile 2>&1`
+		param_checked=1
 		;;
 	"flink" )
 		testio=`$XFS_IO_PROG -T -F -c "flink $testfile" \
@@ -2087,7 +2090,7 @@ _require_xfs_io_command()
 		testio=`$XFS_IO_PROG -f -c "utimes" 0 0 0 0 $testfile 2>&1`
 		;;
 	*)
-		testio=`$XFS_IO_PROG -c "$command help" 2>&1`
+		testio=`$XFS_IO_PROG -c "help $command" 2>&1`
 	esac
 
 	rm -f $testfile 2>&1 > /dev/null
@@ -2100,9 +2103,10 @@ _require_xfs_io_command()
 	echo $testio | grep -q "foreign file active" && \
 		_notrun "xfs_io $command not supported on $FSTYP"
 
-	test -z "$param" && return
-	$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \
-		_notrun "xfs_io $command doesn't support $param"
+	if [ -n "$param" -a $param_checked -eq 0 ]; then
+		$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \
+			_notrun "xfs_io $command doesn't support $param"
+	fi
 }
 
 # check that kernel and filesystem support direct I/O
