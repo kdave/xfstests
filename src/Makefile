@@ -60,6 +60,7 @@ endif
 
 ifeq ($(HAVE_AIO), true)
 SUBDIRS += aio-dio-regress
+LLDLIBS += -laio
 endif
 
 ifeq ($(HAVE_SSL), true)

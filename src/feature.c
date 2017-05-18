@@ -30,6 +30,7 @@
  * Return code: 0 is true, anything else is error/not supported
  *
  * Test for machine features
+ *   -A  test whether AIO syscalls are available
  *   -o  report a number of online cpus
  *   -s  report pagesize
  *   -w  report bits per long
@@ -44,6 +45,10 @@
 
 #ifdef HAVE_XFS_XQM_H
 #include <xfs/xqm.h>
+#endif
+
+#ifdef HAVE_LIBAIO_H
+#include <libaio.h>
 #endif
 
 #ifndef USRQUOTA
@@ -66,7 +71,7 @@ usage(void)
 	fprintf(stderr, "Usage: feature [-v] -<q|u|g|p|U|G|P> <filesystem>\n");
 	fprintf(stderr, "       feature [-v] -c <file>\n");
 	fprintf(stderr, "       feature [-v] -t <file>\n");
-	fprintf(stderr, "       feature -o | -s | -w\n");
+	fprintf(stderr, "       feature -A | -o | -s | -w\n");
 	exit(1);
 }
 
@@ -199,10 +204,35 @@ hasxfsquota(int type, int q, char *device)
 	return (1);
 }
 
+static int
+check_aio_support(void)
+{
+#ifdef HAVE_LIBAIO_H
+	struct io_context *ctx = NULL;
+	int err;
+
+	err = io_setup(1, &ctx);
+	if (err == 0)
+		return 0;
+
+	if (err == -ENOSYS) /* CONFIG_AIO=n */
+		return 1;
+
+	fprintf(stderr, "unexpected error from io_setup(): %s\n",
+		strerror(-err));
+	return 2;
+#else
+	/* libaio was unavailable at build time; assume AIO is unsupported */
+	return 1;
+#endif
+}
+
+
 int
 main(int argc, char **argv)
 {
 	int	c;
+	int	Aflag = 0;
 	int	cflag = 0;
 	int	tflag = 0;
 	int	gflag = 0;
@@ -217,8 +247,11 @@ main(int argc, char **argv)
 	int	oflag = 0;
 	char	*fs = NULL;
 
-	while ((c = getopt(argc, argv, "ctgGopPqsuUvw")) != EOF) {
+	while ((c = getopt(argc, argv, "ActgGopPqsuUvw")) != EOF) {
 		switch (c) {
+		case 'A':
+			Aflag++;
+			break;
 		case 'c':
 			cflag++;
 			break;
@@ -268,7 +301,7 @@ main(int argc, char **argv)
 		if (optind != argc-1)	/* need a device */
 			usage();
 		fs = argv[argc-1];
-	} else if (wflag || sflag || oflag) {
+	} else if (Aflag || wflag || sflag || oflag) {
 		if (optind != argc)
 			usage();
 	} else 
@@ -292,6 +325,9 @@ main(int argc, char **argv)
 		return(hasxfsquota(PRJQUOTA, XFS_QUOTA_PDQ_ACCT, fs));
 	if (Uflag)
 		return(hasxfsquota(USRQUOTA, XFS_QUOTA_UDQ_ACCT, fs));
+
+	if (Aflag)
+		return(check_aio_support());
 
 	if (sflag) {
 		printf("%d\n", getpagesize());

@@ -1868,7 +1868,24 @@ _require_nonexternal()
 	_notrun "External device testing in progress, skipped this test"
 }
 
+# this test requires that the kernel supports asynchronous I/O
+_require_aio()
+{
+	$here/src/feature -A
+	case $? in
+	0)
+		;;
+	1)
+		_notrun "kernel does not support asynchronous I/O"
+		;;
+	*)
+		_fail "unexpected error testing for asynchronous I/O support"
+		;;
+	esac
+}
+
 # this test requires that a (specified) aio-dio executable exists
+# and that the kernel supports asynchronous I/O.
 # $1 - command (optional)
 #
 _require_aiodio()
@@ -1881,6 +1898,7 @@ _require_aiodio()
         AIO_TEST=src/aio-dio-regress/$1
         [ -x $AIO_TEST ] || _notrun "$AIO_TEST not built"
     fi
+    _require_aio
     _require_odirect
 }
 
