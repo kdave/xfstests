@@ -621,10 +621,10 @@ static void check_attribute(const struct statx *stx, char *arg)
 
 	attr = p->attr_flag;
 	if (set) {
-		check(stx->stx_attributes && attr,
+		check((stx->stx_attributes & attr) == attr,
 		      "Attribute %s should be set\n", arg);
 	} else {
-		check(~stx->stx_attributes && attr,
+		check((stx->stx_attributes & attr) == 0,
 		      "Attribute %s should be unset\n", arg);
 	}
 }
