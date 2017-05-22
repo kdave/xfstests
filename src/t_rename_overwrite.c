@@ -31,7 +31,8 @@ int main(int argc, char *argv[])
 		err(1, "fstat(%i)", fd);
 
 	if (stbuf.st_nlink != 0) {
-		fprintf(stderr, "nlink is %lu, should be 0\n", stbuf.st_nlink);
+		fprintf(stderr, "nlink is %lu, should be 0\n",
+			(unsigned long) stbuf.st_nlink);
 		return 1;
 	}
 

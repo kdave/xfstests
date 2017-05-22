@@ -101,10 +101,10 @@ int verify_mapping(char *vastart, long npages, uint64_t *expect)
 		for (i = 0; i < THREADS; i++) {
 			if (*(uint64_t*)(va + page_offs[i]) != expect[i]) {
 				printf("ERROR: thread %d, "
-				       "offset %08lx, %08lx != %08lx\n", i,
-				       (va + page_offs[i] - vastart),
-				       *(uint64_t*)(va + page_offs[i]),
-				       expect[i]);
+				       "offset %08llx, %08llx != %08llx\n", i,
+				       (unsigned long long) (va + page_offs[i] - vastart),
+				       (unsigned long long) *(uint64_t*)(va + page_offs[i]),
+				       (unsigned long long) expect[i]);
 				errcnt++;
 			}
 		}

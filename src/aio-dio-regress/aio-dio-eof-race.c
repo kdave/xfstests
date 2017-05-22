@@ -202,7 +202,8 @@ int main(int argc, char *argv[])
 		 * a seamless buf_size worth of IO_PATTERN to the last block.
 		 */
 		if (memcmp(buf, cmp_buf, buf_size)) {
-			printf("corruption while extending from %ld\n", eof);
+			printf("corruption while extending from %lld\n",
+			       (long long) eof);
 			dump_buffer(buf, 0, buf_size);
 			return 1;
 		}

@@ -92,12 +92,16 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	fd = open(argv[1], O_CREAT | O_TRUNC | O_RDWR, 0600);
-	if (fd < 0)
+	if (fd < 0) {
+		perror("open");
 		return 1;
+	}
 
 	pid1 = fork();
-	if (pid1 < 0)
+	if (pid1 < 0) {
+		perror("fork");
 		return 1;
+	}
 
 	if (pid1 == 0) {
 		struct timeval start, now, delta = { 0, 0 };
@@ -108,12 +112,15 @@ int main(int argc, char **argv)
 		flags = fcntl(fd, F_GETFL);
 		while (1) {
 			ret = fcntl(fd, F_SETFL, flags | O_DIRECT);
-			if (ret)
-				return ret;
+			if (ret) {
+				perror("fcntl O_DIRECT");
+				return 1;
+			}
 			ret = fcntl(fd, F_SETFL, flags);
-			if (ret)
-				return ret;
-
+			if (ret) {
+				perror("fcntl");
+				return 1;
+			}
 			gettimeofday(&now, NULL);
 			timersub(&now, &start, &delta);
 			if (delta.tv_sec >= LOOP_SECONDS)
@@ -121,8 +128,15 @@ int main(int argc, char **argv)
 		}
 	} else {
 		/* parent: AIO */
-		void *buf;
-		posix_memalign(&buf, BUF_SIZE, BUF_SIZE);
+		void *buf = NULL;
+		int err;
+
+		err = posix_memalign(&buf, BUF_SIZE, BUF_SIZE);
+		if (err || buf == NULL) {
+			fprintf(stderr, "posix_memalign failed: %s\n",
+				strerror(err));
+			exit(1);
+		}
 		/* Two tasks which performs unaligned aio will be serialized
 		   which maks race window wider */
 		pid2 = fork();
