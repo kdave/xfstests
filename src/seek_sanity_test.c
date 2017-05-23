@@ -334,12 +334,15 @@ static int test15(int fd, int testnum)
 	if (ret)
 		goto out;
 
+	/* update file size */
+	filsz += bufsz;
+
 	/* offset at the beginning */
 	ret += do_lseek(testnum,  1, fd, filsz, SEEK_HOLE, 0, bufsz);
 	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 1, bufsz);
 	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 0, 0);
 	ret += do_lseek(testnum,  4, fd, filsz, SEEK_DATA, 1, 1);
-	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, bufsz, filsz);
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, bufsz, filsz - bufsz);
 
 out:
 	do_free(buf);
