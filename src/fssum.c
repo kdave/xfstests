@@ -15,7 +15,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 021110-1307, USA.
  */
-#ifdef __LINUX__
+#ifdef __linux__
 #define _BSD_SOURCE
 #define _LARGEFILE64_SOURCE
 #ifndef _GNU_SOURCE
@@ -34,7 +34,7 @@
 #ifdef __SOLARIS__
 #include <sys/mkdev.h>
 #endif
-#include <openssl/md5.h>
+#include "md5.h"
 #include <netinet/in.h>
 #include <inttypes.h>
 #include <assert.h>
@@ -42,7 +42,7 @@
 #define CS_SIZE 16
 #define CHUNKS	128
 
-#ifdef __LINUX__
+#ifdef __linux__
 #ifndef SEEK_DATA
 #define SEEK_DATA 3
 #define SEEK_HOLE 4

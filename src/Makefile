@@ -63,23 +63,19 @@ SUBDIRS += aio-dio-regress
 LLDLIBS += -laio
 endif
 
-ifeq ($(HAVE_SSL), true)
-TARGETS += fssum
-LLDLIBS += -lssl -lcrypto
-ifeq ($(PKG_PLATFORM),linux)
-CFLAGS += -D__LINUX__
-endif
-endif
-
 CFILES = $(TARGETS:=.c)
-LDIRT = $(TARGETS)
+LDIRT = $(TARGETS) fssum
 
 
-default: depend $(TARGETS) $(SUBDIRS)
+default: depend $(LDIRT) $(SUBDIRS)
 
 depend: .dep
 
 include $(BUILDRULES)
+
+fssum: fssum.c md5.c
+	@echo "    [CC]    $@"
+	$(Q)$(LTLINK) fssum.c md5.c -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 
 $(TARGETS): $(LIBTEST)
 	@echo "    [CC]    $@"
@@ -89,7 +85,7 @@ LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 
 install: default $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src
-	$(LTINSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src
+	$(LTINSTALL) -m 755 $(LDIRT) $(PKG_LIB_DIR)/src
 	$(LTINSTALL) -m 755 fill2attr fill2fs fill2fs_check scaleread.sh $(PKG_LIB_DIR)/src
 	$(LTINSTALL) -m 644 dumpfile $(PKG_LIB_DIR)/src
 
