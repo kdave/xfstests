@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test 438
+#
+# This is a regression test for kernel patch
+#   "ext4: Fix data corruption for mmap writes"
+#
+# The problem this test checks for is when too much is zeroed in the tail
+# page that gets written out just while the file gets extended and written
+# to through mmap.
+#
+# Based on test program by Michael Zimmer <michael@swarm64.com>
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 SUSE.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $FILE
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_test_program "t_mmap_fallocate"
+
+# real QA test starts here
+FILE=$TEST_DIR/testfile_fallocate
+# Make sure file exists
+echo >$FILE
+# Force frequent writeback of the file
+(
+	trap "STOP=1" SIGTERM
+	STOP=0
+	while [ $STOP -eq 0 ]; do
+		$XFS_IO_PROG -c fsync $FILE
+	done
+)&
+SYNCPID=$!
+
+# Run the test
+src/t_mmap_fallocate $FILE 256 && echo "Silence is golden"
+
+kill -TERM $SYNCPID
+wait $SYNCPID
+
+# success, all done
+status=0
+exit
