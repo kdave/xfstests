@@ -60,10 +60,10 @@ int main(int argc, char **argv)
         if (ret < 0) {
                 perror("listxattr");
         } else {
-                char *l;
-                for (l = buf; l != (buf + bufsize) && *l != '\0';
-                                l = strchr(l, '\0') + 1) {
+                char *l = buf;
+                while (l < (buf + ret)) {
                         printf("xattr: %s\n", l);
+                        l = strchr(l, '\0') + 1;
                 }
         }
 
