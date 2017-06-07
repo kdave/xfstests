@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test 10
+#
+# Test delayed allocation with a large number of extents that are merged.
+# Regression test for patch "Btrfs: fix delalloc accounting leak caused
+# by u32 overflow".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+test_file="$TEST_DIR/$seq"
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* "$test_file"
+}
+
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+_supported_fs btrfs
+_supported_os Linux
+_require_test
+
+# Create 32k extents. All of these extents will be accounted as outstanding and
+# reserved.
+for ((i = 0; i < 32 * 1024; i++)); do
+	$XFS_IO_PROG -f -c "pwrite $((2 * 4096 * i)) 4096" "$test_file" >>"$seqres.full"
+done
+
+# Fill in the gaps between the created extents. The outstanding extents will
+# all be merged into 1, but there will still be 32k reserved.
+for ((i = 0; i < 32 * 1024; i++)); do
+	$XFS_IO_PROG -f -c "pwrite $((2 * 4096 * i + 1)) 4096" "$test_file" >>"$seqres.full"
+done
+
+# Flush the delayed allocations.
+sync
+
+# Make sure that we didn't leak any metadata space.
+uuid="$(findmnt -n -o UUID "$TEST_DIR")"
+cd "/sys/fs/btrfs/$uuid/allocation"
+echo "$(($(cat metadata/bytes_may_use) - $(cat global_rsv_reserved))) bytes leaked" | grep -v '^0 '
+
+echo "Silence is golden"
+
+status=0
+exit
