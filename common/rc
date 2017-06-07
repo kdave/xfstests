@@ -1364,6 +1364,25 @@ _is_block_dev()
     fi
 }
 
+# returns device number if a file is a character device
+#
+_is_char_dev()
+{
+	if [ $# -ne 1 ]; then
+		echo "Usage: _is_char_dev dev" 1>&2
+		exit 1
+	fi
+
+	_dev=$1
+	if [ -L "${_dev}" ]; then
+		_dev=`readlink -f "${_dev}"`
+	fi
+
+	if [ -c "${_dev}" ]; then
+		src/lstat64 "${_dev}" | $AWK_PROG '/Device type:/ { print $9 }'
+	fi
+}
+
 # Do a command, log it to $seqres.full, optionally test return status
 # and die if command fails. If called with one argument _do executes the
 # command, logs it, and returns its exit status. With two arguments _do
@@ -1790,6 +1809,23 @@ _require_block_device()
 	if [ "`_is_block_dev "$1"`" == "" ]; then
 		_notrun "require $1 to be valid block disk"
 	fi
+}
+
+# this test requires a path to refere to a local block or character device
+# $1 - device
+_require_local_device()
+{
+	if [ -z "$1" ]; then
+		echo "Usage: _require_local_device <dev>" 1>&2
+		exit 1
+	fi
+	if [ "`_is_block_dev "$1"`" != "" ]; then
+		return 0
+	fi
+	if [ "`_is_char_dev "$1"`" != "" ]; then
+		return 0
+	fi
+	_notrun "require $1 to be local device"
 }
 
 # brd based ram disks erase the device when they receive a flush command when no
