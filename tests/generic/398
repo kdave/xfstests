@@ -43,6 +43,12 @@ _cleanup()
 	rm -f $tmp.*
 }
 
+filter_enokey()
+{
+	# rename without key can also fail with EPERM instead of ENOKEY
+	sed -e "s/Required key not available/Operation not permitted/g"
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -149,9 +155,9 @@ efile1=$(find $edir1 -type f)
 efile2=$(find $edir2 -type f)
 
 echo -e "\n\n*** Exchange encrypted <=> encrypted without key ***"
-src/renameat2 -x $efile1 $efile2
+src/renameat2 -x $efile1 $efile2 |& filter_enokey
 echo -e "\n*** Exchange encrypted <=> unencrypted without key ***"
-src/renameat2 -x $efile1 $udir/ufile
+src/renameat2 -x $efile1 $udir/ufile |& filter_enokey
 
 # success, all done
 status=0
