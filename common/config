@@ -199,6 +199,7 @@ export TIMEOUT_PROG="`set_prog_path timeout`"
 export MAN_PROG="`set_prog_path man`"
 export NFS4_SETFACL_PROG="`set_prog_path nfs4_setfacl`"
 export NFS4_GETFACL_PROG="`set_prog_path nfs4_getfacl`"
+export UBIUPDATEVOL_PROG="`set_prog_path ubiupdatevol`"
 
 # use 'udevadm settle' or 'udevsettle' to wait for lv to be settled.
 # newer systems have udevadm command but older systems like RHEL5 don't.
@@ -322,6 +323,9 @@ _mount_opts()
 	tmpfs)
 		# We need to specify the size at mount, use 1G by default
 		export MOUNT_OPTIONS="-o size=1G $TMPFS_MOUNT_OPTIONS"
+		;;
+	ubifs)
+		export MOUNT_OPTIONS=$UBIFS_MOUNT_OPTIONS
 		;;
 	*)
 		;;
@@ -458,13 +462,20 @@ _check_device()
 		return 0
 	fi
 
-	if [ "$FSTYP" == "overlay" ]; then
+	case "$FSTYP" in
+	overlay)
 		if [ ! -d "$dev" ]; then
 			_fatal "common/config: $name ($dev) is not a directory for overlay"
 		fi
-	else
+		;;
+	ubifs)
+		if [ ! -c "$dev" ]; then
+			_fatal "common/config: $name ($dev) is not a character device"
+		fi
+		;;
+	*)
 		_fatal "common/config: $name ($dev) is not a block device or a network filesystem"
-	fi
+	esac
 }
 
 # check and return a canonical mount point path

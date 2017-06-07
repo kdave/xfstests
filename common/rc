@@ -177,6 +177,9 @@ case "$FSTYP" in
 	 ;;
     pvfs2)
 	;;
+    ubifs)
+	[ "$UBIUPDATEVOL_PROG" = "" ] && _fatal "ubiupdatevol not found"
+	;;
 esac
 
 if [ ! -z "$REPORT_LIST" ]; then
@@ -811,6 +814,11 @@ _scratch_mkfs()
 		;;
 	tmpfs)
 		# do nothing for tmpfs
+		return 0
+		;;
+	ubifs)
+		# erase the UBI volume; reformated automatically on next mount
+		$UBIUPDATEVOL_PROG ${SCRATCH_DEV} -t
 		return 0
 		;;
 	ext4)
@@ -1576,6 +1584,15 @@ _require_scratch_nocheck()
 		    _notrun "this test requires a valid \$SCRATCH_MNT and unique $SCRATCH_DEV"
 		fi
 		;;
+	ubifs)
+		# ubifs needs an UBI volume. This will be a char device, not a block device.
+		if [ ! -c "$SCRATCH_DEV" ]; then
+			_notrun "this test requires a valid UBI volume for \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	*)
 		 if [ -z "$SCRATCH_DEV" -o "`_is_block_dev "$SCRATCH_DEV"`" = "" ]
 		 then
@@ -1668,6 +1685,15 @@ _require_test()
 		if [ -z "$TEST_DEV" -o ! -d "$TEST_DIR" ];
 		then
 		    _notrun "this test requires a valid \$TEST_DIR and unique $TEST_DEV"
+		fi
+		;;
+	ubifs)
+		# ubifs needs an UBI volume. This will be a char device, not a block device.
+		if [ ! -c "$TEST_DEV" ]; then
+			_notrun "this test requires a valid UBI volume for \$TEST_DEV"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
 		fi
 		;;
 	*)
@@ -2555,6 +2581,9 @@ _check_test_fs()
     tmpfs)
 	# no way to check consistency for tmpfs
 	;;
+    ubifs)
+	# there is no fsck program for ubifs yet
+	;;
     *)
 	_check_generic_filesystem $TEST_DEV
 	;;
@@ -2603,6 +2632,9 @@ _check_scratch_fs()
 	;;
     tmpfs)
 	# no way to check consistency for tmpfs
+	;;
+    ubifs)
+	# there is no fsck program for ubifs yet
 	;;
     *)
 	_check_generic_filesystem $device
