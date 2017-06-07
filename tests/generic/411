@@ -53,7 +53,7 @@ _supported_fs generic
 _supported_os Linux
 _require_test
 _require_scratch
-_require_block_device $SCRATCH_DEV
+_require_local_device $SCRATCH_DEV
 
 fs_stress()
 {
@@ -103,7 +103,7 @@ start_test()
 	local type=$1
 
 	_scratch_mkfs >$seqres.full 2>&1
-	_get_mount $SCRATCH_DEV $MNTHEAD
+	_get_mount -t $FSTYP $SCRATCH_DEV $MNTHEAD
 	$MOUNT_PROG --make-"${type}" $MNTHEAD
 	mkdir $mpA $mpB $mpC
 }
@@ -125,17 +125,17 @@ crash_test()
 {
 	start_test shared
 
-	_get_mount $SCRATCH_DEV $mpA
+	_get_mount -t $FSTYP $SCRATCH_DEV $mpA
 	mkdir $mpA/mnt1
 	$MOUNT_PROG --make-shared $mpA
 	_get_mount --bind $mpA $mpB
 	_get_mount --bind $mpA $mpC
 	$MOUNT_PROG --make-slave $mpB
 	$MOUNT_PROG --make-slave $mpC
-	_get_mount $SCRATCH_DEV $mpA/mnt1
+	_get_mount -t $FSTYP $SCRATCH_DEV $mpA/mnt1
 	mkdir $mpA/mnt1/mnt2
 
-	_get_mount $SCRATCH_DEV $mpB/mnt1/mnt2
+	_get_mount -t $FSTYP $SCRATCH_DEV $mpB/mnt1/mnt2
 	find_mnt
 	fs_stress $mpB/mnt1/mnt2
 

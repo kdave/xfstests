@@ -64,7 +64,7 @@ _supported_fs generic
 _supported_os Linux
 _require_test
 _require_scratch
-_require_block_device $SCRATCH_DEV
+_require_local_device $SCRATCH_DEV
 
 fs_stress()
 {
@@ -114,7 +114,7 @@ start_test()
 	local type=$1
 
 	_scratch_mkfs >$seqres.full 2>&1
-	_get_mount $SCRATCH_DEV $MNTHEAD
+	_get_mount -t $FSTYP $SCRATCH_DEV $MNTHEAD
 	$MOUNT_PROG --make-"${type}" $MNTHEAD
 	mkdir $mpA $mpB $mpC $mpD
 }
@@ -133,7 +133,7 @@ bind_run()
 	start_test $dest
 
 	echo "bind $source on $dest"
-	_get_mount $SCRATCH_DEV $mpA
+	_get_mount -t $FSTYP $SCRATCH_DEV $mpA
 	mkdir -p $mpA/dir 2>/dev/null
 	$MOUNT_PROG --make-shared $mpA
 	_get_mount --bind $mpA $mpB
@@ -147,7 +147,7 @@ bind_run()
 	fi
 	_get_mount --bind $mpC $mpD
 	for m in $mpA $mpB $mpC $mpD; do
-		_get_mount $SCRATCH_DEV $m/dir
+		_get_mount -t $FSTYP $SCRATCH_DEV $m/dir
 		fs_stress $m/dir
 		find_mnt
 		_put_mount
