@@ -23,11 +23,9 @@ if [ $? -eq 0 ]; then
 	_notrun "Cannot run tests with DAX on dmerror devices"
 fi
 
-_dmerror_init()
+_dmerror_setup()
 {
 	local dm_backing_dev=$SCRATCH_DEV
-
-	$DMSETUP_PROG remove error-test > /dev/null 2>&1
 
 	local blk_dev_size=`blockdev --getsz $dm_backing_dev`
 
@@ -35,10 +33,15 @@ _dmerror_init()
 
 	DMLINEAR_TABLE="0 $blk_dev_size linear $dm_backing_dev 0"
 
+	DMERROR_TABLE="0 $blk_dev_size error $dm_backing_dev 0"
+}
+
+_dmerror_init()
+{
+	_dmerror_setup
+	$DMSETUP_PROG remove error-test > /dev/null 2>&1
 	$DMSETUP_PROG create error-test --table "$DMLINEAR_TABLE" || \
 		_fatal "failed to create dm linear device"
-
-	DMERROR_TABLE="0 $blk_dev_size error $dm_backing_dev 0"
 }
 
 _dmerror_mount()
