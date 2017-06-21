@@ -1,2 +1,171 @@
 QA output created by 040
-Silence is golden.
+--- xfsprogs/libxfs/xfs_alloc.c
++++ kernel/libxfs/xfs_alloc.c
+@@ -XXXX,X +YYYY,Y @@
+ 		pag->pagf_refcount_level = be32_to_cpu(agf->agf_refcount_level);
+ 		spin_lock_init(&pag->pagb_lock);
+ 		pag->pagb_count = 0;
+-		/* XXX: pagb_tree doesn't exist in userspace */
+-		//pag->pagb_tree = RB_ROOT;
++		pag->pagb_tree = RB_ROOT;
+ 		pag->pagf_init = 1;
+ 	}
+ #ifdef DEBUG
+--- xfsprogs/libxfs/xfs_btree.c
++++ kernel/libxfs/xfs_btree.c
+@@ -XXXX,X +YYYY,Y @@
+ 	return error;
+ }
+ 
+-#ifdef __KERNEL__
+ struct xfs_btree_split_args {
+ 	struct xfs_btree_cur	*cur;
+ 	int			level;
+@@ -XXXX,X +YYYY,Y @@
+ 	destroy_work_on_stack(&args.work);
+ 	return args.result;
+ }
+-#else /* !KERNEL */
+-#define xfs_btree_split	__xfs_btree_split
+-#endif
+ 
+ 
+ /*
+--- xfsprogs/libxfs/xfs_dir2_sf.c
++++ kernel/libxfs/xfs_dir2_sf.c
+@@ -XXXX,X +YYYY,Y @@
+ 		 * Calculate the new size, see if we should give up yet.
+ 		 */
+ 		size = xfs_dir2_sf_hdr_size(i8count) +	/* header */
+-		       count * 3 * sizeof(__u8) +	/* namelen + offset */
++		       count * 3 * sizeof(u8) +		/* namelen + offset */
+ 		       namelen +			/* name */
+ 		       (i8count ?			/* inumber */
+ 				count * XFS_INO64_SIZE :
+--- xfsprogs/libxfs/xfs_fs.h
++++ kernel/libxfs/xfs_fs.h
+@@ -XXXX,X +YYYY,Y @@
+ #endif
+ 
+ /*
+- * Flags for the bs_xflags/fsx_xflags field in XFS_IOC_FS[GS]ETXATTR[A]
+- * These are for backwards compatibility only. New code should
+- * use the kernel [4.5 onwards] defined FS_XFLAG_* definitions directly.
+- */
+-#define	XFS_XFLAG_REALTIME	FS_XFLAG_REALTIME
+-#define	XFS_XFLAG_PREALLOC	FS_XFLAG_PREALLOC
+-#define	XFS_XFLAG_IMMUTABLE	FS_XFLAG_IMMUTABLE
+-#define	XFS_XFLAG_APPEND	FS_XFLAG_APPEND
+-#define	XFS_XFLAG_SYNC		FS_XFLAG_SYNC
+-#define	XFS_XFLAG_NOATIME	FS_XFLAG_NOATIME
+-#define	XFS_XFLAG_NODUMP	FS_XFLAG_NODUMP
+-#define	XFS_XFLAG_RTINHERIT	FS_XFLAG_RTINHERIT
+-#define	XFS_XFLAG_PROJINHERIT	FS_XFLAG_PROJINHERIT
+-#define	XFS_XFLAG_NOSYMLINKS	FS_XFLAG_NOSYMLINKS
+-#define	XFS_XFLAG_EXTSIZE	FS_XFLAG_EXTSIZE
+-#define	XFS_XFLAG_EXTSZINHERIT	FS_XFLAG_EXTSZINHERIT
+-#define	XFS_XFLAG_NODEFRAG	FS_XFLAG_NODEFRAG
+-#define	XFS_XFLAG_FILESTREAM	FS_XFLAG_FILESTREAM
+-#define	XFS_XFLAG_HASATTR	FS_XFLAG_HASATTR
+-
+-/*
+  * Structure for XFS_IOC_GETBMAP.
+  * On input, fill in bmv_offset and bmv_length of the first structure
+  * to indicate the area of interest in the file, and bmv_entries with
+@@ -XXXX,X +YYYY,Y @@
+ #define XFS_IOC_GET_AG_RESBLKS	     _IOR ('X', 126, struct xfs_fsop_ag_resblks)
+ /*	XFS_IOC_GETFSUUID ---------- deprecated 140	 */
+ 
+-/* reflink ioctls; these MUST match the btrfs ioctl definitions */
+-/* from struct btrfs_ioctl_clone_range_args */
+-struct xfs_clone_args {
+-	__s64 src_fd;
+-	__u64 src_offset;
+-	__u64 src_length;
+-	__u64 dest_offset;
+-};
+-
+-/* extent-same (dedupe) ioctls; these MUST match the btrfs ioctl definitions */
+-#define XFS_EXTENT_DATA_SAME	0
+-#define XFS_EXTENT_DATA_DIFFERS	1
+-
+-/* from struct btrfs_ioctl_file_extent_same_info */
+-struct xfs_extent_data_info {
+-	__s64 fd;		/* in - destination file */
+-	__u64 logical_offset;	/* in - start of extent in destination */
+-	__u64 bytes_deduped;	/* out - total # of bytes we were able
+-				 * to dedupe from this file */
+-	/* status of this dedupe operation:
+-	 * < 0 for error
+-	 * == XFS_EXTENT_DATA_SAME if dedupe succeeds
+-	 * == XFS_EXTENT_DATA_DIFFERS if data differs
+-	 */
+-	__s32 status;		/* out - see above description */
+-	__u32 reserved;
+-};
+-
+-/* from struct btrfs_ioctl_file_extent_same_args */
+-struct xfs_extent_data {
+-	__u64 logical_offset;	/* in - start of extent in source */
+-	__u64 length;		/* in - length of extent */
+-	__u16 dest_count;	/* in - total elements in info array */
+-	__u16 reserved1;
+-	__u32 reserved2;
+-	struct xfs_extent_data_info info[0];
+-};
+-
+-#define XFS_IOC_CLONE		 _IOW (0x94, 9, int)
+-#define XFS_IOC_CLONE_RANGE	 _IOW (0x94, 13, struct xfs_clone_args)
+-#define XFS_IOC_FILE_EXTENT_SAME _IOWR(0x94, 54, struct xfs_extent_data)
+ 
+ #ifndef HAVE_BBMACROS
+ /*
+--- xfsprogs/libxfs/xfs_inode_fork.c
++++ kernel/libxfs/xfs_inode_fork.c
+@@ -XXXX,X +YYYY,Y @@
+ 	xfs_ifork_t	*ifp,		/* inode fork pointer */
+ 	int		new_size)	/* new indirection array size */
+ {
+-#ifdef DEBUG
+ 	int		nlists;		/* number of irec's (ex lists) */
+ 	int		size;		/* current indirection array size */
+ 
+@@ -XXXX,X +YYYY,Y @@
+ 	size = nlists * sizeof(xfs_ext_irec_t);
+ 	ASSERT(ifp->if_real_bytes);
+ 	ASSERT((new_size >= 0) && (new_size != size));
+-#endif
+ 	if (new_size == 0) {
+ 		xfs_iext_destroy(ifp);
+ 	} else {
+--- xfsprogs/libxfs/xfs_sb.c
++++ kernel/libxfs/xfs_sb.c
+@@ -XXXX,X +YYYY,Y @@
+ 	}
+ 
+ 	/*
++	 * Until this is fixed only page-sized or smaller data blocks work.
++	 */
++	if (unlikely(sbp->sb_blocksize > PAGE_SIZE)) {
++		xfs_warn(mp,
++		"File system with blocksize %d bytes. "
++		"Only pagesize (%ld) or less will currently work.",
++				sbp->sb_blocksize, PAGE_SIZE);
++		return -ENOSYS;
++	}
++
++	/*
+ 	 * Currently only very few inode sizes are supported.
+ 	 */
+ 	switch (sbp->sb_inodesize) {
+@@ -XXXX,X +YYYY,Y @@
+ 		return -EFBIG;
+ 	}
+ 
++	if (check_inprogress && sbp->sb_inprogress) {
++		xfs_warn(mp, "Offline file system operation in progress!");
++		return -EFSCORRUPTED;
++	}
+ 	return 0;
+ }
+ 
