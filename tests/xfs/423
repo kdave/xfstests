@@ -1,0 +1,82 @@
+#! /bin/bash
+# FS QA Test No. 423
+#
+# Race scrubbing the inode record while appending to a file.
+# This exposes a bug in xfs_bmap_count_blocks where we count delalloc
+# extents for di_nblocks if the fork is in extents format, but we don't
+# count them if the fork is in btree format.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1335  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_test_program "punch-alternating"
+_require_xfs_io_command "scrub"
+_require_scratch
+
+echo "Format and populate"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -c 'falloc 0 10m' $SCRATCH_MNT/a >> $seqres.full
+$XFS_IO_PROG -f -c 'falloc 0 10m' $SCRATCH_MNT/b >> $seqres.full
+./src/punch-alternating $SCRATCH_MNT/b
+sync
+
+echo "Set up delalloc extents"
+$XFS_IO_PROG -c 'pwrite -S 0x66 10m 128k' $SCRATCH_MNT/a >> $seqres.full
+$XFS_IO_PROG -c 'pwrite -S 0x66 10m 128k' $SCRATCH_MNT/b >> $seqres.full
+$XFS_IO_PROG -c 'bmap -ev' $SCRATCH_MNT/a $SCRATCH_MNT/b > $SCRATCH_MNT/before
+cat $SCRATCH_MNT/before >> $seqres.full
+
+echo "Scrub a and b"
+$XFS_IO_PROG -x -c 'scrub inode' $SCRATCH_MNT/a >> $seqres.full
+$XFS_IO_PROG -x -c 'scrub inode' $SCRATCH_MNT/b >> $seqres.full
+$XFS_IO_PROG -c 'bmap -ev' $SCRATCH_MNT/a $SCRATCH_MNT/b > $SCRATCH_MNT/after
+cat $SCRATCH_MNT/after >> $seqres.full
+
+echo "Compare extent maps"
+diff -u $SCRATCH_MNT/before $SCRATCH_MNT/after
+
+echo "Test done"
+status=0
+exit
