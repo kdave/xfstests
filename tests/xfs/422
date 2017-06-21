@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test No. 422
+#
+# Race freeze and rmapbt repair for a while to see if we crash or livelock.
+# rmapbt repair requires us to freeze the filesystem to stop all filesystem
+# activity, so we can't have userspace wandering in and thawing it.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1335  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command "scrub"
+_require_xfs_io_error_injection "force_repair"
+
+echo "Format and populate"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+STRESS_DIR="$SCRATCH_MNT/testdir"
+mkdir -p $STRESS_DIR
+
+for i in $(seq 0 9); do
+	mkdir -p $STRESS_DIR/$i
+	for j in $(seq 0 9); do
+		mkdir -p $STRESS_DIR/$i/$j
+		for k in $(seq 0 9); do
+			echo x > $STRESS_DIR/$i/$j/$k
+		done
+	done
+done
+
+cpus=$(( $(src/feature -o) * 4 * LOAD_FACTOR))
+
+echo "Concurrent repair"
+filter_output() {
+	egrep -v '(Device or resource busy|Invalid argument)'
+}
+freeze_loop() {
+	end="$1"
+
+	while [ "$(date +%s)" -lt $end ]; do
+		$XFS_IO_PROG -x -c 'freeze' -c 'thaw' $SCRATCH_MNT 2>&1 | filter_output
+	done
+}
+repair_loop() {
+	end="$1"
+
+	while [ "$(date +%s)" -lt $end ]; do
+		$XFS_IO_PROG -x -c 'repair rmapbt 0' -c 'repair rmapbt 1' $SCRATCH_MNT 2>&1 | filter_output
+	done
+}
+$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
+
+start=$(date +%s)
+end=$((start + (30 * TIME_FACTOR) ))
+
+echo "Loop started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
+freeze_loop $end &
+repair_loop $end &
+
+while [ "$(date +%s)" -lt $end ]; do
+	sleep 1
+done
+echo "Loop finished at $(date)" >> $seqres.full
+echo "Test done"
+
+# success, all done
+status=0
+exit
