@@ -51,19 +51,51 @@ static void get_file_system(int fd)
 
 static int get_io_sizes(int fd)
 {
-       struct stat buf;
-       int ret;
+	off_t pos = 0, offset = 1;
+	struct stat buf;
+	int shift, ret;
 
-       ret = fstat(fd, &buf);
-       if (ret)
-               fprintf(stderr, "  ERROR %d: Failed to find io blocksize\n",
-                       errno);
+	ret = fstat(fd, &buf);
+	if (ret) {
+		fprintf(stderr, "  ERROR %d: Failed to find io blocksize\n",
+			errno);
+		return ret;
+	}
 
-       /* st_blksize is typically also the allocation size */
-       alloc_size = buf.st_blksize;
-       fprintf(stdout, "Allocation size: %ld\n", alloc_size);
+	/* st_blksize is typically also the allocation size */
+	alloc_size = buf.st_blksize;
 
-       return ret;
+	/* try to discover the actual alloc size */
+	while (pos == 0 && offset < alloc_size) {
+		offset <<= 1;
+		ftruncate(fd, 0);
+		pwrite(fd, "a", 1, offset);
+		pos = lseek(fd, 0, SEEK_DATA);
+		if (pos == -1)
+			goto fail;
+	}
+
+	/* bisect */
+	shift = offset >> 2;
+	while (shift && offset < alloc_size) {
+		ftruncate(fd, 0);
+		pwrite(fd, "a", 1, offset);
+		pos = lseek(fd, 0, SEEK_DATA);
+		if (pos == -1)
+			goto fail;
+		offset += pos ? -shift : shift;
+		shift >>= 1;
+	}
+	if (!shift)
+		offset += pos ? 0 : 1;
+	alloc_size = offset;
+	fprintf(stdout, "Allocation size: %ld\n", alloc_size);
+	return 0;
+
+fail:
+	fprintf(stderr, "Kernel does not support llseek(2) extension "
+		"SEEK_DATA. Aborting.\n");
+	return -1;
 }
 
 #define do_free(x)     do { if(x) free(x); } while(0);
@@ -902,8 +934,8 @@ static int run_test(struct testrec *tr)
 
 static int test_basic_support(void)
 {
-	int ret = -1, fd, shift;
-	off_t pos = 0, offset = 1;
+	int ret = -1, fd;
+	off_t pos;
 	char *buf = NULL;
 	int bufsz, filsz;
 
@@ -916,34 +948,6 @@ static int test_basic_support(void)
 	ret = get_io_sizes(fd);
 	if (ret)
 		goto out;
-
-	/* try to discover the actual alloc size */
-	while (pos == 0 && offset < alloc_size) {
-		offset <<= 1;
-		ftruncate(fd, 0);
-		pwrite(fd, "a", 1, offset);
-		pos = lseek(fd, 0, SEEK_DATA);
-	}
-
-	/* bisect */
-	shift = offset >> 2;
-	while (shift && offset < alloc_size) {
-		ftruncate(fd, 0);
-		pwrite(fd, "a", 1, offset);
-		pos = lseek(fd, 0, SEEK_DATA);
-		offset += pos ? -shift : shift;
-		shift >>= 1;
-	}
-	if (!shift)
-		offset += pos ? 0 : 1;
-	alloc_size = offset;
-
-	if (pos == -1) {
-		fprintf(stderr, "Kernel does not support llseek(2) extension "
-			"SEEK_DATA. Aborting.\n");
-		ret = -1;
-		goto out;
-	}
 
 	ftruncate(fd, 0);
 	bufsz = alloc_size * 2;
