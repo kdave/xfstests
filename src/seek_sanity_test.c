@@ -277,6 +277,73 @@ out:
 	return ret;
 }
 
+static int test17(int fd, int testnum)
+{
+	char *buf = NULL;
+	int pagesz = sysconf(_SC_PAGE_SIZE);
+	int bufsz, filsz;
+	int ret = 0;
+
+	if (pagesz < 4 * alloc_size) {
+		fprintf(stdout, "Test skipped as page size (%d) is less than "
+			"four times allocation size (%d).\n",
+			pagesz, (int)alloc_size);
+		goto out;
+	}
+	bufsz = alloc_size;
+	filsz = 3 * bufsz;
+
+	buf = do_malloc(bufsz);
+	if (!buf) {
+		ret = -1;
+		goto out;
+	}
+	memset(buf, 'a', bufsz);
+
+	ret = do_fallocate(fd, 0, filsz, 0);
+	if (ret < 0) {
+		/* Report success if fs doesn't support fallocate */
+		if (errno == EOPNOTSUPP) {
+			fprintf(stdout, "Test skipped as fs doesn't support fallocate.\n");
+			ret = 0;
+		}
+		goto out;
+	}
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	ret = do_pwrite(fd, buf, bufsz, 2 * bufsz);
+	if (ret)
+		goto out;
+
+	ret += do_lseek(testnum,  1, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum,  2, fd, filsz, SEEK_HOLE, 0, bufsz);
+	ret += do_lseek(testnum,  3, fd, filsz, SEEK_DATA, 1, 1);
+	ret += do_lseek(testnum,  4, fd, filsz, SEEK_HOLE, 1, bufsz);
+	ret += do_lseek(testnum,  5, fd, filsz, SEEK_DATA, bufsz, 2 * bufsz);
+	ret += do_lseek(testnum,  6, fd, filsz, SEEK_HOLE, bufsz, bufsz);
+	ret += do_lseek(testnum,  7, fd, filsz, SEEK_DATA, bufsz + 1, 2 * bufsz);
+	ret += do_lseek(testnum,  8, fd, filsz, SEEK_HOLE, bufsz + 1, bufsz + 1);
+	ret += do_lseek(testnum,  9, fd, filsz, SEEK_DATA, 2 * bufsz, 2 * bufsz);
+	ret += do_lseek(testnum, 10, fd, filsz, SEEK_HOLE, 2 * bufsz, 3 * bufsz);
+	ret += do_lseek(testnum, 11, fd, filsz, SEEK_DATA, 2 * bufsz + 1, 2 * bufsz + 1);
+	ret += do_lseek(testnum, 12, fd, filsz, SEEK_HOLE, 2 * bufsz + 1, 3 * bufsz);
+
+	filsz += bufsz;
+	ret += do_fallocate(fd, 0, filsz, 0);
+
+	ret += do_lseek(testnum, 13, fd, filsz, SEEK_DATA, 3 * bufsz, -1);
+	ret += do_lseek(testnum, 14, fd, filsz, SEEK_HOLE, 3 * bufsz, 3 * bufsz);
+	ret += do_lseek(testnum, 15, fd, filsz, SEEK_DATA, 3 * bufsz + 1, -1);
+	ret += do_lseek(testnum, 16, fd, filsz, SEEK_HOLE, 3 * bufsz + 1, 3 * bufsz + 1);
+
+out:
+	do_free(buf);
+	return ret;
+}
+
 /*
  * test file with unwritten extents, having non-contiguous dirty pages in
  * the unwritten extent.
@@ -912,6 +979,7 @@ struct testrec seek_tests[] = {
        { 14, test14, "Test file with unwritten extents, small hole after pagevec dirty pages" },
        { 15, test15, "Test file with unwritten extents, page after unwritten extent" },
        { 16, test16, "Test file with unwritten extents, non-contiguous dirty pages" },
+       { 17, test17, "Test file with unwritten extents, data-hole-data inside page" },
 };
 
 static int run_test(struct testrec *tr)
