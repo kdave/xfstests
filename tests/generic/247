@@ -80,6 +80,13 @@ wait
 
 echo "Silence is golden."
 
-# success, all done
-status=0
+# unmount and check dmesg, filtering out expected XFS warnings about mixed
+# mmap/dio
+_scratch_unmount
+if [ "$FSTYP" == "xfs" ]; then
+	_check_dmesg _filter_xfs_dmesg
+else
+	_check_dmesg
+fi
+status=$?
 exit

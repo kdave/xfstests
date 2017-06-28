@@ -584,3 +584,20 @@ _require_xfs_mkfs_ciname()
 	_scratch_mkfs_xfs_supported -n version=ci >/dev/null 2>&1 \
 		|| _notrun "need case-insensitive naming support in mkfs.xfs"
 }
+
+# xfs generates WARNINGs on purpose when applications mix buffered/mmap IO with
+# direct IO on the same file. This is a helper for _check_dmesg() to filter out
+# such warnings.
+_filter_xfs_dmesg()
+{
+	local warn1="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_dio_aio_write.*"
+	local warn2="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_dio_aio_read.*"
+	local warn3="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_read_iter.*"
+	local warn4="WARNING:.*fs/xfs/xfs_file\.c:.*xfs_file_aio_read.*"
+	local warn5="WARNING:.*fs/iomap\.c:.*iomap_dio_rw.*"
+	sed -e "s#$warn1#Intentional warnings in xfs_file_dio_aio_write#" \
+	    -e "s#$warn2#Intentional warnings in xfs_file_dio_aio_read#" \
+	    -e "s#$warn3#Intentional warnings in xfs_file_read_iter#" \
+	    -e "s#$warn4#Intentional warnings in xfs_file_aio_read#" \
+	    -e "s#$warn5#Intentional warnings in iomap_dio_rw#"
+}
