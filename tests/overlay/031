@@ -38,6 +38,20 @@ _cleanup()
 	rm -f $tmp.*
 }
 
+# create test directory and test file, mount overlayfs and remove
+# testfile to create a whiteout in upper dir.
+create_whiteout()
+{
+	mkdir -p $1/testdir
+	touch $1/testdir/$4
+
+	_overlay_mount_dirs $1 $2 $3 $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+
+	rm -f $SCRATCH_MNT/testdir/$4
+
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -52,26 +66,20 @@ _require_scratch
 # remove all files from previous runs
 _scratch_mkfs
 
-# create test directory and test file
-lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
-upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
-workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
-mkdir -p $lowerdir/testdir
-touch $lowerdir/testdir/a
+# create test directorys and whiteout
+lowerdir=$OVL_BASE_SCRATCH_MNT/lower
+upperdir=$OVL_BASE_SCRATCH_MNT/upper
+workdir=$OVL_BASE_SCRATCH_MNT/workdir
+testfile=a
+mkdir -p $lowerdir $upperdir $workdir
 
-# mount overlayfs and remove testfile to create a whiteout
-_scratch_mount
-
-rm -f $SCRATCH_MNT/testdir/a
-
-# unmount overlayfs but not base fs
-$UMOUNT_PROG $SCRATCH_MNT
+create_whiteout $lowerdir $upperdir $workdir $testfile
 
 # clean up the lower directory and mount overlay again,
 # whiteout will expose.
 rm -rf $lowerdir/testdir
 
-_scratch_mount
+_overlay_mount_dirs $lowerdir $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
 ls $SCRATCH_MNT/testdir
 
@@ -84,7 +92,7 @@ rm -rf $SCRATCH_MNT/testdir 2>&1 | _filter_scratch
 $UMOUNT_PROG $SCRATCH_MNT
 touch $lowerdir/testdir
 
-_scratch_mount
+_overlay_mount_dirs $lowerdir $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
 # try to remove test dir from overlay dir, trigger ovl_remove_and_whiteout,
 # it will not clean up the dir and lead to residue.
