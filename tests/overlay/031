@@ -1,9 +1,10 @@
 #! /bin/bash
 # FS QA Test 031
 #
-# The unmerged and impure upper directories may contain invalid
-# whiteouts when we change lowerdir(e.g. clean up dir) and remount
-# overlay. This may lead to whiteouts exposure and rmdir failure.
+# The unmerged and origined directories may contain invalid
+# whiteouts when we change underlaying dir (e.g. clean up lowerdir)
+# and remount overlay. This may lead to whiteouts exposure and
+# rmdir failure.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2017 Huawei.  All Rights Reserved.
@@ -67,19 +68,21 @@ _require_scratch
 _scratch_mkfs
 
 # create test directorys and whiteout
-lowerdir=$OVL_BASE_SCRATCH_MNT/lower
+lowerdir1=$OVL_BASE_SCRATCH_MNT/lower1
+lowerdir2=$OVL_BASE_SCRATCH_MNT/lower2
 upperdir=$OVL_BASE_SCRATCH_MNT/upper
 workdir=$OVL_BASE_SCRATCH_MNT/workdir
-testfile=a
-mkdir -p $lowerdir $upperdir $workdir
+testfile1=a
+testfile2=b
+mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
 
-create_whiteout $lowerdir $upperdir $workdir $testfile
+create_whiteout $lowerdir1 $upperdir $workdir $testfile1
 
 # clean up the lower directory and mount overlay again,
 # whiteout will expose.
-rm -rf $lowerdir/testdir
+rm -rf $lowerdir1/testdir
 
-_overlay_mount_dirs $lowerdir $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+_overlay_mount_dirs $lowerdir1 $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
 ls $SCRATCH_MNT/testdir
 
@@ -90,14 +93,47 @@ rm -rf $SCRATCH_MNT/testdir 2>&1 | _filter_scratch
 # umount overlay again, create a new file with the same name and
 # mount overlay again.
 $UMOUNT_PROG $SCRATCH_MNT
-touch $lowerdir/testdir
+touch $lowerdir1/testdir
 
-_overlay_mount_dirs $lowerdir $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+_overlay_mount_dirs $lowerdir1 $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
 # try to remove test dir from overlay dir, trigger ovl_remove_and_whiteout,
 # it will not clean up the dir and lead to residue.
 rm -rf $SCRATCH_MNT/testdir 2>&1 | _filter_scratch
 ls $workdir/work
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# let lower dir have invalid whiteouts, repeat ls and rmdir test again.
+rm -rf $lowerdir1/testdir
+rm -rf $upperdir/testdir
+
+create_whiteout $lowerdir2 $lowerdir1 $workdir $testfile1
+
+rm -rf $lowerdir2/testdir
+
+_overlay_mount_dirs "$lowerdir1:$lowerdir2" $upperdir $workdir \
+		     $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+
+ls $SCRATCH_MNT/testdir
+rm -rf $SCRATCH_MNT/testdir 2>&1 | _filter_scratch
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# let lower dir and upper dir both have invalid whiteouts, repeat ls and rmdir again.
+rm -rf $lowerdir1/testdir
+rm -rf $upperdir/testdir
+
+create_whiteout $lowerdir1 $upperdir $workdir $testfile1
+
+rm -rf $lowerdir1/testdir/$testfile1
+
+create_whiteout $lowerdir2 $lowerdir1 $workdir $testfile2
+
+_overlay_mount_dirs $lowerdir1 $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+
+ls $SCRATCH_MNT/testdir
+rm -rf $SCRATCH_MNT/testdir 2>&1 | _filter_scratch
 
 # success, all done
 echo "Silence is golden"
