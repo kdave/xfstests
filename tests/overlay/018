@@ -61,25 +61,42 @@ echo "patient zero" >> $lowerdir/foo
 ln $lowerdir/foo $lowerdir/bar
 
 
+# Record inode numbers in format <ino> <nlink>
+function record_ino_nlink()
+{
+	ls -li $FILES | awk '{ print $1, $3 }' > $1
+}
+
+# Check inode numbers match recorded inode numbers
+function check_ino_nlink()
+{
+	before=$1
+	after=$2
+
+	record_ino_nlink $after
+
+	# Test constant stat(2) st_ino/st_nlink -
+	#   Compare before..after - expect silence
+	# We use diff -u so out.bad will tell us which stage failed
+	diff -u $before $after
+}
+
 _scratch_mount
 
 
-rm -f $tmp.before $tmp.after
+rm -f $tmp.*
 
 foo=$SCRATCH_MNT/foo
 bar=$SCRATCH_MNT/bar
 
-# Record inode number and nlink before copy up
-ls -li $foo $bar | awk '{ print $1, $3 }' > $tmp.before
+FILES="$foo $bar"
+
+record_ino_nlink $tmp.before
 
 # Modify content of one of the hardlinks
 echo "mutated" >> $foo
 
-# Record inode number and nlink after copy up
-ls -li $foo $bar | awk '{ print $1, $3 }' > $tmp.after
-
-# Compare ino/nlink before..after - expect silence
-diff $tmp.before $tmp.after
+check_ino_nlink $tmp.before $tmp.after
 
 # Compare content of files - expect silence
 diff $foo $bar
