@@ -96,11 +96,20 @@ cat $FILES
 record_ino_nlink $tmp.before
 
 # Modify content of one of the hardlinks
-echo "one" >> $foo
+# Intentionally modify the last hardlink in $FILES, so after mount cycle
+# when reading the first file in $FILES, last file won't be in inode/dcache
+echo "one" >> $bar
 
 echo "== After write one =="
 cat $FILES
-check_ino_nlink $tmp.before $tmp.after
+check_ino_nlink $tmp.before $tmp.after_one
+
+# Verify that the hardlinks survive a mount cycle
+_scratch_cycle_mount
+
+echo "== After mount cycle =="
+cat $FILES
+check_ino_nlink $tmp.after_one $tmp.after_cycle
 
 status=0
 exit
