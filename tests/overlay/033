@@ -1,0 +1,150 @@
+#! /bin/bash
+# FS QA Test 033
+#
+# Test nlink accounting of overlay hardlinks.
+#
+# nlink of overlay inode should account for the union of lower and upper
+# hardlinks.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2017 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+report_nlink()
+{
+	when=$1
+
+	[ $DCACHETEMP != cold ] || echo 2 > /proc/sys/vm/drop_caches
+
+	# check nlink with warm dcache after overlay modification
+	# List <nlink> <name>
+	echo "== $when - $DCACHETEMP dcache =="
+	for f in $HARDLINKS; do
+		_ls_l $SCRATCH_MNT/$f | awk '{ print $2, $9 }' | _filter_scratch
+	done
+}
+
+# Create lower hardlinks
+create_hardlinks()
+{
+	lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+	mkdir -p $lowerdir
+	touch $lowerdir/0
+	ln $lowerdir/0 $lowerdir/1
+	ln $lowerdir/0 $lowerdir/2
+	ln $lowerdir/0 $lowerdir/3
+}
+
+test_hardlinks()
+{
+	HARDLINKS=`seq 0 3`
+	report_nlink "all lower"
+
+	# Unlink lower hardlink
+	rm $SCRATCH_MNT/0
+	HARDLINKS=`seq 1 3`
+	report_nlink "unlink lower"
+
+	# Link to lower hardlink
+	ln $SCRATCH_MNT/3 $SCRATCH_MNT/4
+	HARDLINKS=`seq 1 4`
+	report_nlink "link lower"
+
+	# Link to upper hardlink
+	ln $SCRATCH_MNT/4 $SCRATCH_MNT/5
+	HARDLINKS=`seq 1 5`
+	report_nlink "link upper"
+
+	# Rename over lower hardlink
+	touch $SCRATCH_MNT/new
+	mv $SCRATCH_MNT/new $SCRATCH_MNT/1
+	HARDLINKS=`seq 2 5`
+	report_nlink "cover lower"
+
+	# Unlink upper hardlink
+	rm $SCRATCH_MNT/5
+	HARDLINKS=`seq 2 4`
+	report_nlink "unlink upper"
+
+	# Rename over upper hardlink
+	touch $SCRATCH_MNT/new
+	mv $SCRATCH_MNT/new $SCRATCH_MNT/4
+	HARDLINKS=`seq 2 3`
+	report_nlink "cover upper"
+
+	# Unlink last upper (union still has one lower)
+	rm $SCRATCH_MNT/3
+	HARDLINKS=2
+	report_nlink "unlink last upper"
+
+	# Unlink last lower and drop union nlink to zero (and hopefully not below)
+	rm $SCRATCH_MNT/2
+
+	# Verify that orphan index is cleaned when dropping nlink to zero
+	ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index 2>/dev/null
+}
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create lower hardlinks
+create_hardlinks
+
+_scratch_mount
+# Test hardlinks with warm dcache
+DCACHETEMP=warm
+test_hardlinks
+
+# Reset to lower hardlinks
+_scratch_unmount
+_scratch_mkfs
+create_hardlinks
+_scratch_mount
+
+# Test hardlinks with cold dcache
+DCACHETEMP=cold
+test_hardlinks
+
+status=0
+exit
