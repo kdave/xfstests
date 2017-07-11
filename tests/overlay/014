@@ -63,12 +63,17 @@ lowerdir1=$OVL_BASE_SCRATCH_MNT/lower1
 lowerdir2=$OVL_BASE_SCRATCH_MNT/lower2
 upperdir=$OVL_BASE_SCRATCH_MNT/upper
 workdir=$OVL_BASE_SCRATCH_MNT/workdir
-mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
+# When overlay inode index feature is enabled, using an upper layer path and/or
+# a workdir path that are already used by another overlay mount is not allowed
+# and will fail with EBUSY, so create another workdir for the second overlay
+# mount
+workdir2=$OVL_BASE_SCRATCH_MNT/workdir2
+mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir $workdir2
 mkdir -p $lowerdir1/testdir/d
 
 # mount overlay with $lowerdir2 as upperdir, and remove & recreate testdir,
 # make testdir on $lowerdir2 opaque
-_overlay_mount_dirs $lowerdir1 $lowerdir2 $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+_overlay_mount_dirs $lowerdir1 $lowerdir2 $workdir2 $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 rm -rf $SCRATCH_MNT/testdir
 mkdir -p $SCRATCH_MNT/testdir/visibledir
 # unmount overlayfs but not base fs
