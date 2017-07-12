@@ -50,6 +50,7 @@ rm -f $seqres.full
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+_require_scratch_feature index
 
 report_nlink()
 {
@@ -122,7 +123,7 @@ test_hardlinks()
 	rm $SCRATCH_MNT/2
 
 	# Verify that orphan index is cleaned when dropping nlink to zero
-	ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index 2>/dev/null
+	ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index
 }
 
 # Remove all files from previous tests
@@ -131,7 +132,8 @@ _scratch_mkfs
 # Create lower hardlinks
 create_hardlinks
 
-_scratch_mount
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+_scratch_mount -o index=on
 # Test hardlinks with warm dcache
 DCACHETEMP=warm
 test_hardlinks
@@ -140,7 +142,7 @@ test_hardlinks
 _scratch_unmount
 _scratch_mkfs
 create_hardlinks
-_scratch_mount
+_scratch_mount -o index=on
 
 # Test hardlinks with cold dcache
 DCACHETEMP=cold

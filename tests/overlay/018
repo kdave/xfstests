@@ -10,7 +10,7 @@
 #
 #-----------------------------------------------------------------------
 #
-# Copyright (C) 2016 CTERA Networks. All Rights Reserved.
+# Copyright (C) 2016-2017 CTERA Networks. All Rights Reserved.
 # Author: Amir Goldstein <amir73il@gmail.com>
 #
 # This program is free software; you can redistribute it and/or
@@ -49,6 +49,7 @@ _cleanup()
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+_require_scratch_feature index
 
 rm -f $seqres.full
 
@@ -81,7 +82,8 @@ function check_ino_nlink()
 	diff -u $before $after
 }
 
-_scratch_mount
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+_scratch_mount -o index=on
 
 
 rm -f $tmp.*
@@ -105,7 +107,7 @@ cat $FILES
 check_ino_nlink $tmp.before $tmp.after_one
 
 # Verify that the hardlinks survive a mount cycle
-_scratch_cycle_mount
+_scratch_cycle_mount index=on
 
 echo "== After mount cycle =="
 cat $FILES

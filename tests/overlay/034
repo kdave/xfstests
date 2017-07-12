@@ -64,6 +64,8 @@ rm -f $seqres.full
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+# Without overlay index feature hardlinks are broken on copy up
+_require_scratch_feature index
 
 # Remove all files from previous tests
 _scratch_mkfs
@@ -74,7 +76,8 @@ mkdir -p $lowerdir
 touch $lowerdir/0
 ln $lowerdir/0 $lowerdir/1
 
-_scratch_mount
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+_scratch_mount -o index=on
 
 # Copy up lower hardlink - overlay inode nlink 2 is copied from lower
 touch $SCRATCH_MNT/0
@@ -99,8 +102,8 @@ rm $SCRATCH_MNT/1
 rm $SCRATCH_MNT/4
 
 # Verify that orphan index is cleaned on mount
-_scratch_cycle_mount
-ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index 2>/dev/null
+_scratch_cycle_mount index=on
+ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index
 
 echo "Silence is golden"
 status=0
