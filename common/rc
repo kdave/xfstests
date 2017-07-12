@@ -3626,6 +3626,54 @@ _get_fs_sysfs_attr()
 	cat /sys/fs/${FSTYP}/${dname}/${attr}
 }
 
+# Print the value of a filesystem module parameter
+# at /sys/module/$FSTYP/parameters/$PARAM
+#
+# Usage example (FSTYP=overlay):
+#   _get_fs_module_param index
+_get_fs_module_param()
+{
+	cat /sys/module/${FSTYP}/parameters/${1} 2>/dev/null
+}
+
+# Generic test for specific filesystem feature.
+# Currently only implemented to test overlayfs features.
+_require_scratch_feature()
+{
+	local feature=$1
+
+	case "$FSTYP" in
+	overlay)
+		# overalyfs features (e.g. redirect_dir, index) are
+		# configurable from Kconfig (the build default), by module
+		# parameter (the system default) and per mount by mount
+		# option ${feature}=[on|off].
+		#
+		# If the module parameter does not exist then there is no
+		# point in checking the mount option.
+		local default=`_get_fs_module_param ${feature}`
+		[ "$default" = Y ] || [ "$default" = N ] || \
+			_notrun "feature '${feature}' not supported by ${FSTYP}"
+
+		_scratch_mkfs > /dev/null 2>&1
+		_scratch_mount -o ${feature}=on || \
+			_notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+		# Check options to be sure. For example, Overlayfs will fallback to
+		# index=off if underlying fs does not support file handles.
+		# Overlayfs only displays mount option if it differs from the default.
+		# Overlayfs may enable the feature, but fallback to read-only mount.
+		((( [ "$default" = N ] && _fs_options $SCRATCH_DEV | grep -q "${feature}=on" ) || \
+		  ( [ "$default" = Y ] && ! _fs_options $SCRATCH_DEV | grep -q "${feature}=off" )) && \
+		    touch $SCRATCH_MNT/foo 2>/dev/null ) || \
+		        _notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+		_scratch_unmount
+		;;
+	*)
+		_fail "Test for feature '${feature}' of ${FSTYP} is not implemented"
+		;;
+	esac
+}
+
 
 init_rc
 
