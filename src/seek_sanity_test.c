@@ -274,6 +274,18 @@ out:
 	return ret;
 }
 
+/* Make sure we get ENXIO if we pass in a negative offset. */
+static int test18(int fd, int testnum)
+{
+	int ret = 0;
+
+	/* file size doesn't matter in this test, set to 0 */
+	ret += do_lseek(testnum, 1, fd, 0, SEEK_HOLE, -1, -1);
+	ret += do_lseek(testnum, 2, fd, 0, SEEK_DATA, -1, -1);
+
+	return ret;
+}
+
 static int test17(int fd, int testnum)
 {
 	char *buf = NULL;
@@ -969,6 +981,7 @@ struct testrec seek_tests[] = {
        { 15, test15, "Test file with unwritten extents, page after unwritten extent" },
        { 16, test16, "Test file with unwritten extents, non-contiguous dirty pages" },
        { 17, test17, "Test file with unwritten extents, data-hole-data inside page" },
+       { 18, test18, "Test file with negative SEEK_{HOLE,DATA} offsets" },
 };
 
 static int run_test(struct testrec *tr)
