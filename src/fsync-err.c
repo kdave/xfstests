@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <stdbool.h>
 
 /*
  * btrfs has a fixed stripewidth of 64k, so we need to write enough data to
@@ -25,7 +26,7 @@
 
 static void usage()
 {
-	printf("Usage: fsync-err [ -b bufsize ] [ -n num_fds ] -d dmerror path <filename>\n");
+	printf("Usage: fsync-err [ -b bufsize ] [ -n num_fds ] [ -s ] -d dmerror path <filename>\n");
 }
 
 int main(int argc, char **argv)
@@ -35,8 +36,9 @@ int main(int argc, char **argv)
 	char *dmerror_path = NULL;
 	char *cmdbuf;
 	size_t cmdsize, bufsize = DEFAULT_BUFSIZE;
+	bool simple_mode = false;
 
-	while ((i = getopt(argc, argv, "b:d:n:")) != -1) {
+	while ((i = getopt(argc, argv, "b:d:n:s")) != -1) {
 		switch (i) {
 		case 'b':
 			bufsize = strtol(optarg, &buf, 0);
@@ -55,6 +57,15 @@ int main(int argc, char **argv)
 				return 1;
 			}
 			break;
+		case 's':
+			/*
+			 * Many filesystems will continue to throw errors after
+			 * fsync has already advanced to the current error,
+			 * due to metadata writeback failures or other
+			 * issues. Allow those fs' to opt out of more thorough
+			 * testing.
+			 */
+			simple_mode = true;
 		}
 	}
 
@@ -154,16 +165,18 @@ int main(int argc, char **argv)
 		}
 	}
 
-	for (i = 0; i < numfds; ++i) {
-		ret = fsync(fd[i]);
-		if (ret < 0) {
-			/*
-			 * We did a failed write and fsync on each fd before.
-			 * Now the error should be clear since we've not done
-			 * any writes since then.
-			 */
-			printf("Third fsync on fd[%d] failed: %m\n", i);
-			return 1;
+	if (!simple_mode) {
+		for (i = 0; i < numfds; ++i) {
+			ret = fsync(fd[i]);
+			if (ret < 0) {
+				/*
+				 * We did a failed write and fsync on each fd before.
+				 * Now the error should be clear since we've not done
+				 * any writes since then.
+				 */
+				printf("Third fsync on fd[%d] failed: %m\n", i);
+				return 1;
+			}
 		}
 	}
 
@@ -185,12 +198,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	for (i = 0; i < numfds; ++i) {
-		ret = fsync(fd[i]);
-		if (ret < 0) {
-			/* The error should still be clear */
-			printf("fsync after healing device on fd[%d] failed: %m\n", i);
-			return 1;
+	if (!simple_mode) {
+		for (i = 0; i < numfds; ++i) {
+			ret = fsync(fd[i]);
+			if (ret < 0) {
+				/* The error should still be clear */
+				printf("fsync after healing device on fd[%d] failed: %m\n", i);
+				return 1;
+			}
 		}
 	}
 

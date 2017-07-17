@@ -45,15 +45,23 @@ _cleanup()
 . ./common/dmerror
 
 # real QA test starts here
-_supported_fs ext2 ext3 ext4 xfs
 _supported_os Linux
 _require_scratch
 
-# Generally, we want to avoid journal errors in this test. Ensure that
-# journalled fs' have a logdev.
-if [ "$FSTYP" != "ext2" ]; then
-	_require_logdev
-fi
+# Generally, we want to avoid journal errors on the extended testcase. Only
+# unset the -s flag if we have a logdev
+sflag='-s'
+case $FSTYP in
+	btrfs)
+		_notrun "btrfs has a specialized test for this"
+		;;
+	ext3|ext4|xfs)
+		# Do the more thorough test if we have a logdev
+		_has_logdev && sflag=''
+		;;
+	*)
+		;;
+esac
 
 _require_dm_target error
 _require_test_program fsync-err
@@ -70,7 +78,8 @@ _require_fs_space $SCRATCH_MNT 65536
 
 testfile=$SCRATCH_MNT/fsync-err-test
 
-$here/src/fsync-err -d $here/src/dmerror $testfile
+echo "$here/src/fsync-err $sflag -d $here/src/dmerror $testfile" >> $seqres.full
+$here/src/fsync-err $sflag -d $here/src/dmerror $testfile
 
 # success, all done
 _dmerror_load_working_table
