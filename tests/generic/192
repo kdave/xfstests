@@ -48,11 +48,7 @@ _supported_fs generic
 _supported_os Linux
 _require_test
 _require_atime
-#delay=150
-#delay=75
-#delay=60
-#delay=45
-delay=40
+delay=5
 
 testfile=$TEST_DIR/testfile
 rm -f $testfile
@@ -61,7 +57,7 @@ rm -f $seqres.full
 echo test >$testfile
 time1=`_access_time $testfile | tee -a $seqres.full`
 
-echo "sleep for $delay"
+echo "sleep for $delay seconds"
 sleep $delay # sleep to allow time to move on for access
 cat $testfile
 time2=`_access_time $testfile | tee -a $seqres.full`
@@ -73,8 +69,9 @@ time3=`_access_time $testfile | tee -a $seqres.full`
 delta1=`expr $time2 - $time1`
 delta2=`expr $time3 - $time1`
 
-echo "delta1 - access time after sleep in-core: $delta1"
-echo "delta2 - access time after sleep on-disk: $delta2"
+# tolerate an atime up to 2s later than the ideal case
+_within_tolerance "delta1" $delta1 $delay  0 2 -v
+_within_tolerance "delta2" $delta2 $delta1 0 0 -v
 
 # success, all done
 status=0
