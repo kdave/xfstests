@@ -1,0 +1,98 @@
+#! /bin/bash
+# FS QA Test 449
+#
+# Fill the device and set as many extended attributes to a file as
+# possible. Then call setfacl on it and, if this fails for lack of
+# space, test that the permissions remain the same.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Ernesto A. Fernandez.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_test
+_require_acls
+_require_attrs
+
+_scratch_mkfs_sized $((50 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount || _fail "mount failed"
+
+TFILE=$SCRATCH_MNT/testfile.$seq
+
+# Create the test file and choose its permissions
+touch $TFILE
+chmod u+rwx $TFILE
+chmod go-rwx $TFILE
+
+# Try to run out of space so setfacl will fail
+$XFS_IO_PROG -c "pwrite 0 50m" $TFILE >>$seqres.full 2>&1
+i=1
+j=1
+ret=0
+while [ $ret -eq 0 ]; do
+	ret=1
+	while [ $j -le 1000 ]; do
+		# On btrfs, setfattr will sometimes fail when free space is
+		# low, long before it's actually exhausted. Insist until it
+		# fails consistently.
+		$SETFATTR_PROG -n user.$i"x"$j $TFILE &>/dev/null
+		ret=$(( $ret && $? ))
+		((++j))
+	done
+	j=1
+	((++i))
+done
+
+if setfacl -m m:r $TFILE &>/dev/null; then
+	# setfacl succeeded, so the test was meaningless
+	# The filesystem might still have an issue
+	_notrun "$FSTYP succeeds in setting acls despite running out of space for user attrs"
+fi
+
+# Since setfacl failed, the permissions should not have changed
+stat -c %A $TFILE
+
+status=0
+exit
