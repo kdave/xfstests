@@ -67,7 +67,7 @@ AC_DEFUN([AC_HAVE_SENDFILE],
   ])
 
 #
-# Check if we have a getmntent libc call (IRIX, Linux)
+# Check if we have a getmntent libc call (Linux)
 #
 AC_DEFUN([AC_HAVE_GETMNTENT],
   [ AC_MSG_CHECKING([for getmntent ])

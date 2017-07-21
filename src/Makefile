@@ -49,10 +49,6 @@ ifeq ($(PKG_PLATFORM),linux)
 TARGETS += $(LINUX_TARGETS)
 endif
 
-ifeq ($(PKG_PLATFORM),irix)
-LLDLIBS += -lgen
-endif
-
 ifeq ($(HAVE_DB), true)
 TARGETS += dbtest
 LLDLIBS += $(LIBGDBM)

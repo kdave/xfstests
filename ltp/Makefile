@@ -17,10 +17,6 @@ ifeq ($(HAVE_ATTR_LIST), true)
 LCFLAGS += -DHAVE_ATTR_LIST
 LLDLIBS += $(LIBATTR)
 endif
-ifeq ($(PKG_PLATFORM),irix)
-LCFLAGS += -DHAVE_ATTR_LIST
-LLDLIBS += $(LIBATTR)
-endif
 
 ifeq ($(HAVE_AIO), true)
 TARGETS += aio-stress

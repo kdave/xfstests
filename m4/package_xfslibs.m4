@@ -92,19 +92,6 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
     AC_SUBST(libhdl)
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_IRIX_LIBHANDLE],
-  [ 
-    AC_MSG_CHECKING([libhandle.a for IRIX])
-    libhdl="`pwd`/../irix/libhandle/libhandle.a"
-    if ! test -f $libhdl; then
-	echo 'no'
-        echo 'FATAL ERROR: could not find IRIX XFS handle library.'
-        exit 1
-    fi
-    echo 'yes'
-    AC_SUBST(libhdl)
-  ])
-
 AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
   [ AC_MSG_CHECKING([xfsctl from xfs/xfs.h])
     AC_TRY_LINK([
