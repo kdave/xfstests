@@ -1,7 +1,7 @@
 #! /bin/bash
 # FS QA Test No. 095
 #
-# test out xfs_chver on IRIX
+# Test upgrading the XFS log to v2
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
@@ -46,7 +46,7 @@ _cleanup()
 
 # Modify as appropriate.
 _supported_fs xfs
-_supported_os IRIX
+_supported_os Linux
 _require_scratch
 _require_v2log
 
@@ -54,14 +54,13 @@ export MOUNT_OPTIONS="-o logbsize=64k"
 
 # try and mount a v1 log with a v2 LRsize
 # expect failure
-_mkfs_log "-l version=1"
+_mkfs_log "-l version=1 -m crc=0 -d sectsize=512"
+_scratch_xfs_db -c 'version' | tr ',' '\n' | grep LOGV2
 _create_log
 
 # now make the fs a v2 fs and try to mount again
 # it should succeed this time
-xfs_chver -l 2 $SCRATCH_DEV | \
-sed -e "s#$SCRATCH_DEV#SCRATCH_DEV#g" \
-    -e 's/[0-9][0-9]* AGs/N AGs/'
+_scratch_xfs_db -x -c 'version log2' | tr ',' '\n' | grep LOGV2
 _create_log
 
 # success, all done
