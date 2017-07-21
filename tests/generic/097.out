@@ -1,0 +1,177 @@
+QA output created by 097
+
+create file foo
+
+should be no EAs for foo:
+
+set EA <noise,woof>:
+
+set EA <colour,blue>:
+
+set EA <size,small>:
+
+list the EAs for foo: noise, colour, size
+# file: TEST_DIR/foo
+user.colour="blue"
+user.noise="woof"
+user.size="small"
+
+
+check the list again for foo
+# file: TEST_DIR/foo
+user.colour="blue"
+user.noise="woof"
+user.size="small"
+
+
+unmount the FS and see if EAs are persistent
+
+check the list again for foo after umount/mount
+# file: TEST_DIR/foo
+user.colour="blue"
+user.noise="woof"
+user.size="small"
+
+
+remove the colour EA on foo
+
+list EAs for foo: noise, size
+# file: TEST_DIR/foo
+user.noise="woof"
+user.size="small"
+
+
+get the value of the noise EA
+# file: TEST_DIR/foo
+user.noise="woof"
+
+
+get the value of the colour EA which was removed earlier
+TEST_DIR/foo: user.colour: No such attribute
+
+get the value of the size EA
+# file: TEST_DIR/foo
+user.size="small"
+
+
+list all the EAs again: noise, size
+# file: TEST_DIR/foo
+user.noise="woof"
+user.size="small"
+
+
+change the value of the size EA from small to huge
+
+get the size EA which should now have value huge
+# file: TEST_DIR/foo
+user.size="huge"
+
+
+list EAs: noise, size
+# file: TEST_DIR/foo
+user.noise="woof"
+user.size="huge"
+
+
+remove the size EA from foo
+
+list EAs: noise (size EA has been removed)
+# file: TEST_DIR/foo
+user.noise="woof"
+
+
+try removing non-existent EA named woof
+setfattr: TEST_DIR/foo: No such attribute
+
+try removing already removed EA size
+setfattr: TEST_DIR/foo: No such attribute
+
+list EAs: noise
+# file: TEST_DIR/foo
+user.noise="woof"
+
+
+try removing already removed EA colour
+setfattr: TEST_DIR/foo: No such attribute
+
+list EAs: noise
+# file: TEST_DIR/foo
+user.noise="woof"
+
+
+remove remaining EA noise
+
+list EAs: should be no EAs left now
+
+unmount the FS and see if EAs are persistent
+
+list EAs: should still be no EAs left
+
+*** Test out the trusted namespace ***
+
+set EA <trusted:colour,marone>:
+
+set EA <user:colour,beige>:
+
+set EA <user:vomit,pizza>:
+
+set EA <trusted:noise,whack>:
+
+list trusted EAs: <trusted:colour,noise>:
+# file: TEST_DIR/foo
+trusted.colour="marone"
+trusted.noise="whack"
+
+
+list user EAs: <user:colour,vomit>:
+# file: TEST_DIR/foo
+user.colour="beige"
+user.vomit="pizza"
+
+
+get trusted EA colour: marone
+# file: TEST_DIR/foo
+trusted.colour="marone"
+
+
+get trusted EA noise: whack
+# file: TEST_DIR/foo
+trusted.noise="whack"
+
+
+get trusted EA vomit which is a user EA => find nothing
+TEST_DIR/foo: trusted.vomit: No such attribute
+
+unmount the FS and see if EAs are persistent
+
+get trusted EA colour: marone
+# file: TEST_DIR/foo
+trusted.colour="marone"
+
+
+get trusted EA noise: whack
+# file: TEST_DIR/foo
+trusted.noise="whack"
+
+
+get user EA vomit: pizza
+# file: TEST_DIR/foo
+user.vomit="pizza"
+
+
+remove the trusted colour EA
+
+list trusted EAs: <trusted:noise>:
+# file: TEST_DIR/foo
+trusted.noise="whack"
+
+
+list user EAs: <user:colour,vomit>:
+# file: TEST_DIR/foo
+user.colour="beige"
+user.vomit="pizza"
+
+
+remove the final trusted EA noise
+
+list trusted EAs: none
