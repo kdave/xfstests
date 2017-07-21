@@ -35,7 +35,7 @@ main(int argc, char* argv[])
 {
     char *path;
     int fd;
-    char *buf = "hi there";
+    char *buf = "hi there\n";
     ssize_t x;
     int sts;
 
@@ -59,7 +59,7 @@ main(int argc, char* argv[])
         return 1;
     }
     printf("write to the file\n");
-    x = write(fd, buf, strlen(buf)+1); 
+    x = write(fd, buf, strlen(buf));
     if (x == -1) {
 	perror("write");
         return 1;

@@ -1,13 +1,11 @@
 #! /bin/bash
 # FS QA Test No. 093
 #
-# Test out for IRIX the removal of file capabilities when
-# writing to the file (when it doesn't have CAP_FSETID & CAP_SETFCAP)
-# i.e. not root.
-# Test out fix for pv#901019
+# Test clearing of capabilities on write.
 #
 #-----------------------------------------------------------------------
 # Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2017 Google, Inc.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -43,23 +41,19 @@ _cleanup()
     [ -n "$TEST_DIR" ] && rm -f $file
 }
 
-_testfilter()
+filefilter()
 {
-    sed -e "s#$TEST_DIR#TESTDIR#g"
-}
-
-_filefilter()
-{
-    sed -e "s#$tmp##" -e "s#$file#file#"
+    sed -e "s#$file#file#"
 }
 
 # real QA test starts here
 _supported_fs generic
-_supported_os IRIX
+_supported_os Linux
 
 _require_test
 _require_attrs
-_require_runas
+_require_user
+_require_test_program "writemod"
 
 rm -f $seqres.full
 
@@ -67,91 +61,31 @@ echo "QA output created by $seq"
 echo ""
 file=$TEST_DIR/$seq.file
 
-user=`grep ':all=:all=' /etc/capability | tail -1 | $AWK_PROG -F: '{print $1}'`
-uid=`_cat_passwd | grep $user | $AWK_PROG -F: '{print $3}'`
-
-cat >$tmp.append <<EOF
-#!/bin/bash
-echo data >>$file
-EOF
-chmod ugo+x $tmp.append
-
-echo "touch file"
+rm -f $file
 touch $file
-chmod ugo+w $file 
 
-echo "chcap on file"
-chcap CAP_CHOWN+p $file
-
-echo "ls -P on file"
-ls -P $file | _testfilter
-
-echo "append to file as root"
-$tmp.append
-
-echo "ls -P on file"
-ls -P $file | _testfilter
-
-echo "cat file"
-echo "----"
+echo "**** Verifying that appending to file clears capabilities ****"
+setcap cap_chown+ep $file
+getcap $file | filefilter
+echo data1 >> $file
 cat $file
-echo "----"
+getcap $file | filefilter
+echo
 
-echo "append to file as user without caps"
-# in particular user doesn't have FSETID or SETFCAP
-_runas -u $uid $tmp.append
-
-echo "cat file"
-echo "----"
+echo "**** Verifying that appending to file doesn't clear other xattrs ****"
+setcap cap_chown+ep $file
+$SETFATTR_PROG -n trusted.name -v value $file
+echo data2 >> $file
 cat $file
-echo "----"
+$GETFATTR_PROG -m '^trusted\.*' --absolute-names $file | filefilter
 
-echo "ls -P on file"
-ls -P $file | _testfilter
-
-# try again when it doesn't have the EA
-echo "append to file as user without caps a 2nd time"
-_runas -u $uid $tmp.append
-
-echo "ls -P on file"
-ls -P $file | _testfilter
-
-echo "cat file"
-echo "----"
-cat $file
-echo "----"
-
-echo "only let root write to file"
-chmod 700 $file
-chown root $file 
-
-echo "as non-root try to append to file"
-_runas -u $uid $tmp.append 2>&1 | _filefilter
-
-echo "restore perms on file"
-chmod 777 $file
-
-echo "set a root EA on file"
-${ATTR_PROG} -R -s test -V testval $file | _filefilter
-
-echo "list EA on file"
-${ATTR_PROG} -R -l $file | _filefilter
-
-echo "as non-root try to append to file"
-_runas -u $uid $tmp.append 2>&1 | _filefilter
-
-echo "list EA on file"
-${ATTR_PROG} -R -l $file | _filefilter
-
-chown $uid $file
+echo "**** Verifying that chmod doesn't affect open file descriptors ****"
+rm -f $file
+touch $file
+chown $qa_user $file
 chmod ugo+w $TEST_DIR
-echo "as non-root call writemod"
-_runas -u $uid src/writemod $file 2>&1 | _filefilter
-
-echo "cat file"
-echo "----"
+su $qa_user -c "src/writemod $file" | filefilter
 cat $file
-echo "----"
 
 # success, all done
 status=0
