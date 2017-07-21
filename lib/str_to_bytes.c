@@ -124,7 +124,7 @@ char    *s;
 }
 
 /*
- * Force 64 bits number when compiled as 32 IRIX binary.
+ * Force 64 bits number when compiled as a 32-bit binary.
  * This allows for a number bigger than 2G.
  */
 

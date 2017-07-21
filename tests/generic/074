@@ -42,7 +42,7 @@ _cleanup()
 . ./common/filter
 
 _supported_fs generic
-_supported_os IRIX Linux
+_supported_os Linux
 _require_test
 
 rm -f $seqres.full
@@ -116,37 +116,16 @@ _process_args()
 # These params can take a while on different CPUs/OSs
 # so we set them differently for different machines
 #
-if [ $HOSTOS == "IRIX" ]; then 
-    if uname -R | grep -iq debug; then 
-        # e.g. getting around 37secs for 1,1,1 on IP30 debug
-	numchildren=2
-	numloops=1
-	numfiles=2
-        param_type="IRIX debug"
-    else
-        # getting around 1 sec 1,1,1 - 10secs 1,10,1 on IP30 nondebug
+if uname -a | grep -q SMP; then
+	numloops=10
+	numfiles=5
+	numchildren=3
+	param_type="Linux SMP"
+else
 	numloops=2
 	numfiles=3
 	numchildren=3
-        param_type="IRIX nondebug"
-    fi
-elif [ $HOSTOS == "Linux" ]; then
-    if uname -a | grep -q SMP; then
-        numloops=10
-        numfiles=5
-        numchildren=3
-        param_type="Linux SMP"
-    else
-        numloops=2
-        numfiles=3
-        numchildren=3
-        param_type="Linux UP"
-    fi
-else
-    numloops=1
-    numfiles=1
-    numchildren=1
-    param_type="Default"
+	param_type="Linux UP"
 fi
 
 # can override the params here

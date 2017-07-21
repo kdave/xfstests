@@ -37,7 +37,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
 _supported_fs xfs
-_supported_os IRIX Linux
+_supported_os Linux
 _require_test
 
 [ -f core ] && rm -f core
@@ -72,14 +72,8 @@ test_done
 echo "=== TEST 5 ==="
 xfs_db -r -c 'inode 128' -c 'push' -c 'type' $TEST_DEV >$tmp.out 2>&1
 test_done
-# On IRIX we lose state after a "push" operation and don't
-# know the type is still inode
-# Probably not worth changing xfs_db on IRIX for this.
-if [ "$HOSTOS" != "IRIX" ]; then
-    if ! grep -q "current type is \"inode\"" $tmp.out
-    then
-	    cat $tmp.out
-    fi
+if ! grep -q "current type is \"inode\"" $tmp.out; then
+    cat $tmp.out
 fi
 
 echo "=== TEST 6 ==="

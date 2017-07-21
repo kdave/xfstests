@@ -252,7 +252,6 @@ fi
 #
 
 case $(uname -s) in
-	IRIX | IRIX64 )		dfOpts="-Pb"	;;
 	Linux)			dfOpts="-P"	;;
 	*)			dfOpts="-PB"	;;
 esac
