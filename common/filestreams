@@ -21,35 +21,12 @@
 
 _check_filestreams_support()
 {
-	local irix_timeout_sysvar="xfs_mfstream_timeout"
-	local linux_timeout_procvar="/proc/sys/fs/xfs/filestream_centisecs"
-	local streams_avail=""
-	if [ "$HOSTOS" == "IRIX" ]; then
-		# check for the filestreams timeout systune variable in irix
-		streams_avail=`systune $irix_timeout_sysvar 2>&1 |
-			perl -ne 'if (/'$irix_timeout_sysvar'\s+=\s+\d+/) {print "true"}'`
-	else
-		# check for the filestreams timeout proc entry in linux
-		[ -f $linux_timeout_procvar ] && streams_avail="true"
-	fi
-
-	if [ "$streams_avail" == "true" ]; then
-		return 0
-	else
-		return 1
-	fi
+	[ -f /proc/sys/fs/xfs/filestream_centisecs ]
 }
 
 _set_stream_timeout_centisecs()
 {
-	local new_timeout_csecs=$1
-	local irix_timeout_sysvar="xfs_mfstream_timeout"
-	local linux_timeout_procvar="/proc/sys/fs/xfs/filestream_centisecs"
-	if [ "$HOSTOS" == "IRIX" ]; then
-		echo y | systune -r $irix_timeout_sysvar $new_timeout_csecs >/dev/null
-	else
-		echo $new_timeout_csecs > $linux_timeout_procvar
-	fi
+	echo $1 > /proc/sys/fs/xfs/filestream_centisecs
 }
 
 _do_stream()
@@ -63,22 +40,14 @@ _do_stream()
 	local blocks_in_file=`expr $file_size / $bsize`
 
 	mkdir $directory_name
-	if [ "$iflag" = "1" -a "$HOSTOS" != "IRIX" ]; then
+	if [ "$iflag" = "1" ]; then
 		$XFS_IO_PROG -x -c "chattr +S" $directory_name \
 			|| _fail "chattr of filestream flag"
 	fi
 	cd $directory_name
 
-	local dd_cmd=""
-	if [ "$HOSTOS" == "IRIX" ]; then
-		# for irix use lmdd
-		dd_cmd="lmdd"
-		[ "$dio" = "1" ] && dd_cmd="$dd_cmd odirect=1"
-	else
-		# for linux use dd
-		dd_cmd="dd"
-		[ "$dio" = "1" ] && dd_cmd="$dd_cmd oflag=direct"
-	fi
+	local dd_cmd="dd"
+	[ "$dio" = "1" ] && dd_cmd="$dd_cmd oflag=direct"
 	dd_cmd="$dd_cmd if=/dev/zero bs=${bsize} count=${blocks_in_file}"
 
 	local i=1
@@ -140,7 +109,7 @@ _test_streams() {
 	_scratch_mkfs_xfs -dsize=$size,agcount=$agcount >/dev/null 2>&1 \
 		|| _fail "mkfs failed"
 
-	if [ "$use_iflag" = "0" -o "$HOSTOS" == "IRIX" ]; then
+	if [ "$use_iflag" = "0" ]; then
 		# mount using filestreams mount option
 		_scratch_mount "-o filestreams" \
 			|| _fail "filestreams mount failed"

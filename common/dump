@@ -395,8 +395,6 @@ End-of-File
 
 _mk_fillconfig_perm()
 {
-    # dir_guid: ugo=rwx,g+s on dir is for IRIX chmod(1)
-
     cat <<End-of-File >$tmp.config
 # pathname	size/dir  user group mode
 #
@@ -406,7 +404,7 @@ file_sticky	10	$nobody	$nobody	01777
 file_mix1	10	$nobody	$nobody	761
 file_mix2	10	$nobody	$nobody	642
 dir_suid	d	$nobody	$nobody	04777
-dir_guid	d	$nobody	$nobody	ugo=rwx,g+s
+dir_guid	d	$nobody	$nobody	02777
 dir_sticky	d	$nobody	$nobody	01777
 dir_mix1	d	$nobody	$nobody	761
 dir_mix2	d	$nobody	$nobody	642
@@ -1191,7 +1189,7 @@ _do_restore_toc()
     echo "Contents of dump ..."
     opts="$_restore_debug$restore_args -f $dump_file -t"
     echo "xfsrestore $opts" | _dir_filter
-    cd $SCRATCH_MNT # for IRIX which needs xfs cwd
+    cd $SCRATCH_MNT
     $XFSRESTORE_PROG $opts 2>&1 | tee -a $seqres.full | _dump_filter_main |\
     _check_quota_file |\
     _check_quota_entries |\
@@ -1484,25 +1482,14 @@ _check_quota_entries()
 # xfsrestore: user quota information written to ...'
 # xfsrestore: group quota information written to ...'
 # xfsrestore: project quota information written to ...'
-#
-# If on IRIX then look for:
-# xfsrestore: use 'edquota' to restore quotas
-# Else look for:
 # xfsrestore: use 'xfs_quota' to restore quotas
 #
 _check_quota_dumprestore()
 {
-    if [ "$HOSTOS" == "IRIX" ]; then
 	_check_quota 'user quota information' \
 		     'group quota information' \
 		     'project quota information' | \
-	sed "/xfsrestore:.*use 'edquota' to restore quotas/d"
-    else
-	_check_quota 'user quota information' \
-		     'group quota information' \
-		     'project quota information' | \
-	sed "/xfsrestore:.*use 'xfs_quota' to restore quotas/d"
-    fi
+		sed "/xfsrestore:.*use 'xfs_quota' to restore quotas/d"
 }
 
 #

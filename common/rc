@@ -238,7 +238,7 @@ _scratch_options()
 
     case $type in
     mkfs)
-	[ "$HOSTOS" != "IRIX" ] && SCRATCH_OPTIONS="$SCRATCH_OPTIONS -f"
+	SCRATCH_OPTIONS="$SCRATCH_OPTIONS -f"
 	rt_opt="-r"
         log_opt="-l"
 	;;
@@ -287,14 +287,7 @@ _mount_ops_filter()
     [ $last_index -gt 0 ] && shift $last_index
     FS_ESCAPED=$1
     
-    # irix is fussy about how it is fed its mount options
-    # - multiple -o's are not allowed
-    # - no spaces between comma delimitered options
-    # the sed script replaces all -o's (except the first) with a comma
-    # not required for linux, but won't hurt
-    
-    echo $params | sed -e 's/[[:space:]]\+-o[[:space:]]*/UnIqUe/1; s/[[:space:]]\+-o[[:space:]]*/,/g; s/UnIqUe/ -o /1' \
-        | sed -e 's/dmapi/dmi/' \
+    echo $params | sed -e 's/dmapi/dmi/' \
         | $PERL_PROG -ne "s#mtpt=[^,|^\n|^\s]*#mtpt=$FS_ESCAPED\1\2#; print;"
 
 }
@@ -2131,12 +2124,7 @@ s,^\s*$,,;
 
 _user_do()
 {
-    if [ "$HOSTOS" == "IRIX" ]
-	then
-	echo $1 | /bin/bash "su $qa_user 2>&1" | _filter_user_do
-    else
 	echo $1 | su -s /bin/bash $qa_user 2>&1 | _filter_user_do
-    fi
 }
 
 _require_xfs_io_command()
@@ -2708,9 +2696,7 @@ _full_platform_details()
 
 _get_os_name()
 {
-	if [ "`uname`" == "IRIX64" ] || [ "`uname`" == "IRIX" ]; then
-		echo 'irix'
-	elif [ "`uname`" == "Linux" ]; then
+	if [ "`uname`" == "Linux" ]; then
 		echo 'linux'
 	else
 		echo Unknown operating system: `uname`
@@ -3274,9 +3260,6 @@ run_check()
 
 _require_test_symlinks()
 {
-	# IRIX UDF does not support symlinks
-	[ "$HOSTOS" = "IRIX" -a "$FSTYP" = 'udf' ] && \
-		_notrun "Require symlinks support"
 	target=`mktemp -p $TEST_DIR`
 	link=`mktemp -p $TEST_DIR -u`
 	ln -s `basename $target` $link
