@@ -1,0 +1,109 @@
+#! /bin/bash
+# FS QA Test 424
+#
+# xfs_db should take type size into account when setting type.
+# If type size isn't updated whenever type is set, a false crc
+# error can occur due to the stale size. This test checks for
+# that false crc error.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+filter_dbval()
+{
+	awk '{ print $4 }'
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate
+_supported_os Linux
+_supported_fs xfs
+_require_scratch
+
+echo "Silence is golden."
+
+# real QA test starts here
+
+# for different sector sizes, ensure no CRC errors are falsely reported.
+
+# Supported types include: agf, agfl, agi, attr3, bmapbta,
+# bmapbtd, bnobt, cntbt, data, dir3, dqblk, inobt, inodata,
+# inode, log, rtbitmap, rtsummary, sb, symlink, text, finobt.
+# For various sector sizes, test some types that involve type size.
+#
+# NOTE: skip attr3, bmapbta, bmapbtd, dir3, dqblk, inodata, symlink
+# rtbitmap, rtsummary, log
+#
+sec_sz=`_min_dio_alignment $SCRATCH_DEV`
+while [ $sec_sz -le 4096 ]; do
+	sector_sizes="$sector_sizes $sec_sz"
+	sec_sz=$((sec_sz * 2))
+done
+
+for SECTOR_SIZE in $sector_sizes; do
+	$MKFS_XFS_PROG -f -s size=$SECTOR_SIZE $SCRATCH_DEV > /dev/null
+
+	for TYPE in agf agi agfl sb; do
+		DADDR=`_scratch_xfs_db -c "$TYPE" -c "daddr" | filter_dbval`
+		_scratch_xfs_db -c "daddr $DADDR" -c "type $TYPE"
+	done
+
+	DADDR=`_scratch_xfs_db -c "sb" -c "addr rootino" -c "daddr" |
+		filter_dbval`
+	_scratch_xfs_db -c "daddr $DADDR" -c "type inode"
+	DADDR=`_scratch_xfs_db -c "agf" -c "addr bnoroot" -c "daddr" |
+		filter_dbval`
+	_scratch_xfs_db -c "daddr $DADDR" -c "type bnobt"
+	DADDR=`_scratch_xfs_db -c "agf" -c "addr cntroot" -c "daddr" |
+		filter_dbval`
+	_scratch_xfs_db -c "daddr $DADDR" -c "type cntbt"
+	DADDR=`_scratch_xfs_db -c "agi" -c "addr root" -c "daddr" |
+		filter_dbval`
+	_scratch_xfs_db -c "daddr $DADDR" -c "type inobt"
+	DADDR=`_scratch_xfs_db -c "agi" -c "addr free_root" -c "daddr" |
+		filter_dbval`
+	_scratch_xfs_db -c "daddr $DADDR" -c "type finobt"
+
+	_scratch_xfs_db -c "daddr $DADDR" -c "type text"
+	_scratch_xfs_db -c "daddr $DADDR" -c "type data"
+done
+
+# success, all done
+status=0
+exit
