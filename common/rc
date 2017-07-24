@@ -2295,16 +2295,31 @@ _require_fail_make_request()
  not found. Seems that CONFIG_FAIL_MAKE_REQUEST kernel config option not enabled"
 }
 
-#
+# Disable extent zeroing for ext4 on the given device
+_ext4_disable_extent_zeroout()
+{
+	local dev=${1:-$TEST_DEV}
+	local sdev=`_short_dev $dev`
+
+	[ -f /sys/fs/ext4/$sdev/extent_max_zeroout_kb ] && \
+		echo 0 >/sys/fs/ext4/$sdev/extent_max_zeroout_kb
+}
+
 # Check if the file system supports seek_data/hole
-#
 _require_seek_data_hole()
 {
-    testfile=$TEST_DIR/$$.seek
-    testseek=`$here/src/seek_sanity_test -t $testfile 2>&1`
-    rm -f $testfile &>/dev/null
-    echo $testseek | grep -q "Kernel does not support" && \
-        _notrun "File system does not support llseek(2) SEEK_DATA/HOLE"
+	local dev=${1:-$TEST_DEV}
+	local testfile=$TEST_DIR/$$.seek
+	local testseek=`$here/src/seek_sanity_test -t $testfile 2>&1`
+
+	rm -f $testfile &>/dev/null
+	echo $testseek | grep -q "Kernel does not support" && \
+		_notrun "File system does not support llseek(2) SEEK_DATA/HOLE"
+	# Disable extent zeroing for ext4 as that change where holes are
+	# created
+	if [ "$FSTYP" = "ext4" ]; then
+		_ext4_disable_extent_zeroout $dev
+	fi
 }
 
 _require_runas()
