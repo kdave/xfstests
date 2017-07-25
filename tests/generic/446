@@ -61,20 +61,20 @@ filesz=$((65536 * 2))
 $XFS_IO_PROG -f -c "truncate $((filesz * 2))" $SCRATCH_MNT/file >> $seqres.full
 
 # run a background dio read to a hole in a loop
-while true; do
+for i in `seq 0 999`; do
 	$XFS_IO_PROG -d -c "pread 0 $filesz" $SCRATCH_MNT/file > /dev/null 2>&1
 done &
 
 dread_pid=$!
 
 # run mapped write to the same hole as dio read
-for i in `seq 0 999`; do
+# loop until background dio read exits
+while kill -s 0 $dread_pid >/dev/null 2>&1; do
 	$XFS_IO_PROG -c "mmap 0 $filesz" -c "mwrite 0 $filesz" $SCRATCH_MNT/file \
 		> /dev/null
 	$XFS_IO_PROG -c "fpunch 0 $filesz" $SCRATCH_MNT/file > /dev/null
 done
 
-kill -9 $dread_pid > /dev/null 2>&1
 wait $dread_pid > /dev/null 2>&1
 
 echo "Silence is golden"
