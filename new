@@ -239,7 +239,7 @@ then
 
     while true
     do
-	echo -n "Add to group(s) [other] (? for list): "
+	echo -n "Add to group(s) [other] (separate by space, ? for list): "
 	read ans
 	[ -z "$ans" ] && ans=other
 	if [ "X$ans" = "X?" ]
@@ -254,7 +254,17 @@ then
 	    lst=`for word in $grpl; do echo $word; done | sort| uniq `
 	    echo $lst
 	else
-	    break
+	    # only allow lower cases, spaces, digits and underscore in group
+	    inval=`echo $ans | tr -d '[:lower:][:space:][:digit:]_'`
+	    if [ "$inval" != "" ]; then
+		echo "Invalid characters in group(s): $inval"
+		echo "Only lower cases, digits and underscore are allowed in groups, separated by space"
+		continue
+	    else
+		# remove redundant spaces/tabs
+		ans=`echo "$ans" | sed 's/\s\+/ /g'`
+		break
+	    fi
 	fi
     done
 else
