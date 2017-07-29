@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include "statx.h"
 
 static bool failed = false;

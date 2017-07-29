@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #ifdef __SOLARIS__
 #include <sys/mkdev.h>
 #endif
