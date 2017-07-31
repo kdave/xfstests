@@ -82,5 +82,14 @@ for i in `seq 0 1 $FILES`; do
 done
 wait
 echo "*** Silence is golden ***"
-status=0
+
+# unmount and check dmesg, filtering out expected XFS warnings about mixed
+# direct and buffered I/O
+_scratch_unmount
+if [ "$FSTYP" == "xfs" ]; then
+	_check_dmesg _filter_xfs_dmesg
+else
+	_check_dmesg
+fi
+status=$?
 exit
