@@ -69,6 +69,12 @@ chmod go-rwx $TFILE
 # Try to run out of space so setfacl will fail
 $XFS_IO_PROG -c "pwrite 0 50m" $TFILE >>$seqres.full 2>&1
 i=1
+
+# Setting acls on an xfs filesystem will succeed even after running out of
+# space for user attributes. Use trusted attributes
+while $SETFATTR_PROG -n trusted.$i -v $(perl -e 'print "a"x1024') $TFILE &>/dev/null; do
+	((++i))
+done
 j=1
 ret=0
 while [ $ret -eq 0 ]; do
@@ -77,7 +83,7 @@ while [ $ret -eq 0 ]; do
 		# On btrfs, setfattr will sometimes fail when free space is
 		# low, long before it's actually exhausted. Insist until it
 		# fails consistently.
-		$SETFATTR_PROG -n user.$i"x"$j $TFILE &>/dev/null
+		$SETFATTR_PROG -n trusted.$i"x"$j $TFILE &>/dev/null
 		ret=$(( $ret && $? ))
 		((++j))
 	done
