@@ -45,6 +45,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/punch
+. ./common/inject
 
 # real QA test starts here
 rm -f $seqres.full
@@ -53,13 +54,7 @@ rm -f $seqres.full
 _supported_fs generic
 _supported_os Linux
 _require_scratch
-
-DROP_WRITES="drop_writes"
-# replace "drop_writes" with "fail_writes" for old kernel
-if [ -f /sys/fs/xfs/$(_short_dev $TEST_DEV)/fail_writes ];then
-	DROP_WRITES="fail_writes"
-fi
-_require_xfs_sysfs $(_short_dev $TEST_DEV)/${DROP_WRITES}
+_require_xfs_io_error_injection "drop_writes"
 
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
@@ -72,7 +67,7 @@ bytes=$((64 * 1024))
 $XFS_IO_PROG -f -c "pwrite 0 $bytes" $file >> $seqres.full 2>&1
 
 # Enable write drops. All buffered writes are dropped from this point on.
-echo 1 > /sys/fs/xfs/$sdev/$DROP_WRITES
+_scratch_inject_error "drop_writes" 1
 
 # Write every other 4k range to split the larger delalloc extent into many more
 # smaller extents. Use pwrite because with write failures enabled, all
@@ -89,7 +84,7 @@ for i in $(seq 4096 8192 $endoff); do
 	$XFS_IO_PROG -c "pwrite $i 4k" $file >> $seqres.full 2>&1
 done
 
-echo 0 > /sys/fs/xfs/$sdev/$DROP_WRITES
+_scratch_inject_error "drop_writes" 0
 
 _scratch_cycle_mount
 $XFS_IO_PROG -c 'bmap -vp' $file | _filter_bmap
@@ -104,9 +99,9 @@ for offset in $(seq 0 100 500); do
 	$XFS_IO_PROG -fc "pwrite ${offset}m 100m" $file >> $seqres.full 2>&1
 
 	punchoffset=$((offset + 75))
-	echo 1 > /sys/fs/xfs/$sdev/$DROP_WRITES
+	_scratch_inject_error "drop_writes"
 	$XFS_IO_PROG -c "pwrite ${punchoffset}m 4k" $file >> $seqres.full 2>&1
-	echo 0 > /sys/fs/xfs/$sdev/$DROP_WRITES
+	_scratch_inject_error "drop_writes" 0
 done
 
 echo "Silence is golden."

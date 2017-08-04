@@ -47,13 +47,14 @@ rm -f $seqres.full
 
 # get standard environment, filters and checks
 . ./common/rc
+. ./common/inject
 
 # real QA test starts here
 
 # Modify as appropriate.
 _supported_fs xfs
 _supported_os Linux
-_require_xfs_sysfs $(_short_dev $TEST_DEV)/log/log_badcrc_factor
+_require_xfs_io_error_injection "log_bad_crc"
 _require_scratch
 _require_command "$KILLALL_PROG" killall
 
@@ -69,7 +70,7 @@ for i in $(seq 1 5); do
 	# (increase this value to run fsstress longer).
 	factor=$((RANDOM % 100 + 1))
 	echo iteration $i log_badcrc_factor: $factor >> $seqres.full 2>&1
-	echo $factor > /sys/fs/xfs/$sdev/log/log_badcrc_factor
+	_scratch_inject_error "log_bad_crc" "$factor"
 
 	# Run fsstress until the filesystem shuts down. It will shut down
 	# automatically when error injection triggers.

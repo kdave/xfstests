@@ -35,11 +35,48 @@ _require_error_injection()
 	esac
 }
 
+# Find the errortag injection knob in sysfs for a given xfs mount's
+# block device.
+_find_xfs_mountdev_errortag_knob()
+{
+	dev="$1"
+	knob="$2"
+	shortdev="$(_short_dev "${dev}")"
+	tagfile="/sys/fs/xfs/${shortdev}/errortag/${knob}"
+
+	# Some of the new sysfs errortag knobs were previously available via
+	# another sysfs path.
+	case "${knob}" in
+	"log_bad_crc")
+		if [ ! -w "${tagfile}" ]; then
+			tagfile="/sys/fs/xfs/${shortdev}/log/log_badcrc_factor"
+		fi
+		;;
+	"drop_writes")
+		if [ ! -w "${tagfile}" ]; then
+			tagfile="/sys/fs/xfs/${shortdev}/drop_writes"
+		fi
+		if [ ! -w "${tagfile}" ]; then
+			tagfile="/sys/fs/xfs/${shortdev}/fail_writes"
+		fi
+		;;
+	*)
+		;;
+	esac
+
+	echo "${tagfile}"
+}
+
 # Requires that xfs_io inject command knows about this error type
 _require_xfs_io_error_injection()
 {
 	type="$1"
 	_require_error_injection
+
+	# Can we find the error injection knobs via the new errortag
+	# configuration mechanism?
+	knob="$(_find_xfs_mountdev_errortag_knob "${TEST_DEV}" "${type}")"
+	test -w "${knob}" && return
 
 	# NOTE: We can't actually test error injection here because xfs
 	# hasn't always range checked the argument to xfs_errortag_add.
@@ -54,16 +91,34 @@ _require_xfs_io_error_injection()
 _test_inject_error()
 {
 	type="$1"
+	value="$2"
 
-	$XFS_IO_PROG -x -c "inject $type" $TEST_DIR
+	knob="$(_find_xfs_mountdev_errortag_knob "${TEST_DEV}" "${type}")"
+	if [ -w "${knob}" ]; then
+		test -z "${value}" && value="default"
+		echo -n "${value}" > "${knob}"
+	elif [ -z "${value}" ] || [ "${value}" = "default" ]; then
+		$XFS_IO_PROG -x -c "inject $type" $TEST_DIR
+	else
+		_fail "Cannot inject error ${type} value ${value}."
+	fi
 }
 
 # Inject an error into the scratch fs
 _scratch_inject_error()
 {
 	type="$1"
+	value="$2"
 
-	$XFS_IO_PROG -x -c "inject $type" $SCRATCH_MNT
+	knob="$(_find_xfs_mountdev_errortag_knob "${SCRATCH_DEV}" "${type}")"
+	if [ -w "${knob}" ]; then
+		test -z "${value}" && value="default"
+		echo -n "${value}" > "${knob}"
+	elif [ -z "${value}" ] || [ "${value}" = "default" ]; then
+		$XFS_IO_PROG -x -c "inject $type" $SCRATCH_MNT
+	else
+		_fail "Cannot inject error ${type} value ${value}."
+	fi
 }
 
 # Unmount and remount the scratch device, dumping the log
