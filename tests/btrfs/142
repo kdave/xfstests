@@ -75,6 +75,7 @@ start_fail()
 {
 	echo 100 > $DEBUGFS_MNT/fail_make_request/probability
 	echo 2 > $DEBUGFS_MNT/fail_make_request/times
+	echo 1 > $DEBUGFS_MNT/fail_make_request/task-filter
 	echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
 	echo 1 > $SYSFS_BDEV/make-it-fail
 }
@@ -83,6 +84,7 @@ stop_fail()
 {
 	echo 0 > $DEBUGFS_MNT/fail_make_request/probability
 	echo 0 > $DEBUGFS_MNT/fail_make_request/times
+	echo 0 > $DEBUGFS_MNT/fail_make_request/task-filter
 	echo 0 > $SYSFS_BDEV/make-it-fail
 }
 
@@ -118,16 +120,17 @@ echo "step 3......repair the bad copy" >>$seqres.full
 # since raid1 consists of two copies, and the bad copy was put on stripe #1
 # while the good copy lies on stripe #0, the bad copy only gets access when the
 # reader's pid % 2 == 1 is true
-while true; do
-	# start_fail only fails the following dio read so the repair is
+start_fail
+while [[ -z ${result} ]]; do
+	# enable task-filter only fails the following dio read so the repair is
 	# supposed to work.
-	start_fail
-	$XFS_IO_PROG -d -c "pread -b 128K 0 128K" "$SCRATCH_MNT/foobar" > /dev/null &
-	pid=$!
-	wait
-	stop_fail
-	[ $((pid % 2)) == 1 ] && break
+	result=$(bash -c "
+	if [[ \$((\$\$ % 2)) -eq 1 ]]; then
+		echo 1 > /proc/\$\$/make-it-fail
+		exec $XFS_IO_PROG -d -c \"pread -b 128K 0 128K\" \"$SCRATCH_MNT/foobar\"
+	fi");
 done
+stop_fail
 
 _scratch_unmount
 
