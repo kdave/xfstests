@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test No. 465
+#
+# Test i_size is updated properly under dio read/write
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2013 Alibaba Group.  All Rights Reserved.
+# Copyright (c) 2017 Red Hat Inc. All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $testfile.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_aiodio aio-dio-append-write-read-race
+_require_test_program "feature"
+
+testfile=$TEST_DIR/$seq.$$
+min_dio_align=`_min_dio_alignment $TEST_DEV`
+page_size=`$here/src/feature -s`
+
+rm -f $seqres.full
+
+echo "non-aio dio test"
+align=$min_dio_align
+while [ $align -le $page_size ]; do
+	echo "$AIO_TEST -a $align -d $testfile.$align" >> $seqres.full
+	$AIO_TEST -a $align -d $testfile.$align 2>&1 | tee -a $seqres.full
+	align=$((align * 2))
+done
+
+echo "aio-dio test"
+align=$min_dio_align
+while [ $align -le $page_size ]; do
+	echo "$AIO_TEST -a $align $testfile.$align" >> $seqres.full
+	$AIO_TEST -a $align $testfile.$align 2>&1 | tee -a $seqres.full
+	align=$((align * 2))
+done
+
+# success, all done
+status=0
+exit
