@@ -2212,8 +2212,13 @@ _require_xfs_io_command()
 	echo $testio | grep -q "Function not implemented" && \
 		_notrun "xfs_io $command support is missing (missing syscall?)"
 
-	if [ -n "$param" -a $param_checked -eq 0 ]; then
+	[ -n "$param" ] || return
+
+	if [ $param_checked -eq 0 ]; then
 		$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \
+			_notrun "xfs_io $command doesn't support $param"
+	else
+		echo $testio | grep -q "invalid option" && \
 			_notrun "xfs_io $command doesn't support $param"
 	fi
 }
