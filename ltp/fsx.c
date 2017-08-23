@@ -1581,7 +1581,7 @@ usage(void)
 "	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
-	-P: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
+	-P: save .fsxlog .fsxops and .fsxgood files in dirpath (default ./)\n\
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
 	-W: mapped write operations DISabled\n\
         -R: read() system calls only (mapped reads disabled)\n\
@@ -1761,6 +1761,7 @@ main(int argc, char **argv)
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
+	int dirpath = 0;
 	struct stat statbuf;
 
 	goodfile[0] = 0;
@@ -1902,6 +1903,9 @@ main(int argc, char **argv)
 			strcat(goodfile, "/");
 			strncpy(logfile, optarg, sizeof(logfile));
 			strcat(logfile, "/");
+			strncpy(opsfile, optarg, sizeof(logfile));
+			strcat(opsfile, "/");
+			dirpath = 1;
 			break;
                 case 'R':
                         mapped_reads = 0;
@@ -1978,21 +1982,21 @@ main(int argc, char **argv)
 		}
 	}
 #endif
-	strncat(goodfile, fname, 256);
+	strncat(goodfile, dirpath ? basename(fname) : fname, 256);
 	strcat (goodfile, ".fsxgood");
 	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
 	if (fsxgoodfd < 0) {
 		prterr(goodfile);
 		exit(92);
 	}
-	strncat(logfile, fname, 256);
+	strncat(logfile, dirpath ? basename(fname) : fname, 256);
 	strcat (logfile, ".fsxlog");
 	fsxlogf = fopen(logfile, "w");
 	if (fsxlogf == NULL) {
 		prterr(logfile);
 		exit(93);
 	}
-	strncat(opsfile, fname, 256);
+	strncat(opsfile, dirpath ? basename(fname) : fname, 256);
 	strcat(opsfile, ".fsxops");
 	unlink(opsfile);
 
