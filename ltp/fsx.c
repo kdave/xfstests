@@ -116,7 +116,6 @@ int	fd;				/* fd for our test file */
 blksize_t	block_size = 0;
 off_t		file_size = 0;
 off_t		biggest = 0;
-char		state[256];
 unsigned long	testcalls = 0;		/* calls to function "test" */
 
 unsigned long	simulatedopcount = 0;	/* -b flag */
@@ -1909,8 +1908,10 @@ main(int argc, char **argv)
                         break;
 		case 'S':
                         seed = getnum(optarg, &endp);
-			if (seed == 0)
+			if (seed == 0) {
 				seed = time(0) % 10000;
+				seed += (int)getpid();
+			}
 			if (!quiet)
 				fprintf(stdout, "Seed set to %d\n", seed);
 			if (seed < 0)
@@ -1948,8 +1949,7 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
-	initstate(seed, state, 256);
-	setstate(state);
+	srandom(seed);
 	fd = open(fname,
 		O_RDWR|(lite ? 0 : O_CREAT|O_TRUNC)|o_direct, 0666);
 	if (fd < 0) {
