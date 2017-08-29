@@ -34,7 +34,7 @@ static int signals_have_been_setup = 0;
 /* Ensure that the lock is released if we are interrupted.  */
 static void
 handler (int sig) {
-    fprintf(stderr, "%s", sys_siglist[sig]);
+    fprintf(stderr, "%s\n", sys_siglist[sig]);
     exit(1);
 }
 
@@ -99,7 +99,7 @@ lock_mtab (void) {
 			   Too many files open in the system?
 			   Filesystem full? */
 			fprintf(stderr, "can't create lock file %s: %s "
-			     "(use -n flag to override)",
+			     "(use -n flag to override)\n",
 			     linktargetfile, strerror (errsv));
 			exit(1);
 		}
@@ -112,7 +112,7 @@ lock_mtab (void) {
 
 		if (j < 0 && errsv != EEXIST) {
 			fprintf(stderr, "can't link lock file %s: %s "
-			     "(use -n flag to override)",
+			     "(use -n flag to override)\n",
 			     mounted_lock, strerror (errsv));
 			exit(1);
 		}
@@ -157,7 +157,7 @@ lock_mtab (void) {
 			if (fcntl (fd, F_SETLKW, &flock) == -1 &&
 			    errno != EBUSY && errno != EAGAIN) {
 				int errsv = errno;
-				fprintf(stderr, "can't lock lock file %s: %s",
+				fprintf(stderr, "can't lock lock file %s: %s\n",
 				     mounted_lock, (errno == EINTR) ?
 				     _("timed out") : strerror (errsv));
 				exit(1);
