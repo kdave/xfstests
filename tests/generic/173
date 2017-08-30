@@ -81,6 +81,8 @@ _fill_fs $((blksz * nr_free)) $testdir/space $blksz 0 >> $seqres.full 2>&1
 sync
 
 echo "mmap CoW the big file"
+core_ulimit="$(ulimit -c)"
+ulimit -c 0
 out="$(_mwrite_byte 0x62 0 $((blksz * nr_blks)) $((blksz * nr_blks)) $testdir/bigfile 2>&1)"
 err="$?"
 if [ $err -lt 128 ]; then
@@ -95,6 +97,7 @@ err="$?"
 if [ $err -lt 128 ]; then
 	echo "mmap CoW should have failed with SIGBUS, got SIG$(kill -l $err)"
 fi
+ulimit -c "${core_ulimit}"
 
 # success, all done
 status=0
