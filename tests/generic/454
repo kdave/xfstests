@@ -1,0 +1,167 @@
+#! /bin/bash
+# FS QA Test No. 454
+#
+# Create xattrs with multiple keys that all appear the same
+# (in unicode, anyway) but point to different values.  In theory all
+# Linux filesystems should allow this (filenames are a sequence of
+# arbitrary bytes) even if the user implications are horrifying.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+
+_supported_os Linux
+_require_scratch
+_require_attrs
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir="${SCRATCH_MNT}/test-${seq}"
+mkdir $testdir
+testfile="${testdir}/attrfile"
+touch "${testfile}"
+
+hexbytes() {
+	echo -n "$1" | od -tx1 -w99999 | head -n1 | sed -e 's/^0* //g'
+}
+
+setf() {
+	key="$(echo -e "$1")"
+	value="$2"
+
+	$SETFATTR_PROG -n "user.${key}" -v "${value}" "${testfile}"
+	echo "Storing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
+}
+
+testf() {
+	key="$(echo -e "$1")"
+	value="$2"
+
+	echo "Testing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
+
+	actual_value="$($GETFATTR_PROG --absolute-names --only-values -n "user.${key}" "${testfile}")"
+	if [ "${actual_value}" != "${value}" ]; then
+		echo "Key ${key} has value ${actual_value}, expected ${value}."
+	fi
+}
+
+filter_scrub() {
+	grep 'Unicode' | sed -e 's/^.*Duplicate/Duplicate/g'
+}
+
+echo "Create files"
+# These two render the same
+setf "french_caf\xc3\xa9.txt" "NFC"
+setf "french_cafe\xcc\x81.txt" "NFD"
+
+# These two may have different widths
+setf "chinese_\xef\xbd\xb6.txt" "NFKC1"
+setf "chinese_\xe3\x82\xab.txt" "NFKC2"
+
+# Same point, different byte representations in NFC/NFD/NFKC/NFKD
+setf "greek_\xcf\x93.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFC"
+setf "greek_\xcf\x92\xcc\x81.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFD"
+setf "greek_\xce\x8e.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFKC"
+setf "greek_\xce\xa5\xcc\x81.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFKD"
+
+# Arabic code point can expand into a muuuch longer series
+setf "arabic_\xef\xb7\xba.txt" "ARABIC LIGATURE SALLALLAHOU ALAYHE WASALLAM, NFC"
+setf "arabic_\xd8\xb5\xd9\x84\xd9\x89\x20\xd8\xa7\xd9\x84\xd9\x84\xd9\x87\x20\xd8\xb9\xd9\x84\xd9\x8a\xd9\x87\x20\xd9\x88\xd8\xb3\xd9\x84\xd9\x85.txt" "ARABIC LIGATURE SALLALLAHOU ALAYHE WASALLAM, NFKC"
+
+# Fake slash?
+setf "urk\xc0\xafmoo" "FAKESLASH"
+
+$GETFATTR_PROG --absolute-names -d "${testfile}" >> $seqres.full
+
+echo "Test files"
+testf "french_caf\xc3\xa9.txt" "NFC"
+testf "french_cafe\xcc\x81.txt" "NFD"
+
+testf "chinese_\xef\xbd\xb6.txt" "NFKC1"
+testf "chinese_\xe3\x82\xab.txt" "NFKC2"
+
+testf "greek_\xcf\x93.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFC"
+testf "greek_\xcf\x92\xcc\x81.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFD"
+testf "greek_\xce\x8e.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFKC"
+testf "greek_\xce\xa5\xcc\x81.txt" "GREEK UPSILON WITH ACUTE AND HOOK SYMBOL, NFKD"
+
+testf "arabic_\xef\xb7\xba.txt" "ARABIC LIGATURE SALLALLAHOU ALAYHE WASALLAM, NFC"
+testf "arabic_\xd8\xb5\xd9\x84\xd9\x89\x20\xd8\xa7\xd9\x84\xd9\x84\xd9\x87\x20\xd8\xb9\xd9\x84\xd9\x8a\xd9\x87\x20\xd9\x88\xd8\xb3\xd9\x84\xd9\x85.txt" "ARABIC LIGATURE SALLALLAHOU ALAYHE WASALLAM, NFKC"
+
+testf "urk\xc0\xafmoo" "FAKESLASH"
+
+echo "Uniqueness of keys?"
+crazy_keys="$($GETFATTR_PROG --absolute-names -d "${testfile}" | egrep -c '(french_|chinese_|greek_|arabic_|urk)')"
+expected_keys=11
+test "${crazy_keys}" -ne "${expected_keys}" && echo "Expected ${expected_keys} keys, saw ${crazy_keys}."
+
+echo "Test XFS online scrub, if applicable"
+
+# Only run this on xfs if xfs_scrub is available and has the unicode checker
+check_xfs_scrub() {
+	# Ignore non-XFS fs or no scrub program...
+	if [ "${FSTYP}" != "xfs" ] || [ ! -x "${XFS_SCRUB_PROG}" ]; then
+		return 1
+	fi
+
+	# We only care if xfs_scrub has unicode string support...
+	if ! type ldd > /dev/null 2>&1 || \
+	   ! ldd "${XFS_SCRUB_PROG}" | grep -q libunistring; then
+		return 1
+	fi
+
+	# Does the ioctl work?
+	if $XFS_IO_PROG -x -c "scrub test 0" $SCRATCH_MNT 2>&1 | \
+	   grep -q "Inappropriate ioctl"; then
+		return 1
+	fi
+
+	return 0
+}
+
+if check_xfs_scrub; then
+	output="$(${XFS_SCRUB_PROG} -n "${SCRATCH_MNT}" 2>&1 | filter_scrub)"
+	echo "${output}" | grep -q "french_" || echo "No complaints about french e accent?"
+	echo "${output}" | grep -q "chinese_" || echo "No complaints about chinese width-different?"
+	echo "${output}" | grep -q "greek_" || echo "No complaints about greek letter mess?"
+	echo "${output}" | grep -q "arabic_" || echo "No complaints about arabic expanded string?"
+	echo "Actual xfs_scrub output:" >> $seqres.full
+	echo "${output}" >> $seqres.full
+fi
+
+# success, all done
+status=0
+exit
