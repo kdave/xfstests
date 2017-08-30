@@ -569,14 +569,20 @@ check_trunc_hack(void)
 {
 	struct stat statbuf;
 
-	ftruncate(fd, (off_t)0);
-	ftruncate(fd, (off_t)100000);
+	if (ftruncate(fd, (off_t)0))
+		goto ftruncate_err;
+	if (ftruncate(fd, (off_t)100000))
+		goto ftruncate_err;
 	fstat(fd, &statbuf);
 	if (statbuf.st_size != (off_t)100000) {
 		prt("no extend on truncate! not posix!\n");
 		exit(130);
 	}
-	ftruncate(fd, 0);
+	if (ftruncate(fd, 0)) {
+ftruncate_err:
+		prterr("check_trunc_hack: ftruncate");
+		exit(131);
+	}
 }
 
 void
@@ -1742,7 +1748,10 @@ __test_fallocate(int mode, const char *mode_str)
 					mode_str);
 		} else {
 			ret = 1;
-			ftruncate(fd, 0);
+			if (ftruncate(fd, 0)) {
+				warn("main: ftruncate");
+				exit(132);
+			}
 		}
 	}
 	return ret;
