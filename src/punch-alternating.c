@@ -13,9 +13,10 @@
 
 void usage(char *cmd)
 {
-	printf("Usage: %s [-i interval] [-s size] file\n", cmd);
+	printf("Usage: %s [-o offset] [-i interval] [-s size] file\n", cmd);
 	printf("Punches every other block in the file by default,\n");
-	printf("or 'size' blocks every 'interval' blocks with options.\n");
+	printf("or 'size' blocks every 'interval' blocks starting at\n");
+	printf("'offset'.  Units are in fstatfs blocks.\n");
 	exit(1);
 }
 
@@ -24,6 +25,7 @@ int main(int argc, char *argv[])
 	struct stat	s;
 	struct statfs	sf;
 	off_t		offset;
+	off_t		start_offset = 0;
 	int		fd;
 	blksize_t	blksz;
 	off_t		sz;
@@ -33,10 +35,18 @@ int main(int argc, char *argv[])
 	int		size = 1;	/* punch $SIZE blocks ... */
 	int		interval = 2;	/* every $INTERVAL blocks */
 
-	while ((c = getopt(argc, argv, "i:s:")) != EOF) {
+	while ((c = getopt(argc, argv, "i:o:s:")) != EOF) {
 		switch (c) {
 		case 'i':
 			interval = atoi(optarg);
+			break;
+		case 'o':
+			errno = 0;
+			start_offset = strtoull(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "invalid offset '%s'\n", optarg);
+				return 1;
+			}
 			break;
 		case 's':
 			size = atoi(optarg);
@@ -75,7 +85,9 @@ int main(int argc, char *argv[])
 	blksz = sf.f_bsize;
 
 	mode = FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE;
-	for (offset = 0; offset < sz; offset += blksz * interval) {
+	for (offset = start_offset * blksz;
+	     offset < sz;
+	     offset += blksz * interval) {
 		error = fallocate(fd, mode, offset, blksz * size);
 		if (error)
 			goto err;
