@@ -1901,11 +1901,11 @@ do_aio_rw(int opno, long r, int flags)
 	if (xfsctl(f.path, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 		if (v)
 			printf(
-			"%d/%d: do_aio_rw - xfsctl(XFS_IOC_DIOINFO) %s%s failed %d\n",
+			"%d/%d: do_aio_rw - xfsctl(XFS_IOC_DIOINFO) %s%s return %d,"
+			" fallback to stat()\n",
 				procid, opno, f.path, st, errno);
-		free_pathname(&f);
-		close(fd);
-		return;
+		diob.d_mem = diob.d_miniosz = stb.st_blksize;
+		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
 	}
 	dio_env = getenv("XFS_DIO_MIN");
 	if (dio_env)
@@ -2352,11 +2352,11 @@ dread_f(int opno, long r)
 	if (xfsctl(f.path, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 		if (v)
 			printf(
-			"%d/%d: dread - xfsctl(XFS_IOC_DIOINFO) %s%s failed %d\n",
+			"%d/%d: dread - xfsctl(XFS_IOC_DIOINFO) %s%s return %d,"
+			" fallback to stat()\n",
 				procid, opno, f.path, st, errno);
-		free_pathname(&f);
-		close(fd);
-		return;
+		diob.d_mem = diob.d_miniosz = stb.st_blksize;
+		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
 	}
 
 	dio_env = getenv("XFS_DIO_MIN");
@@ -2430,11 +2430,10 @@ dwrite_f(int opno, long r)
 	if (xfsctl(f.path, fd, XFS_IOC_DIOINFO, &diob) < 0) {
 		if (v)
 			printf("%d/%d: dwrite - xfsctl(XFS_IOC_DIOINFO)"
-				" %s%s failed %d\n",
+				" %s%s return %d, fallback to stat()\n",
 			       procid, opno, f.path, st, errno);
-		free_pathname(&f);
-		close(fd);
-		return;
+		diob.d_mem = diob.d_miniosz = stb.st_blksize;
+		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
 	}
 
 	dio_env = getenv("XFS_DIO_MIN");
