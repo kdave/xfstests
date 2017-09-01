@@ -66,19 +66,14 @@ _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
 $XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/original >> $seqres.full
 
-_filter_testdirs()
-{
-    _filter_test_dir | _filter_scratch
-}
-
 _create_reflinks()
 {
     # auto reflink, should fall back to non-reflink
     rm -rf $2
     echo "reflink=auto:"
     cp --reflink=auto $1 $2
-    md5sum $1 | _filter_testdirs
-    md5sum $2 | _filter_testdirs
+    md5sum $1 | _filter_testdir_and_scratch
+    md5sum $2 | _filter_testdir_and_scratch
 
     # always reflink, should fail outright
     rm -rf $2
@@ -86,7 +81,7 @@ _create_reflinks()
     cp --reflink=always $1 $2 >> $seqres.full 2>&1 || echo "cp reflink failed"
 
     # The failed target actually gets created by cp:
-    ls $2 | _filter_testdirs
+    ls $2 | _filter_testdir_and_scratch
 }
 
 echo "test reflinks across different devices"

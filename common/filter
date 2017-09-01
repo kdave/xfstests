@@ -295,6 +295,17 @@ _filter_scratch()
 	    -e "/.use_space/d"
 }
 
+_filter_testdir_and_scratch()
+{
+	# filter both $TEST_DIR and $SCRATCH_MNT, but always filter the longer
+	# string first if the other string is a substring of the first one
+	if echo "$TEST_DIR" | grep -q "$SCRATCH_MNT"; then
+		_filter_test_dir | _filter_scratch
+	else
+		_filter_scratch | _filter_test_dir
+	fi
+}
+
 # Turn any device in the scratch pool into SCRATCH_DEV
 _filter_scratch_pool()
 {
@@ -311,7 +322,7 @@ _filter_quota()
 {
 	# Long dev name might be split onto its own line; last
 	# seds remove that newline if present
-	_filter_scratch | _filter_test_dir | _filter_spaces | \
+	_filter_testdir_and_scratch | _filter_spaces | \
 	sed -e 'N;s/SCRATCH_DEV\n/SCRATCH_DEV/g' | \
 	sed -e 'N;s/TEST_DEV\n/TEST_DEV/g'
 }
