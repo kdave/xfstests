@@ -1,0 +1,113 @@
+#! /bin/bash
+# FS QA Test 460
+#
+# Test that XFS reserves reasonable indirect blocks for delalloc and
+# speculative allocation, and doesn't cause any fdblocks corruption.
+#
+# This was inspired by an XFS but that too large 'indlen' was returned by
+# xfs_bmap_worst_indlen() which can't fit in a 17 bits value (STARTBLOCKVALBITS
+# is defined as 17), then leaked 1 << 17 blocks in sb_fdblocks.
+#
+# This was only seen on XFS with rmapbt feature enabled, but nothing prevents
+# the test from being a generic test.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+testfile=$SCRATCH_MNT/1G_file.$seq
+file_size=$((1024 * 1024 * 1024))
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+saved_dirty_background_ratio=0
+saved_dirty_ratio=0
+
+save_dirty_ratio()
+{
+	saved_dirty_background_ratio=`cat /proc/sys/vm/dirty_background_ratio`
+	saved_dirty_ratio=`cat /proc/sys/vm/dirty_ratio`
+}
+
+set_dirty_ratio()
+{
+	echo 100 > /proc/sys/vm/dirty_background_ratio
+	echo 100 > /proc/sys/vm/dirty_ratio
+}
+
+restore_dirty_ratio()
+{
+	if [ $saved_dirty_background_ratio -ne 0 ]; then
+		echo $saved_dirty_background_ratio > /proc/sys/vm/dirty_background_ratio
+	fi
+	if [ $saved_dirty_ratio -ne 0 ]; then
+		echo $saved_dirty_ratio > /proc/sys/vm/dirty_ratio
+	fi
+}
+
+_cleanup()
+{
+	cd /
+	restore_dirty_ratio
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+# test with scratch device, because test is known to corrupt fs, we don't want
+# the corruption affect subsequent tests
+_require_scratch
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# need at least 1G free space
+_require_fs_space $SCRATCH_MNT $((1024 * 1024))
+
+# To reproduce the bug, we need to keep enough dirty data in memory (1G at
+# least), so that a large enough delay allocated extent is kept in memory, then
+# speculative preallocation could allocate large number of blocks based on the
+# existing extent size.
+# So we set dirty_background_ratio and dirty_ratio to 100% uncontitionally,
+# even if the total memory is less than 1G, there's no harm to run a test on a
+# such host.
+save_dirty_ratio
+set_dirty_ratio
+
+# buffer write a 1G file, which is enough to trigger the bug,
+# _check_filesystems will complain about fs corruption after test
+$XFS_IO_PROG -fc "pwrite -b 1m 0 $file_size" $testfile >/dev/null 2>&1
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
