@@ -180,6 +180,7 @@ int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
 #endif
 
 const char *replayops = NULL;
+const char *recordops = NULL;
 FILE *	fsxlogf = NULL;
 FILE *	replayopsf = NULL;
 char opsfile[1024];
@@ -1676,6 +1677,8 @@ usage(void)
 	-W: mapped write operations DISabled\n\
         -R: read() system calls only (mapped reads disabled)\n\
         -Z: O_DIRECT (use -R, -W, -r and -w too)\n\
+	--replay-ops opsfile: replay ops from recorded .fsxops file\n\
+	--record-ops[=opsfile]: dump ops file also on success. optionally specify ops file name\n\
 	fname: this filename is REQUIRED (no default)\n");
 	exit(90);
 }
@@ -1844,6 +1847,7 @@ __test_fallocate(int mode, const char *mode_str)
 
 static struct option longopts[] = {
 	{"replay-ops", required_argument, 0, 256},
+	{"record-ops", optional_argument, 0, 255},
 	{ }
 };
 
@@ -2034,6 +2038,11 @@ main(int argc, char **argv)
 		case 'Z':
 			o_direct = O_DIRECT;
 			break;
+		case 255:  /* --record-ops */
+			if (optarg)
+				strncpy(opsfile, optarg, sizeof(opsfile));
+			recordops = opsfile;
+			break;
 		case 256:  /* --replay-ops */
 			replayops = optarg;
 			break;
@@ -2113,8 +2122,10 @@ main(int argc, char **argv)
 		prterr(logfile);
 		exit(93);
 	}
-	strncat(opsfile, dirpath ? bname : fname, 256);
-	strcat(opsfile, ".fsxops");
+	if (!*opsfile) {
+		strncat(opsfile, dirpath ? bname : fname, 256);
+		strcat(opsfile, ".fsxops");
+	}
 	unlink(opsfile);
 
 	if (replayops) {
@@ -2195,6 +2206,8 @@ main(int argc, char **argv)
 		report_failure(99);
 	}
 	prt("All %lu operations completed A-OK!\n", testcalls);
+	if (recordops)
+		logdump();
 
 	exit(0);
 	return 0;
