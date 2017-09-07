@@ -133,6 +133,7 @@ unsigned long	simulatedopcount = 0;	/* -b flag */
 int	closeprob = 0;			/* -c flag */
 int	debug = 0;			/* -d flag */
 unsigned long	debugstart = 0;		/* -D flag */
+char	filldata = 0;			/* -g flag */
 int	flush = 0;			/* -f flag */
 int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
@@ -813,9 +814,13 @@ void
 gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 {
 	while (size--) {
-		good_buf[offset] = testcalls % 256; 
-		if (offset % 2)
-			good_buf[offset] += original_buf[offset];
+		if (filldata) {
+			good_buf[offset] = filldata;
+		} else {
+			good_buf[offset] = testcalls % 256;
+			if (offset % 2)
+				good_buf[offset] += original_buf[offset];
+		}
 		offset++;
 	}
 }
@@ -1630,11 +1635,12 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
 	-f flush and invalidate cache after I/O\n\
+	-g X: write character X instead of random generated data\n\
 	-i logdev: do integrity testing, logdev is the dm log writes device\n\
 	-j logid: prefix debug log messsages with this id\n\
 	-l flen: the upper bound on file size (default 262144)\n\
@@ -1872,7 +1878,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "b:c:dfi:j:l:m:no:p:qr:s:t:w:xyAD:FKHzCILN:OP:RS:WZ",
+				 "b:c:dfg:i:j:l:m:no:p:qr:s:t:w:xyAD:FKHzCILN:OP:RS:WZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -1895,6 +1901,9 @@ main(int argc, char **argv)
 			break;
 		case 'f':
 			flush = 1;
+			break;
+		case 'g':
+			filldata = *optarg;
 			break;
 		case 'i':
 			integrity = 1;
