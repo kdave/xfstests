@@ -1,0 +1,90 @@
+##/bin/bash
+#
+# Copyright (c) 2015 Facebook, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#
+# common functions for setting up and tearing down a dm log-writes device
+
+_require_log_writes()
+{
+	[ -z "$LOGWRITES_DEV" -o ! -b "$LOGWRITES_DEV" ] && \
+		_notrun "This test requires a valid \$LOGWRITES_DEV"
+
+	_exclude_scratch_mount_option dax
+	_require_dm_target log-writes
+	_require_test_program "log-writes/replay-log"
+}
+
+_log_writes_init()
+{
+	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+	LOGWRITES_NAME=logwrites-test
+	LOGWRITES_DMDEV=/dev/mapper/$LOGWRITES_NAME
+	LOGWRITES_TABLE="0 $BLK_DEV_SIZE log-writes $SCRATCH_DEV $LOGWRITES_DEV"
+	$DMSETUP_PROG create $LOGWRITES_NAME --table "$LOGWRITES_TABLE" || \
+		_fail "failed to create log-writes device"
+	$DMSETUP_PROG mknodes > /dev/null 2>&1
+}
+
+_log_writes_mark()
+{
+	[ $# -ne 1 ] && _fail "_log_writes_mark takes one argument"
+	$DMSETUP_PROG message $LOGWRITES_NAME 0 mark $1
+}
+
+_log_writes_mkfs()
+{
+	_scratch_options mkfs
+	_mkfs_dev $SCRATCH_OPTIONS $LOGWRITES_DMDEV
+	_log_writes_mark mkfs
+}
+
+_log_writes_mount()
+{
+	_scratch_options mount
+	$MOUNT_PROG -t $FSTYP `_common_dev_mount_options $*` $SCRATCH_OPTIONS \
+		$LOGWRITES_DMDEV $SCRATCH_MNT
+}
+
+_log_writes_unmount()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+# _log_writes_replay_log <mark>
+#
+# This replays the log contained on $LOGWRITES_DEV onto $SCRATCH_DEV upto the
+# mark passed in.
+_log_writes_replay_log()
+{
+	_mark=$1
+
+	$here/src/log-writes/replay-log --log $LOGWRITES_DEV --replay $SCRATCH_DEV \
+		--end-mark $_mark >> $seqres.full 2>&1
+	[ $? -ne 0 ] && _fail "replay failed"
+}
+
+_log_writes_remove()
+{
+	$DMSETUP_PROG remove $LOGWRITES_NAME > /dev/null 2>&1
+	$DMSETUP_PROG mknodes > /dev/null 2>&1
+}
+
+_log_writes_cleanup()
+{
+	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	_log_writes_remove
+}
