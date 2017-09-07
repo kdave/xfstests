@@ -67,6 +67,8 @@ struct log {
 	int replayfd;
 	unsigned long flags;
 	u64 sectorsize;
+	u64 start_sector;
+	u64 end_sector;
 	u64 nr_entries;
 	u64 cur_entry;
 	u64 max_zero_size;

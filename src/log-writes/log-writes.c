@@ -118,6 +118,27 @@ int log_discard(struct log *log, struct log_write_entry *entry)
 }
 
 /*
+ * @log: the log we are replaying.
+ * @entry: entry to be replayed.
+ *
+ * @return: 0 if we should replay the entry, > 0 if we should skip it.
+ *
+ * Should we skip the entry in our log or replay onto the replay device.
+ */
+int log_should_skip(struct log *log, struct log_write_entry *entry)
+{
+	u64 sector = le64_to_cpu(entry->sector);
+	u64 nr_sectors = le64_to_cpu(entry->nr_sectors);
+
+	if (!nr_sectors)
+		return 0;
+	if (sector + nr_sectors <= log->start_sector ||
+	    sector > log->end_sector)
+		return 1;
+	return 0;
+}
+
+/*
  * @entry: entry to be replayed.
  *
  * @return: 1 if the entry is sane, 0 if it is invalid.
@@ -157,6 +178,7 @@ int log_replay_next_entry(struct log *log, struct log_write_entry *entry,
 	char *buf;
 	ssize_t ret;
 	off_t offset;
+	int skip = 0;
 
 	if (log->cur_entry >= log->nr_entries)
 		return 1;
@@ -185,8 +207,10 @@ int log_replay_next_entry(struct log *log, struct log_write_entry *entry,
 		log->cur_pos += read_size;
 	}
 
-	if (log_writes_verbose) {
-		printf("replaying %d@%llu: sector %llu, size %llu, flags %llu\n",
+	skip = log_should_skip(log, entry);
+	if (log_writes_verbose > 1 || (log_writes_verbose && !skip)) {
+		printf("%s %d@%llu: sector %llu, size %llu, flags %llu\n",
+		       skip ? "skipping" : "replaying",
 		       (int)log->cur_entry - 1, log->cur_pos / log->sectorsize,
 		       (unsigned long long)le64_to_cpu(entry->sector),
 		       (unsigned long long)size,
@@ -198,6 +222,15 @@ int log_replay_next_entry(struct log *log, struct log_write_entry *entry,
 	flags = le64_to_cpu(entry->flags);
 	if (flags & LOG_DISCARD_FLAG)
 		return log_discard(log, entry);
+
+	if (skip) {
+		log->cur_pos = lseek(log->logfd, size, SEEK_CUR);
+		if (log->cur_pos == (off_t)-1) {
+			fprintf(stderr, "Error seeking in log: %d\n", errno);
+			return -1;
+		}
+		return 0;
+	}
 
 	buf = malloc(size);
 	if (!buf) {

@@ -20,6 +20,8 @@ enum option_indexes {
 	FSCK,
 	CHECK,
 	START_MARK,
+	START_SECTOR,
+	END_SECTOR,
 };
 
 static struct option long_options[] = {
@@ -37,6 +39,8 @@ static struct option long_options[] = {
 	{"fsck", required_argument, NULL, 0},
 	{"check", required_argument, NULL, 0},
 	{"start-mark", required_argument, NULL, 0},
+	{"start-sector", required_argument, NULL, 0},
+	{"end-sector", required_argument, NULL, 0},
 	{ NULL, 0, NULL, 0 },
 };
 
@@ -61,6 +65,12 @@ static void usage(void)
 		"--check\n");
 	fprintf(stderr, "\t--check [<number>|flush|fua] when to check the "
 		"file system, mush specify --fsck\n");
+	fprintf(stderr, "\t--start-sector <sector> - replay ops on region "
+		"from <sector> onto <device>\n");
+	fprintf(stderr, "\t--end-sector <sector> - replay ops on region "
+		"to <sector> onto <device>\n");
+	fprintf(stderr, "\t-v or --verbose - print replayed ops\n");
+	fprintf(stderr, "\t-vv - print also skipped ops\n");
 	exit(1);
 }
 
@@ -129,6 +139,8 @@ int main(int argc, char **argv)
 	struct log_write_entry *entry;
 	u64 stop_flags = 0;
 	u64 start_entry = 0;
+	u64 start_sector = 0;
+	u64 end_sector = -1ULL;
 	u64 run_limit = 0;
 	u64 num_entries = 0;
 	u64 check_number = 0;
@@ -249,6 +261,22 @@ int main(int argc, char **argv)
 				tmp = NULL;
 			}
 			break;
+		case START_SECTOR:
+			start_sector = strtoull(optarg, &tmp, 0);
+			if (tmp && *tmp != '\0') {
+				fprintf(stderr, "Invalid sector number\n");
+				exit(1);
+			}
+			tmp = NULL;
+			break;
+		case END_SECTOR:
+			end_sector = strtoull(optarg, &tmp, 0);
+			if (tmp && *tmp != '\0') {
+				fprintf(stderr, "Invalid sector number\n");
+				exit(1);
+			}
+			tmp = NULL;
+			break;
 		default:
 			usage();
 		}
@@ -265,6 +293,9 @@ int main(int argc, char **argv)
 
 	if (!discard)
 		log->flags |= LOG_IGNORE_DISCARD;
+
+	log->start_sector = start_sector;
+	log->end_sector = end_sector;
 
 	entry = malloc(log->sectorsize);
 	if (!entry) {
