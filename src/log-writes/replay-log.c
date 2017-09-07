@@ -75,7 +75,7 @@ static int should_stop(struct log_write_entry *entry, u64 stop_flags,
 	u64 flags = le64_to_cpu(entry->flags);
 	int check_mark = (stop_flags & LOG_MARK_FLAG);
 	/* mark data begins after entry header */
-	char *buf = (char *)(entry + 1);
+	char *buf = entry->data;
 	/* entry buffer is padded with at least 1 zero after data_len */
 	u64 buflen = le64_to_cpu(entry->data_len) + 1;
 
@@ -293,8 +293,9 @@ int main(int argc, char **argv)
 			num_entries++;
 			if ((run_limit && num_entries == run_limit) ||
 			    should_stop(entry, stop_flags, end_mark)) {
-				printf("%llu\n",
-				       (unsigned long long)log->cur_entry - 1);
+				printf("%llu@%llu\n",
+				       (unsigned long long)log->cur_entry - 1,
+				       log->cur_pos / log->sectorsize);
 				log_free(log);
 				return 0;
 			}

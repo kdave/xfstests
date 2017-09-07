@@ -55,6 +55,8 @@ struct log_write_entry {
 	__le64 nr_sectors;
 	__le64 flags;
 	__le64 data_len;
+	/* Read extra byte when seeking to verify that header is zero padded */
+	char data[1];
 };
 
 #define LOG_IGNORE_DISCARD (1 << 0)

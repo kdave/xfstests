@@ -118,6 +118,26 @@ int log_discard(struct log *log, struct log_write_entry *entry)
 }
 
 /*
+ * @entry: entry to be replayed.
+ *
+ * @return: 1 if the entry is sane, 0 if it is invalid.
+ *
+ * Check if this is a sane log entry.
+ */
+int log_entry_valid(struct log_write_entry *entry)
+{
+	u64 flags = le64_to_cpu(entry->flags);
+
+	/* Suspect all zeroes entry */
+	if (!flags && !entry->nr_sectors)
+		return 0;
+	/* Suspect non zero padded entry */
+	if (flags != LOG_MARK_FLAG && entry->data[0] != 0)
+		return 0;
+	return 1;
+}
+
+/*
  * @log: the log we are replaying.
  * @entry: where we put the entry.
  * @read_data: read the entry data as well, entry must be log->sectorsize sized
@@ -146,24 +166,32 @@ int log_replay_next_entry(struct log *log, struct log_write_entry *entry,
 		fprintf(stderr, "Error reading entry: %d\n", errno);
 		return -1;
 	}
+	if (!log_entry_valid(entry)) {
+		fprintf(stderr, "Malformed entry @%llu\n",
+				log->cur_pos / log->sectorsize);
+		return -1;
+	}
 	log->cur_entry++;
 
 	size = le64_to_cpu(entry->nr_sectors) * log->sectorsize;
 	if (read_size < log->sectorsize) {
-		if (lseek(log->logfd,
-			  log->sectorsize - sizeof(struct log_write_entry),
-			  SEEK_CUR) == (off_t)-1) {
+		log->cur_pos = lseek(log->logfd,
+			log->sectorsize - sizeof(struct log_write_entry), SEEK_CUR);
+		if (log->cur_pos == (off_t)-1) {
 			fprintf(stderr, "Error seeking in log: %d\n", errno);
 			return -1;
 		}
+	} else {
+		log->cur_pos += read_size;
 	}
 
-	if (log_writes_verbose)
-		printf("replaying %d: sector %llu, size %llu, flags %llu\n",
-		       (int)log->cur_entry - 1,
+	if (log_writes_verbose) {
+		printf("replaying %d@%llu: sector %llu, size %llu, flags %llu\n",
+		       (int)log->cur_entry - 1, log->cur_pos / log->sectorsize,
 		       (unsigned long long)le64_to_cpu(entry->sector),
 		       (unsigned long long)size,
 		       (unsigned long long)le64_to_cpu(entry->flags));
+	}
 	if (!size)
 		return 0;
 
@@ -183,6 +211,7 @@ int log_replay_next_entry(struct log *log, struct log_write_entry *entry,
 		free(buf);
 		return -1;
 	}
+	log->cur_pos += size;
 
 	offset = le64_to_cpu(entry->sector) * log->sectorsize;
 	ret = pwrite(log->replayfd, buf, size, offset);
@@ -212,7 +241,8 @@ int log_seek_entry(struct log *log, u64 entry_num)
 	}
 
 	/* Skip the first sector containing the log super block */
-	if (lseek(log->logfd, log->sectorsize, SEEK_SET) == (off_t)-1) {
+	log->cur_pos = lseek(log->logfd, log->sectorsize, SEEK_SET);
+	if (log->cur_pos == (off_t)-1) {
 		fprintf(stderr, "Error seeking in file: %d\n", errno);
 		return -1;
 	}
@@ -229,9 +259,14 @@ int log_seek_entry(struct log *log, u64 entry_num)
 			fprintf(stderr, "Error reading entry: %d\n", errno);
 			return -1;
 		}
+		if (!log_entry_valid(&entry)) {
+			fprintf(stderr, "Malformed entry @%llu\n",
+					log->cur_pos / log->sectorsize);
+			return -1;
+		}
 		if (log_writes_verbose > 1)
-			printf("seek entry %d: %llu, size %llu, flags %llu\n",
-			       (int)i,
+			printf("seek entry %d@%llu: %llu, size %llu, flags %llu\n",
+			       (int)i, log->cur_pos / log->sectorsize,
 			       (unsigned long long)le64_to_cpu(entry.sector),
 			       (unsigned long long)le64_to_cpu(entry.nr_sectors),
 			       (unsigned long long)le64_to_cpu(entry.flags));
@@ -240,7 +275,8 @@ int log_seek_entry(struct log *log, u64 entry_num)
 		if (!(flags & LOG_DISCARD_FLAG))
 			seek_size += le64_to_cpu(entry.nr_sectors) *
 				log->sectorsize;
-		if (lseek(log->logfd, seek_size, SEEK_CUR) == (off_t)-1) {
+		log->cur_pos = lseek(log->logfd, seek_size, SEEK_CUR);
+		if (log->cur_pos == (off_t)-1) {
 			fprintf(stderr, "Error seeking in file: %d\n", errno);
 			return -1;
 		}
@@ -277,29 +313,37 @@ int log_seek_next_entry(struct log *log, struct log_write_entry *entry,
 		fprintf(stderr, "Error reading entry: %d\n", errno);
 		return -1;
 	}
+	if (!log_entry_valid(entry)) {
+		fprintf(stderr, "Malformed entry @%llu\n",
+				log->cur_pos / log->sectorsize);
+		return -1;
+	}
 	log->cur_entry++;
 
 	if (read_size < log->sectorsize) {
-		if (lseek(log->logfd,
-			  log->sectorsize - sizeof(struct log_write_entry),
-			  SEEK_CUR) == (off_t)-1) {
+		log->cur_pos = lseek(log->logfd,
+			log->sectorsize - sizeof(struct log_write_entry), SEEK_CUR);
+		if (log->cur_pos == (off_t)-1) {
 			fprintf(stderr, "Error seeking in log: %d\n", errno);
 			return -1;
 		}
+	} else {
+		log->cur_pos += read_size;
 	}
 	if (log_writes_verbose > 1)
-		printf("seek entry %d: %llu, size %llu, flags %llu\n",
-		       (int)log->cur_entry - 1,
+		printf("seek entry %d@%llu: %llu, size %llu, flags %llu\n",
+		       (int)log->cur_entry - 1, log->cur_pos / log->sectorsize,
 		       (unsigned long long)le64_to_cpu(entry->sector),
 		       (unsigned long long)le64_to_cpu(entry->nr_sectors),
 		       (unsigned long long)le64_to_cpu(entry->flags));
 
-	flags = le32_to_cpu(entry->flags);
-	read_size = le32_to_cpu(entry->nr_sectors) * log->sectorsize;
+	flags = le64_to_cpu(entry->flags);
+	read_size = le64_to_cpu(entry->nr_sectors) * log->sectorsize;
 	if (!read_size || (flags & LOG_DISCARD_FLAG))
 		return 0;
 
-	if (lseek(log->logfd, read_size, SEEK_CUR) == (off_t)-1) {
+	log->cur_pos = lseek(log->logfd, read_size, SEEK_CUR);
+	if (log->cur_pos == (off_t)-1) {
 		fprintf(stderr, "Error seeking in log: %d\n", errno);
 		return -1;
 	}
@@ -369,8 +413,8 @@ struct log *log_open(char *logfile, char *replayfile)
 	log->nr_entries = le64_to_cpu(super.nr_entries);
 	log->max_zero_size = 128 * 1024 * 1024;
 
-	if (lseek(log->logfd, log->sectorsize - sizeof(super), SEEK_CUR) ==
-	    (off_t) -1) {
+	log->cur_pos = lseek(log->logfd, log->sectorsize - sizeof(super), SEEK_CUR);
+	if (log->cur_pos == (off_t) -1) {
 		fprintf(stderr, "Error seeking to first entry: %d\n", errno);
 		log_free(log);
 		return NULL;
