@@ -119,6 +119,7 @@ char	*temp_buf;			/* a pointer to the current data */
 char	*fname;				/* name of our test file */
 char	*bname;				/* basename of our test file */
 char	*logdev;			/* -i flag */
+char	*logid;				/* -j flag */
 char	dname[1024];			/* -P flag */
 int	dirpath = 0;			/* -P flag */
 int	fd;				/* fd for our test file */
@@ -195,13 +196,16 @@ static void *round_ptr_up(void *ptr, unsigned long align, unsigned long offset)
 }
 
 void
-vwarnc(int code, const char *fmt, va_list ap) {
-  fprintf(stderr, "fsx: ");
-  if (fmt != NULL) {
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, ": ");
-  }
-  fprintf(stderr, "%s\n", strerror(code));
+vwarnc(int code, const char *fmt, va_list ap)
+{
+	if (logid)
+		fprintf(stderr, "%s: ", logid);
+	fprintf(stderr, "fsx: ");
+	if (fmt != NULL) {
+		vfprintf(stderr, fmt, ap);
+		fprintf(stderr, ": ");
+	}
+	fprintf(stderr, "%s\n", strerror(code));
 }
 
 void
@@ -212,20 +216,21 @@ warn(const char * fmt, ...)  {
 	va_end(ap);
 }
 
-#define BUF_SIZE 1024
-
 void
 prt(const char *fmt, ...)
 {
 	va_list args;
-	char buffer[BUF_SIZE];
 
+	if (logid)
+		fprintf(stdout, "%s: ", logid);
 	va_start(args, fmt);
-	vsnprintf(buffer, BUF_SIZE, fmt, args);
+	vfprintf(stdout, fmt, args);
 	va_end(args);
-	fprintf(stdout, "%s", buffer);
-	if (fsxlogf)
-		fprintf(fsxlogf, "%s", buffer);
+	if (fsxlogf) {
+		va_start(args, fmt);
+		vfprintf(fsxlogf, fmt, args);
+		va_end(args);
+	}
 }
 
 void
@@ -1624,12 +1629,13 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-i logdev] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
 	-f flush and invalidate cache after I/O\n\
 	-i logdev: do integrity testing, logdev is the dm log writes device\n\
+	-j logid: prefix debug log messsages with this id\n\
 	-l flen: the upper bound on file size (default 262144)\n\
 	-m startop:endop: monitor (print debug output) specified byte range (default 0:infinity)\n\
 	-n: no verifications of file size\n\
@@ -1862,14 +1868,13 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "b:c:dfi:l:m:no:p:qr:s:t:w:xyAD:FKHzCILN:OP:RS:WZ",
+				 "b:c:dfi:j:l:m:no:p:qr:s:t:w:xyAD:FKHzCILN:OP:RS:WZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %ld\n",
-					simulatedopcount);
+				prt("Will begin at operation %ld\n", simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
 			simulatedopcount -= 1;
@@ -1877,9 +1882,7 @@ main(int argc, char **argv)
 		case 'c':
 			closeprob = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout,
-					"Chance of close/open is 1 in %d\n",
-					closeprob);
+				prt("Chance of close/open is 1 in %d\n", closeprob);
 			if (closeprob <= 0)
 				usage();
 			break;
@@ -1893,6 +1896,13 @@ main(int argc, char **argv)
 			integrity = 1;
 			logdev = strdup(optarg);
 			if (!logdev) {
+				prterr("strdup");
+				exit(101);
+			}
+			break;
+		case 'j':
+			logid = strdup(optarg);
+			if (!logid) {
 				prterr("strdup");
 				exit(101);
 			}
@@ -2012,14 +2022,14 @@ main(int argc, char **argv)
 				seed += (int)getpid();
 			}
 			if (!quiet)
-				fprintf(stdout, "Seed set to %d\n", seed);
+				prt("Seed set to %d\n", seed);
 			if (seed < 0)
 				usage();
 			break;
 		case 'W':
 		        mapped_writes = 0;
 			if (!quiet)
-				fprintf(stdout, "mapped writes DISABLED\n");
+				prt("mapped writes DISABLED\n");
 			break;
 		case 'Z':
 			o_direct = O_DIRECT;
