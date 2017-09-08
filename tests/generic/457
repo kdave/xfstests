@@ -1,10 +1,11 @@
 #! /bin/bash
-# FS QA Test No. 500
+# FS QA Test No. 457
 #
-# Run fsx with log writes to verify power fail safeness.
+# Run fsx with log writes on cloned files to verify power fail safeness.
 #
 #-----------------------------------------------------------------------
-# Copyright (c) 2015 Facebook. All Rights Reserved.
+# Copyright (C) 2017 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as
@@ -37,13 +38,15 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/reflink
 . ./common/dmlogwrites
 
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
 _require_test
-_require_scratch_nocheck
+_require_scratch_reflink
+_require_cp_reflink
 _require_log_writes
 
 rm -f $seqres.full
@@ -79,17 +82,19 @@ _log_writes_mkfs >> $seqres.full 2>&1
 # Log writes emulates discard support, turn it on for maximum crying.
 _log_writes_mount -o discard
 
-NUM_FILES=4
-NUM_OPS=200
-FSX_OPTS="-N $NUM_OPS -d -P $SANITY_DIR -i $LOGWRITES_DMDEV"
-# Set random seeds for fsx runs (0 for timestamp + pid)
-# When test failure is detected, check the seed values printed
-# by fsx processes to $seqres.full and set them in this array
-# to repeat the same fsx runs
-seeds=(0 0 0 0)
+# write testfile index -1 to be cloned to testfile0
+$XFS_IO_PROG -f -c "pwrite -S 0xff 0 256k" -c "fsync" \
+	$SCRATCH_MNT/testfile-1 > /dev/null 2>&1
+
+NUM_FILES=10
+NUM_OPS=10
+FSX_OPTS="-N $NUM_OPS -d -k -P $SANITY_DIR -i $LOGWRITES_DMDEV"
 # Run fsx for a while
+# Set random seeds for fsx runs (0 for timestamp + pid)
 for j in `seq 0 $((NUM_FILES-1))`; do
-	run_check $here/ltp/fsx $FSX_OPTS -S ${seeds[$j]} -j $j $SCRATCH_MNT/testfile$j &
+	# clone the clone from prev iteration which may have already mutated
+	_cp_reflink $SCRATCH_MNT/testfile$((j-1)) $SCRATCH_MNT/testfile$j
+	run_check $here/ltp/fsx $FSX_OPTS -S 0 -j $j $SCRATCH_MNT/testfile$j &
 done
 wait
 
@@ -124,8 +129,6 @@ for j in `seq 0 $((NUM_FILES-1))`; do
 	md5=$(_md5_checksum $SCRATCH_MNT/testfile$j)
 	[ "${md5}" != "${test_md5[$j]}" ] && _fail "testfile$j end md5sum mismatched"
 done
-_scratch_unmount
-_check_scratch_fs
 
 echo "Silence is golden"
 status=0
