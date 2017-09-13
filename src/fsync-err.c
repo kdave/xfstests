@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 	memset(buf, 0x7c, bufsize);
 
 	for (i = 0; i < numfds; ++i) {
-		ret = write(fd[i], buf, bufsize);
+		ret = pwrite(fd[i], buf, bufsize, i * bufsize);
 		if (ret < 0) {
 			printf("First write on fd[%d] failed: %m\n", i);
 			return 1;
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 	}
 
 	for (i = 0; i < numfds; ++i) {
-		ret = write(fd[i], buf, bufsize);
+		ret = pwrite(fd[i], buf, bufsize, i * bufsize);
 		if (ret < 0) {
 			printf("Second write on fd[%d] failed: %m\n", i);
 			return 1;
