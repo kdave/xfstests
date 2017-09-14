@@ -1,0 +1,85 @@
+#! /bin/bash
+# FS QA Test 040
+#
+# chattr with [iap..] attributes open file for read-only and
+# invoke ioctl(). If we chattr a lower file in overlay, it
+# will get the lower file but not trigger copy-up, so ioctl()
+# lead to modification of that lower file.
+#
+# Upstream Commit 7c6893e3c9ab ("ovl: don't allow writing
+# ioctl on lower layer") return EPERM for this case to avoid
+# this issue.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Huawei.  All Rights Reserved.
+# Author: zhangyi (F) <yi.zhang@huawei.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	$CHATTR_PROG -i $lowerdir/foo
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_chattr i
+
+# remove all files from previous runs
+_scratch_mkfs
+
+# prepare lower test file
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+mkdir -p $lowerdir
+touch $lowerdir/foo
+
+# mounting overlay
+_scratch_mount
+
+# Try to add immutable attributes in overlay, it will
+# open file for read-only and invoke ioctl(), it should not
+# modify lower origin file.
+$CHATTR_PROG +i $SCRATCH_MNT/foo > /dev/null 2>&1
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# touching origin file in lower, should succeed
+touch $lowerdir/foo
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
