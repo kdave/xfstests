@@ -108,9 +108,9 @@ test_file_st_ino=$(stat -c '%i' $SCRATCH_MNT/test_file)
 
 mv $SCRATCH_MNT/test_file $impure_dir
 
-$GETFATTR_PROG --absolute-names -n 'trusted.overlay.impure' \
-	       $upperdir/test_dir/impure_dir >>$seqres.full 2>&1
-[[ $? == 0 ]] || echo "Impure directory missing impure xattr"
+impure=$($GETFATTR_PROG --absolute-names --only-values -n 'trusted.overlay.impure' \
+			$upperdir/test_dir/impure_dir)
+[[ $impure == "y" ]] || echo "Impure directory missing impure xattr"
 
 # After $impure_dir becomes impure
 parent_d=$($here/src/t_dir_type $impure_dir $impure_dir_parent_st_ino)
@@ -133,9 +133,9 @@ rm -rf $impure_dir/test_file
 $here/src/t_dir_type $impure_dir $test_file_st_ino
 [[ $? != 0 ]] || echo "Directory's readdir cache has stale entries"
 
-$GETFATTR_PROG --absolute-names -n 'trusted.overlay.impure' \
-	       $upperdir/test_dir/impure_dir >>$seqres.full 2>&1
-[[ $? != 0 ]] || echo "Pure directory has impure xattr"
+impure=$($GETFATTR_PROG --absolute-names --only-values -n 'trusted.overlay.impure' \
+			$upperdir/test_dir/impure_dir 2>/dev/null)
+[[ -z $impure ]] || echo "Pure directory has impure xattr"
 
 # Verify d_ino values corresponding to "." and ".." entries of a
 # pure lower dir.
