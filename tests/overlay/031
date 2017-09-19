@@ -43,12 +43,17 @@ _cleanup()
 # testfile to create a whiteout in upper dir.
 create_whiteout()
 {
-	mkdir -p $1/testdir
-	touch $1/testdir/$4
+	local lower=$1
+	local upper=$2
+	local work=$3
+	local file=$4
 
-	_overlay_mount_dirs $1 $2 $3 $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+	mkdir -p $lower/testdir
+	touch $lower/testdir/$file
 
-	rm -f $SCRATCH_MNT/testdir/$4
+	_overlay_mount_dirs $lower $upper $work $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+
+	rm -f $SCRATCH_MNT/testdir/$file
 
 	$UMOUNT_PROG $SCRATCH_MNT
 }
@@ -72,9 +77,13 @@ lowerdir1=$OVL_BASE_SCRATCH_MNT/lower1
 lowerdir2=$OVL_BASE_SCRATCH_MNT/lower2
 upperdir=$OVL_BASE_SCRATCH_MNT/upper
 workdir=$OVL_BASE_SCRATCH_MNT/workdir
+# When overlay inode index feature is enabled, a workdir cannot be reused
+# with a different upperdir. workdir1 in this test is used as the workdir
+# when lowerdir1 is used as the upperdir.
+workdir1=$OVL_BASE_SCRATCH_MNT/workdir1
 testfile1=a
 testfile2=b
-mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir
+mkdir -p $lowerdir1 $lowerdir2 $upperdir $workdir $workdir1
 
 create_whiteout $lowerdir1 $upperdir $workdir $testfile1
 
@@ -108,7 +117,7 @@ $UMOUNT_PROG $SCRATCH_MNT
 rm -rf $lowerdir1/testdir
 rm -rf $upperdir/testdir
 
-create_whiteout $lowerdir2 $lowerdir1 $workdir $testfile1
+create_whiteout $lowerdir2 $lowerdir1 $workdir1 $testfile1
 
 rm -rf $lowerdir2/testdir
 
@@ -128,7 +137,7 @@ create_whiteout $lowerdir1 $upperdir $workdir $testfile1
 
 rm -rf $lowerdir1/testdir/$testfile1
 
-create_whiteout $lowerdir2 $lowerdir1 $workdir $testfile2
+create_whiteout $lowerdir2 $lowerdir1 $workdir1 $testfile2
 
 _overlay_mount_dirs $lowerdir1 $upperdir $workdir $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
 
