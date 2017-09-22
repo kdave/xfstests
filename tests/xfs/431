@@ -1,0 +1,84 @@
+#! /bin/bash
+# FS QA Test 431
+#
+# Verify kernel doesn't panic when user attempts to set realtime flags
+# on non-realtime FS, using kernel compiled with CONFIG_XFS_RT.  Unpatched
+# kernels will panic during this test.  Kernels not compiled with
+# CONFIG_XFS_RT should pass test.
+#
+# See CVE-2017-14340 for more information.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Facebook, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_xfs_io_command "chattr"
+_require_xfs_io_command "fsync"
+_require_xfs_io_command "pwrite"
+_require_scratch
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+
+# Set realtime inherit flag on scratch mount, suppress output
+# as this may simply error out on future kernels
+$XFS_IO_PROG -c 'chattr +t' $SCRATCH_MNT &> /dev/null
+
+# Check if 't' is actually set, as xfs_io returns 0 even when it fails to set
+# an attribute. And erroring out here is fine, this would be desired behavior
+# for FSes without realtime devices present.
+if $XFS_IO_PROG -c 'lsattr' $SCRATCH_MNT | grep -q 't'; then
+	# Attempt to write/fsync data to file
+	$XFS_IO_PROG -fc 'pwrite 0 1m' -c fsync $SCRATCH_MNT/testfile |
+		tee -a $seqres.full | _filter_xfs_io
+
+	# Remove the testfile and rt inherit flag after we are done or
+	# xfs_repair will fail.
+	rm -f $SCRATCH_MNT/testfile
+	$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT | tee -a $seqres.full 2>&1
+fi
+
+# success, all done
+status=0
+exit
