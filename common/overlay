@@ -1,0 +1,160 @@
+#
+# overlayfs specific common functions.
+#
+
+# helper function to do the actual overlayfs mount operation
+_overlay_mount_dirs()
+{
+	local lowerdir=$1
+	local upperdir=$2
+	local workdir=$3
+	shift 3
+
+	$MOUNT_PROG -t overlay -o lowerdir=$lowerdir -o upperdir=$upperdir \
+		    -o workdir=$workdir `_common_dev_mount_options $*`
+}
+
+# Mount with same options/mnt/dev of scratch mount, but optionally
+# with different lower/upper/work dirs
+_overlay_scratch_mount_dirs()
+{
+	local lowerdir=$1
+	local upperdir=$2
+	local workdir=$3
+	shift 3
+
+	_overlay_mount_dirs $lowerdir $upperdir $workdir \
+				$* $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT
+}
+
+_overlay_mkdirs()
+{
+	local dir=$1
+
+	mkdir -p $dir/$OVL_UPPER
+	mkdir -p $dir/$OVL_LOWER
+	mkdir -p $dir/$OVL_WORK
+	mkdir -p $dir/$OVL_MNT
+}
+
+# Given a base fs dir, set up overlay directories and mount on the given mnt.
+# The dir is used as the mount device so it can be seen from df or mount
+_overlay_mount()
+{
+	local dir=$1
+	local mnt=$2
+	shift 2
+
+	_supports_filetype $dir || _notrun "upper fs needs to support d_type"
+
+	_overlay_mkdirs $dir
+
+	_overlay_mount_dirs $dir/$OVL_LOWER $dir/$OVL_UPPER $dir/$OVL_WORK \
+				$* $dir $mnt
+}
+
+_overlay_base_test_mount()
+{
+	if [ -z "$OVL_BASE_TEST_DEV" -o -z "$OVL_BASE_TEST_DIR" ] || \
+		_check_mounted_on OVL_BASE_TEST_DEV $OVL_BASE_TEST_DEV \
+				OVL_BASE_TEST_DIR $OVL_BASE_TEST_DIR
+	then
+		# no base fs or already mounted
+		return 0
+	elif [ $? -ne 1 ]
+	then
+		# base fs mounted but not on mount point
+		return 1
+	fi
+
+	_mount $TEST_FS_MOUNT_OPTS \
+		$SELINUX_MOUNT_OPTIONS \
+		$OVL_BASE_TEST_DEV $OVL_BASE_TEST_DIR
+}
+
+_overlay_test_mount()
+{
+	_overlay_base_test_mount && \
+		_overlay_mount $OVL_BASE_TEST_DIR $TEST_DIR $*
+}
+
+_overlay_base_scratch_mount()
+{
+	if [ -z "$OVL_BASE_SCRATCH_DEV" -o -z "$OVL_BASE_SCRATCH_MNT" ] || \
+		_check_mounted_on OVL_BASE_SCRATCH_DEV $OVL_BASE_SCRATCH_DEV \
+				OVL_BASE_SCRATCH_MNT $OVL_BASE_SCRATCH_MNT
+	then
+		# no base fs or already mounted
+		return 0
+	elif [ $? -ne 1 ]
+	then
+		# base fs mounted but not on mount point
+		return 1
+	fi
+
+	_mount $OVL_BASE_MOUNT_OPTIONS \
+		$SELINUX_MOUNT_OPTIONS \
+		$OVL_BASE_SCRATCH_DEV $OVL_BASE_SCRATCH_MNT
+}
+
+_overlay_base_scratch_unmount()
+{
+	[ -n "$OVL_BASE_SCRATCH_DEV" -a -n "$OVL_BASE_SCRATCH_MNT" ] || return 0
+
+	$UMOUNT_PROG $OVL_BASE_SCRATCH_MNT
+}
+
+_overlay_scratch_mount()
+{
+	_overlay_base_scratch_mount && \
+		_overlay_mount $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT $*
+}
+
+_overlay_base_test_unmount()
+{
+	[ -n "$OVL_BASE_TEST_DEV" -a -n "$OVL_BASE_TEST_DIR" ] || return 0
+
+	$UMOUNT_PROG $OVL_BASE_TEST_DIR
+}
+
+_overlay_test_unmount()
+{
+	$UMOUNT_PROG $TEST_DIR
+	_overlay_base_test_unmount
+}
+
+_overlay_scratch_unmount()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+	_overlay_base_scratch_unmount
+}
+
+# Require a specific overlayfs feature
+_require_scratch_overlay_feature()
+{
+	local feature=$1
+
+	# overalyfs features (e.g. redirect_dir, index) are
+	# configurable from Kconfig (the build default), by module
+	# parameter (the system default) and per mount by mount
+	# option ${feature}=[on|off].
+	#
+	# If the module parameter does not exist then there is no
+	# point in checking the mount option.
+	local default=`_get_fs_module_param ${feature}`
+	[ "$default" = Y ] || [ "$default" = N ] || \
+		_notrun "feature '${feature}' not supported by ${FSTYP}"
+
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount -o ${feature}=on || \
+		_notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+	# Check options to be sure. For example, Overlayfs will fallback to
+	# index=off if underlying fs does not support file handles.
+	# Overlayfs only displays mount option if it differs from the default.
+	# Overlayfs may enable the feature, but fallback to read-only mount.
+	((( [ "$default" = N ] && _fs_options $SCRATCH_DEV | grep -q "${feature}=on" ) || \
+	  ( [ "$default" = Y ] && ! _fs_options $SCRATCH_DEV | grep -q "${feature}=off" )) && \
+	    touch $SCRATCH_MNT/foo 2>/dev/null ) || \
+	        _notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+	_scratch_unmount
+}
