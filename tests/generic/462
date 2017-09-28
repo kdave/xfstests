@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test 462
+#
+# This is a regression test for kernel commit
+#  ef947b2 x86, mm: fix gup_pte_range() vs DAX mappings
+# created by Jeffrey Moyer <jmoyer@redhat.com>
+#
+# This is reproducible only when testing on pmem device
+# which is configured in "memory mode", not in "raw mode".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Red Hat.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch_dax
+_require_test_program "t_mmap_write_ro"
+# running by unpriviliged user is not necessary to reproduce
+# this bug, just trying to test more.
+_require_user
+
+# real QA test starts here
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount "-o dax"
+
+# remount TEST_DEV wo/ dax
+export TEST_FS_MOUNT_OPTS=""
+_test_cycle_mount
+
+# prepare a 4k read-only DAX file, save its md5sum
+$XFS_IO_PROG -f -c "pwrite -S 0xFF 0 4096" \
+	$SCRATCH_MNT/readonlyfile >> $seqres.full 2>&1
+chmod 0644  $SCRATCH_MNT/readonlyfile
+md5_1="$(_md5_checksum $SCRATCH_MNT/readonlyfile)"
+
+# prepare another 4k non-DAX file
+$XFS_IO_PROG -f -c "pwrite -S 0x00 0 4096" \
+	$TEST_DIR/${seq}.file >> $seqres.full 2>&1
+
+# allow qa_user access
+chown $qa_user $TEST_DIR/${seq}.file
+
+# run test programme, read another file writing into
+# the read-only file with mmap, which should fail.
+_user_do "src/t_mmap_write_ro $TEST_DIR/${seq}.file \
+	$SCRATCH_MNT/readonlyfile"
+
+# read-only file should not get updated, md5sum again.
+md5_2="$(_md5_checksum $SCRATCH_MNT/readonlyfile)"
+
+[ "$md5_1" != "$md5_2" ] && echo "read only file changed"
+
+# success, all done
+status=0
+exit
