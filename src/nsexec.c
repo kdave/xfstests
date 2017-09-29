@@ -138,7 +138,8 @@ childFunc(void *arg)
 
 #define STACK_SIZE (1024 * 1024)
 
-static char child_stack[STACK_SIZE];    /* Space for child's stack */
+/* Space for child's stack */
+static char child_stack[STACK_SIZE] __attribute__((aligned));
 
 int
 main(int argc, char *argv[])
