@@ -25,6 +25,15 @@ REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_UPPER"
 REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_LOWER"
 REPORT_ENV_LIST="$REPORT_ENV_LIST OVL_WORK"
 
+encode_xml()
+{
+    sed -e 's/&/\&amp;/g' \
+	-e 's/>/\&gt;/g' \
+	-e 's/</\&lt;/g' \
+	-e "s/'/\&apos;/g" \
+	-e 's/"/\&quot;/g'
+}
+
 #
 # Xunit format report functions
 _xunit_add_property()
@@ -86,7 +95,7 @@ _xunit_make_testcase_report()
 		;;
 	"notrun")
 		if [ -f $seqres.notrun ]; then
-			local msg=`cat $seqres.notrun`
+			local msg=`cat $seqres.notrun | encode_xml`
 			echo -e "\t\t<skipped message=\"$msg\" />" >> $report
 		else
 			echo -e "\t\t<skipped/>" >> $report
@@ -103,20 +112,20 @@ _xunit_make_testcase_report()
 		if [ -s $seqres.full ]; then
 			echo -e "\t\t<system-out>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat $seqres.full | tr -dc '[:print:][:space:]' >>$report
+			cat $seqres.full | tr -dc '[:print:][:space:]' | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-out>" >> $report
 		fi
 		if [ -f $seqres.dmesg ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat $seqres.dmesg | tr -dc '[:print:][:space:]' >>$report
+			cat $seqres.dmesg | tr -dc '[:print:][:space:]' | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		elif [ -s $seqres.out.bad ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			$diff $seq.out $seqres.out.bad >>$report
+			$diff $seq.out $seqres.out.bad | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		fi
