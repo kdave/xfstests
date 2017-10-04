@@ -1056,7 +1056,19 @@ _scratch_mkfs_sized()
 	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
 	;;
     gfs2)
-	yes | ${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+	# mkfs.gfs2 doesn't automatically shrink journal files on small
+	# filesystems, so the journal files may end up being bigger than the
+	# filesystem, which will cause mkfs.gfs2 to fail.  Until that's fixed,
+	# shrink the journal size to at most one eigth of the filesystem and at
+	# least 8 MiB, the minimum size allowed.
+	MIN_JOURNAL_SIZE=8
+	DEFAULT_JOURNAL_SIZE=128
+	if (( fssize/8 / (1024*1024) < DEFAULT_JOURNAL_SIZE )); then
+	    (( JOURNAL_SIZE = fssize/8 / (1024*1024) ))
+	    (( JOURNAL_SIZE >= MIN_JOURNAL_SIZE )) || JOURNAL_SIZE=$MIN_JOURNAL_SIZE
+	    MKFS_OPTIONS="-J $JOURNAL_SIZE $MKFS_OPTIONS"
+	fi
+	${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -O -b $blocksize $SCRATCH_DEV $blocks
 	;;
     ocfs2)
 	yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
@@ -1143,7 +1155,7 @@ _scratch_mkfs_blocksized()
 	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
 	;;
     gfs2)
-	yes | ${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
+	${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -O -b $blocksize $SCRATCH_DEV
 	;;
     ocfs2)
 	yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize -C $blocksize $SCRATCH_DEV
