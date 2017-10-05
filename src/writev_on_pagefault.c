@@ -43,7 +43,7 @@ void usage(char *progname)
 int main(int argc, char *argv[])
 {
 	int fd, i, c;
-	size_t ret;
+	ssize_t ret;
 	struct iovec *iov;
 	int pagesz = 4096;
 	char *data = NULL;
@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		perror("writev failed");
 	else
-		printf("wrote %d bytes\n", (int)ret);
+		printf("wrote %zd bytes\n", ret);
 
 	close(fd);
 	return 0;
