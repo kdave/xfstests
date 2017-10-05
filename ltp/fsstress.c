@@ -965,7 +965,7 @@ doproc(void)
 		_exit(1);
 	}
 	top_ino = statbuf.st_ino;
-	homedir = getcwd(NULL, -1);
+	homedir = getcwd(NULL, 0);
 	seed += procid;
 	srandom(seed);
 	if (namerand)
