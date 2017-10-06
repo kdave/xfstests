@@ -199,22 +199,22 @@ int test_this(int fd, loff_t sz)
 			tid[i] = (uint64_t)t[i];
 			printf("INFO: thread %d created\n", i);
 		} else {
+			pid_t pid;
 			/*
 			 * Flush stdout before fork, otherwise some lines get
 			 * duplicated... ?!?!?
 			 */
 			fflush(stdout);
-			tid[i] = fork();
-			if (tid[i] < 0) {
+			pid = fork();
+			if (pid < 0) {
 				int j;
 
 				perror("fork");
 				for (j = 0; j < i; j++)
 					waitpid(tid[j], NULL, 0);
 				exit(21);
-			}
-			/* Child? */
-			if (!tid[i]) {
+			} else if (!pid) {
+				/* Child? */
 				void *ret;
 
 				if (use_wr[i])
@@ -223,6 +223,7 @@ int test_this(int fd, loff_t sz)
 					ret = pt_page_marker(&targs[i]);
 				exit(ret ? 1 : 0);
 			}
+			tid[i] = pid;
 			printf("INFO: process %d created\n", i);
 		}
 	}
