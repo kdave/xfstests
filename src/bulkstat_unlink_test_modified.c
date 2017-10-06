@@ -168,13 +168,12 @@ main(int argc, char *argv[])
 				 genlist[j]);
 			exit(1);
 		    }
-		    if ((ret[i].bs_ino == inodelist[j])) {
-			if ((genlist[j] + 1) != ret[i].bs_gen) {
-				/* oops, the new gen number is not 1 bigger than the old */
-				printf("Inode with old generation %d, new generation %d\n",
-				genlist[j], ret[i].bs_gen);
-				exit(1);
-			}
+		    if (ret[i].bs_ino == inodelist[j] &&
+			ret[i].bs_gen != genlist[j] + 1) {
+			/* oops, the new gen number is not 1 bigger than the old */
+			printf("Inode with old generation %d, new generation %d\n",
+			genlist[j], ret[i].bs_gen);
+			exit(1);
 		    }
 		}
 	    }
