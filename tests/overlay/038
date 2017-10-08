@@ -1,7 +1,7 @@
 #! /bin/bash
 # FSQA Test No. 038
 #
-# Test constant d_ino numbers
+# Test consistent d_ino numbers for samefs setup.
 #
 #-----------------------------------------------------------------------
 #
@@ -102,10 +102,8 @@ current_d=$($here/src/t_dir_type $impure_dir $impure_dir_st_ino)
 [[ $current_d == ". d" ]] || \
     echo "Before dir becomes impure: Invalid d_ino reported for ."
 
-chown -h 100 $SCRATCH_MNT/test_file
-test_file_st_ino=$(stat -c '%i' $SCRATCH_MNT/test_file)
-
 mv $SCRATCH_MNT/test_file $impure_dir
+test_file_st_ino=$(stat -c '%i' $impure_dir/test_file)
 
 impure=$($GETFATTR_PROG --absolute-names --only-values -n 'trusted.overlay.impure' \
 			$upperdir/test_dir/impure_dir)
@@ -188,7 +186,7 @@ parent_d=$($here/src/t_dir_type $SCRATCH_MNT/test_dir/pure_lower_dir $test_dir_s
 [[ $parent_d == ".. d" ]] || \
 	echo "Pure lower in dir which has another lower layer: Invalid d_ino reported for .."
 
-$UMOUNT_PROG $SCRATCH_MNT
+_overlay_scratch_unmount
 
 echo "Silence is golden"
 status=0
