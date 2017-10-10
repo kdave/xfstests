@@ -88,40 +88,45 @@ $XFS_IO_PROG -c "pwrite -S 0xff 64K 64K" $SCRATCH_MNT/foo3 | _filter_xfs_io
 $XFS_IO_PROG -c "pwrite -S 0xab 0 64K" $SCRATCH_MNT/foo4 | _filter_xfs_io
 $XFS_IO_PROG -d -c "pwrite -S 0xef 0 64K" $SCRATCH_MNT/foo4 | _filter_xfs_io
 
-echo
-echo "Before writeback"
-echo
+space_used() {
+    echo "Space used by file foo1:"
+    du -h $SCRATCH_MNT/foo1 | _filter_scratch
 
-echo "Space used by file foo1:"
-du -h $SCRATCH_MNT/foo1 | _filter_scratch
+    echo "Space used by file foo2:"
+    du -h $SCRATCH_MNT/foo2 | _filter_scratch
 
-echo "Space used by file foo2:"
-du -h $SCRATCH_MNT/foo2 | _filter_scratch
+    echo "Space used by file foo3:"
+    du -h $SCRATCH_MNT/foo3 | _filter_scratch
 
-echo "Space used by file foo3:"
-du -h $SCRATCH_MNT/foo3 | _filter_scratch
+    echo "Space used by file foo4:"
+    du -h $SCRATCH_MNT/foo4 | _filter_scratch
+}
 
-echo "Space used by file foo4:"
-du -h $SCRATCH_MNT/foo4 | _filter_scratch
+space_used > $SCRATCH_MNT/$seq.before
+(
+    echo
+    echo "Before writeback"
+    echo
+
+    cat $SCRATCH_MNT/$seq.before
+) >> $seqres.full
 
 sync
 
 # We expect the same file sizes reported by 'du' after writeback finishes.
-echo
-echo "After writeback"
-echo
 
-echo "Space used by file foo1:"
-du -h $SCRATCH_MNT/foo1 | _filter_scratch
+space_used > $SCRATCH_MNT/$seq.after
+(
+    echo
+    echo "After writeback"
+    echo
 
-echo "Space used by file foo2:"
-du -h $SCRATCH_MNT/foo2 | _filter_scratch
+    cat $SCRATCH_MNT/$seq.after
+) >> $seqres.full
 
-echo "Space used by file foo3:"
-du -h $SCRATCH_MNT/foo3 | _filter_scratch
-
-echo "Space used by file foo4:"
-du -h $SCRATCH_MNT/foo4 | _filter_scratch
+if diff -q $SCRATCH_MNT/$seq.before $SCRATCH_MNT/$seq.after; then
+	echo "Space used before and after writeback is equal"
+fi
 
 status=0
 exit
