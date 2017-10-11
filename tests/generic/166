@@ -55,6 +55,7 @@ _scratch_mount >> $seqres.full 2>&1
 
 testdir=$SCRATCH_MNT/test-$seq
 finished_file=/tmp/finished
+do_snapshot=/tmp/snapshot
 rm -rf $finished_file
 mkdir $testdir
 
@@ -68,15 +69,24 @@ _pwrite_byte 0x61 0 $((loops * blksz)) $testdir/file1 >> $seqres.full
 _scratch_cycle_mount
 
 # Snapshot creator...
+#
+# We rate limit the snapshot creator to one snapshot per full file write.  this
+# limits the runtime on slow devices, whilst not substantially reducing the the
+# number of snapshots taken on fast devices.
 snappy() {
 	n=0
 	while [ ! -e $finished_file ]; do
+		if [ ! -e $do_snapshot ]; then
+			sleep 0.01
+			continue;
+		fi
 		out="$(_cp_reflink $testdir/file1 $testdir/snap_$n 2>&1)"
 		res=$?
 		echo "$out" | grep -q "No space left" && break
 		test -n "$out" && echo "$out"
 		test $res -ne 0 && break
 		n=$((n + 1))
+		rm -f $do_snapshot
 	done
 }
 
@@ -84,6 +94,7 @@ echo "Snapshot a file undergoing directio rewrite"
 snappy &
 seq $nr_loops -1 0 | while read i; do
 	_pwrite_byte 0x63 $((i * blksz)) $blksz -d $testdir/file1 >> $seqres.full
+	touch $do_snapshot
 done
 touch $finished_file
 wait
