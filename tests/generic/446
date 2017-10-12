@@ -42,6 +42,7 @@ _cleanup()
 
 # get standard environment and checks
 . ./common/rc
+. ./common/filter
 
 # real QA test starts here
 _supported_os Linux
@@ -79,13 +80,10 @@ wait $dread_pid > /dev/null 2>&1
 
 echo "Silence is golden"
 
-# check dmesg, filtering out expected XFS warnings about mixed mmap/dio
+# check dmesg, filtering out expected warnings about mixed mmap/dio
 # and umount first in case umount triggers warnings
 _scratch_unmount
-if [ "$FSTYP" == "xfs" ]; then
-	_check_dmesg _filter_xfs_dmesg
-else
-	_check_dmesg
-fi
+_check_dmesg _filter_aiodio_dmesg
+
 status=$?
 exit
