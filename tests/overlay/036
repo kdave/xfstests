@@ -11,7 +11,14 @@
 # are currently in-use by another overlayfs mount on the system and bad
 # things can happen with such configuration.
 #
-# Expect EBUSY when trying to mount overlay when:
+# Commit 2cac0c00a6cd ("ovl: get exclusive ownership on upper/work dirs")
+# in kernel v4.13 enforces upper/work dir in-use for any overlayfs mount.
+# Later stable fix commit 85fdee1eef1a ("ovl: fix regression caused by
+# exclusive upper/work dir protection") relaxes mount failure to a warning
+# for index=off mount and fails mount with EBUSY for index=on mount.
+#
+# This test expects success with index=off and EBUSY with index=on
+# when trying to mount overlay with:
 # - Upper dir is in-use by another overlay mount
 # - Work dir is in-use by another overlay mount
 #
@@ -63,6 +70,7 @@ rm -f $seqres.full
 _supported_fs overlay
 _supported_os Linux
 _require_scratch
+_require_scratch_feature index
 
 # Remove all files from previous tests
 _scratch_mkfs
@@ -78,13 +86,30 @@ mkdir -p $lowerdir $lowerdir2 $upperdir $upperdir2 $workdir $workdir2
 
 # Mount overlay with lowerdir, upperdir, workdir
 _overlay_mount_dirs $lowerdir $upperdir $workdir \
-		    overlay1 $SCRATCH_MNT
-# Try to mount another overlay with the same upperdir - expect EBUSY
+		    overlay $SCRATCH_MNT
+
+# Try to mount another overlay with the same upperdir
+# with index=off - expect success
 _overlay_mount_dirs $lowerdir2 $upperdir $workdir2 \
-		    overlay2 $SCRATCH_MNT 2>&1 | _filter_scratch
-# Try to mount another overlay with the same workdir - expect EBUSY
+		    overlay0 $SCRATCH_MNT -oindex=off && \
+		    $UMOUNT_PROG $SCRATCH_MNT
+
+# Try to mount another overlay with the same workdir
+# with index=off - expect success
 _overlay_mount_dirs $lowerdir2 $upperdir2 $workdir \
-		    overlay3 $SCRATCH_MNT 2>&1 | _filter_scratch
+		    overlay1 $SCRATCH_MNT -oindex=off && \
+		    $UMOUNT_PROG $SCRATCH_MNT
+
+# Try to mount another overlay with the same upperdir
+# with index=on - expect EBUSY
+_overlay_mount_dirs $lowerdir2 $upperdir $workdir2 \
+		    overlay2 $SCRATCH_MNT -oindex=on 2>&1 | _filter_scratch
+
+# Try to mount another overlay with the same workdir
+# with index=on - expect EBUSY
+_overlay_mount_dirs $lowerdir2 $upperdir2 $workdir \
+		    overlay3 $SCRATCH_MNT -oindex=on 2>&1 | _filter_scratch
+
 
 # success, all done
 status=0
