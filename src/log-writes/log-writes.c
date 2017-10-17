@@ -65,6 +65,9 @@ static int zero_range(struct log *log, u64 start, u64 len)
 
 	memset(buf, 0, bufsize);
 	while (len) {
+		if (len < bufsize)
+			bufsize = len;
+
 		ret = pwrite(log->replayfd, buf, bufsize, start);
 		if (ret != bufsize) {
 			fprintf(stderr, "Error zeroing file: %d\n", errno);
