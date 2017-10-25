@@ -1391,7 +1391,7 @@ read_op(struct log_entry *log_entry)
 				goto fail;
 			}
 			str = strtok(line, " \t\n");
-		} while (!str);
+		} while (!str || str[0] == '#');
 
 		if (strcmp(str, "skip") == 0) {
 			log_entry->flags |= FL_SKIPPED;
