@@ -298,6 +298,30 @@ _require_xfs_db_command()
 		_notrun "xfs_db $command support is missing"
 }
 
+# Does the filesystem mounted from a particular device support scrub?
+_supports_xfs_scrub()
+{
+	local mountpoint="$1"
+	local device="$2"
+
+	if [ ! -b "$device" ] || [ ! -e "$mountpoint" ]; then
+		echo "Usage: _supports_xfs_scrub mountpoint device"
+		exit 1
+	fi
+
+	test "$FSTYP" = "xfs" || return 1
+	test -x "$XFS_SCRUB_PROG" || return 1
+
+	# Probe for kernel support...
+	$XFS_IO_PROG -c 'help scrub' 2>&1 | grep -q 'types are:.*probe' || return 1
+	$XFS_IO_PROG -c "scrub probe 0" "$mountpoint" 2>&1 | grep -q "Inappropriate ioctl" && return 1
+
+	# Scrub can't run on norecovery mounts
+	_fs_options "$device" | grep -q "norecovery" && return 1
+
+	return 0
+}
+
 # run xfs_check and friends on a FS.
 _check_xfs_filesystem()
 {
@@ -330,14 +354,17 @@ _check_xfs_filesystem()
 	type=`_fs_type $device`
 	ok=1
 
-	if [ "$type" = "xfs" ]; then
-		if [ -n "$TEST_XFS_SCRUB" ] && [ -x "$XFS_SCRUB_PROG" ]; then
-			"$XFS_SCRUB_PROG" $scrubflag -v -d -n $device >>$seqres.full
-			if [ $? -ne 0 ]; then
-				_log_err "filesystem on $device failed scrub"
-				ok=0
-			fi
+	# Run online scrub if we can.
+	mntpt="$(_is_mounted $device)"
+	if [ -n "$mntpt" ] && _supports_xfs_scrub "$mntpt" "$device"; then
+		"$XFS_SCRUB_PROG" $scrubflag -v -d -n $device >>$seqres.full 2>&1
+		if [ $? -ne 0 ]; then
+			_log_err "filesystem on $device failed scrub"
+			ok=0
 		fi
+	fi
+
+	if [ "$type" = "xfs" ]; then
 		# mounted ...
 		mountpoint=`_umount_or_remount_ro $device`
 	fi
