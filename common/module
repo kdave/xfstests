@@ -1,0 +1,99 @@
+##/bin/bash
+
+# Routines for messing around with loadable kernel modules
+#
+#-----------------------------------------------------------------------
+#  Copyright (c) 2017 Oracle.  All Rights Reserved.
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+#  USA
+#-----------------------------------------------------------------------
+
+# Return the module name for this fs.
+_module_for_fs()
+{
+	echo "${FSTYP}"
+}
+
+# Reload a particular module.  This module MUST NOT be the module that
+# underlies the filesystem.
+_reload_module()
+{
+	local module="$1"
+
+	modprobe -r "${module}" || _fail "${module} unload failed"
+	modprobe "${module}" || _fail "${module} load failed"
+}
+
+# Reload the filesystem module.
+_reload_fs_module()
+{
+	local module="$1"
+
+	# Unload test fs, try to reload module, remount
+	local had_testfs=""
+	local had_scratchfs=""
+	_check_mounted_on TEST_DEV $TEST_DEV TEST_DIR $TEST_DIR && had_testfs="true"
+	_check_mounted_on SCRATCH_DEV $SCRATCH_DEV SCRATCH_MNT $SCRATCH_MNT && had_scratchfs="true"
+	test -n "${had_testfs}" && _test_unmount
+	test -n "${had_scratchfs}" && _scratch_unmount
+	_reload_module "${module}"
+	test -n "${had_scratchfs}" && _scratch_mount 2> /dev/null
+	test -n "${had_testfs}" && _test_mount 2> /dev/null
+}
+
+# Check that we have a module that can be loaded.  This module MUST NOT
+# be the module that underlies the filesystem.
+_require_loadable_module()
+{
+	local module="$1"
+
+	modinfo "${module}" > /dev/null 2>&1 || _notrun "${module}: must be a module."
+	modprobe -r "${module}" || _notrun "Require ${module} to be unloadable"
+	modprobe "${module}" || _notrun "${module} load failed"
+}
+
+# Check that the module for FSTYP can be loaded.
+_require_loadable_fs_module()
+{
+	local module="$1"
+
+	modinfo "${module}" > /dev/null 2>&1 || _notrun "${module}: must be a module."
+
+	# Unload test fs, try to reload module, remount
+	local had_testfs=""
+	local had_scratchfs=""
+	_check_mounted_on TEST_DEV $TEST_DEV TEST_DIR $TEST_DIR && had_testfs="true"
+	_check_mounted_on SCRATCH_DEV $SCRATCH_DEV SCRATCH_MNT $SCRATCH_MNT && had_scratchfs="true"
+	test -n "${had_testfs}" && _test_unmount
+	test -n "${had_scratchfs}" && _scratch_unmount
+	local unload_ok=""
+	local load_ok=""
+	modprobe -r "${module}" || unload_ok=0
+	modprobe "${module}" || load_ok=0
+	test -n "${had_scratchfs}" && _scratch_mount 2> /dev/null
+	test -n "${had_testfs}" && _test_mount 2> /dev/null
+	test -z "${unload_ok}" || _notrun "Require module ${module} to be unloadable"
+	test -z "${load_ok}" || _notrun "${module} load failed"
+}
+
+# Print the value of a filesystem module parameter
+# at /sys/module/$FSTYP/parameters/$PARAM
+#
+# Usage example (FSTYP=overlay):
+#   _get_fs_module_param index
+_get_fs_module_param()
+{
+	cat /sys/module/${FSTYP}/parameters/${1} 2>/dev/null
+}

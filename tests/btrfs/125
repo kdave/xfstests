@@ -54,6 +54,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/module
 
 # remove previous $seqres.full before test
 rm -f $seqres.full
@@ -63,10 +64,8 @@ rm -f $seqres.full
 _supported_fs btrfs
 _supported_os Linux
 _require_scratch_dev_pool 3
-
-# we need btrfs to unload, need test dir unmounted
 _test_unmount
-_require_btrfs_loadable
+_require_loadable_fs_module "btrfs"
 
 _scratch_dev_pool_get 3
 
@@ -118,7 +117,7 @@ echo "unmount" >> $seqres.full
 _scratch_unmount
 echo "clean btrfs ko" >> $seqres.full
 # un-scan the btrfs devices
-_reload_btrfs_ko
+_reload_fs_module "btrfs"
 _mount -o degraded,device=$dev2 $dev1 $SCRATCH_MNT >>$seqres.full 2>&1
 dd if=/dev/zero of="$SCRATCH_MNT"/tf2 bs=$bs count=$count \
 					>>$seqres.full 2>&1
@@ -154,7 +153,7 @@ echo "Mount degraded but with other dev"
 
 _scratch_unmount
 # un-scan the btrfs devices
-_reload_btrfs_ko
+_reload_fs_module "btrfs"
 
 _mount -o degraded,device=${dev2} $dev3 $SCRATCH_MNT >>$seqres.full 2>&1
 
