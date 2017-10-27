@@ -51,6 +51,8 @@ unset SCRATCH_RTDEV
 
 echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
+rrmapino="$(_scratch_xfs_db -c 'sb 0' -c 'p rrmapino' 2>&1)"
+test "${rrmapino}" = "field rrmapino not found" && _notrun "realtime rmapbt not supported"
 _scratch_mount
 
 echo "Create some files"
@@ -62,21 +64,9 @@ _scratch_unmount
 
 echo "Corrupt fs"
 _scratch_xfs_db -x -c 'sb 0' -c "write rrmapino $ino" >> $seqres.full
-_scratch_mount
+_scratch_mount 2>&1 | _filter_scratch
 
-echo "Check files"
-md5sum $SCRATCH_MNT/f1 2>&1 | _filter_scratch
-
-echo "Try to create more files"
-$XFS_IO_PROG -f -c "pwrite -S 0x68 0 9999" $SCRATCH_MNT/f3 >> $seqres.full 2>&1
-
-echo "Repair fs"
-_scratch_unmount 2>&1 | _filter_scratch
-_repair_scratch_fs >> $seqres.full 2>&1
-
-echo "Try to create more files (again)"
-_scratch_mount
-$XFS_IO_PROG -f -c "pwrite -S 0x68 0 9999" $SCRATCH_MNT/f4 >> $seqres.full
+echo "Test done, mount should have failed"
 
 # success, all done
 status=0
