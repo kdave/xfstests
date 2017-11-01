@@ -95,7 +95,16 @@ s/(stripe unit) \(.*\) (and width) \(.*\)/\1 (SU) \2 (SW)/;
 s/(superblock) (\d+)/\1 AGNO/;
 s/(AG \#)(\d+)/\1AGNO/;
 s/(reset bad sb for ag) (\d+)/\1 AGNO/;
+s/(unknown block state, ag )(\d+)(, block )(\d+)/\1AGNO\3AGBNO/;
 	print;'
+}
+
+# Filter out unknown block state messages that appear when rmap is enabled
+# and we erase a btree root pointer (such that repair never finds the
+# tree and fails to reconcile the metadata reverse mappings against the
+# metadata).
+_filter_repair_lostblocks() {
+	_filter_repair | sed -e '/unknown block state, ag AGNO, block AGBNO/d'
 }
 
 _filter_dd()
