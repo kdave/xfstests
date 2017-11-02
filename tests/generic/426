@@ -52,25 +52,43 @@ _require_test
 _require_test_program "open_by_handle"
 _require_exportfs
 
-numfiles=1024
+NUMFILES=1024
 testdir=$TEST_DIR/$seq-dir
 mkdir -p $testdir
 
+# Create empty test files in test dir
+create_test_files()
+{
+	local dir=$1
+	local opt=$2
+
+	mkdir -p $dir
+	rm -f $dir/*
+	src/open_by_handle -c $dir $NUMFILES
+}
+
+# Test encode/decode file handles
+test_file_handles()
+{
+	local dir=$1
+	local opt=$2
+
+	echo test_file_handles $* | _filter_test_dir
+	src/open_by_handle $opt $dir $NUMFILES
+}
+
 # Check stale handles to deleted files
-rm -f $testdir/*
-src/open_by_handle -c $testdir $numfiles
-src/open_by_handle -d $testdir $numfiles
+create_test_files $testdir
+test_file_handles $testdir -d
 
 # Check non-stale handles to linked files
-rm -f $testdir/*
-src/open_by_handle -c $testdir $numfiles
-src/open_by_handle    $testdir $numfiles
+create_test_files $testdir
+test_file_handles $testdir
 
 # Check non-stale handles to files that were hardlinked and original deleted
-rm -f $testdir/*
-src/open_by_handle -c $testdir $numfiles
-src/open_by_handle -l $testdir $numfiles
-src/open_by_handle -u $testdir $numfiles
+create_test_files $testdir
+test_file_handles $testdir -l
+test_file_handles $testdir -u
 
 echo "Silence is golden"
 status=0
