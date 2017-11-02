@@ -27,7 +27,7 @@
 
 /*
 
-usage: open_by_handle [-c|-l|-u|-d] <test_dir> [num_files]
+usage: open_by_handle [-cludm] <test_dir> [num_files]
 
 Examples:
 
@@ -48,7 +48,12 @@ Examples:
 
    open_by_handle -d <test_dir> [N]
 
-4. Get file handles for existing test set, hardlink all test files,
+4. Get file handles for existing test set, rename all test files,
+   drop caches, try to open all files by handle (should work):
+
+   open_by_handle -m <test_dir> [N]
+
+5. Get file handles for existing test set, hardlink all test files,
    then unlink the original files, drop caches and try to open all
    files by handle (should work):
 
@@ -84,13 +89,14 @@ struct handle {
 
 void usage(void)
 {
-	fprintf(stderr, "usage: open_by_handle [-c|-l|-u|-d] <test_dir> [num_files]\n");
+	fprintf(stderr, "usage: open_by_handle [-cludm] <test_dir> [num_files]\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "open_by_handle -c <test_dir> [N] - create N test files under test_dir, try to get file handles and exit\n");
 	fprintf(stderr, "open_by_handle    <test_dir> [N] - get file handles of test files, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -l <test_dir> [N] - create hardlinks to test files, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -u <test_dir> [N] - unlink (hardlinked) test files, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -d <test_dir> [N] - unlink test files and hardlinks, drop caches and try to open by handle\n");
+	fprintf(stderr, "open_by_handle -m <test_dir> [N] - rename test files, drop caches and try to open by handle\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -105,12 +111,12 @@ int main(int argc, char **argv)
 	char	*test_dir;
 	int	mount_fd, mount_id;
 	int	numfiles = 1;
-	int	create = 0, delete = 0, nlink = 1;
+	int	create = 0, delete = 0, nlink = 1, move = 0;
 
 	if (argc < 2 || argc > 4)
 		usage();
 
-	while ((c = getopt(argc, argv, "clud")) != -1) {
+	while ((c = getopt(argc, argv, "cludm")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
@@ -125,6 +131,9 @@ int main(int argc, char **argv)
 		case 'd':
 			delete = 1;
 			nlink = 0;
+			break;
+		case 'm':
+			move = 1;
 			break;
 		default:
 			fprintf(stderr, "illegal option '%s'\n", argv[optind]);
@@ -196,6 +205,18 @@ int main(int argc, char **argv)
 		ret = link(fname, fname2);
 		if (ret < 0) {
 			strcat(fname2, ": link");
+			perror(fname2);
+			return EXIT_FAILURE;
+		}
+	}
+
+	/* rename the files */
+	for (i=0; move && i < numfiles; i++) {
+		sprintf(fname, "%s/file%06d", test_dir, i);
+		sprintf(fname2, "%s/link%06d", test_dir, i);
+		ret = rename(fname, fname2);
+		if (ret < 0) {
+			strcat(fname2, ": rename");
 			perror(fname2);
 			return EXIT_FAILURE;
 		}
