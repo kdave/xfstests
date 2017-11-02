@@ -156,7 +156,7 @@ int main(int argc, char **argv)
 		sprintf(fname2, "%s/link%06d", test_dir, i);
 		fd = open(fname, O_RDWR | O_CREAT | O_TRUNC, 0644);
 		if (fd < 0) {
-			printf("Warning (%s,%d), open(%s) failed.\n", __FILE__, __LINE__, fname);
+			strcat(fname, ": open");
 			perror(fname);
 			return EXIT_FAILURE;
 		}
@@ -164,7 +164,8 @@ int main(int argc, char **argv)
 		/* blow up leftovers hardlinks if they exist */
 		ret = unlink(fname2);
 		if (ret < 0 && errno != ENOENT) {
-			perror("unlink");
+			strcat(fname2, ": unlink");
+			perror(fname2);
 			return EXIT_FAILURE;
 		}
 	}
@@ -178,7 +179,8 @@ int main(int argc, char **argv)
 		handle[i].fh.handle_bytes = MAX_HANDLE_SZ;
 		ret = name_to_handle_at(AT_FDCWD, fname, &handle[i].fh, &mount_id, 0);
 		if (ret < 0) {
-			perror("name_to_handle");
+			strcat(fname, ": name_to_handle");
+			perror(fname);
 			return EXIT_FAILURE;
 		}
 	}
@@ -193,7 +195,8 @@ int main(int argc, char **argv)
 		sprintf(fname2, "%s/link%06d", test_dir, i);
 		ret = link(fname, fname2);
 		if (ret < 0) {
-			perror("link");
+			strcat(fname2, ": link");
+			perror(fname2);
 			return EXIT_FAILURE;
 		}
 	}
@@ -204,14 +207,16 @@ int main(int argc, char **argv)
 		sprintf(fname2, "%s/link%06d", test_dir, i);
 		ret = unlink(fname);
 		if (ret < 0) {
-			perror("unlink");
+			strcat(fname, ": unlink");
+			perror(fname);
 			return EXIT_FAILURE;
 		}
 		/* with -d flag, delete the hardlink if it exists */
 		if (!nlink)
 			ret = unlink(fname2);
 		if (ret < 0 && errno != ENOENT) {
-			perror("unlink");
+			strcat(fname2, ": unlink");
+			perror(fname2);
 			return EXIT_FAILURE;
 		}
 	}
@@ -246,11 +251,13 @@ int main(int argc, char **argv)
 		} else if (!nlink && fd < 0 && (errno == ENOENT || errno == ESTALE)) {
 			continue;
 		}
+		sprintf(fname, "%s/file%06d", test_dir, i);
 		if (fd >= 0) {
-			printf("open_by_handle(%d) opened an unlinked file!\n", i);
+			printf("open_by_handle(%s) opened an unlinked file!\n", fname);
 			close(fd);
 		} else {
-			printf("open_by_handle(%d) returned %d incorrectly on %s file!\n", i, errno,
+			printf("open_by_handle(%s) returned %d incorrectly on %s file!\n",
+					fname, errno,
 					nlink ? "a linked" : "an unlinked");
 		}
 		failed++;
