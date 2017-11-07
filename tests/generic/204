@@ -69,7 +69,7 @@ _scratch_mount
 # work out correctly. Space usages is based 22500 files and 1024 reserved blocks
 # on a 4k block size 256 byte inode size filesystem.
 resv_blks=1024
-space=97920000
+space=$(stat -f -c '%f * %S' $SCRATCH_MNT | $BC_PROG)
 
 # decrease files for inode size.
 #	22500 * (256 + 4k) = ~97MB
@@ -78,10 +78,20 @@ space=97920000
 
 files=$((space / (isize + dbsize)))
 
+# Now do it again, but factor in the filename sizes too.
+# We naively assume 8 bytes for inode number, 1 byte for ftype,
+# and 1 more byte for namelen, then round up to the nearest 8
+# bytes.
+
+namelen="$(echo -n "$files" | wc -c)"
+direntlen="$(echo "(10 + $namelen + 7) / 8 * 8" | $BC_PROG)"
+
+files=$((space / (direntlen + isize + dbsize)))
+
 echo files $files, resvblks $resv_blks >> $seqres.full
 _scratch_resvblks $resv_blks >> $seqres.full 2>&1
 
-for i in `seq 1 $files`; do
+for i in `seq -w 1 $files`; do
     echo -n > $SCRATCH_MNT/$i
     echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i
 done
