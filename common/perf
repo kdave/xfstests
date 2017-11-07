@@ -1,0 +1,40 @@
+#
+# Common perf specific functions
+#
+
+
+_require_fio_results()
+{
+	if [ -z "$PERF_CONFIGNAME" ]
+	then
+		_notrun "this test requires \$PERF_CONFIGNAME to be set"
+	fi
+	_require_command $PYTHON2_PROG python2
+
+	$PYTHON2_PROG -c "import sqlite3" >/dev/null 2>&1
+	[ $? -ne 0 ] && _notrun "this test requires python sqlite support"
+
+	$PYTHON2_PROG -c "import json" >/dev/null 2>&1
+	[ $? -ne 0 ] && _notrun "this test requires python json support"
+
+	_require_command $SQLITE3_PROG sqlite3
+}
+
+_fio_results_init()
+{
+	cat $here/src/perf/fio-results.sql | \
+		$SQLITE3_PROG $RESULT_BASE/fio-results.db
+	[ $? -ne 0 ] && _fail "failed to create results database"
+	[ ! -e $RESULT_BASE/fio-results.db ] && \
+		_fail "failed to create results database"
+}
+
+_fio_results_compare()
+{
+	_testname=$1
+	_resultfile=$2
+
+	$PYTHON2_PROG $here/src/perf/fio-insert-and-compare.py \
+		-c $PERF_CONFIGNAME -d $RESULT_BASE/fio-results.db \
+		-n $_testname $_resultfile
+}

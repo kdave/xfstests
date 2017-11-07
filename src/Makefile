@@ -25,7 +25,7 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	attr-list-by-handle-cursor-test listxattr dio-interleaved t_dir_type \
 	dio-invalidate-cache stat_test t_encrypted_d_revalidate
 
-SUBDIRS = log-writes
+SUBDIRS = log-writes perf
 
 LLDLIBS = $(LIBATTR) $(LIBHANDLE) $(LIBACL) -lpthread
 
