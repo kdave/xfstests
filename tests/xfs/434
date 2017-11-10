@@ -1,0 +1,111 @@
+#! /bin/bash
+# FS QA Test No. 434
+#
+# Ensure that we don't leak quota inodes when CoW recovery fails.
+#
+# Use xfs_fsr to inject bmap redo items in the log for a linked file and
+# an unlinked file; enable quota so that we always mount with the quota
+# inodes; and then corrupt the refcount btree to ensure that the CoW
+# garbage collection (and therefore the mount) fail.
+#
+# On a subsequent mount attempt, we should be able to replay the bmap
+# items for the linked and unlinked files without prematurely truncating
+# the unlinked inode and without leaking the linked inode, and we should
+# be able to release the quota inodes when we're aborting the mount.  We
+# also should not leak dquots.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+. ./common/inject
+. ./common/quota
+. ./common/module
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_loadable_fs_module "xfs"
+_require_quota
+_require_scratch_reflink
+_require_cp_reflink
+_require_command "$XFS_FSR_PROG" "xfs_fsr"
+_require_xfs_io_error_injection "bmap_finish_one"
+_require_xfs_scratch_rmapbt
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount -o noquota >> "$seqres.full" 2>&1
+
+testdir="$SCRATCH_MNT/test-$seq"
+blksz=65536
+blks=3
+mkdir "$testdir"
+
+echo "Create a many-block file"
+_pwrite_byte 0x62 0 $((blksz * blks)) $testdir/file1 >> $seqres.full
+_pwrite_byte 0x63 0 $blksz $testdir/file2 >> $seqres.full
+_reflink_range $testdir/file2 0 $testdir/file1 $blksz $blksz >> $seqres.full
+_scratch_cycle_mount noquota
+
+echo "Inject error"
+_scratch_inject_error "bmap_finish_one"
+
+echo "Defrag the file"
+$XFS_FSR_PROG -v -d $testdir/file1 >> $seqres.full 2>&1
+
+echo "FS should be shut down, touch will fail"
+touch $SCRATCH_MNT/badfs 2>&1 | _filter_scratch
+
+echo "Remount to replay log" | tee /dev/ttyprintk
+_scratch_unmount
+_scratch_dump_log >> $seqres.full
+_scratch_xfs_db -x -c 'agf 0' -c 'addr refcntroot' -c 'fuzz -d recs[1].startblock ones' >> $seqres.full
+_scratch_xfs_db -x -c 'agf 0' -c 'addr refcntroot' -c p >> $seqres.full
+
+# Suddenly enable quota to test if we can leak the quotacheck dquots!
+_scratch_mount -o quota >> $seqres.full 2>&1
+_scratch_unmount 2> /dev/null
+rm -f ${RESULT_DIR}/require_scratch
+
+echo "See if we leak"
+_reload_fs_module "xfs"
+
+# success, all done
+status=0
+exit
