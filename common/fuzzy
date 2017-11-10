@@ -79,6 +79,14 @@ _scratch_scrub() {
 	esac
 }
 
+# Filter out any keys with an array index >= 10, collapse any array range
+# ("[1-195]") to the first item, and ignore padding fields.
+__filter_xfs_db_keys() {
+	sed -e '/\([a-z]*\)\[\([0-9][0-9]\+\)\].*/d' \
+	    -e 's/\([a-zA-Z0-9_]*\)\[\([0-9]*\)-[0-9]*\]/\1[\2]/g' \
+	    -e '/pad/d'
+}
+
 # Filter the xfs_db print command's field debug information
 # into field name and type.
 __filter_xfs_db_print_fields() {
@@ -87,15 +95,13 @@ __filter_xfs_db_print_fields() {
 		filter='^'
 	fi
 	grep ' = ' | while read key equals value; do
-		# Filter out any keys with an array index >= 10, and
-		# collapse any array range ("[1-195]") to the first item.
-		fuzzkey="$(echo "${key}" | sed -e '/\([a-z]*\)\[\([0-9][0-9]\+\)\].*/d' -e 's/\([a-zA-Z0-9_]*\)\[\([0-9]*\)-[0-9]*\]/\1[\2]/g')"
+		fuzzkey="$(echo "${key}" | __filter_xfs_db_keys)"
 		if [ -z "${fuzzkey}" ]; then
 			continue
 		elif [[ "${value}" == "["* ]]; then
 			echo "${value}" | sed -e 's/^.//g' -e 's/.$//g' -e 's/,/\n/g' | while read subfield; do
 				echo "${fuzzkey}.${subfield}"
-			done
+			done | __filter_xfs_db_keys
 		else
 			echo "${fuzzkey}"
 		fi
