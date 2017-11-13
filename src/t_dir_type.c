@@ -85,7 +85,7 @@ main(int argc, char *argv[])
 				break;
 		/* no match ends up with type = -1 */
 		if (type < 0)
-			ino = atoll(argv[2]);
+			ino = strtoul(argv[2], NULL, 10);
 	}
 
 	for ( ; ; ) {
