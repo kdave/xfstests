@@ -40,11 +40,6 @@ _cleanup()
     rm -f $tmp.*
 }
 
-filter_mount()
-{
-	sed -e "s/mount .* failed: //"
-}
-
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -64,7 +59,7 @@ _scratch_mkfs_xfs -m crc=1 >> $seqres.full 2>&1 || _fail "mkfs failed"
 $XFS_IO_PROG -c "pwrite 224 4" -c fsync $SCRATCH_DEV | _filter_xfs_io
 
 # should FAIL, the crc is bad; golden output contains mount failure
-_scratch_mount 2>&1 | filter_mount
+_scratch_mount 2>&1 | _filter_error_mount
 
 # success, all done
 status=0

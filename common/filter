@@ -390,11 +390,37 @@ _filter_fstrim()
 	egrep -o "[0-9]+ bytes" | $AWK_PROG '{print $1}'
 }
 
+# Remove the ending dot appended to mount error message, util-linux 2.30
+# starts to do so.
+_filter_ending_dot()
+{
+	sed -e "s/\.$//"
+}
+
 # Older mount output referred to "block device" when mounting RO devices
 # It's gone in newer versions
 _filter_ro_mount() {
 	sed -e "s/mount: block device/mount:/g" \
 	    -e "s/mount: cannot mount block device/mount: cannot mount/g"
+}
+
+# Filter a failed mount output due to EUCLEAN and USTALE, util-linux changed
+# the message several times.
+#
+# prior to v2.21:
+# mount: Structure needs cleaning
+# v2.21 to v2.29:
+# mount: mount <device> on <mountpoint> failed: Structure needs cleaning
+# v2.30 and later:
+# mount: <mountpoint>: mount(2) system call failed: Structure needs cleaning.
+#
+# This is also true for ESTALE error. So let's remove all the changing parts
+# and keep the 'prior to v2.21' format:
+# mount: Structure needs cleaning
+# mount: Stale file handle
+_filter_error_mount()
+{
+	sed -e "s/mount:\(.*failed:\)/mount:/" | _filter_ending_dot
 }
 
 _filter_od()
