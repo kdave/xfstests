@@ -397,11 +397,62 @@ _filter_ending_dot()
 	sed -e "s/\.$//"
 }
 
-# Older mount output referred to "block device" when mounting RO devices
-# It's gone in newer versions
+# Older mount output referred to "block device" when mounting RO devices. It's
+# gone in newer versions. v2.30 changed the output again. This filter is to
+# unify all read-only mount messages across all util-linux versions.
+#
+# for a successful ro mount:
+# ancient:	   mount: block device <device> is write-protected, mounting read-only
+# prior to v2.30:  mount: <device> is write-protected, mounting read-only
+# v2.30 and later: mount: <mountpoint>: WARNING: device write-protected, mounted read-only.
+#
+# a failed ro mount:
+# ancient (two-line message):
+# mount: block device <device> is write-protected, mounting read-only
+# mount: cannot mount block device <device> read-only
+# prior to v2.30 (two-line message):
+# mount: <device> is write-protected, mounting read-only
+# mount: cannot mount <device> read-only
+# v2.30 and later (single-line message):
+# mount: <mountpoint>: cannot mount <device> read-only.
+#
+# a failed rw remount:
+# ancient:	   mount: cannot remount block device <device> read-write, is write-protected
+# prior to v2.30:  mount: cannot remount <device> read-write, is write-protected
+# v2.30 and later: mount: <mountpoint>: cannot remount <device> read-write, is write-protected.
+#
+# Now use _filter_ro_mount to unify all these differences across old & new
+# util-linux versions. So the filtered format would be:
+#
+# successful ro mount:
+# mount: device write-protected, mounting read-only
+#
+# failed ro mount:
+# mount: device write-protected, mounting read-only
+# mount: cannot mount device read-only
+#
+# failed rw remount:
+# mount: cannot remount device read-write, is write-protected
 _filter_ro_mount() {
-	sed -e "s/mount: block device/mount:/g" \
-	    -e "s/mount: cannot mount block device/mount: cannot mount/g"
+	perl -ne '
+	if (/write-protected, mount.*read-only/) {
+		# filter successful ro mount, and first line of prior to v2.30
+		# format failed ro mount
+		print "mount: device write-protected, mounting read-only\n";
+	} elsif (/mount: .*: cannot mount.*read-only/) {
+		# filter v2.30 format failed ro mount, convert single-line
+		# message to two-line message
+		print "mount: device write-protected, mounting read-only\n";
+		print "mount: cannot mount device read-only\n";
+	} elsif (/^mount: cannot mount .* read-only$/) {
+		# filter prior to v2.30 format failed ro mount
+		print "mount: cannot mount device read-only\n";
+	} elsif (/mount:.* cannot remount .* read-write.*/) {
+		# filter failed rw remount
+		print "mount: cannot remount device read-write, is write-protected\n";
+	} else {
+		print "$_";
+	}' | _filter_ending_dot
 }
 
 # Filter a failed mount output due to EUCLEAN and USTALE, util-linux changed
