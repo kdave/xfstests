@@ -1,0 +1,124 @@
+#! /bin/bash
+# FS QA Test 468
+#
+# This testcase is a fallocate variant of generic/392, it expands to test
+# block preallocation functionality of fallocate.
+# In this case, we are trying to execute:
+# 1. fallocate {,-k}
+# 2. f{data,}sync
+# 3. power-cuts
+# 4. recovery filesystem during mount
+# 5. check inode's metadata
+#
+# In the case of fsync, filesystem should recover all the inode metadata, while
+# recovering i_blocks and i_size at least for fdatasync, so this testcase excepts
+# that inode metadata will be unchanged after recovery.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 Huawei.  All Rights Reserved.
+# Author: Chao Yu <yuchao0@huawei.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_scratch_shutdown
+_require_xfs_io_command "falloc" "-k"
+
+_scratch_mkfs >/dev/null 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_scratch_mount
+
+testfile=$SCRATCH_MNT/testfile
+
+# check inode metadata after shutdown
+check_inode_metadata()
+{
+	sync_mode=$1
+
+	# fsync or fdatasync
+	if [ "$sync_mode" = "fsync" ]; then
+		stat_opt='-c "b: %b s: %s a: %x m: %y c: %z"'
+	else
+		stat_opt='-c "b: %b s: %s"'
+	fi
+
+	before=`stat "$stat_opt" $testfile`
+
+	$XFS_IO_PROG -c "$sync_mode" $testfile | _filter_xfs_io
+	$here/src/godown $SCRATCH_MNT | tee -a $seqres.full
+	_scratch_cycle_mount
+
+	after=`stat "$stat_opt" $testfile`
+
+	if [ "$before" != "$after" ]; then
+		echo "Before: $before"
+		echo "After : $after"
+	fi
+	echo "Before: $before" >> $seqres.full
+	echo "After : $after" >> $seqres.full
+	rm $testfile
+}
+
+# fallocate XX KB with f{data}sync, followed by power-cut
+test_falloc()
+{
+	# 4202496 = 4m + 8k
+	echo "==== falloc $2$3 test with $1 ====" | tee -a $seqres.full
+	$XFS_IO_PROG -f -c "truncate 4202496"	\
+			-c "pwrite 0 4202496"	\
+			-c "fsync"		\
+			-c "falloc $2 4202496 $3"\
+			$testfile >/dev/null
+	check_inode_metadata $1
+}
+
+for i in fsync fdatasync; do
+	test_falloc $i "" 1024
+	test_falloc $i "" 4096
+	test_falloc $i "" 104857600
+	test_falloc $i "-k " 1024
+	test_falloc $i "-k " 4096
+	test_falloc $i "-k " 104857600
+done
+
+status=0
+exit
