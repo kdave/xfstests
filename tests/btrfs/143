@@ -127,16 +127,16 @@ echo "step 3......repair the bad copy" >>$seqres.full
 # since raid1 consists of two copies, and the bad copy was put on stripe #1
 # while the good copy lies on stripe #0, the bad copy only gets access when the
 # reader's pid % 2 == 1 is true
-while true; do
-	# start_fail only fails the following buffered read so the repair is
-	# supposed to work.
-	echo 3 > /proc/sys/vm/drop_caches
-	start_fail
-	$XFS_IO_PROG -c "pread 0 4K" "$SCRATCH_MNT/foobar" > /dev/null &
-	pid=$!
-	wait
-	stop_fail
-	[ $((pid % 2)) == 1 ] && break
+while [[ -z ${result} ]]; do
+    # invalidate the page cache.
+    _scratch_cycle_mount
+
+    start_fail
+    result=$(bash -c "
+        if [[ \$((\$\$ % 2)) -eq 1 ]]; then
+                exec $XFS_IO_PROG -c \"pread 0 4K\" \"$SCRATCH_MNT/foobar\"
+        fi");
+    stop_fail
 done
 
 _scratch_unmount
