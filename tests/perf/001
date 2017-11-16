@@ -1,0 +1,80 @@
+#! /bin/bash
+# perf/001 Test
+#
+# Buffered random write performance test.
+#
+#-----------------------------------------------------------------------
+# (c) 2017 Josef Bacik
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+fio_config=$tmp.fio
+fio_results=$tmp.json
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/perf
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_block_device $SCRATCH_DEV
+_require_fio_results
+
+rm -f $seqres.full
+
+_size=$((16 * $LOAD_FACTOR))
+cat >$fio_config <<EOF
+[t1]
+directory=${SCRATCH_MNT}
+allrandrepeat=1
+readwrite=randwrite
+size=${_size}G
+ioengine=psync
+end_fsync=1
+fallocate=none
+EOF
+
+_require_fio $fio_config
+
+_fio_results_init
+
+# We are going to write at least 16gib, make sure our scratch fs is large enough
+# to fit and not deal with any enospc overhead.
+_size=$(($_size * 4 * 1024 * 1024))
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+_require_fs_space $SCRATCH_MNT $_size
+
+cat $fio_config >> $seqres.full
+$FIO_PROG --output-format=json --output=$fio_results $fio_config
+
+_scratch_unmount
+cat $fio_results >> $seqres.full
+_fio_results_compare $seq $fio_results
+echo "Silence is golden"
+status=0; exit
