@@ -179,9 +179,14 @@ _scratch_xfs_fuzz_metadata_field() {
 	for arg in "$@"; do
 		cmds+=("-c" "${arg}")
 	done
-	_scratch_xfs_db -x "${cmds[@]}" -c "fuzz ${fuzz_arg} ${key} ${value}"
-	echo
-	newval="$(_scratch_xfs_get_metadata_field "${key}" "$@" 2> /dev/null)"
+	while true; do
+		_scratch_xfs_db -x "${cmds[@]}" -c "fuzz ${fuzz_arg} ${key} ${value}"
+		echo
+		newval="$(_scratch_xfs_get_metadata_field "${key}" "$@" 2> /dev/null)"
+		if [ "${key}" != "random" ] || [ "${oldval}" != "${newval}" ]; then
+			break;
+		fi
+	done
 	if [ "${oldval}" = "${newval}" ]; then
 		echo "Field ${key} already set to ${newval}, skipping test."
 		return 1
