@@ -70,6 +70,11 @@ static void *reader(void *arg)
 	return NULL;
 }
 
+#define fail(fmt , args...) do {	\
+	fprintf(stderr, fmt , ##args);	\
+	exit(1);			\
+} while (0)
+
 static void *writer(struct io_data *data)
 {
 	int ret;
@@ -84,28 +89,23 @@ static void *writer(struct io_data *data)
 		struct iocb *iocbs[] = { &iocb };
 
 		ret = io_setup(1, &ctx);
-		if (ret) {
-			fprintf(stderr, "error %s during io_setup\n",
-				strerror(ret));
-			return NULL;
-		}
+		if (ret)
+			fail("error %s during io_setup\n", strerror(ret));
 		io_prep_pwrite(&iocb, data->fd, data->buf, data->blksize, data->offset);
 		ret = io_submit(ctx, 1, iocbs);
-		if (ret != 1) {
-			fprintf(stderr, "error %s during io_submit\n",
-				strerror(ret));
-			return NULL;
-		}
+		if (ret != 1)
+			fail("error %s during io_submit\n", strerror(ret));
 		ret = io_getevents(ctx, 1, 1, evs, NULL);
-		if (ret != 1) {
-			fprintf(stderr, "error %s during io_getevents\n",
-				strerror(ret));
-			return NULL;
-		}
+		if (ret != 1)
+			fail("error %s during io_getevents\n", strerror(ret));
+		if ((signed)evs[0].res < 0)
+			fail("error %s during write\n", strerror(-evs[0].res));
+		if ((signed)evs[0].res2 < 0)
+			fail("secondary error %s during write\n", strerror(-evs[0].res2));
 	} else {
 		ret = pwrite(data->fd, data->buf, data->blksize, data->offset);
 		if (ret < 0)
-			perror("write file failed");
+			fail("write file failed: %s", strerror(errno));
 	}
 
 	return NULL;
@@ -161,14 +161,14 @@ int main(int argc, char *argv[])
 
 	ret = posix_memalign((void **)&wbuf, io_align, blksize);
 	if (ret) {
-		fprintf(stderr, "failed to alloc memory: %s\n", strerror(ret));
+		fail("failed to alloc memory: %s\n", strerror(ret));
 		ret = 1;
 		goto err;
 	}
 
 	ret = posix_memalign((void **)&rbuf, io_align, blksize);
 	if (ret) {
-		fprintf(stderr, "failed to alloc memory: %s\n", strerror(ret));
+		fail("failed to alloc memory: %s\n", strerror(ret));
 		ret = 1;
 		goto err;
 	}
@@ -189,8 +189,7 @@ int main(int argc, char *argv[])
 		reader_ready = 0;
 		ret = pthread_create(&tid, NULL, reader, &rdata);
 		if (ret) {
-			fprintf(stderr, "create reader thread failed: %s\n",
-				strerror(ret));
+			fail("create reader thread failed: %s\n", strerror(ret));
 			ret = 1;
 			goto err;
 		}
@@ -199,15 +198,14 @@ int main(int argc, char *argv[])
 
 		ret = pthread_join(tid, NULL);
 		if (ret) {
-			fprintf(stderr, "pthread join reader failed: %s\n",
-				strerror(ret));
+			fail("pthread join reader failed: %s\n", strerror(ret));
 			ret = 1;
 			goto err;
 		}
 
 		for (j = 0; j < blksize; j++) {
 			if (rdata.buf[j] != 'a') {
-				fprintf(stderr, "encounter an error: "
+				fail("encounter an error: "
 					"block %d offset %d, content %x\n",
 					i, j, rbuf[j]);
 				ret = 1;
