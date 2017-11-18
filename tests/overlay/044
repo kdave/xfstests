@@ -1,0 +1,145 @@
+#! /bin/bash
+# FSQA Test No. 044
+#
+# Test hardlink breakage on non-samefs setup
+# This is a variant of overlay/018 to test.
+#
+# This simple test demonstrates a known issue with overlayfs:
+# - file A and B are hardlinked in lower
+# - modify A to trigger copy up
+# - file A is no longer a hardlink of file B
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2017 IBM Corporation. All Rights Reserved.
+# Author: Chandan Rajendra <chandan@linux.vnet.ibm.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_test
+_require_scratch_feature index
+_require_test_program "t_dir_type"
+
+rm -f $seqres.full
+
+# Record inode numbers in format <ino> <nlink>
+function record_ino_nlink()
+{
+	ls -li $FILES | awk '{ print $1, $3, $10}' > $1
+}
+
+# Check inode numbers match recorded inode numbers
+function check_ino_nlink()
+{
+	dir=$1
+	before=$2
+	after=$3
+
+	record_ino_nlink $after
+
+	# Test constant stat(2) st_ino/st_nlink -
+	#   Compare before..after - expect silence
+	# We use diff -u so out.bad will tell us which stage failed
+	diff -u $before $after
+
+	# Test constant readdir(3)/getdents(2) d_ino -
+	#   Expect to find file by inode number
+	cat $before | while read ino nlink f; do
+		$here/src/t_dir_type $dir $ino | grep -q $(basename $f) || \
+			echo "$(basename $f) not found by ino $ino (from $before)"
+	done
+}
+
+lowerdir=$OVL_BASE_TEST_DIR/$seq-ovl-lower
+rm -rf $lowerdir
+mkdir $lowerdir
+
+# Create 2 hardlinked files in lower
+echo "zero" >> $lowerdir/foo
+ln $lowerdir/foo $lowerdir/bar
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+OVERLAY_MOUNT_OPTIONS="${OVERLAY_MOUNT_OPTIONS} -o index=on"
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir \
+			    $OVERLAY_MOUNT_OPTIONS
+
+rm -f $tmp.*
+
+foo=$SCRATCH_MNT/foo
+bar=$SCRATCH_MNT/bar
+
+FILES="$foo $bar"
+
+echo "== Before copy up =="
+cat $FILES
+record_ino_nlink $tmp.before
+
+# Modify content of one of the hardlinks
+# Intentionally modify the last hardlink in $FILES, so after mount cycle
+# when reading the first file in $FILES, last file won't be in inode/dcache
+echo "one" >> $bar
+
+echo "== After write one =="
+cat $FILES
+check_ino_nlink $SCRATCH_MNT $tmp.before $tmp.after_one
+
+# Verify that the hardlinks survive a mount cycle
+$UMOUNT_PROG $SCRATCH_MNT
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir \
+			    $OVERLAY_MOUNT_OPTIONS
+
+echo "== After mount cycle =="
+cat $FILES
+check_ino_nlink $SCRATCH_MNT $tmp.after_one $tmp.after_cycle
+
+# Drop caches to get the copied up hardlink out of cache
+echo 3 > /proc/sys/vm/drop_caches
+
+# Modify content of the other hardlink
+echo "two" >> $foo
+
+echo "== After write two =="
+cat $FILES
+check_ino_nlink $SCRATCH_MNT $tmp.after_one $tmp.after_two
+
+status=0
+exit
