@@ -43,6 +43,7 @@ struct io_data {
 	off_t offset;
 	char *buf;
 	int use_aio;
+	ssize_t read_sz;
 };
 
 int reader_ready = 0;
@@ -57,15 +58,15 @@ static void usage(const char *prog)
 static void *reader(void *arg)
 {
 	struct io_data *data = (struct io_data *)arg;
-	int ret;
 
 	memset(data->buf, 'b', data->blksize);
 	reader_ready = 1;
 	do {
-		ret = pread(data->fd, data->buf, data->blksize, data->offset);
-		if (ret < 0)
+		data->read_sz = pread(data->fd, data->buf, data->blksize,
+				      data->offset);
+		if (data->read_sz < 0)
 			perror("read file");
-	} while (ret <= 0);
+	} while (data->read_sz <= 0);
 
 	return NULL;
 }
@@ -203,7 +204,7 @@ int main(int argc, char *argv[])
 			goto err;
 		}
 
-		for (j = 0; j < blksize; j++) {
+		for (j = 0; j < rdata.read_sz; j++) {
 			if (rdata.buf[j] != 'a') {
 				fail("encounter an error: "
 					"block %d offset %d, content %x\n",
