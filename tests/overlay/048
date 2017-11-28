@@ -1,0 +1,141 @@
+#! /bin/bash
+# FS QA Test 048
+#
+# Test nlink accounting of overlay hardlinks with offline modifications.
+#
+# nlink of overlay inode should account for the union of lower and upper
+# hardlinks. Orphan index inodes with union nlink 0 should be cleaned on
+# mount.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2017 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_scratch_feature index
+
+report_nlink()
+{
+	when=$1
+
+	# mount and check nlink after overlay offline modification
+	_scratch_mount -o index=on
+
+	# List <nlink> <name>
+	echo "== $when offline =="
+	for f in $HARDLINKS; do
+		_ls_l $SCRATCH_MNT/$f | awk '{ print $2, $9 }' | _filter_scratch
+	done
+
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+# Create lower hardlinks
+create_hardlinks()
+{
+	mkdir -p $lowerdir
+	touch $lowerdir/0
+	ln $lowerdir/0 $lowerdir/1
+	ln $lowerdir/0 $lowerdir/2
+}
+
+test_hardlinks_offline()
+{
+	HARDLINKS=`seq 0 2`
+	report_nlink "all upper"
+
+	# Unlink copied up hardlink
+	rm $upperdir/0
+	HARDLINKS=`seq 1 2`
+	report_nlink "unlink upper"
+
+	# Link to copied up hardlink
+	ln $upperdir/2 $upperdir/3
+	HARDLINKS=`seq 1 3`
+	report_nlink "link upper"
+
+	# Rename over copied up hardlink
+	touch $upperdir/new
+	mv $upperdir/new $upperdir/1
+	HARDLINKS=`seq 2 3`
+	report_nlink "rename over upper"
+
+	# Unlink new upper hardlink
+	rm $upperdir/3
+	HARDLINKS=2
+	report_nlink "unlink new upper"
+
+	# Unlink last upper and drop union nlink to zero
+	rm $upperdir/2
+
+	HARDLINKS=
+	report_nlink "unlink last lower"
+
+	# Verify that orphan index is cleaned when dropping nlink to zero
+	ls $workdir/index
+}
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create lower hardlinks
+create_hardlinks
+
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+_scratch_mount -o index=on
+
+# Copy up and index hardlinks
+touch $SCRATCH_MNT/0
+touch $SCRATCH_MNT/1
+touch $SCRATCH_MNT/2
+
+# Perform the rest of the changes offline
+$UMOUNT_PROG $SCRATCH_MNT
+
+test_hardlinks_offline
+
+status=0
+exit
