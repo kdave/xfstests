@@ -1,0 +1,107 @@
+#! /bin/bash
+# FSQA Test No. 047
+#
+# Test hardlink breakage after unlink and mount cycle
+#
+# - file A and B are hardlinked in lower
+# - modify A to trigger copy up and index lower
+# - unlink A and mount cycle
+# - check that B still contains the modified data
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2016-2017 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_scratch_feature index
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# Create 2 hardlinked files in lower
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+mkdir -p $lowerdir
+echo "zero" >> $lowerdir/foo
+ln $lowerdir/foo $lowerdir/bar
+
+
+# Enable overlay index feature to prevent breaking hardlinks on copy up
+_scratch_mount -o index=on
+
+
+rm -f $tmp.*
+
+foo=$SCRATCH_MNT/foo
+bar=$SCRATCH_MNT/bar
+
+FILES="$foo $bar"
+
+echo "== Before copy up =="
+cat $foo
+
+# Modify content of one of the hardlinks
+echo "one" >> $bar
+
+echo "== After write one =="
+cat $foo
+
+# Unlink the copied up hardlink
+rm $bar
+
+echo "== After unlink one =="
+cat $foo
+
+# Verify that the hardlinks survive a mount cycle
+_scratch_cycle_mount index=on
+
+echo "== After mount cycle =="
+cat $foo
+
+# Drop caches to get the copied up hardlink out of cache
+echo 3 > /proc/sys/vm/drop_caches
+
+# Modify content of the other hardlink
+echo "two" >> $foo
+
+echo "== After write two =="
+cat $foo
+
+status=0
+exit
