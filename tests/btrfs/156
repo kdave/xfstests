@@ -1,0 +1,120 @@
+#! /bin/bash
+# FS QA Test 156
+#
+# Check if btrfs can correctly trim free space in block groups
+#
+# An ancient regression prevent btrfs from trimming free space inside
+# existing block groups, if bytenr of block group starts beyond
+# btrfs_super_block->total_bytes.
+# However all bytenr in btrfs is in btrfs logical address space,
+# where any bytenr in range [0, U64_MAX] is valid.
+#
+# Fixed by patch named "btrfs: Ensure btrfs_trim_fs can trim the whole fs".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_fstrim
+
+# 1024fs size
+fs_size=$((1024 * 1024 * 1024))
+
+# Use small files to fill half of the fs
+file_size=$(( 1024 * 1024 ))
+nr_files=$(( $fs_size / $file_size / 2))
+
+# Force to use single data and meta profile.
+# Since the test relies on fstrim output, which will differ for different
+# profiles
+_scratch_mkfs -b $fs_size -m single -d single > /dev/null
+_scratch_mount
+
+_require_batched_discard "$SCRATCH_MNT"
+
+for n in $(seq -w 0 $(( $nr_files - 1))); do
+	$XFS_IO_PROG -f -c "pwrite 0 $file_size" "$SCRATCH_MNT/file_$n" \
+		> /dev/null
+done
+
+# Flush all buffer data into disk, to trigger chunk allocation
+sync
+
+# Now we have take at least 50% of the filesystem, relocate all chunks twice
+# so all chunks will start after 1G in logical space.
+# (Btrfs chunk allocation will not rewind to reuse lower space)
+_run_btrfs_util_prog balance start --full-balance "$SCRATCH_MNT"
+
+# To avoid possible false ENOSPC alert on v4.15-rc1, seems to be a
+# reserved space related bug (maybe related to outstanding space rework?),
+# but that's another story.
+sync
+
+_run_btrfs_util_prog balance start --full-balance "$SCRATCH_MNT"
+
+# Now remove half of the files to make some holes for later trim.
+# While still keep the chunk space fragmented, so no chunk will be freed
+rm $SCRATCH_MNT/file_*[13579] -f
+
+# Make sure space is freed
+sync
+
+trimmed=$($FSTRIM_PROG -v "$SCRATCH_MNT" | _filter_fstrim)
+echo "Trimmed=$trimmed total_size=$fs_size ratio=$(($trimmed * 100 / $fs_size))%" \
+	>> $seqres.full
+
+# For correct full fs trim, both unallocated space (less than 50%)
+# and free space in existing block groups (about 25%) should be trimmed.
+# If less than 50% is trimmed, then only unallocated space is trimmed.
+# BTW, without fix only 31% can be trimmed, while after fix it's 64%.
+if [ $trimmed -lt $(( $fs_size / 2)) ]; then
+	echo "Free space in block groups not trimmed"
+	echo "Trimmed=$trimmed total_size=$fs_size ratio=$(($trimmed * 100 / $fs_size))%"
+fi
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
