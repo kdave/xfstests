@@ -2045,6 +2045,13 @@ _require_xfs_io_command()
 			-c "$command 4k 8k" $testfile 2>&1`
 		;;
 	"fiemap")
+		# If 'ranged' is passed as argument then we check to see if fiemap supports
+		# ranged query params
+		if echo "$param" | grep -q "ranged"; then
+			param=$(echo "$param" | sed "s/ranged//")
+			$XFS_IO_PROG -c "help fiemap" | grep -q "\[offset \[len\]\]"
+			[ $? -eq 0 ] || _notrun "xfs_io $command ranged support is missing"
+		fi
 		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
 			-c "fiemap -v $param" $testfile 2>&1`
 		param_checked=1

@@ -1,0 +1,107 @@
+#! /bin/bash
+# FS QA Test No. 473
+#
+# Test for the new ranged query functionality in xfs_io's fiemap command.
+# This tests various combinations of hole + data layout being printed.
+# Also the test used 16k holes to be compatible with 16k block filesystems
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Nikolay Borisov <nborisov@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/punch
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_os Linux
+_require_test
+_require_xfs_io_command "truncate"
+# ranged is a special argument which checks if fiemap supports
+# [offset [len]] args
+_require_xfs_io_command "fiemap" "ranged"
+
+file=$TEST_DIR/fiemap.$seq
+rm -f $file
+
+# Create a file with 64k hole followed by 64k data, and this pattern
+# repeats till it reaches 4M file size, so each extent has 64k data.
+# But truncate file to its final size first, otherwise XFS would merge
+# some extents due to speculative preallocation.
+$XFS_IO_PROG -f -c "truncate 4m" $file
+for i in {0..31}; do
+	$XFS_IO_PROG -c "pwrite $(($i*128+64))k 64k" $file >/dev/null;
+done
+
+# Query 1 data extent between 64k..64k range
+echo "Basic data extent"
+$XFS_IO_PROG -c "fiemap -v 64k 64k" $file | _filter_fiemap
+
+# Query data and hole extent
+echo "Data + Hole"
+$XFS_IO_PROG -c "fiemap -v 64k 80k" $file | _filter_fiemap
+
+echo "Hole + Data"
+$XFS_IO_PROG -c "fiemap -v 0 65k" $file | _filter_fiemap
+
+echo "Hole + Data + Hole"
+$XFS_IO_PROG -c "fiemap -v 0k 130k" $file | _filter_fiemap
+
+echo "Data + Hole + Data"
+$XFS_IO_PROG -c "fiemap -v 64k 192k" $file | _filter_fiemap
+
+echo "Beginning with a hole"
+$XFS_IO_PROG -c "fiemap -v 0 3k" $file | _filter_fiemap
+
+# Query for 0..160k that's 40 extents, more than the EXTENT_BATCH
+echo "Query more than 32 extents"
+$XFS_IO_PROG -c "fiemap -v 0 3m" $file | _filter_fiemap
+
+echo "Larger query than file size"
+$XFS_IO_PROG -c "fiemap -v 0 5m" $file | _filter_fiemap
+
+# mapping past eof shouldn't print anything"
+$XFS_IO_PROG -c "fiemap -v 5m" $file | _filter_fiemap
+
+echo "Skip first hole"
+# check everything without the first hole
+$XFS_IO_PROG -c "fiemap -v 64k" $file | _filter_fiemap
+
+# success, all done
+status=0
+exit
