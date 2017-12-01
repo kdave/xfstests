@@ -125,16 +125,19 @@ $LVM_PROG lvextend -L $newpsize $vgname/$poolname >>$seqres.full 2>&1
 wait $freezeid
 ret=$?
 
-
 # Different filesystems will handle the lack of real space in different ways,
 # some will remount the filesystem in read-only mode, some will not. These tests
 # will check if:
 #	- The filesystem turns into Read-Only and reject further writes
 #	- The filesystem stays in Read-Write mode, but can be frozen/thawed
 #	  without getting stuck.
-ISRO=$(_fs_options /dev/mapper/$vgname-$snapname | grep -w "ro")
-
 if [ $ret -ne 0 ]; then
+	# fsfreeze failed, filesystem should reject further writes and remount
+	# as readonly. Sometimes the previous write process won't trigger
+	# ro-remount, e.g. on ext3/4, do additional touch here to make sure
+	# filesystems see the metadata I/O error.
+	touch $SCRATCH_MNT/newfile >/dev/null 2>&1
+	ISRO=$(_fs_options /dev/mapper/$vgname-$snapname | grep -w "ro")
 	if [ -n "$ISRO" ]; then
 		echo "Test OK"
 	else
