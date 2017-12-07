@@ -2023,6 +2023,7 @@ _require_xfs_io_command()
 	shift
 	local param="$*"
 	local param_checked=0
+	local opts=""
 
 	testfile=$TEST_DIR/$$.xfs_io
 	case $command in
@@ -2067,6 +2068,17 @@ _require_xfs_io_command()
 		echo $testio | grep -q "invalid option" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"pwrite")
+		# -N (RWF_NOWAIT) only works with direct vectored I/O writes
+		local pwrite_opts=" "
+		if [ "$param" == "-N" ]; then
+			opts+=" -d"
+			pwrite_opts+="-V 1 -b 4k"
+		fi
+		testio=`$XFS_IO_PROG -f $opts -c \
+		        "pwrite $pwrite_opts $param 0 4k" $testfile 2>&1`
+		param_checked=1
+		;;
 	"scrub"|"repair")
 		testio=`$XFS_IO_PROG -x -c "$command probe 0" $TEST_DIR 2>&1`
 		echo $testio | grep -q "Inappropriate ioctl" && \
@@ -2097,7 +2109,9 @@ _require_xfs_io_command()
 		$XFS_IO_PROG -c "help $command" | grep -q "^ $param --" || \
 			_notrun "xfs_io $command doesn't support $param"
 	else
-		echo $testio | grep -q "invalid option" && \
+		# xfs_io could result in "command %c not supported" if it was
+		# built on kernels not supporting pwritev2() calls
+		echo $testio | grep -q "\(invalid option\|not supported\)" && \
 			_notrun "xfs_io $command doesn't support $param"
 	fi
 }
