@@ -73,7 +73,8 @@
 /*#define PATH_MAX pathconf("/", _PC_PATH_MAX)*/
 #endif
 
-char	Wlog_Error_String[256];
+#define ERROR_STRING_LEN 1280
+char	Wlog_Error_String[ERROR_STRING_LEN];
 
 #if __STDC__
 static int	wlog_rec_pack(struct wlog_rec *wrec, char *buf, int flag);
@@ -120,7 +121,7 @@ int			mode;
 	umask(omask);
 
 	if (wfile->w_afd == -1) {
-		sprintf(Wlog_Error_String,
+		snprintf(Wlog_Error_String, ERROR_STRING_LEN,
 			"Could not open write_log - open(%s, %#o, %#o) failed:  %s\n",
 			wfile->w_file, oflags, mode, strerror(errno));
 		return -1;
@@ -132,7 +133,7 @@ int			mode;
 
 	oflags = O_RDWR;
 	if ((wfile->w_rfd = open(wfile->w_file, oflags)) == -1) {
-		sprintf(Wlog_Error_String,
+		snprintf(Wlog_Error_String, ERROR_STRING_LEN,
 			"Could not open write log - open(%s, %#o) failed:  %s\n",
 			wfile->w_file, oflags, strerror(errno));
 		close(wfile->w_afd);
