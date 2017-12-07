@@ -794,7 +794,7 @@ extern int Forker_npids;	/* num of forked pid, defined in forker.c */
 			break;
 
 		case 'W':
-			sprintf( TagName, "(%.39s)", optarg );
+			sprintf( TagName, "(%.37s)", optarg );
 			break;
 
 		case 'y':

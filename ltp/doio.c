@@ -3184,7 +3184,7 @@ char	*opts;
 			break;
 
 		case 'N':
-			sprintf( TagName, "(%.39s)", optarg );
+			sprintf( TagName, "(%.37s)", optarg );
 			break;
 
 		case 'n':
