@@ -28,6 +28,37 @@ _require_log_writes()
 	_require_test_program "log-writes/replay-log"
 }
 
+# Starting from v4.15-rc1, DAX support was added to dm-log-writes, but note
+# that it doesn't track the data that we write via the mmap(), so we can't do
+# any data integrity checking. We can only verify that the metadata writes for
+# the page faults happened, e.g. when mmap(2) with MAP_SYNC flag.
+#
+# Introduce a new helper to check if dm-log-writes target supports DAX
+# explicitly. But this is considered as a temporary workaround, we want to move
+# all the DAX check back to _require_log_writes when dm-log-writes gains full
+# DAX support and remove this helper.
+_require_log_writes_dax()
+{
+	[ -z "$LOGWRITES_DEV" -o ! -b "$LOGWRITES_DEV" ] && \
+		_notrun "This test requires a valid \$LOGWRITES_DEV"
+
+	_require_dm_target log-writes
+	_require_test_program "log-writes/replay-log"
+
+	local ret=0
+	_log_writes_init
+	_log_writes_mkfs > /dev/null 2>&1
+	_log_writes_mount -o dax > /dev/null 2>&1
+	# Check options to be sure. XFS ignores dax option
+	# and goes on if dev underneath does not support dax.
+	_fs_options $LOGWRITES_DMDEV | grep -qw "dax"
+	ret=$?
+	_log_writes_cleanup
+	if [ $ret -ne 0 ]; then
+		_notrun "$LOGWRITES_DMDEV $FSTYP does not support -o dax"
+	fi
+}
+
 _log_writes_init()
 {
 	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
@@ -90,5 +121,8 @@ _log_writes_remove()
 _log_writes_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+	# wait for device to be fully settled so that 'dmsetup remove' doesn't
+	# fail due to EBUSY
+	$UDEV_SETTLE_PROG >/dev/null 2>&1
 	_log_writes_remove
 }
