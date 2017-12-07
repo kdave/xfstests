@@ -1,0 +1,75 @@
+#! /bin/bash
+# FS QA Test No. 471
+#
+# write a file with RWF_NOWAIT and it would fail because there are no
+# blocks allocated. Create a file with direct I/O and re-write it
+# using RWF_NOWAIT. I/O should finish within 50 microsecods since
+# block allocations are already performed.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017, SUSE Linux Products.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/populate
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_os Linux
+_require_odirect
+_require_test
+_require_xfs_io_command pwrite -N
+
+# Remove reminiscence of previously run tests
+testdir=$TEST_DIR/$seq
+if [ -e $testdir ]; then
+	rm -Rf $testdir
+fi
+
+mkdir $testdir
+
+# Create a file with pwrite nowait (will fail with EAGAIN)
+$XFS_IO_PROG -f -d -c "pwrite -N -V 1 -b 1M 0 1M" $testdir/f1
+
+# Write the file without nowait
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -W -w -V 1 -b 1M 0 8M" $testdir/f1 | _filter_xfs_io
+
+time_taken=`$XFS_IO_PROG -d -c "pwrite -S 0xbb -N -V 1 -b 1M 2M 1M" $testdir/f1 | awk '/^1/ {print $5}'`
+
+# RWF_NOWAIT should finish within a short period of time so we are choosing
+# a conservative value of 50 ms. Anything longer means it is waiting
+# for something in the kernel which would be a fail.
+if (( $(echo "$time_taken < 0.05" | bc -l) )); then
+	echo "RWF_NOWAIT time is within limits."
+else
+	echo "RWF_NOWAIT took $time_taken seconds"
+fi
+
+$XFS_IO_PROG -c "pread -v 0 8M" $testdir/f1 | _filter_xfs_io_unique
+
+# success, all done
+status=0
+exit
