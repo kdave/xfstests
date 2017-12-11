@@ -44,12 +44,15 @@ _supported_fs ext4
 _supported_os Linux
 
 _require_scratch
-_require_ext4_mkfs_feature "64bit"
 
 rm -f $seqres.full
 
 # Make a small ext4 fs with extents disabled & mount it
-$MKFS_EXT4_PROG -F -O ^extents,^64bit $SCRATCH_DEV 512m >> $seqres.full 2>&1
+features="^extents"
+if grep -q 64bit /etc/mke2fs.conf ; then
+    features="^extents,^64bit"
+fi
+$MKFS_EXT4_PROG -F -O "$features" $SCRATCH_DEV 512m >> $seqres.full 2>&1
 _scratch_mount || _fail "couldn't mount fs"
 
 # Create a small non-extent-based file

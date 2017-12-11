@@ -1812,32 +1812,20 @@ _require_scratch_ext4_crc()
 	_scratch_unmount
 }
 
-# Check the specified feature whether it is available in mkfs.ext4 or not.
-_require_ext4_mkfs_feature()
+# Check whether the specified feature whether it is supported by
+# mkfs.ext4 and the kernel.
+_require_scratch_ext4_feature()
 {
-	local feature=$1
-	local testfile=/tmp/$$.ext4_mkfs
-
-	if [ -z "$feature" ]; then
-                echo "Usage: _require_ext4_mkfs_feature feature"
-                exit 1
-        fi
-
-	touch $testfile
-	local result=$($MKFS_EXT4_PROG -F -O $feature -n $testfile 512m 2>&1)
-	rm -f $testfile
-	echo $result | grep -q "Invalid filesystem option" && \
-		_notrun "mkfs.ext4 doesn't support $feature feature"
-}
-
-# this test requires the ext4 kernel support bigalloc feature
-#
-_require_ext4_bigalloc()
-{
-	$MKFS_EXT4_PROG -F -O bigalloc $SCRATCH_DEV 512m >/dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
-	   || _notrun "Ext4 kernel doesn't support bigalloc feature"
-	_scratch_unmount
+    if [ -z "$1" ]; then
+        echo "Usage: _require_scratch_ext4_feature feature"
+        exit 1
+    fi
+    $MKFS_EXT4_PROG -F $MKFS_OPTIONS -O "$1" \
+		    $SCRATCH_DEV 512m >/dev/null 2>&1 \
+	|| _notrun "mkfs.ext4 doesn't support $1 feature"
+    _scratch_mount >/dev/null 2>&1 \
+	|| _notrun "Kernel doesn't support the ext4 feature(s): $1"
+    _scratch_unmount
 }
 
 # this test requires that external log/realtime devices are not in use
