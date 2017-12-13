@@ -145,8 +145,10 @@ $FSSTRESS_PROG -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t \
 for i in $(seq 1 $LOOPS)
 do
 	# hard link the content of the current directory to the next
-	cp -Rl $SCRATCH_MNT/dir$i $SCRATCH_MNT/dir$((i+1)) 2>&1 | \
-		filter_enospc
+	while ! test -d $SCRATCH_MNT/dir$((i+1)); do
+		cp -Rl $SCRATCH_MNT/dir$i $SCRATCH_MNT/dir$((i+1)) 2>&1 | \
+			filter_enospc
+	done
 
 	# do a random replacement of files in the new directory
 	_rand_replace $SCRATCH_MNT/dir$((i+1)) $COUNT
