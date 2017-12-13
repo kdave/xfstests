@@ -24,6 +24,7 @@
 #include <gdbm-ndbm.h>
 #elif HAVE_GDBM_H
 #include <gdbm.h>
+#include <ndbm.h>
 #elif HAVE_NDBM_H
 #include <ndbm.h>
 #else
