@@ -312,6 +312,17 @@ _create_dumpdir_stress_num()
         status=1
         exit
     fi
+
+    # Remove fsstress commands that aren't supported on all xfs configs so that
+    # we always execute exactly the same sequence of operations no matter how
+    # the filesystem is configured
+    if $FSSTRESS_PROG | grep -q clonerange; then
+        FSSTRESS_AVOID="-f clonerange=0 $FSSTRESS_AVOID"
+    fi
+    if $FSSTRESS_PROG | grep -q deduperange; then
+        FSSTRESS_AVOID="-f deduperange=0 $FSSTRESS_AVOID"
+    fi
+
     echo ""
     echo "-----------------------------------------------"
     echo "fsstress : $_param"
