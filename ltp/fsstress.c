@@ -614,6 +614,9 @@ int main(int argc, char **argv)
 				return 1;
 			}
 #endif
+
+			cleanup_flist();
+			free(freq_table);
 			return 0;
 		}
 	}
@@ -640,6 +643,7 @@ int main(int argc, char **argv)
 		close(fd);
 	}
 
+	free(freq_table);
 	unlink(buf);
 	return 0;
 }
@@ -997,6 +1001,7 @@ doproc(void)
 	}
 errout:
 	chdir("..");
+	free(homedir);
 	if (cleanup) {
 		sprintf(cmd, "rm -rf %s", buf);
 		system(cmd);
