@@ -495,7 +495,7 @@ int main(int argc, char **argv)
 
 	(void)mkdir(dirname, 0777);
 	if (logname && logname[0] != '/') {
-		if (getcwd(rpath, sizeof(rpath)) < 0){
+		if (!getcwd(rpath, sizeof(rpath))){
 			perror("getcwd failed");
 			exit(1);
 		}
@@ -970,6 +970,10 @@ doproc(void)
 	}
 	top_ino = statbuf.st_ino;
 	homedir = getcwd(NULL, 0);
+	if (!homedir) {
+		perror("getcwd failed");
+		_exit(1);
+	}
 	seed += procid;
 	srandom(seed);
 	if (namerand)
