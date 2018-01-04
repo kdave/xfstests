@@ -1,0 +1,74 @@
+#! /bin/bash
+# FS QA Test ext4/030
+#
+# This is a regression test for kernel patch:
+#   ext4: prevent data corruption with journaling + DAX
+# created by Ross Zwisler <ross.zwisler@linux.intel.com>
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2017-2018 Intel Corporation.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_os Linux
+_supported_fs ext4
+_require_scratch_dax
+_require_test_program "t_ext4_dax_journal_corruption"
+_require_command "$CHATTR_PROG" chattr
+
+# real QA test starts here
+_scratch_mkfs > $seqres.full 2>&1
+
+# In order to get our failure condition consistently we need to turn off
+# delayed allocation.  With delayed allocation on this simple test will pass,
+# but we would almost certainly see data corruption down the road as the
+# contents of the journal would conflict with the DAX data.
+_scratch_mount "-o dax,nodelalloc" >> $seqres.full 2>&1
+
+$here/src/t_ext4_dax_journal_corruption $CHATTR_PROG $SCRATCH_MNT/testfile
+
+if [[ $? != 0 && $? != 77 ]]; then
+	echo "Test failed, status $?"
+	exit 1
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
