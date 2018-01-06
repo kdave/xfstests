@@ -3007,6 +3007,18 @@ _require_metadata_journaling()
 		# ext4 might not load a journal
 		_exclude_scratch_mount_option "noload"
 		;;
+	overlay)
+		# metadata journaling check is based on base filesystem configurations
+		# and  because -overlay option saves those configurations to OVL_BASE_*,
+		# adding restore/override the configurations before/after the check.
+		if [ ! -z $OVL_BASE_FSTYP -a $OVL_BASE_FSTYP != "overlay" ]; then
+			_overlay_config_restore
+			_require_metadata_journaling
+			_overlay_config_override
+		else
+			_notrun "No metadata journaling support for legacy overlay setup"
+		fi
+		;;
 	*)
 		# by default we pass; if you need to, add your fs above!
 		;;
