@@ -77,11 +77,14 @@ _load_flakey_table()
 	$DMSETUP_PROG suspend $suspend_opt flakey-test
 	[ $? -ne 0 ] && _fatal "failed to suspend flakey-test"
 
-	$DMSETUP_PROG load flakey-test --table "$table"
+	# There may be multiple dm targets in the table, and these dm targets
+	# will be joined by the newline ("\n"). Option --table can not cope with
+	# the multiple-targets case, so get them by reading from standard input.
+	echo -e "$table" | $DMSETUP_PROG load flakey-test
 	[ $? -ne 0 ] && _fatal "failed to load table into flakey-test"
 
 	$DMSETUP_PROG resume flakey-test
-	[ $? -ne 0 ] && _fatal  "failed to resumeflakey-test"
+	[ $? -ne 0 ] && _fatal  "failed to resume flakey-test"
 }
 
 # Silently drop all writes and unmount/remount to simulate a crash/power
