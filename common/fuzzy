@@ -126,39 +126,6 @@ _scratch_xfs_list_metadata_fields() {
 	_scratch_xfs_db "${cmds[@]}" -c print | __filter_xfs_db_print_fields "${filter}"
 }
 
-# Get a metadata field
-# The first arg is the field name
-# The rest of the arguments are xfs_db commands to find the metadata.
-_scratch_xfs_get_metadata_field() {
-	key="$1"
-	shift
-
-	grep_key="$(echo "${key}" | tr '[]()' '....')"
-	local cmds=()
-	for arg in "$@"; do
-		cmds+=("-c" "${arg}")
-	done
-	_scratch_xfs_db "${cmds[@]}" -c "print ${key}" | grep "^${grep_key}" | \
-		sed -e 's/^.* = //g'
-}
-
-# Set a metadata field
-# The first arg is the field name
-# The second arg is the new value
-# The rest of the arguments are xfs_db commands to find the metadata.
-_scratch_xfs_set_metadata_field() {
-	key="$1"
-	value="$2"
-	shift; shift
-
-	local cmds=()
-	for arg in "$@"; do
-		cmds+=("-c" "${arg}")
-	done
-	_scratch_xfs_db -x "${cmds[@]}" -c "write -d ${key} ${value}"
-	echo
-}
-
 # Fuzz a metadata field
 # The first arg is the field name
 # The second arg is the xfs_db fuzz verb

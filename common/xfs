@@ -624,3 +624,50 @@ _require_no_xfs_debug()
 		_notrun "Require XFS built without CONFIG_XFS_DEBUG"
 	fi
 }
+
+# Get a metadata field
+# The first arg is the field name
+# The rest of the arguments are xfs_db commands to find the metadata.
+_scratch_xfs_get_metadata_field()
+{
+	local key="$1"
+	shift
+
+	local grep_key="$(echo "${key}" | tr '[]()' '....')"
+	local cmds=()
+	local arg
+	for arg in "$@"; do
+		cmds+=("-c" "${arg}")
+	done
+	_scratch_xfs_db "${cmds[@]}" -c "print ${key}" | grep "^${grep_key}" | \
+		sed -e 's/^.* = //g'
+}
+
+# Set a metadata field
+# The first arg is the field name
+# The second arg is the new value
+# The rest of the arguments are xfs_db commands to find the metadata.
+_scratch_xfs_set_metadata_field()
+{
+	local key="$1"
+	local value="$2"
+	shift; shift
+
+	local cmds=()
+	local arg
+	for arg in "$@"; do
+		cmds+=("-c" "${arg}")
+	done
+	_scratch_xfs_db -x "${cmds[@]}" -c "write -d ${key} -- ${value}"
+	echo
+}
+
+_scratch_xfs_get_sb_field()
+{
+	_scratch_xfs_get_metadata_field "$1" "sb 0"
+}
+
+_scratch_xfs_set_sb_field()
+{
+	_scratch_xfs_set_metadata_field "$1" "$2" "sb 0"
+}

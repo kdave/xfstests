@@ -49,11 +49,6 @@ _supported_os Linux
 
 _require_scratch
 
-get_features()
-{
-	_scratch_xfs_db -x  -c "sb" -c "print $1" | awk '// {print $3}'
-}
-
 # clear any mkfs options so that we can directly specify the options we need to
 # be able to test the features bitmask behaviour correctly.
 MKFS_OPTIONS=
@@ -63,8 +58,8 @@ _scratch_mkfs_xfs -m crc=0 -l lazy-count=1 >/dev/null 2>&1
 # gives us the values the resultant tests should be the same as for testing at
 # the end of the test. We don't hard code feature values, because that makes the
 # test break every time we change mkfs feature defaults.
-f2=`get_features features2`
-bf2=`get_features bad_features2`
+f2=`_scratch_xfs_get_sb_field features2`
+bf2=`_scratch_xfs_get_sb_field bad_features2`
 
 #
 # Now clear the normal flags
@@ -74,7 +69,7 @@ _scratch_xfs_db -x  -c 'sb' -c 'write features2 0'
 
 _scratch_mount
 _scratch_unmount
-rwf2=`get_features features2`
+rwf2=`_scratch_xfs_get_sb_field features2`
 
 #
 # Clear the normal flags again for the second rount.
@@ -88,7 +83,7 @@ _scratch_xfs_db -x  -c 'sb' -c 'write features2 0'
 _scratch_mount -o ro
 _scratch_mount -o remount,rw
 _scratch_unmount
-rof2=`get_features features2`
+rof2=`_scratch_xfs_get_sb_field features2`
 
 [ "$f2" != "$bf2" ] && echo "mkfs: features2 $f2 != bad_features2 $bf2"
 [ "$f2" != "$rwf2" ] && echo "mount rw: old features2 $f2 != new features2 $rwf2"
