@@ -78,7 +78,8 @@ _scratch_pool_mkfs $mkfs_opts >>$seqres.full 2>&1
 # chunk
 _scratch_mount -o nospace_cache
 
-$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" | _filter_xfs_io
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" |\
+	_filter_xfs_io_offset
 
 # step 2, corrupt the first 64k of one copy (on SCRATCH_DEV which is the first
 # one in $SCRATCH_DEV_POOL
@@ -89,7 +90,8 @@ logical_in_btrfs=`${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar | _filter_filefrag | c
 physical_on_scratch=`get_physical ${logical_in_btrfs}`
 
 _scratch_unmount
-$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical_on_scratch 64K" $SCRATCH_DEV | _filter_xfs_io
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical_on_scratch 64K" $SCRATCH_DEV |\
+	_filter_xfs_io_offset
 
 _scratch_mount
 
@@ -110,7 +112,8 @@ done
 _scratch_unmount
 
 # check if the repair works
-$XFS_IO_PROG -c "pread -v -b 512 $physical_on_scratch 512" $SCRATCH_DEV | _filter_xfs_io
+$XFS_IO_PROG -c "pread -v -b 512 $physical_on_scratch 512" $SCRATCH_DEV |\
+	_filter_xfs_io_offset
 
 _scratch_dev_pool_put
 # success, all done

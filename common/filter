@@ -226,6 +226,15 @@ _filter_xfs_io()
     sed -e "s/[0-9/.]* [GMKiBbytes]*, [0-9]* ops\; [0-9/:. sec]* ([infa0-9/.]* [EPGMKiBbytes]*\/sec and [infa0-9/.]* ops\/sec)/XXX Bytes, X ops\; XX:XX:XX.X (XXX YYY\/sec and XXX ops\/sec)/"
 }
 
+# Also filter out the offset part of xfs_io output
+# Some test cases may be affected by underlaying extent/chunk layout change,
+# so wipe out this part to avoid golden output difference
+_filter_xfs_io_offset()
+{
+    # filter out " at offset XXX" and offset of "pread -v"
+    _filter_xfs_io | sed -e "s/ at offset [0-9]*$//" -e "s/^[0-9a-f]\+:/XXXXXXXX:/"
+}
+
 # stderr filter for xfs_io to handle change of error output format (e.g.
 # pwrite64 -> pwrite).
 _filter_xfs_io_error()
@@ -276,7 +285,6 @@ _filter_xfs_io_pages_modified()
 
 	_filter_xfs_io_units_modified "Page" $PAGE_SIZE
 }
-
 
 _filter_test_dir()
 {
