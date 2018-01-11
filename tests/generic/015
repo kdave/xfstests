@@ -53,7 +53,11 @@ _supported_os Linux
 _require_scratch
 _require_no_large_scratch_dev
 
-_scratch_mkfs_sized `expr 50 \* 1024 \* 1024` >/dev/null 2>&1 \
+# With filesystems less than 100mb btrfs is created in mixed mode
+# which can lead to slight accounting errors of 1mb. Having the
+# fs be at least 101 mb ensures those errors are within the error
+# tolerance of 1%
+_scratch_mkfs_sized `expr 101 \* 1024 \* 1024` >/dev/null 2>&1 \
     || _fail "mkfs failed"
 _scratch_mount || _fail "mount failed"
 out=$SCRATCH_MNT/fillup.$$
