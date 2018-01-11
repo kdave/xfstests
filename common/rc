@@ -166,6 +166,8 @@ case "$FSTYP" in
 	 ;;
     cifs)
 	 ;;
+    9p)
+	 ;;
     ceph)
 	 ;;
     glusterfs)
@@ -595,6 +597,9 @@ _test_mkfs()
     cifs)
 	# do nothing for cifs
 	;;
+    9p)
+	# do nothing for 9p
+	;;
     ceph)
 	# do nothing for ceph
 	;;
@@ -628,6 +633,9 @@ _mkfs_dev()
     case $FSTYP in
     nfs*)
 	# do nothing for nfs
+	;;
+    9p)
+	# do nothing for 9p
 	;;
     overlay)
 	# do nothing for overlay
@@ -693,7 +701,7 @@ _scratch_mkfs()
 	local mkfs_status
 
 	case $FSTYP in
-	nfs*|cifs|ceph|overlay|glusterfs|pvfs2)
+	nfs*|cifs|ceph|overlay|glusterfs|pvfs2|9p)
 		# unable to re-create this fstyp, just remove all files in
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
@@ -1465,6 +1473,14 @@ _require_scratch_nocheck()
 			_notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
+	9p)
+		if [ -z "$SCRATCH_DEV" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
 	nfs*|ceph)
 		echo $SCRATCH_DEV | grep -q ":/" > /dev/null 2>&1
 		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
@@ -1565,6 +1581,14 @@ _require_test()
 	glusterfs)
 		echo $TEST_DEV | egrep -q ":/?" > /dev/null 2>&1
 		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DEV"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
+	9p)
+		if [ -z "$TEST_DEV" ]; then
 			_notrun "this test requires a valid \$TEST_DEV"
 		fi
 		if [ ! -d "$TEST_DIR" ]; then
@@ -2532,6 +2556,9 @@ _check_test_fs()
     cifs)
 	# no way to check consistency for cifs
 	;;
+    9p)
+	# no way to check consistency for 9p
+	;;
     ceph)
 	# no way to check consistency for CephFS
 	;;
@@ -2586,6 +2613,9 @@ _check_scratch_fs()
 	;;
     cifs)
 	# Don't know how to check a CIFS filesystem, yet.
+	;;
+    9p)
+	# no way to check consistency for 9p
 	;;
     ceph)
 	# no way to check consistency for CephFS
