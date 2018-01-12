@@ -200,8 +200,14 @@ _mount()
 _get_mount()
 {
 	local mnt_point=${!#}
+	local mnt_dev=${@:(-2):1}
+	local scratch_opts=""
+	if [ "$mnt_dev" = "$SCRATCH_DEV" ]; then
+		_scratch_options mount
+		scratch_opts="$SCRATCH_OPTIONS"
+	fi
 
-	_mount $*
+	_mount $scratch_opts $*
 	if [ $? -eq 0 ]; then
 		MOUNTED_POINT_STACK="$mnt_point $MOUNTED_POINT_STACK"
 	else
@@ -232,7 +238,7 @@ _clear_mount_stack()
 
 _scratch_options()
 {
-    type=$1
+    local type=$1
     SCRATCH_OPTIONS=""
 
     if [ "$FSTYP" != "xfs" ]; then
@@ -1759,6 +1765,14 @@ _require_realtime()
 	_notrun "External volumes not in use, skipped this test"
     [ "$SCRATCH_RTDEV" = "" ] && \
 	_notrun "Realtime device required, skipped this test"
+}
+
+# This test requires that a realtime subvolume is not in use
+#
+_require_no_realtime()
+{
+	[ "$USE_EXTERNAL" = "yes" ] && [ -n "$SCRATCH_RTDEV" ] && \
+		_notrun "Test not compatible with realtime subvolumes, skipped this test"
 }
 
 # this test requires that a specified command (executable) exists
