@@ -56,7 +56,10 @@ _cleanup()
 _xfs_repair_noscan()
 {
 	# invoke repair directly so we can kill the process if need be
-	$XFS_REPAIR_PROG $SCRATCH_DEV 2>&1 | tee -a $seqres.full > $tmp.repair &
+	[ "$USE_EXTERNAL" = yes ] && [ -n "$SCRATCH_RTDEV" ] && \
+		rt_repair_opts="-r $SCRATCH_RTDEV"
+	$XFS_REPAIR_PROG $rt_repair_opts $SCRATCH_DEV 2>&1 |
+		tee -a $seqres.full > $tmp.repair &
 	repair_pid=$!
 
 	# monitor progress for as long as it is running
