@@ -33,6 +33,16 @@ BC=$(which bc 2> /dev/null) || BC=
 VALID_TEST_ID="[0-9]\{3\}"
 VALID_TEST_NAME="$VALID_TEST_ID-\?[[:alnum:]-]*"
 
+# Some tests are not relevant or functional when testing XFS realtime
+# subvolumes along with the rtinherit=1 mkfs option.  In these cases,
+# this test will opt-out of the test.
+_require_no_rtinherit()
+{
+	[ "$FSTYP" = "xfs" ] && echo "$MKFS_OPTIONS" |
+		egrep -q "rtinherit([^=]|=1|$)" && \
+		_notrun "rtinherit mkfs option is not supported by this test."
+}
+
 _require_math()
 {
 	if [ -z "$BC" ]; then
