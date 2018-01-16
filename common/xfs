@@ -658,8 +658,11 @@ _scratch_xfs_set_metadata_field()
 	for arg in "$@"; do
 		cmds+=("-c" "${arg}")
 	done
-	_scratch_xfs_db -x "${cmds[@]}" -c "write -d ${key} -- ${value}"
-	echo
+
+	local wr_cmd="write"
+	_scratch_xfs_db -x -c "help write" | egrep -q "(-c|-d)" && value="-- ${value}"
+	_scratch_xfs_db -x -c "help write" | egrep -q "(-d)" && wr_cmd="${wr_cmd} -d"
+	_scratch_xfs_db -x "${cmds[@]}" -c "${wr_cmd} ${key} ${value}"
 }
 
 _scratch_xfs_get_sb_field()
