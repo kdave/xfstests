@@ -625,6 +625,28 @@ _require_no_xfs_debug()
 	fi
 }
 
+# Require that assertions will not crash the system.
+#
+# Assertions would always crash the system if XFS assert fatal was enabled
+# (CONFIG_XFS_ASSERT_FATAL=y).  If a test is designed to trigger an assertion,
+# skip the test on a CONFIG_XFS_ASSERT_FATAL built XFS by default.  Note:
+# CONFIG_XFS_ASSERT_FATAL can be disabled by setting bug_on_assert to zero if
+# we want test to run.
+_require_no_xfs_bug_on_assert()
+{
+	if [ -f /sys/fs/xfs/debug/bug_on_assert ]; then
+		grep -q "1" /sys/fs/xfs/debug/bug_on_assert && \
+		   _notrun "test requires XFS bug_on_assert to be off, turn it off to run the test"
+	else
+		# Note: Prior to the creation of CONFIG_XFS_ASSERT_FATAL (and
+		# the sysfs knob bug_on_assert), assertions would always crash
+		# the system if XFS debug was enabled (CONFIG_XFS_DEBUG=y).  If
+		# a test is designed to trigger an assertion and the test
+		# designer does not want to hang fstests, skip the test.
+		_require_no_xfs_debug
+	fi
+}
+
 # Get a metadata field
 # The first arg is the field name
 # The rest of the arguments are xfs_db commands to find the metadata.
