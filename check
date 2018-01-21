@@ -487,6 +487,18 @@ _check_filesystems()
 	fi
 }
 
+_expunge_test()
+{
+	local TEST_ID="$1"
+	if [ -s $tmp.xlist ]; then
+		if grep -q $TEST_ID $tmp.xlist; then
+			echo "       [expunged]"
+			return 1
+		fi
+	fi
+	return 0
+}
+
 _prepare_test_list
 
 if $OPTIONS_HAVE_SECTIONS; then
@@ -674,11 +686,9 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		rm -f $seqres.out.bad
 
 		# check if we really should run it
-		if [ -s $tmp.xlist ]; then
-			if grep $seqnum $tmp.xlist > /dev/null 2>&1 ; then
-				echo "       [expunged]"
-				continue
-			fi
+		_expunge_test $seqnum
+		if [ $? -eq 1 ]; then
+			continue
 		fi
 
 		# slashes now in names, sed barfs on them so use grep
