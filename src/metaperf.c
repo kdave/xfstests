@@ -25,6 +25,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <linux/param.h>
 
 typedef	void	*(*fpi_t)(void);
 typedef	void	(*fpt_t)(int, void *);
