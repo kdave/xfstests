@@ -119,6 +119,7 @@
 
 #ifdef STDC_HEADERS
 #include <signal.h>
+#include <stdint.h>
 #endif
 
 #ifdef HAVE_STRINGS_H

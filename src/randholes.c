@@ -21,7 +21,7 @@
 #include "global.h"
 
 #define	power_of_2(x)	((x) && !((x) & ((x) - 1)))
-#define	DEFAULT_FILESIZE	((__uint64_t) (256 * 1024 * 1024))
+#define	DEFAULT_FILESIZE	((uint64_t) (256 * 1024 * 1024))
 #define	DEFAULT_BLOCKSIZE	512
 
 #define	SETBIT(ARRAY, N)	((ARRAY)[(N)/8] |= (1 << ((N)%8)))
@@ -30,8 +30,8 @@
 /* Bit-vector array showing which blocks have been written */
 static unsigned char	*valid;
 
-static __uint64_t filesize;
-static __uint64_t fileoffset;
+static uint64_t filesize;
+static uint64_t fileoffset;
 
 static unsigned int blocksize;
 static int count;
@@ -72,7 +72,7 @@ usage(char *progname)
 	fprintf(stderr, "\tdefault count is %d block-sized writes\n",
 		(int) (DEFAULT_FILESIZE / DEFAULT_BLOCKSIZE));
 	fprintf(stderr, "\tdefault write_offset is %" PRIu64 " bytes\n",
-		(__uint64_t) 0);
+		(uint64_t) 0);
 	exit(1);
 }
 
@@ -174,7 +174,7 @@ findblock(void)
 }
 
 static void
-dumpblock(int *buffer, __uint64_t offset, int blocksize)
+dumpblock(int *buffer, uint64_t offset, int blocksize)
 {
 	int	i;
 
@@ -190,7 +190,7 @@ dumpblock(int *buffer, __uint64_t offset, int blocksize)
 static void
 writeblks(char *fname, int fd, size_t alignment)
 {
-	__uint64_t offset;
+	uint64_t offset;
 	char *buffer = NULL;
 	int block;
 	int ret;
@@ -226,7 +226,7 @@ writeblks(char *fname, int fd, size_t alignment)
 		    exit(1);
 		}
 
-		offset = (__uint64_t) block * blocksize;
+		offset = (uint64_t) block * blocksize;
 		if (alloconly) {
                         if (test) continue;
                         
@@ -252,8 +252,8 @@ writeblks(char *fname, int fd, size_t alignment)
 			 * into it.  We'll verify this when we read
 			 * it back in again.
 			 */
-			*(__uint64_t *) buffer = fileoffset + offset;
-			*(__uint64_t *) (buffer + 256) = fileoffset + offset;
+			*(uint64_t *) buffer = fileoffset + offset;
+			*(uint64_t *) (buffer + 256) = fileoffset + offset;
 
 		        if (write(fd, buffer, blocksize) < blocksize) {
 			        perror("write");
@@ -273,7 +273,7 @@ writeblks(char *fname, int fd, size_t alignment)
 static int
 readblks(int fd, size_t alignment)
 {
-	__uint64_t offset;
+	uint64_t offset;
 	char *buffer, *tmp;
 	unsigned int xfer, block, i;
         int err=0;
@@ -305,9 +305,9 @@ readblks(int fd, size_t alignment)
 		}
 		tmp = buffer;
 		for (i = 0; i < READ_XFER; i++) {
-			__uint64_t want;
-			__uint64_t first;
-			__uint64_t second;
+			uint64_t want;
+			uint64_t first;
+			uint64_t second;
 
 			if (verbose && ((block % 100) == 0)) {
 				printf("+");
@@ -315,8 +315,8 @@ readblks(int fd, size_t alignment)
 			}
 
 			want = BITVAL(valid, block) ? offset : 0;
-			first = *(__uint64_t *) tmp;
-			second = *(__uint64_t *) (tmp + 256);
+			first = *(uint64_t *) tmp;
+			second = *(uint64_t *) (tmp + 256);
 			if (first != want || second != want) {
 				printf("mismatched data at offset=0x%" PRIx64
 					", expected 0x%" PRIx64

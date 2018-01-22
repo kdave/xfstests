@@ -87,7 +87,7 @@ int check_big_ID(char *filename)
 	}
 
 	/* 98789 is greater than 2^16 (65536) */
-	if ((__uint32_t)sbuf.st_uid == 98789 || (__uint32_t)sbuf.st_gid == 98789)
+	if ((uint32_t)sbuf.st_uid == 98789 || (uint32_t)sbuf.st_gid == 98789)
 		return(0);
 	if (verbose)
 		fprintf(stderr, "lstat64 on %s gave uid=%d, gid=%d\n",

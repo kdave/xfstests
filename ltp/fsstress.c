@@ -1811,7 +1811,7 @@ allocsp_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	struct xfs_flock64	fl;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -1843,7 +1843,7 @@ allocsp_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	fl.l_whence = SEEK_SET;
@@ -1862,14 +1862,14 @@ allocsp_f(int opno, long r)
 void
 do_aio_rw(int opno, long r, int flags)
 {
-	__int64_t	align;
+	int64_t		align;
 	char		*buf;
 	struct dioattr	diob;
 	int		e;
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -1926,8 +1926,8 @@ do_aio_rw(int opno, long r, int flags)
 	dio_env = getenv("XFS_DIO_MIN");
 	if (dio_env)
 		diob.d_mem = diob.d_miniosz = atoi(dio_env);
-	align = (__int64_t)diob.d_miniosz;
-	lr = ((__int64_t)random() << 32) + random();
+	align = (int64_t)diob.d_miniosz;
+	lr = ((int64_t)random() << 32) + random();
 	len = (random() % FILELEN_MAX) + 1;
 	len -= (len % align);
 	if (len <= 0)
@@ -2102,7 +2102,7 @@ bulkstat_f(int opno, long r)
 	__u64		last;
 	int		nent;
 	xfs_bstat_t	*t;
-	__int64_t	total;
+	int64_t		total;
         xfs_fsop_bulkreq_t bsr;
 
 	last = 0;
@@ -2293,7 +2293,7 @@ clonerange_f(
 	if (len > stat1.st_size)
 		len = stat1.st_size;
 
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	if (stat1.st_size == len)
 		off1 = 0;
 	else
@@ -2306,7 +2306,7 @@ clonerange_f(
 	 * until we find one that doesn't overlap the source range.
 	 */
 	do {
-		lr = ((__int64_t)random() << 32) + random();
+		lr = ((int64_t)random() << 32) + random();
 		off2 = (off64_t)(lr % MIN(stat2.st_size + (1024 * 1024), MAXFSIZE));
 		off2 %= maxfsize;
 		off2 &= ~(stat2.st_blksize - 1);
@@ -2497,7 +2497,7 @@ deduperange_f(
 		len = stat[0].st_size / 2;
 
 	/* Calculate offsets */
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	if (stat[0].st_size == len)
 		off[0] = 0;
 	else
@@ -2513,7 +2513,7 @@ deduperange_f(
 		int	tries = 0;
 
 		do {
-			lr = ((__int64_t)random() << 32) + random();
+			lr = ((int64_t)random() << 32) + random();
 			if (stat[i].st_size <= len)
 				off[i] = 0;
 			else
@@ -2702,14 +2702,14 @@ creat_f(int opno, long r)
 void
 dread_f(int opno, long r)
 {
-	__int64_t	align;
+	int64_t		align;
 	char		*buf;
 	struct dioattr	diob;
 	int		e;
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -2764,8 +2764,8 @@ dread_f(int opno, long r)
 	if (dio_env)
 		diob.d_mem = diob.d_miniosz = atoi(dio_env);
 
-	align = (__int64_t)diob.d_miniosz;
-	lr = ((__int64_t)random() << 32) + random();
+	align = (int64_t)diob.d_miniosz;
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
 	off -= (off % align);
 	lseek64(fd, off, SEEK_SET);
@@ -2788,14 +2788,14 @@ dread_f(int opno, long r)
 void
 dwrite_f(int opno, long r)
 {
-	__int64_t	align;
+	int64_t		align;
 	char		*buf;
 	struct dioattr	diob;
 	int		e;
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -2841,8 +2841,8 @@ dwrite_f(int opno, long r)
 	if (dio_env)
 		diob.d_mem = diob.d_miniosz = atoi(dio_env);
 
-	align = (__int64_t)diob.d_miniosz;
-	lr = ((__int64_t)random() << 32) + random();
+	align = (int64_t)diob.d_miniosz;
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off -= (off % align);
 	lseek64(fd, off, SEEK_SET);
@@ -2888,7 +2888,7 @@ do_fallocate(int opno, long r, int mode)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	off64_t		len;
 	struct stat64	stb;
@@ -2920,7 +2920,7 @@ do_fallocate(int opno, long r, int mode)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	len = (off64_t)(random() % (1024 * 1024));
@@ -3003,7 +3003,7 @@ fiemap_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	int		fd;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3047,14 +3047,14 @@ fiemap_f(int opno, long r)
 		close(fd);
 		return;
 	}
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	fiemap->fm_flags = random() & (FIEMAP_FLAGS_COMPAT | 0x10000);
 	fiemap->fm_extent_count = blocks_to_map;
 	fiemap->fm_mapped_extents = random() & 0xffff;
 	fiemap->fm_start = off;
-	fiemap->fm_length = ((__int64_t)random() << 32) + random();
+	fiemap->fm_length = ((int64_t)random() << 32) + random();
 
 	e = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 	if (v)
@@ -3075,7 +3075,7 @@ freesp_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	struct xfs_flock64	fl;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3107,7 +3107,7 @@ freesp_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	fl.l_whence = SEEK_SET;
@@ -3350,7 +3350,7 @@ do_mmap(int opno, long r, int prot)
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	int		flags;
 	struct stat64	stb;
@@ -3393,7 +3393,7 @@ do_mmap(int opno, long r, int prot)
 		return;
 	}
 
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
 	off &= (off64_t)(~(sysconf(_SC_PAGE_SIZE) - 1));
 	len = (size_t)(random() % MIN(stb.st_size - off, FILELEN_MAX)) + 1;
@@ -3495,7 +3495,7 @@ read_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3535,7 +3535,7 @@ read_f(int opno, long r)
 		close(fd);
 		return;
 	}
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
 	lseek64(fd, off, SEEK_SET);
 	len = (random() % FILELEN_MAX) + 1;
@@ -3579,7 +3579,7 @@ readv_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3624,7 +3624,7 @@ readv_f(int opno, long r)
 		close(fd);
 		return;
 	}
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
 	lseek64(fd, off, SEEK_SET);
 	len = (random() % FILELEN_MAX) + 1;
@@ -3726,7 +3726,7 @@ resvsp_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	struct xfs_flock64	fl;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3758,7 +3758,7 @@ resvsp_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	fl.l_whence = SEEK_SET;
@@ -3910,7 +3910,7 @@ truncate_f(int opno, long r)
 {
 	int		e;
 	pathname_t	f;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -3933,7 +3933,7 @@ truncate_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	e = truncate64_path(&f, off) < 0 ? errno : 0;
@@ -3980,7 +3980,7 @@ unresvsp_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	struct xfs_flock64	fl;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -4012,7 +4012,7 @@ unresvsp_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	fl.l_whence = SEEK_SET;
@@ -4035,7 +4035,7 @@ write_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -4067,7 +4067,7 @@ write_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	lseek64(fd, off, SEEK_SET);
@@ -4091,7 +4091,7 @@ writev_f(int opno, long r)
 	pathname_t	f;
 	int		fd;
 	size_t		len;
-	__int64_t	lr;
+	int64_t		lr;
 	off64_t		off;
 	struct stat64	stb;
 	int		v;
@@ -4128,7 +4128,7 @@ writev_f(int opno, long r)
 		return;
 	}
 	inode_info(st, sizeof(st), &stb, v);
-	lr = ((__int64_t)random() << 32) + random();
+	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
 	off %= maxfsize;
 	lseek64(fd, off, SEEK_SET);

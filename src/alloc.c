@@ -171,7 +171,7 @@ bozo!
 	int		tflag = 0;
         int             nflag = 0;
 	int		unlinkit = 0;
-	__int64_t	v;
+	int64_t		v;
 
 	while ((c = getopt(argc, argv, "b:d:f:rtn")) != -1) {
 		switch (c) {

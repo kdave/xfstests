@@ -23,15 +23,15 @@
 #include "global.h"
 
 char *progname;
-__uint64_t num_holes = 1000;
-__uint64_t curr_holes;
+uint64_t num_holes = 1000;
+uint64_t curr_holes;
 int verbose_opt = 0;
 char *filename;
 int status_num = 100;
 int wsync;
 int preserve;
 unsigned int blocksize;
-__uint64_t fileoffset;
+uint64_t fileoffset;
 
 #define JUMP_SIZE (128 * 1024)
 #define NUMHOLES_TO_SIZE(i) (i * JUMP_SIZE)
@@ -51,8 +51,8 @@ main(int argc, char *argv[])
 	int c;
 	int fd;
 	int oflags;
-	__uint64_t i;
-	__uint64_t offset;
+	uint64_t i;
+	uint64_t offset;
 	int blocksize = 512;
 	unsigned char *buffer = NULL;
 	struct stat stat;

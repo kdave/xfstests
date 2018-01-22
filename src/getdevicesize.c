@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
 
@@ -33,7 +34,7 @@
 
 int main(int argc, char **argv)
 {
-	__uint64_t	size;
+	uint64_t	size;
 	long long	sz = -1;
 	int		error, fd;
 

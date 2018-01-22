@@ -119,9 +119,9 @@ loggen_unmount(int count)
     xlog_op_header_t        *op;
     /* the data section must be 32 bit size aligned */
     struct {
-        __uint16_t magic;
-        __uint16_t pad1;
-        __uint32_t pad2; /* may as well make it 64 bits */
+        uint16_t magic;
+        uint16_t pad1;
+        uint32_t pad2; /* may as well make it 64 bits */
     } magic = { XLOG_UNMOUNT_TYPE, 0, 0 };
     
     if (!count) count=1;
