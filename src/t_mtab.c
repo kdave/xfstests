@@ -34,7 +34,7 @@ static int signals_have_been_setup = 0;
 /* Ensure that the lock is released if we are interrupted.  */
 static void
 handler (int sig) {
-    fprintf(stderr, "%s\n", sys_siglist[sig]);
+    fprintf(stderr, "%s\n", strsignal(sig));
     exit(1);
 }
 
