@@ -362,7 +362,7 @@ char	**argv;
 		case SIGTSTP:
 		case SIGSTOP:
 		case SIGCONT:
-		case SIGCLD:
+		case SIGCHLD:
 		case SIGBUS:
 		case SIGSEGV:
 		case SIGQUIT:

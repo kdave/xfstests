@@ -1389,7 +1389,7 @@ set_sig()
 #ifdef SIGRESTART
 	        case SIGRESTART:
 #endif /* SIGRESTART */
-                case SIGCLD:
+                case SIGCHLD:
                     break;
 
                 default:
