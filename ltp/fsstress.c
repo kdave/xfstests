@@ -19,6 +19,7 @@
 #include <linux/fs.h>
 #include <setjmp.h>
 #include <sys/uio.h>
+#include <stddef.h>
 #include "global.h"
 
 #ifdef HAVE_ATTR_XATTR_H
