@@ -22,7 +22,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/mman.h>
-#include <sys/signal.h>
+#include <signal.h>
 #include <sys/stat.h>
 
 
