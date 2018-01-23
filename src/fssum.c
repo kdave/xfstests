@@ -40,6 +40,7 @@
 #include <netinet/in.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <endian.h>
 
 #define CS_SIZE 16
 #define CHUNKS	128
@@ -48,12 +49,6 @@
 #ifndef SEEK_DATA
 #define SEEK_DATA 3
 #define SEEK_HOLE 4
-#endif
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define htonll(x)     __bswap_64 (x)
-#else
-#define htonll(x)     (x)
 #endif
 #endif
 
@@ -216,7 +211,7 @@ sum_add_sum(sum_t *dst, sum_t *src)
 void
 sum_add_u64(sum_t *dst, uint64_t val)
 {
-	uint64_t v = htonll(val);
+	uint64_t v = htobe64(val);
 	sum_add(dst, &v, sizeof(v));
 }
 
