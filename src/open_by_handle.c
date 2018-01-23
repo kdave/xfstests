@@ -412,7 +412,7 @@ int main(int argc, char **argv)
 			if (!nlink) {
 				printf("open_by_handle(%s) opened an unlinked dir!\n", dname);
 				return EXIT_FAILURE;
-			} else {
+			} else if (rd) {
 				/*
 				 * Sanity check dir fd - expect to access orig file IFF
 				 * it was not unlinked nor renamed.
