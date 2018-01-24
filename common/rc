@@ -3438,6 +3438,66 @@ _check_dmesg()
 	fi
 }
 
+# capture the kmemleak report
+_capture_kmemleak()
+{
+	local _kern_knob="${DEBUGFS_MNT}/kmemleak"
+	local _leak_file="$1"
+
+	# Tell the kernel to scan for memory leaks.  Apparently the write
+	# returns before the scan is complete, so do it twice in the hopes
+	# that twice is enough to capture all the leaks.
+	echo "scan" > "${_kern_knob}"
+	cat "${_kern_knob}" > /dev/null
+	echo "scan" > "${_kern_knob}"
+	cat "${_kern_knob}" > "${_leak_file}.tmp"
+	if [ -s "${_leak_file}.tmp" ]; then
+		cat > "${_leak_file}" << ENDL
+EXPERIMENTAL kmemleak reported some memory leaks!  Due to the way kmemleak
+works, the leak might be from an earlier test, or something totally unrelated.
+ENDL
+		cat "${_leak_file}.tmp" >> "${_leak_file}"
+		rm -rf "${_leak_file}.tmp"
+	fi
+	echo "clear" > "${_kern_knob}"
+}
+
+# set up kmemleak
+_init_kmemleak()
+{
+	local _kern_knob="${DEBUGFS_MNT}/kmemleak"
+
+	if [ ! -w "${_kern_knob}" ]; then
+		return 0
+	fi
+
+	# Disable the automatic scan so that we can control it completely,
+	# then dump all the leaks recorded so far.
+	echo "scan=off" > "${_kern_knob}"
+	_capture_kmemleak /dev/null
+}
+
+# check kmemleak log
+_check_kmemleak()
+{
+	local _kern_knob="${DEBUGFS_MNT}/kmemleak"
+	local _leak_file="${seqres}.kmemleak"
+
+	if [ ! -w "${_kern_knob}" ]; then
+		return 0
+	fi
+
+	# Capture and report any leaks
+	_capture_kmemleak "${_leak_file}"
+	if [ -s "${_leak_file}" ]; then
+		_dump_err "_check_kmemleak: something found in kmemleak (see ${_leak_file})"
+		return 1
+	else
+		rm -f "${_leak_file}"
+		return 0
+	fi
+}
+
 # don't check dmesg log after test
 _disable_dmesg_check()
 {
