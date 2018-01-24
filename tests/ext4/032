@@ -1,0 +1,170 @@
+#! /bin/bash
+# FS QA Test ext4/032
+#
+# Ext4 online resize tests of small and crucial resizes with bigalloc
+# feature.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Google, Inc.  All Rights Reserved.
+#
+# Author: Harshad Shirwadkar <harshads@google.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,	 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+BLK_SIZ=4096
+CLUSTER_SIZ=4096
+
+IMG_FILE=$SCRATCH_DIR/$seq.fs
+IMG_MNT=$SCRATCH_DIR/$seq.mnt
+
+## Num clusters to blocks.
+c2b()
+{
+	local clusters=$1
+	echo $(($clusters * $CLUSTER_SIZ / $BLK_SIZ))
+}
+
+ext4_online_resize()
+{
+	## sizes are in number of blocks.
+	local original_size=$1
+	local final_size=$2
+	local check_if_supported=${3:-0}
+
+	## Start with a clean image file.
+	echo "" > ${IMG_FILE}
+	echo "+++ truncate image file to $final_size" | \
+		tee -a $seqres.full
+	$XFS_IO_PROG -f -c "truncate $(($final_size * $BLK_SIZ))" ${IMG_FILE}
+	LOOP_DEVICE=`_create_loop_device $IMG_FILE`
+
+	echo "+++ create fs on image file $original_size" | \
+		tee -a $seqres.full
+
+	${MKFS_PROG}.${FSTYP} -F -O bigalloc,resize_inode -C $CLUSTER_SIZ \
+		-b $BLK_SIZ ${LOOP_DEVICE} $original_size >> \
+		$seqres.full 2>&1 || _fail "mkfs failed"
+
+	echo "+++ mount image file" | tee -a $seqres.full
+	$MOUNT_PROG -t ${FSTYP} ${LOOP_DEVICE} ${IMG_MNT} > \
+		/dev/null 2>&1 || _fail "mount failed"
+
+	echo "+++ resize fs to $final_size" | tee -a $seqres.full
+
+	resize2fs -f ${LOOP_DEVICE} $final_size >$tmp.resize2fs 2>&1
+	if [ $? -ne 0 ]; then
+		if [ $check_if_supported -eq 1 ]; then
+			grep -iq "operation not supported" $tmp.resize2fs \
+				&& _notrun "online resizing not supported with bigalloc"
+		fi
+		_fail "resize failed"
+	fi
+	cat $tmp.resize2fs >> $seqres.full
+	echo "+++ umount fs" | tee -a $seqres.full
+	$UMOUNT_PROG ${IMG_MNT}
+
+	echo "+++ check fs" | tee -a $seqres.full
+	_check_generic_filesystem $LOOP_DEVICE >> $seqres.full 2>&1 || \
+		_fail "fsck should not fail"
+	_destroy_loop_device $LOOP_DEVICE && LOOP_DEVICE=
+}
+
+_cleanup()
+{
+	cd /
+	[ -n "$LOOP_DEVICE" ] && _destroy_loop_device $LOOP_DEVICE > /dev/null 2>&1
+	rm -f $tmp.*
+	$UMOUNT_PROG ${IMG_MNT} > /dev/null 2>&1
+	rm -f ${IMG_FILE} > /dev/null 2>&1
+}
+
+# get standard environment and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+
+_require_loop
+_require_scratch
+# We use resize_inode to make sure that block group descriptor table
+# can be extended.
+_require_scratch_ext4_feature "bigalloc,resize_inode"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+rm -f $seqres.full
+
+mkdir -p $IMG_MNT || _fail "cannot create loopback mount point"
+
+# Check if online resizing with bigalloc is supported by the kernel
+ext4_online_resize 4096 8192 1
+
+## We perform resizing to various multiples of block group sizes to
+## ensure that we cover maximum edge cases in the kernel code.
+for CLUSTER_SIZ in 4096 16384 65536; do
+	echo "++ set cluster size to $CLUSTER_SIZ" | tee -a $seqres.full
+
+	##
+	## Extend last group tests
+	##
+
+	## Extending a 1/2 block group to a 2/3 block group.
+	ext4_online_resize $(c2b 16384) $(c2b 24576)
+	## Extending a 2/3rd block group to one cluster less than a
+	## full block group.
+	ext4_online_resize $(c2b 24576) $(c2b 32767)
+	## Extending a 2/3rd block group to a full block group.
+	ext4_online_resize $(c2b 24576) $(c2b 32768)
+
+	##
+	## Extend last group and add more block groups.
+	##
+
+	## Extending a 2/3rd block group to 2 block groups.
+	ext4_online_resize $(c2b 24576) $(c2b 65536)
+	## Extending a 2/3rd block group to 15 block groups and one
+	## cluster.
+	ext4_online_resize $(c2b 24576) $(c2b 491521)
+	## Extending a 2/3rd block group to 15 and a half block groups.
+	ext4_online_resize $(c2b 24576) $(c2b 507904)
+	## Extending a 2/3rd block group to 16 block groups.
+	ext4_online_resize $(c2b 24576) $(c2b 524288)
+	## Extending a 2/3rd block group to 160 block groups.
+	ext4_online_resize $(c2b 24576) $(c2b 5242880)
+
+	##
+	## Convert to meta_bg.
+	##
+
+	## Extending a 2/3rd block group to 1280 block groups.
+	ext4_online_resize $(c2b 24576) $(c2b 41943040)
+done
+
+status=0
+exit
