@@ -61,7 +61,9 @@ touch $SCRATCH_MNT/file
 $SETFATTR_PROG -n trusted.small -v a $SCRATCH_MNT/file
 
 # start a background getxattr loop for the existing xattr
-while [ true ]; do
+runfile="$tmp.getfattr"
+touch $runfile
+while [ -e $runfile ]; do
 	$GETFATTR_PROG --absolute-names -n trusted.small $SCRATCH_MNT/file \
 		> /dev/null || break
 done &
@@ -75,7 +77,7 @@ for i in $(seq 0 99); do
 	$SETFATTR_PROG -x trusted.big $SCRATCH_MNT/file
 done
 
-kill -9 $getfattr_pid > /dev/null 2>&1
+rm -f $runfile
 wait > /dev/null 2>&1
 
 echo Silence is golden
