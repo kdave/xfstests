@@ -69,7 +69,6 @@ report_nlink()
 # Create lower hardlinks
 create_hardlinks()
 {
-	lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
 	mkdir -p $lowerdir
 	touch $lowerdir/0
 	ln $lowerdir/0 $lowerdir/1
@@ -123,8 +122,13 @@ test_hardlinks()
 	rm $SCRATCH_MNT/2
 
 	# Verify that orphan index is cleaned when dropping nlink to zero
-	ls $OVL_BASE_SCRATCH_MNT/$OVL_WORK/index
+	# With nfs_export=on index will contain a whiteout index entry, so allow
+	# chardev entries in index dir.
+	find $workdir/index -mindepth 1 -type c -o -print
 }
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
 
 # Remove all files from previous tests
 _scratch_mkfs
