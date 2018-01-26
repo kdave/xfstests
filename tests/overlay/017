@@ -57,6 +57,8 @@ _supported_os Linux
 _require_scratch
 _require_test_program "af_unix"
 _require_test_program "t_dir_type"
+# Require redirect_dir for renaming a merge directory
+_require_scratch_feature redirect_dir
 
 rm -f $seqres.full
 
@@ -111,8 +113,8 @@ function check_inode_numbers()
 	done
 }
 
-_scratch_mount
-
+# Enable redirect_dir for renaming a merge directory
+_scratch_mount "-o redirect_dir=on"
 
 rm -f $tmp.*
 testdir=$SCRATCH_MNT/test
@@ -140,7 +142,7 @@ echo 3 > /proc/sys/vm/drop_caches
 check_inode_numbers $testdir $tmp.after_copyup $tmp.after_move
 
 # Verify that the inode numbers survive a mount cycle
-_scratch_cycle_mount
+_scratch_cycle_mount "redirect_dir=on"
 
 # Compare inode numbers before/after mount cycle
 check_inode_numbers $testdir $tmp.after_move $tmp.after_cycle
