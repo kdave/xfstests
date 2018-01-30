@@ -1,0 +1,256 @@
+#! /bin/bash
+# FS QA Test No. 051
+#
+# Test encode/decode overlay file handles for non-samefs.
+#
+# This is a variant of overlay file handles test for an overlayfs that is
+# composed of multiple lower layers not on the same underlying fs.
+#
+# - Check encode/write/decode/read content of lower/upper file handles
+# - Check encode/decode/write/read content of lower/upper file handles
+# - Check decode/read of unlinked lower/upper files and directories
+# - Check decode/read of lower file handles after copy up, link and unlink
+#
+# This test requires and enables overlayfs NFS export support.
+# NFS export support depends on and requires overlayfs index feature.
+#
+#-----------------------------------------------------------------------
+# Copyright (C) 2018 CTERA Networks. All Rights Reserved.
+# Author: Amir Goldstein <amir73il@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	# Cleanup overlay scratch mount that is holding base test mount
+	# to prevent _check_test_fs and _test_umount from failing before
+	# _check_scratch_fs _scratch_umount
+	$UMOUNT_PROG $SCRATCH_MNT 2>/dev/null
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs overlay
+_supported_os Linux
+_require_test
+_require_scratch
+_require_test_program "open_by_handle"
+# We need to require both features together, because nfs_export cannot
+# be enabled when index is disabled
+_require_scratch_overlay_features index nfs_export
+
+# Lower is on test partition
+lower=$OVL_BASE_TEST_DIR/$OVL_LOWER-$seq
+# Upper/work are on scratch partition
+middle=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upper=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+work=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+
+NUMFILES=1
+
+# Create test dir and empty test files
+create_test_files()
+{
+	local dir=$1
+
+	mkdir -p $dir
+	$here/src/open_by_handle -cp $dir $NUMFILES
+}
+
+# Create hard links to test files
+link_test_files()
+{
+	local dir=$1
+
+	$here/src/open_by_handle -l $dir $NUMFILES
+}
+
+# Test encode/decode file handles on overlay mount
+test_file_handles()
+{
+	local dir=$1
+	local opt=$2
+
+	echo test_file_handles $dir $opt | _filter_scratch
+	$here/src/open_by_handle $opt $dir $NUMFILES
+}
+
+# Re-create lower/middle/upper/work dirs
+create_dirs()
+{
+	# Create lower dir on test partition
+	rm -rf $lower
+	mkdir $lower
+
+	# Create middle/upper/work dirs on scratch partition
+	_scratch_mkfs
+}
+
+# Mount an overlay on $SCRATCH_MNT with lower layer on test partition
+# and middle and upper layer on scratch partition
+mount_dirs()
+{
+	_overlay_scratch_mount_dirs $middle:$lower $upper $work \
+				-o "index=on,nfs_export=on"
+}
+
+# Unmount the overlay without unmounting base fs
+unmount_dirs()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+# Check non-stale file handles of lower/upper files and verify
+# that handle encoded before copy up is decoded to upper after
+# copy up. Verify reading data from file open by file handle
+# and verify access_at() with dirfd open by file handle.
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+mount_dirs
+# Check encode/decode of upper regular file handles
+test_file_handles $SCRATCH_MNT/uppertestdir
+# Check encode/decode of upper dir file handle
+test_file_handles $SCRATCH_MNT/uppertestdir -p
+# Check encode/write/decode/read/write of upper file handles
+test_file_handles $SCRATCH_MNT/uppertestdir -wrap
+# Check encode/decode of lower regular file handles before copy up
+test_file_handles $SCRATCH_MNT/lowertestdir
+# Check encode/decode of lower dir file handles before copy up
+test_file_handles $SCRATCH_MNT/lowertestdir -p
+# Check encode/write/decode/read/write of lower file handles across copy up
+test_file_handles $SCRATCH_MNT/lowertestdir -wrap
+unmount_dirs
+
+# Check copy up after encode/decode of lower/upper files
+# (copy up of disconnected dentry to index dir)
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+mount_dirs
+# Check encode/decode/write/read of upper regular file handles
+test_file_handles $SCRATCH_MNT/uppertestdir -a
+test_file_handles $SCRATCH_MNT/uppertestdir -r
+# Check encode/decode/write/read of lower regular file handles
+test_file_handles $SCRATCH_MNT/lowertestdir -a
+test_file_handles $SCRATCH_MNT/lowertestdir -r
+unmount_dirs
+
+# Check non-stale handles to unlinked but open lower/upper files
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $upper/uppertestdir.rw
+create_test_files $lower/lowertestdir
+create_test_files $lower/lowertestdir.rw
+mount_dirs
+test_file_handles $SCRATCH_MNT/uppertestdir -dk
+# Check encode/write/unlink/decode/read of upper regular file handles
+test_file_handles $SCRATCH_MNT/uppertestdir.rw -rwdk
+test_file_handles $SCRATCH_MNT/lowertestdir -dk
+# Check encode/write/unlink/decode/read of lower file handles across copy up
+test_file_handles $SCRATCH_MNT/lowertestdir.rw -rwdk
+unmount_dirs
+
+# Check stale handles of unlinked lower/upper files (nlink = 0)
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+mount_dirs
+# Check decode of upper file handles after unlink/rmdir (nlink == 0)
+test_file_handles $SCRATCH_MNT/uppertestdir -dp
+# Check decode of lower file handles after unlink/rmdir (nlink == 0)
+test_file_handles $SCRATCH_MNT/lowertestdir -dp
+unmount_dirs
+
+# Check non-stale file handles of linked lower/upper files (nlink = 2,1)
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+mount_dirs
+# Check decode/read of upper file handles after link (nlink == 2)
+test_file_handles $SCRATCH_MNT/uppertestdir -wlr
+# Check decode/read of upper file handles after link + unlink (nlink == 1)
+test_file_handles $SCRATCH_MNT/uppertestdir -ur
+# Check decode/read of lower file handles after copy up + link (nlink == 2)
+test_file_handles $SCRATCH_MNT/lowertestdir -wlr
+# Check decode/read of lower file handles after copy up + link + unlink (nlink == 1)
+test_file_handles $SCRATCH_MNT/lowertestdir -ur
+unmount_dirs
+
+# Check non-stale file handles of linked lower/upper hardlinks (nlink = 2,1)
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+# Create lower/upper hardlinks
+link_test_files $lower/lowertestdir
+link_test_files $upper/uppertestdir
+mount_dirs
+# Check encode/decode of upper hardlink file handles (nlink == 2)
+test_file_handles $SCRATCH_MNT/uppertestdir
+# Check decode/read of upper hardlink file handles after unlink (nlink == 1)
+test_file_handles $SCRATCH_MNT/uppertestdir -wur
+# Check encode/decode of lower hardlink file handles before copy up (nlink == 2)
+test_file_handles $SCRATCH_MNT/lowertestdir
+# Check decode/read of lower hardlink file handles after copy up + unlink (nlink == 1)
+test_file_handles $SCRATCH_MNT/lowertestdir -wur
+unmount_dirs
+
+# Check stale file handles of unlinked lower/upper hardlinks (nlink = 2,0)
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+# Create lower/upper hardlinks
+link_test_files $lower/lowertestdir
+link_test_files $upper/uppertestdir
+mount_dirs
+# Check encode/decode of upper hardlink file handles (nlink == 2)
+test_file_handles $SCRATCH_MNT/uppertestdir
+# Check decode of upper hardlink file handles after 2*unlink (nlink == 0)
+test_file_handles $SCRATCH_MNT/uppertestdir -d
+# Check encode/decode of lower hardlink file handles before copy up (nlink == 2)
+test_file_handles $SCRATCH_MNT/lowertestdir
+# Check decode of lower hardlink file handles after copy up + 2*unlink (nlink == 0)
+test_file_handles $SCRATCH_MNT/lowertestdir -d
+unmount_dirs
+
+# Check non-stale file handles of lower/upper renamed files
+create_dirs
+create_test_files $upper/uppertestdir
+create_test_files $lower/lowertestdir
+mount_dirs
+# Check decode/read of upper file handles after rename in same upper parent
+test_file_handles $SCRATCH_MNT/uppertestdir -wmr
+# Check decode/read of lower file handles after copy up + rename in same merge parent
+test_file_handles $SCRATCH_MNT/lowertestdir -wmr
+unmount_dirs
+
+status=0
+exit
