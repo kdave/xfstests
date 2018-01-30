@@ -122,8 +122,8 @@ _overlay_scratch_unmount()
 	_overlay_base_unmount "$OVL_BASE_SCRATCH_DEV" "$OVL_BASE_SCRATCH_MNT"
 }
 
-# Require a specific overlayfs feature
-_require_scratch_overlay_feature()
+# Check that a specific overlayfs feature is supported
+__check_scratch_overlay_feature()
 {
 	local feature=$1
 
@@ -138,9 +138,6 @@ _require_scratch_overlay_feature()
 	[ "$default" = Y ] || [ "$default" = N ] || \
 		_notrun "feature '${feature}' not supported by ${FSTYP}"
 
-	_scratch_mkfs > /dev/null 2>&1
-	_scratch_mount -o ${feature}=on || \
-		_notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
 	# Check options to be sure. For example, Overlayfs will fallback to
 	# index=off if underlying fs does not support file handles.
 	# Overlayfs only displays mount option if it differs from the default.
@@ -149,5 +146,25 @@ _require_scratch_overlay_feature()
 	  ( [ "$default" = Y ] && ! _fs_options $SCRATCH_DEV | grep -q "${feature}=off" )) && \
 	    touch $SCRATCH_MNT/foo 2>/dev/null ) || \
 	        _notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+}
+
+# Require a set of overlayfs features
+_require_scratch_overlay_features()
+{
+	local features=( $* )
+	local opts="rw"
+
+	for feature in ${features[*]}; do
+		opts+=",${feature}=on"
+	done
+
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount -o $opts || \
+		_notrun "overlay options '$opts' cannot be enabled on ${SCRATCH_DEV}"
+
+	for feature in ${features[*]}; do
+		__check_scratch_overlay_feature ${feature}
+	done
+
 	_scratch_unmount
 }
