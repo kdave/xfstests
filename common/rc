@@ -352,13 +352,20 @@ _supports_filetype()
 	esac
 }
 
+# mount scratch device with given options but don't check mount status
+_try_scratch_mount()
+{
+	if [ "$FSTYP" == "overlay" ]; then
+		_overlay_scratch_mount $*
+		return $?
+	fi
+	_mount -t $FSTYP `_scratch_mount_options $*`
+}
+
+# mount scratch device with given options and _fail if mount fails
 _scratch_mount()
 {
-    if [ "$FSTYP" == "overlay" ]; then
-        _overlay_scratch_mount $*
-        return $?
-    fi
-    _mount -t $FSTYP `_scratch_mount_options $*`
+	_try_scratch_mount $* || _fail "mount failed"
 }
 
 _scratch_unmount()
@@ -397,7 +404,7 @@ _scratch_cycle_mount()
 	opts="-o $opts"
     fi
     _scratch_unmount
-    _scratch_mount "$opts"
+    _try_scratch_mount "$opts" || _fail "cycle mount failed"
 }
 
 _scratch_shutdown()
@@ -524,7 +531,7 @@ _setup_large_ext4_fs()
 
 	# mount the filesystem and create 16TB - 4KB files until we consume
 	# all the necessary space.
-	_scratch_mount 2>&1 >$tmp_dir/mnt.err
+	_try_scratch_mount 2>&1 >$tmp_dir/mnt.err
 	local status=$?
 	if [ $status -ne 0 ]; then
 		echo "mount failed"
@@ -1103,7 +1110,7 @@ _repair_scratch_fs()
 	res=$?
 	if [ "$res" -ne 0 ]; then
 		echo "xfs_repair returns $res; replay log?"
-		_scratch_mount
+		_try_scratch_mount
 		res=$?
 		if [ "$res" -gt 0 ]; then
 			echo "mount returns $res; zap log?"
@@ -1872,7 +1879,7 @@ _require_scratch_ext4_crc()
 {
 	_scratch_mkfs_ext4 >/dev/null 2>&1
 	dumpe2fs -h $SCRATCH_DEV 2> /dev/null | grep -q metadata_csum || _notrun "metadata_csum not supported by this filesystem"
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support metadata_csum feature"
 	_scratch_unmount
 }
@@ -1888,7 +1895,7 @@ _require_scratch_ext4_feature()
     $MKFS_EXT4_PROG -F $MKFS_OPTIONS -O "$1" \
 		    $SCRATCH_DEV 512m >/dev/null 2>&1 \
 	|| _notrun "mkfs.ext4 doesn't support $1 feature"
-    _scratch_mount >/dev/null 2>&1 \
+    _try_scratch_mount >/dev/null 2>&1 \
 	|| _notrun "Kernel doesn't support the ext4 feature(s): $1"
     _scratch_unmount
 }
@@ -2322,7 +2329,7 @@ _require_scratch_richacl_xfs()
 	_scratch_mkfs_xfs_supported -m richacl=1 >/dev/null 2>&1 \
 		|| _notrun "mkfs.xfs doesn't have richacl feature"
 	_scratch_mkfs_xfs -m richacl=1 >/dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel doesn't support richacl feature on $FSTYP"
 	_scratch_unmount
 }
@@ -2331,7 +2338,7 @@ _require_scratch_richacl_ext4()
 {
 	_scratch_mkfs -O richacl >/dev/null 2>&1 \
 		|| _notrun "can't mkfs $FSTYP with option -O richacl"
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel doesn't support richacl feature on $FSTYP"
 	_scratch_unmount
 }
@@ -2993,7 +3000,7 @@ _require_scratch_shutdown()
 	[ -x src/godown ] || _notrun "src/godown executable not found"
 
 	_scratch_mkfs > /dev/null 2>&1 || _notrun "_scratch_mkfs failed on $SCRATCH_DEV"
-	_scratch_mount || _notrun "_scratch_mount failed on $SCRATCH_MNT"
+	_scratch_mount
 
 	if [ $FSTYP = "overlay" ]; then
 		if [ -z $OVL_BASE_SCRATCH_DEV ]; then
@@ -3019,7 +3026,8 @@ _require_scratch_dax()
 {
 	_require_scratch
 	_scratch_mkfs > /dev/null 2>&1
-	_scratch_mount -o dax
+	_try_scratch_mount -o dax || \
+		_notrun "mount $SCRATCH_DEV with dax failed"
 	# Check options to be sure. XFS ignores dax option
 	# and goes on if dev underneath does not support dax.
 	_fs_options $SCRATCH_DEV | grep -qw "dax" || \
@@ -3030,7 +3038,7 @@ _require_scratch_dax()
 # Does norecovery support by this fs?
 _require_norecovery()
 {
-	_scratch_mount -o ro,norecovery || \
+	_try_scratch_mount -o ro,norecovery || \
 		_notrun "$FSTYP does not support norecovery"
 	_scratch_unmount
 }
@@ -3229,7 +3237,7 @@ _require_atime()
 _require_relatime()
 {
         _scratch_mkfs > /dev/null 2>&1
-        _scratch_mount -o relatime || \
+        _try_scratch_mount -o relatime || \
                 _notrun "relatime not supported by the current kernel"
 	_scratch_unmount
 }

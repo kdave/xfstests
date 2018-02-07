@@ -75,7 +75,7 @@ scratch_repair() {
 	elif [ "${res}" -eq 2 ]; then
 		# replay log?
 		echo "+++ replaying log" >> "${FSCK_LOG}"
-		_scratch_mount >> "${FSCK_LOG}" 2>&1
+		_try_scratch_mount >> "${FSCK_LOG}" 2>&1
 		res=$?
 		echo "+++ mount returns ${res}" >> "${FSCK_LOG}"
 		if [ "${res}" -gt 0 ]; then
@@ -127,7 +127,7 @@ echo "++ corrupt image" >> $seqres.full
 xfs_db -x -c blockget -c "blocktrash ${FUZZ_ARGS}" "${SCRATCH_DEV}" >> $seqres.full 2>&1
 
 echo "++ mount image" >> $seqres.full
-_scratch_mount >> $seqres.full 2>&1
+_try_scratch_mount >> $seqres.full 2>&1
 
 echo "+++ test scratch" >> $seqres.full
 _scratch_fuzz_test >> $seqres.full 2>&1
@@ -149,7 +149,7 @@ _scratch_xfs_repair >> $seqres.full 2>&1
 
 ROUND2_LOG="${tmp}-round2-${fsck_pass}.log"
 echo "++ mount image (2)" >> $ROUND2_LOG
-_scratch_mount >> $ROUND2_LOG 2>&1
+_try_scratch_mount >> $ROUND2_LOG 2>&1
 
 echo "++ chattr -R -i" >> $ROUND2_LOG
 $CHATTR_PROG -R -f -i "${SCRATCH_MNT}/" > /dev/null 2>> $ROUND2_LOG

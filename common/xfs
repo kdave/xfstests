@@ -18,7 +18,7 @@ _setup_large_xfs_fs()
 	file_size=$(($file_size - $SCRATCH_DEV_EMPTY_SPACE))
 
 	# mount the filesystem, create the file, unmount it
-	_scratch_mount 2>&1 >$tmp_dir/mnt.err
+	_try_scratch_mount 2>&1 >$tmp_dir/mnt.err
 	local status=$?
 	if [ $status -ne 0 ]; then
 		echo "mount failed"
@@ -223,7 +223,7 @@ _require_xfs_mkfs_crc()
 _require_xfs_crc()
 {
 	_scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
 	_scratch_unmount
 }
@@ -233,7 +233,7 @@ _require_xfs_crc()
 _require_scratch_xfs_crc()
 {
 	_scratch_mkfs_xfs >/dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
 	xfs_info $SCRATCH_MNT | grep -q 'crc=1' || _notrun "crc feature not supported by this filesystem"
 	_scratch_unmount
@@ -252,7 +252,7 @@ _require_xfs_mkfs_finobt()
 _require_xfs_finobt()
 {
 	_scratch_mkfs_xfs -m crc=1,finobt=1 >/dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support finobt feature"
 	_scratch_unmount
 }
@@ -280,7 +280,7 @@ _require_xfs_sparse_inodes()
 	_scratch_mkfs_xfs_supported -m crc=1 -i sparse > /dev/null 2>&1 \
 		|| _notrun "mkfs.xfs does not support sparse inodes"
 	_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel does not support sparse inodes"
 	_scratch_unmount
 }
@@ -599,7 +599,7 @@ _require_meta_uuid()
 
 	_scratch_xfs_db -x -c "uuid generate" >/dev/null 2>&1
 
-	_scratch_mount >/dev/null 2>&1 \
+	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support meta_uuid feature"
 	_scratch_unmount
 }

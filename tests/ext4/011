@@ -73,13 +73,13 @@ blk="$(dumpe2fs "${SCRATCH_DEV}" 2> /dev/null | grep 'MMP block number' | sed -e
 $XFS_IO_PROG -f -c "pwrite -S 0x62 $((blk * blksz + 16)) 8" "${SCRATCH_DEV}" >> $seqres.full
 
 echo "+ mount image"
-_scratch_mount 2> /dev/null && _fail "mount should fail due to bad MMP"
+_try_scratch_mount 2> /dev/null && _fail "mount should fail due to bad MMP"
 
 echo "+ repair fs"
 e2fsck -fy "${SCRATCH_DEV}" >> $seqres.full 2>&1
 
 echo "+ mount image (2)"
-_scratch_mount || _fail "mount should not fail; MMP has been fixed"
+_try_scratch_mount || _fail "mount should not fail; MMP has been fixed"
 
 echo "+ check fs (2)"
 e2fsck -fn "${SCRATCH_DEV}" >> $seqres.full 2>&1 || _fail "fsck should not fail"
