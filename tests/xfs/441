@@ -1,0 +1,88 @@
+#! /bin/bash
+# FS QA Test No. 441
+#
+# Regression test for a quota accounting bug when reflinking across EOF
+# of a file in which we forgot dq_attach.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/reflink
+. ./common/quota
+. ./common/filter
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_quota
+_require_scratch_reflink
+_require_cp_reflink
+_require_user
+
+rm -f $seqres.full
+
+check_quota() {
+	du_total="$(du -ksc $SCRATCH_MNT/a $SCRATCH_MNT/b | tail -n 1 | awk '{print $1}')"
+	qu_total="$(_report_quota_blocks "-u $SCRATCH_MNT" | grep $qa_user | awk '{print $2}')"
+	echo "du: $du_total; quota: $qu_total"
+}
+
+echo "Format and mount (noquota)"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount "-o noquota" >> $seqres.full 2>&1
+
+echo "Create files"
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/a >> $seqres.full
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/b >> $seqres.full
+chown $qa_user $SCRATCH_MNT/a $SCRATCH_MNT/b
+check_quota 2>&1 | _filter_scratch
+
+echo "Mount (usrquota) and check quota"
+_scratch_unmount
+_scratch_mount "-o usrquota,grpquota" >> "$seqres.full" 2>&1
+check_quota
+
+echo "Reflink and check quota again"
+_reflink_range $SCRATCH_MNT/a 256k $SCRATCH_MNT/b 384k 128k >> $seqres.full
+_reflink_range $SCRATCH_MNT/a 256k $SCRATCH_MNT/b 960k 128k >> $seqres.full
+check_quota
+
+echo "Force quotacheck"
+_check_quota_usage
+
+# success, all done
+status=0
+exit

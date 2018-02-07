@@ -1,0 +1,119 @@
+#! /bin/bash
+# FS QA Test No. 442
+#
+# Force enable all XFS quotas, run fsstress until the fs runs out of
+# space, and make sure the quotas are still correct when we're done.
+# This is a general regression/stress test for numerous quota bugs with
+# reflink and copy on write.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/quota
+. ./common/filter
+. ./common/reflink
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch_reflink
+_require_quota
+_require_command "$KILLALL_PROG" "killall"
+
+rm -f $seqres.full
+
+report_quota_blocks() {
+	$XFS_QUOTA_PROG -x -c "report $1" $SCRATCH_MNT | \
+			awk '{x += $2;} END { print(x); }'
+}
+
+compare_quota_to_du() {
+	test $1 -eq $2 || echo "$3 quota $2 blocks does not match du $1 blocks?"
+}
+
+# Make sure the user/group/project quota block counts match the du output.
+# This ensures that we did the quota accounting correctly and that we're
+# accurately reporting cow preallocation blocks in stat.
+check_quota_du_blocks() {
+	sync
+	#$XFS_QUOTA_PROG -x -c 'report' $SCRATCH_MNT >> $seqres.full
+	du_rep=$(du -ks $SCRATCH_MNT | awk '{print $1}')
+	u_rep=$(report_quota_blocks -u)
+	g_rep=$(report_quota_blocks -g)
+	p_rep=$(report_quota_blocks -p)
+
+	compare_quota_to_du $du_rep $u_rep "user"
+	compare_quota_to_du $du_rep $g_rep "group"
+	compare_quota_to_du $du_rep $p_rep "project"
+}
+
+echo "Format and fsstress"
+
+_qmount_option "usrquota,grpquota,prjquota"
+# We use a small volume so that we hit ENOSPC.  This is critical for
+# regression testing a bug in the directio write code that could result in fs
+# corruption ("xfs: check reflink allocation mappings").
+#
+# This started as a test for quota accounting problems ("xfs: treat CoW fork
+# operations as delalloc for quota accounting") and ("xfs: call
+# xfs_qm_dqattach before performing reflink operations") though each of those
+# tests now have separate faster-running regression tests.
+_scratch_mkfs_sized $((1600 * 1048576)) > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1 || _fail "mount failed..."
+
+nr_cpus=$((LOAD_FACTOR * 4))
+nr_ops=$((25000 * nr_cpus * TIME_FACTOR))
+$FSSTRESS_PROG $FSSTRESS_AVOID -w -d $SCRATCH_MNT -n $nr_ops -p $nr_cpus >> $seqres.full
+
+echo "Check quota before remount"
+check_quota_du_blocks
+
+# Clear out all the preallocations before we quotacheck.
+# The count comparison in _check_quota_usage will be unhappy if we don't
+# manage to clean out all the cow preallocations before the remount.
+_scratch_unmount
+_scratch_mount
+
+# Make sure the usage doesn't change after quotacheck.
+echo "Check quota after remount"
+_check_quota_usage
+
+check_quota_du_blocks
+
+# success, all done
+status=0
+exit
