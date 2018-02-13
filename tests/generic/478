@@ -1,0 +1,250 @@
+#! /bin/bash
+# FS QA Test 478
+#
+# Test OFD lock. fcntl F_OFD_SETLK to set lock, then F_OFD_GETLK
+# to verify we are being given correct advice by kernel.
+#
+# OFD lock combines POSIX lock and BSD flock:
+#   + does not share between threads
+#   + byte granularity
+#            (both tested by LTP/fcntl3{4,6})
+#   + only release automatically after all open fd closed
+#
+# This test target the third one and expand a little bit.
+#
+# The basic idea is one setlk routine setting locks via fcntl
+# *_SETLK, followed by operations like clone, dup then close fd;
+# another routine getlk getting locks via fcntl *_GETLK.
+#
+# Firstly in setlk routine process P0, place a lock L0 on an
+# opened testfile, then
+#
+#   + clone() a child P1 to close the fd then tell getlk to go,
+#     parent P0 wait getlk done then close fd.
+# or
+#   + dup() fd to a newfd then close newfd then tell getlk to go,
+#     then wait getlk done then close fd.
+#
+# In getlk process P2, do fcntl *_GETLK with lock L1 after get
+# notified by setlk routine.
+#
+# In the end, getlk routine check the returned struct flock.l_type
+# to see if the lock mechanism works fine.
+#
+# When testing with clone,
+#    + CLONE_FILES set, close releases all locks;
+#    + CLONE_FILES not set, locks remain in P0;
+#
+# If L0 is a POSIX lock,
+#   + it is not inherited into P1
+#   + it is released after dup & close
+#
+# If L0 is a OFD lock,
+#   + it is inherited into P1
+#   + it is not released after dup & close
+#
+#  setlk routine:			 * getlk routine:
+#    start				 *   start
+#      |				 *     |
+#   open file				 *  open file
+#      |				 *     |
+#   init sem				 *     |
+#      |				 *     |
+#  wait init sem done			 * wait init sem done
+#      |				 *     |
+#    setlk L0                            *     |
+#      |				 *     |
+#      |---------clone()--------|	 *     |
+#      |                        |	 *     |
+#      |(child P1)   (parent P0)|	 *     | (P2)
+#      |                        |	 *     |
+#      |                   close fd	 *     |
+#      |                        |	 *     |
+#      |                 set sem0=0	 *  wait sem0==0
+#      |                        |	 *     |
+#      |                        |	 *   getlk L1
+#      |                        |	 *     |
+#   wait sem1==0                |    	 *  set sem1=0
+#      |                        |	 *     |
+#     exit                wait child 	 *     |
+#                               |	 *  check result
+#                           cleanup  	 *     |
+#                               |	 *     |
+#                             exit	 *    exit
+#
+# We can test combainations of:
+#	+ shared or exclusive lock
+#	+ these locks are conflicting or not
+#	+ one OFD lock and one POSIX lock
+#	+ that open testfile RDONLY or RDWR
+#	+ clone with CLONE_FILES or not
+#	+ dup and close newfd
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Red Hat Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_ofd_locks
+
+# real QA test starts here
+# prepare a 4k testfile in TEST_DIR
+$XFS_IO_PROG -f -c "pwrite -S 0xFF 0 4096" \
+	$TEST_DIR/testfile >> $seqres.full 2>&1
+
+do_test()
+{
+	local soptions="$1"
+	local goptions="$2"
+	# print options and getlk output for debug
+	echo $* >> $seqres.full 2>&1
+	# -s : do setlk
+	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
+	# -g : do getlk
+	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
+		tee -a $seqres.full
+	wait $!
+
+	# add -F to clone with CLONE_FILES
+	soptions="$1 -F"
+	# with -F, new locks are always file to place
+	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
+	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
+		tee -a $seqres.full
+	wait $!
+
+	# add -d to dup and close
+	soptions="$1 -d"
+	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
+	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
+		tee -a $seqres.full
+	wait $!
+}
+
+# Always setlk at range [0,9], getlk at range [0,9] [5,24] or [20,29].
+# To open file RDONLY or RDWR should not break the locks.
+# POSIX locks should be released after closed fd, so it wont conflict
+# with other locks in tests
+
+# -P : operate posix lock
+# -w : operate on F_WRLCK
+# -r : operate on F_RDLCK
+# -R : open file RDONLY
+# -W : open file RDWR
+# -o : file offset where the lock starts
+# -l : lock length
+# -F : clone with CLONE_FILES in setlk
+# -d : dup and close in setlk
+
+# setlk wrlck [0,9], getlk wrlck [0,9], expect
+#    + wrlck when CLONE_FILES not set
+#    + unlck when CLONE_FILES set
+#    + wrlck when dup & close
+do_test "-s -w -o 0 -l 10 -W" "-g -w -o 0 -l 10 -W" "wrlck" "unlck" "wrlck"
+# setlk wrlck [0,9], getlk posix wrlck [5,24]
+do_test "-s -w -o 0 -l 10 -W" "-g -w -o 5 -l 20 -W -P" "wrlck" "unlck" "wrlck"
+# setlk wrlck [0,9], getlk wrlck [20,29]
+do_test "-s -w -o 0 -l 10 -W" "-g -w -o 20 -l 10 -W" "unlck" "unlck" "unlck"
+# setlk posix wrlck [0,9], getlk wrlck [5,24]
+do_test "-s -w -o 0 -l 10 -W -P" "-g -w -o 5 -l 20 -W" "wrlck" "unlck" "unlck"
+# setlk posix wrlck [0,9], getlk wrlck [20,29]
+do_test "-s -w -o 0 -l 10 -W -P" "-g -w -o 20 -l 10 -W" "unlck" "unlck" "unlck"
+
+# setlk wrlck [0,9], getlk rdlck [0,9]
+do_test "-s -w -o 0 -l 10 -W" "-g -r -o 0 -l 10 -W" "wrlck" "unlck" "wrlck"
+# setlk wrlck [0,9], getlk posix rdlck [5,24]
+do_test "-s -w -o 0 -l 10" "-g -r -o 5 -l 20 -P" "wrlck" "unlck" "wrlck"
+# setlk wrlck [0,9], getlk rdlck [20,29]
+do_test "-s -w -o 0 -l 10" "-g -r -o 20 -l 10" "unlck" "unlck" "unlck"
+# setlk posix wrlck [0,9], getlk rdlck [5,24]
+do_test "-s -w -o 0 -l 10 -P" "-g -r -o 5 -l 20" "wrlck" "unlck" "unlck"
+# setlk posix wrlck [0,9], getlk rdlck [20,29]
+do_test "-s -w -o 0 -l 10 -P" "-g -r -o 20 -l 10" "unlck" "unlck" "unlck"
+
+# setlk rdlck [0,9], getlk wrlck [0,9], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -w -o 0 -l 10 -R" "rdlck" "unlck" "rdlck"
+# setlk rdlck [0,9], getlk wrlck [5,24], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -w -o 5 -l 20 -R -P" "rdlck" "unlck" "rdlck"
+# setlk posix rdlck [0,9], getlk wrlck [5,24], open RDONLY
+do_test "-s -r -o 0 -l 10 -R -P" "-g -w -o 5 -l 20 -R" "rdlck" "unlck" "unlck"
+
+# setlk rdlck [0,9], getlk wrlck [0,9]
+do_test "-s -r -o 0 -l 10" "-g -w -o 0 -l 10" "rdlck" "unlck" "rdlck"
+# setlk rdlck [0,9], getlk posix wrlck [5,24]
+do_test "-s -r -o 0 -l 10" "-g -w -o 5 -l 20 -P" "rdlck" "unlck" "rdlck"
+# setlk posix rdlck [0,9], getlk wrlck [5,24]
+do_test "-s -r -o 0 -l 10 -P" "-g -w -o 5 -l 20" "rdlck" "unlck" "unlck"
+
+# setlk rdlck [0,9], getlk wrlck [20,29], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -w -o 20 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk wrlck [20,29], open RDONLY
+do_test "-s -r -o 0 -l 10 -R -P" "-g -w -o 20 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk rdlck [0,9], getlk wrlck [20,29]
+do_test "-s -r -o 0 -l 10" "-g -w -o 20 -l 10" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk wrlck [20,29]
+do_test "-s -r -o 0 -l 10 -P" "-g -w -o 20 -l 10" "unlck" "unlck" "unlck"
+
+# setlk rdlck [0,9], getlk rdlck [0,9], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -r -o 0 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk rdlck [0,9], getlk posix rdlck [0,9], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -r -o 0 -l 10 -R -P" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk rdlck [0,9], open RDONLY
+do_test "-s -r -o 0 -l 10 -R -P" "-g -r -o 0 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk rdlck [0,9], getlk rdlck [0,9]
+do_test "-s -r -o 0 -l 10" "-g -r -o 0 -l 10" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk rdlck [0,9]
+do_test "-s -r -o 0 -l 10 -P" "-g -r -o 0 -l 10" "unlck" "unlck" "unlck"
+
+# setlk rdlck [0,9], getlk rdlck [20,29], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -r -o 20 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk rdlck [0,9], getlk posix rdlck [20,29], open RDONLY
+do_test "-s -r -o 0 -l 10 -R" "-g -r -o 20 -l 10 -R -P" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk rdlck [20,29], open RDONLY
+do_test "-s -r -o 0 -l 10 -R -P" "-g -r -o 20 -l 10 -R" "unlck" "unlck" "unlck"
+# setlk rdlck [0,9], getlk rdlck [20,29]
+do_test "-s -r -o 0 -l 10" "-g -r -o 20 -l 10" "unlck" "unlck" "unlck"
+# setlk posix rdlck [0,9], getlk rdlck [20,29]
+do_test "-s -r -o 0 -l 10 -P" "-g -r -o 20 -l 10" "unlck" "unlck" "unlck"
+
+# success, all done
+status=0
+exit
