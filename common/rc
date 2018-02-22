@@ -2113,8 +2113,10 @@ _require_xfs_io_command()
 		param_checked=1
 		;;
 	"fpunch" | "fcollapse" | "zero" | "fzero" | "finsert" | "funshare")
-		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 20k" -c "fsync" \
-			-c "$command 4k 8k" $testfile 2>&1`
+		local blocksize=$(_get_block_size $TEST_DIR)
+		testio=`$XFS_IO_PROG -F -f -c "pwrite 0 $((5 * $blocksize))" \
+			-c "fsync" -c "$command $blocksize $((2 * $blocksize))" \
+			$testfile 2>&1`
 		;;
 	"fiemap")
 		# If 'ranged' is passed as argument then we check to see if fiemap supports
