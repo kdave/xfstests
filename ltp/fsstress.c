@@ -2222,6 +2222,7 @@ clonerange_f(
 	off64_t			lr;
 	off64_t			off1;
 	off64_t			off2;
+	off64_t			max_off2;
 	size_t			len;
 	int			v1;
 	int			v2;
@@ -2305,9 +2306,10 @@ clonerange_f(
 	 * If srcfile == destfile, randomly generate destination ranges
 	 * until we find one that doesn't overlap the source range.
 	 */
+	max_off2 = MIN(stat2.st_size + (1024ULL * stat2.st_blksize), MAXFSIZE);
 	do {
 		lr = ((int64_t)random() << 32) + random();
-		off2 = (off64_t)(lr % MIN(stat2.st_size + (1024 * 1024), MAXFSIZE));
+		off2 = (off64_t)(lr % max_off2);
 		off2 %= maxfsize;
 		off2 &= ~(stat2.st_blksize - 1);
 	} while (stat1.st_ino == stat2.st_ino && llabs(off2 - off1) < len);
