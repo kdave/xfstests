@@ -1,0 +1,83 @@
+#! /bin/bash
+# FSQA Test No. 480
+#
+# Test that if we have a file with two hard links in the same parent directory,
+# then remove of the links, create a new file in the same parent directory and
+# with the name of the link removed, fsync the new file and have a power loss,
+# mounting the filesystem succeeds.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+mkdir $SCRATCH_MNT/testdir
+touch $SCRATCH_MNT/testdir/foo
+ln $SCRATCH_MNT/testdir/foo $SCRATCH_MNT/testdir/bar
+
+# Make sure everything done so far is durably persisted.
+sync
+
+# Now remove of the links of our file and create a new file with the same name
+# and in the same parent directory, and finally fsync this new file.
+unlink $SCRATCH_MNT/testdir/bar
+touch $SCRATCH_MNT/testdir/bar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/testdir/bar
+
+# Simulate a power failure and mount the filesystem to check that replaying the
+# the fsync log/journal succeeds, that is the mount operation does not fail.
+_flakey_drop_and_remount
+
+_unmount_flakey
+_cleanup_flakey
+
+echo "Silence is golden"
+status=0
+exit
