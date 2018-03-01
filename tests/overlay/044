@@ -49,7 +49,9 @@ _cleanup()
 # real QA test starts here
 _supported_fs overlay
 _supported_os Linux
-_require_scratch
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 _require_test
 _require_scratch_feature index
 _require_test_program "t_dir_type"
@@ -122,6 +124,7 @@ check_ino_nlink $SCRATCH_MNT $tmp.before $tmp.after_one
 
 # Verify that the hardlinks survive a mount cycle
 $UMOUNT_PROG $SCRATCH_MNT
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o index=on
 _overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o index=on
 
 echo "== After mount cycle =="
@@ -137,6 +140,9 @@ echo "two" >> $foo
 echo "== After write two =="
 cat $FILES
 check_ino_nlink $SCRATCH_MNT $tmp.after_one $tmp.after_two
+
+# check overlayfs
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o index=on
 
 status=0
 exit

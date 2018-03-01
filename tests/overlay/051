@@ -61,8 +61,10 @@ _cleanup()
 _supported_fs overlay
 _supported_os Linux
 _require_test
-_require_scratch
 _require_test_program "open_by_handle"
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 # We need to require both features together, because nfs_export cannot
 # be enabled when index is disabled
 _require_scratch_overlay_features index nfs_export
@@ -122,10 +124,14 @@ mount_dirs()
 				-o "index=on,nfs_export=on"
 }
 
-# Unmount the overlay without unmounting base fs
+# Unmount the overlay without unmounting base fs and check the
+# underlying dirs
 unmount_dirs()
 {
 	$UMOUNT_PROG $SCRATCH_MNT
+
+	_overlay_check_scratch_dirs $middle:$lower $upper $work \
+				-o "index=on,nfs_export=on"
 }
 
 # Check non-stale file handles of lower/upper files and verify

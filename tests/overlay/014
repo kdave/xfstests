@@ -53,7 +53,9 @@ rm -f $seqres.full
 # real QA test starts here
 _supported_fs overlay
 _supported_os Linux
-_require_scratch
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 
 # Remove all files from previous tests
 _scratch_mkfs
@@ -78,6 +80,9 @@ mkdir -p $SCRATCH_MNT/testdir/visibledir
 # unmount overlayfs but not base fs
 $UMOUNT_PROG $SCRATCH_MNT
 
+# check overlayfs
+_overlay_check_scratch_dirs $lowerdir1 $lowerdir2 $workdir2
+
 # mount overlay again, with lowerdir1 and lowerdir2 as multiple lowerdirs,
 # and create a new file in testdir, triggers copyup from lowerdir,
 # copyup should not copy overlayfs private xattr
@@ -89,6 +94,9 @@ touch $SCRATCH_MNT/testdir/visiblefile
 $UMOUNT_PROG $SCRATCH_MNT
 _overlay_scratch_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir
 ls $SCRATCH_MNT/testdir
+
+# check overlayfs
+_overlay_check_scratch_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir
 
 # success, all done
 status=0

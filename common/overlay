@@ -219,6 +219,35 @@ _overlay_check_dirs()
 	return $err
 }
 
+# Check the same mnt/dev of _check_overlay_scratch_fs but non-default
+# underlying scratch dirs of overlayfs, it needs lower/upper/work dirs
+# provided as arguments, and it's useful for non-default setups such
+# as multiple lower layers
+_overlay_check_scratch_dirs()
+{
+	local lowerdir=$1
+	local upperdir=$2
+	local workdir=$3
+	shift 3
+
+	# Need to umount overlay for scratch dir check
+	local ovl_mounted=`_is_dir_mountpoint $SCRATCH_MNT`
+	[ -z "$ovl_mounted" ] || $UMOUNT_PROG $SCRATCH_MNT
+
+	# Check dirs with extra overlay options
+	_overlay_check_dirs $lowerdir $upperdir $workdir $*
+	local ret=$?
+
+	if [ $ret -eq 0 -a -n "$ovl_mounted" ]; then
+		# overlay was mounted, remount with extra mount options
+		_overlay_scratch_mount_dirs $lowerdir $upperdir \
+					    $workdir $*
+		ret=$?
+	fi
+
+	return $ret
+}
+
 _overlay_check_fs()
 {
 	# The first arguments is overlay mount point use for checking

@@ -46,7 +46,9 @@ _cleanup()
 # real QA test starts here
 _supported_fs overlay
 _supported_os Linux
-_require_scratch
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 _require_attrs
 _require_test_program "t_dir_type"
 
@@ -163,6 +165,9 @@ subdir_d=$($here/src/t_dir_type $pure_lower_dir $pure_lower_subdir_st_ino)
 
 _scratch_unmount
 
+# check overlayfs
+_check_scratch_fs
+
 # Verify pure lower residing in dir which has another lower layer
 _scratch_mkfs
 
@@ -201,6 +206,9 @@ current_d=$($here/src/t_dir_type $pure_lower_dir $pure_lower_dir_st_ino)
 subdir_d=$($here/src/t_dir_type $pure_lower_dir $pure_lower_subdir_st_ino)
 [[ $subdir_d == "subdir d" ]] || \
 	echo "Pure lower in dir which has another lower layer: Invalid d_ino reported for subdir"
+
+# check overlayfs
+_overlay_check_scratch_dirs "$middir:$lowerdir" $upperdir $workdir
 
 echo "Silence is golden"
 status=0

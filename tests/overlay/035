@@ -51,7 +51,9 @@ rm -f $seqres.full
 # real QA test starts here
 _supported_fs overlay
 _supported_os Linux
-_require_scratch
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 _require_chattr i
 
 # Remove all files from previous tests
@@ -80,6 +82,9 @@ $CHATTR_PROG +i $workdir
 _overlay_scratch_mount_dirs $lowerdir2 $upperdir $workdir
 touch $SCRATCH_MNT/bar 2>&1 | _filter_scratch
 _scratch_remount rw 2>&1 | _filter_ro_mount
+
+# check overlayfs
+_overlay_check_scratch_dirs $lowerdir2 $upperdir $workdir
 
 # success, all done
 status=0

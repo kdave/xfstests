@@ -48,7 +48,9 @@ rm -f $seqres.full
 # real QA test starts here
 _supported_fs overlay
 _supported_os Linux
-_require_scratch
+# Use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
 
 # Remove all files from previous tests
 _scratch_mkfs
@@ -69,6 +71,9 @@ mknod $lowerdir2/testdir/a c 0 0
 # Mount overlayfs and remove testdir, which led to kernel crash
 _overlay_scratch_mount_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir
 rm -rf $SCRATCH_MNT/testdir
+
+# check overlayfs
+_overlay_check_scratch_dirs "$lowerdir2:$lowerdir1" $upperdir $workdir
 
 # success, all done
 echo "Silence is golden"
