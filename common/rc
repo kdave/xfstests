@@ -2381,27 +2381,18 @@ _scratch_mkfs_richacl()
 	esac
 }
 
-# check that a FS on a device is mounted
-# if so, return mount point
-#
-_is_mounted()
+# check if the given device is mounted, if so, return mount point
+_is_dev_mounted()
 {
-    if [ $# -ne 1 ]
-    then
-	echo "Usage: _is_mounted device" 1>&2
-	exit 1
-    fi
+	local dev=$1
+	local fstype=${2:-$FSTYP}
 
-    device=$1
+	if [ $# -lt 1 ]; then
+		echo "Usage: _is_dev_mounted <device> [fstype]" 1>&2
+		exit 1
+	fi
 
-    if _mount | grep "$device " | $AWK_PROG -v pattern="type $FSTYP" '
-        pattern        { print $3 ; exit 0 }
-        END            { exit 1 }
-    '
-    then
-        echo "_is_mounted: $device is not a mounted $FSTYP FS"
-        exit 1
-    fi
+	findmnt -rncv -S $dev -t $fstype -o TARGET | head -1
 }
 
 # remount a FS to a new mode (ro or rw)
@@ -2441,7 +2432,7 @@ _umount_or_remount_ro()
     fi
 
     device=$1
-    mountpoint=`_is_mounted $device`
+    mountpoint=`_is_dev_mounted $device`
 
     if [ $USE_REMOUNT -eq 0 ]; then
         $UMOUNT_PROG $device
