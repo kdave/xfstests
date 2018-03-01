@@ -190,3 +190,102 @@ _overlay_fsck_dirs()
 	$FSCK_OVERLAY_PROG -o lowerdir=$lowerdir -o upperdir=$upperdir \
 			   -o workdir=$workdir $*
 }
+
+_overlay_check_dirs()
+{
+	local lowerdir=$1
+	local upperdir=$2
+	local workdir=$3
+	shift 3
+	local err=0
+
+	_overlay_fsck_dirs $lowerdir $upperdir $workdir \
+			   $FSCK_OPTIONS $* >>$tmp.fsck 2>&1
+	if [ $? -ne 0 ]; then
+		_log_err "_overlay_check_fs: overlayfs on $lowerdir,$upperdir,$workdir is inconsistent"
+
+		echo "*** fsck.overlay output ***"	>>$seqres.full
+		cat $tmp.fsck				>>$seqres.full
+		echo "*** end fsck.overlay output"	>>$seqres.full
+
+		echo "*** mount output ***"		>>$seqres.full
+		_mount					>>$seqres.full
+		echo "*** end mount output"		>>$seqres.full
+
+		err=1
+	fi
+	rm -f $tmp.fsck
+
+	return $err
+}
+
+_overlay_check_fs()
+{
+	# The first arguments is overlay mount point use for checking
+	# overlay filesystem is mounted or not, the remaining arquments
+	# use for mounting overlay base filesystem if it was not mounted.
+	# We shift one to aligns arguments for _overlay_base_mount.
+	local ovl_mnt=$1
+	shift 1
+
+	local base_dev=$3
+	local base_mnt=$4
+
+	[ "$FSTYP" = overlay ] || return 0
+
+	# Base fs needs to be mounted to check overlay dirs
+	local base_fstype=""
+	local ovl_mounted=""
+
+	[ -z "$base_dev" ] || \
+		base_fstype=`_fs_type $base_dev`
+
+	# If base_dev is set but base_fstype is empty, base fs is not
+	# mounted, we need to mount base fs. Otherwise, we need to
+	# check and umount overlayfs if it was mounted.
+	if [ -n "$base_dev" -a -z "$base_fstype" ]; then
+		_overlay_base_mount $*
+	else
+		# Check and umount overlay for dir check
+		ovl_mounted=`_is_dir_mountpoint $ovl_mnt`
+		[ -z "$ovl_mounted" ] || $UMOUNT_PROG $ovl_mnt
+	fi
+
+	_overlay_check_dirs $base_mnt/$OVL_LOWER $base_mnt/$OVL_UPPER \
+			    $base_mnt/$OVL_WORK
+	local ret=$?
+
+	if [ -n "$base_dev" -a -z "$base_fstype" ]; then
+		_overlay_base_unmount "$base_dev" "$base_mnt"
+	elif [ $ret -eq 0 -a -n "$ovl_mounted" ]; then
+		# overlay was mounted, remount besides extra mount options
+		_overlay_mount $base_mnt $ovl_mnt
+		ret=$?
+	fi
+
+	if [ $ret != 0 ]; then
+		status=1
+		if [ "$iam" != "check" ]; then
+			exit 1
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+_check_overlay_test_fs()
+{
+	_overlay_check_fs "$TEST_DIR" \
+		OVL_BASE_TEST_DEV OVL_BASE_TEST_DIR \
+		"$OVL_BASE_TEST_DEV" "$OVL_BASE_TEST_DIR" \
+		$TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS
+}
+
+_check_overlay_scratch_fs()
+{
+	_overlay_check_fs "$SCRATCH_MNT" \
+		OVL_BASE_SCRATCH_DEV OVL_BASE_SCRATCH_MNT \
+		"$OVL_BASE_SCRATCH_DEV" "$OVL_BASE_SCRATCH_MNT" \
+		$OVL_BASE_MOUNT_OPTIONS $SELINUX_MOUNT_OPTIONS
+}

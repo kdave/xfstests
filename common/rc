@@ -2395,6 +2395,20 @@ _is_dev_mounted()
 	findmnt -rncv -S $dev -t $fstype -o TARGET | head -1
 }
 
+# check if the given dir is a mount point, if so, return mount point
+_is_dir_mountpoint()
+{
+	local dir=$1
+	local fstype=${2:-$FSTYP}
+
+	if [ $# -lt 1 ]; then
+		echo "Uasge: _is_dir_mountpoint <dir> [fstype]" 1>&2
+		exit 1
+	fi
+
+	findmnt -rncv -t $fstype -o TARGET $dir | head -1
+}
+
 # remount a FS to a new mode (ro or rw)
 #
 _remount()
@@ -2590,7 +2604,7 @@ _check_test_fs()
 	# no way to check consistency for GlusterFS
 	;;
     overlay)
-	# no way to check consistency for overlay
+	_check_overlay_test_fs
 	;;
     pvfs2)
 	;;
@@ -2648,7 +2662,7 @@ _check_scratch_fs()
 	# no way to check consistency for GlusterFS
 	;;
     overlay)
-	# no way to check consistency for overlay
+	_check_overlay_scratch_fs
 	;;
     pvfs2)
 	;;
