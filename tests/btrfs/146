@@ -73,10 +73,13 @@ echo "Format and mount"
 _scratch_pool_mkfs "-d raid0 -m raid1" > $seqres.full 2>&1
 _scratch_mount
 
-# How much do we need to write? We need to hit all of the stripes. btrfs uses
-# a fixed 64k stripesize, so write enough to hit each one
+# How much do we need to write? We need to hit all of the stripes. btrfs uses a
+# fixed 64k stripesize, so write enough to hit each one. In the case of
+# compression, each 128K input data chunk will be compressed to 4K (because of
+# the characters written are duplicate). Therefore we have to write
+# (128K * 16) = 2048K to make sure every stripe can be hit.
 number_of_devices=`echo $SCRATCH_DEV_POOL | wc -w`
-write_kb=$(($number_of_devices * 64))
+write_kb=$(($number_of_devices * 2048))
 _require_fs_space $SCRATCH_MNT $write_kb
 
 testfile=$SCRATCH_MNT/fsync-err-test
