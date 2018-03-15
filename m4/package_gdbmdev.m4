@@ -22,26 +22,12 @@ AC_DEFUN([AC_PACKAGE_WANT_GDBM],
     fi
 
     if test -z "$have_db"; then
-      AC_CHECK_HEADER(gdbm.h,
-	[
-	  have_db=true
-	  gdbm_ndbm_=true
-	], [
-	  have_db=false
-	  gdbm_ndbm_=false
-	])
       AC_CHECK_HEADER(ndbm.h,
 	[
-	  ndbm_=true
-	], [
-	  ndbm_=false
+	  have_db=true
+	  AC_DEFINE(HAVE_NDBM_H, [1],
+		    [Define to 1 if you have the <ndbm.h> header file.])
 	])
-	if test $gdbm_ndbm_ = true; then
-	  if test $ndbm_ = true; then
-	    AC_DEFINE(HAVE_GDBM_H, [1],
-		      [Define to 1 if you have both <gdbm.h> and <ndbm.h> header files.])
-	  fi
-	fi
     fi
 
     if test "$have_db" = true; then
