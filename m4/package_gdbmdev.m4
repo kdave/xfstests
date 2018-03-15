@@ -1,23 +1,3 @@
-AC_DEFUN([AC_PACKAGE_WANT_NDBM],
-  [ AC_CHECK_HEADERS(ndbm.h, [ have_db=true ], [ have_db=false ])
-    found=false
-    libgdbm=""
-
-    if test $have_db = true; then
-      AC_CHECK_LIB(ndbm,dbm_open,found=true,found=false)
-      AC_CHECK_LIB(ndbm,dbm_fetch,,found=false)
-      AC_CHECK_LIB(ndbm,dbm_store,,found=false)
-      AC_CHECK_LIB(ndbm,dbm_close,,found=false)
-
-      if test $found = true; then
-        libgdbm="$ndbm"
-      fi
-    fi
-
-    AC_SUBST(libgdbm)
-    AC_SUBST(have_db)
-  ])
-
 AC_DEFUN([AC_PACKAGE_WANT_GDBM],
   [ AC_CHECK_HEADER(gdbm-ndbm.h, [ gdbm_ndbm=true; have_db=true ], [ gdbm_ndbm=false; have_db=false ])
 
