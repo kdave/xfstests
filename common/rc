@@ -3426,6 +3426,31 @@ _get_device_size()
 	grep `_short_dev $1` /proc/partitions | awk '{print $3}'
 }
 
+# Make sure we actually have dmesg checking set up.
+_require_check_dmesg()
+{
+	test -w /dev/kmsg || \
+		_notrun "Test requires writable /dev/kmsg."
+}
+
+# Return the dmesg log since the start of this test.  Caller must ensure that
+# /dev/kmsg was writable when the test was started so that we can find the
+# beginning of this test's log messages; _require_check_dmesg does this.
+_dmesg_since_test_start()
+{
+	# search the dmesg log of last run of $seqnum for possible failures
+	# use sed \cregexpc address type, since $seqnum contains "/"
+	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
+		tac
+}
+
+# check dmesg log for a specific string, subject to the same requirements as
+# _dmesg_since_test_start.
+_check_dmesg_for()
+{
+	_dmesg_since_test_start | egrep -q "$1"
+}
+
 # check dmesg log for WARNING/Oops/etc.
 _check_dmesg()
 {
@@ -3439,10 +3464,7 @@ _check_dmesg()
 	# filter out intentional WARNINGs or Oopses
 	filter=${1:-cat}
 
-	# search the dmesg log of last run of $seqnum for possible failures
-	# use sed \cregexpc address type, since $seqnum contains "/"
-	dmesg | tac | sed -ne "0,\#run fstests $seqnum at $date_time#p" | \
-		tac | $filter >$seqres.dmesg
+	_dmesg_since_test_start | $filter >$seqres.dmesg
 	egrep -q -e "kernel BUG at" \
 	     -e "WARNING:" \
 	     -e "BUG:" \
