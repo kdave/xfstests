@@ -317,14 +317,14 @@ int main(int argc, char **argv)
 		sop.sem_num = 0;
 		sop.sem_op = 1;
 		sop.sem_flg = 0;
-		ts.tv_sec = 15;
+		ts.tv_sec = 5;
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("inc sem0 2", errno);
 		sop.sem_num = 1;
 		sop.sem_op = 1;
 		sop.sem_flg = 0;
-		ts.tv_sec = 15;
+		ts.tv_sec = 5;
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("inc sem1 2", errno);
@@ -376,7 +376,7 @@ int main(int argc, char **argv)
 		sop.sem_num = 1;
 		sop.sem_op = 0;
 		sop.sem_flg = 0;
-		ts.tv_sec = 15;
+		ts.tv_sec = 5;
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("wait sem1 0", errno);
@@ -391,14 +391,18 @@ int main(int argc, char **argv)
 	/* getlck */
 	if (lock_cmd == 0) {
 		/* wait sem created and initialized */
+		retry = 5;
 		do {
 			semid = semget(semkey, 2, 0);
 			if (semid != -1)
 				break;
-			if (errno == ENOENT)
+			if (errno == ENOENT && retry) {
+				sleep(1);
+				retry--;
 				continue;
-			else
+			} else {
 				err_exit("getlk_semget", errno);
+			}
 		} while (1);
 		do {
 			memset(&sem_ds, 0, sizeof(sem_ds));
@@ -410,7 +414,7 @@ int main(int argc, char **argv)
 		sop.sem_num = 0;
 		sop.sem_op = 0;
 		sop.sem_flg = 0;
-		ts.tv_sec = 15;
+		ts.tv_sec = 5;
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("wait sem0 0", errno);
