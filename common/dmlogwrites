@@ -126,3 +126,59 @@ _log_writes_cleanup()
 	$UDEV_SETTLE_PROG >/dev/null 2>&1
 	_log_writes_remove
 }
+
+# Convert log writes mark to entry number
+# Result entry number is output to stdout, could be empty if not found
+_log_writes_mark_to_entry_number()
+{
+	local mark=$1
+	local ret
+
+	[ -z "$mark" ] && _fatal \
+		"mark must be given for _log_writes_mark_to_entry_number"
+
+	ret=$($here/src/log-writes/replay-log --find --log $LOGWRITES_DEV \
+		--end-mark $mark 2> /dev/null)
+	[ -z "$ret" ] && return
+	ret=$(echo "$ret" | cut -f1 -d\@)
+	echo "mark $mark has entry number $ret" >> $seqres.full
+	echo "$ret"
+}
+
+# Find next fua write entry number
+# Result entry number is output to stdout, could be empty if not found
+_log_writes_find_next_fua()
+{
+	local start_entry=$1
+	local ret
+
+	[ -z "$start_entry" ] && start_entry=0
+	ret=$($here/src/log-writes/replay-log --find --log $LOGWRITES_DEV \
+	      --next-fua --start-entry $start_entry 2> /dev/null)
+	[ -z "$ret" ] && return
+
+	# Result should be something like "1024@offset" where 1024 is the
+	# entry number we need
+	ret=$(echo "$ret" | cut -f1 -d\@)
+	echo "next fua is entry number $ret" >> $seqres.full
+	echo "$ret"
+}
+
+# Replay log range to specified entry
+# $1:	End entry. The entry with this number *WILL* be replayed
+_log_writes_replay_log_range()
+{
+	local end=$1
+
+	[ -z "$end" ] && _fail \
+	"end entry must be specified for _log_writes_replay_log_range"
+
+	# To ensure we replay the last entry,
+	# we need to manually increase the end entry number to ensure
+	# it's played
+	echo "=== replay to $end ===" >> $seqres.full
+	$here/src/log-writes/replay-log --log $LOGWRITES_DEV \
+		--replay $SCRATCH_DEV --limit $(($end + 1)) \
+		>> $seqres.full 2>&1
+	[ $? -ne 0 ] && _fail "replay failed"
+}

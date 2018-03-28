@@ -1,0 +1,108 @@
+#! /bin/bash
+# FS QA Test 482
+#
+# Test filesystem consistency after each FUA operation
+#
+# Will do log replay and check the filesystem.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	$KILLALL_PROG -KILL -q $FSSTRESS_PROG &> /dev/null
+	_log_writes_cleanup &> /dev/null
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmlogwrites
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+
+_require_command "$KILLALL_PROG" killall
+# Use $SCRATCH_DEV as replay device
+_require_scratch
+# and we need extra device as log device
+_require_log_writes
+
+
+nr_cpus=$("$here/src/feature" -o)
+# cap nr_cpus to 8 to avoid spending too much time on hosts with many cpus
+if [ $nr_cpus -gt 8 ]; then
+	nr_cpus=8
+fi
+fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 512 -p $nr_cpus \
+		$FSSTRESS_AVOID)
+
+_test_unmount
+_log_writes_init
+_log_writes_mkfs >> $seqres.full 2>&1
+_log_writes_mark mkfs
+
+_log_writes_mount
+run_check $FSSTRESS_PROG $fsstress_args > /dev/null 2>&1
+_log_writes_unmount
+
+_log_writes_remove
+prev=$(_log_writes_mark_to_entry_number mkfs)
+[ -z "$prev" ] && _fail "failed to locate entry mark 'mkfs'"
+cur=$(_log_writes_find_next_fua $prev)
+[ -z "$cur" ] && _fail "failed to locate next FUA write"
+
+while [ ! -z "$cur" ]; do
+	_log_writes_replay_log_range $cur >> $seqres.full
+
+	# Here we need extra mount to replay the log, mainly for journal based
+	# fs, as their fsck will report dirty log as error.
+	# We don't care to preserve any data on $SCRATCH_DEV, as we can replay
+	# back to the point we need, and in fact sometimes creating/deleting
+	# snapshots repeatedly can be slower than replaying the log.
+	_scratch_mount
+	_scratch_unmount
+	_check_scratch_fs
+
+	prev=$cur
+	cur=$(_log_writes_find_next_fua $(($cur + 1)))
+	[ -z "$cur" ] && break
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
