@@ -27,7 +27,7 @@
 
 /*
 
-usage: open_by_handle [-cludmrwapk] [<-i|-o> <handles_file>] <test_dir> [num_files]
+usage: open_by_handle [-cludmrwapkh] [<-i|-o> <handles_file>] <test_dir> [num_files]
 
 Examples:
 
@@ -109,7 +109,7 @@ struct handle {
 
 void usage(void)
 {
-	fprintf(stderr, "usage: open_by_handle [-cludmrwapk] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
+	fprintf(stderr, "usage: open_by_handle [-cludmrwapkh] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "open_by_handle -c <test_dir> [N] - create N test files under test_dir, try to get file handles and exit\n");
 	fprintf(stderr, "open_by_handle    <test_dir> [N] - get file handles of test files, drop caches and try to open by handle\n");
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 	if (argc < 2)
 		usage();
 
-	while ((c = getopt(argc, argv, "cludmrwapki:o:")) != -1) {
+	while ((c = getopt(argc, argv, "cludmrwapkhi:o:")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
