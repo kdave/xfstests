@@ -27,7 +27,7 @@
 
 /*
 
-usage: open_by_handle [-cludmrwapknh] [<-i|-o> <handles_file>] <test_dir> [num_files]
+usage: open_by_handle [-cludmrwapknhs] [<-i|-o> <handles_file>] <test_dir> [num_files]
 
 Examples:
 
@@ -48,9 +48,9 @@ Examples:
    open_by_handle -p -o <handles_file> <test_dir> [N]
 
 4. Read file handles from file and open files by handle without
-   dropping caches beforehand:
+   dropping caches beforehand. Sleep afterhand to keep files open:
 
-   open_by_handle -np -i <handles_file> <test_dir> [N]
+   open_by_handle -nps -i <handles_file> <test_dir> [N]
 
 5. Get file handles for existing test set, write data to files,
    drop caches, open all files by handle, read and verify written
@@ -112,7 +112,7 @@ struct handle {
 
 void usage(void)
 {
-	fprintf(stderr, "usage: open_by_handle [-cludmrwapknh] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
+	fprintf(stderr, "usage: open_by_handle [-cludmrwapknhs] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "open_by_handle -c <test_dir> [N] - create N test files under test_dir, try to get file handles and exit\n");
 	fprintf(stderr, "open_by_handle    <test_dir> [N] - get file handles of test files, drop caches and try to open by handle\n");
@@ -128,6 +128,7 @@ void usage(void)
 	fprintf(stderr, "open_by_handle -p <test_dir>     - create/delete and try to open by handle also test_dir itself\n");
 	fprintf(stderr, "open_by_handle -i <handles_file> <test_dir> [N] - read test files handles from file and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -o <handles_file> <test_dir> [N] - get file handles of test files and write handles to file\n");
+	fprintf(stderr, "open_by_handle -s <test_dir> [N] - wait in sleep loop after opening files by handle to keep them open\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -148,12 +149,12 @@ int main(int argc, char **argv)
 	int	numfiles = 1;
 	int	create = 0, delete = 0, nlink = 1, move = 0;
 	int	rd = 0, wr = 0, wrafter = 0, parent = 0;
-	int	keepopen = 0, drop_caches = 1;
+	int	keepopen = 0, drop_caches = 1, sleep_loop = 0;
 
 	if (argc < 2)
 		usage();
 
-	while ((c = getopt(argc, argv, "cludmrwapknhi:o:")) != -1) {
+	while ((c = getopt(argc, argv, "cludmrwapknhi:o:s")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
@@ -208,6 +209,9 @@ int main(int argc, char **argv)
 				perror(outfile);
 				return EXIT_FAILURE;
 			}
+			break;
+		case 's':
+			sleep_loop = 1;
 			break;
 		default:
 			fprintf(stderr, "illegal option '%s'\n", argv[optind]);
@@ -478,7 +482,8 @@ int main(int argc, char **argv)
 				perror(fname);
 				return EXIT_FAILURE;
 			}
-			close(fd);
+			if (!sleep_loop)
+				close(fd);
 			continue;
 		} else if (!nlink && !keepopen && fd < 0 && (errno == ENOENT || errno == ESTALE)) {
 			continue;
@@ -529,7 +534,8 @@ int main(int argc, char **argv)
 					return EXIT_FAILURE;
 				}
 			}
-			close(fd);
+			if (!sleep_loop)
+				close(fd);
 		} else if (nlink || !(errno == ENOENT || errno == ESTALE)) {
 			printf("open_by_handle(%s) returned %d incorrectly on %s dir!\n",
 					dname, errno,
@@ -540,5 +546,13 @@ int main(int argc, char **argv)
 
 	if (failed)
 		return EXIT_FAILURE;
+
+	/*
+	 * Sleep keeping files open by handle - the program need to be killed
+	 * to release the open files.
+	 */
+	while (sleep_loop)
+		sleep(1);
+
 	return EXIT_SUCCESS;
 }
