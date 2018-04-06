@@ -1,0 +1,124 @@
+#! /bin/bash
+# FSQA Test No. 483
+#
+# Test that fsync operations preserve extents allocated with fallocate(2) that
+# are placed beyond a file's size.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+. ./common/punch
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_xfs_io_command "falloc" "-k"
+_require_xfs_io_command "fiemap"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test files.
+$XFS_IO_PROG -f -c "pwrite -S 0xea 0 256K" $SCRATCH_MNT/foo >/dev/null
+
+# Create a file with many extents. We later want to shrink truncate it and
+# add a prealloc extent beyond its new size.
+for ((i = 1; i <= 500; i++)); do
+	offset=$(((i - 1) * 4 * 1024))
+	$XFS_IO_PROG -f -s -c "pwrite -S 0xcf $offset 4K" \
+		$SCRATCH_MNT/bar >/dev/null
+done
+
+# A file which already has a prealloc extent beyond its size.
+# The fsync done on it is motivated by differences in the btrfs implementation
+# of fsync (first fsync has different logic from subsequent fsyncs).
+$XFS_IO_PROG -f -c "pwrite -S 0xf1 0 256K" \
+	     -c "falloc -k 256K 768K" \
+	     -c "fsync" \
+	     $SCRATCH_MNT/baz >/dev/null
+
+# Make sure everything done so far is durably persisted.
+sync
+
+# Allocate an extent beyond the size of the first test file and fsync it.
+$XFS_IO_PROG -c "falloc -k 256K 1M"\
+	     -c "fsync" \
+	     $SCRATCH_MNT/foo
+
+# Do a shrinking truncate of our test file, add a prealloc extent to it after
+# its new size and fsync it.
+$XFS_IO_PROG -c "truncate 256K" \
+	     -c "falloc -k 256K 1M"\
+	     -c "fsync" \
+	     $SCRATCH_MNT/bar
+
+# Allocate another extent beyond the size of file baz.
+$XFS_IO_PROG -c "falloc -k 1M 2M"\
+	     -c "fsync" \
+	     $SCRATCH_MNT/baz
+
+# Simulate a power failure and mount the filesystem to check that the extents
+# previously allocated were not lost and the file sizes are correct.
+_flakey_drop_and_remount
+
+echo "File foo fiemap:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_hole_fiemap
+echo "File foo size:"
+stat --format %s $SCRATCH_MNT/foo
+
+echo "File bar fiemap:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/bar | _filter_hole_fiemap
+echo "File bar size:"
+stat --format %s $SCRATCH_MNT/bar
+
+echo "File baz fiemap:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/baz | _filter_hole_fiemap
+echo "File baz size:"
+stat --format %s $SCRATCH_MNT/baz
+
+_unmount_flakey
+_cleanup_flakey
+
+status=0
+exit
