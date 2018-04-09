@@ -94,11 +94,16 @@ set_prog_path()
 	type -P $1
 }
 
-# Handle mkfs.btrfs which does (or does not) require -f to overwrite
-set_btrfs_mkfs_prog_path_with_opts()
+# Handle mkfs.$fstyp which does (or does not) require -f to overwrite
+set_mkfs_prog_path_with_opts()
 {
-	p=`set_prog_path mkfs.btrfs`
-	if [ "$p" != "" ] && grep -q 'force overwrite' $p; then
+	local fstyp=$1
+	local p=`set_prog_path mkfs.$fstyp`
+
+	# Note: mkfs.f2fs doesn't support the --help option yet, but it doesn't
+	# matter since it also prints the help when an invalid option is given.
+	if [ "$p" != "" ] && \
+		$p --help |& grep -q "[[:space:]]-f[[:space:]|]"; then
 		echo "$p -f"
 	else
 		echo $p
@@ -223,8 +228,8 @@ case "$HOSTOS" in
         export MKFS_XFS_PROG="`set_prog_path mkfs.xfs`"
         export MKFS_EXT4_PROG="`set_prog_path mkfs.ext4`"
         export MKFS_UDF_PROG="`set_prog_path mkudffs`"
-        export MKFS_BTRFS_PROG="`set_btrfs_mkfs_prog_path_with_opts`"
-        export MKFS_F2FS_PROG="`set_prog_path mkfs.f2fs`"
+        export MKFS_BTRFS_PROG="`set_mkfs_prog_path_with_opts btrfs`"
+        export MKFS_F2FS_PROG="`set_mkfs_prog_path_with_opts f2fs`"
         export DUMP_F2FS_PROG="`set_prog_path dump.f2fs`"
         export BTRFS_UTIL_PROG="`set_prog_path btrfs`"
         export BTRFS_SHOW_SUPER_PROG="`set_prog_path btrfs-show-super`"
