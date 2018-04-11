@@ -70,8 +70,15 @@ export MOUNT_OPTIONS=""
 # lazysb, attr2 and other feature bits are held in features2 and will require
 # morebitsbit on So test with lazysb and without it to see if the morebitsbit is
 # okay etc. If the mkfs defaults change, these need to change as well.
-export MKFS_NO_LAZY="-m crc=0 -l lazy-count=0 -i projid32bit=0"
-export MKFS_LAZY="-m crc=0 -l lazy-count=1 -i projid32bit=0"
+MKFS_NO_LAZY="-m crc=0 -l lazy-count=0 -i projid32bit=0"
+MKFS_LAZY="-m crc=0 -l lazy-count=1 -i projid32bit=0"
+
+# ftype is also stored in features2, so we have to detect its presence in
+# mkfs and disable it here too.
+if _scratch_mkfs --help 2>&1 | grep -q "ftype="; then
+	MKFS_NO_LAZY="$MKFS_NO_LAZY -n ftype=0"
+	MKFS_LAZY="$MKFS_LAZY -n ftype=0"
+fi
 
 # Make sure that when we think we are testing with morebits off
 # that we really are.
