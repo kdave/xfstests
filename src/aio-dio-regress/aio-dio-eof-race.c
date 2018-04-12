@@ -154,6 +154,9 @@ int main(int argc, char *argv[])
 
 	/* Keep extending until size_MB */
 	while (eof < size_MB * 1024 * 1024) {
+		ssize_t sret;
+		int i;
+
 		memset(buf, IO_PATTERN, buf_size);
 		fstat(fd, &statbuf);
 		eof = statbuf.st_size;
@@ -186,14 +189,31 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
+		for (i = 0; i < err; i++) {
+			/*
+			 * res is unsigned for some reason, so this is the best
+			 * way to detect that it contains a negative errno.
+			 */
+			if (evs[i].res > buf_size / 4) {
+				fprintf(stderr, "pwrite: %s\n",
+					strerror(-evs[i].res));
+				return 1;
+			}
+		}
+
 		/*
 		 * And then read it back.
 		 *
 		 * Using pread to keep it simple, but AIO has the same effect.
 		 * eof is the prior eof; we just wrote buf_size more.
 		 */
-		if (pread(fd, buf, buf_size, eof) != buf_size) {
+		sret = pread(fd, buf, buf_size, eof);
+		if (sret == -1) {
 			perror("pread");
+			return 1;
+		} else if (sret != buf_size) {
+			fprintf(stderr, "short read %zd was less than %zu\n",
+				sret, buf_size);
 			return 1;
 		}
 
