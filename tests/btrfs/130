@@ -67,12 +67,14 @@ nr_extents=$((4096 * $LOAD_FACTOR))
 blocksize=$((128 * 1024))
 file=$SCRATCH_MNT/foobar
 
+echo LOAD_FACTOR=$LOAD_FACTOR nr_extents=$nr_extents blocksize=$blocksize >> $seqres.full
+
 # create the initial file, whose file extents are all point to one extent
 _pwrite_byte 0xcdcdcdcd 0 $blocksize  $file | _filter_xfs_io
 
 for i in $(seq 1 $(($nr_extents - 1))); do
 	_reflink_range $file 0 $file $(($i * $blocksize)) $blocksize \
-		> /dev/null 2>&1
+		>> $seqres.full 2>&1
 done
 
 # create a RO snapshot, so we can send out the snapshot
@@ -82,7 +84,8 @@ _run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/ro_snap
 # 1) OOM since memory is allocated inside a O(n^3) loop
 # 2) Softlock since time consuming backref walk is called without scheduling.
 # the send destination is not important, just send will cause the problem
-_run_btrfs_util_prog send $SCRATCH_MNT/ro_snap > /dev/null 2>&1
+echo "# $BTRFS_UTIL_PROG send $SCRATCH_MNT/ro_snap > /dev/null" >> $seqres.full
+$BTRFS_UTIL_PROG send $SCRATCH_MNT/ro_snap > /dev/null 2>>$seqres.full
 
 # success, all done
 status=0
