@@ -701,3 +701,23 @@ _scratch_xfs_set_sb_field()
 {
 	_scratch_xfs_set_metadata_field "$1" "$2" "sb 0"
 }
+
+# Before xfsprogs commit 4222d000ed("db: write via array indexing doesn't
+# work"), xfs_db command to write a specific AGFL index doesn't work. It's a
+# bug in a diagnostic tool that is only used by XFS developers as a test
+# infrastructure, so it's fine to treat it as a infrastructure dependency as
+# all other _require rules.
+_require_xfs_db_write_array()
+{
+	local supported=0
+
+	_require_test
+	touch $TEST_DIR/$seq.img
+	$MKFS_XFS_PROG -d file,name=$TEST_DIR/$seq.img,size=512m >/dev/null 2>&1
+	$XFS_DB_PROG -x -c "agfl 0" -c "write bno[32] 78" $TEST_DIR/$seq.img \
+		>/dev/null 2>&1
+	$XFS_DB_PROG -x -c "agfl 0" -c "print bno[32]" $TEST_DIR/$seq.img \
+		| grep -q "bno\[32\] = 78" && supported=1
+	rm -f $TEST_DIR/$seq.img
+	[ $supported -eq 0 ] && _notrun "xfs_db write can't support array"
+}
