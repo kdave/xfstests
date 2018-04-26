@@ -62,6 +62,8 @@ _require_scratch_nocheck
 _require_test
 _require_test_program "af_unix"
 _require_test_program "t_dir_type"
+# Require redirect_dir for renaming a merge directory
+_require_scratch_feature redirect_dir
 
 rm -f $seqres.full
 
@@ -83,7 +85,8 @@ _scratch_mkfs >>$seqres.full 2>&1
 upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
 workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
 
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir
+# Enable redirect_dir for renaming a merge directory
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
 
 FILES="dir file symlink chrdev blkdev fifo socket"
 
@@ -150,13 +153,13 @@ check_inode_numbers $testdir $tmp.after_copyup $tmp.after_move
 
 # Verify that the inode numbers survive a mount cycle
 $UMOUNT_PROG $SCRATCH_MNT
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
 
 # Compare inode numbers before/after mount cycle
 check_inode_numbers $testdir $tmp.after_move $tmp.after_cycle
 
 # check overlayfs
-_overlay_check_scratch_dirs $lowerdir $upperdir $workdir
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
 
 echo "Silence is golden"
 status=0
