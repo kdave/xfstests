@@ -85,8 +85,15 @@ _scratch_mkfs >>$seqres.full 2>&1
 upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
 workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
 
-# Enable redirect_dir for renaming a merge directory
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
+# Enable redirect_dir for renaming a merge directory.
+# Enabling xino in this test requires that base filesystem inode numbers will
+# not use bit 63 in inode number of the test files, because bit 63 is used by
+# overlayfs to indicate the layer. Let's just assume that this is true for all
+# tested filesystems and if we are wrong, the test may fail.
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on,xino=on || \
+	_notrun "cannot mount overlay with xino=on option"
+_fs_options $SCRATCH_DEV | grep -q "xino=on" || \
+	_notrun "cannot enable xino feature"
 
 FILES="dir file symlink chrdev blkdev fifo socket"
 
@@ -153,13 +160,13 @@ check_inode_numbers $testdir $tmp.after_copyup $tmp.after_move
 
 # Verify that the inode numbers survive a mount cycle
 $UMOUNT_PROG $SCRATCH_MNT
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o redirect_dir=on,xino=on
 
 # Compare inode numbers before/after mount cycle
 check_inode_numbers $testdir $tmp.after_move $tmp.after_cycle
 
 # check overlayfs
-_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o redirect_dir=on
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o redirect_dir=on,xino=on
 
 echo "Silence is golden"
 status=0

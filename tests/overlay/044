@@ -99,8 +99,15 @@ _scratch_mkfs >>$seqres.full 2>&1
 upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
 workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
 
-# Enable overlay index feature to prevent breaking hardlinks on copy up
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o index=on
+# Enable overlay index feature to prevent breaking hardlinks on copy up.
+# Enabling xino in this test requires that base filesystem inode numbers will
+# not use bit 63 in inode number of the test files, because bit 63 is used by
+# overlayfs to indicate the layer. Let's just assume that this is true for all
+# tested filesystems and if we are wrong, the test may fail.
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o index=on,xino=on || \
+	_notrun "cannot mount overlay with xino=on option"
+_fs_options $SCRATCH_DEV | grep -q "xino=on" || \
+	_notrun "cannot enable xino feature"
 
 rm -f $tmp.*
 
@@ -124,8 +131,8 @@ check_ino_nlink $SCRATCH_MNT $tmp.before $tmp.after_one
 
 # Verify that the hardlinks survive a mount cycle
 $UMOUNT_PROG $SCRATCH_MNT
-_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o index=on
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o index=on
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o index=on,xino=on
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o index=on,xino=on
 
 echo "== After mount cycle =="
 cat $FILES

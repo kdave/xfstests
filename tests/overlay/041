@@ -70,7 +70,14 @@ _scratch_mkfs
 upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
 workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
 
-_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir
+# Enabling xino in this test requires that base filesystem inode numbers will
+# not use bit 63 in inode number of the test files, because bit 63 is used by
+# overlayfs to indicate the layer. Let's just assume that this is true for all
+# tested filesystems and if we are wrong, the test may fail.
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o xino=on || \
+	_notrun "cannot mount overlay with xino=on option"
+_fs_options $SCRATCH_DEV | grep -q "xino=on" || \
+	_notrun "cannot enable xino feature"
 
 test_dir=$SCRATCH_MNT/test_dir/
 
@@ -171,7 +178,7 @@ subdir_d=$($here/src/t_dir_type $pure_lower_dir $pure_lower_subdir_st_ino)
 $UMOUNT_PROG $SCRATCH_MNT
 
 # check overlayfs
-_overlay_check_scratch_dirs $lowerdir $upperdir $workdir
+_overlay_check_scratch_dirs $lowerdir $upperdir $workdir -o xino=on
 
 # Verify pure lower residing in dir which has another lower layer
 middir=$OVL_BASE_TEST_DIR/$seq-ovl-mid
@@ -186,7 +193,7 @@ mkdir -p $lowerdir/test_dir/pure_lower_dir/subdir
 
 _scratch_mkfs
 
-_overlay_scratch_mount_dirs $middir:$lowerdir $upperdir $workdir
+_overlay_scratch_mount_dirs $middir:$lowerdir $upperdir $workdir -o xino=on
 
 # Copy up test_dir
 touch $test_dir/test_file
@@ -209,7 +216,7 @@ subdir_d=$($here/src/t_dir_type $pure_lower_dir $pure_lower_subdir_st_ino)
 	echo "Pure lower in dir which has another lower layer: Invalid d_ino reported for subdir"
 
 # check overlayfs
-_overlay_check_scratch_dirs "$middir:$lowerdir" $upperdir $workdir
+_overlay_check_scratch_dirs "$middir:$lowerdir" $upperdir $workdir -o xino=on
 
 echo "Silence is golden"
 status=0
