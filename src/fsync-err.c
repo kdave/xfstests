@@ -170,9 +170,9 @@ int main(int argc, char **argv)
 			ret = fsync(fd[i]);
 			if (ret < 0) {
 				/*
-				 * We did a failed write and fsync on each fd before.
-				 * Now the error should be clear since we've not done
-				 * any writes since then.
+				 * We did a failed write and fsync on each fd
+				 * before.  Now the error should be clear since
+				 * we've not done any writes since then.
 				 */
 				printf("Third fsync on fd[%d] failed: %m\n", i);
 				return 1;
@@ -220,7 +220,7 @@ int main(int argc, char **argv)
 			printf("Close of fd[%d] returned unexpected error: %m\n", i);
 			return 1;
 		}
-		fd[i] = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		fd[i] = open(fname, O_WRONLY, 0644);
 		if (fd[i] < 0) {
 			printf("Second open of fd[%d] failed: %m\n", i);
 			return 1;
