@@ -94,15 +94,16 @@ for ag in $(seq 1 $((agcount - 1))) 0; do
 done
 
 echo "+ mount image"
-_scratch_mount
+if _try_scratch_mount >> $seqres.full 2>&1; then
 
-echo "+ modify files"
-broken=0
-for x in `seq 65 70`; do
-	touch "${TESTFILE}.${x}" 2> /dev/null || broken=1
-done
-echo "broken: ${broken}"
-umount "${SCRATCH_MNT}"
+	echo "+ modify files"
+	broken=0
+	for x in `seq 65 70`; do
+		touch "${TESTFILE}.${x}" 2> /dev/null || broken=1
+	done
+	echo "broken: ${broken}"
+	umount "${SCRATCH_MNT}"
+fi
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1

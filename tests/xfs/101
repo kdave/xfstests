@@ -82,12 +82,13 @@ echo "+ corrupt dir"
 _scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full
 
 echo "+ mount image"
-_scratch_mount
+if _try_scratch_mount >> $seqres.full 2>&1; then
 
-echo "+ modify dir"
-rm -rf "${SCRATCH_MNT}/blockdir/00000000" 2> /dev/null && _fail "modified corrupt directory"
-mkdir "${SCRATCH_MNT}/blockdir/xxxxxxxx" 2> /dev/null && _fail "add to corrupt directory"
-umount "${SCRATCH_MNT}"
+	echo "+ modify dir"
+	rm -rf "${SCRATCH_MNT}/blockdir/00000000" 2> /dev/null && _fail "modified corrupt directory"
+	mkdir "${SCRATCH_MNT}/blockdir/xxxxxxxx" 2> /dev/null && _fail "add to corrupt directory"
+	umount "${SCRATCH_MNT}"
+fi
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1

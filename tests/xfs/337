@@ -85,12 +85,13 @@ _scratch_xfs_db -x -c "sb" -c "addr rrmapino" -c "addr u3.rtrmapbt.ptrs[1]" \
 	>> $seqres.full 2>&1
 
 echo "+ mount image"
-_scratch_mount
+if _try_scratch_mount >> $seqres.full 2>&1; then
 
-echo "+ copy more"
-$XFS_IO_PROG -f -R -c "pwrite -S 0x68 0 1" $SCRATCH_MNT/e3 >> $seqres.full 2>&1
-test -s ${SCRATCH_MNT}/f3 && echo "should not be able to copy with busted rtrmap btree"
-_scratch_unmount
+	echo "+ copy more"
+	$XFS_IO_PROG -f -R -c "pwrite -S 0x68 0 1" $SCRATCH_MNT/e3 >> $seqres.full 2>&1
+	test -s ${SCRATCH_MNT}/f3 && echo "should not be able to copy with busted rtrmap btree"
+	_scratch_unmount
+fi
 
 echo "+ repair fs"
 _repair_scratch_fs >> $seqres.full 2>&1

@@ -79,14 +79,15 @@ echo "+ corrupt image"
 _scratch_xfs_db -x -c "inode ${inode}" -c "addr u.bmbt.ptrs[1]" -c "addr u3.bmbt.ptrs[1]" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full
 
 echo "+ mount image"
-_scratch_mount
+if _try_scratch_mount >> $seqres.full 2>&1; then
 
-echo "+ modify files"
-before="$(stat -c '%b' "${SCRATCH_MNT}/bigfile")"
-$XFS_IO_PROG -f -c "pwrite -S 0x62 ${blksz} ${blksz}" -c 'fsync' "${SCRATCH_MNT}/bigfile" >> $seqres.full 2> /dev/null
-after="$(stat -c '%b' "${SCRATCH_MNT}/bigfile")"
-test "${before}" -eq "${after}" || _fail "pwrite should fail on corrupt bmbt"
-umount "${SCRATCH_MNT}"
+	echo "+ modify files"
+	before="$(stat -c '%b' "${SCRATCH_MNT}/bigfile")"
+	$XFS_IO_PROG -f -c "pwrite -S 0x62 ${blksz} ${blksz}" -c 'fsync' "${SCRATCH_MNT}/bigfile" >> $seqres.full 2> /dev/null
+	after="$(stat -c '%b' "${SCRATCH_MNT}/bigfile")"
+	test "${before}" -eq "${after}" || _fail "pwrite should fail on corrupt bmbt"
+	umount "${SCRATCH_MNT}"
+fi
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1

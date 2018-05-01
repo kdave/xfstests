@@ -93,13 +93,14 @@ done
 
 # Try to append to files; this should fail
 echo "+ mount image"
-_scratch_mount
+if _try_scratch_mount >> $seqres.full 2>&1; then
 
-echo "+ modify files"
-for x in `seq 1 64`; do
-	$XFS_IO_PROG -f -c "pwrite -S 0x62 0 ${blksz}" "${TESTFILE}.${x}" >> $seqres.full
-done
-umount "${SCRATCH_MNT}"
+	echo "+ modify files"
+	for x in `seq 1 64`; do
+		$XFS_IO_PROG -f -c "pwrite -S 0x62 0 ${blksz}" "${TESTFILE}.${x}" >> $seqres.full
+	done
+	umount "${SCRATCH_MNT}"
+fi
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1
