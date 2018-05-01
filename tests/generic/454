@@ -154,7 +154,7 @@ check_xfs_scrub() {
 
 	# We only care if xfs_scrub has unicode string support...
 	if ! type ldd > /dev/null 2>&1 || \
-	   ! ldd "${XFS_SCRUB_PROG}" | grep -q libunistring; then
+	   ! ldd "${XFS_SCRUB_PROG}" | grep -q libicui18n; then
 		return 1
 	fi
 
@@ -162,9 +162,8 @@ check_xfs_scrub() {
 }
 
 if check_xfs_scrub; then
-	output="$(LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -n "${SCRATCH_MNT}" 2>&1 | filter_scrub)"
+	output="$(LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -v -n "${SCRATCH_MNT}" 2>&1 | filter_scrub)"
 	echo "${output}" | grep -q "french_" || echo "No complaints about french e accent?"
-	echo "${output}" | grep -q "chinese_" || echo "No complaints about chinese width-different?"
 	echo "${output}" | grep -q "greek_" || echo "No complaints about greek letter mess?"
 	echo "${output}" | grep -q "arabic_" || echo "No complaints about arabic expanded string?"
 	echo "Actual xfs_scrub output:" >> $seqres.full
