@@ -62,10 +62,37 @@ setf() {
 	echo "Storing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
 }
 
+setd() {
+	key="$(echo -e "$1")"
+	value="$2"
+
+	mkdir -p "${testdir}/${key}"
+	echo "${value}" > "${testdir}/${key}/value"
+	echo "Storing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
+}
+
 testf() {
 	key="$(echo -e "$1")"
 	value="$2"
 	fname="${testdir}/${key}"
+
+	echo "Testing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
+
+	if [ ! -e "${fname}" ]; then
+		echo "Key ${key} does not exist for ${value} test??"
+		return
+	fi
+
+	actual_value="$(cat "${fname}")"
+	if [ "${actual_value}" != "${value}" ]; then
+		echo "Key ${key} has value ${value}, expected ${actual_value}."
+	fi
+}
+
+testd() {
+	key="$(echo -e "$1")"
+	value="$2"
+	fname="${testdir}/${key}/value"
 
 	echo "Testing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
 
@@ -143,6 +170,10 @@ setf "zerojoin_moo\xe2\x80\x8dcow.txt" "zero width joiners"
 setf "combmark_\xe1\x80\x9c\xe1\x80\xad\xe1\x80\xaf.txt" "combining marks"
 setf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
 
+# fake dotdot entry
+setd ".\xe2\x80\x8d" "zero width joiners in dot entry"
+setd "..\xe2\x80\x8d" "zero width joiners in dotdot entry"
+
 ls -la $testdir >> $seqres.full
 
 echo "Test files"
@@ -189,6 +220,9 @@ testf "zerojoin_moo\xe2\x80\x8dcow.txt" "zero width joiners"
 
 testf "combmark_\xe1\x80\x9c\xe1\x80\xad\xe1\x80\xaf.txt" "combining marks"
 testf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
+
+testd ".\xe2\x80\x8d" "zero width joiners in dot entry"
+testd "..\xe2\x80\x8d" "zero width joiners in dotdot entry"
 
 echo "Uniqueness of inodes?"
 stat -c '%i' "${testdir}/"* | sort | uniq -c | while read nr inum; do
