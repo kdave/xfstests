@@ -1,0 +1,71 @@
+#! /bin/bash
+# FS QA Test No. 486
+#
+# Ensure that we can XATTR_REPLACE a tiny attr into a large attr.
+# Kanda Motohiro <kanda.motohiro@gmail.com> reports that XATTR_REPLACE'ing
+# a single-byte attr with a 2048-byte attr causes a fs shutdown because we
+# remove the shortform attr, convert the attr fork to long format, and then
+# try to re-add the attr having not cleared ATTR_REPLACE.
+#
+# Commit 7b38460dc8e4 ("xfs: don't fail when converting shortform attr to long
+# form during ATTR_REPLACE") fixed the xfs bug.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test_program "attr_replace_test"
+_require_attrs
+_require_scratch
+
+rm -f $seqres.full
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount >>$seqres.full 2>&1
+
+filter_attr_output() {
+	_filter_scratch | sed -e 's/has a [0-9]* byte value/has a NNNN byte value/g'
+}
+
+./src/attr_replace_test $SCRATCH_MNT/hello
+$ATTR_PROG -l $SCRATCH_MNT/hello | filter_attr_output
+
+status=0
+exit
