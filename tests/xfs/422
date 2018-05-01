@@ -51,6 +51,7 @@ _supported_fs xfs
 _require_xfs_scratch_rmapbt
 _require_xfs_io_command "scrub"
 _require_xfs_io_error_injection "force_repair"
+_require_command "$KILLALL_PROG" killall
 
 echo "Format and populate"
 _scratch_mkfs > "$seqres.full" 2>&1
@@ -89,18 +90,33 @@ repair_loop() {
 		$XFS_IO_PROG -x -c 'repair rmapbt 0' -c 'repair rmapbt 1' $SCRATCH_MNT 2>&1 | filter_output
 	done
 }
+stress_loop() {
+	end="$1"
+
+	FSSTRESS_ARGS=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000 $FSSTRESS_AVOID)
+	while [ "$(date +%s)" -lt $end ]; do
+		$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full
+	done
+}
 $XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
 
 start=$(date +%s)
 end=$((start + (30 * TIME_FACTOR) ))
 
 echo "Loop started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
+stress_loop $end &
 freeze_loop $end &
 repair_loop $end &
 
-while [ "$(date +%s)" -lt $end ]; do
+# Wait until 2 seconds after the loops should have finished...
+while [ "$(date +%s)" -lt $((end + 2)) ]; do
 	sleep 1
 done
+
+# ...and clean up after the loops in case they didn't do it themselves.
+$KILLALL_PROG -TERM xfs_io fsstress >> $seqres.full 2>&1
+$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
+
 echo "Loop finished at $(date)" >> $seqres.full
 echo "Test done"
 
