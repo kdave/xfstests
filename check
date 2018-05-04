@@ -102,6 +102,8 @@ a test file name match pattern (e.g. xfs/*).
 group argument is either a name of a tests group to collect from all
 the test dirs (e.g. quick) or a name of a tests group to collect from
 a specific tests dir in the form of <test dir>/<group name> (e.g. xfs/quick).
+If you want to run all the tests in the test suite, use "-g all" to specify all
+groups.
 
 exclude_file argument refers to a name of a file inside each test directory.
 for every test dir where this file is found, the listed test names are
@@ -220,22 +222,24 @@ _prepare_test_list()
 	fi
 
 	# Specified groups to include
-	for group in $GROUP_LIST; do
-		list=$(get_group_list $group)
-		if [ -z "$list" ]; then
-			echo "Group \"$group\" is empty or not defined?"
-			exit 1
-		fi
-
-		for t in $list; do
-			grep -s "^$t\$" $tmp.list >/dev/null || \
-							echo "$t" >>$tmp.list
-		done
-	done
-
-	if ! $have_test_arg && [ -z "$GROUP_LIST" ]; then
+	# Note that the CLI processing adds a leading space to the first group
+	# parameter, so we have to catch that here checking for "all"
+	if ! $have_test_arg && [ "$GROUP_LIST" == " all" ]; then
 		# no test numbers, do everything
 		get_all_tests
+	else
+		for group in $GROUP_LIST; do
+			list=$(get_group_list $group)
+			if [ -z "$list" ]; then
+				echo "Group \"$group\" is empty or not defined?"
+				exit 1
+			fi
+
+			for t in $list; do
+				grep -s "^$t\$" $tmp.list >/dev/null || \
+							echo "$t" >>$tmp.list
+			done
+		done
 	fi
 
 	# Specified groups to exclude
@@ -364,6 +368,10 @@ if $have_test_arg; then
 
 		shift
 	done
+elif [ -z "$GROUP_LIST" ]; then
+	# default group list is the auto group. If any other group or test is
+	# specified, we use that instead.
+	GROUP_LIST="auto"
 fi
 
 # we need common/rc
