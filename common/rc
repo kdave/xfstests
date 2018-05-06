@@ -1169,27 +1169,6 @@ _get_pids_by_name()
 	-e "/[0-9]:[0-9][0-9]  *$1 /s/ .*//p"
 }
 
-# fix malloc libs output
-#
-_fix_malloc()
-{
-    # filter out the Electric Fence notice
-    $PERL_PROG -e '
-        while (<>) {
-            if (defined $o && /^\s+Electric Fence/) {
-                chomp($o);
-                print "$o";
-                undef $o;
-                next;
-            }
-            print $o if (defined $o);
-
-            $o=$_;
-        }
-        print $o if (defined $o);
-    '
-}
-
 #
 # _df_device : get an IRIX style df line for a given device
 #
@@ -1372,7 +1351,7 @@ _do()
     (eval "echo '---' \"$cmd\"") >>$seqres.full
     (eval "$cmd") >$tmp._out 2>&1
     local ret=$?
-    cat $tmp._out | _fix_malloc >>$seqres.full
+    cat $tmp._out >>$seqres.full
     rm -f $tmp._out
     if [ $# -eq 2 ]; then
 	if [ $ret -eq 0 ]; then
