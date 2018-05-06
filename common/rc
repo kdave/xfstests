@@ -2126,13 +2126,20 @@ _require_xfs_io_command()
 			-c "fiemap -v $param" $testfile 2>&1`
 		param_checked=1
 		;;
-	"flink" )
-		testio=`$XFS_IO_PROG -T -F -c "flink $testfile" \
-			$TEST_DIR 2>&1`
+	"flink")
+		local testlink=$TEST_DIR/$$.link.xfs_io
+		testio=`$XFS_IO_PROG -F -f -c "flink $testlink" $testfile 2>&1`
+		rm -f $testlink > /dev/null 2>&1
+		;;
+	"-T")
+		# Check O_TMPFILE support in xfs_io, kernel and fs
+		testio=`$XFS_IO_PROG -T -c quit $TEST_DIR 2>&1`
 		echo $testio | egrep -q "invalid option|Is a directory" && \
 			_notrun "xfs_io $command support is missing"
+		echo $testio | grep -q "Operation not supported" && \
+			_notrun "O_TMPFILE is not supported"
 		;;
-	"fsmap" )
+	"fsmap")
 		testio=`$XFS_IO_PROG -f -c "fsmap" $testfile 2>&1`
 		echo $testio | grep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command support is missing"
