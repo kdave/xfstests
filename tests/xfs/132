@@ -1,0 +1,73 @@
+#! /bin/bash
+# FS QA Test No. 132
+#
+# Catch inobt/on disk inode free state mismatches on V4 filesystems
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Red Hat, Inc.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+
+# we intentionally corrupt the filesystem, so don't check it after the test
+_require_scratch_nocheck
+
+# on success, we'll get a shutdown filesystem with a really noisy log message
+# due to transaction cancellation.  Hence we don't want to check dmesg here.
+_disable_dmesg_check
+
+_require_xfs_mkfs_crc
+_scratch_mkfs -m crc=0 > $seqres.full 2>&1
+
+# corrupt an inode in the root inode chunk
+root_ino=$(_scratch_xfs_get_metadata_field 'rootino' 'sb 0')
+corrupt_ino=$((root_ino + 15))
+_scratch_xfs_set_metadata_field 'core.mode' 0100644 "inode $corrupt_ino"
+
+_scratch_mount
+
+# The corrupt inode should be tripped over during these initial file creates.
+touch $SCRATCH_MNT/file{0,1,2,3,4,5}{0,1,2,3,4,5} 2>&1 | _filter_scratch
+
+# success, all done
+status=0
+exit
