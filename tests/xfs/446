@@ -1,0 +1,52 @@
+#! /bin/bash
+# FS QA Test No. 446
+#
+# checkbashisms on all /bin/sh scripts.  This is a maintainer script.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+
+# get standard environment
+. ./common/rc
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+export CHECKBASHISMS_PROG="`set_prog_path checkbashisms`"
+_require_command "$CHECKBASHISMS_PROG" checkbashisms
+
+test -z "$WORKAREA" && _notrun "Can't find xfsprogs source"
+
+rm -f $seqres.full
+
+echo "Silence is golden"
+find $WORKAREA -type f -name 'xfs*.sh' -print0 | xargs -0 grep '^#!.*/bin/sh' | sed -e 's/:.*$//g' | while read f; do
+	$CHECKBASHISMS_PROG $f
+done
+
+status=0
