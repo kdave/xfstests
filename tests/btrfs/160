@@ -1,0 +1,105 @@
+#! /bin/bash
+# FS QA Test No. 160
+#
+# Open a file and write to it and fsync. Then flip the data device to throw
+# errors, write to it again and call sync. Close the file, reopen it and
+# then call fsync on it. Is the error reported?
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018, Jeff Layton <jlayton@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_dmerror_cleanup
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmerror
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs btrfs
+_require_scratch_dev_pool
+
+_require_dm_target error
+
+rm -f $seqres.full
+
+# bring up dmerror device
+_dmerror_init
+
+# Replace first device with error-test device
+old_SCRATCH_DEV=$SCRATCH_DEV
+SCRATCH_DEV_POOL=`echo $SCRATCH_DEV_POOL | perl -pe "s#$SCRATCH_DEV#$DMERROR_DEV#"`
+SCRATCH_DEV=$DMERROR_DEV
+
+echo "Format and mount"
+_scratch_pool_mkfs "-d raid0 -m raid1" > $seqres.full 2>&1
+_scratch_mount
+
+# How much do we need to write? We need to hit all of the stripes. btrfs uses a
+# fixed 64k stripesize, so write enough to hit each one. In the case of
+# compression, each 128K input data chunk will be compressed to 4K (because of
+# the characters written are duplicate). Therefore we have to write
+# (128K * 16) = 2048K to make sure every stripe can be hit.
+number_of_devices=`echo $SCRATCH_DEV_POOL | wc -w`
+write_kb=$(($number_of_devices * 2048))
+_require_fs_space $SCRATCH_MNT $write_kb
+datalen=$((($write_kb * 1024)-1))
+
+# use fd 5 to hold file open
+testfile=$SCRATCH_MNT/fsync-open-after-err
+exec 5>$testfile
+
+# write some data to file and fsync it out
+$XFS_IO_PROG -c "pwrite -q 0 $datalen" -c fsync $testfile
+
+# flip device to non-working mode
+_dmerror_load_error_table
+
+# rewrite the data, call sync to ensure it's written back w/o scraping error
+$XFS_IO_PROG -c "pwrite -q 0 $datalen" -c sync $testfile
+
+# heal the device error
+_dmerror_load_working_table
+
+# open again and call fsync
+echo "The following fsync should fail with EIO:"
+$XFS_IO_PROG -c fsync $testfile
+echo "done"
+
+# close file
+exec 5>&-
+
+# success, all done
+_dmerror_cleanup
+
+status=0
+exit
