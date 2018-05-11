@@ -1,0 +1,86 @@
+#! /bin/bash
+# FSQA Test No. 489
+#
+# Test that xattrs are not lost after calling fsync multiple times with a
+# filesystem commit in between the fsync calls.
+#
+#-----------------------------------------------------------------------
+#
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+# Author: Filipe Manana <fdmanana@suse.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_attrs
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+touch $SCRATCH_MNT/foobar
+$SETFATTR_PROG -n user.xa1 -v qwerty $SCRATCH_MNT/foobar
+$SETFATTR_PROG -n user.xa2 -v 'hello world' $SCRATCH_MNT/foobar
+$SETFATTR_PROG -n user.xa3 -v test $SCRATCH_MNT/foobar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foobar
+
+# Call sync to commit all fileystem metadata.
+sync
+
+$XFS_IO_PROG -c "pwrite -S 0xea 0 64K" \
+	     -c "fsync" \
+	     $SCRATCH_MNT/foobar >>$seqres.full
+
+# Simulate a power failure and mount the filesystem to check that the xattrs
+# were not lost and neither was the data we wrote.
+_flakey_drop_and_remount
+echo "File xattrs after power failure:"
+$GETFATTR_PROG --absolute-names --dump $SCRATCH_MNT/foobar | _filter_scratch
+echo "File data after power failure:"
+od -t x1 $SCRATCH_MNT/foobar
+
+_unmount_flakey
+_cleanup_flakey
+
+status=0
+exit
