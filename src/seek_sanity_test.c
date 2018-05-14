@@ -274,6 +274,75 @@ out:
 	return ret;
 }
 
+/*
+ * Make sure hole size is properly reported when starting in the middle of a
+ * hole in ext? doubly indirect tree
+ */
+static int test20(int fd, int testnum)
+{
+	int ret = -1;
+	char *buf = NULL;
+	loff_t bufsz, filsz;
+
+	bufsz = alloc_size;
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* Magic size in the middle of ext[23] triple indirect tree */
+	filsz = (12 + bufsz / 4 + 8 * bufsz / 4 * bufsz / 4 + 2 * bufsz / 4 + 5) * bufsz;
+	ret = do_pwrite(fd, buf, bufsz, filsz - bufsz);
+	if (ret)
+		goto out;
+
+	/* Offset inside ext[23] indirect block */
+	ret += do_lseek(testnum, 1, fd, filsz, SEEK_DATA, 14 * bufsz, filsz - bufsz);
+	/* Offset inside ext[23] doubly indirect block */
+	ret += do_lseek(testnum, 2, fd, filsz, SEEK_DATA, (12 + 2 * bufsz / 4) * bufsz, filsz - bufsz);
+	/* Offsets inside ext[23] triply indirect block */
+	ret += do_lseek(testnum, 3, fd, filsz, SEEK_DATA,
+		(12 + bufsz / 4 + bufsz / 4 * bufsz / 4 + 3 * bufsz / 4 + 5) * bufsz, filsz - bufsz);
+	ret += do_lseek(testnum, 3, fd, filsz, SEEK_DATA,
+		(12 + bufsz / 4 + 7 * bufsz / 4 * bufsz / 4 + 5 * bufsz / 4) * bufsz, filsz - bufsz);
+	ret += do_lseek(testnum, 3, fd, filsz, SEEK_DATA,
+		(12 + bufsz / 4 + 8 * bufsz / 4 * bufsz / 4 + bufsz / 4 + 11) * bufsz, filsz - bufsz);
+out:
+	if (buf)
+		free(buf);
+	return ret;
+}
+/*
+ * Make sure hole size is properly reported when starting in the middle of a
+ * hole in ext? indirect tree
+ */
+static int test19(int fd, int testnum)
+{
+	int ret = -1;
+	char *buf = NULL;
+	int bufsz, filsz;
+
+	bufsz = alloc_size;
+	buf = do_malloc(bufsz);
+	if (!buf)
+		goto out;
+	memset(buf, 'a', bufsz);
+
+	/* Magic size just beyond ext[23] indirect tree size */
+	filsz = (12 + bufsz / 4 + 1) * bufsz;
+	ret = do_pwrite(fd, buf, bufsz, filsz - bufsz);
+	if (ret)
+		goto out;
+
+	ret += do_lseek(testnum, 1, fd, filsz, SEEK_DATA, bufsz, filsz - bufsz);
+	ret += do_lseek(testnum, 2, fd, filsz, SEEK_DATA, 12*bufsz, filsz - bufsz);
+	ret += do_lseek(testnum, 3, fd, filsz, SEEK_DATA, (12 + bufsz / 4 - 8)*bufsz, filsz - bufsz);
+out:
+	if (buf)
+		free(buf);
+	return ret;
+}
+
 /* Make sure we get ENXIO if we pass in a negative offset. */
 static int test18(int fd, int testnum)
 {
@@ -982,6 +1051,8 @@ struct testrec seek_tests[] = {
        { 16, test16, "Test file with unwritten extents, non-contiguous dirty pages" },
        { 17, test17, "Test file with unwritten extents, data-hole-data inside page" },
        { 18, test18, "Test file with negative SEEK_{HOLE,DATA} offsets" },
+       { 19, test19, "Test file SEEK_DATA from middle of a large hole" },
+       { 20, test20, "Test file SEEK_DATA from middle of a huge hole" },
 };
 
 static int run_test(struct testrec *tr)
