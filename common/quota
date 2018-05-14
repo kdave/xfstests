@@ -90,9 +90,9 @@ _require_xfs_quota_foreign()
 _require_prjquota()
 {
     [ -n "$1" ] && _dev="$1" || _dev="$TEST_DEV"
-    if [ "$FSTYP" == "ext4" ]; then
+    if [[ "$FSTYP" == ext[234] ]]; then
 	dumpe2fs -h $_dev 2>&1 | grep -qw project || \
-		_notrun "Project quota not available on this ext4"
+		_notrun "Project quota not available on this $FSTYP"
     fi
     src/feature -P $_dev
     [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
@@ -116,7 +116,7 @@ _require_getnextquota()
 # prior to mount.  This is a relatively new feature ...
 _scratch_enable_pquota()
 {
-	[ "$FSTYP" != "ext4" ] && return
+	[[ "$FSTYP" != ext[234] ]] && return
 
 	tune2fs -O quota,project $SCRATCH_DEV >>$seqres.full 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
@@ -242,7 +242,7 @@ _qmount_option()
 
 	# ext4 doesn't _do_ "-o pquota/prjquota" because reasons
 	# Switch it to "quota" to enable mkfs-time pquota
-	if [ "$FSTYP" == "ext4" ]; then
+	if [[ "$FSTYP" == ext[234] ]]; then
 		OPTS=`echo $OPTS \
 		| sed	-e 's/\bpquota/quota/g'	\
 			-e 's/prjquota/quota/g'`
