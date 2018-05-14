@@ -113,7 +113,7 @@ $XFS_IO_PROG -f -d -c 'pwrite -b 1m 0 120m' $SCRATCH_MNT/f1 >>$seqres.full 2>&1
 # extended. It is expected, and is only used so xfsaild is triggered to
 # flush AIL items, other filesystems usually get remounted as read-only during
 # the above write process.
-fsfreeze -f $SCRATCH_MNT >>$seqres.full 2>&1 &
+xfs_freeze -f $SCRATCH_MNT >>$seqres.full 2>&1 &
 freezeid=$!
 
 # Wait enough so xfsaild can run
@@ -132,7 +132,7 @@ ret=$?
 #	- The filesystem stays in Read-Write mode, but can be frozen/thawed
 #	  without getting stuck.
 if [ $ret -ne 0 ]; then
-	# fsfreeze failed, filesystem should reject further writes and remount
+	# freeze failed, filesystem should reject further writes and remount
 	# as readonly. Sometimes the previous write process won't trigger
 	# ro-remount, e.g. on ext3/4, do additional touch here to make sure
 	# filesystems see the metadata I/O error.
@@ -148,7 +148,7 @@ if [ $ret -ne 0 ]; then
 else
 	# Try to thaw the filesystem, and complete test if if succeed.
 	# NOTE: This will hang on affected XFS filesystems.
-	fsfreeze -u $SCRATCH_MNT >>$seqres.full 2>&1
+	xfs_freeze -u $SCRATCH_MNT >>$seqres.full 2>&1
 	echo "Test OK"
 fi
 
