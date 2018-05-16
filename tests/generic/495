@@ -1,0 +1,77 @@
+#! /bin/bash
+# FS QA Test 495
+#
+# Test invalid swap files.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Facebook.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch_swapfile
+_require_test_program mkswap
+_require_test_program swapon
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+echo "File with holes"
+# We can't use _format_swapfile because we're using our custom mkswap and
+# swapon.
+touch "$SCRATCH_MNT/swap"
+$CHATTR_PROG +C "$SCRATCH_MNT/swap" >> $seqres.full 2>&1
+chmod 0600 "$SCRATCH_MNT/swap"
+$XFS_IO_PROG -c "truncate $(($(get_page_size) * 10))" "$SCRATCH_MNT/swap"
+"$here/src/mkswap" "$SCRATCH_MNT/swap"
+"$here/src/swapon" "$SCRATCH_MNT/swap"
+swapoff "$SCRATCH_MNT/swap" >/dev/null 2>&1
+
+echo "Empty swap file (only swap header)"
+rm -f "$SCRATCH_MNT/swap"
+touch "$SCRATCH_MNT/swap"
+$CHATTR_PROG +C "$SCRATCH_MNT/swap" >> $seqres.full 2>&1
+chmod 0600 "$SCRATCH_MNT/swap"
+_pwrite_byte 0x61 0 $(get_page_size) "$SCRATCH_MNT/swap" >> $seqres.full
+"$here/src/mkswap" "$SCRATCH_MNT/swap"
+"$here/src/swapon" "$SCRATCH_MNT/swap"
+swapoff "$SCRATCH_MNT/swap" >/dev/null 2>&1
+
+status=0
+exit
