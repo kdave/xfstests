@@ -1,0 +1,95 @@
+#! /bin/bash
+# FS QA Test 492
+#
+# Test the online filesystem label set/get ioctls
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Red Hat, Inc.  All Rights Reserved.
+# Author: Eric Sandeen <sandeen@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "label"
+_require_label_get_max
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+# Make sure we can set & clear the label
+$XFS_IO_PROG -c "label -s label.$seq" $SCRATCH_MNT
+$XFS_IO_PROG -c "label" $SCRATCH_MNT
+
+$XFS_IO_PROG -c "label -c" $SCRATCH_MNT
+$XFS_IO_PROG -c "label" $SCRATCH_MNT
+
+# And that userspace can see it now, while mounted
+# NB: some blkid has trailing whitespace, filter it out here
+$XFS_IO_PROG -c "label -s label.$seq" $SCRATCH_MNT
+$XFS_IO_PROG -c "label" $SCRATCH_MNT
+blkid -s LABEL $SCRATCH_DEV | _filter_scratch | sed -e "s/ $//g"
+
+# And that the it is still there when it's unmounted
+_scratch_unmount
+blkid -s LABEL $SCRATCH_DEV | _filter_scratch | sed -e "s/ $//g"
+
+# And that it persists after a remount
+_scratch_mount
+$XFS_IO_PROG -c "label" $SCRATCH_MNT
+
+# And that a too-long label is rejected, beyond the interface max:
+fs_label=$(perl -e "print 'l' x 257;")
+$XFS_IO_PROG -c "label -s $fs_label" $SCRATCH_MNT
+
+# And it succeeds right at the filesystem max:
+max_label_len=$(_label_get_max)
+fs_label=$(perl -e "print 'o' x $max_label_len;")
+$XFS_IO_PROG -c "label -s $fs_label" $SCRATCH_MNT | sed -e 's/o\+/MAXLABEL/'
+
+# And that it fails past the filesystem max:
+let toolong_label_len=max_label_len+1
+fs_label=$(perl -e "print 'o' x $toolong_label_len;")
+$XFS_IO_PROG -c "label -s $fs_label " $SCRATCH_MNT
+
+# success, all done
+status=0
+exit

@@ -2144,6 +2144,9 @@ _require_xfs_io_command()
 		echo $testio | grep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"label")
+		testio=`$XFS_IO_PROG -c "label" $TEST_DIR 2>&1`
+		;;
 	"open")
 		# -c "open $f" is broken in xfs_io <= 4.8. Along with the fix,
 		# a new -C flag was introduced to execute one shot commands.
@@ -2182,7 +2185,7 @@ _require_xfs_io_command()
 	rm -f $testfile 2>&1 > /dev/null
 	echo $testio | grep -q "not found" && \
 		_notrun "xfs_io $command support is missing"
-	echo $testio | grep -q "Operation not supported" && \
+	echo $testio | grep -q "Operation not supported\|Inappropriate ioctl" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs?)"
 	echo $testio | grep -q "Invalid" && \
 		_notrun "xfs_io $command failed (old kernel/wrong fs/bad args?)"
@@ -3786,6 +3789,29 @@ _require_scratch_feature()
 		_fail "Test for feature '${feature}' of ${FSTYP} is not implemented"
 		;;
 	esac
+}
+
+# The maximum filesystem label length, /not/ including terminating NULL
+_label_get_max()
+{
+	case $FSTYP in
+	xfs)
+		echo 12
+		;;
+	btrfs)
+		echo 255
+		;;
+	*)
+		_notrun "$FSTYP does not define maximum label length"
+		;;
+	esac
+}
+
+# Helper to check above early in a script
+_require_label_get_max()
+{
+	# Just call _label_get_max which will notrun if appropriate
+	dummy=$(_label_get_max)
 }
 
 init_rc
