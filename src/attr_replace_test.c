@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 
 #define die() do { perror(""); \
-fprintf(stderr, "error=%d at line %d\n", errno, __LINE__); \
+fprintf(stderr, "error at line %d\n", __LINE__); \
 exit(1); } while (0)
 
 #define fail(...) do { \
