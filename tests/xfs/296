@@ -47,6 +47,8 @@ _cleanup()
 _supported_fs xfs
 _supported_os Linux
 _require_scratch
+_require_command "$SETCAP_PROG" setcap
+_require_command "$GETCAP_PROG" getcap
 
 rm -f $seqres.full
 
@@ -57,12 +59,12 @@ echo test > $dump_dir/testfile
 # Set a generic xattr
 setfattr -n user.name -v value $dump_dir/testfile
 # Now set the cap (which is also an xattr)
-setcap cap_setgid,cap_setuid+ep $dump_dir/testfile
+$SETCAP_PROG cap_setgid,cap_setuid+ep $dump_dir/testfile
 # And make sure they are there on the source
 echo "Checking for xattr on source file"
 getfattr --absolute-names -m user.name $dump_dir/testfile | _dir_filter
 echo "Checking for capability on source file"
-getcap $dump_dir/testfile | _dir_filter
+$GETCAP_PROG $dump_dir/testfile | _dir_filter
 getfattr --absolute-names -m security.capability $dump_dir/testfile | _dir_filter
 
 _do_dump_file -f $tmp.df.0
@@ -75,7 +77,7 @@ _diff_compare
 echo "Checking for xattr on restored file"
 getfattr --absolute-names -m user.name $restore_dir/$dump_sdir/testfile | _dir_filter
 echo "Checking for capability on restored file"
-getcap $restore_dir/$dump_sdir/testfile | _dir_filter
+$GETCAP_PROG $restore_dir/$dump_sdir/testfile | _dir_filter
 getfattr --absolute-names -m security.capability $restore_dir/$dump_sdir/testfile | _dir_filter
 
 status=0

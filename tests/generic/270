@@ -51,10 +51,7 @@ _workout()
 	echo "fsstress $args" >> $seqres.full
 	# Grant chown capability 
 	cp $FSSTRESS_PROG  $tmp.fsstress.bin
-	if [ "`whereis setcap`" == "setcap:" ]; then
-            _notrun "setcap not installed."
-	fi
-	setcap cap_chown=epi  $tmp.fsstress.bin
+	$SETCAP_PROG cap_chown=epi  $tmp.fsstress.bin
 
 	(su $qa_user -c "$tmp.fsstress.bin $args" &) > /dev/null 2>&1
 	pid=$!
@@ -80,6 +77,7 @@ _require_quota
 _require_user
 _require_scratch
 _require_command "$KILLALL_PROG" killall
+_require_command "$SETCAP_PROG" setcap
 
 rm -f $seqres.full
 _scratch_mkfs_sized $((512 * 1024 * 1024)) >> $seqres.full 2>&1
