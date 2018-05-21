@@ -73,9 +73,11 @@ for i in $(seq 1 $((50 * TIME_FACTOR)) ); do
 	# recovery
 	sleep $((RANDOM % 3))
 
-	# Loading error table without "--nolockfs" option. Because "--nolockfs"
-	# won't freeze fs, then some running I/Os may cause XFS to shutdown
-	# prematurely. That's not what we want to test.
+	# This test aims to simulate sudden disk failure, which means that we
+	# do not want to quiesce the filesystem or otherwise give it a chance
+	# to flush its logs.  Therefore we want to call dmsetup with the
+	# --nolockfs parameter; to make this happen we must call the load
+	# error table helper *without* 'lockfs'.
 	_dmerror_load_error_table
 
 	ps -e | grep fsstress > /dev/null 2>&1
