@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 
 static void err_exit(char *op, int errn)
@@ -32,12 +33,24 @@ struct flock fl = {
 
 static void checklock(int fd)
 {
-	if (fcntl(fd, F_GETLK, &fl) < 0)
-		err_exit("getlk", errno);
-	if (fl.l_type == F_UNLCK) {
-		printf("record lock is not preserved across execve(2)\n");
-		exit(1);
+	pid_t pid;
+
+	pid = fork();
+	if (pid < 0)
+		err_exit("fork", errno);
+
+	if (!pid) {
+		if (fcntl(fd, F_GETLK, &fl) < 0)
+			err_exit("getlk", errno);
+		if (fl.l_type == F_UNLCK) {
+			printf("record lock is not preserved across execve(2)\n");
+			exit(1);
+		}
+		exit(0);
 	}
+
+	waitpid(pid, NULL, 0);
+
 	exit(0);
 }
 
@@ -52,7 +65,6 @@ int main(int argc, char **argv)
 	if (argc == 3) {
 		fd = atoi(argv[2]);
 		checklock(fd);
-		exit(0);
 	}
 
 	fd = open(argv[1], O_WRONLY|O_CREAT, 0755);
