@@ -2225,6 +2225,19 @@ _require_odirect()
 	rm -f $testfile 2>&1 > /dev/null
 }
 
+_format_swapfile() {
+	local fname="$1"
+	local sz="$2"
+
+	rm -f "$fname"
+	touch "$fname"
+	chmod 0600 "$fname"
+	# Swap files must be nocow on Btrfs.
+	$CHATTR_PROG +C "$fname" > /dev/null 2>&1
+	_pwrite_byte 0x61 0 "$sz" "$fname" >> $seqres.full
+	mkswap "$fname" >> $seqres.full
+}
+
 # Check that the filesystem supports swapfiles
 _require_scratch_swapfile()
 {
@@ -2234,10 +2247,8 @@ _require_scratch_swapfile()
 	_scratch_mount
 
 	# Minimum size for mkswap is 10 pages
-	local size=$(($(get_page_size) * 10))
+	_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
 
-	_pwrite_byte 0x61 0 "$size" "$SCRATCH_MNT/swap" >/dev/null 2>&1
-	mkswap "$SCRATCH_MNT/swap" >/dev/null 2>&1
 	if ! swapon "$SCRATCH_MNT/swap" >/dev/null 2>&1; then
 		_scratch_unmount
 		_notrun "swapfiles are not supported"
