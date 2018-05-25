@@ -73,13 +73,16 @@ echo "=== truncate file ==="
 dd if=/dev/zero of=$tmpfile bs=1 seek=19998630180864 count=1 >/dev/null 2>&1 \
 	|| _fail "!!! failed to truncate loopback file to correct size"
 
+# mkfs/growfs output has changed slightly over the years, this distills
+# it down to a common set of output parameters we care about
 mkfs_filter()
 {
 	sed -e 's/meta-data=[^ ]*/meta-data=FILE/' \
 	    -e 's/ *isize=[0-9]* / isize=N /' \
 	    -e "s/\(^log.*blocks=\)\([0-9]*,\)/\1XXXXX,/" \
+	    -e "s/internal log/internal    /" \
 	    -e "s/, projid32bit=[0-9]//" \
-	    -e "s/ ftype=[0-9]//" \
+	    -e "s/,\? ftype=[0-9]//" \
 	    -e "/.*reflink=/d" \
 	    -e "s/\(sectsz\)\(=[0-9]* *\)/\1=512   /" \
 	    -e "s/\(sunit=\)\([0-9]* blks,\)/\10 blks,/" \
