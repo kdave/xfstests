@@ -77,10 +77,11 @@ _xunit_make_section_report()
 
 _xunit_make_testcase_report()
 {
-	local test_status="$1"
+	local test_seq="$1"
+	local test_status="$2"
 	local test_time=`expr $stop - $start`
 	local strip="$SRC_DIR/"
-	local test_name=${seq#$strip}
+	local test_name=${test_seq#$strip}
 	local sect_name=$section
 
 	# TODO: other places may also win if no-section mode will be named like 'default/global'
@@ -126,13 +127,13 @@ _xunit_make_testcase_report()
 		elif [ -s $seqres.out.bad ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			$diff $seq.out $seqres.out.bad | encode_xml >>$report
+			$diff $test_seq.out $seqres.out.bad | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		fi
 		;;
 	*)
-		echo -e "\t\t<failure message=\"Unknown ret_state=$ret_state\" type=\"TestFail\"/>" >> $report
+		echo -e "\t\t<failure message=\"Unknown test_status=$test_status\" type=\"TestFail\"/>" >> $report
 		;;
 	esac
 	echo -e "\t</testcase>" >> $report
@@ -157,11 +158,12 @@ _make_section_report()
 
 _make_testcase_report()
 {
-	test_status="$1"
+	local test_seq="$1"
+	local test_status="$2"
 	for report in $REPORT_LIST; do
 		case "$report" in
 		"xunit")
-			_xunit_make_testcase_report "$test_status"
+			_xunit_make_testcase_report "$test_seq" "$test_status"
 			;;
 		*)
 			_dump_err "report format '$report' is not supported"
