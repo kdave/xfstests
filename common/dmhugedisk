@@ -31,6 +31,11 @@ _dmhugedisk_init()
 {
 	test -z "$1" && _fatal "must specify sector count to _dmhugedisk_init"
 	local dm_backing_dev=$SCRATCH_DEV
+	local chunk_size="$2"
+
+	if [ -z "$chunk_size" ]; then
+		chunk_size=512
+	fi
 
 	$DMSETUP_PROG remove huge-test > /dev/null 2>&1
 	$DMSETUP_PROG remove huge-test-zero > /dev/null 2>&1
@@ -41,7 +46,7 @@ _dmhugedisk_init()
 	DMHUGEDISK_DEV='/dev/mapper/huge-test'
 
 	DMHUGEDISK_ZERO_TABLE="0 $blk_dev_size zero"
-	DMHUGEDISK_DEV_TABLE="0 $blk_dev_size snapshot $DMHUGEDISK_ZERO $SCRATCH_DEV N 512"
+	DMHUGEDISK_DEV_TABLE="0 $blk_dev_size snapshot $DMHUGEDISK_ZERO $SCRATCH_DEV N $chunk_size"
 
 	$DMSETUP_PROG create huge-test-zero --table "$DMHUGEDISK_ZERO_TABLE" || \
 		_fatal "failed to create dm huge zero device"
