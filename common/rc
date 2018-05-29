@@ -20,18 +20,9 @@
 #  Mountain View, CA 94043, USA, or: http://www.sgi.com
 #-----------------------------------------------------------------------
 
-BC=$(which bc 2> /dev/null) || BC=
+. common/config
 
-# Valid test names start with 3 digits "NNN":
-#  "[0-9]\{3\}"
-# followed by an optional "-":
-#  "-\?"
-# followed by an optional combination of alphanumeric and "-" chars:
-#  "[[:alnum:]-]*"
-# e.g. 999-the-mark-of-fstests
-#
-VALID_TEST_ID="[0-9]\{3\}"
-VALID_TEST_NAME="$VALID_TEST_ID-\?[[:alnum:]-]*"
+BC=$(which bc 2> /dev/null) || BC=
 
 # Some tests are not relevant or functional when testing XFS realtime
 # subvolumes along with the rtinherit=1 mkfs option.  In these cases,
@@ -109,16 +100,6 @@ _ls_l()
 {
 	ls -l $* | sed "s/\(^[-rwxdlbcpsStT]*\)\. /\1 /" | grep -v 'lost+found'
 }
-
-# we need common/config
-if [ "$iam" != "check" ]
-then
-    if ! . ./common/config
-        then
-        echo "$iam: failed to source common/config"
-        exit 1
-    fi
-fi
 
 _dump_err()
 {
@@ -3574,10 +3555,6 @@ _disable_dmesg_check()
 
 init_rc()
 {
-	if [ "$iam" == new ]
-	then
-		return
-	fi
 	# make some further configuration checks here
 	if [ "$TEST_DEV" = ""  ]
 	then
