@@ -35,7 +35,6 @@ _cleanup()
 	umount $SCRATCH_MNT > /dev/null 2>&1
 	_dmhugedisk_cleanup
 	rm -rf $tmp.*
-	_scratch_mkfs >/dev/null 2>&1
 }
 
 # get standard environment, filters and checks
@@ -46,7 +45,7 @@ _cleanup()
 # real QA test starts here
 _supported_os Linux
 _supported_fs xfs
-_require_scratch
+_require_scratch_nocheck
 _require_xfs_scratch_rmapbt
 _require_xfs_io_command "falloc"
 
@@ -60,7 +59,7 @@ _scratch_mount >> $seqres.full
 testdir=$SCRATCH_MNT/test-$seq
 blksz="$(_get_block_size $SCRATCH_MNT)"
 
-umount $SCRATCH_MNT
+_scratch_unmount
 
 echo "Format huge device"
 nr_blks=2100000	# 2^21 plus a little more
@@ -110,7 +109,6 @@ test $nr_rmaps -eq 1 || xfs_db -c 'agf 0' -c 'addr rmaproot' -c 'p' $DMHUGEDISK_
 echo "Check and fake-repair huge filesystem again" | tee -a $seqres.full
 $XFS_DB_PROG -c 'check' $DMHUGEDISK_DEV
 $XFS_REPAIR_PROG -n $DMHUGEDISK_DEV >> $seqres.full 2>&1
-_dmhugedisk_cleanup
 
 echo "Done"
 
