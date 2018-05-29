@@ -72,7 +72,7 @@ ext4_online_resize()
 
 	echo "+++ resize fs to $final_size" | tee -a $seqres.full
 
-	resize2fs -f ${LOOP_DEVICE} $final_size >$tmp.resize2fs 2>&1
+	$RESIZE2FS_PROG -f ${LOOP_DEVICE} $final_size >$tmp.resize2fs 2>&1
 	if [ $? -ne 0 ]; then
 		if [ $check_if_supported -eq 1 ]; then
 			grep -iq "operation not supported" $tmp.resize2fs \
@@ -114,6 +114,7 @@ _require_scratch
 # We use resize_inode to make sure that block group descriptor table
 # can be extended.
 _require_scratch_ext4_feature "bigalloc,resize_inode"
+_require_command "$RESIZE2FS_PROG" resize2fs
 
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
