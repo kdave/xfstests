@@ -1,0 +1,123 @@
+#! /bin/bash
+# FS QA Test 033
+#
+# Test s_inodes_count overflow for huge filesystems. This bug was fixed
+# by commit "ext4: Forbid overflowing inode count when resizing".
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Jan Kara, SUSE.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	umount $SCRATCH_MNT >/dev/null 2>&1
+	_dmhugedisk_cleanup
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmhugedisk
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch_nocheck
+_require_dmhugedisk
+_require_dumpe2fs
+_require_command "$RESIZE2FS_PROG" resize2fs
+
+# Figure out whether device is large enough
+devsize=$(blockdev --getsize64 $SCRATCH_DEV)
+if [ $devsize -lt 4294967296 ]; then
+	_notrun "Too small scratch device, need at least 4G"
+fi
+
+# Figure out block size
+echo "Figure out block size"
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount >> $seqres.full
+blksz="$(_get_block_size $SCRATCH_MNT)"
+_scratch_unmount
+
+inodes_per_group=$((blksz*8))
+group_blocks=$((blksz*8))
+
+# Number of groups to overflow s_inodes_count
+limit_groups=$(((1<<32)/inodes_per_group))
+
+# Create device huge enough so that overflowing inode count is possible.
+# Set chunk size to 16 sectors. Group descriptors with META_BG feature
+# are rather sparse and that leads to huge overallocation especially with
+# 1k blocksize.
+echo "Format huge device"
+_dmhugedisk_init $(((limit_groups + 16)*group_blocks*(blksz/512))) 16
+
+# Start with small fs
+group_count=$((limit_groups - 16))
+_mkfs_dev -N $((group_count*inodes_per_group)) -b $blksz \
+	$DMHUGEDISK_DEV $((group_count*group_blocks))
+
+_mount $DMHUGEDISK_DEV $SCRATCH_MNT
+
+echo "Initial fs dump" >> $seqres.full
+$DUMPE2FS_PROG -h $DMHUGEDISK_DEV >> $seqres.full 2>&1
+
+# This should fail, s_inodes_count would just overflow!
+echo "Resizing to inode limit + 1..."
+$RESIZE2FS_PROG $DMHUGEDISK_DEV $((limit_groups*group_blocks)) >> $seqres.full 2>&1
+if [ $? -eq 0 ]; then
+	echo "Resizing succeeded but it should fail!"
+	exit
+fi
+
+# This should succeed, we are maxing out inodes
+echo "Resizing to max group count..."
+$RESIZE2FS_PROG $DMHUGEDISK_DEV $(((limit_groups-1)*group_blocks)) >> $seqres.full 2>&1
+if [ $? -ne 0 ]; then
+	echo "Resizing failed!"
+	exit
+fi
+
+echo "Fs dump after resize" >> $seqres.full
+$DUMPE2FS_PROG -h $DMHUGEDISK_DEV >> $seqres.full 2>&1
+
+# This should fail, s_inodes_count would overflow by quite a bit!
+echo "Resizing to device size..."
+$RESIZE2FS_PROG $DMHUGEDISK_DEV >> $seqres.full 2>&1
+if [ $? -eq 0 ]; then
+	echo "Resizing succeeded but it should fail!"
+	exit
+fi
+
+# success, all done
+status=0
+exit
