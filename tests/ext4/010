@@ -47,8 +47,10 @@ _supported_fs ext4
 _supported_os Linux
 
 _require_scratch
+_require_dumpe2fs
 test -n "${FORCE_FUZZ}" || _require_scratch_ext4_crc
 _require_attrs
+_require_command "$RESIZE2FS_PROG" resize2fs
 
 rm -f $seqres.full
 TESTDIR="${SCRATCH_MNT}/scratchdir"
@@ -56,9 +58,9 @@ TESTFILE="${TESTDIR}/testfile"
 
 echo "+ create scratch fs"
 _scratch_mkfs_ext4 > /dev/null 2>&1
-dumpe2fs -g "${SCRATCH_DEV}" > /dev/null 2>&1 || _notrun "dumpe2fs -g not supported"
-resize2fs -M "${SCRATCH_DEV}" >> $seqres.full 2>&1
-nr_groups="$(dumpe2fs -g "${SCRATCH_DEV}" 2> /dev/null | tail -n 1 | cut -d : -f 1)"
+$DUMPE2FS_PROG -g "${SCRATCH_DEV}" > /dev/null 2>&1 || _notrun "dumpe2fs -g not supported"
+$RESIZE2FS_PROG -M "${SCRATCH_DEV}" >> $seqres.full 2>&1
+nr_groups="$($DUMPE2FS_PROG -g "${SCRATCH_DEV}" 2> /dev/null | tail -n 1 | cut -d : -f 1)"
 
 echo "+ mount fs image"
 _scratch_mount
@@ -74,7 +76,7 @@ echo "+ check fs"
 e2fsck -fn "${SCRATCH_DEV}" >> $seqres.full 2>&1 || _fail "fsck should not fail"
 
 echo "+ corrupt image"
-dumpe2fs -g "${SCRATCH_DEV}" 2>/dev/null | awk -F ':' '{if (int($6) > 0) {print $6}}' | while read blk; do
+$DUMPE2FS_PROG -g "${SCRATCH_DEV}" 2>/dev/null | awk -F ':' '{if (int($6) > 0) {print $6}}' | while read blk; do
 	debugfs -w -n -R "zap_block ${blk}" "${SCRATCH_DEV}" >> $seqres.full 2>&1 || _fail "inode bitmap fuzz failed"
 done
 
