@@ -140,9 +140,6 @@ __check_scratch_overlay_feature()
 	# configurable from Kconfig (the build default), by module
 	# parameter (the system default) and per mount by mount
 	# option ${feature}=[on|off].
-	#
-	# If the module parameter does not exist then there is no
-	# point in checking the mount option.
 	local default=`_get_fs_module_param ${feature}`
 	[ "$default" = Y ] || [ "$default" = N ] || \
 		_notrun "feature '${feature}' not supported by ${FSTYP}"
@@ -164,12 +161,16 @@ _require_scratch_overlay_features()
 	local opts="rw"
 
 	for feature in ${features[*]}; do
+		# If the module parameter does not exist then there is no
+		# point in checking the mount option.
+		_get_fs_module_param ${feature} > /dev/null 2>&1 || \
+			_notrun "feature '${feature}' not supported by overlay"
 		opts+=",${feature}=on"
 	done
 
 	_scratch_mkfs > /dev/null 2>&1
 	_try_scratch_mount -o $opts || \
-		_notrun "overlay options '$opts' cannot be enabled on ${SCRATCH_DEV}"
+	        _notrun "overlay features '${features[*]}' cannot be enabled on ${SCRATCH_DEV}"
 
 	for feature in ${features[*]}; do
 		__check_scratch_overlay_feature ${feature}
