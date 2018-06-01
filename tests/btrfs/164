@@ -1,0 +1,111 @@
+#! /bin/bash
+# FS QA Test 164 seed device delete test
+#
+# Test case to verify that a seed device can be deleted
+#  Create a seed device
+#  Create a sprout device
+#  Remount RW
+#  Run device delete on the seed device
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle.  All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/module
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_loadable_fs_module "btrfs"
+_require_scratch_dev_pool 2
+
+_scratch_dev_pool_get 2
+
+dev_seed=$(echo $SCRATCH_DEV_POOL | awk '{print $1}')
+dev_sprout=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+
+create_seed()
+{
+	_mkfs_dev $dev_seed
+	run_check _mount $dev_seed $SCRATCH_MNT
+	$XFS_IO_PROG -f -d -c "pwrite -S 0xab 0 256K" $SCRATCH_MNT/foobar >\
+		/dev/null
+	echo -- gloden --
+	od -x $SCRATCH_MNT/foobar
+	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_scratch_unmount
+	$BTRFS_TUNE_PROG -S 1 $dev_seed
+	run_check _mount $dev_seed $SCRATCH_MNT
+}
+
+add_sprout()
+{
+	_run_btrfs_util_prog device add -f $dev_sprout $SCRATCH_MNT
+	run_check mount -o rw,remount $dev_seed $SCRATCH_MNT
+	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+}
+
+delete_seed()
+{
+	_run_btrfs_util_prog device delete $dev_seed $SCRATCH_MNT
+	_scratch_unmount
+	_reload_fs_module "btrfs"
+	run_check _mount $dev_sprout $SCRATCH_MNT
+	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	echo -- sprout --
+	od -x $SCRATCH_MNT/foobar
+	_scratch_unmount
+}
+
+seed_is_mountable()
+{
+	run_check _mount $dev_seed $SCRATCH_MNT
+	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_scratch_unmount
+}
+
+create_seed
+add_sprout
+delete_seed
+
+seed_is_mountable
+
+_scratch_dev_pool_put
+
+status=0
+exit
