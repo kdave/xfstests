@@ -1,0 +1,86 @@
+#! /bin/bash
+# FS QA Test No. 449
+#
+# Make sure pretty printed XFS geometry is the same across all programs.
+#
+#-----------------------------------------------------------------------
+# Copyright (c) 2018 Oracle, Inc.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+#-----------------------------------------------------------------------
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+rm -f $seqres.full
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+
+_require_scratch_nocheck
+
+# Geometry printing wasn't unified until xfs_spaceman grew an 'info'
+# command, so skip this test if there is no spaceman or it doesn't
+# know what 'info' is.
+_require_xfs_spaceman_command "info"
+_require_command "$XFS_GROWFS_PROG" xfs_growfs
+
+_scratch_mkfs > $tmp.mkfs
+echo MKFS >> $seqres.full
+cat $tmp.mkfs >> $seqres.full
+
+_scratch_xfs_db -c "info" > $tmp.dbinfo
+echo DB >> $seqres.full
+cat $tmp.dbinfo >> $seqres.full
+diff -u $tmp.mkfs $tmp.dbinfo
+
+_scratch_mount
+
+$XFS_SPACEMAN_PROG -c "info" $SCRATCH_MNT > $tmp.spaceman
+echo SPACEMAN >> $seqres.full
+cat $tmp.spaceman >> $seqres.full
+diff -u $tmp.mkfs $tmp.spaceman
+
+$XFS_GROWFS_PROG -n $SCRATCH_MNT > $tmp.growfs
+echo GROWFS >> $seqres.full
+cat $tmp.growfs >> $seqres.full
+diff -u $tmp.mkfs $tmp.growfs
+
+$XFS_INFO_PROG $SCRATCH_MNT > $tmp.info
+echo INFO >> $seqres.full
+cat $tmp.info >> $seqres.full
+diff -u $tmp.mkfs $tmp.info
+
+echo "Silence is golden."
+status=0
+exit 0

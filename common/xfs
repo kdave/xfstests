@@ -720,3 +720,43 @@ _require_xfs_db_write_array()
 	rm -f $TEST_DIR/$seq.img
 	[ $supported -eq 0 ] && _notrun "xfs_db write can't support array"
 }
+
+_require_xfs_spaceman_command()
+{
+	if [ -z "$1" ]; then
+		echo "Usage: _require_xfs_spaceman_command command [switch]" 1>&2
+		exit 1
+	fi
+	local command=$1
+	shift
+	local param="$*"
+	local param_checked=0
+	local opts=""
+
+	_require_command "$XFS_SPACEMAN_PROG" "xfs_spaceman"
+
+	testfile=$TEST_DIR/$$.xfs_spaceman
+	case $command in
+	*)
+		testio=`$XFS_SPACEMAN_PROG -c "help $command" $TEST_DIR 2>&1`
+	esac
+
+	rm -f $testfile 2>&1 > /dev/null
+	echo $testio | grep -q "not found" && \
+		_notrun "xfs_spaceman $command support is missing"
+	echo $testio | grep -q "Operation not supported" && \
+		_notrun "xfs_spaceman $command failed (old kernel/wrong fs?)"
+	echo $testio | grep -q "Invalid" && \
+		_notrun "xfs_spaceman $command failed (old kernel/wrong fs/bad args?)"
+	echo $testio | grep -q "foreign file active" && \
+		_notrun "xfs_spaceman $command not supported on $FSTYP"
+	echo $testio | grep -q "Function not implemented" && \
+		_notrun "xfs_spaceman $command support is missing (missing syscall?)"
+
+	[ -n "$param" ] || return
+
+	if [ $param_checked -eq 0 ]; then
+		$XFS_SPACEMAN_PROG -c "help $command" | grep -q "^ $param --" || \
+			_notrun "xfs_spaceman $command doesn't support $param"
+	fi
+}
