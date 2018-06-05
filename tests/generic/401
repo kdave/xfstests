@@ -4,14 +4,13 @@
 # Test filetype feature
 #
 # This test does NOT require that file system support the d_type feature.
-# It verifies that either all file types are reported as DT_UNKNOWN
-# or all file types are reported correctly.
+# It verifies that file types are reported as either DT_UNKNOWN or as
+# the actual file type. For example, special dir entries . and .. MAY be
+# reported as DT_UNKNOWN IF filetype feature is disabled (ext4), but MAY
+# also be reported as DT_DIR in this case (xfs).
 #
 # For fs for which we know how to test the filetype feature (xfs|ext*)
 # verify getting DT_UNKNOWN IFF feature is disabled.
-# Special dir entries . and .. MAY be reported as DT_UNKNOWN IF filetype
-# feature is disabled (ext4), but MAY also be reported as DT_DIR in this
-# case (xfs).
 #
 #-----------------------------------------------------------------------
 #
@@ -73,23 +72,22 @@ mknod $testdir/c c 1 1
 mknod $testdir/b b 1 1
 mknod $testdir/p p
 
-# Test d_type of . and ..
-# it must be DT_DIR on fs with filetype support and it could be
-# either DR_DIR or DT_UNKNOWN on fs without filetype support
-src/t_dir_type $testdir d | grep -F '.' | sort
-
-# Test that either all file types are unknown or all are correct
-if _supports_filetype $SCRATCH_MNT; then
-	# print real file types
-	src/t_dir_type $testdir | grep -vF '.' | sort
-else
-	# print fake dir file type for . and .. if they are DT_UNKNOWN
-	src/t_dir_type $testdir u | grep -F '.' | \
-		awk '{ print $1, "d" }' | sort
-	# list unknown files and print filename as fake file type
-	src/t_dir_type $testdir u | grep -vF '.' | \
-		awk '{ print $1, $1 }' | sort
-fi
+# Test d_type of test files - it must be the actual file type on fs
+# with filetype support and it could be either the actual file type
+# or DT_UNKNOWN on fs without filetype support
+ftype=
+_supports_filetype $SCRATCH_MNT && ftype=1
+src/t_dir_type $testdir | \
+while read name type; do
+	if [ "$ftype" != 1 -a "$type" = u ]; then
+		if [ "$name" = "." -o "$name" = ".." ]; then
+			type=d
+		else
+			type=$name
+		fi
+	fi
+	echo $name $type
+done | sort
 
 status=0
 exit
