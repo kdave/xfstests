@@ -95,9 +95,11 @@ sub get_qa_header($) {
     open(my $FH, $f) || die "couldn't open '$f': $!";
     while (<$FH>) {
 	#ignore.
-	m/^#\!/    		and next; #shebang
-	m/^#\s*\-{10}/		and last; #dashed lines
-	m/^#\s*copyright/i 	and last; #copyright lines
+	m/^#\!/			and next; # shebang
+	m/^# SPDX/i		and next; # SPDX tags
+	m/^# Copyright/i	and next; # Copyright tags
+	m/^#\s*\-{10}/		and last; # dashed lines
+	m/^seq/i		and last; # test start
 
 	s/^# *//;
 
