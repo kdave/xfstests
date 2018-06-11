@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 498
+#
+# Test that if we create a new hard link for a file which was previously
+# fsync'ed, fsync a parent directory of the new hard link and power fail,
+# the parent directory exists after mounting the filesystem again.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+mkdir $SCRATCH_MNT/A
+mkdir $SCRATCH_MNT/B
+mkdir $SCRATCH_MNT/A/C
+touch $SCRATCH_MNT/B/foo
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/B/foo
+# It is important the new hard link is located in a hierarchy of new directories
+# (not yet persisted).
+ln $SCRATCH_MNT/B/foo $SCRATCH_MNT/A/C/foo
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/A
+
+# Simulate a power failure and mount the filesystem to check that what we
+# explicitly fsync'ed exists.
+_flakey_drop_and_remount
+
+[ -d $SCRATCH_MNT/A ] || echo "directory A missing"
+[ -f $SCRATCH_MNT/B/foo ] || echo "file B/foo is missing"
+
+_unmount_flakey
+_cleanup_flakey
+
+echo "Silence is golden"
+status=0
+exit
