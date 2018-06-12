@@ -2036,8 +2036,6 @@ main(int argc, char **argv)
 				seed = time(0) % 10000;
 				seed += (int)getpid();
 			}
-			if (!quiet)
-				prt("Seed set to %d\n", seed);
 			if (seed < 0)
 				usage();
 			break;
@@ -2091,6 +2089,8 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
+	if (!quiet && seed)
+		prt("Seed set to %d\n", seed);
 	srandom(seed);
 	fd = open(fname, o_flags, 0666);
 	if (fd < 0) {
