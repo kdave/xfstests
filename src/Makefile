@@ -19,7 +19,7 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 
 LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	preallo_rw_pattern_writer ftrunc trunc fs_perms testx looptest \
-	locktest unwritten_mmap bulkstat_unlink_test t_stripealign \
+	locktest unwritten_mmap bulkstat_unlink_test \
 	bulkstat_unlink_test_modified t_dir_offset t_futimens t_immutable \
 	stale_handle pwrite_mmap_blocked t_dir_offset2 seek_sanity_test \
 	seek_copy_test t_readdir_1 t_readdir_2 fsync-tester nsexec cloner \
@@ -37,7 +37,7 @@ LINUX_TARGETS += loggen
 endif
 
 ifeq ($(HAVE_FIEMAP), true)
-LINUX_TARGETS += fiemap-tester
+LINUX_TARGETS += fiemap-tester t_stripealign
 endif
 
 ifeq ($(HAVE_OPEN_BY_HANDLE_AT), true)
