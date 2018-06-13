@@ -1,0 +1,124 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Fujitsu. All Rights Reserved.
+#
+# FS QA Test No. 165
+#
+# QA test that checks rmdir(2) works for subvolumes like ordinary directories.
+#
+# This behavior has been restricted long time but becomes allowed by kernel
+# commit a79a464d5675 ("btrfs: Allow rmdir(2) to delete an empty subvolume")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+create_subvol()
+{
+	$BTRFS_UTIL_PROG subvolume create $1 >> $seqres.full 2>&1
+}
+
+create_snapshot()
+{
+	$BTRFS_UTIL_PROG subvolume snapshot $@ >> $seqres.full 2>&1
+}
+
+rmdir_subvol()
+{
+	rmdir $1 >> $seqres.full 2>&1
+}
+
+rm_r_subvol() {
+	rm -r $1 >> $seqres.full 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_btrfs_fs_feature "rmdir_subvol"
+
+_scratch_mkfs > /dev/null 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# Check that an empty subvolume can be deleted by rmdir
+create_subvol $SCRATCH_MNT/sub1
+rmdir_subvol $SCRATCH_MNT/sub1 || \
+	echo "rmdir should delete an empty subvolume"
+
+# Check that non-empty subvolume cannot be deleted by rmdir
+create_subvol $SCRATCH_MNT/sub2
+touch $SCRATCH_MNT/sub2/file
+rmdir_subvol $SCRATCH_MNT/sub2 && \
+	echo "rmdir should fail for non-empty subvolume"
+rm $SCRATCH_MNT/sub2/file
+rmdir_subvol $SCRATCH_MNT/sub2 || \
+	echo "rmdir should delete an empty subvolume"
+
+# Check that read-only empty subvolume can be deleted by rmdir
+create_subvol $SCRATCH_MNT/sub3
+create_snapshot -r $SCRATCH_MNT/sub3 $SCRATCH_MNT/snap
+$BTRFS_UTIL_PROG property set $SCRATCH_MNT/sub3 ro true >> $seqres.full 2>&1
+rmdir_subvol $SCRATCH_MNT/sub3 || \
+	echo "rmdir should delete an empty subvolume"
+rmdir_subvol $SCRATCH_MNT/snap || \
+	echo "rmdir should delete a readonly empty subvolume"
+
+# Check that the default subvolume cannot be deleted by rmdir
+create_subvol $SCRATCH_MNT/sub4
+subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT sub4)
+$BTRFS_UTIL_PROG subvolume set-default $subvolid $SCRATCH_MNT \
+	>> $seqres.full 2>&1
+rmdir_subvol $SCRATCH_MNT/sub4 && \
+	echo "rmdir should fail for the default subvolume"
+
+# Check that subvolume stub (created by snapshot) can be deleted by rmdir
+# (Note: this has been always allowed)
+create_subvol $SCRATCH_MNT/sub5
+create_subvol $SCRATCH_MNT/sub5/sub6
+create_snapshot $SCRATCH_MNT/sub5 $SCRATCH_MNT/snap2
+rmdir $SCRATCH_MNT/snap2/sub6 || \
+	echo "rmdir should delete a subvolume stub (ino number == 2)"
+
+# Check that rm -r works for both non-snapshot subvolume and snapshot
+create_subvol $SCRATCH_MNT/sub7
+mkdir $SCRATCH_MNT/sub7/dir
+create_subvol $SCRATCH_MNT/sub7/dir/sub8
+touch $SCRATCH_MNT/sub7/dir/sub8/file
+
+create_snapshot $SCRATCH_MNT/sub7 $SCRATCH_MNT/snap3
+create_snapshot -r $SCRATCH_MNT/sub7 $SCRATCH_MNT/snap4
+
+rm_r_subvol $SCRATCH_MNT/sub7 || \
+	echo "rm -r should delete subvolumes recursively"
+rm_r_subvol $SCRATCH_MNT/snap3 || \
+	echo "rm -r should delete subvolumes recursively"
+rm_r_subvol $SCRATCH_MNT/snap4 && \
+	echo "rm -r should fail for non-empty readonly subvolume"
+
+$BTRFS_UTIL_PROG property set $SCRATCH_MNT/snap4 ro false >> $seqres.full 2>&1
+rm_r_subvol $SCRATCH_MNT/snap4 || \
+	echo "rm -r should delete subvolumes recursively"
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
