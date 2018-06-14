@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 167
+#
+# Test if btrfs will corrupt compressed data extent without data csum
+# by replacing it with uncompressed data, when doing device replace.
+#
+# This could be fixed by the following kernel commit:
+# ac0b4145d662 ("btrfs: scrub: Don't use inode pages for device replace")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 2
+_require_scratch_dev_pool_equal_size
+
+_scratch_dev_pool_get 1
+_spare_dev_get
+_scratch_pool_mkfs >> $seqres.full 2>&1
+
+# Create nodatasum inode
+_scratch_mount "-o nodatasum"
+touch $SCRATCH_MNT/nodatasum_file
+_scratch_remount "datasum,compress"
+_pwrite_byte 0xcd 0 128K $SCRATCH_MNT/nodatasum_file > /dev/null
+
+# Write the compressed data back to disk
+sync
+
+# Replace the device
+_run_btrfs_util_prog replace start -Bf 1 $SPARE_DEV $SCRATCH_MNT
+
+# Unmount to drop all cache so next read will read from disk
+_scratch_unmount
+_mount $SPARE_DEV $SCRATCH_MNT
+
+# Now the EXTENT_DATA item still marks the extent as compressed,
+# but the on-disk data is uncompressed, thus reading it as compressed
+# will definitely cause EIO.
+cat $SCRATCH_MNT/nodatasum_file > /dev/null
+
+_scratch_unmount
+_spare_dev_put
+_scratch_dev_pool_put
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
