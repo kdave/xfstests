@@ -760,3 +760,18 @@ _require_xfs_spaceman_command()
 			_notrun "xfs_spaceman $command doesn't support $param"
 	fi
 }
+
+_scratch_get_sfdir_prefix() {
+	local dir_ino="$1"
+
+	for prefix in "u.sfdir3" "u.sfdir2" "u3.sfdir3"; do
+		if [ -n "$(_scratch_xfs_get_metadata_field \
+				"${prefix}.hdr.parent.i4" \
+				"inode ${dir_ino}")" ]; then
+			echo "${prefix}"
+			return 0
+		fi
+	done
+	_scratch_xfs_db -c "inode ${dir_ino}" -c 'p' >> $seqres.full
+	return 1
+}

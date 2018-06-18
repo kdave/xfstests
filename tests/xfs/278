@@ -46,25 +46,11 @@ _scratch_unmount
 
 echo "Silence is goodness..."
 
-get_sfdir_prefix() {
-	local dir_ino="$1"
-
-	for prefix in "u.sfdir3" "u.sfdir2" "u3.sfdir3"; do
-		if [ -n "$(_scratch_xfs_get_metadata_field \
-				"${prefix}.hdr.parent.i4" \
-				"inode ${dir_ino}")" ]; then
-			echo "${prefix}"
-			return 0
-		fi
-	done
-	_scratch_xfs_db -c "inode ${dir_ino}" -c 'p' >> $seqres.full
-	return 1
-}
 set_ifield() {
 	_scratch_xfs_set_metadata_field "$1" 0 "inode $2" >> $seqres.full
 }
 
-sfdir_prefix="$(get_sfdir_prefix "$DIR_INO" || \
+sfdir_prefix="$(_scratch_get_sfdir_prefix "$DIR_INO" || \
 	_fail "Cannot determine sfdir prefix")"
 
 # Corrupt DIR
