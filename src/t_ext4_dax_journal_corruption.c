@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	fallocate(fd, 0, 0, len);
 
 	dax_data = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
-	if (!dax_data)
+	if (dax_data == MAP_FAILED)
 		err_exit("mmap dax_data");
 
 	/*
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 	chattr_cmd(chattr, "+j", file);
 
 	data = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-	if (!data)
+	if (data == MAP_FAILED)
 		err_exit("mmap data");
 
 	/*

@@ -40,7 +40,7 @@ main(int __attribute__((unused)) argc, char **argv)
 	void *addr;
 
 	addr = mmap(NULL, 4096, PROT_READ, MAP_SHARED|MAP_ANONYMOUS, 0, 0);
-	if (!addr) {
+	if (addr == MAP_FAILED) {
 		perror("mmap");
 		exit(1);
 	}

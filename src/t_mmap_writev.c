@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 	if (fd==-1) {perror("open");exit(1);}
 
 	base = mmap(NULL,16384,PROT_READ,MAP_SHARED,fd,0);
-	if  (base == (void *)-1) { perror("mmap");exit(1); }
+	if  (base == MAP_FAILED) { perror("mmap");exit(1); }
 
 	unlink(new_file);
 

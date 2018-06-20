@@ -37,14 +37,14 @@ int main(int argc, char *argv[])
 		err_exit("fd");
 
 	data = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-	if (!data)
+	if (data == MAP_FAILED)
 		err_exit("mmap data");
 
 	/* this fallocate turns off inline data and turns on DAX */
 	fallocate(fd, 0, 0, PAGE(2));
 
 	dax_data = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
-	if (!dax_data)
+	if (dax_data == MAP_FAILED)
 		err_exit("mmap dax_data");
 
 	/*

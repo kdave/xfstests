@@ -41,6 +41,8 @@ int main(int argc, char *argv[])
 	ftruncate(fd, MiB(4));
 
 	data = mmap(NULL, MiB(2), PROT_READ, MAP_SHARED, fd, MiB(2));
+	if (data == MAP_FAILED)
+		err_exit("mmap");
 
 	/*
 	 * This faults in a 2MiB zero page to satisfy the read.

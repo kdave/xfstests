@@ -138,7 +138,7 @@ bozo!
 			exit(1);
 		}
 		p = mmap(NULL, file_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-		if (p == (char *)-1) {
+		if (p == MAP_FAILED) {
 			perror("mmap");
 			exit(1);
 		}
