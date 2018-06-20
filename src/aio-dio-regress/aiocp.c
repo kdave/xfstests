@@ -1,48 +1,30 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (c) 2004 Daniel McNeil <daniel@osdl.org>
  *               2004 Open Source Development Lab
- *   This program is free software;  you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 2 of the License, or
- *   (at your option) any later version.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY;  without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
- *   the GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program;  if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
- * Module: .c
- */
-
-/*
- * Change History:
- *
- *
- * version of copy command using async i/o
- * From:	Stephen Hemminger <shemminger@osdl.org>
- * Modified by Daniel McNeil <daniel@osdl.org> for testing aio.
- *	- added -a alignment
- *	- added -b blksize option 
- *	_ added -s size	option
- *	- added -f open_flag option
- *	- added -w (no write) option (reads from source only)
- *	- added -n (num aio) option 
- *	- added -z (zero dest) opton (writes zeros to dest only)
- *	- added -D delay_ms option
- *  - 2/2004  Marty Ridgeway (mridge@us.ibm.com) Changes to adapt to LTP
  *
  * Copy file by using a async I/O state machine.
  * 1. Start read request
  * 2. When read completes turn it into a write request
  * 3. When write completes decrement counter and free resources
  *
- *
- * Usage: aiocp [-b blksize] -n [num_aio] [-w] [-z] [-s filesize] 
+ * Usage: aiocp [-b blksize] -n [num_aio] [-w] [-z] [-s filesize]
  *		[-f DIRECT|TRUNC|CREAT|SYNC|LARGEFILE] src dest
+ *
+ * Change History:
+ *
+ * version of copy command using async i/o
+ * From:	Stephen Hemminger <shemminger@osdl.org>
+ * Modified by Daniel McNeil <daniel@osdl.org> for testing aio.
+ *	- added -a alignment
+ *	- added -b blksize option
+ *	_ added -s size	option
+ *	- added -f open_flag option
+ *	- added -w (no write) option (reads from source only)
+ *	- added -n (num aio) option
+ *	- added -z (zero dest) opton (writes zeros to dest only)
+ *	- added -D delay_ms option
+ *  - 2/2004  Marty Ridgeway (mridge@us.ibm.com) Changes to adapt to LTP
  */
 
 //#define _GNU_SOURCE
