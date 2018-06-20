@@ -1,12 +1,11 @@
-/* userns_child_exec.c
-
-   Copyright 2013, Michael Kerrisk
-   Licensed under GNU General Public License v2 or later
-
-   Create a child process that executes a shell command in new
-   namespace(s); allow UID and GID mappings to be specified when
-   creating a user namespace.
-*/
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright 2013, Michael Kerrisk
+ *
+ * Create a child process that executes a shell command in new
+ * namespace(s); allow UID and GID mappings to be specified when
+ * creating a user namespace.
+ */
 
 #ifndef  _GNU_SOURCE
 #define _GNU_SOURCE

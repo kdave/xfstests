@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0
+
 import json
 import argparse
 import FioResultDecoder

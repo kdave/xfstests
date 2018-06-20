@@ -1,13 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Check ctime updates when calling futimens without UTIME_OMIT for the
  * mtime entry.
- *
  * Copyright (c) 2009 Eric Blake <ebb9@byu.net>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
  */
 #include <fcntl.h>
 #include <unistd.h>

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0
+
 default_keys = [ 'iops', 'io_bytes', 'bw' ]
 latency_keys = [ 'lat_ns_min', 'lat_ns_max' ]
 main_job_keys = [ 'sys_cpu', 'elapsed' ]
