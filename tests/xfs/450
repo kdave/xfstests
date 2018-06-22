@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle, Inc.  All rights reserved.
+#
+# FS QA Test No. 450
+#
+# Make sure that the statfs b_avail counter doesn't change across remount
+# after the rmapbt has grown in size.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous \$seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_test_program "punch-alternating"
+_require_xfs_scratch_rmapbt
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# Make sure we allocate a big enough file such that punching out every other
+# block will cause the rmapbt to expand by at least one block.
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+nr_rmap_per_rmapbt=$(( (blksz - 56) / 24))
+blks=$(( (nr_rmap_per_rmapbt + 2) * 2))
+$XFS_IO_PROG -f -c "falloc 0 $((blks * blksz))" $SCRATCH_MNT/a >> $seqres.full
+$here/src/punch-alternating $SCRATCH_MNT/a
+
+# Do the stat counters change across the remount?
+before=$(stat -f -c '%b %f' $SCRATCH_MNT)
+_scratch_cycle_mount
+after=$(stat -f -c '%b %f' $SCRATCH_MNT)
+
+if [ "${before}" != "${after}" ]; then
+	echo "counters changed: ${before} ${after}"
+	echo "before: ${before}" >> $seqres.full
+	echo "after: ${after}" >> $seqres.full
+fi
+
+echo "Silence is golden."
+
+# success, all done
+status=0
+exit
