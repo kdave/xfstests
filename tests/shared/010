@@ -1,0 +1,94 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test 010
+#
+# Dedup & random I/O race test, do multi-threads fsstress and dedupe on
+# same directory/files
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	end_test
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# duperemove only supports btrfs and xfs (with reflink feature).
+# Add other filesystems if it supports more later.
+_supported_fs xfs btrfs
+_supported_os Linux
+_require_scratch_dedupe
+_require_command "$DUPEREMOVE_PROG" duperemove
+_require_command "$KILLALL_PROG" killall
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+function end_test()
+{
+	local f=1
+
+	# stop duperemove running
+	if [ -e $dupe_run ]; then
+		rm -f $dupe_run
+		wait $dedup_pids
+	fi
+
+	# Make sure all fsstress get killed
+	while [ $f -ne 0 ]; do
+		$KILLALL_PROG -q $FSSTRESS_PROG > /dev/null 2>&1
+		sleep 1
+		f=`ps -eLf | grep $FSSTRESS_PROG | grep -v "grep" | wc -l`
+	done
+}
+
+sleep_time=$((50 * TIME_FACTOR))
+
+# Start fsstress
+fsstress_opts="-r -n 1000 -p $((5 * LOAD_FACTOR))"
+$FSSTRESS_PROG $fsstress_opts -d $SCRATCH_MNT -l 0 >> $seqres.full 2>&1 &
+dedup_pids=""
+dupe_run=$TEST_DIR/${seq}-running
+# Start several dedupe processes on same directory
+touch $dupe_run
+for ((i = 0; i < $((2 * LOAD_FACTOR)); i++)); do
+	while [ -e $dupe_run ]; do
+		$DUPEREMOVE_PROG -dr --dedupe-options=same $SCRATCH_MNT/ \
+			>>$seqres.full 2>&1
+	done &
+	dedup_pids="$! $dedup_pids"
+done
+
+# End the test after $sleep_time seconds
+sleep $sleep_time
+end_test
+
+# umount and mount again, verify pagecache contents don't mutate and a fresh
+# read from the disk also doesn't show mutations.
+find $testdir -type f -exec md5sum {} \; > ${tmp}.md5sum
+_scratch_cycle_mount
+md5sum -c --quiet ${tmp}.md5sum
+
+echo "Silence is golden"
+status=0
+exit
