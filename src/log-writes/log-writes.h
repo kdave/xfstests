@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef _LOG_WRITES_H_
 #define _LOG_WRITES_H_
 
