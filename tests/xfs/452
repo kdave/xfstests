@@ -1,0 +1,49 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test 452
+#
+# Test xfs_db by bad character in field list selector string. The issue
+# has been fixed by xfsprogs 945e47e2.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs_xfs >> $seqres.full 2>&1
+inum=`_scratch_xfs_get_metadata_field rootino "sb 0"`
+
+echo "= check bad character * ="
+_scratch_xfs_db -c "inode $inum" -c "print core.*"
+echo "= check bad character trailing slash ="
+_scratch_xfs_db -c "inode $inum" -c "print core.\\"
+echo "= check missing closing quote ="
+_scratch_xfs_db -c "inode $inum" -c "print core.\""
+
+# success, all done
+status=0
+exit
