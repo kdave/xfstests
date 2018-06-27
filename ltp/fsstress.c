@@ -10,9 +10,6 @@
 #include <stddef.h>
 #include "global.h"
 
-#ifdef HAVE_ATTR_XATTR_H
-#include <attr/xattr.h>
-#endif
 #ifdef HAVE_ATTR_ATTRIBUTES_H
 #include <attr/attributes.h>
 #endif
