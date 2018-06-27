@@ -23,7 +23,7 @@
 #include <grp.h>
 #include <libgen.h>
 #include <sys/acl.h>
-#include <attr/xattr.h>
+#include <sys/xattr.h>
 #include <linux/fs.h>
 #include <linux/magic.h>
 #include <xfs/xfs.h>
