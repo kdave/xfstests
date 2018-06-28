@@ -20,8 +20,8 @@ _dmhugedisk_init()
 		chunk_size=512
 	fi
 
-	$DMSETUP_PROG remove huge-test > /dev/null 2>&1
-	$DMSETUP_PROG remove huge-test-zero > /dev/null 2>&1
+	_dmsetup_remove huge-test
+	_dmsetup_remove huge-test-zero
 
 	local blk_dev_size=$1
 
@@ -31,18 +31,15 @@ _dmhugedisk_init()
 	DMHUGEDISK_ZERO_TABLE="0 $blk_dev_size zero"
 	DMHUGEDISK_DEV_TABLE="0 $blk_dev_size snapshot $DMHUGEDISK_ZERO $SCRATCH_DEV N $chunk_size"
 
-	$DMSETUP_PROG create huge-test-zero --table "$DMHUGEDISK_ZERO_TABLE" || \
+	_dmsetup_create huge-test-zero --table "$DMHUGEDISK_ZERO_TABLE" || \
 		_fatal "failed to create dm huge zero device"
-	$DMSETUP_PROG create huge-test --table "$DMHUGEDISK_DEV_TABLE" || \
+	_dmsetup_create huge-test --table "$DMHUGEDISK_DEV_TABLE" || \
 		_fatal "failed to create dm huge device"
 }
 
 _dmhugedisk_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	# wait for device to be fully settled so that 'dmsetup remove' doesn't
-	# fail due to EBUSY
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
-	$DMSETUP_PROG remove huge-test > /dev/null 2>&1
-	$DMSETUP_PROG remove huge-test-zero > /dev/null 2>&1
+	_dmsetup_remove huge-test
+	_dmsetup_remove huge-test-zero
 }

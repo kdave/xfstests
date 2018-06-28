@@ -20,9 +20,8 @@ _init_flakey()
 	FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 180 0"
 	FLAKEY_TABLE_DROP="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 drop_writes"
 	FLAKEY_TABLE_ERROR="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 error_writes"
-	$DMSETUP_PROG create flakey-test --table "$FLAKEY_TABLE" || \
+	_dmsetup_create flakey-test --table "$FLAKEY_TABLE" || \
 		_fatal "failed to create flakey device"
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
 }
 
 _mount_flakey()
@@ -42,11 +41,7 @@ _cleanup_flakey()
 	# otherwise the umount will hang
 	$DMSETUP_PROG resume flakey-test > /dev/null 2>&1
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	# wait for device to be fully settled so that 'dmsetup remove' doesn't
-	# fail due to EBUSY
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
-	$DMSETUP_PROG remove flakey-test > /dev/null 2>&1
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
+	_dmsetup_remove flakey-test
 }
 
 # _load_flakey_table <table> [lockfs]
@@ -101,11 +96,8 @@ _require_flakey_with_error_writes()
 	SIZE=`blockdev --getsz $SCRATCH_DEV`
 	TABLE="0 $SIZE flakey $SCRATCH_DEV 0 0 180 1 error_writes"
 
-	$DMSETUP_PROG create $NAME --table "$TABLE" >/dev/null 2>&1
-	if [ $? -ne 0 ]; then
+	_dmsetup_create $NAME --table "$TABLE" || \
 		_notrun "This test requires error_writes feature in dm-flakey"
-	fi
-	$DMSETUP_PROG mknodes >/dev/null 2>&1
 
 	_cleanup_flakey
 }

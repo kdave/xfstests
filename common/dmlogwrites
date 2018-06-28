@@ -51,9 +51,8 @@ _log_writes_init()
 	LOGWRITES_NAME=logwrites-test
 	LOGWRITES_DMDEV=/dev/mapper/$LOGWRITES_NAME
 	LOGWRITES_TABLE="0 $BLK_DEV_SIZE log-writes $SCRATCH_DEV $LOGWRITES_DEV"
-	$DMSETUP_PROG create $LOGWRITES_NAME --table "$LOGWRITES_TABLE" || \
+	_dmsetup_create $LOGWRITES_NAME --table "$LOGWRITES_TABLE" || \
 		_fail "failed to create log-writes device"
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
 }
 
 _log_writes_mark()
@@ -100,16 +99,12 @@ _log_writes_replay_log()
 
 _log_writes_remove()
 {
-	$DMSETUP_PROG remove $LOGWRITES_NAME > /dev/null 2>&1
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
+	_dmsetup_remove $LOGWRITES_NAME
 }
 
 _log_writes_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	# wait for device to be fully settled so that 'dmsetup remove' doesn't
-	# fail due to EBUSY
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
 	_log_writes_remove
 }
 

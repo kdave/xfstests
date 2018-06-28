@@ -18,9 +18,8 @@ _init_delay()
 	DELAY_DEV=/dev/mapper/delay-test
 	DELAY_TABLE="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 0"
 	DELAY_TABLE_RDELAY="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 10000 $SCRATCH_DEV 0 0"
-	$DMSETUP_PROG create delay-test --table "$DELAY_TABLE" || \
+	_dmsetup_create delay-test --table "$DELAY_TABLE" || \
 		_fatal "failed to create delay device"
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
 }
 
 _mount_delay()
@@ -41,11 +40,7 @@ _cleanup_delay()
 	# otherwise the umount will hang
 	$DMSETUP_PROG resume delay-test > /dev/null 2>&1
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	# wait for device to be fully settled so that 'dmsetup remove' doesn't
-	# fail due to EBUSY
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
-	$DMSETUP_PROG remove delay-test > /dev/null 2>&1
-	$DMSETUP_PROG mknodes > /dev/null 2>&1
+	_dmsetup_remove delay-test
 }
 
 # _load_delay_table <table> [lockfs]

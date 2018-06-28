@@ -31,9 +31,7 @@ cleanup_dmdev()
 	# in case it's still suspended and/or mounted
 	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
 	$UMOUNT_PROG $lvdev >/dev/null 2>&1
-
-	$DMSETUP_PROG remove $node >>$seqres.full 2>&1
-	$DMSETUP_PROG mknodes >/dev/null 2>&1
+	_dmsetup_remove $node
 }
 
 # get standard environment, filters and checks
@@ -51,9 +49,8 @@ _require_freeze
 setup_dmdev()
 {
 	table="0 $size_in_sector linear $SCRATCH_DEV 0"
-	$DMSETUP_PROG create $node --table "$table" >>$seqres.full 2>&1 && \
-	$DMSETUP_PROG mknodes >/dev/null 2>&1
-	return $?
+	_dmsetup_create $node --table "$table" || \
+		_fail "setup dm device failed"
 }
 
 rm -f $seqres.full
@@ -65,7 +62,7 @@ _scratch_mkfs_sized $size >>$seqres.full 2>&1
 
 node=$seq-test
 lvdev=/dev/mapper/$node
-setup_dmdev || _fail "setup dm device failed"
+setup_dmdev
 
 # take use of dmsetup suspend to freeze the fs.
 # xfs_freeze/fsfreeze cannot be used in this test, because it can possibly

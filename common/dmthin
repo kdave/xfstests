@@ -29,13 +29,10 @@ fi
 _dmthin_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	# wait for device to be fully settled so that 'dmsetup remove' doesn't
-	# fail due to EBUSY
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
-	$DMSETUP_PROG remove $DMTHIN_VOL_NAME> /dev/null 2>&1
-	$DMSETUP_PROG remove $DMTHIN_POOL_NAME> /dev/null 2>&1
-	$DMSETUP_PROG remove $DMTHIN_META_NAME> /dev/null 2>&1
-	$DMSETUP_PROG remove $DMTHIN_DATA_NAME> /dev/null 2>&1
+	_dmsetup_remove $DMTHIN_VOL_NAME
+	_dmsetup_remove $DMTHIN_POOL_NAME
+	_dmsetup_remove $DMTHIN_META_NAME
+	_dmsetup_remove $DMTHIN_DATA_NAME
 }
 
 _dmthin_check_fs()
@@ -112,13 +109,13 @@ _dmthin_init()
 
 	# Metadata device
 	DMTHIN_META_TABLE="0 $meta_dev_size linear $dm_backing_dev $meta_dev_offset"
-	$DMSETUP_PROG create $DMTHIN_META_NAME --table "$DMTHIN_META_TABLE" || \
+	_dmsetup_create $DMTHIN_META_NAME --table "$DMTHIN_META_TABLE" || \
 		_fatal "failed to create dm thin meta device"
 
 	# Data device
 	local data_dev_offset=$((meta_dev_offset + $meta_dev_size))
 	DMTHIN_DATA_TABLE="0 $data_dev_size linear $dm_backing_dev $data_dev_offset"
-	$DMSETUP_PROG create $DMTHIN_DATA_NAME --table "$DMTHIN_DATA_TABLE" || \
+	_dmsetup_create $DMTHIN_DATA_NAME --table "$DMTHIN_DATA_TABLE" || \
 		_fatal "failed to create dm thin data device"
 
 	# Zap the pool metadata dev
@@ -127,7 +124,7 @@ _dmthin_init()
 	# Thin pool
 	# "start length thin-pool metadata_dev data_dev data_block_size low_water_mark"
 	DMTHIN_POOL_TABLE="0 $data_dev_size thin-pool $DMTHIN_META_DEV $DMTHIN_DATA_DEV $cluster_size $low_water"
-	$DMSETUP_PROG create $DMTHIN_POOL_NAME --table "$DMTHIN_POOL_TABLE" || \
+	_dmsetup_create $DMTHIN_POOL_NAME --table "$DMTHIN_POOL_TABLE" || \
 		_fatal "failed to create dm thin pool device"
 
 	# Thin volume
@@ -136,7 +133,7 @@ _dmthin_init()
 
 	# start length thin pool_dev dev_id [external_origin_dev]
 	DMTHIN_VOL_TABLE="0 $virtual_size thin $DMTHIN_POOL_DEV $pool_id"
-	$DMSETUP_PROG create $DMTHIN_VOL_NAME --table "$DMTHIN_VOL_TABLE" || \
+	_dmsetup_create $DMTHIN_VOL_NAME --table "$DMTHIN_VOL_TABLE" || \
 		_fatal "failed to create dm thin volume device"
 
 }
