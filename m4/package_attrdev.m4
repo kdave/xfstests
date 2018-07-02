@@ -26,8 +26,8 @@ AC_DEFUN([AC_PACKAGE_WANT_ATTRLIST_LIBATTR],
     AC_SUBST(have_attr_list)
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_ATTRGET_LIBATTR],
-  [ AC_CHECK_LIB(attr, attr_get,, [
+AC_DEFUN([AC_PACKAGE_NEED_ATTRSET_LIBATTR],
+  [ AC_CHECK_LIB(attr, attr_set,, [
         echo
         echo 'FATAL ERROR: could not find a valid Extended Attributes library.'
         echo 'Install the extended attributes (attr) development package.'
