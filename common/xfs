@@ -774,3 +774,18 @@ _scratch_get_sfdir_prefix() {
 	_scratch_xfs_db -c "inode ${dir_ino}" -c 'p' >> $seqres.full
 	return 1
 }
+
+_scratch_get_bmx_prefix() {
+	local ino="$1"
+
+	for prefix in "u3.bmx" "u.bmx"; do
+		if [ -n "$(_scratch_xfs_get_metadata_field \
+				"${prefix}[0].startblock" \
+				"inode ${ino}")" ]; then
+			echo "${prefix}"
+			return 0
+		fi
+	done
+	_scratch_xfs_db -c "inode ${ino}" -c 'p' >> $seqres.full
+	return 1
+}

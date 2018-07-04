@@ -49,9 +49,8 @@ _do_bit_test()
 _supported_fs xfs
 _supported_os Linux
 _require_scratch_nocheck
-_require_xfs_mkfs_crc
 
-_scratch_mkfs -m crc=0 >/dev/null 2>&1
+_scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 # create the test file
@@ -68,11 +67,18 @@ BMBT_STARTOFF_BITLEN=54
 BMBT_STARTBLOCK_BITLEN=52
 BMBT_BLOCKCOUNT_BITLEN=21
 
+prefix=$(_scratch_get_bmx_prefix $FILE_INO)
+test -n "$prefix" || _fail "could not find bmx prefix from inode $FILE_INO"
+
+filter_output() {
+	sed -e "s/${prefix}/u.bmx/g"
+}
+
 # test setting the BMBT entries from 0 to past the valid number.
-_do_bit_test "u.bmx[0].extentflag" $BMBT_EXNTFLAG_BITLEN
-_do_bit_test "u.bmx[0].startoff" $BMBT_STARTOFF_BITLEN
-_do_bit_test "u.bmx[0].startblock" $BMBT_STARTBLOCK_BITLEN
-_do_bit_test "u.bmx[0].blockcount" $BMBT_BLOCKCOUNT_BITLEN
+_do_bit_test "${prefix}[0].extentflag" $BMBT_EXNTFLAG_BITLEN | filter_output
+_do_bit_test "${prefix}[0].startoff" $BMBT_STARTOFF_BITLEN | filter_output
+_do_bit_test "${prefix}[0].startblock" $BMBT_STARTBLOCK_BITLEN | filter_output
+_do_bit_test "${prefix}[0].blockcount" $BMBT_BLOCKCOUNT_BITLEN | filter_output
 # test setting the 32 bit generation number
 _scratch_xfs_db -x -c "inode $FILE_INO" -c "write core.gen 0x5a"
 _scratch_xfs_db -x -c "inode $FILE_INO" -c "write core.gen 0xa5"
