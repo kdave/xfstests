@@ -66,7 +66,14 @@ md5sum $testdir/file2 | _filter_scratch
 echo "CoW and unmount"
 sync
 _dmerror_load_error_table
-$XFS_IO_PROG -f -c "mmap -rw 0 $filesize" -c "mwrite -S 0x63 0 $filesize" $testdir/file2 >> $seqres.full 2>&1
+# Insulate ourselves against bash reporting the SIGBUS when we try to modify
+# the metadata.
+cat > $tmp.run << ENDL
+ulimit -c 0
+$XFS_IO_PROG -f -c "mmap -rw 0 $filesize" \
+	-c "mwrite -S 0x63 0 $filesize" $testdir/file2 >> $seqres.full 2>&1
+ENDL
+bash $tmp.run 2> /dev/null
 _dmerror_load_working_table
 rm -rf $testdir/file2 >> $seqres.full 2>&1
 _dmerror_unmount
