@@ -1,0 +1,57 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 499
+#
+# Test a specific sequence of fsx operations that causes an mmap read past
+# eof to return nonzero contents.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/punch
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "fcollapse"
+_require_xfs_io_command "fzero"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+cat >> $tmp.fsxops << ENDL
+fallocate 0x77e2 0x5f06 0x269a2 keep_size
+mapwrite 0x2e7fc 0x42ba 0x3f989
+write 0x67a9 0x714e 0x3f989
+write 0x39f96 0x185a 0x3f989
+collapse_range 0x36000 0x8000 0x3f989
+mapread 0x74c0 0x1bb3 0x3e2d0
+truncate 0x0 0x8aa2 0x3e2d0
+zero_range 0x1265 0x783d 0x8aa2
+mapread 0x7bd8 0xeca 0x8aa2
+ENDL
+
+victim=$SCRATCH_MNT/a
+touch $victim
+$here/ltp/fsx --replay-ops $tmp.fsxops $victim > $tmp.output || cat $tmp.output
+
+echo "Silence is golden"
+status=0
+exit
