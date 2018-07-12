@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 500
+#
+# Race test running out of data space with concurrent discard operation on
+# dm-thin.
+#
+# If a user constructs a test that loops repeatedly over below steps on
+# dm-thin, block allocation can fail due to discards not having completed
+# yet (Fixed by a685557 dm thin: handle running out of data space vs
+# concurrent discard):
+# 1) fill thin device via filesystem file
+# 2) remove file
+# 3) fstrim
+#
+# And this maybe cause a deadlock when racing a fstrim with a filesystem
+# (XFS) shutdown. (Fixed by 8c81dd46ef3c Force log to disk before reading
+# the AGF during a fstrim)
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_dmthin_cleanup
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmthin
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_nocheck
+_require_dm_target thin-pool
+
+# Require underlying device support discard
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+_require_batched_discard $SCRATCH_MNT
+_scratch_unmount
+
+# Create a thin pool and a *slightly smaller* thin volume, it's helpful
+# to reproduce the bug
+BACKING_SIZE=$((128 * 1024 * 1024 / 512))	# 128M
+VIRTUAL_SIZE=$((BACKING_SIZE + 1024))		# 128M + 1k
+CLUSTER_SIZE=$((64 * 1024 / 512))		# 64K
+
+_dmthin_init $BACKING_SIZE $VIRTUAL_SIZE $CLUSTER_SIZE 0
+_dmthin_set_fail
+_mkfs_dev $DMTHIN_VOL_DEV
+_dmthin_mount
+
+# There're two bugs at here, one is dm-thin bug, the other is filesystem
+# (XFS especially) bug. The dm-thin bug can't handle running out of data
+# space with concurrent discard well. Then the dm-thin bug cause fs unmount
+# hang when racing a fstrim with a filesystem shutdown.
+#
+# If both of two bugs haven't been fixed, below test maybe cause deadlock.
+# Else if the fs bug has been fixed, but the dm-thin bug hasn't. below test
+# will cause the test fail (no deadlock).
+# Else the test will pass.
+for ((i=0; i<20; i++)); do
+	$XFS_IO_PROG -f -c "pwrite -b 64k 0 256M" \
+		$SCRATCH_MNT/testfile &>/dev/null
+	rm -f $SCRATCH_MNT/testfile
+	$FSTRIM_PROG $SCRATCH_MNT
+done
+
+_dmthin_check_fs
+_dmthin_cleanup
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
