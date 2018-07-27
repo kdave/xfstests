@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Intel Corporation.  All Rights Reserved.
+#
+# FS QA Test No. 503
+#
+# This is a regression test for kernel patch:
+#   ext4: handle layout changes to pinned DAX mapping
+#
+# This test exercises each of the DAX paths in ext4 which remove blocks from
+# an inode's block map.  This includes things like hole punch, truncate down,
+# etc.  This test was written to regression test errors seen with an ext4 +
+# DAX setup, but the test runs fine with or without DAX and with XFS so we
+# don't require the DAX mount option or a specific filesystem for the test.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch
+_require_test_program "t_mmap_collision"
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fpunch"
+_require_xfs_io_command "fcollapse"
+_require_xfs_io_command "fzero"
+
+_scratch_mkfs >> $seqres.full 2>&1
+# To get the failure we turn off DAX on our SCRATCH_MNT so we can get O_DIRECT
+# behavior.  We will continue to use unmodified mount options for the test
+# TEST_DIR.  The failures fixed by the above mentioned kernel patch trigger
+# when those mount options include "-o dax", but the test runs fine without
+# that option so we don't require it.
+export MOUNT_OPTIONS=""
+_scratch_mount >> $seqres.full 2>&1
+
+# real QA test starts here
+$here/src/t_mmap_collision $TEST_DIR/testfile $SCRATCH_MNT/testfile
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
