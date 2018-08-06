@@ -1,0 +1,75 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 170
+#
+# Test that if we write into an unwritten extent of a file when there is no
+# more space left to allocate in the filesystem and then snapshot the file's
+# subvolume, after a clean shutdown the data was not lost.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "falloc" "-k"
+
+rm -f $seqres.full
+
+# Use a fixed size filesystem so that we can precisely fill the data block group
+# mkfs.btrfs creates and allocate all unused space for a new data block group.
+# It's important to not use the mixed block groups feature as well because we
+# later want to not have more space available for allocating data extents but
+# still have enough metadata space free for creating the snapshot.
+fs_size=$((2 * 1024 * 1024 * 1024)) # 2Gb
+_scratch_mkfs_sized $fs_size >>$seqres.full 2>&1
+
+# Mount without space cache so that we can precisely fill all data space and
+# unallocated space later (space cache v1 uses data block groups).
+_scratch_mount "-o nospace_cache"
+
+# Create our test file and allocate 1826.25Mb of space for it.
+# This will exhaust the existing data block group and all unallocated space on
+# this small fileystem (2Gb).
+$XFS_IO_PROG -f -c "falloc -k 0 1914961920" $SCRATCH_MNT/foobar
+
+# Write some data to the file and check its digest. This write will result in a
+# NOCOW write because there's no more space available to allocate and the file
+# has preallocated (unwritten) extents.
+$XFS_IO_PROG -c "pwrite -S 0xea -b 128K 0 128K" $SCRATCH_MNT/foobar | _filter_xfs_io
+
+echo "File digest after write:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+# Create a snapshot of the subvolume where our file is.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap 2>&1 \
+	| _filter_scratch
+
+# Cleanly unmount the filesystem.
+_scratch_unmount
+
+# Mount the filesystem again and verify the file has the same data it had before
+# we unmounted the filesystem (same digest).
+_scratch_mount
+echo "File digest after mounting the filesystem again:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+status=0
+exit
