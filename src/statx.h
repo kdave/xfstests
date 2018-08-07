@@ -159,6 +159,7 @@ struct statx {
 #define STATX_ATTR_ENCRYPTED		0x00000800 /* [I] File requires key to decrypt in fs */
 
 #define STATX_ATTR_AUTOMOUNT		0x00001000 /* Dir: Automount trigger */
+#endif /* STATX_TYPE */
 
 static inline
 int xfstests_statx(int dfd, const char *filename, unsigned flags,
@@ -172,5 +173,4 @@ int xfstests_statx(int dfd, const char *filename, unsigned flags,
 #endif
 }
 
-#endif /* STATX_TYPE */
 #endif /* STATX_H */
