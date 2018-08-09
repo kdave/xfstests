@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 RedHat Inc.  All Rights Reserved.
+#
+# FS QA Test 504
+#
+# Regression test case for kernel patch:
+# fs/lock: skip lock owner pid translation in case we are in init_pid_ns
+#
+# Open new fd by exec shell built-in, then require exclusive lock
+# by flock(1) command. Checking /proc/locks for the lock info.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_command "$FLOCK_PROG" "flock"
+
+# Create test file and find its inode NO.
+testfile=$TEST_DIR/flock_testfile_$seq
+touch $testfile
+tf_inode=$(stat -c %i $testfile)
+echo inode $tf_inode >> $seqres.full
+
+# Create new fd by exec
+exec 9> $testfile
+# flock locks the fd then exits, we should see the lock info even the owner is dead
+flock -x 9
+cat /proc/locks >> $seqres.full
+
+# Checking
+grep -qw $tf_inode /proc/locks || echo "lock info not found"
+
+# success, all done
+status=0
+echo "Silence is golden"
+exit
