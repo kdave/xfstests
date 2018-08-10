@@ -59,6 +59,14 @@ _scratch_unmount
 _scratch_xfs_set_metadata_field "hdr.count" "0" \
 				"inode $inum" "ablock 0" >> $seqres.full
 
+# verify current xfs_db write command can set hdr.count to 0. Old xfsprogs
+# can't do that on v5 filesystems.
+count=$(_scratch_xfs_get_metadata_field "hdr.count" \
+					"inode $inum" "ablock 0")
+if [ "$count" != "0" ]; then
+	_notrun "xfs_db can't set attr hdr.count to 0"
+fi
+
 # make sure xfs_repair can find above corruption. If it can't, that
 # means we need to fix this bug on current xfs_repair
 _scratch_xfs_repair -n >> $seqres.full 2>&1
