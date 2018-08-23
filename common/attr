@@ -224,6 +224,18 @@ _sort_getfattr_output()
     awk '{a[FNR]=$0}END{n = asort(a); for(i=1; i <= n; i++) print a[i]"\n"}' RS=''
 }
 
+# Previously, when getfattr dumps values of all extended attributes, it prints
+# empty attr as 'user.name', but new getfattr (since attr-2.4.48) prints it as
+# 'user.name=""'. Filter out the ending '=""' so that both old and new getfattr
+# pints the same output.
+#
+# Note: This function returns the getfattr command result.
+_getfattr()
+{
+	$GETFATTR_PROG "$@" | sed -e 's/=\"\"//'
+	return ${PIPESTATUS[0]}
+}
+
 # set maximum total attr space based on fs type
 case "$FSTYP" in
 xfs|udf|pvfs2|9p|ceph)
