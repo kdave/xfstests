@@ -1,15 +1,17 @@
 #! /bin/bash
 # SPDX-License-Identifier: GPL-2.0
-# Copyright (C) 2016 CTERA Networks. All Rights Reserved.
+# Copyright (C) 2018 CTERA Networks. All Rights Reserved.
 #
-# FSQA Test No. 016
+# FSQA Test No. 061
 #
 # Test ro/rw fd data inconsistecies
 #
+# This is a variant of test overlay/016 with mread instead of pread.
+#
 # This simple test demonstrates a known issue with overlayfs:
-# - process A opens file F for read
+# - process A opens file F for read + mmap
 # - process B writes new data to file F
-# - process A reads old data from file F
+# - process A reads old data from mapped memory
 #
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -48,16 +50,15 @@ _scratch_mount
 
 
 #
-# open file for read (rofd)
-# open file for write (rwfd)
+# mmap MAP_SHARED|PROT_READ of rofd
 # write to rwfd
-# read from rofd
+# read from mapped memory
 #
 $XFS_IO_PROG -r $SCRATCH_MNT/foo \
+	-C "mmap -r 0 16" \
 	-C "open $SCRATCH_MNT/foo" \
 	-C "pwrite -S 0x61 0 16" \
-	-C "file 0" \
-	-C "pread -v 0 16" \
+	-C "mread -v 0 16" \
 | _filter_xfs_io | _filter_scratch
 
 status=0
