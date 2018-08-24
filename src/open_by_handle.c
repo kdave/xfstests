@@ -123,6 +123,7 @@ int main(int argc, char **argv)
 	int	fd;
 	int	ret = 0;
 	int	failed = 0;
+	char	mname[PATH_MAX];
 	char	dname[PATH_MAX];
 	char	fname[PATH_MAX];
 	char	fname2[PATH_MAX];
@@ -240,9 +241,10 @@ int main(int argc, char **argv)
 	 *    the dentry cache and the use of -ip flag combination would not
 	 *    allow testing decode of dir file handle in cold dcache scenario.
 	 */
+	strcpy(dname, test_dir);
 	if (parent && !in_fd) {
-		strcpy(dname, test_dir);
-		mount_dir = dirname(dname);
+		strcpy(mname, test_dir);
+		mount_dir = dirname(mname);
 		if (create)
 			ret = mkdir(test_dir, 0700);
 		if (ret < 0 && errno != EEXIST) {
