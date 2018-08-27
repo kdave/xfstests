@@ -280,8 +280,17 @@ static int test20(int fd, int testnum)
 	/* Magic size in the middle of ext[23] triple indirect tree */
 	filsz = (12 + bufsz / 4 + 8 * bufsz / 4 * bufsz / 4 + 2 * bufsz / 4 + 5) * bufsz;
 	ret = do_pwrite(fd, buf, bufsz, filsz - bufsz);
-	if (ret)
+	if (ret) {
+		/*
+		 * Report success. Filesystem just cannot handle so large
+		 * offsets and correctly reports it.
+		 */
+		if (errno == EFBIG) {
+			fprintf(stdout, "Test skipped as fs doesn't support so large files.\n");
+			ret = 0;
+		}
 		goto out;
+	}
 
 	/* Offset inside ext[23] indirect block */
 	ret += do_lseek(testnum, 1, fd, filsz, SEEK_DATA, 14 * bufsz, filsz - bufsz);
