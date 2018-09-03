@@ -456,8 +456,9 @@ _check_device()
 	fi
 
 	case "$FSTYP" in
-	9p)
+	9p|tmpfs)
 		# 9p mount tags are just plain strings, so anything is allowed
+		# tmpfs doesn't use mount source, ignore
 		;;
 	overlay)
 		if [ ! -d "$dev" ]; then
@@ -655,6 +656,15 @@ get_next_config() {
 	# set default RESULT_BASE
 	if [ -z "$RESULT_BASE" ]; then
 		export RESULT_BASE="$here/results/"
+	fi
+
+	if [ "$FSTYP" == "tmpfs" ]; then
+		if [ -z "TEST_DEV" ]; then
+			export TEST_DEV=tmpfs_test
+		fi
+		if [ -z "SCRATCH_DEV" ]; then
+			export TEST_DEV=tmpfs_scratch
+		fi
 	fi
 
 	#  Mandatory Config values.
