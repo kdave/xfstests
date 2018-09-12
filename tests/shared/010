@@ -65,15 +65,17 @@ function end_test()
 sleep_time=$((50 * TIME_FACTOR))
 
 # Start fsstress
+testdir="$SCRATCH_MNT/dir"
+mkdir $testdir
 fsstress_opts="-r -n 1000 -p $((5 * LOAD_FACTOR))"
-$FSSTRESS_PROG $fsstress_opts -d $SCRATCH_MNT -l 0 >> $seqres.full 2>&1 &
+$FSSTRESS_PROG $fsstress_opts -d $testdir -l 0 >> $seqres.full 2>&1 &
 dedup_pids=""
 dupe_run=$TEST_DIR/${seq}-running
 # Start several dedupe processes on same directory
 touch $dupe_run
 for ((i = 0; i < $((2 * LOAD_FACTOR)); i++)); do
 	while [ -e $dupe_run ]; do
-		$DUPEREMOVE_PROG -dr --dedupe-options=same $SCRATCH_MNT/ \
+		$DUPEREMOVE_PROG -dr --dedupe-options=same $testdir \
 			>>$seqres.full 2>&1
 	done &
 	dedup_pids="$! $dedup_pids"
