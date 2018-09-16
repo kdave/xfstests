@@ -6,7 +6,7 @@
 #
 # Test that an incremental send/receive operation will not fail when the
 # destination filesystem has compression enabled and the source filesystem
-# has a 4K extent at a file offset 0 that is not compressed and that is
+# has an extent at a file offset 0 that is not compressed and that is
 # shared.
 #
 seq=`basename $0`
@@ -36,6 +36,7 @@ _require_test
 _require_scratch
 _require_scratch_reflink
 _require_odirect
+_require_btrfs_command inspect-internal dump-super
 
 send_files_dir=$TEST_DIR/btrfs-test-$seq
 
@@ -44,21 +45,27 @@ rm -fr $send_files_dir
 mkdir $send_files_dir
 
 _scratch_mkfs >>$seqres.full 2>&1
-_scratch_mount "-o compress"
+# On 64K pagesize systems the compression is more efficient, so max_inline
+# helps to create regular (non inline) extent irrespective of the final
+# write size.
+_scratch_mount "-o compress -o max_inline=0"
 
 # Write to our file using direct IO, so that this way the write ends up not
 # getting compressed, that is, we get a regular extent which is neither
 # inlined nor compressed.
 # Alternatively, we could have mounted the fs without compression enabled,
 # which would result as well in an uncompressed regular extent.
-$XFS_IO_PROG -f -d -c "pwrite -S 0xab 0 4K" $SCRATCH_MNT/foobar | _filter_xfs_io
+sectorsize=$(_scratch_btrfs_sectorsize)
+$XFS_IO_PROG -f -d -c "pwrite -S 0xab 0 $sectorsize" $SCRATCH_MNT/foobar |\
+	_filter_xfs_io_numbers
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
 	$SCRATCH_MNT/mysnap1 > /dev/null
 
 # Clone the regular (not inlined) extent.
-$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foobar 0 8K 4K" $SCRATCH_MNT/foobar \
-	| _filter_xfs_io
+$XFS_IO_PROG -c \
+	"reflink $SCRATCH_MNT/foobar 0 $((2 * $sectorsize)) $sectorsize" \
+	$SCRATCH_MNT/foobar | _filter_xfs_io_numbers
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
 	$SCRATCH_MNT/mysnap2 > /dev/null
@@ -67,17 +74,19 @@ $BTRFS_UTIL_PROG send -f $send_files_dir/1.snap \
 		 $SCRATCH_MNT/mysnap1 2>&1 >/dev/null | _filter_scratch
 
 # Now do an incremental send of the second snapshot. The send stream can have
-# a clone operation to clone the extent at offset 0 to offset 8K. This operation
-# would fail on the receiver if it has compression enabled, since the write
-# operation of the extent at offset 0 was compressed because it was a buffered
-# write operation, and btrfs' clone implementation does not allow cloning inline
-# extents to offsets different from 0.
+# a clone operation to clone the extent at offset 0 to offset (2 x sectorsize).
+# This operation would fail on the receiver if it has compression enabled, since
+# the write operation of the extent at offset 0 was compressed because it was a
+# buffered write operation, and btrfs' clone implementation does not allow
+# cloning inline extents to offsets different from 0.
 $BTRFS_UTIL_PROG send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
 		 $SCRATCH_MNT/mysnap2 2>&1 >/dev/null | _filter_scratch
 
-echo "File digests in the original filesystem:"
-md5sum $SCRATCH_MNT/mysnap1/foobar | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/foobar | _filter_scratch
+sum_src_snap1=$(md5sum $SCRATCH_MNT/mysnap1/foobar | awk '{print $1}')
+sum_src_snap2=$(md5sum $SCRATCH_MNT/mysnap2/foobar | awk '{print $1}')
+echo "File digests in the original filesystem:" >> $seqres.full
+echo "md5sum $SCRATCH_MNT/mysnap1/foobar " $sum_src_snap1 >> $seqres.full
+echo "md5sum $SCRATCH_MNT/mysnap2/foobar " $sum_src_snap2 >> $seqres.full
 
 # Now recreate the filesystem by receiving both send streams and verify we get
 # the same file content that the original filesystem had.
@@ -88,9 +97,14 @@ _scratch_mount "-o compress"
 $BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT > /dev/null
 $BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT > /dev/null
 
-echo "File digests in the new filesystem:"
-md5sum $SCRATCH_MNT/mysnap1/foobar | _filter_scratch
-md5sum $SCRATCH_MNT/mysnap2/foobar | _filter_scratch
+sum_dest_snap1=$(md5sum $SCRATCH_MNT/mysnap1/foobar | awk '{print $1}')
+sum_dest_snap2=$(md5sum $SCRATCH_MNT/mysnap2/foobar | awk '{print $1}')
+echo "File digests in the new filesystem:" | tee -a $seqres.full
+echo "md5sum $SCRATCH_MNT/mysnap1/foobar " $sum_src_snap1 >> $seqres.full
+echo "md5sum $SCRATCH_MNT/mysnap2/foobar " $sum_src_snap2 >> $seqres.full
+
+[[ $sum_src_snap1 == $sum_dest_snap1 ]] && echo "src and dest 'mysnap1' checksum matched"
+[[ $sum_src_snap2 == $sum_dest_snap2 ]] && echo "src and dest 'mysnap2' checksum matched"
 
 status=0
 exit
