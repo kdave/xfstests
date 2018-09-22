@@ -3508,14 +3508,23 @@ _init_kmemleak()
 {
 	local kern_knob="${DEBUGFS_MNT}/kmemleak"
 
+	# Since kernel v4.19-rc3, the kmemleak knob exists even if kmemleak is
+	# disabled, but returns EBUSY on write. So instead of relying on
+	# existance of writable knob file, we use a test file to indicate that
+	# _check_kmemleak() is enabled only if we actually managed to write to
+	# the knob file.
+	rm -f ${RESULT_BASE}/check_kmemleak
+
 	if [ ! -w "$kern_knob" ]; then
 		return 0
 	fi
 
 	# Disable the automatic scan so that we can control it completely,
 	# then dump all the leaks recorded so far.
-	echo "scan=off" > "$kern_knob"
-	_capture_kmemleak /dev/null
+	if echo "scan=off" > "$kern_knob" 2>/dev/null; then
+		_capture_kmemleak /dev/null
+		touch ${RESULT_BASE}/check_kmemleak
+	fi
 }
 
 # check kmemleak log
@@ -3524,7 +3533,7 @@ _check_kmemleak()
 	local kern_knob="${DEBUGFS_MNT}/kmemleak"
 	local leak_file="${seqres}.kmemleak"
 
-	if [ ! -w "$kern_knob" ]; then
+	if [ ! -f ${RESULT_BASE}/check_kmemleak ]; then
 		return 0
 	fi
 
