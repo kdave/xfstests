@@ -10,13 +10,6 @@
 #
 # PV 985792
 #
-#This is the list of holes to punch in the file limited to $filesize
-#NOTE holes cannot overlap or this script will fail.
-holes="4096:4096 303104:4096 1048576:512 1051648:8192 1065984:8192 1085440:7168"
-#filesize in MB
-filesize=10
-#Name of file to perform the test on
-filename=test-190
 
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -38,9 +31,24 @@ _supported_os Linux
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
 _scratch_mount
-fsblocksize=`$XFS_INFO_PROG $SCRATCH_MNT|sed 's/=/ /g'|awk '/^data / { print $3 }'`
 
-dd if=/dev/zero of=$SCRATCH_MNT/$filename bs=1024k count=10 >> $seqres.full 2>&1
+fsblocksize=$(_get_file_block_size $SCRATCH_MNT)
+
+#This is the list of holes to punch in the file limited to $filesize
+#NOTE holes cannot overlap or this script will fail.
+holes="$fsblocksize:$fsblocksize \
+$(($fsblocksize * 74)):$fsblocksize \
+$(($fsblocksize * 256)):$(($fsblocksize / 8)) \
+$(echo scale=0\;$fsblocksize \* 256 \+ $fsblocksize \* 3 \/ 4 | bc):$(($fsblocksize * 2)) \
+$(echo scale=0\;$fsblocksize \* 260 \+ $fsblocksize \* 1 \/ 4 | bc):$(($fsblocksize * 2)) \
+$(($fsblocksize * 265)):$(echo scale=0\;$fsblocksize \+ $fsblocksize \* 3 \/ 4 | bc)"
+
+#filesize
+filesize=$(($fsblocksize * 2560))
+#Name of file to perform the test on
+filename=test-190
+
+$XFS_IO_PROG -f -c "pwrite 0 $(($fsblocksize * 2560))" $SCRATCH_MNT/$filename >> $seqres.full 2>&1
 
 # run DMAPI test using verbose output
 echo Punching holes in file
