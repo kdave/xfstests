@@ -45,44 +45,46 @@ _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
 _mount_flakey
 
+BLOCK_SIZE=$(_get_file_block_size $SCRATCH_MNT)
+
 # Create out test file with some data and then fsync it.
 # We do the fsync only to make sure the last fsync we do in this test triggers
 # the fast code path of btrfs' fsync implementation, a condition necessary to
 # trigger the bug btrfs had.
-$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K 128K" \
+$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K $(($BLOCK_SIZE * 32))" \
 		-c "fsync"                  \
-		$SCRATCH_MNT/foobar | _filter_xfs_io
+		$SCRATCH_MNT/foobar | _filter_xfs_io_blocks_modified
 
 # Now punch a hole against the range [96K, 128K[.
-$XFS_IO_PROG -c "fpunch 96K 32K" $SCRATCH_MNT/foobar
+$XFS_IO_PROG -c "fpunch $(($BLOCK_SIZE * 24)) $(($BLOCK_SIZE * 8))" $SCRATCH_MNT/foobar
 
 # Punch another hole against a range that overlaps the previous range and ends
 # beyond eof.
-$XFS_IO_PROG -c "fpunch 64K 128K" $SCRATCH_MNT/foobar
+$XFS_IO_PROG -c "fpunch $(($BLOCK_SIZE * 16)) $(($BLOCK_SIZE * 32))" $SCRATCH_MNT/foobar
 
 # Punch another hole against a range that overlaps the first range ([96K, 128K[)
 # and ends at eof.
-$XFS_IO_PROG -c "fpunch 32K 96K" $SCRATCH_MNT/foobar
+$XFS_IO_PROG -c "fpunch $(($BLOCK_SIZE * 8)) $(($BLOCK_SIZE * 24))" $SCRATCH_MNT/foobar
 
 # Fsync our file. We want to verify that, after a power failure and mounting the
 # filesystem again, the file content reflects all the hole punch operations.
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foobar
 
 echo "File digest before power failure:"
-md5sum $SCRATCH_MNT/foobar | _filter_scratch
+od -t x1 $SCRATCH_MNT/foobar | _filter_od
 
 echo "Fiemap before power failure:"
-$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap $BLOCK_SIZE
 
 _flakey_drop_and_remount
 
 echo "File digest after log replay:"
 # Must match the same digest we got before the power failure.
-md5sum $SCRATCH_MNT/foobar | _filter_scratch
+od -t x1 $SCRATCH_MNT/foobar | _filter_od
 
 echo "Fiemap after log replay:"
 # Must match the same extent listing we got before the power failure.
-$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap $BLOCK_SIZE
 
 _unmount_flakey
 
