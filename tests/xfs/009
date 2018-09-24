@@ -14,21 +14,11 @@ here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
-# This isn't really related to fs block size, it's just what
-# alloc uses for the "block" unit in it's input parameters...
-bsize=4096
 
 _cleanup()
 {
     echo "*** unmount"
     _scratch_unmount
-}
-
-_block_filter()
-{
-   sed \
-	-e 's/[0-9][0-9]*\.\.[0-9][0-9]*/BLOCKRANGE/g' \
-	-e "s/blocksize $bsize/blocksize BSIZE/g"
 }
 
 _init()
@@ -49,11 +39,6 @@ _init()
     fi
 }
 
-_filesize()
-{
-    ls -l $1 | $AWK_PROG '{print "filesize = " $5}'
-}
-
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -64,8 +49,85 @@ _supported_os Linux
 
 _require_scratch
 
+_filesize()
+{
+    ls -l $1 | $AWK_PROG -v bsize="$bsize" '{print "filesize = " $5 / bsize}'
+}
+
+_block_filter()
+{
+	$AWK_PROG -v bsize="$bsize" '
+	/blocksize/ {
+		printf("    blocksize BSIZE\n")
+
+		next
+	}
+
+	/CMD/ {
+		split($3, off, "=")
+		offset = strtonum(off[2])
+		if (offset != -1)
+			offset = offset / bsize
+
+		split($4, len, "=")
+		nr_blocks = strtonum(len[2])
+		if (nr_blocks != -1)
+			nr_blocks = nr_blocks / bsize
+
+		printf("    %s %s off=%s, len=%d\n", $1, $2, offset, nr_blocks)
+
+		next
+	}
+
+	/MAP/ {
+		split($2, off, "=")
+		offset = strtonum(off[2])
+		if (offset != -1)
+			offset = offset / bsize
+
+		split($3, len, "=")
+
+		nr_blocks = strtonum(len[2])
+
+		if (nr_blocks != -1)
+			nr_blocks = nr_blocks / bsize
+
+		printf("    %s off=%s, len=%d %s\n", $1, offset, nr_blocks, $4)
+
+		next
+	}
+
+	/TRUNCATE/ {
+		split($2, off, "=")
+		offset = strtonum(off[2]) / bsize
+
+		printf("    %s off=%s\n", $1, offset)
+
+		next
+	}
+
+	/\[[0-9]+,[0-9]+\]:/ {
+		printf("        %s BLOCKRANGE\n", $1)
+
+		next
+	}
+
+	{
+		print
+
+		next
+	}
+	'
+}
+
 _init
 out=$SCRATCH_MNT/$$.tmp
+
+# This isn't really related to fs block size, it's just what
+# alloc uses for the "block" unit in it's input parameters...
+# However, xfs_alloc_file_space() rounds up allocation
+# request by the filesystem's block size.
+bsize=$(_get_file_block_size $SCRATCH_MNT)
 
 # since we're using a clean FS here, we make some assumptions
 # about availability of contiguous blocks
