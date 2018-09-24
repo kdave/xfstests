@@ -38,8 +38,13 @@ chmod a+rwx $seqres.full	# arbitrary users will write here
 _require_scratch
 _require_xfs_quota
 
-bsoft=100
-bhard=500
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+bsize=$(_get_file_block_size $SCRATCH_MNT)
+_scratch_unmount
+
+bsoft=$(( 200 * $bsize ))
+bhard=$(( 1000 * $bsize ))
 isoft=4
 ihard=10
 
@@ -55,7 +60,9 @@ _filter_report()
 		if ($ENV{'LARGE_SCRATCH_DEV'}) {
 			$val = $ENV{'NUM_SPACE_FILES'};
 		}
-		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g'
+		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g' |
+	perl -npe '
+		s|^(.*?) (\d+) (\d+) (\d+)|$1 @{[$2 * 1024 /'$bsize']} @{[$3 * 1024 /'$bsize']} @{[$4 * 1024 /'$bsize']}|'
 }
 
 # The actual point at which limit enforcement takes place for the
@@ -70,9 +77,10 @@ _filter_and_check_blks()
 		if (/^\#'$id'\s+(\d+)/ && '$enforce') {
 			$maximum = '$bhard';
 			$minimum = '$bhard' * 85/100;
-			if (($1 < $minimum || $1 > $maximum) && '$noextsz') {
+			$used = $1 * 1024;
+			if (($used < $minimum || $used > $maximum) && '$noextsz') {
 				printf(" URK %d: %d is out of range! [%d,%d]\n",
-					'$id', $1, $minimum, $maximum);
+					'$id', $used, $minimum, $maximum);
 			}
 			s/^(\#'$id'\s+)(\d+)/\1 =OK=/g;
 		}
@@ -132,7 +140,7 @@ _exercise()
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
 	xfs_quota -D $tmp.projects -P $temp.projid -x \
-		-c "limit -$type bsoft=${bsoft}k bhard=${bhard}k $id" \
+		-c "limit -$type bsoft=${bsoft} bhard=${bhard} $id" \
 		-c "limit -$type isoft=$isoft ihard=$ihard $id" \
 		$SCRATCH_DEV
 	xfs_quota -D $tmp.projects -P $tmp.projid -x \
@@ -152,7 +160,7 @@ _exercise()
 
 	echo
 	echo "*** push past the soft block limit" | tee -a $seqres.full
-	_file_as_id $SCRATCH_MNT/softie $id $type 1024 140
+	_file_as_id $SCRATCH_MNT/softie $id $type $bsize 300
 	_qmount
 	xfs_quota -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
@@ -173,7 +181,7 @@ _exercise()
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
 	echo "*** push past the hard block limit (expect EDQUOT)" | tee -a $seqres.full
-	_file_as_id $SCRATCH_MNT/softie $id $type 1024 540
+	_file_as_id $SCRATCH_MNT/softie $id $type $bsize 1200
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
 	_qmount
