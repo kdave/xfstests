@@ -7,6 +7,18 @@
 # Check some extent size hint boundary conditions that can result in
 # MAXEXTLEN overflows.
 #
+# In xfs_bmap_extsize_align(), we had,
+# 	if ((temp = (align_alen % extsz))) {
+# 		align_alen += extsz - temp;
+# 	}
+# align_alen had the value of 2097151 (i.e. MAXEXTLEN) blocks. extsz had
+# the value of 4096 blocks.
+#
+# align_alen % extsz will be 4095. so align_alen will end up having
+# 2097151 + (4096 - 4095) = 2097152 i.e. (MAXEXTLEN + 1). Thus the length
+# of the new extent will be larger than MAXEXTLEN. This will later cause
+# the bmbt leaf to have an entry whose length is set to zero block count.
+#
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
@@ -46,19 +58,22 @@ mkdir -p $LOOP_MNT
 $XFS_IO_PROG -ft -c "truncate 1t" $LOOP_FILE >> $seqres.full
 LOOP_DEV=`_create_loop_device $LOOP_FILE`
 
-_mkfs_dev -d size=156452m,agcount=4 -l size=32m $LOOP_DEV
+_mkfs_dev -d size=260g,agcount=2 $LOOP_DEV
 _mount $LOOP_DEV $LOOP_MNT
 
+BLOCK_SIZE=$(_get_file_block_size $LOOP_MNT)
+
 # Corrupt the BMBT by creating extents larger than MAXEXTLEN
+# For 4k blocksize, MAXEXTLEN * 4k = 2097151 * 4k = 8589930496 = ~8GiB
 $XFS_IO_PROG -ft \
-	-c "extsize 16m" \
-	-c "falloc 0 30g" \
+	-c "extsize $(($BLOCK_SIZE * 4096))" \
+	-c "falloc 0 $(($BLOCK_SIZE * 2097152))" \
 	$LOOP_MNT/foo >> $seqres.full
 
 umount $LOOP_MNT
 _check_xfs_filesystem $LOOP_DEV none none
 
-_mkfs_dev -f -l size=32m $LOOP_DEV
+_mkfs_dev -f $LOOP_DEV
 _mount $LOOP_DEV $LOOP_MNT
 
 # check we trim both ends of the extent approproiately; this will fail
