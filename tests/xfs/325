@@ -54,11 +54,12 @@ echo "Check files"
 md5sum $SCRATCH_MNT/file1 | _filter_scratch
 md5sum $SCRATCH_MNT/file2 | _filter_scratch
 
+echo "CoW a few blocks"
+$XFS_IO_PROG -c "pwrite -W -S 0x67 $((10 * blksz)) $((10 * blksz))" $SCRATCH_MNT/file2 >> $seqres.full
+
 echo "Inject error"
 _scratch_inject_error "free_extent"
 
-echo "CoW a few blocks"
-$XFS_IO_PROG -c "pwrite -W -S 0x67 $((10 * blksz)) $((10 * blksz))" $SCRATCH_MNT/file2 >> $seqres.full
 rm $SCRATCH_MNT/file1
 sync
 
