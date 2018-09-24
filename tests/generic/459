@@ -59,14 +59,14 @@ vgname=vg_$seq
 lvname=lv_$seq
 poolname=pool_$seq
 snapname=snap_$seq
-origpsize=100
-virtsize=200
-newpsize=200
+origpsize=200
+virtsize=300
+newpsize=300
 
 # Ensure we have enough disk space
-_scratch_mkfs_sized $((250 * 1024 * 1024)) >>$seqres.full 2>&1
+_scratch_mkfs_sized $((350 * 1024 * 1024)) >>$seqres.full 2>&1
 
-# Create a 100MB dm-thin POOL
+# Create a 200MB dm-thin POOL
 $LVM_PROG pvcreate -f $SCRATCH_DEV >>$seqres.full 2>&1
 $LVM_PROG vgcreate -f $vgname $SCRATCH_DEV >>$seqres.full 2>&1
 
@@ -74,7 +74,7 @@ $LVM_PROG lvcreate  --thinpool $poolname  --errorwhenfull y \
 		    --zero n -L $origpsize \
 		    --poolmetadatasize 4M $vgname >>$seqres.full 2>&1
 
-# Create a overprovisioned 200MB dm-thin virt. device
+# Create a overprovisioned 300MB dm-thin virt. device
 $LVM_PROG lvcreate  --virtualsize $virtsize \
 		    -T $vgname/$poolname \
 		    -n $lvname >>$seqres.full 2>&1
@@ -92,7 +92,7 @@ _mount /dev/mapper/$vgname-$snapname $SCRATCH_MNT
 
 # Consume all space available in the volume and freeze to ensure everything
 # required to make the fs consistent is flushed to disk.
-$XFS_IO_PROG -f -d -c 'pwrite -b 1m 0 120m' $SCRATCH_MNT/f1 >>$seqres.full 2>&1
+$XFS_IO_PROG -f -d -c 'pwrite -b 1m 0 220m' $SCRATCH_MNT/f1 >>$seqres.full 2>&1
 
 # In XFS, this freeze will never complete until the dm-thin POOL device is
 # extended. It is expected, and is only used so xfsaild is triggered to
