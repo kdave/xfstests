@@ -1,0 +1,94 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Huawei.  All Rights Reserved.
+#
+# FS QA Test 505
+#
+# This testcase is trying to test recovery flow of generic filesystem, w/ below
+# steps, once uid or gid changes, after we fsync that file, we can expect that
+# uid/gid can be recovered after sudden power-cuts.
+# 1. touch testfile;
+# 1.1 sync (optional)
+# 2. chown 100 testfile;
+# 3. chgrp 100 testfile;
+# 4. xfs_io -f testfile -c "fsync";
+# 5. godown;
+# 6. umount;
+# 7. mount;
+# 8. check uid/gid
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_scratch
+_require_scratch_shutdown
+
+_scratch_mkfs >/dev/null 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+
+testfile=$SCRATCH_MNT/testfile
+stat_opt='-c "uid: %u, gid: %g"'
+
+do_check()
+{
+	_scratch_mount
+
+	touch $testfile
+
+	if [ "$1" == "sync" ]; then
+		sync
+	fi
+
+	chown 100 $testfile
+	chgrp 100 $testfile
+
+	before=`stat "$stat_opt" $testfile`
+
+	$XFS_IO_PROG -f $testfile -c "fsync" | _filter_xfs_io
+
+	_scratch_shutdown | tee -a $seqres.full
+	_scratch_cycle_mount
+
+	after=`stat "$stat_opt" $testfile`
+
+	# check inode's uid/gid
+	if [ "$before" != "$after" ]; then
+		echo "Before: $before"
+		echo "After : $after"
+	fi
+	echo "Before: $before" >> $seqres.full
+	echo "After : $after" >> $seqres.full
+
+	rm $testfile
+	_scratch_unmount
+}
+
+echo "Silence is golden"
+do_check
+do_check sync
+
+status=0
+exit
