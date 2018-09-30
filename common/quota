@@ -77,6 +77,13 @@ _require_prjquota()
 	dumpe2fs -h $_dev 2>&1 | grep -qw project || \
 		_notrun "Project quota not available on this $FSTYP"
     fi
+    if [ "$FSTYP" == "f2fs" ]; then
+	dump.f2fs $_dev 2>&1 | grep -qw project_quota
+	[ $? -ne 0 ] && _notrun "Project quota not enabled in this device $_dev"
+	cat /sys/fs/f2fs/features/project_quota | grep -qw supported
+	[ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
+	return
+    fi
     src/feature -P $_dev
     [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
     if [ "$USE_EXTERNAL" = yes -a ! -z "$_dev" ]; then
