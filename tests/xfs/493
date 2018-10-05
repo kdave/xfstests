@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 493
+#
+# Test detection & fixing of bad summary block counts at mount time.
+# Corrupt the AGFs to test mount failure when mount-fixing fails.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap '_cleanup; exit $status' 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_supported_os Linux
+_require_scratch_nocheck
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+echo "test file" > $SCRATCH_MNT/testfile
+
+echo "Fuzz fdblocks and btreeblks"
+_scratch_unmount
+dblocks=$(_scratch_xfs_get_metadata_field dblocks 'sb 0')
+_scratch_xfs_set_metadata_field fdblocks $((dblocks * 2)) 'sb 0' > $seqres.full 2>&1
+
+aglen=$(_scratch_xfs_get_metadata_field length 'agf 0')
+_scratch_xfs_set_metadata_field btreeblks $aglen 'agf 0' > $seqres.full 2>&1
+
+echo "Detection and Correction"
+if _try_scratch_mount >> $seqres.full 2>&1; then
+	echo "mount should have failed"
+	avail=$(stat -c '%a' -f $SCRATCH_MNT)
+	total=$(stat -c '%b' -f $SCRATCH_MNT)
+	echo "avail: $avail" >> $seqres.full
+	echo "total: $total" >> $seqres.full
+	test "$avail" -gt "$total" && echo "free space bad: $avail > $total"
+	_scratch_unmount
+fi
+_scratch_xfs_repair -n >> $seqres.full 2>&1 && echo "repair didn't find fuzz?"
+
+# success, all done
+status=0
+exit
