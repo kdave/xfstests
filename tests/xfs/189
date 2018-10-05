@@ -165,7 +165,19 @@ _test_remount_barrier()
 	echo
 
 	# mention barrier explicitly even if it's currently the default just to be sure
-	_try_scratch_mount -o barrier
+	_try_scratch_mount -o barrier > $tmp.barriermount 2>&1
+
+	# If the kernel doesn't recognize 'barrier' as a mount option then
+	# just fake the output.  The barrier option was removed in 4.19.
+	if grep -q "bad option" $tmp.barriermount; then
+		cat << ENDL
+SCRATCH_DEV on SCRATCH_MNT type xfs (rw)
+SCRATCH_DEV on SCRATCH_MNT type xfs (rw,nobarrier)
+SCRATCH_DEV on SCRATCH_MNT type xfs (rw)
+ENDL
+		return
+	fi
+
 	[ $? -eq 0 ] || echo "mount failed unexpectedly!"
 	_check_mount rw
 
