@@ -1,0 +1,96 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Huawei.  All Rights Reserved.
+#
+# FS QA Test 508
+#
+# This testcase is trying to test recovery flow of generic filesystem, it needs
+# creation time support on specified filesystem.
+# With below steps, once the file is created, creation time attribute should be
+# valid on the file, after we fsync that file, it expects creation time can be
+# recovered after sudden power-cuts.
+# 1. touch testfile;
+# 1.1 sync (optional)
+# 2. xfs_io -f testfile -c "fsync";
+# 3. godown;
+# 4. umount;
+# 5. mount;
+# 6. check creation time
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_test_lsattr
+_require_statx
+_require_xfs_io_command "statx" "-v"
+_require_btime
+
+_require_scratch
+_require_scratch_shutdown
+
+_scratch_mkfs >/dev/null 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+
+testfile=$SCRATCH_MNT/testfile
+
+do_check()
+{
+	_scratch_mount
+
+	touch $testfile
+
+	if [ "$1" == "sync" ]; then
+		sync
+	fi
+
+	before=`$XFS_IO_PROG -f $testfile -c "statx -v" | grep btime`
+
+	$XFS_IO_PROG -f $testfile -c "fsync" | _filter_xfs_io
+
+	_scratch_shutdown | tee -a $seqres.full
+	_scratch_cycle_mount
+
+	after=`$XFS_IO_PROG -f $testfile -c "statx -v" | grep btime`
+
+	# check inode's creation time
+	if [ "$before" != "$after" ]; then
+		echo "Before: $before"
+		echo "After : $after"
+	fi
+	echo "Before: $before" >> $seqres.full
+	echo "After : $after" >> $seqres.full
+
+	rm -f $testfile
+	_scratch_unmount
+}
+
+echo "Silence is golden"
+
+do_check
+do_check sync
+
+status=0
+exit
