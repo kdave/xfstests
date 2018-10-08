@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 509
+#
+# Test that if we fsync a tmpfile, without adding a hard link to it, and then
+# power fail, we will be able to mount the filesystem without triggering any
+# crashes, warnings or corruptions.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "-T"
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our tmpfile, write some data to it and fsync it. We want a power
+# failure to happen after the fsync, so that we have an inode with a link
+# count of 0 in our log/journal.
+$XFS_IO_PROG -T \
+	-c "pwrite -S 0xab 0 64K" \
+	-c "fsync" \
+	$SCRATCH_MNT | _filter_xfs_io
+
+# Simulate a power failure and mount the filesystem to check that it succeeds.
+_flakey_drop_and_remount
+
+_unmount_flakey
+
+status=0
+exit
