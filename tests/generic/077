@@ -13,11 +13,18 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1
-# Something w/ enough data to fill 50M of fs...
-filler=/lib/modules/
 
-# fall back in case /lib/modules doesn't exist
-[ -d $filler ] || filler=/usr
+# Something w/ enough data to fill 256M of fs...
+filler=""
+[ -d /lib/modules ] && \
+	[ $(( $(du -h -m /lib/modules | tail -1| cut -f1) * 2 )) -ge 256 ] && \
+	filler=/lib/modules
+
+# fall back in case /lib/modules doesn't exist or smaller
+[[ -z $filler ]] && \
+	[ -d /usr ] && \
+	[ $(( $(du -h -m /usr | tail -1| cut -f1) * 2 )) -ge 256 ] && \
+	filler=/usr
 
 _cleanup()
 {
@@ -36,7 +43,7 @@ trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
 _supported_fs generic
 _supported_os Linux
 
-[ ! -d $filler ] && _notrun "No directory to source files from"
+[ ! -d $filler ] && _notrun "No directory at least 256MB to source files from"
 
 _require_scratch
 _require_attrs
@@ -49,9 +56,8 @@ rm -f $seqres.full
 _scratch_unmount >/dev/null 2>&1
 echo "*** MKFS ***"                         >>$seqres.full
 echo ""                                     >>$seqres.full
-SIZE=`expr 50 \* 1024 \* 1024`
-_scratch_mkfs_sized $SIZE                   >>$seqres.full 2>&1 \
-	|| _fail "mkfs failed"
+fs_size=$((256 * 1024 * 1024))
+_scratch_mkfs_sized $fs_size >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount
 mkdir $SCRATCH_MNT/subdir
 
