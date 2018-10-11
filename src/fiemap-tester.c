@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/vfs.h>
 #include <linux/fs.h>
 #include <linux/types.h>
@@ -556,7 +557,19 @@ main(int argc, char **argv)
 	}
 
 	if (ioctl(fd, FIGETBSZ, &blocksize) < 0) {
-		perror("Can't get filesystem block size");
+		struct statfs buf;
+
+		if (fstatfs(fd, &buf) == 0) {
+			blocksize = buf.f_bsize;
+		} else {
+			perror("Can't get filesystem block size");
+			close(fd);
+			exit(1);
+		}
+	}
+
+	if (blocksize <= 0) {
+		printf("Illegal filesystem block size\n");
 		close(fd);
 		exit(1);
 	}
