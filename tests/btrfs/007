@@ -16,14 +16,14 @@ seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
 
-tmp=`mktemp -d`
+tmp=/tmp/$$
 status=1
 
 _cleanup()
 {
-	echo "*** unmount"
-	_scratch_unmount 2>/dev/null
+	cd /
 	rm -f $tmp.*
+	rm -fr $send_files_dir
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -38,7 +38,11 @@ _require_scratch
 _require_fssum
 _require_seek_data_hole
 
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
 rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
 
 workout()
 {
@@ -57,19 +61,20 @@ workout()
 
 	_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr
 
-	echo "# $BTRFS_UTIL_PROG send $SCRATCH_MNT/base > $tmp/base.snap" \
+	echo "# $BTRFS_UTIL_PROG send $SCRATCH_MNT/base > ${send_files_dir}/base.snap" \
 		>> $seqres.full
-	$BTRFS_UTIL_PROG send $SCRATCH_MNT/base > $tmp/base.snap 2>> $seqres.full \
+	$BTRFS_UTIL_PROG send $SCRATCH_MNT/base > $send_files_dir/base.snap 2>> $seqres.full \
 		|| _fail "failed: '$@'"
 	echo "# $BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base\
-		$SCRATCH_MNT/incr > $tmp/incr.snap" >> $seqres.full
+		$SCRATCH_MNT/incr > ${send_files_dir}/incr.snap" >> $seqres.full
 	$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base \
-		$SCRATCH_MNT/incr > $tmp/incr.snap 2>> $seqres.full \
+		$SCRATCH_MNT/incr > $send_files_dir/incr.snap 2>> $seqres.full \
 		|| _fail "failed: '$@'"
 
-	run_check $FSSUM_PROG -A -f -w $tmp/base.fssum $SCRATCH_MNT/base
-	run_check $FSSUM_PROG -A -f -w $tmp/incr.fssum -x $SCRATCH_MNT/incr/base \
-		$SCRATCH_MNT/incr
+	run_check $FSSUM_PROG -A -f -w $send_files_dir/base.fssum \
+		$SCRATCH_MNT/base
+	run_check $FSSUM_PROG -A -f -w $send_files_dir/incr.fssum \
+		-x $SCRATCH_MNT/incr/base $SCRATCH_MNT/incr
 
 	_scratch_unmount >/dev/null 2>&1
 	echo "*** mkfs -dsize=$fsz"    >>$seqres.full
@@ -78,11 +83,11 @@ workout()
 		|| _fail "size=$fsz mkfs failed"
 	_scratch_mount "-o noatime"
 
-	_run_btrfs_util_prog receive $SCRATCH_MNT < $tmp/base.snap
-	run_check $FSSUM_PROG -r $tmp/base.fssum $SCRATCH_MNT/base
+	_run_btrfs_util_prog receive $SCRATCH_MNT < $send_files_dir/base.snap
+	run_check $FSSUM_PROG -r $send_files_dir/base.fssum $SCRATCH_MNT/base
 
-	_run_btrfs_util_prog receive $SCRATCH_MNT < $tmp/incr.snap
-	run_check $FSSUM_PROG -r $tmp/incr.fssum $SCRATCH_MNT/incr
+	_run_btrfs_util_prog receive $SCRATCH_MNT < $send_files_dir/incr.snap
+	run_check $FSSUM_PROG -r $send_files_dir/incr.fssum $SCRATCH_MNT/incr
 }
 
 echo "*** test send / receive"
