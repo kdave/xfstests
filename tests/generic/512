@@ -1,0 +1,61 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 512
+#
+# Test that if we have a very small file, with a size smaller than the block
+# size, then fallocate a very small range within the block size but past the
+# file's current size, fsync the file and then power fail, after mounting the
+# filesystem all the file data is there and the file size is correct.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "falloc"
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+$XFS_IO_PROG -f \
+	     -c "pwrite -S 0xb6 0 21" \
+	     -c "falloc 40 40" \
+	     -c "fsync" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Simulate a power failure and mount the filesystem. We expect no data loss
+# and a correct file size.
+_flakey_drop_and_remount
+
+echo "File content after power failure:"
+od -t x1 -A d $SCRATCH_MNT/foobar
+
+_unmount_flakey
+
+status=0
+exit
