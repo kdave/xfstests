@@ -1,0 +1,68 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 515
+#
+# Ensure that reflinking into a file well beyond EOF zeroes everything between
+# the old EOF and the start of the newly linked chunk.  This is an adaptation
+# of a reproducer script that Eric Sandeen formulated from a stale data
+# exposure bug uncovered by shared/010.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+
+rm -f $seqres.full
+
+# Fill disk with a well known pattern so that stale data exposure becomes much
+# more obvious.
+$XFS_IO_PROG -c "pwrite -S 0x58 -b 1m 0 300m" $SCRATCH_DEV >> $seqres.full
+_scratch_mkfs_sized $((300 * 1048576)) >>$seqres.full 2>&1
+_scratch_mount
+
+DONOR1=$SCRATCH_MNT/a
+TARGET=$SCRATCH_MNT/b
+blksz=65536
+
+$XFS_IO_PROG -f -c "pwrite -S 0x72 0 $blksz" $DONOR1 >> $seqres.full
+
+$XFS_IO_PROG -f \
+	-c "falloc -k $((blksz*2)) $blksz"        \
+	-c "pwrite -S 0x57 $((blksz*16)) 8192" \
+	-c "fdatasync" \
+	-c 'stat' \
+	-c "reflink $DONOR1 0 $((blksz*17)) $blksz" \
+                $TARGET >> $seqres.full
+
+od -tx1 -Ad -c $TARGET >> $seqres.full
+md5sum $DONOR1 | _filter_scratch
+md5sum $TARGET | _filter_scratch
+
+_scratch_cycle_mount
+
+od -tx1 -Ad -c $TARGET >> $seqres.full
+md5sum $DONOR1 | _filter_scratch
+md5sum $TARGET | _filter_scratch
+
+status=0
+exit

@@ -1,0 +1,81 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 516
+#
+# Ensuring that we cannot dedupe non-matching parts of files:
+#   - Fail to dedupe non-identical parts of two different files
+#   - Check that nothing changes in either file
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -rf $tmp.* $testdir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_require_test_dedupe
+
+rm -f $seqres.full
+
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
+
+echo "Create the original files"
+blksz=65536
+_pwrite_byte 0x61 $((blksz * 2)) $((blksz * 6)) $testdir/file1 >> $seqres.full
+_pwrite_byte 0x61 $((blksz * 2)) $((blksz * 6)) $testdir/file2 >> $seqres.full
+_pwrite_byte 0x62 $(((blksz * 6) - 33)) 1 $testdir/file2 >> $seqres.full
+_test_cycle_mount
+
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+
+_compare_range $testdir/file1 0 $testdir/file2 0 "$((blksz * 8))" \
+       || echo "Files 1-2 do not match (intentional)"
+
+echo "(partial) dedupe the middle blocks together"
+free_before=$(stat -f -c '%a' $testdir)
+_dedupe_range $testdir/file1 $((blksz * 4)) $testdir/file2 \
+		$((blksz * 4)) $((blksz * 2)) 2>&1 | _filter_xfs_io_numbers | _filter_dedupe_error
+_test_cycle_mount
+${FILEFRAG_PROG} -v $testdir/file1 >> $seqres.full
+${FILEFRAG_PROG} -v $testdir/file2 >> $seqres.full
+free_after=$(stat -f -c '%a' $testdir)
+echo "freesp changed by $free_before -> $free_after" >> $seqres.full
+
+echo "Compare sections"
+md5sum $testdir/file1 | _filter_test_dir
+md5sum $testdir/file2 | _filter_test_dir
+
+_compare_range $testdir/file1 0 $testdir/file2 0 $((blksz * 4)) \
+       || echo "Start sections do not match (error)"
+
+_compare_range $testdir/file1 $((blksz * 4)) $testdir/file2 \
+		$((blksz * 4)) $((blksz * 2)) \
+       || echo "Middle sections do not match (intentional)"
+
+_compare_range $testdir/file1 $((blksz * 6)) $testdir/file2 \
+		$((blksz * 6)) $((blksz * 2)) \
+       || echo "End sections do not match (error)"
+
+# success, all done
+status=0
+exit
