@@ -1,0 +1,81 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle. All Rights Reserved.
+#
+# FS QA Test 185
+#
+# Fuzzy test for FS image duplication.
+#  Could be fixed by
+#  a9261d4125c9 ("btrfs: harden agaist duplicate fsid on scanned devices")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+mnt=$TEST_DIR/$seq.mnt
+_cleanup()
+{
+	rm -rf $mnt > /dev/null 2>&1
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 2
+_scratch_dev_pool_get 2
+
+device_1=$(echo $SCRATCH_DEV_POOL | awk '{print $1}')
+device_2=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+
+echo device_1=$device_1 device_2=$device_2 >> $seqres.full
+
+rm -rf $mnt > /dev/null 2>&1
+mkdir $mnt
+_mkfs_dev $device_1
+_mount $device_1 $mnt
+
+[[ $(findmnt $mnt | grep -v TARGET | awk '{print $2}') != $device_1 ]] && \
+						_fail "mounted device changed"
+
+for sb_bytenr in 65536 67108864; do
+	echo -n "dd status=none if=$dev_foo of=$dev_bar bs=1 "\
+		"seek=$sb_bytenr skip=$sb_bytenr count=4096" >> $seqres.full
+	dd status=none if=$device_1 of=$device_2 bs=1 seek=$sb_bytenr \
+				skip=$sb_bytenr count=4096 > /dev/null 2>&1
+	echo ..:$? >> $seqres.full
+done
+
+# Original device is mounted, scan of its clone should fail
+$BTRFS_UTIL_PROG device scan $device_2 >> $seqres.full 2>&1
+[[ $? != 1 ]] && _fail "cloned device scan should fail"
+
+[[ $(findmnt $mnt | grep -v TARGET | awk '{print $2}') != $device_1 ]] && \
+						_fail "mounted device changed"
+
+# Original device scan should be successful
+$BTRFS_UTIL_PROG device scan $device_1 >> $seqres.full 2>&1
+[[ $? != 0 ]] && \
+	_fail "if it fails here, then it means subvolume mount at boot may fail "\
+	      "in some configs."
+
+$UMOUNT_PROG $mnt > /dev/null 2>&1
+_scratch_dev_pool_put
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
