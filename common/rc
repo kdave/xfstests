@@ -3830,6 +3830,19 @@ _require_btime()
 	rm -f $TEST_DIR/test_creation_time
 }
 
+_require_scratch_btime()
+{
+	_require_scratch
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount
+
+	$XFS_IO_PROG -f $SCRATCH_MNT/test_creation_time -c "statx -v" \
+		| grep btime >>$seqres.full 2>&1 || \
+		_notrun "inode creation time not supported by this filesystem"
+
+	_scratch_unmount
+}
+
 init_rc
 
 ################################################################################
