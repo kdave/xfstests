@@ -224,71 +224,16 @@ int
 sum_file_data_permissive(int fd, sum_t *dst)
 {
 	int ret;
-	off_t pos;
-	off_t old;
-	int i;
-	uint64_t zeros = 0;
-
-	pos = lseek(fd, 0, SEEK_CUR);
-	if (pos == (off_t)-1)
-		return errno == ENXIO ? 0 : -2;
 
 	while (1) {
-		old = pos;
-		pos = lseek(fd, pos, SEEK_DATA);
-		if (pos == (off_t)-1) {
-			if (errno == ENXIO) {
-				ret = 0;
-				pos = lseek(fd, 0, SEEK_END);
-				if (pos != (off_t)-1)
-					zeros += pos - old;
-			} else {
-				ret = -2;
-			}
-			break;
-		}
 		ret = read(fd, buf, sizeof(buf));
-		assert(ret); /* eof found by lseek */
-		if (ret <= 0)
+		if (ret < 0)
+			return -errno;
+		sum_add(dst, buf, ret);
+		if (ret < sizeof(buf))
 			break;
-		if (old < pos) /* hole */
-			zeros += pos - old;
-		for (i = 0; i < ret; ++i) {
-			for (old = i; buf[i] == 0 && i < ret; ++i)
-				;
-			if (old < i) /* code like a hole */
-				zeros += i - old;
-			if (i == ret)
-				break;
-			if (zeros) {
-				if (verbose >= 2)
-					fprintf(stderr,
-						"adding %llu zeros to sum\n",
-						(unsigned long long)zeros);
-				sum_add_u64(dst, 0);
-				sum_add_u64(dst, zeros);
-				zeros = 0;
-			}
-			for (old = i; buf[i] != 0 && i < ret; ++i)
-				;
-			if (verbose >= 2)
-				fprintf(stderr, "adding %u non-zeros to sum\n",
-					i - (int)old);
-			sum_add(dst, buf + old, i - old);
-		}
-		pos += ret;
 	}
-
-	if (zeros) {
-		if (verbose >= 2)
-			fprintf(stderr,
-				"adding %llu zeros to sum (finishing)\n",
-				(unsigned long long)zeros);
-		sum_add_u64(dst, 0);
-		sum_add_u64(dst, zeros);
-	}
-
-	return ret;
+	return 0;
 }
 
 int
