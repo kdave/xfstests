@@ -1,0 +1,44 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 494
+#
+# Ensure that xfsprogs crc32 works correctly via xfs_io crc32cselftest command.
+#
+seq=`basename "$0"`
+seqres="$RESULT_DIR/$seq"
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_xfs_io_command "crc32cselftest"
+
+rm -f "$seqres.full"
+
+filter_selftest() {
+	sed -e 's/bytes in [0-9]* usec/bytes in XXX usec/g'
+}
+
+$XFS_IO_PROG -c 'crc32cselftest' | filter_selftest
+
+echo "Silence is golden."
+# success, all done
+status=0
+exit
