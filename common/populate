@@ -136,6 +136,12 @@ _scratch_xfs_populate() {
 	_scratch_mount
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
 	dblksz="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep naming.*bsize | sed -e 's/^.*bsize=//g' -e 's/\([0-9]*\).*$/\1/g')"
+	crc="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep crc= | sed -e 's/^.*crc=//g' -e 's/\([0-9]*\).*$/\1/g')"
+	if [ $crc -eq 1 ]; then
+		leaf_hdr_size=64
+	else
+		leaf_hdr_size=16
+	fi
 	leaf_lblk="$((32 * 1073741824 / blksz))"
 	node_lblk="$((64 * 1073741824 / blksz))"
 
@@ -170,6 +176,10 @@ _scratch_xfs_populate() {
 	# - LEAF
 	echo "+ leaf dir"
 	__populate_create_dir "${SCRATCH_MNT}/S_IFDIR.FMT_LEAF" "$((dblksz / 12))"
+
+	# - LEAFN
+	echo "+ leafn dir"
+	__populate_create_dir "${SCRATCH_MNT}/S_IFDIR.FMT_LEAFN" "$(( ((dblksz - leaf_hdr_size) / 8) - 3 ))"
 
 	# - NODE
 	echo "+ node dir"
@@ -433,6 +443,9 @@ __populate_check_xfs_dir() {
 	"leaf")
 		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
+	"leafn")
+		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.hdr.magic" | egrep -q '(0x3dff|0xd2ff)' || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		;;
 	"node"|"btree")
 		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 1) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
@@ -508,6 +521,7 @@ _scratch_xfs_populate_check() {
 	inline_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_INLINE")"
 	block_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_BLOCK")"
 	leaf_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_LEAF")"
+	leafn_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_LEAFN")"
 	node_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_NODE")"
 	btree_dir="$(__populate_find_inode "${SCRATCH_MNT}/S_IFDIR.FMT_BTREE")"
 	local_slink="$(__populate_find_inode "${SCRATCH_MNT}/S_IFLNK.FMT_LOCAL")"
@@ -533,6 +547,7 @@ _scratch_xfs_populate_check() {
 	__populate_check_xfs_dir "${inline_dir}" "inline"
 	__populate_check_xfs_dir "${block_dir}" "block"
 	__populate_check_xfs_dir "${leaf_dir}" "leaf"
+	__populate_check_xfs_dir "${leafn_dir}" "leafn"
 	__populate_check_xfs_dir "${node_dir}" "node"
 	__populate_check_xfs_dir "${btree_dir}" "btree"
 	__populate_check_xfs_dformat "${btree_dir}" "btree"
