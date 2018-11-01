@@ -24,6 +24,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/quota
 
 # remove previous $seqres.full before test
 rm -f $seqres.full
@@ -42,6 +43,10 @@ _disable_dmesg_check
 
 _require_xfs_mkfs_crc
 _scratch_mkfs -m crc=0 > $seqres.full 2>&1
+
+# The files that EIO in the golden output changes if we have quotas enabled
+# so leave it off.
+_qmount_option "defaults"
 
 # corrupt an inode in the root inode chunk
 root_ino=$(_scratch_xfs_get_metadata_field 'rootino' 'sb 0')
