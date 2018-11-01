@@ -26,6 +26,21 @@ _add_and_append_dumpdir_fill()
     _append_dumpdir_fill
 }
 
+# Quota files are stored as special files in the dumpdir of the incremental
+# backup.  This throws off the directory/file count reported because xfsrestore
+# includes the dumpdir in the restore summary counts.
+filter_cumulative_quota_updates() {
+    $here/src/feature -U $SCRATCH_DEV && quota=1
+    $here/src/feature -G $SCRATCH_DEV && quota=1
+    $here/src/feature -P $SCRATCH_DEV && quota=1
+
+    $AWK_PROG -v quota=$quota '
+	/entries processed/ {
+		if (quota) {$2--; $5--;}
+	}
+	{print}'
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/dump
@@ -47,7 +62,7 @@ _add_and_append_dumpdir_fill
 _do_dump_file -f $tmp.df.1 -l 1 -D
 _prepare_restore_dir
 _do_restore_file_cum -f $tmp.df.0
-_do_restore_file_cum -f $tmp.df.1
+_do_restore_file_cum -f $tmp.df.1 | filter_cumulative_quota_updates
 _ls_compare_sub
 _diff_compare
 
