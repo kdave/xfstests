@@ -27,14 +27,15 @@ _require_scratch_nocheck
 
 rm -f $seqres.full
 
-_scratch_mkfs_xfs -d size=16m -b size=512 -l size=4944b >> $seqres.full 2>&1
+fsblksz=1024
+_scratch_mkfs_xfs -d size=$((32768*fsblksz)) -b size=$fsblksz >> $seqres.full 2>&1
 _scratch_mount
 
 # fix the reserve block pool to a known size so that the enospc calculations
 # work out correctly.
 _scratch_resvblks 1024 >> $seqres.full 2>&1
 
-# on a 16MB filesystem, there's 32768x512byte blocks. used is:
+# on a 16MB filesystem, there's 32768x$fsblkszbyte blocks. used is:
 #	- 4944 in the log,
 #	- 32+1 for the root inode cluster
 #	- 4 for the AG header
@@ -50,19 +51,25 @@ _scratch_resvblks 1024 >> $seqres.full 2>&1
 # Filesystem           1K-blocks      Used Available Use% Mounted on
 # /dev/ubdc                13912     13908         4 100% /mnt/scratch
 #
-dd if=/dev/zero of=$SCRATCH_MNT/fred bs=512 count=25000 2>&1 | _filter_dd
-dd if=/dev/zero of=$SCRATCH_MNT/fred2 bs=512 count=500 2>&1 | _filter_dd
-dd if=/dev/zero of=$SCRATCH_MNT/fred3 bs=512 count=245 2>&1 | _filter_dd
+blks=$(( ($(_get_available_space $SCRATCH_MNT) / $fsblksz) - 15 ))
+test $blks -gt 1100 || _notrun "not enough space"
+b1=$(echo $blks | sed -e 's/[0-9][0-9][0-9]$/000/g')
+b2=$(echo $blks | sed -e 's/^[0-9][0-9]//g')
+echo "blks: $blks b1: $b1 b2: $b2" >> $seqres.full
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=$fsblksz count=$((b1 - 1000)) 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred2 bs=$fsblksz count=$b2 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred3 bs=$fsblksz count=$((blks - (b1 + b2))) 2>&1 | _filter_dd
 rm -f $SCRATCH_MNT/fred*
 
 echo "*** one file"
 # now try a single file of that size
-dd if=/dev/zero of=$SCRATCH_MNT/fred bs=512 count=26745 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=$fsblksz count=$blks 2>&1 | _filter_dd
 #rm -f $SCRATCH_MNT/fred*
 
 echo "*** one file, a few bytes at a time"
 # now try a single file of that size
-dd if=/dev/zero of=$SCRATCH_MNT/fred bs=15 count=$[26745/15*512] 2>&1 | _filter_dd
+dd if=/dev/zero of=$SCRATCH_MNT/fred bs=15 count=$[blks/15*$fsblksz] 2>&1 | _filter_dd
+echo space: $(_get_available_space $SCRATCH_MNT) >> $seqres.full
 
 # success, all done
 echo "*** done"
