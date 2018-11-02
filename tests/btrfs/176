@@ -1,0 +1,82 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Facebook.  All Rights Reserved.
+#
+# FS QA Test 176
+#
+# Test device remove/replace with an active swap file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 3
+_require_scratch_swapfile
+
+# We check the filesystem manually because we move devices around.
+rm -f "${RESULT_DIR}/require_scratch"
+
+scratch_dev1="$(echo "${SCRATCH_DEV_POOL}" | awk '{ print $1 }')"
+scratch_dev2="$(echo "${SCRATCH_DEV_POOL}" | awk '{ print $2 }')"
+scratch_dev3="$(echo "${SCRATCH_DEV_POOL}" | awk '{ print $3 }')"
+
+echo "Remove device"
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
+# We know the swap file is on device 1 because we added device 2 after it was
+# already created.
+$BTRFS_UTIL_PROG device delete "$scratch_dev1" "$SCRATCH_MNT" 2>&1 | grep -o "Text file busy"
+# Deleting/readding device 2 should still work.
+$BTRFS_UTIL_PROG device delete "$scratch_dev2" "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+swapoff "$SCRATCH_MNT/swap" > /dev/null 2>&1
+# Deleting device 1 should work again after swapoff.
+$BTRFS_UTIL_PROG device delete "$scratch_dev1" "$SCRATCH_MNT"
+_scratch_unmount
+_check_scratch_fs "$scratch_dev2"
+
+echo "Replace device"
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
+# Again, we know the swap file is on device 1.
+$BTRFS_UTIL_PROG replace start -fB "$scratch_dev1" "$scratch_dev3" "$SCRATCH_MNT" 2>&1 | grep -o "Text file busy"
+# Replacing device 2 should still work.
+$BTRFS_UTIL_PROG replace start -fB "$scratch_dev2" "$scratch_dev3" "$SCRATCH_MNT"
+swapoff "$SCRATCH_MNT/swap" > /dev/null 2>&1
+# Replacing device 1 should work again after swapoff.
+$BTRFS_UTIL_PROG replace start -fB "$scratch_dev1" "$scratch_dev2" "$SCRATCH_MNT"
+_scratch_unmount
+_check_scratch_fs "$scratch_dev2"
+
+# success, all done
+status=0
+exit
