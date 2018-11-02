@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Facebook.  All Rights Reserved.
+#
+# FS QA Test 177
+#
+# Test relocation (balance and resize) with an active swap file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+. ./common/btrfs
+
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_swapfile
+
+swapfile="$SCRATCH_MNT/swap"
+
+# First, create a 1GB filesystem and fill it up.
+_scratch_mkfs_sized $((1024 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+dd if=/dev/zero of="$SCRATCH_MNT/fill" bs=1024k >> $seqres.full 2>&1
+# Now add more space and create a swap file. We know that the first 1GB of the
+# filesystem was used, so the swap file must be in the new part of the
+# filesystem.
+$BTRFS_UTIL_PROG filesystem resize 2G "$SCRATCH_MNT" | _filter_scratch
+_format_swapfile "$swapfile" $((32 * 1024 * 1024))
+swapon "$swapfile"
+# Add even more space which we know is unused.
+$BTRFS_UTIL_PROG filesystem resize 3G "$SCRATCH_MNT" | _filter_scratch
+# Free up the first 1GB of the filesystem.
+rm -f "$SCRATCH_MNT/fill"
+# Get rid of empty block groups and also make sure that balance skips block
+# groups containing active swap files.
+_run_btrfs_balance_start "$SCRATCH_MNT"
+# Shrink away the unused space.
+$BTRFS_UTIL_PROG filesystem resize 2G "$SCRATCH_MNT" | _filter_scratch
+# Try to shrink away the area occupied by the swap file, which should fail.
+$BTRFS_UTIL_PROG filesystem resize 1G "$SCRATCH_MNT" 2>&1 | grep -o "Text file busy"
+swapoff "$swapfile"
+# It should work again after swapoff.
+$BTRFS_UTIL_PROG filesystem resize 1G "$SCRATCH_MNT" | _filter_scratch
+
+status=0
+exit
