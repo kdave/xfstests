@@ -49,8 +49,6 @@ page_size=$(get_page_size)
 swapfile_cycle() {
 	local swapfile="$1"
 
-	# Swap files must be nocow on Btrfs.
-	$CHATTR_PROG +C $swapfile >> $seqres.full 2>&1
 	"$here/src/mkswap" $swapfile >> $seqres.full
 	"$here/src/swapon" $swapfile 2>&1 | _filter_scratch
 	swapoff $swapfile 2>> $seqres.full
@@ -59,8 +57,10 @@ swapfile_cycle() {
 
 # Create a fallocated swap file
 echo "fallocate swap" | tee -a $seqres.full
-$XFS_IO_PROG -f -c "falloc 0 $len" $swapfile >> $seqres.full
+touch $swapfile
+# Swap files must be nocow on Btrfs.
 $CHATTR_PROG +C $swapfile >> $seqres.full 2>&1
+$XFS_IO_PROG -f -c "falloc 0 $len" $swapfile >> $seqres.full
 "$here/src/mkswap" $swapfile
 "$here/src/swapon" $swapfile >> $seqres.full 2>&1 || \
 	_notrun "fallocated swap not supported here"

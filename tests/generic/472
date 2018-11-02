@@ -42,13 +42,15 @@ _scratch_mount >>$seqres.full 2>&1
 
 swapfile=$SCRATCH_MNT/swap
 len=$((2 * 1048576))
-page_size=$(get_page_size)
 
 swapfile_cycle() {
 	local swapfile="$1"
+	local len="$2"
 
+	touch $swapfile
 	# Swap files must be nocow on Btrfs.
 	$CHATTR_PROG +C $swapfile >> $seqres.full 2>&1
+	_pwrite_byte 0x58 0 $len $swapfile >> $seqres.full
 	"$here/src/mkswap" $swapfile >> $seqres.full
 	"$here/src/swapon" $swapfile 2>&1 | _filter_scratch
 	swapoff $swapfile 2>> $seqres.full
@@ -57,20 +59,16 @@ swapfile_cycle() {
 
 # Create a regular swap file
 echo "regular swap" | tee -a $seqres.full
-_pwrite_byte 0x58 0 $len $swapfile >> $seqres.full
-swapfile_cycle $swapfile
+swapfile_cycle $swapfile $len
 
 # Create a swap file with a little too much junk on the end
 echo "too long swap" | tee -a $seqres.full
-_pwrite_byte 0x58 0 $((len + 3)) $swapfile >> $seqres.full
-swapfile_cycle $swapfile
+swapfile_cycle $swapfile $((len + 3))
 
 # Create a ridiculously small swap file.  Each swap file must have at least
 # two pages after the header page.
 echo "tiny swap" | tee -a $seqres.full
-tiny_len=$((page_size * 3))
-_pwrite_byte 0x58 0 $tiny_len $swapfile >> $seqres.full
-swapfile_cycle $swapfile
+swapfile_cycle $swapfile $(($(get_page_size) * 3))
 
 status=0
 exit
