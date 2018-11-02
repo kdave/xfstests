@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Facebook.  All Rights Reserved.
+#
+# FS QA Test 175
+#
+# Test swap file activation on multiple devices.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 2
+_require_scratch_swapfile
+
+cycle_swapfile() {
+	local sz=${1:-$(($(get_page_size) * 10))}
+	_format_swapfile "$SCRATCH_MNT/swap" "$sz"
+	swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
+	swapoff "$SCRATCH_MNT/swap" > /dev/null 2>&1
+}
+
+echo "RAID 1"
+_scratch_pool_mkfs -d raid1 -m raid1 >> $seqres.full 2>&1
+_scratch_mount
+cycle_swapfile
+_scratch_unmount
+
+echo "DUP"
+_scratch_pool_mkfs -d dup -m dup >> $seqres.full 2>&1
+_scratch_mount
+cycle_swapfile
+_scratch_unmount
+
+echo "Single on multiple devices"
+_scratch_pool_mkfs -d single -m raid1 -b $((1024 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+# Each device is only 1 GB, so 1.5 GB must be split across multiple devices.
+cycle_swapfile $((3 * 1024 * 1024 * 1024 / 2))
+_scratch_unmount
+
+echo "Single on one device"
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+# Create the swap file, then add the device. That way we know it's all on one
+# device.
+_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
+scratch_dev2="$(echo "${SCRATCH_DEV_POOL}" | awk '{ print $2 }')"
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
+swapoff "$SCRATCH_MNT/swap" > /dev/null 2>&1
+
+status=0
+exit
