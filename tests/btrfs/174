@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Facebook.  All Rights Reserved.
+#
+# FS QA Test 174
+#
+# Test restrictions on operations that can be done on an active swap file
+# specific to Btrfs.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_swapfile
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/swapvol" >> $seqres.full
+swapfile="$SCRATCH_MNT/swapvol/swap"
+_format_swapfile "$swapfile" $(($(get_page_size) * 10))
+swapon "$swapfile"
+
+# Turning off nocow doesn't do anything because the file is not empty, not
+# because the file is a swap file, but make sure this works anyways.
+echo "Disable nocow"
+$CHATTR_PROG -C "$swapfile"
+$LSATTR_PROG -l "$swapfile" | _filter_scratch | _filter_spaces
+
+# Compression we reject outright.
+echo "Enable compression"
+$CHATTR_PROG +c "$swapfile" 2>&1 | grep -o "Text file busy"
+$LSATTR_PROG -l "$swapfile" | _filter_scratch | _filter_spaces
+
+echo "Snapshot"
+$BTRFS_UTIL_PROG subvolume snapshot "$SCRATCH_MNT/swapvol" \
+	"$SCRATCH_MNT/swapsnap" 2>&1 | grep -o "Text file busy"
+
+echo "Defrag"
+# We pass the -c (compress) flag to force defrag even if the file isn't
+# fragmented.
+$BTRFS_UTIL_PROG filesystem defrag -c "$swapfile" 2>&1 | grep -o "Text file busy"
+
+swapoff "$swapfile"
+_scratch_unmount
+
+status=0
+exit
