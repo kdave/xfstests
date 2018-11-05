@@ -444,7 +444,9 @@ __populate_check_xfs_dir() {
 		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"leafn")
-		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.hdr.magic" | egrep -q '(0x3dff|0xd2ff)' || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.hdr.magic" | grep -q '0x3dff' && return
+		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.magic" | grep -q '0xd2ff' && return
+		_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"node"|"btree")
 		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 1) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
