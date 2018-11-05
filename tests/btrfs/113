@@ -25,6 +25,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/filter.btrfs
 
 # real QA test starts here
 _supported_fs btrfs
@@ -78,7 +79,8 @@ $XFS_IO_PROG -c "truncate 128" $SCRATCH_MNT/foo
 # it's normally not a very common case to clone very small files (only case
 # where we get inline extents) and copying inline extents does not save any
 # space (unlike for normal, non-inlined extents).
-$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/foo $SCRATCH_MNT/bar \
+	| _filter_btrfs_cloner_error
 
 # Now because the above clone operation used to succeed, and due to foo's inline
 # extent not being shinked by the truncate operation, our file bar got the whole

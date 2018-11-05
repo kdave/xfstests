@@ -97,5 +97,22 @@ _filter_btrfs_qgroup_assign_warnings()
 	    -e "/quotas may be inconsistent, rescan needed/d"
 }
 
+# Long ago we found that attempting to clone inline extents resulted in hitting
+# a BUG_ON() and then decided to not support such use cases by returning errno
+# -EOPNOTSUPP to user space. Later on, clone/reflink became a VFS API too, since
+# other filesystems (such as XFS) implemented this feature. After that we found
+# one scenario of data corruption due to allowing cloning an EOF block into the
+# middle of a file, and started to reject such scenario by returning the errno
+# -EINVAL to user space (this affected both Btrfs and XFS). Such scenario often
+# overlaps the detection of attempts to clone inline extents, since it is done
+# early on based only on the arguments passed to the clone system call (and
+# btrfs' specific ioctl) before processing the source file extents.
+# So replace error messages related to errno -EOPNOTSUPP to be the same as the
+# one we get from a -EINVAL errno.
+_filter_btrfs_cloner_error()
+{
+	sed -e "s/\(clone failed:\) Operation not supported/\1 Invalid argument/g"
+}
+
 # make sure this script returns success
 /bin/true

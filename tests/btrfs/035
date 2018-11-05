@@ -24,6 +24,7 @@ trap "_cleanup ; exit \$status" 0 1 2 3 15
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/filter.btrfs
 
 # real QA test starts here
 _supported_fs btrfs
@@ -49,7 +50,7 @@ $CLONER_PROG $SCRATCH_MNT/src $SCRATCH_MNT/src.clone2
 snap_src_sz=`ls -lah $SCRATCH_MNT/src.clone1 | awk '{print $5}'`
 echo "attempting ioctl (src.clone1 src)"
 $CLONER_PROG -s 0 -d 0 -l ${snap_src_sz} \
-	$SCRATCH_MNT/src.clone1 $SCRATCH_MNT/src
+	$SCRATCH_MNT/src.clone1 $SCRATCH_MNT/src | _filter_btrfs_cloner_error
 
 # The clone operation should have failed. If it did not it meant we had data
 # loss, because file "src.clone1" has an inline extent which is 10 bytes long

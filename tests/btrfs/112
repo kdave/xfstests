@@ -23,6 +23,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/filter.btrfs
 
 # real QA test starts here
 _supported_fs btrfs
@@ -53,7 +54,8 @@ test_cloning_inline_extents()
 	# clone the inline extent from file bar into this file.
 	$XFS_IO_PROG -f -c "pwrite -S 0xaa 0K 16K" $SCRATCH_MNT/foo \
 		| _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo \
+		| _filter_btrfs_cloner_error
 
 	# Doing IO against any range in the first 4K of the file should work.
 	# Due to a past clone ioctl bug which allowed cloning the inline extent,
@@ -69,7 +71,8 @@ test_cloning_inline_extents()
 	# as well to clone the inline extent from file bar into this file.
 	$XFS_IO_PROG -f -c "pwrite -S 0xdd 4K 12K" $SCRATCH_MNT/foo2 \
 		| _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo2
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo2 \
+		| _filter_btrfs_cloner_error
 
 	# Doing IO against any range in the first 4K of the file should work.
 	# Due to a past clone ioctl bug which allowed cloning the inline extent,
@@ -84,7 +87,8 @@ test_cloning_inline_extents()
 	# but has a prealloc extent. It should not be possible as well to clone
 	# the inline extent from file bar into this file.
 	$XFS_IO_PROG -f -c "falloc -k 0 1M" $SCRATCH_MNT/foo3 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo3
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo3 \
+		| _filter_btrfs_cloner_error
 
 	# Doing IO against any range in the first 4K of the file should work.
 	# Due to a past clone ioctl bug which allowed cloning the inline extent,
@@ -101,7 +105,8 @@ test_cloning_inline_extents()
 	# It should be possible to do the extent cloning from bar to this file.
 	$XFS_IO_PROG -f -c "pwrite -S 0x01 0 40" $SCRATCH_MNT/foo4 \
 		| _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo4
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo4 \
+		| _filter_btrfs_cloner_error
 
 	# Doing IO against any range in the first 4K of the file should work.
 	echo "File foo4 data after clone operation:"
@@ -116,7 +121,8 @@ test_cloning_inline_extents()
 	# into this file.
 	$XFS_IO_PROG -f -c "pwrite -S 0x03 0 60" $SCRATCH_MNT/foo5 \
 		| _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo5
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo5 \
+		| _filter_btrfs_cloner_error
 
 	# Reading the file should not fail.
 	echo "File foo5 data after clone operation:"
@@ -129,7 +135,8 @@ test_cloning_inline_extents()
 	# It should not be possible to clone the inline extent from file bar
 	# into this file.
 	$XFS_IO_PROG -f -c "truncate 16K" $SCRATCH_MNT/foo6 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo6
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo6 \
+		| _filter_btrfs_cloner_error
 
 	# Reading the file should not fail.
 	echo "File foo6 data after clone operation:"
@@ -142,7 +149,8 @@ test_cloning_inline_extents()
 	# It should be possible to clone the inline extent from file bar into
 	# this file.
 	$XFS_IO_PROG -f -c "truncate 30" $SCRATCH_MNT/foo7 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo7
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo7 \
+		| _filter_btrfs_cloner_error
 
 	# Reading the file should not fail.
 	echo "File foo7 data after clone operation:"
@@ -156,7 +164,8 @@ test_cloning_inline_extents()
 	$XFS_IO_PROG -f -c "falloc -k 0 1M" \
 			-c "pwrite -S 0x88 0 20" \
 			$SCRATCH_MNT/foo8 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo8
+	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo8 \
+		| _filter_btrfs_cloner_error
 
 	echo "File foo8 data after clone operation:"
 	# Must have a size of 20 bytes, with all bytes having a value of 0x88
