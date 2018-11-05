@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 518
+#
+# Test that we can not clone a range from a file A into the middle of a file B
+# when the range includes the last block of file A and file A's size is not
+# aligned with the filesystem's block size. Allowing such case would lead to
+# data corruption since the data between EOF and the end of its block is
+# undefined.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_reflink
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+foo_size=$((256 * 1024 + 100)) # 256Kb + 100 bytes
+bar_size="1M"
+
+$XFS_IO_PROG -f -c "pwrite -S 0x3c 0 $foo_size" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xb5 0 $bar_size" $SCRATCH_MNT/bar | _filter_xfs_io
+
+# Cloning the EOF block of a file into the middle of another file should fail
+# with an invalid argument error.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 512K $foo_size" $SCRATCH_MNT/bar
+
+# Unmount the filesystem and mount it again. This guarantees any file data in
+# the page cache is dropped.
+_scratch_cycle_mount
+
+# Verify no changes were made to the file.
+echo "File content after failed reflink:"
+od -A d -t x1 $SCRATCH_MNT/bar
+
+status=0
+exit
