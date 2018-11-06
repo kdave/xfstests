@@ -1,0 +1,104 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 519
+#
+# Verify if there's physical address overlap returned by FIBMAP, cover:
+# 79b3dbe4adb3 fs: fix iomap_bmap position calculation
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_command "$FILEFRAG_PROG" filefrag
+_require_fibmap
+
+testfile="$SCRATCH_MNT/$seq-testfile"
+
+# Use filefrag -B option to force the use of the older FIBMAP ioctl instead of
+# the FIEMAP ioctl. Then verify if there's map overlap.
+verify_filefrag()
+{
+	local n=1
+
+	# record details in .full file
+	${FILEFRAG_PROG} -Bes -v $testfile >> $seqres.full
+
+	# Due to physical things can't be golden image, so only output logical
+	# information at here
+	${FILEFRAG_PROG} -Be $testfile | _filter_filefrag | \
+		cut -d# -f1-2 > $tmp.filefrag
+
+	# Verify there's not physical address overlay
+	for i in `cat $tmp.filefrag`; do
+		# Get the start(v1) and end(v2) addresses will be verified
+		v1=`sed -n "${n}p" $tmp.filefrag | cut -d# -f1`
+		v2=`sed -n "${n}p" $tmp.filefrag | cut -d# -f2`
+		# The 2nd value is length, so the real end is:
+		v2=$((v1 + v2))
+
+		# Remove the line need to be verified ($i), compare with other
+		# lines one by one
+		sed -e "${n}d" $tmp.filefrag > $tmp.filefrag.tmp
+		for j in `cat $tmp.filefrag.tmp`; do
+			# Get 'next' line start(e1) and end(e2) addresses
+			e1=`echo $j | cut -d# -f1`
+			e2=`echo $j | cut -d# -f2`
+			# The 2nd value is length, so the real end is:
+			e2=$((e1 + e2))
+
+			# Verify there's not:
+			#       [ e1 ... e2 ]
+			#             [ v1 ... v2 ]
+			# Or:
+			#       [ e1 ... e2 ]
+			# [ v1 ... v2 ]
+			if ! [ ${v1} -ge ${e2} -o ${v2} -le ${e1} ]; then
+				echo "find physical addr overlap [$i] vs [$j]"
+			fi
+		done
+		((n++))
+	done
+}
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+# Test
+echo "== FIBMAP on empty file =="
+$XFS_IO_PROG -f -c "truncate 0" $testfile > /dev/null
+verify_filefrag
+
+echo "== FIBMAP on sparse file =="
+$XFS_IO_PROG -f -t -c "pwrite -S 0xaa 0 1m" \
+	     -c "pwrite -S 0xaa 2m 1m" \
+	     -c "pwrite -S 0xaa 4m 1m" \
+	     $testfile > /dev/null
+verify_filefrag
+
+# success, all done
+status=0
+exit
