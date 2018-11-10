@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Liu Bo, Alibaba.  All Rights Reserved.
+#
+# FS QA Test 034
+#
+# Regression test for a ENOSPC warning when both quota and
+# "-o dioread_nolock,nodelalloc" is used.
+#
+# The bug was fixed by commit
+# "Ext4: fix ENOSPC when both quota and dioread_nolock are enabled"
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_quota
+_require_nobody
+_require_xfs_io_command "syncfs"
+
+echo "Format and mount"
+_scratch_mkfs "-O quota" > $seqres.full 2>&1
+_scratch_mount "-o dioread_nolock,nodelalloc" > $seqres.full 2>&1
+
+echo "Create the original file"
+touch $SCRATCH_MNT/foobar >> $seqres.full
+chown nobody $SCRATCH_MNT/foobar >> $seqres.full
+
+echo "Set hard quota"
+setquota -u nobody 0 10M 0 0 $SCRATCH_MNT
+_report_quota_blocks $SCRATCH_MNT >> $seqres.full
+
+echo "Create 2 level extent tree (btree) for foobar with a unwritten extent"
+$XFS_IO_PROG -f -c "pwrite 0 4k" -c "falloc 4k 4k" -c "pwrite 8k 4k" \
+	     -c "pwrite 20k 4k"  -c "pwrite 28k 4k" -c "pwrite 36k 4k" \
+	     -c "fsync" $SCRATCH_MNT/foobar >> $seqres.full
+
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar >> $seqres.full
+
+echo "Convert unwritten extent to written and collapse extent tree to inode"
+$XFS_IO_PROG -c "pwrite 4k 4k" $SCRATCH_MNT/foobar >> $seqres.full
+
+echo "Create a new file and do fsync to force a jbd2 commit"
+$XFS_IO_PROG -f -c "pwrite 0 4k" -c "fsync" $SCRATCH_MNT/dummy >> $seqres.full
+
+# Use 'syncfs' instead of 'sync' here as 'sync' could have dirtied quota files
+# ahead of writeback and could not reproduce the bug.
+echo "sync $SCRATCH_MNT to writeback"
+$XFS_IO_PROG -c "syncfs" $SCRATCH_MNT >> $seqres.full
+
+# success, all done
+status=0
+exit
