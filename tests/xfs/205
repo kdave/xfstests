@@ -54,7 +54,9 @@ _scratch_resvblks 1024 >> $seqres.full 2>&1
 blks=$(( ($(_get_available_space $SCRATCH_MNT) / $fsblksz) - 15 ))
 test $blks -gt 1100 || _notrun "not enough space"
 b1=$(echo $blks | sed -e 's/[0-9][0-9][0-9]$/000/g')
-b2=$(echo $blks | sed -e 's/^[0-9][0-9]//g')
+# in case b2 begins with '0' as '098' and being treated as octal number, force
+# it to be 10 based
+b2=$((10#$(echo $blks | sed -e 's/^[0-9][0-9]//g')))
 echo "blks: $blks b1: $b1 b2: $b2" >> $seqres.full
 dd if=/dev/zero of=$SCRATCH_MNT/fred bs=$fsblksz count=$((b1 - 1000)) 2>&1 | _filter_dd
 dd if=/dev/zero of=$SCRATCH_MNT/fred2 bs=$fsblksz count=$b2 2>&1 | _filter_dd
