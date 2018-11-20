@@ -1,0 +1,184 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 The University of Texas at Austin.  All Rights Reserved.
+#
+# FS QA Test 520
+#
+# Test case created by CrashMonkey
+#
+# Test if we create a hard link to a file and persist either of the files, all
+# the names persist.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# 256MB in byte
+fssize=$((2**20 * 256))
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_nocheck
+_require_dm_target flakey
+
+# initialize scratch device
+_scratch_mkfs_sized $fssize >> $seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+
+stat_opt='-c "blocks: %b size: %s inode: %i links: %h"'
+before=""
+after=""
+
+
+# Using _scratch_mkfs instead of cleaning up the  working directory,
+# adds about 10 seconds of delay in total for the 37 tests.
+clean_dir()
+{
+	_mount_flakey
+	rm -rf $SCRATCH_MNT/*
+	sync
+	_unmount_flakey
+}
+
+check_consistency()
+{
+	_flakey_drop_and_remount
+
+	if [ -f $1 ]; then
+		after=`stat "$stat_opt" $1`
+	fi
+
+	if [ "$before" != "$after" ] && [ $2 -ne 1 ]; then
+		echo "Before: $before"
+		echo "After: $after"
+	fi
+
+	_unmount_flakey
+	_check_scratch_fs $FLAKEY_DEV
+}
+
+# create a hard link $2 to file $1, and fsync $3, followed by power-cut
+test_link_fsync()
+{
+	local sibling=0
+	local src=$SCRATCH_MNT/$1
+	local dest=$SCRATCH_MNT/$2
+	before=""
+	after=""
+
+	if [ "$3" == "./" ]; then
+		fsync=$SCRATCH_MNT
+	else
+		fsync=$SCRATCH_MNT/$3
+	fi
+
+	echo -ne "\n=== link $src $dest  with fsync $fsync ===\n" | \
+		_filter_scratch
+	_mount_flakey
+
+	# Now execute the workload
+	# Create the directory in which the source and destination files
+	# will be created
+	mkdir -p "${src%/*}"
+	mkdir -p "${dest%/*}"
+	touch $src
+	ln $src $dest
+
+	# If the file being persisted is a sibling, create it first
+	if [ ! -f $fsync ]; then
+		sibling=1
+		touch $fsync
+	fi
+
+	$XFS_IO_PROG -c "fsync" $fsync
+
+	if [ $sibling -ne 1 ]; then
+		before=`stat "$stat_opt" $src`
+	fi
+
+	check_consistency $src $sibling
+	clean_dir
+}
+
+# create a hard link $2 to file $1, and sync, followed by power-cut
+test_link_sync()
+{
+	local src=$SCRATCH_MNT/$1
+	local dest=$SCRATCH_MNT/$2
+	before=""
+	after=""
+	echo -ne "\n=== link $src $dest  with sync ===\n" | _filter_scratch
+	_mount_flakey
+
+	# now execute the workload
+	# Create the directory in which the source and destination files
+	# will be created
+	mkdir -p "${src%/*}"
+	mkdir -p "${dest%/*}"
+	touch $src
+	ln $src $dest
+	sync
+	before=`stat "$stat_opt" $src`
+
+	check_consistency $src 0
+	clean_dir
+}
+
+
+# Create different combinations to run the link test
+# Group 0: Both files within root directory
+file_names[0]="foo bar"
+fsync_names[0]="./ foo bar"
+
+# Group 1: Create hard link in a sub directory
+file_names[1]="foo A/bar"
+fsync_names[1]="./ foo bar A A/bar A/foo"
+
+# Group 2: Create hard link in parent directory
+file_names[2]="A/foo bar"
+fsync_names[2]="./ foo bar A A/bar A/foo"
+
+# Group 3: Both files within a directory other than root
+file_names[3]="A/foo A/bar"
+fsync_names[3]="./ A A/bar A/foo"
+
+#Group 4: Exercise name reuse : Link file in sub-directory
+file_names[4]="bar A/bar"
+fsync_names[4]="./ foo bar A A/bar A/foo"
+
+#Group 5: Exercise name reuse : Link file in parent directory
+file_names[5]="A/bar bar"
+fsync_names[5]="./ foo bar A A/bar A/foo"
+
+for ((test_group = 0; test_group < 6; test_group++)); do
+	for file in ${fsync_names[$test_group]}; do
+		test_link_fsync ${file_names[$test_group]} $file
+	done
+	test_link_sync ${file_names[$test_group]}
+done
+
+# success, all done
+status=0
+exit
