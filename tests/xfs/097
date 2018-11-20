@@ -78,17 +78,17 @@ for ag in $(seq 1 $((agcount - 1))) 0; do
 	_scratch_xfs_db -x -c "agi ${ag}" -c "agi ${ag}" -c "addr free_root" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full 2>&1
 done
 
-echo "+ mount image"
+echo "+ mount image && modify files"
+broken=1
 if _try_scratch_mount >> $seqres.full 2>&1; then
 
-	echo "+ modify files"
 	broken=0
 	for x in `seq 65 70`; do
-		touch "${TESTFILE}.${x}" 2> /dev/null || broken=1
+		touch "${TESTFILE}.${x}" 2> /dev/null && broken=0
 	done
-	echo "broken: ${broken}"
 	umount "${SCRATCH_MNT}"
 fi
+echo "broken: ${broken}"
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1

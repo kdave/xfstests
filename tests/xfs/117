@@ -74,20 +74,19 @@ seq "${inode}" "$((inode + 64))" | while read ino; do
 	_scratch_xfs_db -x -c "inode ${ino}" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full 2>&1
 done
 
-echo "+ mount image"
+echo "+ mount image && modify files"
+broken=1
 if _try_scratch_mount >> $seqres.full 2>&1; then
 
-	echo "+ modify files"
-	broken=0
 	for x in `seq 1 64`; do
 		stat "${TESTFILE}.${x}" >> $seqres.full 2>&1
-		test $? -ne 0 && broken=1
+		test $? -eq 0 && broken=0
 		touch "${TESTFILE}.${x}" >> $seqres.full 2>&1
-		test $? -ne 0 && broken=1
+		test $? -eq 0 && broken=0
 	done
-	echo "broken: ${broken}"
 	umount "${SCRATCH_MNT}"
 fi
+echo "broken: ${broken}"
 
 echo "+ repair fs"
 _scratch_xfs_repair >> $seqres.full 2>&1
