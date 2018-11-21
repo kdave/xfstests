@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/vfs.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
@@ -31,7 +31,7 @@
 
 int main(int argc, char ** argv)
 {
-	struct stat		sb;
+	struct statfs		sb;
 	struct fiemap		*fie;
 	struct fiemap_extent	*fe;
 	int			fd;
@@ -54,7 +54,7 @@ int main(int argc, char ** argv)
                 return 1;
         }
 
-	ret = fstat(fd, &sb);
+	ret = fstatfs(fd, &sb);
 	if (ret) {
 		perror(filename);
 		close(fd);
@@ -101,7 +101,7 @@ int main(int argc, char ** argv)
 		return 1;
 	}
 
-	block = fie->fm_extents[0].fe_physical / sb.st_blksize;
+	block = fie->fm_extents[0].fe_physical / sb.f_bsize;
 check:
 	if (block % sunit) {
 		printf("%s: Start block %llu not multiple of sunit %u\n",
