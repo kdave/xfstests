@@ -3843,9 +3843,22 @@ _require_scratch_btime()
 	_scratch_unmount
 }
 
-_require_fibmap()
+_require_filefrag_options()
 {
 	_require_command "$FILEFRAG_PROG" filefrag
+
+	local options=$1
+	local file="$TEST_DIR/options_testfile"
+
+	echo "XX" > $file
+	${FILEFRAG_PROG} -$options $file 2>&1 | grep -q "invalid option" && \
+		_notrun "filefrag doesn't support $options option"
+	rm -f $file
+}
+
+_require_fibmap()
+{
+	_require_filefrag_options "B"
 
 	local file="$TEST_DIR/fibmap_testfile"
 
