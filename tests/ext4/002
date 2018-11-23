@@ -105,61 +105,63 @@ _check_ext4_eof_flag()
 _supported_fs ext4
 _supported_os Linux
 _require_xfs_io_command "falloc"
-_require_test
+_require_scratch
 
 # Real QA test starts here.
 rm -f $seqres.full
 
-# Remove any leftover files from last run.
-rm -f ${TEST_DIR}/test_?
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+BLOCK_SIZE=$(_get_block_size $SCRATCH_MNT)
 
 # Begin test cases.
-echo "Test 1: Fallocate 40960 bytes and write 4096 bytes (buffered io)." \
+echo "Test 1: Fallocate 10 blocks and write 1 block (buffered io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f                       \
-    -c 'falloc -k 0 40960'              \
-    -c 'pwrite 0 4096'                  \
-    ${TEST_DIR}/test_1 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f				\
+    -c "falloc -k 0 $((10 * $BLOCK_SIZE))"	\
+    -c "pwrite 0 $BLOCK_SIZE"			\
+    ${SCRATCH_MNT}/test_1 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_1 ${BIT_SET}
 
-echo "Test 2: Fallocate 40960 bytes and write 4096 bytes (direct io)." \
+echo "Test 2: Fallocate 10 blocks and write 1 block (direct io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f -d                    \
-    -c 'falloc -k 0 40960'              \
-    -c 'pwrite 0 4096'                  \
-    ${TEST_DIR}/test_2 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f -d				\
+    -c "falloc -k 0 $((10 * $BLOCK_SIZE))"	\
+    -c "pwrite 0 $BLOCK_SIZE"			\
+    ${SCRATCH_MNT}/test_2 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_2 ${BIT_SET}
 
-echo "Test 3: Fallocate 40960 bytes and write 40960 bytes (buffered io)." \
+echo "Test 3: Fallocate 10 blocks and write 10 blocks (buffered io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f                       \
-    -c 'falloc -k 0 40960'              \
-    -c 'pwrite 0 40960'                 \
-    ${TEST_DIR}/test_3 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f				\
+    -c "falloc -k 0 $((10 * $BLOCK_SIZE))"	\
+    -c "pwrite 0 $((10 * $BLOCK_SIZE))"		\
+    ${SCRATCH_MNT}/test_3 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_3 ${BIT_NOT_SET}
 
-echo "Test 4: Fallocate 40960 bytes and write 40960 bytes (direct io)." \
+echo "Test 4: Fallocate 10 blocks and write 10 blocks (direct io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f -d                    \
-    -c 'falloc -k 0 40960'              \
-    -c 'pwrite 0 40960'                 \
-    ${TEST_DIR}/test_4 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f -d				\
+    -c "falloc -k 0 $((10 * $BLOCK_SIZE))"	\
+    -c "pwrite 0 $((10 * $BLOCK_SIZE))"		\
+    ${SCRATCH_MNT}/test_4 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_4 ${BIT_NOT_SET}
 
-echo "Test 5: Fallocate 128k, seek 256k and write 4k block (buffered io)." \
+echo "Test 5: Fallocate 32 blocks, seek 64 blocks and write 1 block (buffered io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f                       \
-    -c 'falloc -k 0 128k'               \
-    -c 'pwrite 256k 4k'                 \
-    ${TEST_DIR}/test_5 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f					\
+    -c "falloc -k 0 $((32 * $BLOCK_SIZE))"		\
+    -c "pwrite $((64 * $BLOCK_SIZE)) $BLOCK_SIZE"	\
+    ${SCRATCH_MNT}/test_5 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_5 ${BIT_NOT_SET}
 
-echo "Test 6: Fallocate 128k, seek to 256k and write a 4k block (direct io)." \
+echo "Test 6: Fallocate 32 blocks, seek to 64 blocks and write 1 block (direct io)." \
     >> $seqres.full
-${XFS_IO_PROG} -f -d                    \
-    -c 'falloc -k 0 128k'               \
-    -c 'pwrite 256k 4k'                 \
-    ${TEST_DIR}/test_6 | _filter_xfs_io_unique
+${XFS_IO_PROG} -f -d					\
+    -c "falloc -k 0 $((32 * $BLOCK_SIZE))"		\
+    -c "pwrite $((64 * $BLOCK_SIZE)) $BLOCK_SIZE"	\
+    ${SCRATCH_MNT}/test_6 | _filter_xfs_io_blocks_modified
 _check_ext4_eof_flag test_6 ${BIT_NOT_SET}
 
 status=0
