@@ -34,6 +34,7 @@
 #ifdef AIO
 #include <libaio.h>
 #endif
+#include <sys/syscall.h>
 
 #ifndef MAP_FILE
 # define MAP_FILE 0
@@ -106,6 +107,7 @@ enum {
 	OP_INSERT_RANGE,
 	OP_CLONE_RANGE,
 	OP_DEDUPE_RANGE,
+	OP_COPY_RANGE,
 	OP_MAX_FULL,
 
 	/* integrity operations */
@@ -169,6 +171,7 @@ int	mapped_reads = 1;		/* -R flag disables it */
 int	check_file = 0;			/* -X flag enables */
 int	clone_range_calls = 1;		/* -J flag disables */
 int	dedupe_range_calls = 1;		/* -B flag disables */
+int	copy_range_calls = 1;		/* -E flag disables */
 int	integrity = 0;			/* -i flag */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -264,6 +267,7 @@ static const char *op_names[] = {
 	[OP_INSERT_RANGE] = "insert_range",
 	[OP_CLONE_RANGE] = "clone_range",
 	[OP_DEDUPE_RANGE] = "dedupe_range",
+	[OP_COPY_RANGE] = "copy_range",
 	[OP_FSYNC] = "fsync",
 };
 
@@ -476,6 +480,20 @@ logdump(void)
 				prt("\tBBBB******");
 			else if (overlap2)
 				prt("\t******BBBB");
+			break;
+		case OP_COPY_RANGE:
+			prt("COPY 0x%x thru 0x%x\t(0x%x bytes) to 0x%x thru 0x%x",
+			    lp->args[0], lp->args[0] + lp->args[1] - 1,
+			    lp->args[1],
+			    lp->args[2], lp->args[2] + lp->args[1] - 1);
+			overlap2 = badoff >= lp->args[2] &&
+				  badoff < lp->args[2] + lp->args[1];
+			if (overlap && overlap2)
+				prt("\tEEEE**EEEE");
+			else if (overlap)
+				prt("\tEEEE******");
+			else if (overlap2)
+				prt("\t******EEEE");
 			break;
 		case OP_FSYNC:
 			prt("FSYNC");
@@ -1558,6 +1576,110 @@ do_dedupe_range(unsigned offset, unsigned length, unsigned dest)
 }
 #endif
 
+#ifdef HAVE_COPY_FILE_RANGE
+int
+test_copy_range(void)
+{
+	loff_t o1 = 0, o2 = 0;
+
+	if (syscall(__NR_copy_file_range, fd, &o1, fd, &o2, 0, 0) == -1 &&
+	    (errno == EOPNOTSUPP || errno == ENOTTY)) {
+		if (!quiet)
+			fprintf(stderr,
+				"main: filesystem does not support "
+				"copy range, disabling!\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+void
+do_copy_range(unsigned offset, unsigned length, unsigned dest)
+{
+	loff_t o1, o2;
+	size_t olen;
+	ssize_t nr;
+	int tries = 0;
+
+	if (length == 0) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping zero length copy range\n");
+		log5(OP_COPY_RANGE, offset, length, dest, FL_SKIPPED);
+		return;
+	}
+
+	if ((loff_t)offset >= file_size) {
+		if (!quiet && testcalls > simulatedopcount)
+			prt("skipping copy range behind EOF\n");
+		log5(OP_COPY_RANGE, offset, length, dest, FL_SKIPPED);
+		return;
+	}
+
+	if (dest + length > biggest) {
+		biggest = dest + length;
+		if (!quiet && testcalls > simulatedopcount)
+			prt("copying to largest ever: 0x%x\n", dest + length);
+	}
+
+	log5(OP_COPY_RANGE, offset, length, dest, FL_NONE);
+
+	if (testcalls <= simulatedopcount)
+		return;
+
+	if ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug && (monitorstart == -1 || monitorend == -1 ||
+		       dest <= monitorstart || dest + length <= monitorend))) {
+		prt("%lu copy\tfrom 0x%x to 0x%x, (0x%x bytes) at 0x%x\n",
+			testcalls, offset, offset+length, length, dest);
+	}
+
+	o1 = offset;
+	o2 = dest;
+	olen = length;
+
+	while (olen > 0) {
+		nr = syscall(__NR_copy_file_range, fd, &o1, fd, &o2, olen, 0);
+		if (nr < 0) {
+			if (errno != EAGAIN || tries++ >= 300)
+				break;
+		} else if (nr > olen) {
+			prt("copy range: 0x%x to 0x%x at 0x%x\n", offset,
+					offset + length, dest);
+			prt("do_copy_range: asked %u, copied %u??\n",
+					nr, olen);
+			report_failure(161);
+		} else if (nr > 0)
+			olen -= nr;
+	}
+	if (nr < 0) {
+		prt("copy range: 0x%x to 0x%x at 0x%x\n", offset,
+				offset + length, dest);
+		prterr("do_copy_range:");
+		report_failure(161);
+	}
+
+	memcpy(good_buf + dest, good_buf + offset, length);
+	if (dest > file_size)
+		memset(good_buf + file_size, '\0', dest - file_size);
+	if (dest + length > file_size)
+		file_size = dest + length;
+}
+
+#else
+int
+test_copy_range(void)
+{
+	return 0;
+}
+
+void
+do_copy_range(unsigned offset, unsigned length, unsigned dest)
+{
+	return;
+}
+#endif
+
 #ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
@@ -1717,6 +1839,7 @@ op_args_count(int operation)
 	switch (operation) {
 	case OP_CLONE_RANGE:
 	case OP_DEDUPE_RANGE:
+	case OP_COPY_RANGE:
 		return 4;
 	default:
 		return 3;
@@ -1891,6 +2014,18 @@ test(void)
 				 offset2 + size > file_size);
 			break;
 		}
+	case OP_COPY_RANGE:
+		TRIM_OFF_LEN(offset, size, file_size);
+		offset -= offset % readbdy;
+		if (o_direct)
+			size -= size % readbdy;
+		do {
+			offset2 = random();
+			TRIM_OFF(offset2, maxfilelen);
+			offset2 -= offset2 % writebdy;
+		} while (llabs(offset2 - offset) < size ||
+			 offset2 + size > maxfilelen);
+		break;
 	}
 
 have_op:
@@ -1942,6 +2077,12 @@ have_op:
 		break;
 	case OP_DEDUPE_RANGE:
 		if (!dedupe_range_calls) {
+			log5(op, offset, size, offset2, FL_SKIPPED);
+			goto out;
+		}
+		break;
+	case OP_COPY_RANGE:
+		if (!copy_range_calls) {
 			log5(op, offset, size, offset2, FL_SKIPPED);
 			goto out;
 		}
@@ -2036,6 +2177,18 @@ have_op:
 
 		do_dedupe_range(offset, size, offset2);
 		break;
+	case OP_COPY_RANGE:
+		if (size == 0) {
+			log5(OP_COPY_RANGE, offset, size, offset2, FL_SKIPPED);
+			goto out;
+		}
+		if (offset2 + size > maxfilelen) {
+			log5(OP_COPY_RANGE, offset, size, offset2, FL_SKIPPED);
+			goto out;
+		}
+
+		do_copy_range(offset, size, offset2);
+		break;
 	case OP_FSYNC:
 		dofsync();
 		break;
@@ -2061,7 +2214,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dknqxABFJLOWZ] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dknqxABEFJLOWZ] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
@@ -2107,6 +2260,9 @@ usage(void)
 #endif
 #ifdef FIDEDUPERANGE
 "	-B: Do not use dedupe range calls\n"
+#endif
+#ifdef HAVE_COPY_FILE_RANGE
+"	-E: Do not use copy range calls\n"
 #endif
 "	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
@@ -2311,7 +2467,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "b:c:dfg:i:j:kl:m:no:p:qr:s:t:w:xyABD:FJKHzCILN:OP:RS:WXZ",
+				 "b:c:dfg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:WXZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -2446,6 +2602,9 @@ main(int argc, char **argv)
 			break;
 		case 'B':
 			dedupe_range_calls = 0;
+			break;
+		case 'E':
+			copy_range_calls = 0;
 			break;
 		case 'L':
 		        lite = 1;
@@ -2669,6 +2828,8 @@ main(int argc, char **argv)
 		clone_range_calls = test_clone_range();
 	if (dedupe_range_calls)
 		dedupe_range_calls = test_dedupe_range();
+	if (copy_range_calls)
+		copy_range_calls = test_copy_range();
 
 	while (numops == -1 || numops--)
 		if (!test())
