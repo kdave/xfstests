@@ -51,7 +51,8 @@ enum opflags { FL_NONE = 0, FL_SKIPPED = 1, FL_CLOSE_OPEN = 2, FL_KEEP_SIZE = 4 
 
 struct log_entry {
 	int	operation;
-	int	args[3];
+	int	nr_args;
+	int	args[4];
 	enum opflags flags;
 };
 
@@ -279,6 +280,27 @@ static int op_code(const char *name)
 }
 
 void
+log5(int operation, int arg0, int arg1, int arg2, enum opflags flags)
+{
+	struct log_entry *le;
+
+	le = &oplog[logptr];
+	le->operation = operation;
+	if (closeopen)
+		flags |= FL_CLOSE_OPEN;
+	le->args[0] = arg0;
+	le->args[1] = arg1;
+	le->args[2] = arg2;
+	le->args[3] = file_size;
+	le->nr_args = 4;
+	le->flags = flags;
+	logptr++;
+	logcount++;
+	if (logptr >= LOGSIZE)
+		logptr = 0;
+}
+
+void
 log4(int operation, int arg0, int arg1, enum opflags flags)
 {
 	struct log_entry *le;
@@ -290,6 +312,7 @@ log4(int operation, int arg0, int arg1, enum opflags flags)
 	le->args[0] = arg0;
 	le->args[1] = arg1;
 	le->args[2] = file_size;
+	le->nr_args = 3;
 	le->flags = flags;
 	logptr++;
 	logcount++;
@@ -439,11 +462,13 @@ logdump(void)
 			i = 0;
 
 		if (logopsf) {
+			int j;
+
 			if (lp->flags & FL_SKIPPED)
 				fprintf(logopsf, "skip ");
-			fprintf(logopsf, "%s 0x%x 0x%x 0x%x",
-				op_name(lp->operation),
-				lp->args[0], lp->args[1], lp->args[2]);
+			fprintf(logopsf, "%s", op_name(lp->operation));
+			for (j = 0; j < lp->nr_args; j++)
+				fprintf(logopsf, " 0x%x", lp->args[j]);
 			if (lp->flags & FL_KEEP_SIZE)
 				fprintf(logopsf, " keep_size");
 			if (lp->flags & FL_CLOSE_OPEN)
@@ -1433,6 +1458,15 @@ cleanup(int sig)
 }
 
 static int
+op_args_count(int operation)
+{
+	switch (operation) {
+	default:
+		return 3;
+	}
+}
+
+static int
 read_op(struct log_entry *log_entry)
 {
 	char line[256];
@@ -1464,7 +1498,8 @@ read_op(struct log_entry *log_entry)
 		log_entry->operation = op_code(str);
 		if (log_entry->operation == -1)
 			goto fail;
-		for (i = 0; i < 3; i++) {
+		log_entry->nr_args = op_args_count(log_entry->operation);
+		for (i = 0; i < log_entry->nr_args; i++) {
 			char *end;
 
 			str = strtok(NULL, " \t\n");
