@@ -88,25 +88,27 @@ int			logcount = 0;	/* total ops */
  * mode being run.
  */
 
-/* common operations */
-#define	OP_READ		0
-#define OP_WRITE	1
-#define OP_MAPREAD	2
-#define OP_MAPWRITE	3
-#define OP_MAX_LITE	4
+enum {
+	/* common operations */
+	OP_READ = 0,
+	OP_WRITE,
+	OP_MAPREAD,
+	OP_MAPWRITE,
+	OP_MAX_LITE,
 
-/* !lite operations */
-#define OP_TRUNCATE		4
-#define OP_FALLOCATE		5
-#define OP_PUNCH_HOLE		6
-#define OP_ZERO_RANGE		7
-#define OP_COLLAPSE_RANGE	8
-#define OP_INSERT_RANGE	9
-#define OP_MAX_FULL		10
+	/* !lite operations */
+	OP_TRUNCATE = OP_MAX_LITE,
+	OP_FALLOCATE,
+	OP_PUNCH_HOLE,
+	OP_ZERO_RANGE,
+	OP_COLLAPSE_RANGE,
+	OP_INSERT_RANGE,
+	OP_MAX_FULL,
 
-/* integrity operations */
-#define OP_FSYNC		10
-#define OP_MAX_INTEGRITY	11
+	/* integrity operations */
+	OP_FSYNC = OP_MAX_FULL,
+	OP_MAX_INTEGRITY,
+};
 
 #undef PAGE_SIZE
 #define PAGE_SIZE       getpagesize()
