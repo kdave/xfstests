@@ -28,6 +28,10 @@ ifeq ($(HAVE_FALLOCATE), true)
 LCFLAGS += -DFALLOCATE
 endif
 
+ifeq ($(HAVE_COPY_FILE_RANGE),yes)
+LCFLAGS += -DHAVE_COPY_FILE_RANGE
+endif
+
 default: depend $(TARGETS)
 
 depend: .dep

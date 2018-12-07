@@ -26,6 +26,7 @@
 #include <libaio.h>
 io_context_t	io_ctx;
 #endif
+#include <sys/syscall.h>
 
 #ifndef FS_IOC_GETFLAGS
 #define FS_IOC_GETFLAGS                 _IOR('f', 1, long)
@@ -55,6 +56,7 @@ typedef enum {
 	OP_BULKSTAT1,
 	OP_CHOWN,
 	OP_CLONERANGE,
+	OP_COPYRANGE,
 	OP_CREAT,
 	OP_DEDUPERANGE,
 	OP_DREAD,
@@ -163,6 +165,7 @@ void	bulkstat_f(int, long);
 void	bulkstat1_f(int, long);
 void	chown_f(int, long);
 void	clonerange_f(int, long);
+void	copyrange_f(int, long);
 void	creat_f(int, long);
 void	deduperange_f(int, long);
 void	dread_f(int, long);
@@ -212,6 +215,7 @@ opdesc_t	ops[] = {
 	{ OP_BULKSTAT1, "bulkstat1", bulkstat1_f, 1, 0 },
 	{ OP_CHOWN, "chown", chown_f, 3, 1 },
 	{ OP_CLONERANGE, "clonerange", clonerange_f, 4, 1 },
+	{ OP_COPYRANGE, "copyrange", copyrange_f, 4, 1 },
 	{ OP_CREAT, "creat", creat_f, 4, 1 },
 	{ OP_DEDUPERANGE, "deduperange", deduperange_f, 4, 1},
 	{ OP_DREAD, "dread", dread_f, 4, 0 },
@@ -2319,6 +2323,149 @@ clonerange_f(
 
 		if (ret < 0)
 			printf(" error %d", e);
+		printf("\n");
+	}
+
+out_fd2:
+	close(fd2);
+out_fd1:
+	close(fd1);
+out_fpath2:
+	free_pathname(&fpath2);
+out_fpath1:
+	free_pathname(&fpath1);
+#endif
+}
+
+/* copy some arbitrary range of f1 to f2. */
+void
+copyrange_f(
+	int			opno,
+	long			r)
+{
+#ifdef HAVE_COPY_FILE_RANGE
+	struct pathname		fpath1;
+	struct pathname		fpath2;
+	struct stat64		stat1;
+	struct stat64		stat2;
+	char			inoinfo1[1024];
+	char			inoinfo2[1024];
+	loff_t			lr;
+	loff_t			off1;
+	loff_t			off2;
+	loff_t			max_off2;
+	size_t			len;
+	int			tries = 0;
+	int			v1;
+	int			v2;
+	int			fd1;
+	int			fd2;
+	size_t			ret;
+	int			e;
+
+	/* Load paths */
+	init_pathname(&fpath1);
+	if (!get_fname(FT_REGm, r, &fpath1, NULL, NULL, &v1)) {
+		if (v1)
+			printf("%d/%d: copyrange read - no filename\n",
+				procid, opno);
+		goto out_fpath1;
+	}
+
+	init_pathname(&fpath2);
+	if (!get_fname(FT_REGm, random(), &fpath2, NULL, NULL, &v2)) {
+		if (v2)
+			printf("%d/%d: copyrange write - no filename\n",
+				procid, opno);
+		goto out_fpath2;
+	}
+
+	/* Open files */
+	fd1 = open_path(&fpath1, O_RDONLY);
+	e = fd1 < 0 ? errno : 0;
+	check_cwd();
+	if (fd1 < 0) {
+		if (v1)
+			printf("%d/%d: copyrange read - open %s failed %d\n",
+				procid, opno, fpath1.path, e);
+		goto out_fpath2;
+	}
+
+	fd2 = open_path(&fpath2, O_WRONLY);
+	e = fd2 < 0 ? errno : 0;
+	check_cwd();
+	if (fd2 < 0) {
+		if (v2)
+			printf("%d/%d: copyrange write - open %s failed %d\n",
+				procid, opno, fpath2.path, e);
+		goto out_fd1;
+	}
+
+	/* Get file stats */
+	if (fstat64(fd1, &stat1) < 0) {
+		if (v1)
+			printf("%d/%d: copyrange read - fstat64 %s failed %d\n",
+				procid, opno, fpath1.path, errno);
+		goto out_fd2;
+	}
+	inode_info(inoinfo1, sizeof(inoinfo1), &stat1, v1);
+
+	if (fstat64(fd2, &stat2) < 0) {
+		if (v2)
+			printf("%d/%d: copyrange write - fstat64 %s failed %d\n",
+				procid, opno, fpath2.path, errno);
+		goto out_fd2;
+	}
+	inode_info(inoinfo2, sizeof(inoinfo2), &stat2, v2);
+
+	/* Calculate offsets */
+	len = (random() % FILELEN_MAX) + 1;
+	if (len == 0)
+		len = stat1.st_blksize;
+	if (len > stat1.st_size)
+		len = stat1.st_size;
+
+	lr = ((int64_t)random() << 32) + random();
+	if (stat1.st_size == len)
+		off1 = 0;
+	else
+		off1 = (off64_t)(lr % MIN(stat1.st_size - len, MAXFSIZE));
+	off1 %= maxfsize;
+
+	/*
+	 * If srcfile == destfile, randomly generate destination ranges
+	 * until we find one that doesn't overlap the source range.
+	 */
+	max_off2 = MIN(stat2.st_size + (1024ULL * stat2.st_blksize), MAXFSIZE);
+	do {
+		lr = ((int64_t)random() << 32) + random();
+		off2 = (off64_t)(lr % max_off2);
+		off2 %= maxfsize;
+	} while (stat1.st_ino == stat2.st_ino && llabs(off2 - off1) < len);
+
+	while (len > 0) {
+		ret = syscall(__NR_copy_file_range, fd1, &off1, fd2, &off2,
+			      len, 0);
+		if (ret < 0) {
+			if (errno != EAGAIN || tries++ >= 300)
+				break;
+		} else if (ret > len)
+			break;
+		else if (ret > 0)
+			len -= ret;
+	}
+	e = ret < 0 ? errno : 0;
+	if (v1 || v2) {
+		printf("%d/%d: copyrange %s%s [%lld,%lld] -> %s%s [%lld,%lld]",
+			procid, opno,
+			fpath1.path, inoinfo1, (long long)off1, (long long)len,
+			fpath2.path, inoinfo2, (long long)off2, (long long)len);
+
+		if (ret < 0)
+			printf(" error %d", e);
+		else if (len && ret > len)
+			printf(" asked for %lld, copied %lld??\n",
+				(long long)len, (long long)ret);
 		printf("\n");
 	}
 
