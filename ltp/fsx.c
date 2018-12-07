@@ -121,7 +121,7 @@ char	*bname;				/* basename of our test file */
 char	*logdev;			/* -i flag */
 char	*logid;				/* -j flag */
 char	dname[1024];			/* -P flag */
-char	goodfile[1024];
+char	goodfile[PATH_MAX];
 int	dirpath = 0;			/* -P flag */
 int	fd;				/* fd for our test file */
 
@@ -185,7 +185,7 @@ const char *replayops = NULL;
 const char *recordops = NULL;
 FILE *	fsxlogf = NULL;
 FILE *	replayopsf = NULL;
-char opsfile[1024];
+char opsfile[PATH_MAX];
 int badoff = -1;
 int closeopen = 0;
 
@@ -541,13 +541,13 @@ mark_log(void)
 void
 dump_fsync_buffer(void)
 {
-	char fname_buffer[1024];
+	char fname_buffer[PATH_MAX];
 	int good_fd;
 
 	if (!good_buf)
 		return;
 
-	snprintf(fname_buffer, 1024, "%s%s.mark%d", dname,
+	snprintf(fname_buffer, sizeof(fname_buffer), "%s%s.mark%d", dname,
 		 bname, mark_nr);
 	good_fd = open(fname_buffer, O_WRONLY|O_CREAT|O_TRUNC, 0666);
 	if (good_fd < 0) {
@@ -1865,7 +1865,7 @@ main(int argc, char **argv)
 {
 	int	i, style, ch;
 	char	*endp, *tmp;
-	char logfile[1024];
+	char logfile[PATH_MAX];
 	struct stat statbuf;
 	int o_flags = O_RDWR|O_CREAT|O_TRUNC;
 
