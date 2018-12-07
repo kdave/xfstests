@@ -499,7 +499,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 	if (logname) {
-		char path[PATH_MAX];
+		char path[PATH_MAX + NAME_MAX + 1];
 		snprintf(path, sizeof(path), "%s/%s", rpath, logname);
 		if (freopen(path, "a", stdout) == NULL) {
 			perror("freopen logfile failed");
@@ -583,7 +583,7 @@ int main(int argc, char **argv)
 				return 0;
 #endif
 			if (logname) {
-				char path[PATH_MAX];
+				char path[PATH_MAX + NAME_MAX + 2 + 11];
 				snprintf(path, sizeof(path), "%s/%s.%d",
 					 rpath, logname, i);
 				if (freopen(path, "a", stdout) == NULL) {
