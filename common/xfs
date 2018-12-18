@@ -89,6 +89,7 @@ _scratch_mkfs_xfs()
 	_scratch_do_mkfs "$mkfs_cmd" "$mkfs_filter" $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
 	mkfs_status=$?
 
+	grep -q crc=0 $tmp.mkfsstd && _force_xfsv4_mount_options
 
 	if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
 		# manually parse the mkfs output to get the fs size in bytes
@@ -788,4 +789,27 @@ _scratch_get_bmx_prefix() {
 	done
 	_scratch_xfs_db -c "inode ${ino}" -c 'p' >> $seqres.full
 	return 1
+}
+
+#
+# Ensures that we don't pass any mount options incompatible with XFS v4
+#
+_force_xfsv4_mount_options()
+{
+	local gquota=0
+	local pquota=0
+
+	# Can't have group and project quotas in XFS v4
+	echo "$MOUNT_OPTIONS" | egrep -q "(gquota|grpquota|grpjquota=|gqnoenforce)" && gquota=1
+	echo "$MOUNT_OPTIONS" | egrep -q "(\bpquota|prjquota|pqnoenforce)" && pquota=1
+
+	if [ $gquota -gt 0 ] && [ $pquota -gt 0 ]; then
+		export MOUNT_OPTIONS=$(echo $MOUNT_OPTIONS \
+			| sed   -e 's/gquota/QUOTA/g'      \
+				-e 's/grpquota/QUOTA/g'    \
+				-e 's/grpjquota=[^, ]/QUOTA/g' \
+				-e 's/gqnoenforce/QUOTA/g' \
+				-e "s/QUOTA/defaults/g")
+	fi
+	echo "MOUNT_OPTIONS = $MOUNT_OPTIONS" >>$seqres.full
 }
