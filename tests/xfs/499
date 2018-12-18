@@ -1,0 +1,74 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 499
+#
+# Look for stringified constants in the __print_symbolic format strings,
+# which suggest that we forgot to TRACE_DEFINE_ENUM somewhere, which causes
+# incomplete ftrace reporting.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_command "$CC_PROG" "cc"
+
+cprog=$tmp.ftrace.c
+oprog=$tmp.ftrace
+sedprog=$tmp.ftrace.sed
+
+ftrace_dir=$DEBUGFS_MNT/tracing/events/xfs
+
+test -d $ftrace_dir || _notrun "ftrace not enabled"
+
+# The second argument to __print_symbolic is stringified in the tracepoint's
+# fmt file, so we look for "{ NUM, STRING }" and try to separate each of them
+# into single lines so that we can build a C structure.  This will (we hope)
+# catch non-constant numbers that the compiler won't know about.
+cat > $sedprog << ENDL
+s/}, /},\n/g
+s/}),/},\n/g
+s/})/},\n/g
+s/, {/\n{/g
+ENDL
+
+cat > $cprog << ENDL
+struct ftrace_chk {
+	unsigned long long	num;
+	char			*str;
+} syms[] = {
+ENDL
+egrep '(__print_flags|__print_symbolic)' $ftrace_dir*/*/format | \
+	sed -f $sedprog | grep '^{' | sort | uniq >> $cprog
+cat >> $cprog << ENDL
+};
+
+int main(int argc, char *argv[]) { return 0; }
+ENDL
+
+cat $cprog >> $seqres.full
+echo Compiler errors imply missing TRACE_DEFINE_ENUM.
+$CC_PROG -o $oprog $cprog
+
+# success, all done
+echo Silence is golden
+status=0
+exit
