@@ -46,11 +46,12 @@ _scratch_mkfs_xfs > /dev/null
 
 echo "+ mount fs image"
 _scratch_mount
-blksz=1000
+blksz=1024
 
 echo "+ make some files"
 echo "file contents: moo" > "${SCRATCH_MNT}/x"
-str="$(perl -e "print './' x $(( (blksz / 2) - 16));")x"
+reps=$(( (blksz - (56 + 1)) / 2 ))
+str="$(perl -e "print './' x $reps;")x"
 (cd $SCRATCH_MNT; ln -s "${str}" "long_symlink")
 cat "${SCRATCH_MNT}/long_symlink"
 inode="$(stat -c '%i' "${SCRATCH_MNT}/long_symlink")"
@@ -60,7 +61,7 @@ echo "+ check fs"
 _scratch_xfs_repair -n >> $seqres.full 2>&1 || _fail "xfs_repair should not fail"
 
 echo "+ corrupt image"
-_scratch_xfs_db -x -c "inode ${inode}" -c "dblock 0" -c "stack" -c "blocktrash -x 32 -o 256 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full
+_scratch_xfs_db -x -c "inode ${inode}" -c "dblock 0" -c "stack" -c "blocktrash -x 32 -o 256 -y $((blksz * 4)) -z ${FUZZ_ARGS}" >> $seqres.full
 
 echo "+ mount image"
 if _try_scratch_mount >> $seqres.full 2>&1; then
