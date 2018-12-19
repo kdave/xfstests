@@ -22,6 +22,7 @@ have_test_arg=false
 randomize=false
 export here=`pwd`
 xfile=""
+subdir_xfile=""
 brief_test_summary=false
 do_report=false
 DUMP_OUTPUT=false
@@ -272,13 +273,7 @@ while [ $# -gt 0 ]; do
 		XGROUP_LIST="$XGROUP_LIST ${xgroup//,/ }"
 		;;
 
-	-X)	xfile=$2; shift ;
-		for d in $SRC_GROUPS $FSTYP; do
-			[ -f $SRC_DIR/$d/$xfile ] || continue
-			for f in `sed "s/#.*$//" $SRC_DIR/$d/$xfile`; do
-				echo $d/$f >> $tmp.xlist
-			done
-		done
+	-X)	subdir_xfile=$2; shift ;
 		;;
 	-E)	xfile=$2; shift ;
 		if [ -f $xfile ]; then
@@ -323,6 +318,15 @@ done
 if ! . ./common/rc; then
 	echo "check: failed to source common/rc"
 	exit 1
+fi
+
+if [ -n "$subdir_xfile" ]; then
+	for d in $SRC_GROUPS $FSTYP; do
+		[ -f $SRC_DIR/$d/$subdir_xfile ] || continue
+		for f in `sed "s/#.*$//" $SRC_DIR/$d/$subdir_xfile`; do
+			echo $d/$f >> $tmp.xlist
+		done
+	done
 fi
 
 # Process tests from command line now.
