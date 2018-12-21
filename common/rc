@@ -2210,15 +2210,28 @@ _format_swapfile() {
 	# Swap files must be nocow on Btrfs.
 	$CHATTR_PROG +C "$fname" > /dev/null 2>&1
 	_pwrite_byte 0x61 0 "$sz" "$fname" >> $seqres.full
-	mkswap "$fname" >> $seqres.full
+	$MKSWAP_PROG "$fname" >> $seqres.full
 }
 
 # Check that the filesystem supports swapfiles
 _require_scratch_swapfile()
 {
 	_require_scratch
+	_require_command "$MKSWAP_PROG" "mkswap"
 
 	_scratch_mkfs >/dev/null
+
+	# With mounting SELinux context(e.g. system_u:object_r:root_t:s0),
+	# standard mkswap tried to reset the type of default context to
+	# swapfile_t if it's not swapfile_t, and then it failed and returned
+	# ENOTSUP expectedly as we don't want to create any SELinux attr on
+	# purpose.  standard mkswap ignored this relabel error by commit
+	# d97dc0e of util-linux, but it still reported the error before
+	# commit d97dc0e.  We mount swapfile context directly to skip the
+	# reset step.
+	[ -n "$SELINUX_MOUNT_OPTIONS" ] && export \
+		SELINUX_MOUNT_OPTIONS="-o context=system_u:object_r:swapfile_t:s0"
+
 	_scratch_mount
 
 	# Minimum size for mkswap is 10 pages
