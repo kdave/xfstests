@@ -55,14 +55,18 @@ _scratch_mount
 
 sync
 
-$XFS_IO_PROG -f -c "pwrite 0 4K" $SCRATCH_MNT/testfile >/dev/null 2>&1
+# Large fs has a huge size .use_space file, will take long time on running
+# fssum $SCRATCH_MNT. So change the target path to a sub-dir of $SCRATCH_MNT.
+localdir=$SCRATCH_MNT/dir
+mkdir $localdir
+$XFS_IO_PROG -f -c "pwrite 0 4K" $localdir/testfile >/dev/null 2>&1
 
 # fssum used for comparing checksum of test file(data & metedata),
 # exclude checking about atime, block structure, open error.
-$FSSUM_PROG -ugomAcdES -f -w $tmp.fssum $SCRATCH_MNT
-$XFS_IO_PROG -c "syncfs" $SCRATCH_MNT/testfile >/dev/null 2>&1
+$FSSUM_PROG -ugomAcdES -f -w $tmp.fssum $localdir
+$XFS_IO_PROG -c "syncfs" $localdir/testfile >/dev/null 2>&1
 _scratch_shutdown
 _scratch_cycle_mount
-$FSSUM_PROG -r $tmp.fssum $SCRATCH_MNT
+$FSSUM_PROG -r $tmp.fssum $localdir
 
 exit
