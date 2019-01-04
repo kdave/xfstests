@@ -257,15 +257,17 @@ if [ -x /usr/sbin/selinuxenabled ] && /usr/sbin/selinuxenabled; then
 fi
 
 # check if mkfs.xfs supports v5 xfs
-XFS_MKFS_HAS_NO_META_SUPPORT=""
-touch /tmp/crc_check.img
-$MKFS_XFS_PROG -N -d file,name=/tmp/crc_check.img,size=32m -m crc=0 \
-	>/dev/null 2>&1;
-if [ $? -ne 0 ]; then
-	XFS_MKFS_HAS_NO_META_SUPPORT=true
+if [ "$FSTYP" == "xfs" ]; then
+	XFS_MKFS_HAS_NO_META_SUPPORT=""
+	touch /tmp/crc_check.img
+	$MKFS_XFS_PROG -N -d file,name=/tmp/crc_check.img,size=32m -m crc=0 \
+		>/dev/null 2>&1;
+	if [ $? -ne 0 ]; then
+		XFS_MKFS_HAS_NO_META_SUPPORT=true
+	fi
+	rm -f /tmp/crc_check.img
+	export XFS_MKFS_HAS_NO_META_SUPPORT
 fi
-rm -f /tmp/crc_check.img
-export XFS_MKFS_HAS_NO_META_SUPPORT
 
 _mount_opts()
 {
