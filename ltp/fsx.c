@@ -1583,7 +1583,7 @@ test_copy_range(void)
 	loff_t o1 = 0, o2 = 0;
 
 	if (syscall(__NR_copy_file_range, fd, &o1, fd, &o2, 0, 0) == -1 &&
-	    (errno == EOPNOTSUPP || errno == ENOTTY)) {
+	    (errno == ENOSYS || errno == EOPNOTSUPP || errno == ENOTTY)) {
 		if (!quiet)
 			fprintf(stderr,
 				"main: filesystem does not support "
@@ -2423,7 +2423,8 @@ __test_fallocate(int mode, const char *mode_str)
 #ifdef HAVE_LINUX_FALLOC_H
 	int ret = 0;
 	if (!lite) {
-		if (fallocate(fd, mode, file_size, 1) && errno == EOPNOTSUPP) {
+		if (fallocate(fd, mode, file_size, 1) &&
+		    (errno == ENOSYS || errno == EOPNOTSUPP)) {
 			if(!quiet)
 				fprintf(stderr,
 					"main: filesystem does not support "
