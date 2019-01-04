@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 523
+#
+# Check that xattrs can have slashes in their name.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_attrs
+
+rm -f $seqres.full
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+echo "set attr"
+file=$SCRATCH_MNT/moofile
+touch $file
+$SETFATTR_PROG -n "user.boo/hoo" -v "woof" $file
+
+echo "check attr"
+_getfattr -d --absolute-names $file | _filter_scratch
+
+# Now we let the fsck tool check the filesystem, because xfs_repair had a
+# regression where it would flag and erase any xattr with a '/' in it.
+
+status=0
+exit
