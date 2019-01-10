@@ -290,7 +290,7 @@ static void set_origin_timestamp(const char *arg)
 /*
  * Get reference stats from a file.
  */
-static void get_reference(const char *file)
+static void get_reference(const char *file, unsigned int mask)
 {
 	int ret;
 
@@ -298,9 +298,7 @@ static void get_reference(const char *file)
 		bad_arg("ref= requires a filename\n");
 
 	memset(&ref, 0xfb, sizeof(ref));
-	ret = xfstests_statx(AT_FDCWD, file, AT_SYMLINK_NOFOLLOW,
-			     STATX_ATIME | STATX_BTIME | STATX_CTIME | STATX_MTIME,
-			     &ref);
+	ret = xfstests_statx(AT_FDCWD, file, AT_SYMLINK_NOFOLLOW, mask, &ref);
 	switch (ret) {
 	case 0:
 		ref_set = true;
@@ -751,7 +749,7 @@ int main(int argc, char **argv)
 
 		if (strncmp("ref=", arg, 4) == 0) {
 			/* ref=<file> - set reference stats from file */
-			get_reference(arg + 4);
+			get_reference(arg + 4, mask);
 			continue;
 		}
 
