@@ -1,0 +1,116 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 179
+#
+# Test if btrfs will lockup at subvolume deletion when qgroups are enabled.
+#
+# This bug is going to be fixed by a patch for the kernel titled
+# "btrfs: qgroup: Don't trigger backref walk at delayed ref insert time".
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+# default sleep interval
+sleep_time=1
+
+# stress test runtime
+runtime=120
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+mkdir -p "$SCRATCH_MNT/snapshots"
+$BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/src" > /dev/null
+$BTRFS_UTIL_PROG quota enable "$SCRATCH_MNT" > /dev/null
+$BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT" > /dev/null
+
+fill_workload()
+{
+	trap "wait; exit" SIGTERM
+	local i=0
+	while true; do
+		_pwrite_byte 0xcd 0 8K "$SCRATCH_MNT/src/large_$i" > /dev/null
+		_pwrite_byte 0xcd 0 2K "$SCRATCH_MNT/src/inline_$i" > /dev/null
+
+		# Randomly remove some files for every 5 loop
+		if [ $(( $i % 5 )) -eq 0 ]; then
+			victim=$(ls "$SCRATCH_MNT/src" | sort -R | head -n1)
+			rm "$SCRATCH_MNT/src/$victim"
+		fi
+		i=$((i + 1))
+	done
+}
+
+snapshot_workload()
+{
+	trap "wait; exit" SIGTERM
+	local i=0
+	while true; do
+		sleep $sleep_time
+		$BTRFS_UTIL_PROG subvolume snapshot "$SCRATCH_MNT/src" \
+			"$SCRATCH_MNT/snapshots/$i" > /dev/null
+		i=$((i + 1))
+	done
+}
+
+delete_workload()
+{
+	trap "wait; exit" SIGTERM
+	while true; do
+		sleep $((sleep_time * 2))
+		victim=$(ls "$SCRATCH_MNT/snapshots" | sort -R | head -n1)
+		$BTRFS_UTIL_PROG subvolume delete \
+			"$SCRATCH_MNT/snapshots/$victim" > /dev/null
+	done
+}
+
+fill_workload &
+fill_pid=$!
+
+sleep $((sleep_time * 2))
+snapshot_workload &
+snapshot_pid=$!
+delete_workload &
+delete_pid=$!
+
+sleep $runtime
+kill $fill_pid
+wait $fill_pid
+kill $snapshot_pid
+wait $snapshot_pid
+kill $delete_pid
+wait $delete_pid
+
+# success, all done
+echo "Silence is golden"
+
+status=0
+exit
