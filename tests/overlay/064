@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test 064
+#
+# Make sure CAP_SETUID is not cleared over file copy up.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_command "$SETCAP_PROG" setcap
+_require_command "$GETCAP_PROG" getcap
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create test file
+lowerdir=${OVL_BASE_SCRATCH_MNT}/${OVL_LOWER}
+echo "This is lower" >> ${lowerdir}/file
+
+# set setuid bit
+$SETCAP_PROG cap_setuid+ep ${lowerdir}/file
+
+_scratch_mount
+
+# Trigger file copy up without actually writing anything to file. This
+# requires opening file with WRITE and xfs_io opens file with
+# O_RDWR by default.
+$XFS_IO_PROG -c "stat" ${SCRATCH_MNT}/file >>$seqres.full
+
+# Make sure cap_setuid is still there
+$GETCAP_PROG ${SCRATCH_MNT}/file | _filter_scratch
+
+# success, all done
+status=0
+exit
