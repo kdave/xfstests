@@ -69,6 +69,12 @@ create_target_file()
 
 reader_loop()
 {
+	# Wait for any running 'cat' subcommand before exitting so that after
+	# the test kills the reader loop subshell it does not fail with an
+	# error message from a 'cat' subcommand due to the test file being
+	# temporarily unavailable due to the scratch fs unmount operation.
+	trap "wait; exit" SIGTERM
+
 	local name=$1
 
 	while true; do
