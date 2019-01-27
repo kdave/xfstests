@@ -45,9 +45,6 @@ session_label="stress_$seq"
 nobody=4 # define this uid/gid as a number
 do_quota_check=true # do quota check if quotas enabled
 
-# install our cleaner
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
 # start inventory from a known base - move it aside for test
 for dir in /var/xfsdump/inventory /var/lib/xfsdump/inventory; do
     if [ -d $dir ]; then
@@ -227,7 +224,7 @@ _wipe_fs()
 # Cleanup created dirs and files
 # Called by trap
 #
-_cleanup()
+_cleanup_dump()
 {
     # Some tests include this before checking _supported_fs xfs
     # and the sleeps & checks here get annoying
@@ -236,7 +233,6 @@ _cleanup()
     fi
 
     cd $here
-    rm -f $tmp.*
 
     if [ -n "$DEBUGDUMP" ]; then
 	# save it for inspection
