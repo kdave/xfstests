@@ -1,0 +1,101 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 181
+#
+# Test if btrfs will commit too many transactions for nothing and cause
+# performance regression during balance.
+#
+# This bug is going to be fixed by a patch for kernel title
+# "btrfs: don't end the transaction for delayed refs in throttle"
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_btrfs_command inspect-internal dump-super
+
+_scratch_mkfs > /dev/null
+
+_scratch_mount
+
+nr_files=1024
+
+get_super_gen()
+{
+	local ret=$($BTRFS_UTIL_PROG inspect dump-super "$SCRATCH_DEV" |\
+		grep ^generation | awk '{print $2}')
+	if [ -z $ret ]; then
+		_fail "failed to get super block generation"
+	fi
+	echo "$ret"
+}
+
+$BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/subvol" > /dev/null
+
+# Create some small files to take up enough metadata reserved space
+for ((i = 0; i < $nr_files; i++)) do
+	_pwrite_byte 0xcd 0 1K "$SCRATCH_MNT/subvol/file_$i" > /dev/null
+done
+
+# Commit the fs so we can get a stable super generation
+sync
+
+before_gen=$(get_super_gen)
+
+$BTRFS_UTIL_PROG balance start -m "$SCRATCH_MNT" > /dev/null
+
+after_gen=$(get_super_gen)
+
+# Since the fs is pretty small, we should have only 1 small metadata chunk and
+# one tiny system chunk.
+# Relocating such small chunks only needs 6 commits for each, thus 12 commits for
+# 2 chunks.
+# Here we use 10x the theoretic value as threshold.
+theoretic_gen=$(( 6 * 2 ))
+threshold_gen=$(( 10 * $theoretic_gen ))
+if [ $(( $after_gen - $before_gen )) -gt 120 ]; then
+	echo "balance committed too many transactions"
+	echo "super generation before balance: ${before_gen}"
+	echo "super generation after balance:  ${after_gen}"
+	echo "super generation difference:     $((after_gen - before_gen))"
+	echo "theoretic generation difference: ${theoretic_gen}"
+	echo "threshold generation difference: ${threshold_gen}"
+fi
+
+echo "super generation before balance: ${before_gen}" >> $seqres.full
+echo "super generation after balance:  ${after_gen}" >> $seqres.full
+echo "super generation difference:     $((after_gen - before_gen))" >> $seqres.full
+echo "theoretic generation difference: ${theoretic_gen}" >> $seqres.full
+echo "threshold generation difference: ${threshold_gen}" >> $seqres.full
+
+# success, all done
+echo "Silence is golden"
+
+status=0
+exit
