@@ -34,26 +34,38 @@ _supported_os Linux
 _require_scratch
 _require_command "$SETCAP_PROG" setcap
 _require_command "$GETCAP_PROG" getcap
+_require_scratch_overlay_features metacopy
 
 # Remove all files from previous tests
 _scratch_mkfs
 
 # Create test file
 lowerdir=${OVL_BASE_SCRATCH_MNT}/${OVL_LOWER}
-echo "This is lower" >> ${lowerdir}/file
+echo "This is lower1" >> ${lowerdir}/file1
+echo "This is lower2" >> ${lowerdir}/file2
 
 # set setuid bit
-$SETCAP_PROG cap_setuid+ep ${lowerdir}/file
+$SETCAP_PROG cap_setuid+ep ${lowerdir}/file1
+$SETCAP_PROG cap_setuid+ep ${lowerdir}/file2
 
-_scratch_mount
+_scratch_mount "-o metacopy=on"
 
 # Trigger file copy up without actually writing anything to file. This
 # requires opening file with WRITE and xfs_io opens file with
 # O_RDWR by default.
-$XFS_IO_PROG -c "stat" ${SCRATCH_MNT}/file >>$seqres.full
+$XFS_IO_PROG -c "stat" ${SCRATCH_MNT}/file1 >>$seqres.full
 
 # Make sure cap_setuid is still there
-$GETCAP_PROG ${SCRATCH_MNT}/file | _filter_scratch
+$GETCAP_PROG ${SCRATCH_MNT}/file1 | _filter_scratch
+
+# Trigger metadata only copy-up
+chmod 000 ${SCRATCH_MNT}/file2
+
+# Trigger data copy-up
+$XFS_IO_PROG -c "stat" ${SCRATCH_MNT}/file2 >>$seqres.full
+
+# Make sure cap_setuid is still there
+$GETCAP_PROG ${SCRATCH_MNT}/file2 | _filter_scratch
 
 # success, all done
 status=0
