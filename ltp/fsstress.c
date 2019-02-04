@@ -2862,10 +2862,11 @@ splice_f(int opno, long r)
 
 	/*
 	 * splice can overlap write, so the offset of the target file can be
-	 * any number (< maxfsize)
+	 * any number. But to avoid too large offset, add a clamp of 1024 blocks
+	 * past the current dest file EOF
 	 */
 	lr = ((int64_t)random() << 32) + random();
-	off2 = (off64_t)(lr % maxfsize);
+	off2 = (off64_t)(lr % MIN(stat2.st_size + (1024ULL * stat2.st_blksize), MAXFSIZE));
 
 	/*
 	 * Due to len, off1 and off2 will be changed later, so record the
