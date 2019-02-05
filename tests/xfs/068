@@ -30,12 +30,24 @@ _cleanup()
 . ./common/rc
 . ./common/dump
 
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
 # real QA test starts here
 _supported_fs xfs
 _supported_os Linux
 
 _create_dumpdir_stress_num 4096
-_do_dump_restore
+
+echo -n "Before: " >> $seqres.full
+_count_dumpdir_files | tee $tmp.before >> $seqres.full
+
+# filter out the file count, it changes as fsstress adds new operations
+_do_dump_restore | sed -e "/entries processed$/s/[0-9][0-9]*/NUM/g"
+
+echo -n "After: " >> $seqres.full
+_count_restoredir_files | tee $tmp.after >> $seqres.full
+diff -u $tmp.before $tmp.after
 
 # success, all done
 exit
