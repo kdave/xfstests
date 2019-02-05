@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2017, Oracle and/or its affiliates.
+# Copyright (C) 2019, CTERA Networks.
+# All Rights Reserved.
+#
+# FS QA Test No. 525
+#
+# Check that high-offset reads and writes work.
+#
+# This is a variant of test generic/466 for filesystems that
+# do not support mkfs_sized.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+testdir=$SCRATCH_MNT
+
+echo "++ Create the original files" >> $seqres.full
+bigoff=$(echo "2^63 - 2" | $BC_PROG)
+len=$(echo "2^63 - 1" | $BC_PROG)
+$XFS_IO_PROG -f -c "truncate $len" $testdir/file0 >> $seqres.full 2>&1
+if [ ! -s $testdir/file0 ]; then
+	# If we can't set a large file size then don't bother
+	# with read/write tests, because fs doesn't support it.
+	_notrun "filesystem does not support huge file size"
+fi
+_pwrite_byte 0x61 $bigoff 1 $testdir/file1 >> $seqres.full
+
+echo "++ Check file creation" >> $seqres.full
+_scratch_cycle_mount
+
+$XFS_IO_PROG -c "pread -v -q $bigoff 1" $testdir/file1
+
+# success, all done
+status=0
+exit
