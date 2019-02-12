@@ -184,9 +184,15 @@ lock_mtab (void) {
 /* Remove lock file.  */
 void
 unlock_mtab (void) {
+	int ret;
 	if (we_created_lockfile) {
-		unlink (mounted_lock);
-		we_created_lockfile = 0;
+		ret = unlink (mounted_lock);
+		if (ret) {
+			fprintf(stderr, "Cannot remove lock file: %s\n", strerror(errno));
+			exit(1);
+		} else {
+			we_created_lockfile = 0;
+		}
 	}
 }
 
