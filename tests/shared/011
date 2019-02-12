@@ -1,0 +1,141 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 011
+#
+# This test verifies that cgroup aware writeback properly accounts I/Os in
+# various scenarios. We perform reads/writes from different combinations of
+# cgroups and verify that pages are accounted against the group that brought
+# them into cache.
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+
+	echo $$ > $cgdir/cgroup.procs
+	rmdir $cgdir/$seq-cg* > /dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/cgroup2
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs ext4 btrfs
+_supported_os Linux
+_require_scratch
+_require_cgroup2 io
+
+smajor=$((0x`stat -L -c %t $SCRATCH_DEV`))
+sminor=$((0x`stat -L -c %T $SCRATCH_DEV`))
+cgdir=$CGROUP2_PATH
+
+iosize=$((1024 * 1024 * 8))
+
+# Check cgroup read/write charges against expected values. Allow for some
+# tolerance as different filesystems seem to account slightly differently.
+check_cg()
+{
+	cgroot=$1
+	cgname=$(basename $cgroot)
+	expectedread=$2
+	expectedwrite=$3
+	rbytes=0
+	wbytes=0
+
+	iobytes=`cat $cgroot/io.stat | grep $smajor:$sminor`
+	if [ $? == 0 ]; then
+		rbytes=`echo $iobytes | awk '{ print $2 }' | \
+			awk -F = '{ print $2 }'`
+		wbytes=`echo $iobytes | awk '{ print $3 }' | \
+			awk -F = '{ print $2 }'`
+	fi
+
+	_within_tolerance "read" $rbytes $expectedread 5% -v
+	_within_tolerance "write" $wbytes $expectedwrite 5% -v
+}
+
+# Move current process to another cgroup.
+switch_cg()
+{
+	mkdir -p $1
+	echo $$ > $1/cgroup.procs
+}
+
+# Reset cgroup state for a new test.
+reset()
+{
+	echo $$ > $cgdir/cgroup.procs
+	rmdir $cgdir/$seq-cg* > /dev/null 2>&1
+	$XFS_IO_PROG -fc "pwrite 0 $iosize" $SCRATCH_MNT/file \
+		>> $seqres.full 2>&1
+	_scratch_cycle_mount || _fail "mount failed"
+	stat $SCRATCH_MNT/file > /dev/null
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+echo "+io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
+
+# Read and write from a single group.
+echo "read/write"
+reset
+switch_cg $cgdir/$seq-cg
+$XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" -c fsync \
+	$SCRATCH_MNT/file >> $seqres.full 2>&1
+switch_cg $cgdir
+$XFS_IO_PROG -c fsync $SCRATCH_MNT/file
+check_cg $cgdir/$seq-cg $iosize $iosize
+
+# Write from one cgroup then read and write from a second. Writes are charged to
+# the first group and nothing to the second.
+echo "write -> read/write"
+reset
+switch_cg $cgdir/$seq-cg
+$XFS_IO_PROG -c "pwrite 0 $iosize" $SCRATCH_MNT/file >> $seqres.full 2>&1
+switch_cg $cgdir/$seq-cg-2
+$XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" $SCRATCH_MNT/file \
+	>> $seqres.full 2>&1
+switch_cg $cgdir
+$XFS_IO_PROG -c fsync $SCRATCH_MNT/file
+check_cg $cgdir/$seq-cg 0 $iosize
+check_cg $cgdir/$seq-cg-2 0 0
+
+# Read from one cgroup, read & write from a second. Both reads and writes are
+# charged to the first group and nothing to the second.
+echo "read -> read/write"
+reset
+switch_cg $cgdir/$seq-cg
+$XFS_IO_PROG -c "pread 0 $iosize" $SCRATCH_MNT/file >> $seqres.full 2>&1
+switch_cg $cgdir/$seq-cg-2
+$XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" $SCRATCH_MNT/file \
+	>> $seqres.full 2>&1
+switch_cg $cgdir
+$XFS_IO_PROG -c fsync $SCRATCH_MNT/file
+check_cg $cgdir/$seq-cg $iosize $iosize
+check_cg $cgdir/$seq-cg-2 0 0
+
+echo "-io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
+
+# success, all done
+status=0
+exit
