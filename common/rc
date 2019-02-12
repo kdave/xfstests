@@ -3849,7 +3849,11 @@ _dmsetup_create()
 
 _require_btime()
 {
-	$XFS_IO_PROG -f $TEST_DIR/test_creation_time -c "statx -v" \
+	# Note: filesystems are not required to report btime (creation time)
+	# if the caller doesn't ask for it, so we define STATX_BTIME here and
+	# pass it in to the statx command.
+	export STATX_BTIME=0x800
+	$XFS_IO_PROG -f $TEST_DIR/test_creation_time -c "statx -m $STATX_BTIME -v" \
 		| grep btime >>$seqres.full 2>&1 || \
 		_notrun "inode creation time not supported by this filesystem"
 	rm -f $TEST_DIR/test_creation_time
@@ -3861,7 +3865,11 @@ _require_scratch_btime()
 	_scratch_mkfs > /dev/null 2>&1
 	_scratch_mount
 
-	$XFS_IO_PROG -f $SCRATCH_MNT/test_creation_time -c "statx -v" \
+	# Note: filesystems are not required to report btime (creation time)
+	# if the caller doesn't ask for it, so we define STATX_BTIME here and
+	# pass it in to the statx command.
+	export STATX_BTIME=0x800
+	$XFS_IO_PROG -f $SCRATCH_MNT/test_creation_time -c "statx -m $STATX_BTIME -v" \
 		| grep btime >>$seqres.full 2>&1 || \
 		_notrun "inode creation time not supported by this filesystem"
 
