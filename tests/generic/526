@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 526
+#
+# Test that after a combination of file renames, linking and creating a new file
+# with the old name of a renamed file, if we fsync the new file, after a power
+# failure we are able to mount the filesystem and all file names correspond to
+# the correct inodes.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+mkdir $SCRATCH_MNT/testdir
+echo -n "foo" > $SCRATCH_MNT/testdir/fname1
+echo -n "hello" > $SCRATCH_MNT/testdir/fname2
+
+# Make sure everything done so far is durably persisted.
+sync
+
+# Rename and link files such that one new name corresponds to the name of
+# another renamed file and one new file has the old name of one of the renamed
+# files. Then fsync only the new file.
+mv $SCRATCH_MNT/testdir/fname1 $SCRATCH_MNT/testdir/fname3
+mv $SCRATCH_MNT/testdir/fname2 $SCRATCH_MNT/testdir/fname4
+ln $SCRATCH_MNT/testdir/fname3 $SCRATCH_MNT/testdir/fname2
+echo -n "bar" > $SCRATCH_MNT/testdir/fname1
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/testdir/fname1
+
+# Simulate a power failure and mount the filesystem to check that all file names
+# exist and correspond to the correct inodes.
+_flakey_drop_and_remount
+
+echo "File fname1 data after power failure: $(cat $SCRATCH_MNT/testdir/fname1)"
+echo "File fname2 data after power failure: $(cat $SCRATCH_MNT/testdir/fname2)"
+echo "File fname3 data after power failure: $(cat $SCRATCH_MNT/testdir/fname3)"
+echo "File fname4 data after power failure: $(cat $SCRATCH_MNT/testdir/fname4)"
+
+_unmount_flakey
+
+status=0
+exit
