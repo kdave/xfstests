@@ -3500,7 +3500,7 @@ _check_dmesg()
 # capture the kmemleak report
 _capture_kmemleak()
 {
-	local kern_knob="${DEBUGFS_MNT}/kmemleak"
+	local kern_knob="$DEBUGFS_MNT/kmemleak"
 	local leak_file="$1"
 
 	# Tell the kernel to scan for memory leaks.  Apparently the write
@@ -3521,17 +3521,20 @@ ENDL
 	echo "clear" > "$kern_knob"
 }
 
-# set up kmemleak
-_init_kmemleak()
+# Figure out if the running kernel supports kmemleak; if it does, clear out
+# anything that leaked before we even started testing.  The leak checker only
+# needs to be primed like this once per ./check invocation.
+_detect_kmemleak()
 {
-	local kern_knob="${DEBUGFS_MNT}/kmemleak"
+	local kern_knob="$DEBUGFS_MNT/kmemleak"
+	KMEMLEAK_CHECK_FILE="/tmp/check_kmemleak"
 
 	# Since kernel v4.19-rc3, the kmemleak knob exists even if kmemleak is
 	# disabled, but returns EBUSY on write. So instead of relying on
 	# existance of writable knob file, we use a test file to indicate that
 	# _check_kmemleak() is enabled only if we actually managed to write to
 	# the knob file.
-	rm -f ${RESULT_BASE}/check_kmemleak
+	rm -f "$KMEMLEAK_CHECK_FILE"
 
 	if [ ! -w "$kern_knob" ]; then
 		return 0
@@ -3541,17 +3544,26 @@ _init_kmemleak()
 	# then dump all the leaks recorded so far.
 	if echo "scan=off" > "$kern_knob" 2>/dev/null; then
 		_capture_kmemleak /dev/null
-		touch ${RESULT_BASE}/check_kmemleak
+		touch "$KMEMLEAK_CHECK_FILE"
 	fi
 }
 
-# check kmemleak log
+# Kick the kmemleak checker to scan for leaks.  Background leak scan mode is
+# not enabled, so we must call the kernel to ask for a scan and deal with the
+# results appropriately.  This we do after every test completes, whether or not
+# it was successful.
 _check_kmemleak()
 {
-	local kern_knob="${DEBUGFS_MNT}/kmemleak"
-	local leak_file="${seqres}.kmemleak"
+	local kern_knob="$DEBUGFS_MNT/kmemleak"
+	local leak_file="$seqres.kmemleak"
 
-	if [ ! -f ${RESULT_BASE}/check_kmemleak ]; then
+	if [ ! -f "$KMEMLEAK_CHECK_FILE" ]; then
+		return 0
+	fi
+
+	# Not enabled, so discard any report of leaks found.
+	if [ "$USE_KMEMLEAK" != "yes" ]; then
+		_capture_kmemleak /dev/null
 		return 0
 	fi
 
