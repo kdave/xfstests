@@ -1,0 +1,71 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 531
+#
+# Stress test creating a lot of unlinked O_TMPFILE files and closing them
+# all at once, checking that we don't blow up the filesystem.  This is sort
+# of a performance test for the xfs unlinked inode backref patchset, but it
+# applies to most other filesystems.
+#
+# Use every CPU possible to stress the filesystem.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+testfile=$TEST_DIR/$seq.txt
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_test_program "t_open_tmpfiles"
+
+rm -f $seqres.full
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Try to load up all the CPUs, two threads per CPU.
+nr_cpus=$(( $(getconf _NPROCESSORS_ONLN) * 2 ))
+
+# Set ULIMIT_NOFILE to min(file-max, 50000 files per LOAD_FACTOR)
+# so that this test doesn't take forever or OOM the box
+max_files=$((50000 * LOAD_FACTOR))
+max_allowable_files=$(( $(cat /proc/sys/fs/file-max) ))
+test $max_allowable_files -gt 0 && test $max_files -gt $max_allowable_files && \
+	max_files=$max_allowable_files
+ulimit -n $max_files
+
+# Open a lot of unlinked files
+echo create >> $seqres.full
+for i in $(seq 1 $nr_cpus); do
+	mkdir $SCRATCH_MNT/$i
+	$here/src/t_open_tmpfiles $SCRATCH_MNT/$i >> $seqres.full &
+done
+wait
+
+# Unmount to prove that we can clean it all
+echo umount >> $seqres.full
+before=$(date +%s)
+_scratch_unmount
+after=$(date +%s)
+echo "Unmount took $((after - before))s." >> $seqres.full
+
+# Mount so that we can run the usual checks
+echo silence is golden
+_scratch_mount
+status=0
+exit
