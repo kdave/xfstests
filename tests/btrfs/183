@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 183
+#
+# Regression test for read corruption of compressed and shared extents after
+# punching holes into a file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_reflink
+_require_xfs_io_command "fpunch"
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount "-o compress"
+
+# Create a file with 3 consecutive compressed extents, each corresponds to 128Kb
+# of data (uncompressed size) and each is stored on disk as a 4Kb extent
+# (compressed size, regardless of compression algorithm used).
+# Each extent starts with 4Kb of zeroes, while the remaining bytes all have a
+# value of 0xff.
+$XFS_IO_PROG -f -c "pwrite -S 0xff 0 384K" \
+	     -c "pwrite -S 0x00 0 4K" \
+	     -c "pwrite -S 0x00 128K 4K" \
+	     -c "pwrite -S 0x00 256K 4K" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+echo "File digest after initial creation:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+# Clone the first extent into offsets 128K and 256K.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foobar 0 128K 128K" \
+	     -c "reflink $SCRATCH_MNT/foobar 0 256K 128K" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+echo "File digest after reflinking:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+# Punch holes into the regions that are already full of zeroes.
+$XFS_IO_PROG -c "fpunch 0 4K" \
+	     -c "fpunch 128K 4K" \
+	     -c "fpunch 256K 4K" \
+	     $SCRATCH_MNT/foobar
+
+echo "File digest after punching holes:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+echo 1 > /proc/sys/vm/drop_caches
+
+echo "File digest after dropping page cache:"
+md5sum $SCRATCH_MNT/foobar | _filter_scratch
+
+status=0
+exit
