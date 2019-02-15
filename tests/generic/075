@@ -48,11 +48,9 @@ _do_test()
     echo "fsx.$_n : $_filter_param"
     echo "-----------------------------------------------"
 
-    if [ "$FSTYP" != "xfs" ]
-    then
-	if [ "$_n" = "1" -o "$_n" = "3" ]
-	then
-	    # HACK: only xfs handles preallocation (-x) so just skip this test
+    # Skip the prealloc runs if the file system does not support preallocation
+    if [ "$_n" = "1" -o "$_n" = "3" ]; then
+        if [ -n "$testio" ]; then
 	    return
 	fi
     fi
@@ -127,6 +125,12 @@ rm -f $seqres.full
 echo "brevity is wit..."
 
 _check_test_fs
+
+# check if preallocation is supported, xfs_io resvsp command only prints out
+# messages on failure.
+testfile=$TEST_DIR/$$.xfs_io
+testio=`$XFS_IO_PROG -f -c "resvsp 0 1" $testfile 2>&1`
+rm -f $testfile 2>&1 > /dev/null
 
 # Options:
 # -d: debug output for all operations
