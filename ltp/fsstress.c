@@ -2363,7 +2363,7 @@ copyrange_f(
 	int			v2;
 	int			fd1;
 	int			fd2;
-	size_t			ret;
+	size_t			ret = 0;
 	int			e;
 
 	/* Load paths */
@@ -2452,7 +2452,7 @@ copyrange_f(
 		if (ret < 0) {
 			if (errno != EAGAIN || tries++ >= 300)
 				break;
-		} else if (ret > len)
+		} else if (ret > len || ret == 0)
 			break;
 		else if (ret > 0)
 			len -= ret;
@@ -2890,7 +2890,7 @@ splice_f(int opno, long r)
 	while (len > 0) {
 		/* move to pipe buffer */
 		ret1 = splice(fd1, &off1, filedes[1], NULL, len, 0);
-		if (ret1 < 0) {
+		if (ret1 <= 0) {
 			break;
 		}
 		bytes = ret1;
