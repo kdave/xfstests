@@ -70,7 +70,11 @@ void die(void)
 		fflush(stdout);
 
 		if (shutdown_fs) {
-			int flag = XFS_FSOP_GOING_FLAGS_NOLOGFLUSH;
+			/*
+			 * Flush the log so that we have to process the
+			 * unlinked inodes the next time we mount.
+			 */
+			int flag = XFS_FSOP_GOING_FLAGS_LOGFLUSH;
 			int ret;
 
 			ret = ioctl(min_fd, XFS_IOC_GOINGDOWN, &flag);
