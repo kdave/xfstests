@@ -36,10 +36,9 @@ _scratch_mkfs -d extszinherit=8388608 >> $seqres.full 2>&1
 test $? -eq 1 || echo "should have failed extszinherit"
 
 # Try cow extent size hint if supported
-$MKFS_XFS_PROG -N -f $SCRATCH_DEV > $tmp.mkfs
-if grep -q 'reflink=' $tmp.mkfs ; then
+if _scratch_mkfs_xfs_supported -m crc=1,reflink=1 >> $seqres.full 2>&1; then
 	echo cowextsize >> $seqres.full
-	_scratch_mkfs -m reflink=1 -d cowextsize=8388608 >> $seqres.full 2>&1
+	_scratch_mkfs -m reflink=1,crc=1 -d cowextsize=8388608 >> $seqres.full 2>&1
 	test $? -eq 1 || echo "should have failed cowextsize"
 fi
 
