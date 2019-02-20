@@ -27,7 +27,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <attr/xattr.h>
+#include <sys/xattr.h>
 
 void die(const char *msg)
 {
