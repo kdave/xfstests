@@ -15,14 +15,24 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 . ./common/rc
 
-_supported_fs ext4 xfs
+_supported_fs ext4 xfs btrfs
 _supported_os Linux
 _require_test
 _require_loop
 _require_fstrim
 _require_xfs_io_command "fiemap"
-_require_fs_space $TEST_DIR 307200
+if [ "$FSTYP" = "btrfs" ]; then
+	# 3g for btrfs to have distinct bgs
+	_require_fs_space $TEST_DIR 3145728
+	fssize=3000
+else
+	_require_fs_space $TEST_DIR 307200
+	fssize=300
+fi
+
 [ "$FSTYP" = "ext4" ] && _require_dumpe2fs
+[ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-super
+[ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-tree
 
 _cleanup()
 {
@@ -60,6 +70,22 @@ get_free_sectors()
 	$XFS_DB_PROG -r -c "freesp -d" $img_file | $SED_PROG '/^.*from/,$d'| \
 		 $AWK_PROG -v spb=$sectors_per_block -v agsize=$agsize \
 		'{ print spb * ($1 * agsize + $2), spb * ($1 * agsize + $2 + $3) - 1 }'
+	;;
+	btrfs)
+		local device_size=$($BTRFS_UTIL_PROG filesystem show --raw $loop_mnt 2>&1 \
+			| sed -n "s/^.*size \([0-9]*\).*$/\1/p")
+
+		local nodesize=$($BTRFS_UTIL_PROG inspect-internal dump-super $img_file  \
+			| sed -n 's/nodesize\s*\(.*\)/\1/p')
+
+		# Get holes within block groups
+		$BTRFS_UTIL_PROG inspect-internal dump-tree -t extent $img_file \
+			| $AWK_PROG -v sectorsize=512 -v nodesize=$nodesize -f $here/src/parse-extent-tree.awk
+
+		# Get holes within unallocated space on disk
+		$BTRFS_UTIL_PROG inspect-internal dump-tree -t dev $img_file \
+			| $AWK_PROG -v sectorsize=512 -v devsize=$device_size -f $here/src/parse-dev-tree.awk
+
 	;;
 	esac
 }
@@ -105,7 +131,7 @@ here=`pwd`
 tmp=`mktemp -d`
 
 img_file=$TEST_DIR/$$.fs
-dd if=/dev/zero of=$img_file bs=1M count=300 &> /dev/null
+dd if=/dev/zero of=$img_file bs=1M count=$fssize &> /dev/null
 
 loop_dev=$(_create_loop_device $img_file)
 loop_mnt=$tmp/loop_mnt
@@ -118,6 +144,7 @@ merged_sectors="$tmp/merged_free_sectors"
 mkdir $loop_mnt
 
 [ "$FSTYP" = "xfs" ] && MKFS_OPTIONS="-f $MKFS_OPTIONS"
+[ "$FSTYP" = "btrfs" ] && MKFS_OPTIONS="$MKFS_OPTIONS -f -dsingle -msingle"
 
 _mkfs_dev $loop_dev
 _mount $loop_dev $loop_mnt
