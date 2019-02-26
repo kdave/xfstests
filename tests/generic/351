@@ -62,17 +62,7 @@ $XFS_IO_PROG -c "fpunch 512 512" $dev
 
 echo "Zero range past MAX_LFS_FILESIZE keep size"
 # zod = MAX_LFS_FILESIZE
-case "$(getconf LONG_BIT)" in
-"32")
-	zod=$(( ($(getconf PAGE_SIZE) << ($(getconf LONG_BIT) - 1) ) - 1))
-	;;
-"64")
-	zod=9223372036854775807
-	;;
-*)
-	_fail "sizeof(long) == $(getconf LONG_BIT)?"
-	;;
-esac
+zod=$(_get_max_lfs_filesize)
 $XFS_IO_PROG -c "fzero -k 512k $zod" $dev
 
 echo "Zero range past MAX_LFS_FILESIZE"

@@ -50,17 +50,7 @@ md5sum $dev | sed -e "s|$dev|SCSI_DEBUG_DEV|g"
 
 echo "Zero range to MAX_LFS_FILESIZE"
 # zod = MAX_LFS_FILESIZE
-case "$(getconf LONG_BIT)" in
-"32")
-	zod=$(( ($(getconf PAGE_SIZE) << ($(getconf LONG_BIT) - 1) ) - 1))
-	;;
-"64")
-	zod=9223372036854775807
-	;;
-*)
-	_fail "sizeof(long) == $(getconf LONG_BIT)?"
-	;;
-esac
+zod=$(_get_max_lfs_filesize)
 $XFS_IO_PROG -c "fzero -k 0 $zod" $dev
 
 echo "Check contents"
