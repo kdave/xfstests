@@ -2356,8 +2356,11 @@ copyrange_f(
 	loff_t			lr;
 	loff_t			off1;
 	loff_t			off2;
+	loff_t			offset1;
+	loff_t			offset2;
 	loff_t			max_off2;
 	size_t			len;
+	size_t			length;
 	int			tries = 0;
 	int			v1;
 	int			v2;
@@ -2446,6 +2449,14 @@ copyrange_f(
 		off2 %= maxfsize;
 	} while (stat1.st_ino == stat2.st_ino && llabs(off2 - off1) < len);
 
+	/*
+	 * Since len, off1 and off2 will be changed later, preserve their
+	 * original values.
+	 */
+	length = len;
+	offset1 = off1;
+	offset2 = off2;
+
 	while (len > 0) {
 		ret = syscall(__NR_copy_file_range, fd1, &off1, fd2, &off2,
 			      len, 0);
@@ -2461,8 +2472,10 @@ copyrange_f(
 	if (v1 || v2) {
 		printf("%d/%d: copyrange %s%s [%lld,%lld] -> %s%s [%lld,%lld]",
 			procid, opno,
-			fpath1.path, inoinfo1, (long long)off1, (long long)len,
-			fpath2.path, inoinfo2, (long long)off2, (long long)len);
+			fpath1.path, inoinfo1,
+			(long long)offset1, (long long)length,
+			fpath2.path, inoinfo2,
+			(long long)offset2, (long long)length);
 
 		if (ret < 0)
 			printf(" error %d", e);
@@ -2869,8 +2882,8 @@ splice_f(int opno, long r)
 	off2 = (off64_t)(lr % MIN(stat2.st_size + (1024ULL * stat2.st_blksize), MAXFSIZE));
 
 	/*
-	 * Due to len, off1 and off2 will be changed later, so record the
-	 * original number at here
+	 * Since len, off1 and off2 will be changed later, preserve their
+	 * original values.
 	 */
 	length = len;
 	offset1 = off1;
