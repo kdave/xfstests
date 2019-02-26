@@ -3810,6 +3810,29 @@ _require_scratch_feature()
 	esac
 }
 
+# Get the maximum size of a file in $TEST_DIR (s_maxbytes).  On ext4 this will
+# be UINT32_MAX * block_size, but other filesystems may allow up to LLONG_MAX.
+_get_max_file_size()
+{
+	local testfile=$TEST_DIR/maxfilesize.$seq
+	local l=0
+	local r=9223372036854775807 # LLONG_MAX
+
+	rm -f $testfile
+	while (( l < r )); do
+		# Use _math() to avoid signed integer overflow.
+		local m=$(_math "($l + $r + 1) / 2")
+		if $XFS_IO_PROG -f -c "truncate $m" $testfile \
+			|& grep -q 'File too large'
+		then
+			r=$(( m - 1 ))
+		else
+			l=$m
+		fi
+	done
+	echo $l
+}
+
 # The maximum filesystem label length, /not/ including terminating NULL
 _label_get_max()
 {

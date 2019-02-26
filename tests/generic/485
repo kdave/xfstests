@@ -37,31 +37,8 @@ _require_xfs_io_command "falloc" "-k"
 _require_xfs_io_command "finsert"
 _require_xfs_io_command "truncate"
 
-# Get the maximum size of a file in $TEST_DIR (s_maxbytes).  On ext4 this will
-# be UINT32_MAX * block_size, but other filesystems may allow up to LLONG_MAX.
-get_max_file_size()
-{
-	local testfile=$TEST_DIR/maxfilesize.$seq
-	local l=0
-	local r=9223372036854775807 # LLONG_MAX
-
-	rm -f $testfile
-	while (( l < r )); do
-		# Use _math() to avoid signed integer overflow.
-		local m=$(_math "($l + $r + 1) / 2")
-		if $XFS_IO_PROG -f -c "truncate $m" $testfile \
-			|& grep -q 'File too large'
-		then
-			r=$(( m - 1 ))
-		else
-			l=$m
-		fi
-	done
-	echo $l
-}
-
 block_size=$(_get_file_block_size $TEST_DIR)
-max_file_size=$(get_max_file_size)
+max_file_size=$(_get_max_file_size)
 max_blocks=$((max_file_size / block_size))
 testfile=$TEST_DIR/testfile.$seq
 

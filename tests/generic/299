@@ -25,6 +25,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
+_require_test
 _require_scratch
 _require_odirect
 _require_block_device $SCRATCH_DEV
@@ -32,6 +33,11 @@ _require_block_device $SCRATCH_DEV
 NUM_JOBS=$((4*LOAD_FACTOR))
 BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
 FILE_SIZE=$((BLK_DEV_SIZE * 512))
+
+max_file_size=$(_get_max_file_size)
+if [ $max_file_size -lt $FILE_SIZE ]; then
+	FILE_SIZE=$max_file_size
+fi
 
 cat >$fio_config <<EOF
 ###########
