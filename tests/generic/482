@@ -22,12 +22,14 @@ _cleanup()
 	cd /
 	$KILLALL_PROG -KILL -q $FSSTRESS_PROG &> /dev/null
 	_log_writes_cleanup &> /dev/null
+	_dmthin_cleanup
 	rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/dmthin
 . ./common/dmlogwrites
 
 # remove previous $seqres.full before test
@@ -40,10 +42,11 @@ _supported_fs generic
 _supported_os Linux
 
 _require_command "$KILLALL_PROG" killall
-# Use $SCRATCH_DEV as replay device
-_require_scratch
+# Use thin device as replay device, which requires $SCRATCH_DEV
+_require_scratch_nocheck
 # and we need extra device as log device
 _require_log_writes
+_require_dm_target thin-pool
 
 
 nr_cpus=$("$here/src/feature" -o)
@@ -53,9 +56,15 @@ if [ $nr_cpus -gt 8 ]; then
 fi
 fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 512 -p $nr_cpus \
 		$FSSTRESS_AVOID)
+devsize=$((1024*1024*200 / 512))	# 200m phys/virt size
+csize=$((1024*64 / 512))		# 64k cluster size
+lowspace=$((1024*1024 / 512))		# 1m low space threshold
 
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
 _test_unmount
-_log_writes_init $SCRATCH_DEV
+_dmthin_init $devsize $devsize $csize $lowspace
+_log_writes_init $DMTHIN_VOL_DEV
 _log_writes_mkfs >> $seqres.full 2>&1
 _log_writes_mark mkfs
 
@@ -70,16 +79,15 @@ cur=$(_log_writes_find_next_fua $prev)
 [ -z "$cur" ] && _fail "failed to locate next FUA write"
 
 while [ ! -z "$cur" ]; do
-	_log_writes_replay_log_range $cur $SCRATCH_DEV >> $seqres.full
+	_log_writes_replay_log_range $cur $DMTHIN_VOL_DEV >> $seqres.full
 
 	# Here we need extra mount to replay the log, mainly for journal based
 	# fs, as their fsck will report dirty log as error.
-	# We don't care to preserve any data on $SCRATCH_DEV, as we can replay
+	# We don't care to preserve any data on the replay dev, as we can replay
 	# back to the point we need, and in fact sometimes creating/deleting
 	# snapshots repeatedly can be slower than replaying the log.
-	_scratch_mount
-	_scratch_unmount
-	_check_scratch_fs
+	_dmthin_mount
+	_dmthin_check_fs
 
 	prev=$cur
 	cur=$(_log_writes_find_next_fua $(($cur + 1)))
