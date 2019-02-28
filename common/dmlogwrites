@@ -32,7 +32,7 @@ _require_log_writes_dax()
 	_require_test_program "log-writes/replay-log"
 
 	local ret=0
-	_log_writes_init
+	_log_writes_init $SCRATCH_DEV
 	_log_writes_mkfs > /dev/null 2>&1
 	_log_writes_mount -o dax > /dev/null 2>&1
 	# Check options to be sure. XFS ignores dax option
@@ -47,10 +47,15 @@ _require_log_writes_dax()
 
 _log_writes_init()
 {
-	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+	blkdev=$1
+
+	[ -z "$blkdev" ] && _fail \
+	"block dev must be specified for _log_writes_init"
+
+	local BLK_DEV_SIZE=`blockdev --getsz $blkdev`
 	LOGWRITES_NAME=logwrites-test
 	LOGWRITES_DMDEV=/dev/mapper/$LOGWRITES_NAME
-	LOGWRITES_TABLE="0 $BLK_DEV_SIZE log-writes $SCRATCH_DEV $LOGWRITES_DEV"
+	LOGWRITES_TABLE="0 $BLK_DEV_SIZE log-writes $blkdev $LOGWRITES_DEV"
 	_dmsetup_create $LOGWRITES_NAME --table "$LOGWRITES_TABLE" || \
 		_fail "failed to create log-writes device"
 }
@@ -82,17 +87,21 @@ _log_writes_unmount()
 
 # _log_writes_replay_log <mark>
 #
-# This replays the log contained on $LOGWRITES_DEV onto $SCRATCH_DEV upto the
+# This replays the log contained on $LOGWRITES_DEV onto blkdev upto the
 # mark passed in.
 _log_writes_replay_log()
 {
 	_mark=$1
+	_blkdev=$2
+
+	[ -z "$_blkdev" ] && _fail \
+	"block dev must be specified for _log_writes_replay_log"
 
 	$here/src/log-writes/replay-log --log $LOGWRITES_DEV --find \
 		--end-mark $_mark >> $seqres.full 2>&1
 	[ $? -ne 0 ] && _fail "mark '$_mark' does not exist"
 
-	$here/src/log-writes/replay-log --log $LOGWRITES_DEV --replay $SCRATCH_DEV \
+	$here/src/log-writes/replay-log --log $LOGWRITES_DEV --replay $_blkdev \
 		--end-mark $_mark >> $seqres.full 2>&1
 	[ $? -ne 0 ] && _fail "replay failed"
 }
@@ -150,16 +159,19 @@ _log_writes_find_next_fua()
 _log_writes_replay_log_range()
 {
 	local end=$1
+	local blkdev=$2
 
 	[ -z "$end" ] && _fail \
 	"end entry must be specified for _log_writes_replay_log_range"
+	[ -z "$blkdev" ] && _fail \
+	"block dev must be specified for _log_writes_replay_log_range"
 
 	# To ensure we replay the last entry,
 	# we need to manually increase the end entry number to ensure
 	# it's played
 	echo "=== replay to $end ===" >> $seqres.full
 	$here/src/log-writes/replay-log --log $LOGWRITES_DEV \
-		--replay $SCRATCH_DEV --limit $(($end + 1)) \
+		--replay $blkdev --limit $(($end + 1)) \
 		>> $seqres.full 2>&1
 	[ $? -ne 0 ] && _fail "replay failed"
 }

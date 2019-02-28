@@ -44,7 +44,7 @@ check_files()
 		local filename=$(basename $i)
 		local mark="${filename##*.}"
 		echo "checking $filename" >> $seqres.full
-		_log_writes_replay_log $filename
+		_log_writes_replay_log $filename $SCRATCH_DEV
 		_scratch_mount
 		local expected_md5=$(_md5_checksum $i)
 		local md5=$(_md5_checksum $SCRATCH_MNT/$name)
@@ -59,7 +59,7 @@ rm -rf $SANITY_DIR
 mkdir $SANITY_DIR
 
 # Create the log
-_log_writes_init
+_log_writes_init $SCRATCH_DEV
 
 _log_writes_mkfs >> $seqres.full 2>&1
 
@@ -96,7 +96,7 @@ _check_scratch_fs
 
 # check pre umount
 echo "checking pre umount" >> $seqres.full
-_log_writes_replay_log last
+_log_writes_replay_log last $SCRATCH_DEV
 _scratch_mount
 _scratch_unmount
 _check_scratch_fs
@@ -107,7 +107,7 @@ done
 
 # Check the end
 echo "checking post umount" >> $seqres.full
-_log_writes_replay_log end
+_log_writes_replay_log end $SCRATCH_DEV
 _scratch_mount
 for j in `seq 0 $((NUM_FILES-1))`; do
 	md5=$(_md5_checksum $SCRATCH_MNT/testfile$j)
