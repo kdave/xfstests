@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 534
+#
+# Test that if we truncate a file to reduce its size, rename it and then fsync
+# it, after a power failure the file has a correct size and name.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test file with an initial size of 8000 bytes, then fsync it,
+# followed by a truncate that reduces its size down to 3000 bytes.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 8000" \
+	     -c "fsync" \
+	     -c "truncate 3000" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now rename the file and fsync it again.
+mv $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar
+
+# Simulate a power failure and mount the filesystem to check that the file was
+# persisted with the new name and has a size of 3000 bytes.
+_flakey_drop_and_remount
+
+[ -f $SCRATCH_MNT/bar ] || echo "file name 'bar' is missing"
+[ -f $SCRATCH_MNT/foo ] && echo "file name 'foo' still exists"
+
+echo "File content after power failure:"
+od -A d -t x1 $SCRATCH_MNT/bar
+
+_unmount_flakey
+
+status=0
+exit
