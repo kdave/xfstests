@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 532
+#
+# Regression test for a bug where XFS fails to set statx attributes_mask but
+# sets attribute flags anyway.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+
+get_attributes() {
+	$XFS_IO_PROG -r -c "statx -r" $1 | grep 'stat.attributes =' | cut -d ' ' -f 3
+}
+
+get_attributes_mask() {
+	$XFS_IO_PROG -r -c "statx -r" $1 | grep 'stat.attributes_mask =' | cut -d ' ' -f 3
+}
+
+check_statx_attributes()
+{
+	local attrs=$(get_attributes $testfile)
+	local mask=$(get_attributes_mask $testfile)
+
+	echo "MASK:$mask:ATTRS:$attrs:" >> $seqres.full
+
+	test -z "$mask" && _notrun "xfs_io statx command does not support attributes_mask"
+	test $(( mask )) -eq 0 && echo "attributes mask is zero"
+	test $(( attrs & ~(mask) )) -ne 0 && echo "attributes $attrs do not appear in mask $mask"
+}
+
+rm -f $seqres.full
+echo "Silence is golden"
+
+# Create file, check for incorrect mask
+testfile=$TEST_DIR/$seq.$$.test
+touch $testfile
+check_statx_attributes
+
+# Do it again, but this time try to turn on one of the attributes.
+if $CHATTR_PROG +i $testfile > /dev/null 2>&1; then
+	check_statx_attributes
+	$CHATTR_PROG -i $testfile
+fi
+if $CHATTR_PROG +a $testfile > /dev/null 2>&1; then
+	check_statx_attributes
+	$CHATTR_PROG -a $testfile
+fi
+
+status=0
+exit
