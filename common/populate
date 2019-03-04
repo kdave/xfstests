@@ -260,6 +260,21 @@ _scratch_xfs_populate() {
 	$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/BNOBT"
 	./src/punch-alternating "${SCRATCH_MNT}/BNOBT"
 
+	# Inode btree
+	echo "+ inobt btree"
+	local ino_per_rec=64
+	local rec_per_btblock=16
+	local nr="$(( 2 * (blksz / rec_per_btblock) * ino_per_rec ))"
+	local dir="${SCRATCH_MNT}/INOBT"
+	mkdir -p "${dir}"
+	seq 0 "${nr}" | while read f; do
+		touch "${dir}/${f}"
+	done
+
+	seq 0 "$((ino_per_rec + 1))" "${nr}" | while read f; do
+		rm -f "${dir}/${f}"
+	done
+
 	# Reverse-mapping btree
 	is_rmapbt="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep -c 'rmapbt=1')"
 	if [ $is_rmapbt -gt 0 ]; then
@@ -562,6 +577,8 @@ _scratch_xfs_populate_check() {
 	__populate_check_xfs_aformat "${btree_attr}" "btree"
 	__populate_check_xfs_agbtree_height "bno"
 	__populate_check_xfs_agbtree_height "cnt"
+	__populate_check_xfs_agbtree_height "ino"
+	test $is_finobt -ne 0 && __populate_check_xfs_agbtree_height "fino"
 	test $is_rmapbt -ne 0 && __populate_check_xfs_agbtree_height "rmap"
 	test $is_reflink -ne 0 && __populate_check_xfs_agbtree_height "refcnt"
 }
