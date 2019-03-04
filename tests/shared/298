@@ -46,13 +46,21 @@ _cleanup()
 
 get_holes()
 {
+	# It's not a good idea to be running tools against the image file
+	# backing a live filesystem because the filesystem could be maintaining
+	# in-core state that will perturb the free space map on umount.  Stick
+	# to established convention which requires the filesystem to be
+	# unmounted while we probe the underlying file.
+	$UMOUNT_PROG $loop_mnt
 	$XFS_IO_PROG -F -c fiemap $1 | grep hole | $SED_PROG 's/.*\[\(.*\)\.\.\(.*\)\].*/\1 \2/'
+	_mount $loop_dev $loop_mnt
 }
 
 get_free_sectors()
 {
 	case $FSTYP in
 	ext4)
+	$UMOUNT_PROG $loop_mnt
 	$DUMPE2FS_PROG $img_file  2>&1 | grep " Free blocks" | cut -d ":" -f2- | \
 		tr ',' '\n' | $SED_PROG 's/^ //' | \
 		$AWK_PROG -v spb=$sectors_per_block 'BEGIN{FS="-"};
@@ -195,6 +203,16 @@ while read line; do
 		END { if(found) exit 0; else exit 1}' $merged_sectors
 	then
 		echo "Sectors $from-$to are not marked as free!"
+
+		# Dump the state to make it easier to debug this...
+		echo free_sectors >> $seqres.full
+		sort -g < $free_sectors >> $seqres.full
+		echo fiemap_ref >> $seqres.full
+		sort -g < $fiemap_ref >> $seqres.full
+		echo merged_sectors >> $seqres.full
+		sort -g < $merged_sectors >> $seqres.full
+		echo fiemap_after >> $seqres.full
+		sort -g < $fiemap_after >> $seqres.full
 		exit
 	fi
 done < $fiemap_after
