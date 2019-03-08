@@ -1,0 +1,108 @@
+QA output created by 533
+
+create file foo.533
+
+should be no EAs for foo.533:
+
+set EA <NOISE,woof>:
+
+set EA <COLOUR,blue>:
+
+set EA <SIZE,small>:
+
+list the EAs for foo.533: NOISE, COLOUR, SIZE
+# file: TEST_DIR/foo.533
+user.COLOUR="blue"
+user.NOISE="woof"
+user.SIZE="small"
+
+
+check the list again for foo.533
+# file: TEST_DIR/foo.533
+user.COLOUR="blue"
+user.NOISE="woof"
+user.SIZE="small"
+
+
+unmount the FS and see if EAs are persistent
+
+check the list again for foo.533 after umount/mount
+# file: TEST_DIR/foo.533
+user.COLOUR="blue"
+user.NOISE="woof"
+user.SIZE="small"
+
+
+remove the COLOUR EA on foo.533
+
+list EAs for foo.533: NOISE, SIZE
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+user.SIZE="small"
+
+
+get the value of the NOISE EA
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+
+
+get the value of the COLOUR EA which was removed earlier
+TEST_DIR/foo.533: user.COLOUR: No such attribute
+
+get the value of the SIZE EA
+# file: TEST_DIR/foo.533
+user.SIZE="small"
+
+
+list all the EAs again: NOISE, SIZE
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+user.SIZE="small"
+
+
+change the value of the SIZE EA from small to huge
+
+get the SIZE EA which should now have value huge
+# file: TEST_DIR/foo.533
+user.SIZE="huge"
+
+
+list EAs: NOISE, SIZE
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+user.SIZE="huge"
+
+
+remove the SIZE EA from foo.533
+
+list EAs: NOISE (SIZE EA has been removed)
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+
+
+try removing non-existent EA named woof
+setfattr: TEST_DIR/foo.533: No such attribute
+
+try removing already removed EA SIZE
+setfattr: TEST_DIR/foo.533: No such attribute
+
+list EAs: NOISE
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+
+
+try removing already removed EA COLOUR
+setfattr: TEST_DIR/foo.533: No such attribute
+
+list EAs: NOISE
+# file: TEST_DIR/foo.533
+user.NOISE="woof"
+
+
+remove remaining EA NOISE
+
+list EAs: should be no EAs left now
+
+unmount the FS and see if EAs are persistent
+
+list EAs: should still be no EAs left

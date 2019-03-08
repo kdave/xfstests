@@ -1,0 +1,143 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2017 Google, Inc.  All Rights Reserved.
+# Copyright (c) 2019 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 526.
+#
+# Simple attr smoke tests for user EAs, dereived from generic/097.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+file=$TEST_DIR/foo.$seq
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+getfattr()
+{
+	_getfattr --absolute-names "$@" |& _filter_test_dir
+}
+
+setfattr()
+{
+	$SETFATTR_PROG "$@" |& _filter_test_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+
+_require_test
+_require_attrs
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+echo -e "\ncreate file foo.$seq"
+rm -f $file
+touch $file
+
+echo -e "\nshould be no EAs for foo.$seq:"
+getfattr -d $file
+
+echo -e "\nset EA <NOISE,woof>:"
+setfattr -n user.NOISE -v woof $file
+
+echo -e "\nset EA <COLOUR,blue>:"
+setfattr -n user.COLOUR -v blue $file
+
+echo -e "\nset EA <SIZE,small>:"
+setfattr -n user.SIZE -v small $file
+
+echo -e "\nlist the EAs for foo.$seq: NOISE, COLOUR, SIZE"
+getfattr -d $file
+
+echo -e "\ncheck the list again for foo.$seq"
+getfattr -d $file
+
+echo -e "\nunmount the FS and see if EAs are persistent"
+_test_cycle_mount
+
+echo -e "\ncheck the list again for foo.$seq after umount/mount"
+getfattr -d $file
+
+echo -e "\nremove the COLOUR EA on foo.$seq"
+setfattr -x user.COLOUR $file
+
+echo -e "\nlist EAs for foo.$seq: NOISE, SIZE"
+getfattr -d $file
+
+echo -e "\nget the value of the NOISE EA"
+getfattr -n user.NOISE $file
+
+echo -e "\nget the value of the COLOUR EA which was removed earlier"
+getfattr -n user.COLOUR $file
+
+echo -e "\nget the value of the SIZE EA"
+getfattr -n user.SIZE $file
+
+echo -e "\nlist all the EAs again: NOISE, SIZE"
+getfattr -d $file
+
+echo -e "\nchange the value of the SIZE EA from small to huge"
+setfattr -n user.SIZE -v huge $file
+
+echo -e "\nget the SIZE EA which should now have value huge"
+getfattr -n user.SIZE $file
+
+echo -e "\nlist EAs: NOISE, SIZE"
+getfattr -d $file
+
+echo -e "\nremove the SIZE EA from foo.$seq"
+setfattr -x user.SIZE $file
+
+echo -e "\nlist EAs: NOISE (SIZE EA has been removed)"
+getfattr -d $file
+
+echo -e "\ntry removing non-existent EA named woof"
+setfattr -x user.WOOF $file
+
+echo -e "\ntry removing already removed EA SIZE"
+setfattr -x user.SIZE $file
+
+echo -e "\nlist EAs: NOISE"
+getfattr -d $file
+
+echo -e "\ntry removing already removed EA COLOUR"
+setfattr -x user.COLOUR $file
+
+echo -e "\nlist EAs: NOISE"
+getfattr -d $file
+
+echo -e "\nremove remaining EA NOISE"
+setfattr -x user.NOISE $file
+
+echo -e "\nlist EAs: should be no EAs left now"
+getfattr -d $file
+
+echo -e "\nunmount the FS and see if EAs are persistent"
+_test_cycle_mount
+
+echo -e "\nlist EAs: should still be no EAs left"
+getfattr -d $file
+
+# success, all done
+status=0
+exit
