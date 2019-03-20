@@ -69,18 +69,21 @@ do
 
 	# preallocate the first 64k and overwite, writing past 64k to contend
 	# with writeback
+	file_len=0x100000
 	$XFS_IO_PROG \
 		-c "falloc 0 0x10000"	\
-		-c "pwrite 0 0x100000"	\
+		-c "pwrite 0 $file_len"	\
 		-c "fsync"		\
 		$SCRATCH_MNT/file >> $seqres.full 2>&1
 
-	# Check for unwritten extents. We should have none since we wrote over
-	# the entire preallocated region and ran fsync.
-	$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/file | \
-		tee -a $seqres.full | \
-		_filter_fiemap | grep unwritten
-	[ $? == 0 ] && _fail "Unwritten extents found!"
+	# Check for unwritten extents. We should have none before EOF since we
+	# wrote over the entire preallocated region and ran fsync.
+	eof_sector=$(( file_len / 512 ))
+	$XFS_IO_PROG -c 'fiemap -v' $SCRATCH_MNT/file | \
+		_filter_fiemap | \
+		tr '[.]:' '    ' | \
+		awk "{if (\$2 < $eof_sector) {print \$0}}" | \
+		grep -q unwritten && _fail "Unwritten extents found!"
 done
 
 echo $iters iterations
