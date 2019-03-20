@@ -44,7 +44,7 @@ _crashtest()
 
 	# Create an fs on a small, initialized image. The pattern is written to
 	# the image to detect stale data exposure.
-	$XFS_IO_PROG -f -c "truncate 0" -c "pwrite 0 25M" $img \
+	$XFS_IO_PROG -f -c "truncate 0" -c "pwrite -S 0xCD 0 25M" $img \
 		>> $seqres.full 2>&1
 	_mkfs_dev $img >> $seqres.full 2>&1
 
@@ -61,8 +61,12 @@ _crashtest()
 	$UMOUNT_PROG $mnt
 	_mount $img $mnt
 
-	# we generally expect a zero-sized file (this should be silent)
-	hexdump $file
+	# We should /never/ see 0xCD in the file, because we wrote that pattern
+	# to the filesystem image to expose stale data.
+	if hexdump -v -e '/1 "%02X "' $file | grep -q "CD"; then
+		echo "Saw stale data!!!"
+		hexdump $file
+	fi
 
 	$UMOUNT_PROG $mnt
 }
