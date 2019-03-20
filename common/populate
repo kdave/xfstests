@@ -765,20 +765,14 @@ _fill_fs()
 	done
 }
 
-# Populate a scratch FS from scratch or from a cached image.
-_scratch_populate_cached() {
-	POPULATE_METADUMP="${TEST_DIR}/__populate.${FSTYP}"
-	POPULATE_METADUMP_DESCR="${TEST_DIR}/__populate.${FSTYP}.txt"
+# Compute the fs geometry description of a populated filesystem
+_scratch_populate_cache_tag() {
+	local extra_descr=""
+	local size="$(blockdev --getsz "${SCRATCH_DEV}")"
 
-	# Don't keep metadata images cached for more 48 hours...
-	rm -rf "$(find "${POPULATE_METADUMP}" -mtime +2 2>/dev/null)"
-
-	# Throw away cached image if it doesn't match our spec.
 	case "${FSTYP}" in
 	"ext4")
 		extra_descr="LOGDEV ${SCRATCH_LOGDEV} USE_EXTERNAL ${USE_EXTERNAL}"
-		# ext4 cannot e2image external logs, so we cannot restore
-		test -n "${SCRATCH_LOGDEV}" && rm -f "${POPULATE_METADUMP}"
 		;;
 	"xfs")
 		extra_descr="LOGDEV ${SCRATCH_LOGDEV} USE_EXTERNAL ${USE_EXTERNAL} RTDEV ${SCRATCH_RTDEV}"
@@ -787,23 +781,46 @@ _scratch_populate_cached() {
 			extra_descr="${extra_descr} QUOTAS"
 		fi
 		;;
-	*)
-		extra_descr="";;
 	esac
-	meta_descr="FSTYP ${FSTYP} MKFS_OPTIONS ${MKFS_OPTIONS} SIZE $(blockdev --getsz "${SCRATCH_DEV}") ${extra_descr} ARGS $@"
-	cmp -s "${POPULATE_METADUMP_DESCR}" <(echo "${meta_descr}") || rm -rf "${POPULATE_METADUMP}"
+	echo "FSTYP ${FSTYP} MKFS_OPTIONS ${MKFS_OPTIONS} SIZE ${size} ${extra_descr} ARGS $@"
+}
 
-	# Do we have a cached image?
-	if [ -r "${POPULATE_METADUMP}" ]; then
-		case "${FSTYP}" in
-		"xfs")
-			xfs_mdrestore "${POPULATE_METADUMP}" "${SCRATCH_DEV}" && return
-			;;
-		"ext2"|"ext3"|"ext4")
-			e2image -r "${POPULATE_METADUMP}" "${SCRATCH_DEV}" && return
-			;;
-		esac
-	fi
+# Restore a cached populated fs from a metadata dump
+_scratch_populate_restore_cached() {
+	local metadump="$1"
+
+	case "${FSTYP}" in
+	"xfs")
+		xfs_mdrestore "${metadump}" "${SCRATCH_DEV}" && return 0
+		;;
+	"ext2"|"ext3"|"ext4")
+		# ext4 cannot e2image external logs, so we cannot restore
+		test -n "${SCRATCH_LOGDEV}" && return 1
+		e2image -r "${metadump}" "${SCRATCH_DEV}" && return 0
+		;;
+	esac
+	return 1
+}
+
+# Populate a scratch FS from scratch or from a cached image.
+_scratch_populate_cached() {
+	local meta_descr="$(_scratch_populate_cache_tag "$@")"
+
+	# These variables are shared outside this function
+	POPULATE_METADUMP="${TEST_DIR}/__populate.${FSTYP}"
+	POPULATE_METADUMP_DESCR="${TEST_DIR}/__populate.${FSTYP}.txt"
+
+	# Don't keep metadata images cached for more 48 hours...
+	rm -rf "$(find "${POPULATE_METADUMP}" -mtime +2 2>/dev/null)"
+
+	# Throw away cached image if it doesn't match our spec.
+	cmp -s "${POPULATE_METADUMP_DESCR}" <(echo "${meta_descr}") || \
+		rm -rf "${POPULATE_METADUMP}"
+
+	# Try to restore from the metadump
+	test -r "${POPULATE_METADUMP}" && \
+		_scratch_populate_restore_cached "${POPULATE_METADUMP}" && \
+		return
 
 	# Oh well, just create one from scratch
 	_scratch_mkfs
