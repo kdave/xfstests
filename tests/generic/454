@@ -48,7 +48,12 @@ setf() {
 	key="$(echo -e "$1")"
 	value="$2"
 
-	$SETFATTR_PROG -n "user.${key}" -v "${value}" "${testfile}"
+	$SETFATTR_PROG -n "user.${key}" -v "${value}" "${testfile}" > $tmp.output 2>&1
+	if [ $? -ne 0 ]; then
+		grep -q 'No space left on device' $tmp.output && \
+			_notrun "ran out of space"
+		cat $tmp.output
+	fi
 	echo "Storing ${key} ($(hexbytes "${key}")) -> ${value}" >> $seqres.full
 }
 
