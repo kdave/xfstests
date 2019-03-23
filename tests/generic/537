@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 537
+#
+# Ensure that we can't call fstrim on filesystems mounted norecovery, because
+# FSTRIM implementations use free space metadata to drive the discard requests
+# and we told the filesystem not to make sure the metadata are up to date.
+#
+# The following patches fixed the bug on ext4, xfs and btrfs
+# ext4: prohibit fstrim in norecovery mode
+# xfs: prohibit fstrim in norecovery mode
+# Btrfs: do not allow trimming when a fs is mounted with the nologreplay option
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_scratch
+_require_fstrim
+
+rm -f $seqres.full
+
+_scratch_mkfs > $seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+
+echo "fstrim on regular mount"
+_scratch_mount >> $seqres.full 2>&1
+$FSTRIM_PROG -v $SCRATCH_MNT >> $seqres.full 2>&1 || \
+	_notrun "FSTRIM not supported"
+_scratch_unmount
+
+echo "fstrim on ro mount"
+_scratch_mount -o ro >> $seqres.full 2>&1
+$FSTRIM_PROG -v $SCRATCH_MNT >> $seqres.full 2>&1
+_scratch_unmount
+
+echo "fstrim on ro mount with no log replay"
+norecovery="norecovery"
+test $FSTYP = "btrfs" && norecovery=nologreplay
+_scratch_mount -o ro,$norecovery >> $seqres.full 2>&1
+$FSTRIM_PROG -v $SCRATCH_MNT >> $seqres.full 2>&1 && \
+	echo "fstrim with unrecovered metadata just ate your filesystem"
+_scratch_unmount
+
+# success, all done
+status=0
+exit
