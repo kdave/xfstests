@@ -1,0 +1,97 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 503
+#
+# Populate a XFS filesystem and ensure that metadump, mdrestore, and copy
+# all work properly.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.* $testdir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/populate
+
+testdir=$TEST_DIR/test-$seq
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+
+_require_scratch_nocheck
+_require_populate_commands
+
+echo "Format and populate"
+_scratch_populate_cached nofill > $seqres.full 2>&1
+
+mkdir -p $testdir
+metadump_file=$testdir/scratch.md
+metadump_file_a=${metadump_file}.a
+metadump_file_g=${metadump_file}.g
+metadump_file_ag=${metadump_file}.ag
+copy_file=$testdir/copy.img
+
+echo metadump
+_scratch_metadump $metadump_file >> $seqres.full
+
+echo metadump a
+_scratch_metadump $metadump_file_a -a >> $seqres.full
+
+echo metadump g
+_scratch_metadump $metadump_file_g -g >> $seqres.full
+
+echo metadump ag
+_scratch_metadump $metadump_file_ag -a -g >> $seqres.full
+
+echo copy
+$XFS_COPY_PROG $SCRATCH_DEV $copy_file >> $seqres.full
+_check_scratch_fs $copy_file
+
+echo recopy
+$XFS_COPY_PROG $copy_file $SCRATCH_DEV >> $seqres.full
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore
+xfs_mdrestore $metadump_file $SCRATCH_DEV
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore a
+xfs_mdrestore $metadump_file_a $SCRATCH_DEV
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore g
+xfs_mdrestore $metadump_file_g $SCRATCH_DEV
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore ag
+xfs_mdrestore $metadump_file_ag $SCRATCH_DEV
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+# success, all done
+status=0
+exit
