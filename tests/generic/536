@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 536
+#
+# Test a some write patterns for stale data exposure after a crash.  XFS is
+# historically susceptible to this problem in the window between delalloc to
+# physical extent conversion and writeback completion.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_scratch_shutdown
+
+# create a small fs and initialize free blocks with a unique pattern
+_scratch_mkfs_sized $((1024 * 1024 * 100)) >> $seqres.full 2>&1
+_scratch_mount
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 100m" -c fsync $SCRATCH_MNT/spc \
+	>> $seqres.full 2>&1
+rm -f $SCRATCH_MNT/spc
+$XFS_IO_PROG -c fsync $SCRATCH_MNT
+
+# Write a couple files with particular writeback sequences. The first writes a
+# delalloc extent and triggers writeback on the last page. The second triggers
+# post-eof preallocation (on XFS), write extends into the preallocation and
+# triggers writeback of the last written page.
+$XFS_IO_PROG -fc "pwrite 0 256k" -c "sync_range -w 252k 4k" \
+	-c "sync_range -a 252k 4k" $SCRATCH_MNT/file.1 >> $seqres.full 2>&1
+$XFS_IO_PROG -fc "pwrite 0 260k" -c fsync -c "pwrite 1536k 4k" \
+	-c "sync_range -w 1536k 4k" -c "sync_range -a 1536k 4k" \
+	$SCRATCH_MNT/file.2 >> $seqres.full 2>&1
+
+# Shut down before any other writeback completes. Flush the log to persist inode
+# size updates.
+_scratch_shutdown -f
+
+# Now search both files for stale bytes. The region prior to the last page in
+# the first file should be zero filled. The region between the two writes to the
+# second file should also be zero filled.
+_scratch_cycle_mount
+echo file.1 | tee -a $seqres.full
+hexdump $SCRATCH_MNT/file.1 | tee -a $seqres.full | grep ab
+echo file.2 | tee -a $seqres.full
+hexdump $SCRATCH_MNT/file.2 | tee -a $seqres.full | grep ab
+
+status=0
+exit
