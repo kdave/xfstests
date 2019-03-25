@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 SUSE LLC. All Rights Reserved.
+#
+# FS QA Test 184
+#
+# Verify that when a device is removed from a multi-device
+# filesystem its superblock copies are correctly deleted
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_scratch_dev_pool 2
+_require_btrfs_command inspect-internal dump-super
+
+_scratch_dev_pool_get 2
+
+# Explicitly use raid0 mode to ensure at least one of the devices can be
+# removed.
+_scratch_pool_mkfs "-d raid0 -m raid0" >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# pick last dev in the list
+dev_del=`echo ${SCRATCH_DEV_POOL} | awk '{print $NF}'`
+$BTRFS_UTIL_PROG device delete $dev_del $SCRATCH_MNT || _fail "btrfs device delete failed"
+for i in {0..2}; do
+	output=$($BTRFS_UTIL_PROG inspect-internal dump-super -s $i $dev_del 2>&1)
+	$BTRFS_UTIL_PROG inspect-internal dump-super -s $i $dev_del 2>&1 | grep -q "bad magic"
+	ret=$?
+	if [[ "$output" != "" && $ret -eq 1 ]]; then
+		_fail "Deleted dev superblocks not scratched"
+	fi
+done
+_scratch_unmount
+
+_scratch_dev_pool_put
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
