@@ -1482,7 +1482,8 @@ test_dedupe_range(void)
 	else
 		error = 0;
 
-	if (error == EOPNOTSUPP || error == ENOTTY) {
+	/* Older kernels may return EINVAL... */
+	if (error == EOPNOTSUPP || error == ENOTTY || error == EINVAL) {
 		if (!quiet)
 			fprintf(stderr,
 				"main: filesystem does not support "
