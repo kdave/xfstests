@@ -1,0 +1,95 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 538
+#
+# Non-block-aligned direct AIO write test with an initial truncate i_size.
+#
+# Uncover "ext4: Fix data corruption caused by unaligned direct AIO":
+# (Ext4 needs to serialize unaligned direct AIO because the zeroing of
+# partial blocks of two competing unaligned AIOs can result in data
+# corruption.
+#
+# However it decides not to serialize if the potentially unaligned aio is
+# past i_size with the rationale that no pending writes are possible past
+# i_size. Unfortunately if the i_size is not block aligned and the second
+# unaligned write lands past i_size, but still into the same block, it has
+# the potential of corrupting the previous unaligned write to the same
+# block.)
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_aiodio aio-dio-write-verify
+
+localfile=$TEST_DIR/${seq}-aio-dio-write-verify-testfile
+diosize=`_min_dio_alignment $TEST_DEV`
+blocksize=`_get_block_size $TEST_DIR`
+bufsize=$((blocksize * 2))
+truncsize=$((bufsize+diosize))
+
+# Need smaller logical block size to do non-block-aligned test
+if [ $diosize -ge $blocksize ];then
+	_notrun "Need device logical block size($diosize) < fs block size($blocksize)"
+fi
+
+rm -rf $localfile 2>/dev/null
+# block-aligned aiodio write verification at first
+$AIO_TEST -a size=$bufsize,off=0 -a size=$bufsize,off=$bufsize $localfile
+
+# non-block-aligned aiodio write verification
+#          **************** **************** ****************
+#          *   block 1&2  * *  block 3&4   * *  block 5&6   *
+#          **************** **************** ****************
+# existing 0000000000000000 0000000000000000 0000000000000000
+# truncate ---------------->|
+# write 1   ZZZZZZZZZZZZZZZ Z
+# write 2  |<----            ZZZZZZZZZZZZZZZ Z ---->|
+#
+# "Write 1" writes 2 blocks data at off=$diosize.
+# "Write 2" seeks from 0 to "Write 1" end + block size, shift $diosize bytes each
+# time, writes 2 blocksize data too.
+# Verify there's not corruption each time.
+i=0
+while [ $((diosize * i)) -lt $((diosize + bufsize + blocksize)) ];do
+	position=$((diosize * i++))
+	# non-block-aligned AIO write on different i_size file
+	$AIO_TEST -t $truncsize -a size=$bufsize,off=$diosize \
+		  -a size=$bufsize,off=$position \
+		  $localfile
+	if [ $? -ne 0 ];then
+		echo "FAIL: [$truncsize, $bufsize, $diosize, $position]"
+		echo "-------------------------------------------------"
+	fi
+	rm -f $localfile
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
