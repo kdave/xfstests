@@ -17,6 +17,21 @@ dev_removed=0
 removed_dev_htl=""
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
+# Check if all scratch dev pools are deletable
+deletable_scratch_dev_pool()
+{
+	local i
+	local x
+	for i in $SCRATCH_DEV_POOL; do
+		x=`echo $i | cut -d"/" -f 3`
+		if [ ! -f /sys/class/block/${x}/device/delete ]; then
+			return 1
+		fi
+	done
+
+	return 0
+}
+
 _cleanup()
 {
     cd /
@@ -35,7 +50,6 @@ _supported_fs btrfs
 _supported_os Linux
 _require_scratch
 _require_scratch_dev_pool 4
-_require_deletable_scratch_dev_pool
 _require_command "$WIPEFS_PROG" wipefs
 
 rm -f $seqres.full
@@ -110,6 +124,9 @@ _test_replace()
 	local n=${#devs[@]}
 	local ds
 	local d
+
+	# If scratch devs are not deletable skip this test
+	if ! deletable_scratch_dev_pool; then return 0; fi
 
 	# exclude the first and the last disk in the disk pool
 	n=$(($n-1))
