@@ -2298,6 +2298,53 @@ _ext4_disable_extent_zeroout()
 		echo 0 >/sys/fs/ext4/$sdev/extent_max_zeroout_kb
 }
 
+# The default behavior of SEEK_HOLE is to always return EOF.
+# Filesystems that implement non-default behavior return the offset
+# of holes with SEEK_HOLE. There is no way to query the filesystem
+# of which behavior it is implementing.
+# We use this whitelist FSTYP, to set expectation and avoid silent
+# regression of filesystem seek hole behavior.
+#
+# Return 0 for true
+_fstyp_has_non_default_seek_data_hole()
+{
+	if [ -z $1 ]; then
+		local fstyp=$FSTYP
+	else
+		local fstyp=$1
+	fi
+
+	case "$fstyp" in
+	btrfs|ext4|xfs|ceph|cifs|f2fs|gfs2|nfs*|ocfs2|tmpfs)
+		return 0
+		;;
+	overlay)
+		if [ ! -z $OVL_BASE_FSTYP -a $OVL_BASE_FSTYP != "overlay" ]; then
+			_fstyp_has_non_default_seek_data_hole $OVL_BASE_FSTYP
+			return $?
+		else
+			# Assume that base fs has default behavior
+			return 1
+		fi
+		;;
+	*)
+		# by default fstyp has default SEEK_HOLE behavior;
+		# if your fs has non-default behavior, add it to whitelist above!
+		return 1
+		;;
+	esac
+}
+
+# Run seek sanity test with predefined expectation for SEEK_DATA/HOLE behavior
+_run_seek_sanity_test()
+{
+	local testseekargs
+	if _fstyp_has_non_default_seek_data_hole; then
+		testseekargs+="-f"
+	fi
+	$here/src/seek_sanity_test $testseekargs $*
+}
+
 # Check if the file system supports seek_data/hole
 _require_seek_data_hole()
 {

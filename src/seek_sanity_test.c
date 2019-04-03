@@ -23,6 +23,7 @@
 #endif
 
 static blksize_t alloc_size;
+int allow_default_behavior = 1;
 int default_behavior = 0;
 int unwritten_extents = 0;
 char *base_file_path;
@@ -1119,6 +1120,12 @@ static int test_basic_support(void)
 		fprintf(stderr, "File system supports the default behavior.\n");
 	}
 
+	if (default_behavior && !allow_default_behavior) {
+		fprintf(stderr, "Default behavior is not allowed. Aborting.\n");
+		ret = -1;
+		goto out;
+	}
+
 	ftruncate(fd, 0);
 	if (fallocate(fd, 0, 0, alloc_size) == -1) {
 		if (errno == EOPNOTSUPP)
@@ -1148,7 +1155,7 @@ out:
 
 void usage(char *cmd)
 {
-	fprintf(stdout, "Usage: %s [-t] [-s <starttest>] [-e <endtest>] base_file_path\n", cmd);
+	fprintf(stdout, "Usage: %s [-tf] [-s <starttest>] [-e <endtest>] base_file_path\n", cmd);
 	exit(1);
 }
 
@@ -1169,10 +1176,13 @@ int main(int argc, char **argv)
 	teststart = 1;
 	testend = 12;
 
-	while ((opt = getopt(argc, argv, "ts:e:")) != -1) {
+	while ((opt = getopt(argc, argv, "tfs:e:")) != -1) {
 		switch (opt) {
 		case 't':
 			check_support++;
+			break;
+		case 'f':
+			allow_default_behavior = 0;
 			break;
 		case 's':
 			teststart = strtol(optarg, NULL, 10);
