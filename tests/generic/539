@@ -1,0 +1,46 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019, CTERA Networks.  All Rights Reserved.
+#
+# FS QA Test No. 539
+#
+# Check that SEEK_HOLE can find a punched hole.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+
+_supported_fs generic
+_supported_os Linux
+
+_require_test
+_require_seek_data_hole
+_require_xfs_io_command "fpunch"
+
+base_test_file=$TEST_DIR/seek_sanity_testfile.$seq
+
+_require_test_program "seek_sanity_test"
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $base_test_file*
+}
+
+echo "Silence is golden"
+
+_run_seek_sanity_test -s 21 -e 21 $base_test_file > $seqres.full 2>&1 ||
+	_fail "seek sanity check failed!"
+
+# success, all done
+status=0
+exit

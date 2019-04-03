@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
+#include "global.h"
 
 #ifndef SEEK_DATA
 #define SEEK_DATA      3
@@ -26,6 +27,7 @@ static blksize_t alloc_size;
 int allow_default_behavior = 1;
 int default_behavior = 0;
 int unwritten_extents = 0;
+int punch_hole = 0;
 char *base_file_path;
 
 static void get_file_system(int fd)
@@ -118,8 +120,9 @@ static int do_fallocate(int fd, off_t offset, off_t length, int mode)
 
 	ret = fallocate(fd, mode, offset, length);
 	if (ret)
-		fprintf(stderr, "  ERROR %d: Failed to preallocate "
-			"space to %ld bytes\n", errno, (long) length);
+		fprintf(stderr, "  ERROR %d: Failed to %s of %ld bytes\n",
+			errno, (mode & FALLOC_FL_PUNCH_HOLE) ? "punch hole" :
+			"preallocate space", (long) length);
 
 	return ret;
 }
@@ -259,6 +262,52 @@ static int huge_file_test(int fd, int testnum, off_t filsz)
 
 out:
 	do_free(buf);
+	return ret;
+}
+
+/*
+ * Make sure hole size is properly reported when punched in the middle of a file
+ */
+static int test21(int fd, int testnum)
+{
+	char *buf = NULL;
+	int bufsz, filsz;
+	int ret = 0;
+
+	if (!punch_hole) {
+		fprintf(stdout, "Test skipped as fs doesn't support punch hole.\n");
+		goto out;
+	}
+
+	if (default_behavior) {
+		fprintf(stdout, "Test skipped as fs doesn't support seeking a punched hole.\n");
+		goto out;
+	}
+
+	bufsz = alloc_size * 3;
+	buf = do_malloc(bufsz);
+	if (!buf) {
+		ret = -1;
+		goto out;
+	}
+	memset(buf, 'a', bufsz);
+
+	ret = do_pwrite(fd, buf, bufsz, 0);
+	if (ret)
+		goto out;
+
+	filsz = bufsz;
+	ret = do_fallocate(fd, alloc_size, alloc_size,
+			   FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE);
+	if (ret < 0)
+		goto out;
+
+	ret += do_lseek(testnum, 1, fd, filsz, SEEK_DATA, 0, 0);
+	ret += do_lseek(testnum, 2, fd, filsz, SEEK_HOLE, 0, alloc_size);
+	ret += do_lseek(testnum, 3, fd, filsz, SEEK_DATA, alloc_size, alloc_size * 2);
+out:
+	if (buf)
+		free(buf);
 	return ret;
 }
 
@@ -1050,6 +1099,7 @@ struct testrec seek_tests[] = {
        { 18, test18, "Test file with negative SEEK_{HOLE,DATA} offsets" },
        { 19, test19, "Test file SEEK_DATA from middle of a large hole" },
        { 20, test20, "Test file SEEK_DATA from middle of a huge hole" },
+       { 21, test21, "Test file SEEK_HOLE that was created by PUNCH_HOLE" },
 };
 
 static int run_test(struct testrec *tr)
@@ -1127,15 +1177,20 @@ static int test_basic_support(void)
 	}
 
 	ftruncate(fd, 0);
-	if (fallocate(fd, 0, 0, alloc_size) == -1) {
+	if (fallocate(fd, 0, 0, alloc_size * 2) == -1) {
 		if (errno == EOPNOTSUPP)
-			fprintf(stderr, "File system does not support fallocate.");
+			fprintf(stderr, "File system does not support fallocate.\n");
 		else {
 			fprintf(stderr, "ERROR %d: Failed to preallocate "
 				"space to %ld bytes. Aborting.\n", errno, (long) alloc_size);
 			ret = -1;
 		}
 		goto out;
+	} else if (fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+			     0, alloc_size) == -1) {
+		fprintf(stderr, "File system does not support punch hole.\n");
+	} else {
+		punch_hole = 1;
 	}
 
 	pos = lseek(fd, 0, SEEK_DATA);
