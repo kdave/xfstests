@@ -1395,8 +1395,8 @@ open_file_or_dir(pathname_t *name, int flags)
 		return fd;
 	if (fd == -1 && errno != EISDIR)
 		return fd;
-	/* Directories can not be opened in write mode. */
-	flags &= ~O_WRONLY;
+	/* Directories can not be opened in write mode nor direct mode. */
+	flags &= ~(O_WRONLY | O_DIRECT);
 	flags |= O_RDONLY | O_DIRECTORY;
 	return open_path(name, flags);
 }
@@ -1774,13 +1774,13 @@ afsync_f(int opno, long r)
 	struct io_event	event;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
+	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, NULL, &v)) {
 		if (v)
 			printf("%d/%d: afsync - no filename\n", procid, opno);
 		free_pathname(&f);
 		return;
 	}
-	fd = open_path(&f, O_WRONLY | O_DIRECT);
+	fd = open_file_or_dir(&f, O_WRONLY | O_DIRECT);
 	e = fd < 0 ? errno : 0;
 	check_cwd();
 	if (fd < 0) {
