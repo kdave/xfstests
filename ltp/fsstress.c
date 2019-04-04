@@ -324,6 +324,7 @@ void	make_freq_table(void);
 int	mkdir_path(pathname_t *, mode_t);
 int	mknod_path(pathname_t *, mode_t, dev_t);
 void	namerandpad(int, char *, int);
+int	open_file_or_dir(pathname_t *, int);
 int	open_path(pathname_t *, int);
 DIR	*opendir_path(pathname_t *);
 void	process_freq(char *);
@@ -1382,6 +1383,22 @@ namerandpad(int id, char *buf, int i)
 		memset(&buf[i], 'X', padlen);
 		buf[i + padlen] = '\0';
 	}
+}
+
+int
+open_file_or_dir(pathname_t *name, int flags)
+{
+	int fd;
+
+	fd = open_path(name, flags);
+	if (fd != -1)
+		return fd;
+	if (fd == -1 && errno != EISDIR)
+		return fd;
+	/* Directories can not be opened in write mode. */
+	flags &= ~O_WRONLY;
+	flags |= O_RDONLY | O_DIRECTORY;
+	return open_path(name, flags);
 }
 
 int
@@ -3455,13 +3472,13 @@ fsync_f(int opno, long r)
 	int		v;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
+	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, NULL, &v)) {
 		if (v)
 			printf("%d/%d: fsync - no filename\n", procid, opno);
 		free_pathname(&f);
 		return;
 	}
-	fd = open_path(&f, O_WRONLY);
+	fd = open_file_or_dir(&f, O_WRONLY);
 	e = fd < 0 ? errno : 0;
 	check_cwd();
 	if (fd < 0) {
