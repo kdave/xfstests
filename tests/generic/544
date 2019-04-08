@@ -1,0 +1,197 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 544
+#
+# Ensure that we can reflink from a file with a higher inode number to a lower
+# inode number and vice versa.  Mix it up by doing this test with inodes that
+# already share blocks and inodes that don't share blocks.  This tests both
+# double-inode locking order correctness as well as stressing things like ocfs2
+# which have per-inode sharing groups and therefore have to check that we don't
+# try to link data between disjoint sharing groups.
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_scratch_reflink
+_require_cp_reflink
+
+rm -f $seqres.full
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+blksz=65536
+nr=2
+filesize=$((blksz * nr))
+testdir=$SCRATCH_MNT/test-$seq
+dummy_file=$testdir/dummy
+low_file=$testdir/low
+high_file=$testdir/high
+scenario=1
+mkdir $testdir
+
+# Return inode number
+inum() {
+	stat -c '%i' $1
+}
+
+# Create two test files, make $low_file the file with the lower inode
+# number, and make $high_file the file with the higher inode number.
+create_files() {
+	_pwrite_byte 0x60 0 $filesize $testdir/file1 >> $seqres.full
+	_pwrite_byte 0x61 0 $filesize $testdir/file2 >> $seqres.full
+	if [ "$(inum $testdir/file1)" -lt "$(inum $testdir/file2)" ]; then
+		mv $testdir/file1 $low_file
+		mv $testdir/file2 $high_file
+	else
+		mv $testdir/file2 $low_file
+		mv $testdir/file1 $high_file
+	fi
+}
+
+# Check md5sum of both files, but keep results sorted by inode order
+check_files() {
+	md5sum $low_file | _filter_scratch
+	md5sum $high_file | _filter_scratch
+}
+
+# Test reflinking data from the first file to the second file
+test_files() {
+	local src="$1"
+	local dest="$2"
+	local off=$((filesize / 2))
+	local sz=$((filesize / 2))
+
+	check_files
+	_reflink_range $src $off $dest $off $sz >> $seqres.full
+	_scratch_cycle_mount
+	check_files
+}
+
+# Make a file shared with a dummy file
+dummy_share() {
+	local which="$2"
+	test -z "$which" && which=1
+	local dummy=$dummy_file.$which
+
+	rm -f $dummy
+	_cp_reflink $1 $dummy
+}
+
+# Make two files share (different ranges) with a dummy file
+mutual_dummy_share() {
+	rm -f $dummy_file
+	_cp_reflink $1 $dummy_file
+	_reflink_range $2 0 $dummy_file $blksz $blksz >> $seqres.full
+}
+
+# Announce ourselves, remembering which scenario we've tried
+ann() {
+	echo "$scenario: $@" | tee -a $seqres.full
+	scenario=$((scenario + 1))
+}
+
+# Scenario 1: low to high, neither file shares
+ann "low to high, neither share"
+create_files
+test_files $low_file $high_file
+
+# Scenario 2: high to low, neither file shares
+ann "high to low, neither share"
+create_files
+test_files $high_file $low_file
+
+# Scenario 3: low to high, only source file shares
+ann "low to high, only source shares"
+create_files
+dummy_share $low_file
+test_files $low_file $high_file
+
+# Scenario 4: high to low, only source file shares
+ann "high to low, only source shares"
+create_files
+dummy_share $high_file
+test_files $high_file $low_file
+
+# Scenario 5: low to high, only dest file shares
+ann "low to high, only dest shares"
+create_files
+dummy_share $high_file
+test_files $low_file $high_file
+
+# Scenario 6: high to low, only dest file shares
+ann "high to low, only dest shares"
+create_files
+dummy_share $low_file
+test_files $high_file $low_file
+
+# Scenario 7: low to high, both files share with each other
+ann "low to high, both files share with each other"
+create_files
+_reflink_range $low_file 0 $high_file 0 $blksz >> $seqres.full
+test_files $low_file $high_file
+
+# Scenario 8: high to low, both files share with each other
+ann "high to low, both files share with each other"
+create_files
+_reflink_range $low_file 0 $high_file 0 $blksz >> $seqres.full
+test_files $high_file $low_file
+
+# Scenario 9: low to high, both files share but not with each other
+ann "low to high, both files share but not with each other"
+create_files
+# ocfs2 can only reflink between files sharing a refcount tree, so for
+# this test (and #10) we skip the dummy file because we'd rather not split
+# the test code just to mask off the /one/ weird fs like this...
+if _supports_arbitrary_fileset_reflink; then
+	dummy_share $low_file 1
+	dummy_share $high_file 2
+fi
+test_files $low_file $high_file
+
+# Scenario 10: high to low, both files share but not with each other
+ann "high to low, both files share but not with each other"
+create_files
+if _supports_arbitrary_fileset_reflink; then
+	dummy_share $low_file 1
+	dummy_share $high_file 2
+fi
+test_files $high_file $low_file
+
+# Scenario 11: low to high, both files share mutually
+ann "low to high, both files share mutually"
+create_files
+mutual_dummy_share $low_file $high_file
+test_files $low_file $high_file
+
+# Scenario 12: high to low, both files share mutually
+ann "high to low, both files share mutually"
+create_files
+mutual_dummy_share $low_file $high_file
+test_files $high_file $low_file
+
+# success, all done
+status=0
+exit
