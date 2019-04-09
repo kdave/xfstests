@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/xattr.h>
+#include <endian.h>
 
 void die(const char *msg)
 {
@@ -52,13 +53,14 @@ struct myacl {
 
 int main(int argc, char *argv[])
 {
+	/* posix_acl_xattr_entry/header need little-endian order */
 	struct myacl acl = {
-		.d = 2,
+		.d = htole32(2),
 		.e = {
-			{1, 0, 0},
-			{4, 0, 0},
-			{0x10, 0, 0},
-			{0x20, 0, 0},
+			{htole16(1), 0, 0},
+			{htole16(4), 0, 0},
+			{htole16(0x10), 0, 0},
+			{htole16(0x20), 0, 0},
 		},
 	};
 	char buf[64];
