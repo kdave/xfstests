@@ -54,6 +54,10 @@ test_enforcement()
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now try to overcome block hardlimit
+	# Reset grace time here due to the repquota will invoke Q_SYNC on
+	# old quota which may be time consuming on the low speed or busy
+	# scratch device that may leed to grace time exceed.
+	setquota -$type $qa_user -T $grace $grace $SCRATCH_MNT 2>/dev/null
 	echo "Write 250 blocks..."
 	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE))' -c fsync \
 		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | \
@@ -75,6 +79,10 @@ test_enforcement()
 		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Try to exceed inode hardlimit
+	# Reset grace time here due to the repquota will invoke Q_SYNC on
+	# old quota which may be time consuming on the low speed or busy
+	# scratch device that may leed to grace time exceed.
+	setquota -$type $qa_user -T $grace $grace $SCRATCH_MNT 2>/dev/null
 	echo "Touch 5+6"
 	su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
 		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
