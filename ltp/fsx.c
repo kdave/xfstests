@@ -1364,7 +1364,7 @@ test_clone_range(void)
 	};
 
 	if (ioctl(fd, FICLONERANGE, &fcr) &&
-	    (errno = EOPNOTSUPP || errno == ENOTTY)) {
+	    (errno == EOPNOTSUPP || errno == ENOTTY)) {
 		if (!quiet)
 			fprintf(stderr,
 				"main: filesystem does not support "
@@ -1581,9 +1581,9 @@ do_dedupe_range(unsigned offset, unsigned length, unsigned dest)
 int
 test_copy_range(void)
 {
-	loff_t o1 = 0, o2 = 0;
+	loff_t o1 = 0, o2 = 1;
 
-	if (syscall(__NR_copy_file_range, fd, &o1, fd, &o2, 0, 0) == -1 &&
+	if (syscall(__NR_copy_file_range, fd, &o1, fd, &o2, 1, 0) == -1 &&
 	    (errno == ENOSYS || errno == EOPNOTSUPP || errno == ENOTTY)) {
 		if (!quiet)
 			fprintf(stderr,
