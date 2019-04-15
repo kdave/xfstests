@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 186
+#
+# Test that if we have a subvolume/snapshot that is writable, has a file with
+# unflushed delalloc (buffered writes not yet flushed), turn the subvolume to
+# readonly mode and then use it for send a operation, the send stream will
+# contain the delalloc data - that is, no data loss happens.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -fr $send_files_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_test
+_require_scratch
+_require_btrfs_command "property"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our test subvolume.
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/sv | _filter_scratch
+
+# Create our test file with some delalloc data.
+$XFS_IO_PROG -f -c "pwrite -S 0xea 0 108K" $SCRATCH_MNT/sv/foo | _filter_xfs_io
+
+# Turn our subvolume to RO so that it can be used for a send operation.
+$BTRFS_UTIL_PROG property set $SCRATCH_MNT/sv ro true
+
+# Create the send stream.
+$BTRFS_UTIL_PROG send -f $send_files_dir/sv.send $SCRATCH_MNT/sv 2>&1 \
+    | _filter_scratch
+
+echo "File content in the original filesystem:"
+od -t x1 -A d $SCRATCH_MNT/sv/foo
+
+# Recreate the filesystem and apply the send stream and verify no data was lost.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/sv.send $SCRATCH_MNT
+
+echo "File content in the new filesystem:"
+od -t x1 -A d $SCRATCH_MNT/sv/foo
+
+status=0
+exit
