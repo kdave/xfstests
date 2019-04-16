@@ -483,9 +483,8 @@ _check_filesystems()
 	if [ -f ${RESULT_DIR}/require_scratch ]; then
 		_check_scratch_fs || err=true
 		rm -f ${RESULT_DIR}/require_scratch*
-	else
-		_scratch_unmount 2> /dev/null
 	fi
+	_scratch_unmount 2> /dev/null
 }
 
 _expunge_test()
@@ -625,6 +624,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 	      echo "check: failed to mount \$SCRATCH_DEV using specified options"
 	      status=1
 	      exit
+	  else
+	      _scratch_unmount
 	  fi
 	fi
 
@@ -737,6 +738,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			# _check_dmesg depends on this log in dmesg
 			touch ${RESULT_DIR}/check_dmesg
 		fi
+		_try_wipe_scratch_devs > /dev/null 2>&1
 		if [ "$DUMP_OUTPUT" = true ]; then
 			./$seq 2>&1 | tee $tmp.out
 			# Because $? would get tee's return code
