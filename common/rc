@@ -3497,6 +3497,16 @@ _check_dmesg_for()
 	_dmesg_since_test_start | egrep -q "$1"
 }
 
+# Default filter for dmesg scanning.
+# Ignore lockdep complaining about its own bugginess when scanning dmesg
+# output, because we shouldn't be failing filesystem tests on account of
+# lockdep.
+_check_dmesg_filter()
+{
+	egrep -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
+		-e "BUG: MAX_STACK_TRACE_ENTRIES too low"
+}
+
 # check dmesg log for WARNING/Oops/etc.
 _check_dmesg()
 {
@@ -3508,7 +3518,7 @@ _check_dmesg()
 	# default filter is a simple cat command, caller could provide a
 	# customized filter and pass the name through the first argument, to
 	# filter out intentional WARNINGs or Oopses
-	local filter=${1:-cat}
+	local filter=${1:-_check_dmesg_filter}
 
 	_dmesg_since_test_start | $filter >$seqres.dmesg
 	egrep -q -e "kernel BUG at" \
