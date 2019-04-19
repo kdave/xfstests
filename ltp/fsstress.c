@@ -82,6 +82,7 @@ typedef enum {
 	OP_READ,
 	OP_READLINK,
 	OP_READV,
+	OP_REMOVEFATTR,
 	OP_RENAME,
 	OP_RESVSP,
 	OP_RMDIR,
@@ -198,6 +199,7 @@ void	insert_f(int, long);
 void	read_f(int, long);
 void	readlink_f(int, long);
 void	readv_f(int, long);
+void	removefattr_f(int, long);
 void	rename_f(int, long);
 void	resvsp_f(int, long);
 void	rmdir_f(int, long);
@@ -253,6 +255,8 @@ opdesc_t	ops[] = {
 	{ OP_READ, "read", read_f, 1, 0 },
 	{ OP_READLINK, "readlink", readlink_f, 1, 0 },
 	{ OP_READV, "readv", readv_f, 1, 0 },
+	/* remove (delete) extended attribute */
+	{ OP_REMOVEFATTR, "removefattr", removefattr_f, 1, 1 },
 	{ OP_RENAME, "rename", rename_f, 2, 1 },
 	{ OP_RESVSP, "resvsp", resvsp_f, 1, 1 },
 	{ OP_RMDIR, "rmdir", rmdir_f, 1, 1 },
@@ -4112,6 +4116,49 @@ readv_f(int opno, long r)
 		       iovcnt, e);
 	free_pathname(&f);
 	close(fd);
+}
+
+void
+removefattr_f(int opno, long r)
+{
+	fent_t	        *fep;
+	int		e;
+	pathname_t	f;
+	int		v;
+	char            name[XATTR_NAME_BUF_SIZE];
+	int             xattr_num;
+
+	init_pathname(&f);
+	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, &fep, &v)) {
+		if (v)
+			printf("%d/%d: removefattr - no filename\n", procid, opno);
+		goto out;
+	}
+	check_cwd();
+
+	/*
+	 * If the file/dir has xattrs, pick one randomly, otherwise attempt to
+	 * remove a xattr that doesn't exist (fremovexattr should fail with
+	 * errno set to ENOATTR (61) in this case).
+	 */
+	if (fep->xattr_counter > 0)
+		xattr_num = (random() % fep->xattr_counter) + 1;
+	else
+		xattr_num = 0;
+
+	e = generate_xattr_name(xattr_num, name, sizeof(name));
+	if (e < 0) {
+		printf("%d/%d: removefattr - file %s failed to generate xattr name: %d\n",
+		       procid, opno, f.path, e);
+		goto out;
+	}
+
+	e = removexattr(f.path, name) < 0 ? errno : 0;
+	if (v)
+		printf("%d/%d: removefattr file %s name %s %d\n",
+		       procid, opno, f.path, name, e);
+out:
+	free_pathname(&f);
 }
 
 void
