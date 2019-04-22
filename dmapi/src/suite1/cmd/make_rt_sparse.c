@@ -36,7 +36,7 @@ main(
 	int	argc,
 	char	**argv)
 {
-	xfs_fsop_geom_t	geom;
+	struct  xfs_fsop_geom	geom;
 	struct	fsxattr	fsx;
 	struct	dioattr	dio;
 	char	*pathname;

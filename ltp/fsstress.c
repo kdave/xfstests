@@ -294,7 +294,7 @@ int		errrange;
 int		errtag;
 opty_t		*freq_table;
 int		freq_table_size;
-xfs_fsop_geom_t	geom;
+struct xfs_fsop_geom	geom;
 char		*homedir;
 int		*ilist;
 int		ilistlen;
