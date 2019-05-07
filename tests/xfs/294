@@ -70,13 +70,14 @@ for I in `seq 1 100`; do
 	touch $SCRATCH_MNT/testdir/12345678901234567890$I;
 done
 
-# Now completely fragment freespace.
-# Consume most of it:
-$XFS_IO_PROG -f -c "falloc 0 400m" $SCRATCH_MNT/fillfile ||
-	_fail "Could not allocate space"
-
 # File to fragment:
 $XFS_IO_PROG -f -c "falloc 0 70m" $SCRATCH_MNT/fragfile ||
+	_fail "Could not allocate space"
+
+# Now completely fragment freespace.
+# Consume most of it:
+space=$(stat -f -c '%f * %S * 95 / 100' $SCRATCH_MNT | $BC_PROG)
+$XFS_IO_PROG -f -c "falloc 0 $space" $SCRATCH_MNT/fillfile ||
 	_fail "Could not allocate space"
 
 df -h $SCRATCH_MNT >> $seqres.full 2>&1
