@@ -77,6 +77,42 @@ _scratch_mkfs_xfs_supported()
 	return $mkfs_status
 }
 
+# Returns the minimum XFS log size, in units of log blocks.
+_scratch_find_xfs_min_logblocks()
+{
+	local mkfs_cmd="`_scratch_mkfs_xfs_opts`"
+
+	# The smallest log size we can specify is 2M (XFS_MIN_LOG_BYTES) so
+	# pass that in and see if mkfs succeeds or tells us what is the
+	# minimum log size.
+	local XFS_MIN_LOG_BYTES=2097152
+
+	_scratch_do_mkfs "$mkfs_cmd" "cat" $* -N -l size=$XFS_MIN_LOG_BYTES \
+		2>$tmp.mkfserr 1>$tmp.mkfsstd
+	local mkfs_status=$?
+
+	# mkfs suceeded, so we must pick out the log block size to do the
+	# unit conversion
+	if [ $mkfs_status -eq 0 ]; then
+		local blksz="$(grep '^log.*bsize' $tmp.mkfsstd | \
+			sed -e 's/log.*bsize=\([0-9]*\).*$/\1/g')"
+		echo $((XFS_MIN_LOG_BYTES / blksz))
+		return
+	fi
+
+	# Usually mkfs will tell us the minimum log size...
+	if grep -q 'minimum size is' $tmp.mkfserr; then
+		grep 'minimum size is' $tmp.mkfserr | \
+			sed -e 's/^.*minimum size is \([0-9]*\) blocks/\1/g'
+		return
+	fi
+
+	# Don't know what to do, so fail
+	echo "Cannot determine minimum log size" >&2
+	cat $tmp.mkfsstd >> $seqres.full
+	cat $tmp.mkfserr >> $seqres.full
+}
+
 _scratch_mkfs_xfs()
 {
 	local mkfs_cmd="`_scratch_mkfs_xfs_opts`"

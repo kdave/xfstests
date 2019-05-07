@@ -36,7 +36,8 @@ _require_attrs
 
 rm -f $seqres.full
 
-_scratch_mkfs -l size=2560b >/dev/null 2>&1
+logblks=$(_scratch_find_xfs_min_logblocks)
+_scratch_mkfs -l size=${logblks}b >/dev/null 2>&1
 
 # Should yield a multiply-logged inode, thanks to xattr
 # Old logprint says this, then coredumps:
@@ -53,7 +54,7 @@ _scratch_xfs_logprint 2>&1 >> $seqres.full
 # match, not as a continued transaction.  If that happens we'll see:
 #	xfs_logprint: unknown log operation type (494e)
 
-_scratch_mkfs -l size=2560b >/dev/null 2>&1
+_scratch_mkfs -l size=${logblks}b >/dev/null 2>&1
 _scratch_mount
 for I in `seq 0 8192`; do
         echo a >> $SCRATCH_MNT/cat
