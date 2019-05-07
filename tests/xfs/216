@@ -37,12 +37,18 @@ _require_loop
 LOOP_DEV=$SCRATCH_MNT/test_fs
 LOOP_MNT=$SCRATCH_MNT/test_fs_dir
 
+loop_mkfs_opts=
+$MKFS_XFS_PROG 2>&1 | grep -q rmapbt && \
+	loop_mkfs_opts="$loop_mkfs_opts -m rmapbt=0"
+$MKFS_XFS_PROG 2>&1 | grep -q reflink && \
+	loop_mkfs_opts="$loop_mkfs_opts -m reflink=0"
+
 _do_mkfs()
 {
 	for i in $*; do
 		echo -n "fssize=${i}g "
 		$MKFS_XFS_PROG -f -b size=4096 -l version=2 \
-			-d name=$LOOP_DEV,size=${i}g |grep log
+			-d name=$LOOP_DEV,size=${i}g $loop_mkfs_opts |grep log
 		mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
 		echo "test write" > $LOOP_MNT/test
 		umount $LOOP_MNT > /dev/null 2>&1
