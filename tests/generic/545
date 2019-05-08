@@ -1,0 +1,74 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Alibaba Group.  All Rights Reserved.
+#
+# FS QA Test No. 545
+#
+# Check that we can't set the FS_APPEND_FL and FS_IMMUTABLE_FL inode
+# flags without capbility CAP_LINUX_IMMUTABLE
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	# Cleanup of flags on both file in case test is aborted
+	# (i.e. CTRL-C), so we have no immutable/append-only files
+	$CHATTR_PROG -ia $workdir/file1 >/dev/null 2>&1
+	$CHATTR_PROG -ia $workdir/file2 >/dev/null 2>&1
+
+	cd /
+	rm -rf $tmp.* $workdir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+
+_require_test
+_require_chattr i
+_require_chattr a
+_require_command "$CAPSH_PROG" "capsh"
+
+workdir="$TEST_DIR/test-$seq"
+rm -rf $workdir
+mkdir $workdir
+
+echo "Create the original files"
+touch $workdir/file1
+touch $workdir/file2
+
+do_filter_output()
+{
+	grep -o "Operation not permitted"
+}
+
+echo "Try to chattr +ia with capabilities CAP_LINUX_IMMUTABLE"
+$CHATTR_PROG +a $workdir/file1
+$CHATTR_PROG +i $workdir/file1
+
+echo "Try to chattr +ia/-ia without capability CAP_LINUX_IMMUTABLE"
+$CAPSH_PROG --drop=cap_linux_immutable -- -c "$CHATTR_PROG +a $workdir/file2" 2>&1 | do_filter_output
+$CAPSH_PROG --drop=cap_linux_immutable -- -c "$CHATTR_PROG +i $workdir/file2" 2>&1 | do_filter_output
+
+$CAPSH_PROG --drop=cap_linux_immutable -- -c "$CHATTR_PROG -i $workdir/file1" 2>&1 | do_filter_output
+$CAPSH_PROG --drop=cap_linux_immutable -- -c "$CHATTR_PROG -a $workdir/file1" 2>&1 | do_filter_output
+
+echo "Try to chattr -ia with capability CAP_LINUX_IMMUTABLE"
+$CHATTR_PROG -i $workdir/file1
+$CHATTR_PROG -a $workdir/file1
+
+# success, all done
+status=0
+exit
