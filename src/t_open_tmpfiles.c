@@ -24,7 +24,6 @@ static int min_fd = -1;
 static int max_fd = -1;
 static unsigned int nr_opened = 0;
 static float start_time;
-static int shutdown_fs = 0;
 
 void clock_time(float *time)
 {
@@ -68,22 +67,6 @@ void die(void)
 		printf("Opened %u files in %.2fs.\n", nr_opened,
 				end_time - start_time);
 		fflush(stdout);
-
-		if (shutdown_fs) {
-			/*
-			 * Flush the log so that we have to process the
-			 * unlinked inodes the next time we mount.
-			 */
-			int flag = XFS_FSOP_GOING_FLAGS_LOGFLUSH;
-			int ret;
-
-			ret = ioctl(min_fd, XFS_IOC_GOINGDOWN, &flag);
-			if (ret) {
-				perror("shutdown");
-				exit(2);
-			}
-			exit(0);
-		}
 
 		clock_time(&start_time);
 		for (fd = min_fd; fd <= max_fd; fd++)
@@ -160,8 +143,6 @@ int main(int argc, char *argv[])
 		if (ret)
 			perror(argv[1]);
 	}
-	if (argc > 2 && !strcmp(argv[2], "shutdown"))
-		shutdown_fs = 1;
 
 	clock_time(&start_time);
 	while (1)
