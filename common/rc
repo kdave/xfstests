@@ -2315,8 +2315,15 @@ _fstyp_has_non_default_seek_data_hole()
 	fi
 
 	case "$fstyp" in
-	btrfs|ext4|xfs|ceph|cifs|f2fs|gfs2|nfs*|ocfs2|tmpfs)
+	btrfs|ext4|xfs|ceph|cifs|f2fs|gfs2|ocfs2|tmpfs)
 		return 0
+		;;
+	nfs*)
+		# NFSv2 and NFSv3 only support default behavior of SEEK_HOLE,
+		# while NFSv4 supports non-default behavior
+		local nfsvers=`_df_device $TEST_DEV | $AWK_PROG '{ print $2 }'`
+		[ "$nfsvers" = "nfs4" ]
+		return $?
 		;;
 	overlay)
 		if [ ! -z $OVL_BASE_FSTYP -a $OVL_BASE_FSTYP != "overlay" ]; then
