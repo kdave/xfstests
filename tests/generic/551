@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 551
+#
+# Randomly direct AIO write&verify stress test
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_aiodio aio-dio-write-verify
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+localfile=$SCRATCH_MNT/testfile
+diosize=`_min_dio_alignment $SCRATCH_DEV`
+
+# The maximum write size and offset are both 32k diosize. So the maximum
+# file size will be (32 * 2)k
+free_size_k=`df -kP $SCRATCH_MNT | grep -v Filesystem | awk '{print $4}'`
+max_io_size_b=$((32 * 1024))
+if [ $max_io_size_b -gt $((free_size_k * 1024 / 2 / diosize)) ]; then
+	max_io_size_b=$((free_size_k * 1024 / 2 / diosize))
+fi
+
+do_test()
+{
+	local num_oper
+	local oper_list=""
+	local size
+	local off
+	local truncsize
+
+	# the number of AIO write operation
+	num_oper=$((RANDOM % 64 + 1))
+
+	for ((i=0; i<num_oper; i++)); do
+		size=$(((RANDOM % max_io_size_b + 1) * diosize))
+		off=$((RANDOM % max_io_size_b * diosize))
+		oper_list="$oper_list -a size=$size,off=$off"
+	done
+	truncsize=$(((RANDOM * diosize + RANDOM % diosize) % max_io_size_b))
+
+	$AIO_TEST -t $truncsize $oper_list $localfile
+	if [ $? -ne 0 ];then
+		echo "$AIO_TEST -t $truncsize $oper_list $localfile"
+		echo "==========^^ Fail ^^=========="
+	fi
+}
+
+testimes=$((LOAD_FACTOR * 100))
+while [ $testimes -gt 0 ]; do
+	echo > $localfile
+	do_test
+	((testimes--))
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
