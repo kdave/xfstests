@@ -15,6 +15,13 @@ tmp=$$
 status=1	# failure is the default!
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
+BASE_TEST_FILE=$TEST_DIR/seek_sanity_testfile
+
+_cleanup()
+{
+	rm -f $tmp.* $BASE_TEST_FILE.*
+}
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
@@ -27,14 +34,7 @@ _require_seek_data_hole
 # All the seek sanity test cases here do falloc
 _require_xfs_io_command "falloc"
 
-BASE_TEST_FILE=$TEST_DIR/seek_sanity_testfile
-
 _require_test_program "seek_sanity_test"
-
-_cleanup()
-{
-	rm -f $tmp.* $BASE_TEST_FILE.*
-}
 
 _run_seek_sanity_test -s 13 -e 16 $BASE_TEST_FILE > $seqres.full 2>&1 ||
 	_fail "seek sanity check failed!"
