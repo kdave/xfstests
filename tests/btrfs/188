@@ -1,0 +1,84 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 188
+#
+# Test that an incremental send with not corrupt data when the source filesystem
+# has the no-holes feature enabled, a file has prealloc (unwritten) extents that
+# start after its size and hole is punched (after the first snapshot is made)
+# that removes all extents from some offset up to the file's size.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -fr $send_files_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_test
+_require_scratch
+_require_btrfs_fs_feature "no_holes"
+_require_btrfs_mkfs_feature "no-holes"
+_require_xfs_io_command "fpunch"
+_require_xfs_io_command "falloc" "-k"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs "-O no-holes" >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our test file with a prealloc extent that starts beyond its size.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 500K" $SCRATCH_MNT/foobar | _filter_xfs_io
+$XFS_IO_PROG -c "falloc -k 1200K 800K" $SCRATCH_MNT/foobar
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+# Now punch a hole that drops all the extents within the file's size.
+$XFS_IO_PROG -c "fpunch 0 500K" $SCRATCH_MNT/foobar
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/incr 2>&1 | _filter_scratch
+
+echo "File digest in the original filesystem:"
+md5sum $SCRATCH_MNT/incr/foobar | _filter_scratch
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same file content that the original filesystem had.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT
+
+echo "File digest in the new filesystem:"
+md5sum $SCRATCH_MNT/incr/foobar | _filter_scratch
+
+status=0
+exit
