@@ -4014,6 +4014,24 @@ _try_wipe_scratch_devs()
 	done
 }
 
+# Only run this on xfs if xfs_scrub is available and has the unicode checker
+_check_xfs_scrub_does_unicode() {
+	[ "${FSTYP}" == "xfs" ] || return 1
+
+	local mount="$1"
+	local dev="$2"
+
+	_supports_xfs_scrub "${mount}" "${dev}" || return 1
+
+	# We only care if xfs_scrub has unicode string support...
+	if ! type ldd > /dev/null 2>&1 || \
+	   ! ldd "${XFS_SCRUB_PROG}" | grep -q libicui18n; then
+		return 1
+	fi
+
+	return 0
+}
+
 init_rc
 
 ################################################################################
