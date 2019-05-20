@@ -24,7 +24,7 @@ static int min_fd = -1;
 static int max_fd = -1;
 static unsigned int nr_opened = 0;
 static float start_time;
-static int shutdown_fs = 0;
+static int shutdown_fd = -1;
 
 void clock_time(float *time)
 {
@@ -69,7 +69,7 @@ void die(void)
 				end_time - start_time);
 		fflush(stdout);
 
-		if (shutdown_fs) {
+		if (shutdown_fd >= 0) {
 			/*
 			 * Flush the log so that we have to process the
 			 * unlinked inodes the next time we mount.
@@ -77,7 +77,7 @@ void die(void)
 			int flag = XFS_FSOP_GOING_FLAGS_LOGFLUSH;
 			int ret;
 
-			ret = ioctl(min_fd, XFS_IOC_GOINGDOWN, &flag);
+			ret = ioctl(shutdown_fd, XFS_IOC_GOINGDOWN, &flag);
 			if (ret) {
 				perror("shutdown");
 				exit(2);
@@ -148,8 +148,9 @@ void leak_tmpfile(void)
 
 /*
  * Try to put as many files on the unlinked list and then kill them.
- * The first argument is a directory to chdir into; passing any second arg
- * will shut down the fs instead of closing files.
+ * The first argument is a directory to chdir into; the second argumennt (if
+ * provided) is a file path that will be opened and then used to shut down the
+ * fs before the program exits.
  */
 int main(int argc, char *argv[])
 {
@@ -160,8 +161,13 @@ int main(int argc, char *argv[])
 		if (ret)
 			perror(argv[1]);
 	}
-	if (argc > 2 && !strcmp(argv[2], "shutdown"))
-		shutdown_fs = 1;
+	if (argc > 2) {
+		shutdown_fd = open(argv[2], O_RDONLY);
+		if (shutdown_fd < 0) {
+			perror(argv[2]);
+			return 1;
+		}
+	}
 
 	clock_time(&start_time);
 	while (1)
