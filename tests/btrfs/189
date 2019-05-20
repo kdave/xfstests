@@ -1,0 +1,105 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 189
+#
+# Test that an incremental send receive does not issue clone operations that
+# attempt to clone the last block of a file, with a size not aligned to the
+# filesystem's sector size, into the middle of some other file. Such clone
+# request causes the receiver to fail (with EINVAL), for kernels that include
+# commit ac765f83f1397646 ("Btrfs: fix data corruption due to cloning of eof
+# block"), or cause silent data corruption for older kernels.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -fr $send_files_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_fssum
+_require_test
+_require_scratch_reflink
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -c "pwrite -S 0xb1 0 2M" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xc7 0 2M" $SCRATCH_MNT/bar | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0x4d 0 2M" $SCRATCH_MNT/baz | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xe2 0 2M" $SCRATCH_MNT/zoo | _filter_xfs_io
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+# Clone part of the extent from a higher offset to a lower offset of the same
+# file.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1560K 500K 100K" $SCRATCH_MNT/bar \
+	| _filter_xfs_io
+
+# Now clone from the previous file, same range, into the middle of another file,
+# such that the end offset at the destination is smaller than the destination's
+# file size.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1560K 0 100K" $SCRATCH_MNT/zoo \
+	| _filter_xfs_io
+
+# Truncate the source file of the previous clone operation to a smaller size,
+# which ends up in the middle of the range of previous clone operation from file
+# bar to file bar. We want to check this doesn't confuse send to issue invalid
+# clone operations.
+$XFS_IO_PROG -c "truncate 550K" $SCRATCH_MNT/bar
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/incr 2>&1 | _filter_scratch
+
+# Compute digests of the snapshot trees so that later we can compare against
+# digests of the trees in the new filesystem, to see if they match (no data or
+# metadata corruption happened).
+$FSSUM_PROG -A -f -w $send_files_dir/base.fssum $SCRATCH_MNT/base
+$FSSUM_PROG -A -f -w $send_files_dir/incr.fssum \
+	-x $SCRATCH_MNT/incr/base $SCRATCH_MNT/incr
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same file contents that the original filesystem had.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT
+
+# Compute digests of the snapshot trees in the new filesystem and compare them
+# to the ones in the original filesystem, they must match.
+$FSSUM_PROG -r $send_files_dir/base.fssum $SCRATCH_MNT/base
+$FSSUM_PROG -r $send_files_dir/incr.fssum $SCRATCH_MNT/incr
+
+status=0
+exit
