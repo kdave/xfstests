@@ -1,0 +1,52 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 505
+#
+# Ensure all xfs_spaceman commands are documented.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_command "$XFS_SPACEMAN_PROG" "xfs_spaceman"
+_require_command "$MAN_PROG" man
+
+echo "Silence is golden"
+
+MANPAGE=$($MAN_PROG --path xfs_spaceman)
+
+case "$MANPAGE" in
+*.gz|*.z\|*.Z)	CAT=zcat;;
+*.bz2)		CAT=bzcat;;
+*.xz)		CAT=xzcat;;
+*)		CAT=cat;;
+esac
+_require_command `which $CAT` $CAT
+
+for COMMAND in `$XFS_SPACEMAN_PROG -c help $TEST_DIR | awk '{print $1}' | grep -v "^Use"`; do
+  $CAT "$MANPAGE" | egrep -q "^\.B.*$COMMAND" || \
+	echo "$COMMAND not documented in the xfs_spaceman manpage"
+done
+
+# success, all done
+status=0
+exit

@@ -773,7 +773,12 @@ _require_xfs_spaceman_command()
 	_require_command "$XFS_SPACEMAN_PROG" "xfs_spaceman"
 
 	testfile=$TEST_DIR/$$.xfs_spaceman
+	touch $testfile
 	case $command in
+	"health")
+		testio=`$XFS_SPACEMAN_PROG -c "health $param" $TEST_DIR 2>&1`
+		param_checked=1
+		;;
 	*)
 		testio=`$XFS_SPACEMAN_PROG -c "help $command" $TEST_DIR 2>&1`
 	esac
@@ -787,6 +792,8 @@ _require_xfs_spaceman_command()
 		_notrun "xfs_spaceman $command failed (old kernel/wrong fs/bad args?)"
 	echo $testio | grep -q "foreign file active" && \
 		_notrun "xfs_spaceman $command not supported on $FSTYP"
+	echo $testio | grep -q "Inappropriate ioctl for device" && \
+		_notrun "xfs_spaceman $command support is missing (missing ioctl?)"
 	echo $testio | grep -q "Function not implemented" && \
 		_notrun "xfs_spaceman $command support is missing (missing syscall?)"
 
