@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <sys/xattr.h>
 #include <sys/stat.h>
+#include <sys/param.h>
+#include <linux/limits.h>
 
 #define die() do { perror(""); \
 fprintf(stderr, "error at line %d\n", __LINE__); \
@@ -44,6 +46,7 @@ int main(int argc, char *argv[])
 	size = sbuf.st_blksize * 3 / 4;
 	if (!size)
 		fail("Invalid st_blksize(%ld)\n", sbuf.st_blksize);
+	size = MIN(size, XATTR_SIZE_MAX);
 	value = malloc(size);
 	if (!value)
 		fail("Failed to allocate memory\n");
