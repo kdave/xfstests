@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 190
+#
+# A general test to validate that balance and qgroups work correctly when
+# balance needs to be resumed on mount.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmlogwrites
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+# and we need extra device as log device
+_require_log_writes
+
+nr_files=512				# enough metadata to bump tree height
+file_size=2048				# small enough to be inlined
+
+_log_writes_init $SCRATCH_DEV
+_log_writes_mkfs >> $seqres.full 2>&1
+
+_log_writes_mount
+$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT >> $seqres.full
+$BTRFS_UTIL_PROG quota rescan -w $SCRATCH_MNT >> $seqres.full
+
+# Create enough metadata for later balance
+for ((i = 0; i < $nr_files; i++)); do
+	_pwrite_byte 0xcd 0 $file_size $SCRATCH_MNT/file_$i > /dev/null
+done
+
+# Flush delalloc so that balance has work to do.
+sync
+
+# Balance metadata so we will have at least one transaction committed with
+# valid reloc tree, and hopefully another commit with orphan reloc tree.
+$BTRFS_UTIL_PROG balance start -f -m $SCRATCH_MNT >> $seqres.full
+_log_writes_unmount
+_log_writes_remove
+
+cur=$(_log_writes_find_next_fua 0)
+echo "cur=$cur" >> $seqres.full
+while [ ! -z "$cur" ]; do
+	_log_writes_replay_log_range $cur $SCRATCH_DEV >> $seqref.full
+
+	# Test that no crashes happen or any other kind of failure.
+	_scratch_mount
+	_scratch_unmount
+
+	# Don't trigger fsck here, as relocation get paused,
+	# at that transistent state, qgroup number may differ
+	# and cause false alert.
+
+	prev=$cur
+	cur=$(_log_writes_find_next_fua $(($cur + 1)))
+	[ -z "$cur" ] && break
+done
+
+# Now the fs has finished its balance and qgroup should be consistent.
+# Fstest will automatically check the fs and btrfs check will report
+# any qgroup inconsistent if something went wrong.
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
