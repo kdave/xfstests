@@ -34,7 +34,6 @@ _supported_fs generic
 _supported_os Linux
 _require_scratch_encryption
 _require_xfs_io_command "get_encpolicy"
-_require_xfs_io_command "set_encpolicy"
 _require_user
 
 _scratch_mkfs_encrypted &>> $seqres.full
@@ -45,7 +44,7 @@ check_no_policy()
 	# When a file is unencrypted, FS_IOC_GET_ENCRYPTION_POLICY currently
 	# fails with ENOENT on ext4 but with ENODATA on f2fs.  TODO: it's
 	# planned to consistently use ENODATA.  For now this test accepts both.
-	$XFS_IO_PROG -c "get_encpolicy" $1 |&
+	_get_encpolicy $1 |&
 		sed -e 's/No such file or directory/No data available/'
 }
 
@@ -54,25 +53,25 @@ empty_dir=$SCRATCH_MNT/empty_dir
 echo -e "\n*** Setting encryption policy on empty directory ***"
 mkdir $empty_dir
 check_no_policy $empty_dir |& _filter_scratch
-$XFS_IO_PROG -c "set_encpolicy 0000111122223333" $empty_dir
-$XFS_IO_PROG -c "get_encpolicy" $empty_dir | _filter_scratch
+_set_encpolicy $empty_dir 0000111122223333
+_get_encpolicy $empty_dir | _filter_scratch
 
 # Should be able to set the same policy again, but not a different one.
 # TODO: the error code for "already has a different policy" is planned to switch
 # from EINVAL to EEXIST.  For now this test accepts both.
 echo -e "\n*** Setting encryption policy again ***"
-$XFS_IO_PROG -c "set_encpolicy 0000111122223333" $empty_dir
-$XFS_IO_PROG -c "get_encpolicy" $empty_dir | _filter_scratch
-$XFS_IO_PROG -c "set_encpolicy 4444555566667777" $empty_dir |& \
+_set_encpolicy $empty_dir 0000111122223333
+_get_encpolicy $empty_dir | _filter_scratch
+_set_encpolicy $empty_dir 4444555566667777 |& \
 	_filter_scratch | sed -e 's/Invalid argument/File exists/'
-$XFS_IO_PROG -c "get_encpolicy" $empty_dir | _filter_scratch
+_get_encpolicy $empty_dir | _filter_scratch
 
 # Should *not* be able to set an encryption policy on a nonempty directory
 nonempty_dir=$SCRATCH_MNT/nonempty_dir
 echo -e "\n*** Setting encryption policy on nonempty directory ***"
 mkdir $nonempty_dir
 touch $nonempty_dir/file
-$XFS_IO_PROG -c "set_encpolicy" $nonempty_dir |& _filter_scratch
+_set_encpolicy $nonempty_dir |& _filter_scratch
 check_no_policy $nonempty_dir |& _filter_scratch
 
 # Should *not* be able to set an encryption policy on a nondirectory file, even
@@ -83,7 +82,7 @@ check_no_policy $nonempty_dir |& _filter_scratch
 nondirectory=$SCRATCH_MNT/nondirectory
 echo -e "\n*** Setting encryption policy on nondirectory ***"
 touch $nondirectory
-$XFS_IO_PROG -c "set_encpolicy" $nondirectory |& \
+_set_encpolicy $nondirectory |& \
 	_filter_scratch | sed -e 's/Invalid argument/Not a directory/'
 check_no_policy $nondirectory |& _filter_scratch
 
@@ -93,8 +92,7 @@ check_no_policy $nondirectory |& _filter_scratch
 unauthorized_dir=$SCRATCH_MNT/unauthorized_dir
 echo -e "\n*** Setting encryption policy on another user's directory ***"
 mkdir $unauthorized_dir
-su $qa_user -c "$XFS_IO_PROG -c \"set_encpolicy\" $unauthorized_dir" |& \
-	_filter_scratch
+_user_do_set_encpolicy $unauthorized_dir |& _filter_scratch
 check_no_policy $unauthorized_dir |& _filter_scratch
 
 # Should *not* be able to set an encryption policy on a directory on a
@@ -104,12 +102,12 @@ check_no_policy $unauthorized_dir |& _filter_scratch
 echo -e "\n*** Setting encryption policy on readonly filesystem ***"
 mkdir $SCRATCH_MNT/ro_dir $SCRATCH_MNT/ro_bind_mnt
 _scratch_remount ro
-$XFS_IO_PROG -c "set_encpolicy" $SCRATCH_MNT/ro_dir |& _filter_scratch
+_set_encpolicy $SCRATCH_MNT/ro_dir |& _filter_scratch
 check_no_policy $SCRATCH_MNT/ro_dir |& _filter_scratch
 _scratch_remount rw
 mount --bind $SCRATCH_MNT $SCRATCH_MNT/ro_bind_mnt
 mount -o remount,ro,bind $SCRATCH_MNT/ro_bind_mnt
-$XFS_IO_PROG -c "set_encpolicy" $SCRATCH_MNT/ro_bind_mnt/ro_dir |& _filter_scratch
+_set_encpolicy $SCRATCH_MNT/ro_bind_mnt/ro_dir |& _filter_scratch
 check_no_policy $SCRATCH_MNT/ro_bind_mnt/ro_dir |& _filter_scratch
 umount $SCRATCH_MNT/ro_bind_mnt
 

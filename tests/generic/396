@@ -34,7 +34,6 @@ rm -f $seqres.full
 _supported_fs generic
 _supported_os Linux
 _require_scratch_encryption
-_require_xfs_io_command "set_encpolicy"
 
 _scratch_mkfs_encrypted &>> $seqres.full
 _scratch_mount
@@ -42,23 +41,23 @@ dir=$SCRATCH_MNT/dir
 mkdir $dir
 
 echo -e "\n*** Invalid contents encryption mode ***"
-$XFS_IO_PROG -c "set_encpolicy -c 0xFF" $dir |& _filter_scratch
+_set_encpolicy $dir -c 0xFF |& _filter_scratch
 
 echo -e "\n*** Invalid filenames encryption mode ***"
-$XFS_IO_PROG -c "set_encpolicy -n 0xFF" $dir |& _filter_scratch
+_set_encpolicy $dir -n 0xFF |& _filter_scratch
 
 echo -e "\n*** Invalid flags ***"
-$XFS_IO_PROG -c "set_encpolicy -f 0xFF" $dir |& _filter_scratch
+_set_encpolicy $dir -f 0xFF |& _filter_scratch
 
 echo -e "\n*** Invalid policy version ***"
-$XFS_IO_PROG -c "set_encpolicy -v 0xFF" $dir |& _filter_scratch
+_set_encpolicy $dir -v 0xFF |& _filter_scratch
 
 # Currently, the only supported combination of modes is AES-256-XTS for contents
 # and AES-256-CTS for filenames.  Nothing else should be accepted.
 echo -e "\n*** Invalid combinations of modes ***"
-$XFS_IO_PROG -c "set_encpolicy -c AES-256-CTS -n AES-256-CTS" $dir |& _filter_scratch
-$XFS_IO_PROG -c "set_encpolicy -c AES-256-CTS -n AES-256-XTS" $dir |& _filter_scratch
-$XFS_IO_PROG -c "set_encpolicy -c AES-256-XTS -n AES-256-XTS" $dir |& _filter_scratch
+_set_encpolicy $dir -c AES-256-CTS -n AES-256-CTS |& _filter_scratch
+_set_encpolicy $dir -c AES-256-CTS -n AES-256-XTS |& _filter_scratch
+_set_encpolicy $dir -c AES-256-XTS -n AES-256-XTS |& _filter_scratch
 
 # success, all done
 status=0

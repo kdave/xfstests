@@ -38,8 +38,7 @@ _require_scratch_encryption()
 	# presence of /sys/fs/ext4/features/encryption, but this is broken on
 	# some older kernels and is ext4-specific anyway.)
 	mkdir $SCRATCH_MNT/tmpdir
-	if $XFS_IO_PROG -c set_encpolicy $SCRATCH_MNT/tmpdir \
-		2>&1 >>$seqres.full | \
+	if _set_encpolicy $SCRATCH_MNT/tmpdir 2>&1 >>$seqres.full | \
 		egrep -q 'Inappropriate ioctl for device|Operation not supported'
 	then
 		_notrun "kernel does not support $FSTYP encryption"
@@ -174,4 +173,30 @@ _revoke_encryption_key()
 	local keydesc=$1
 	local keyid=$($KEYCTL_PROG search @s logon $FSTYP:$keydesc)
 	$KEYCTL_PROG revoke $keyid >>$seqres.full
+}
+
+# Set an encryption policy on the specified directory.
+_set_encpolicy()
+{
+	local dir=$1
+	shift
+
+	$XFS_IO_PROG -c "set_encpolicy $*" "$dir"
+}
+
+_user_do_set_encpolicy()
+{
+	local dir=$1
+	shift
+
+	_user_do "$XFS_IO_PROG -c \"set_encpolicy $*\" \"$dir\""
+}
+
+# Display the specified file or directory's encryption policy.
+_get_encpolicy()
+{
+	local file=$1
+	shift
+
+	$XFS_IO_PROG -c "get_encpolicy $*" "$file"
 }
