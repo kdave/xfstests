@@ -320,3 +320,20 @@ _check_overlay_scratch_fs()
 		"$OVL_BASE_SCRATCH_DEV" "$OVL_BASE_SCRATCH_MNT" \
 		$OVL_BASE_MOUNT_OPTIONS $SELINUX_MOUNT_OPTIONS
 }
+
+_repair_overlay_scratch_fs()
+{
+	_overlay_fsck_dirs $OVL_BASE_SCRATCH_MNT/$OVL_LOWER \
+		$OVL_BASE_SCRATCH_MNT/$OVL_UPPER \
+		$OVL_BASE_SCRATCH_MNT/$OVL_WORK -y
+	local res=$?
+	case $res in
+	$FSCK_OK|$FSCK_NONDESTRUCT)
+		res=0
+		;;
+	*)
+		_dump_err2 "fsck.overlay failed, err=$res"
+		;;
+	esac
+	return $res
+}

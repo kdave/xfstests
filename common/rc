@@ -1112,8 +1112,17 @@ _repair_scratch_fs()
 	return $res
         ;;
     *)
-        # Let's hope fsck -y suffices...
-        fsck -t $FSTYP -y $SCRATCH_DEV 2>&1
+	local dev=$SCRATCH_DEV
+	local fstyp=$FSTYP
+	if [ $FSTYP = "overlay" -a -n "$OVL_BASE_SCRATCH_DEV" ]; then
+		_repair_overlay_scratch_fs
+		# Fall through to repair base fs
+		dev=$OVL_BASE_SCRATCH_DEV
+		fstyp=$OVL_BASE_FSTYP
+		$UMOUNT_PROG $OVL_BASE_SCRATCH_MNT
+	fi
+	# Let's hope fsck -y suffices...
+	fsck -t $fstyp -y $dev 2>&1
 	local res=$?
 	case $res in
 	$FSCK_OK|$FSCK_NONDESTRUCT|$FSCK_REBOOT)
