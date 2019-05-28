@@ -121,8 +121,7 @@ echo "+ Invalid redirect"
 make_test_dirs
 make_redirect_dir $upperdir/testdir "invalid"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 check_no_redirect $upperdir/testdir
 
 # Test invalid redirect xattr point to a file origin, should remove
@@ -131,8 +130,7 @@ make_test_dirs
 touch $lowerdir/origin
 make_redirect_dir $upperdir/testdir "origin"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 check_no_redirect $upperdir/testdir
 
 # Test valid redirect xattr point to a directory origin in the same directory,
@@ -143,8 +141,7 @@ mkdir $lowerdir/origin
 make_whiteout $upperdir/origin
 make_redirect_dir $upperdir/testdir "origin"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_redirect $upperdir/testdir "origin"
 
 # Test valid redirect xattr point to a directory origin in different directories
@@ -155,8 +152,7 @@ mkdir $lowerdir/origin
 make_whiteout $upperdir/origin
 make_redirect_dir $upperdir/testdir1/testdir2 "/origin"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_redirect $upperdir/testdir1/testdir2 "/origin"
 
 # Test valid redirect xattr but missing whiteout to cover lower target,
@@ -166,8 +162,7 @@ make_test_dirs
 mkdir $lowerdir/origin
 make_redirect_dir $upperdir/testdir "origin"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 check_redirect $upperdir/testdir "origin"
 check_whiteout $upperdir/origin
 
@@ -178,8 +173,7 @@ mkdir $lowerdir/{testdir1,testdir2}
 make_redirect_dir $upperdir/testdir1 "testdir2"
 make_redirect_dir $upperdir/testdir2 "testdir1"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_redirect $upperdir/testdir1 "testdir2"
 check_redirect $upperdir/testdir2 "testdir1"
 
@@ -191,8 +185,7 @@ mkdir $lowerdir/testdir
 make_redirect_dir $upperdir/testdir "invalid"
 
 # Question get yes answer: Should set opaque dir ?
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -y >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -y
 check_no_redirect $upperdir/testdir
 check_opaque $upperdir/testdir
 
@@ -205,12 +198,10 @@ make_redirect_dir $lowerdir/testdir1 "origin"
 make_redirect_dir $lowerdir/testdir2 "origin"
 make_redirect_dir $upperdir/testdir3 "origin"
 
-_overlay_fsck_dirs "$lowerdir:$lowerdir2" $upperdir $workdir -p >> \
-	$seqres.full 2>&1 && echo "fsck should fail"
+_overlay_fsck_expect $FSCK_UNCORRECTED "$lowerdir:$lowerdir2" $upperdir $workdir -p
 
 # Question get yes answer: Duplicate redirect directory, remove xattr ?
-_overlay_fsck_dirs "$lowerdir:$lowerdir2" $upperdir $workdir -y >> \
-	$seqres.full 2>&1 || echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT "$lowerdir:$lowerdir2" $upperdir $workdir -y
 redirect_1=`check_redirect $lowerdir/testdir1 "origin" 2>/dev/null`
 redirect_2=`check_redirect $lowerdir/testdir2 "origin" 2>/dev/null`
 [[ $redirect_1 == $redirect_2 ]] && echo "Redirect xattr incorrect"
@@ -223,12 +214,10 @@ make_test_dirs
 mkdir $lowerdir/origin $upperdir/origin
 make_redirect_dir $upperdir/testdir "origin"
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 && \
-	echo "fsck should fail"
+_overlay_fsck_expect $FSCK_UNCORRECTED $lowerdir $upperdir $workdir -p
 
 # Question get yes answer: Duplicate redirect directory, remove xattr ?
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -y >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -y
 check_no_redirect $upperdir/testdir
 
 # Test duplicate redirect xattr with lower same name directory exists,
@@ -240,8 +229,7 @@ make_redirect_dir $upperdir/testdir "invalid"
 
 # Question one get yes answer: Duplicate redirect directory, remove xattr?
 # Question two get yes answer: Should set opaque dir ?
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -y >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -y
 check_no_redirect $upperdir/testdir
 check_opaque $upperdir/testdir
 

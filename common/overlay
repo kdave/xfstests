@@ -193,6 +193,25 @@ _overlay_fsck_dirs()
 			   -o workdir=$workdir $*
 }
 
+# Run fsck and check for expected return value
+_overlay_fsck_expect()
+{
+	# The first arguments is the expected fsck program exit code, the
+	# remaining arguments are the input parameters of the fsck program.
+	local expect_ret=$1
+	local lowerdir=$2
+	local upperdir=$3
+	local workdir=$4
+	shift 4
+
+	_overlay_fsck_dirs $lowerdir $upperdir $workdir $* >> \
+			$seqres.full 2>&1
+	fsck_ret=$?
+
+	[[ "$fsck_ret" == "$expect_ret" ]] || \
+		echo "expect fsck.overlay to return $expect_ret, but got $fsck_ret"
+}
+
 _overlay_check_dirs()
 {
 	local lowerdir=$1

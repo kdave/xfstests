@@ -96,8 +96,7 @@ echo "+ Orphan whiteout"
 make_test_dirs
 make_whiteout $lowerdir/foo $upperdir/{foo,bar}
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 ls $lowerdir
 ls $upperdir
 
@@ -107,8 +106,7 @@ make_test_dirs
 touch $lowerdir2/{foo,bar}
 make_whiteout $upperdir/foo $lowerdir/bar
 
-_overlay_fsck_dirs "$lowerdir:$lowerdir2" $upperdir $workdir -p >> \
-	 $seqres.full 2>&1 || echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK "$lowerdir:$lowerdir2" $upperdir $workdir -p
 check_whiteout $upperdir/foo $lowerdir/bar
 
 # Test orphan whiteout in opaque directory, should remove
@@ -119,8 +117,7 @@ touch $lowerdir/testdir/foo
 make_opaque_dir $upperdir/testdir
 make_whiteout $upperdir/testdir/foo
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 ls $upperdir/testdir
 
 # Test orphan whiteout whose parent path is not an merged directory,
@@ -135,8 +132,7 @@ make_whiteout $lowerdir/testdir2
 make_opaque_dir $lowerdir/testdir3
 make_whiteout $upperdir/{testdir1/foo,/testdir2/foo,testdir3/foo,testdir4/foo}
 
-_overlay_fsck_dirs "$lowerdir:$lowerdir2" $upperdir $workdir -p >> \
-	$seqres.full 2>&1 || echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT "$lowerdir:$lowerdir2" $upperdir $workdir -p
 ls $upperdir/testdir1
 ls $upperdir/testdir2
 ls $upperdir/testdir3
@@ -150,8 +146,7 @@ touch $lowerdir/testdir/foo
 make_redirect_dir $upperdir/testdir "origin"
 make_whiteout $upperdir/testdir/foo
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 ls $upperdir/testdir
 
 # Test valid whiteout in redirect directory cover file in lower
@@ -163,8 +158,7 @@ touch $lowerdir/origin/foo
 make_redirect_dir $upperdir/testdir "origin"
 make_whiteout $upperdir/testdir/foo
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_whiteout $upperdir/testdir/foo
 
 # Test valid whiteout covering lower target whose parent directory
@@ -177,8 +171,7 @@ make_redirect_dir $lowerdir/testdir "origin"
 mkdir -p $upperdir/testdir/subdir
 make_whiteout $upperdir/testdir/subdir/foo
 
-_overlay_fsck_dirs "$lowerdir:$lowerdir2" $upperdir $workdir -p \
-	>> $seqres.full 2>&1 || echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK "$lowerdir:$lowerdir2" $upperdir $workdir -p
 check_whiteout $upperdir/testdir/subdir/foo
 
 # Test invalid whiteout in opaque subdirectory in a redirect directory,
@@ -191,8 +184,7 @@ make_redirect_dir $upperdir/testdir "origin"
 make_opaque_dir $upperdir/testdir/subdir
 make_whiteout $upperdir/testdir/subdir/foo
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-	echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_NONDESTRUCT $lowerdir $upperdir $workdir -p
 ls $upperdir/testdir/subdir
 
 # Test valid whiteout in reidrect subdirectory in a opaque directory
@@ -205,8 +197,7 @@ make_opaque_dir $upperdir/testdir
 make_redirect_dir $upperdir/testdir/subdir "/origin"
 make_whiteout $upperdir/testdir/subdir/foo
 
-_overlay_fsck_dirs $lowerdir $upperdir $workdir -p >> $seqres.full 2>&1 || \
-        echo "fsck should not fail"
+_overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_whiteout $upperdir/testdir/subdir/foo
 
 # success, all done
