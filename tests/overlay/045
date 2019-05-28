@@ -37,6 +37,7 @@ _require_attrs
 _require_command "$FSCK_OVERLAY_PROG" fsck.overlay
 
 OVL_XATTR_OPAQUE_VAL=y
+OVL_XATTR_IMPURE_VAL=y
 
 # remove all files from previous tests
 _scratch_mkfs
@@ -67,6 +68,15 @@ make_opaque_dir()
 
 	mkdir -p $target
 	$SETFATTR_PROG -n $OVL_XATTR_OPAQUE -v $OVL_XATTR_OPAQUE_VAL $target
+}
+
+# Create impure directories
+make_impure_dir()
+{
+	for dir in $*; do
+		mkdir -p $dir
+		$SETFATTR_PROG -n $OVL_XATTR_IMPURE -v $OVL_XATTR_IMPURE_VAL $dir
+	done
 }
 
 # Create a redirect directory
@@ -155,8 +165,9 @@ echo "+ Valid whiteout(2)"
 make_test_dirs
 mkdir $lowerdir/origin
 touch $lowerdir/origin/foo
+make_impure_dir $upperdir
 make_redirect_dir $upperdir/testdir "origin"
-make_whiteout $upperdir/testdir/foo
+make_whiteout $upperdir/origin $upperdir/testdir/foo
 
 _overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_whiteout $upperdir/testdir/foo
@@ -169,7 +180,8 @@ mkdir -p $lowerdir2/origin/subdir
 touch $lowerdir2/origin/subdir/foo
 make_redirect_dir $lowerdir/testdir "origin"
 mkdir -p $upperdir/testdir/subdir
-make_whiteout $upperdir/testdir/subdir/foo
+make_whiteout $lowerdir/origin $upperdir/testdir/subdir/foo
+make_impure_dir $upperdir/testdir $upperdir
 
 _overlay_fsck_expect $FSCK_OK "$lowerdir:$lowerdir2" $upperdir $workdir -p
 check_whiteout $upperdir/testdir/subdir/foo
@@ -195,7 +207,8 @@ mkdir $lowerdir/origin
 touch $lowerdir/origin/foo
 make_opaque_dir $upperdir/testdir
 make_redirect_dir $upperdir/testdir/subdir "/origin"
-make_whiteout $upperdir/testdir/subdir/foo
+make_whiteout $upperdir/origin $upperdir/testdir/subdir/foo
+make_impure_dir $upperdir/testdir
 
 _overlay_fsck_expect $FSCK_OK $lowerdir $upperdir $workdir -p
 check_whiteout $upperdir/testdir/subdir/foo
