@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 FUJITSU LIMITED. All rights reserved.
+#
+# FSQA Test No. 035
+#
+# Regression test for commit:
+# f96c3ac8dfc2 ("ext4: fix crash during online resizing")
+#
+# This case tests a loss s_first_data_block on ext4 when computing
+# maximum size with given number of group descriptor blocks.  Filesystem
+# with non-zero s_first_data_block can happen that computed maximum size
+# lower than current size and leads to a BUG_ON in in ext4_alloc_group_tables()
+# hitting on flex_gd->count == 0.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_command "$RESIZE2FS_PROG" resize2fs
+
+rm -f $seqres.full
+
+$MKFS_EXT4_PROG -F -b 1024 -E "resize=262144" $SCRATCH_DEV 32768 >> $seqres.full 2>&1
+_scratch_mount
+
+echo "Resizing to 262145 blocks"
+$RESIZE2FS_PROG $SCRATCH_DEV 262145 >> $seqres.full 2>&1
+
+echo "Resizing to 300000 blocks"
+$RESIZE2FS_PROG $SCRATCH_DEV 300000 >> $seqres.full 2>&1
+
+# success, all done
+status=0
+exit
