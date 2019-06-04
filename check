@@ -499,6 +499,17 @@ _expunge_test()
 	return 0
 }
 
+# Make the check script unattractive to the OOM killer...
+OOM_SCORE_ADJ="/proc/self/oom_score_adj"
+test -w ${OOM_SCORE_ADJ} && echo -1000 > ${OOM_SCORE_ADJ}
+
+# ...and make the tests themselves somewhat more attractive to it, so that if
+# the system runs out of memory it'll be the test that gets killed and not the
+# test framework.
+_run_seq() {
+	bash -c "test -w ${OOM_SCORE_ADJ} && echo 250 > ${OOM_SCORE_ADJ}; exec ./$seq"
+}
+
 _detect_kmemleak
 _prepare_test_list
 
@@ -740,11 +751,11 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		fi
 		_try_wipe_scratch_devs > /dev/null 2>&1
 		if [ "$DUMP_OUTPUT" = true ]; then
-			./$seq 2>&1 | tee $tmp.out
+			_run_seq 2>&1 | tee $tmp.out
 			# Because $? would get tee's return code
 			sts=${PIPESTATUS[0]}
 		else
-			./$seq >$tmp.out 2>&1
+			_run_seq >$tmp.out 2>&1
 			sts=$?
 		fi
 
