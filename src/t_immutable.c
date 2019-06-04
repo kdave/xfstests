@@ -228,8 +228,8 @@ static int test_immutable(const char *dir)
 
      if (stfs.f_type == XFS_SUPER_MAGIC && !getuid()) {
 	  jdm_fshandle_t *fshandle;
-	  xfs_bstat_t bstat;
-	  xfs_fsop_bulkreq_t  bulkreq;
+	  struct xfs_bstat bstat;
+	  struct xfs_fsop_bulkreq  bulkreq;
 	  xfs_ino_t ino;
 	  char *dirpath;
 
@@ -903,8 +903,8 @@ static int test_append(const char *dir)
 
      if (stfs.f_type == XFS_SUPER_MAGIC && !getuid()) {
 	  jdm_fshandle_t *fshandle;
-	  xfs_bstat_t bstat;
-	  xfs_fsop_bulkreq_t  bulkreq;
+	  struct xfs_bstat bstat;
+	  struct xfs_fsop_bulkreq  bulkreq;
 	  xfs_ino_t ino;
 	  char *dirpath;
 
@@ -1288,8 +1288,8 @@ static int test_append(const char *dir)
 
      if (stfs.f_type == XFS_SUPER_MAGIC && !getuid()) {
           jdm_fshandle_t *fshandle;
-          xfs_bstat_t bstat;
-          xfs_fsop_bulkreq_t  bulkreq;
+          struct xfs_bstat bstat;
+          struct xfs_fsop_bulkreq  bulkreq;
           xfs_ino_t ino;
           char *dirpath;
 

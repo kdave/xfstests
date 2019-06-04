@@ -26,8 +26,8 @@ main(int argc, char *argv[])
 
 	struct stat sbuf;
 	ino_t *inodelist;
-	xfs_fsop_bulkreq_t a;
-	xfs_bstat_t *ret;
+	struct xfs_fsop_bulkreq a;
+	struct xfs_bstat *ret;
 	int iterations;
 	char fname[MAXPATHLEN];
 	char *dirname;
@@ -60,7 +60,7 @@ main(int argc, char *argv[])
 		printf("Runing extended checks.\n");
 
 	inodelist = (ino_t *)malloc(nfiles * sizeof(ino_t));
-	ret = (xfs_bstat_t *)malloc(nfiles * sizeof(xfs_bstat_t));
+	ret = (struct xfs_bstat *)malloc(nfiles * sizeof(struct xfs_bstat));
 
 	for (k=0; k < iterations; k++) {
 		int fd[nfiles + 1];
@@ -69,7 +69,7 @@ main(int argc, char *argv[])
 
 		printf("Iteration %d ... (%d files)", k, nfiles);
 
-		memset(&a, 0, sizeof(xfs_fsop_bulkreq_t));
+		memset(&a, 0, sizeof(struct xfs_fsop_bulkreq));
 		a.lastip = (__u64 *)&last_inode;
 		a.icount = nfiles;
 		a.ubuffer = ret;

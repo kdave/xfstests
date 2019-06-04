@@ -2152,9 +2152,9 @@ bulkstat_f(int opno, long r)
 	int		fd;
 	__u64		last;
 	int		nent;
-	xfs_bstat_t	*t;
+	struct xfs_bstat	*t;
 	int64_t		total;
-        xfs_fsop_bulkreq_t bsr;
+	struct xfs_fsop_bulkreq bsr;
 
 	last = 0;
 	nent = (r % 999) + 2;
@@ -2185,9 +2185,9 @@ bulkstat1_f(int opno, long r)
 	int		good;
 	__u64		ino;
 	struct stat64	s;
-	xfs_bstat_t	t;
+	struct xfs_bstat	t;
 	int		v;
-        xfs_fsop_bulkreq_t bsr;
+	struct xfs_fsop_bulkreq bsr;
         
 
 	good = random() & 1;

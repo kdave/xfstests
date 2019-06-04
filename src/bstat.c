@@ -20,7 +20,7 @@ dotime(void *ti, char *s)
 }
 
 void
-printbstat(xfs_bstat_t *sp)
+printbstat(struct xfs_bstat *sp)
 {
 	printf("ino %lld mode %#o nlink %d uid %d gid %d rdev %#x\n",
 		(long long)sp->bs_ino, sp->bs_mode, sp->bs_nlink,
@@ -64,7 +64,7 @@ main(int argc, char **argv)
 	int		quiet = 0;
 	int		statit = 0;
 	int		verbose = 0;
-	xfs_bstat_t	*t;
+	struct xfs_bstat	*t;
 	int		ret;
 	jdm_fshandle_t	*fshandlep = NULL;
 	int		fd;
@@ -73,7 +73,7 @@ main(int argc, char **argv)
 	char *cc_readlinkbufp;
 	int cc_readlinkbufsz;
 	int 		c;
-	xfs_fsop_bulkreq_t bulkreq;
+	struct xfs_fsop_bulkreq bulkreq;
 
 	while ((c = getopt(argc, argv, "cdl:qv")) != -1) {
 		switch (c) {

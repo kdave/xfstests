@@ -27,8 +27,8 @@ main(int argc, char *argv[])
     struct stat sbuf;
     ino_t *inodelist;
     __u32 *genlist;
-    xfs_fsop_bulkreq_t a;
-    xfs_bstat_t *ret;
+    struct xfs_fsop_bulkreq a;
+    struct xfs_bstat *ret;
     int iterations;
     char fname[MAXPATHLEN];
     char *dirname;
@@ -50,7 +50,7 @@ main(int argc, char *argv[])
 
     inodelist = (ino_t *)malloc(nfiles * sizeof(ino_t));
     genlist = (__u32 *)malloc(nfiles * sizeof(__u32));
-    ret = (xfs_bstat_t *)malloc(nfiles * sizeof(xfs_bstat_t));
+    ret = (struct xfs_bstat *)malloc(nfiles * sizeof(struct xfs_bstat));
 
     for (k=0; k < iterations; k++) {
 	xfs_ino_t last_inode = 0;
@@ -61,8 +61,8 @@ main(int argc, char *argv[])
 
 	memset(inodelist, 0, nfiles * sizeof(ino_t));
 	memset(genlist, 0, nfiles * sizeof(__u32));
-	memset(ret, 0, nfiles * sizeof(xfs_bstat_t));
-	memset(&a, 0, sizeof(xfs_fsop_bulkreq_t));
+	memset(ret, 0, nfiles * sizeof(struct xfs_bstat));
+	memset(&a, 0, sizeof(struct xfs_fsop_bulkreq));
 	a.lastip = (__u64 *)&last_inode;
 	a.icount = nfiles;
 	a.ubuffer = ret;
