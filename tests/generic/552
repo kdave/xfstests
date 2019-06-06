@@ -1,0 +1,98 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 552
+#
+# Check that if we write some data to a file, its inode gets evicted (while its
+# parent directory's inode is not evicted due to being in use), then we rename
+# the file and fsync it, after a power failure the file data is not lost.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_odirect
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test directory with two files in it.
+mkdir $SCRATCH_MNT/dir
+touch $SCRATCH_MNT/dir/foo
+touch $SCRATCH_MNT/dir/bar
+
+# Do a direct IO write into file bar.
+# To trigger the bug found in btrfs, doing a buffered write would also work as
+# long as writeback completes before the file's inode is evicted (the inode can
+# not be evicted while delalloc exists). But since that is hard to trigger from
+# a user space test, without resulting in a transaction commit as well, just do
+# a direct IO write since it is much simpler.
+$XFS_IO_PROG -d -c "pwrite -S 0xd3 0 4K" $SCRATCH_MNT/dir/bar | _filter_xfs_io
+
+# Keep the directory in use while we evict all inodes. This is to prevent
+# eviction of the directory's inode (a necessary condition to trigger the bug
+# found in btrfs, as evicting the directory inode would result in commiting the
+# current transaction when the fsync of file foo happens below).
+(
+	cd $SCRATCH_MNT/dir
+	while true; do
+		:
+	done
+) &
+pid=$!
+# Wait a bit to give time to the background process to chdir to the directory.
+sleep 0.1
+
+# Evict all inodes from memory, except the directory's inode because a background
+# process is using it.
+echo 2 > /proc/sys/vm/drop_caches
+
+# Now fsync our file foo, which ends up persisting information about its parent
+# directory inode because it is a new inode.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/dir/foo
+
+# Rename our file bar to baz right before we fsync it.
+mv $SCRATCH_MNT/dir/bar $SCRATCH_MNT/dir/baz
+
+# Fsync our file baz, after a power failure we expect to see the data we
+# previously wrote to it.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/dir/baz
+
+# Kill the background process using our test directory.
+kill $pid
+wait $pid
+
+# Simulate a power failure and then check no data loss happened.
+_flakey_drop_and_remount
+
+echo "File data after power failure:"
+od -t x1 -A d $SCRATCH_MNT/dir/baz
+
+_unmount_flakey
+status=0
+exit
