@@ -59,6 +59,9 @@ _xunit_make_section_report()
 	local report=$tmp.report.xunit.$sect_name.xml
 	# Header
 	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $REPORT_DIR/result.xml
+	if [ -z "$date_time" ]; then
+		date_time=$(date +"%F %T")
+	fi
 	local dtime=`echo $date_time| tr  " " 'T'`
 	local stats="failures=\"$n_bad\" skipped=\"$n_notrun\" tests=\"$n_total\" time=\"$sect_time\""
 	local hw_info="hostname=\"$HOST\" timestamp=\"$dtime\" "
@@ -70,7 +73,9 @@ _xunit_make_section_report()
 		_xunit_add_property "$p"
 	done
 	echo -e "\t</properties>" >> $REPORT_DIR/result.xml
-	cat $tmp.report.xunit.$sect_name.xml >> $REPORT_DIR/result.xml
+	if [ -f $report ]; then
+		cat $report >> $REPORT_DIR/result.xml
+	fi
 	echo "</testsuite>" >> $REPORT_DIR/result.xml
 	echo "Xunit report: $REPORT_DIR/result.xml"
 }
