@@ -2090,6 +2090,16 @@ _require_xfs_io_command()
 	local testfile=$TEST_DIR/$$.xfs_io
 	local testio
 	case $command in
+	"chattr")
+		if [ -z "$param" ]; then
+			param=s
+		fi
+		# Test xfs_io chattr support AND
+		# filesystem FS_IOC_FSSETXATTR support
+		testio=`$XFS_IO_PROG -F -f -c "chattr +$param" $testfile 2>&1`
+		$XFS_IO_PROG -F -f -r -c "chattr -$param" $testfile 2>&1
+		param_checked="+$param"
+		;;
 	"chproj")
 		testio=`$XFS_IO_PROG -F -f -c "chproj 0" $testfile 2>&1`
 		;;
