@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Collabora, Ltd.  All Rights Reserved.
+#
+# Common functions for testing filename casefold feature
+
+_has_casefold_kernel_support()
+{
+	case $FSTYP in
+	ext4)
+		test -f '/sys/fs/ext4/features/casefold'
+		;;
+	*)
+		# defaults to unsupported
+		false
+		;;
+	esac
+}
+
+_require_scratch_casefold()
+{
+	if ! _has_casefold_kernel_support ; then
+		_notrun "$FSTYP does not support casefold feature"
+	fi
+
+	if ! _scratch_mkfs_casefold &>>seqres.full; then
+		_notrun "$FSTYP userspace tools do not support casefold"
+	fi
+
+	# Make sure the kernel can mount a filesystem with the encoding
+	# defined by the userspace tools.  This will fail if
+	# the userspace tool used a more recent encoding than the one
+	# supported in kernel space.
+	if ! _try_scratch_mount &>>seqres.full; then
+		_notrun "kernel can't mount filesystem with the encoding set by userspace"
+	fi
+	_scratch_unmount
+
+	# utilities used by casefold
+	_require_command "$CHATTR_PROG" chattr
+	_require_command "$LSATTR_PROG" lsattr
+}
+
+_scratch_mkfs_casefold()
+{
+	case $FSTYP in
+	ext4)
+		_scratch_mkfs -O casefold $*
+		;;
+	*)
+		_notrun "Don't know how to mkfs with casefold support on $FSTYP"
+		;;
+	esac
+}
+
+_scratch_mkfs_casefold_strict()
+{
+	case $FSTYP in
+	ext4)
+		_scratch_mkfs -O casefold -E encoding_flags=strict
+		;;
+	*)
+		_notrun "Don't know how to mkfs with casefold-strict support on $FSTYP"
+		;;
+	esac
+}
+
+# To get the exact disk name, we need some method that does a
+# getdents() on the parent directory, such that we don't get
+# normalized/casefolded results.  'Find' works ok.
+_casefold_check_exact_name()
+{
+	local basedir=$1
+	local exact_name=$2
+	find ${basedir} | grep -q ${exact_name}
+}
+
+_casefold_set_attr()
+{
+	$CHATTR_PROG +F "${1}"
+}
+
+_casefold_unset_attr()
+{
+	$CHATTR_PROG -F "${1}"
+}
+
+_casefold_lsattr_dir()
+{
+	$LSATTR_PROG -ld "${1}" | _filter_spaces
+}
