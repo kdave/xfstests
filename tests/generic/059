@@ -18,6 +18,9 @@
 #
 #  Btrfs: add missing inode update when punching hole
 #
+# Also test the mtime and ctime properties of the file change after punching
+# holes with ranges that operate only on a single block of the file.
+#
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
@@ -68,6 +71,13 @@ $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
 # fsync log.
 sync
 
+# Sleep for 1 second, because we want to check that the next punch operations we
+# do update the file's mtime and ctime.
+sleep 1
+
+mtime_before=$(stat -c %Y $SCRATCH_MNT/foo)
+ctime_before=$(stat -c %Z $SCRATCH_MNT/foo)
+
 # Punch a hole in our file. This small range affects only 1 page.
 # This made the btrfs hole punching implementation write only some zeroes in
 # one page, but it did not update the btrfs inode fields used to determine if
@@ -93,6 +103,14 @@ _flakey_drop_and_remount
 # was after the holes were punched.
 echo "File content after:"
 od -t x1 $SCRATCH_MNT/foo
+
+mtime_after=$(stat -c %Y $SCRATCH_MNT/foo)
+ctime_after=$(stat -c %Z $SCRATCH_MNT/foo)
+
+[ $mtime_after -gt $mtime_before ] || \
+	echo "mtime did not increase (before: $mtime_before after: $mtime_after"
+[ $ctime_after -gt $ctime_before ] || \
+	echo "ctime did not increase (before: $ctime_before after: $ctime_after"
 
 status=0
 exit
