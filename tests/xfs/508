@@ -1,0 +1,117 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 508
+#
+# Test project quota inheritance flag, uncover xfsprogs bug fixed by xfsprogs
+# commit b136f48b19a5 ("xfs_quota: fix false error reporting of project
+# inheritance flag is not set")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_xfs_quota
+
+cat >$tmp.projects <<EOF
+10:$SCRATCH_MNT/dir
+EOF
+
+cat >$tmp.projid <<EOF
+root:0
+test:10
+EOF
+
+QUOTA_CMD="$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid"
+
+filter_xfs_pquota()
+{
+        perl -ne "
+s,$tmp.projects,[PROJECTS_FILE],;
+s,$SCRATCH_MNT,[SCR_MNT],;
+s,$SCRATCH_DEV,[SCR_DEV],;
+        print;"
+}
+
+do_quota_nospc()
+{
+	local file=$1
+	local exp=$2
+
+	echo "Write $file, expect $exp:" | _filter_scratch
+	$XFS_IO_PROG -t -f -c "pwrite 0 5m" $file 2>&1 >/dev/null | \
+		_filter_xfs_io_error
+	rm -f $file
+}
+
+_scratch_mkfs_xfs >>$seqres.full 2>&1
+_qmount_option "prjquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
+
+mkdir $SCRATCH_MNT/dir
+$QUOTA_CMD -x -c 'project -s test' $SCRATCH_MNT >>$seqres.full 2>&1
+$QUOTA_CMD -x -c 'limit -p bsoft=1m bhard=2m test' $SCRATCH_MNT
+
+# test the Project inheritance bit is a directory only flag, and it's set on
+# directory by default. Expect no complain about "project inheritance flag is
+# not set" on regular file.
+echo "== The parent directory has Project inheritance bit by default =="
+touch $SCRATCH_MNT/dir/foo
+mkdir $SCRATCH_MNT/dir/dir_inherit
+touch $SCRATCH_MNT/dir/dir_inherit/foo
+$QUOTA_CMD -x -c 'project -c test' $SCRATCH_MNT | filter_xfs_pquota
+echo ""
+
+# test the quota and the project inheritance quota work well
+do_quota_nospc $SCRATCH_MNT/dir/foo ENOSPC
+do_quota_nospc $SCRATCH_MNT/dir/dir_inherit/foo ENOSPC
+echo ""
+
+# test the project quota won't be inherited, if removing the Project
+# inheritance bit
+echo "== After removing parent directory has Project inheritance bit =="
+$XFS_IO_PROG -x -c "chattr -P" $SCRATCH_MNT/dir
+touch $SCRATCH_MNT/dir/foo
+mkdir $SCRATCH_MNT/dir/dir_uninherit
+touch $SCRATCH_MNT/dir/dir_uninherit/foo
+$QUOTA_CMD -x -c 'project -c test' $SCRATCH_MNT | filter_xfs_pquota
+echo ""
+
+# after remove the Project inheritance bit of the original parent directory,
+# then verify:
+# 1) there's not any limit on the original parent directory and files under it
+# 2) the quota limit of sub-directory which has inherited still works
+# 3) there's not limit on the new sub-dirctory (not inherit from parent)
+do_quota_nospc $SCRATCH_MNT/dir/foo Success
+do_quota_nospc $SCRATCH_MNT/dir/dir_inherit/foo ENOSPC
+do_quota_nospc $SCRATCH_MNT/dir/dir_uninherit/foo Success
+
+_scratch_unmount
+# success, all done
+status=0
+exit
