@@ -75,6 +75,24 @@ _require_scratch_reflink()
 	_scratch_unmount
 }
 
+# this test requires duperemove working for the file system
+_require_scratch_duperemove()
+{
+	_require_scratch
+	_require_command "$DUPEREMOVE_PROG" duperemove
+
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	dd if=/dev/zero of="$SCRATCH_MNT/file1" bs=128k count=1 >& /dev/null
+	dd if=/dev/zero of="$SCRATCH_MNT/file2" bs=128k count=1 >& /dev/null
+	if ! "$DUPEREMOVE_PROG" -d "$SCRATCH_MNT/file1" \
+	    "$SCRATCH_MNT/file2" >& /dev/null ; then
+		_scratch_unmount
+		_notrun "duperemove does not support file system type: $FSTYP"
+	fi
+	_scratch_unmount
+}
+
 # this test requires scratch fs to report explicit SHARED flag
 # e.g.
 #   0         4K         8K
