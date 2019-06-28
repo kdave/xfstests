@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2017 Oracle, Inc.  All Rights Reserved.
 #
-# FSQA Test No. 007
+# FSQA Test No. ext4/040 (was shared/005)
 #
 # Since loff_t is a signed type, it is invalid for a filesystem to load
 # an inode with i_size = -1ULL.  Unfortunately, nobody checks this,
@@ -10,8 +10,8 @@
 # and appending to it.  This causes an integer overflow in the routines
 # underlying writeback, which results in the kernel locking up.
 #
-# So, create this malformed inode and try a dio append to make sure we
-# catch this situation.
+# So, create this malformed inode and try a buffered append to make
+# sure we catch this situation.
 #
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -49,17 +49,15 @@ echo m > $testdir/a
 
 echo "Corrupt filesystem"
 _scratch_unmount
-# Set the file size to the highest multiple of 512 below
-# -1 so that we can perform a dio write.
-$DEBUGFS_PROG -w -R "sif /a size 0xFFFFFFFFFFFFFE00" $SCRATCH_DEV >> $seqres.full 2>&1
+$DEBUGFS_PROG -w -R "sif /a size -1" $SCRATCH_DEV >> $seqres.full 2>&1
 
-# check whether debugfs succeeds to set i_size to -512 or not
-$DEBUGFS_PROG -R "stat /a" $SCRATCH_DEV 2>&1 | grep -q "Size: 18446744073709551104" || \
-	_notrun "Could not set i_size to -512 successfully, skip test."
+# check whether debugfs succeeds to set i_size to -1 or not
+$DEBUGFS_PROG -R "stat /a" $SCRATCH_DEV 2>&1 | grep -q "Size: 18446744073709551615" || \
+	_notrun "Could not set i_size to -1 successfully, skip test."
 
 echo "Remount, try to append"
 _scratch_mount
-dd if=/dev/zero of=$testdir/a bs=512 count=1 oflag=direct,append conv=notrunc >> $seqres.full 2>&1 || echo "Write did not succeed (ok)."
+dd if=/dev/zero of=$testdir/a bs=512 count=1 oflag=append conv=notrunc >> $seqres.full 2>&1 || echo "Write did not succeed (ok)."
 sync
 
 # success, all done
