@@ -59,20 +59,22 @@ $BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
 
 # Clone part of the extent from a higher offset to a lower offset of the same
 # file.
-$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1560K 500K 100K" $SCRATCH_MNT/bar \
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1600K 640K 128K" $SCRATCH_MNT/bar \
 	| _filter_xfs_io
 
 # Now clone from the previous file, same range, into the middle of another file,
 # such that the end offset at the destination is smaller than the destination's
 # file size.
-$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1560K 0 100K" $SCRATCH_MNT/zoo \
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 1600K 0 128K" $SCRATCH_MNT/zoo \
 	| _filter_xfs_io
 
 # Truncate the source file of the previous clone operation to a smaller size,
 # which ends up in the middle of the range of previous clone operation from file
 # bar to file bar. We want to check this doesn't confuse send to issue invalid
-# clone operations.
-$XFS_IO_PROG -c "truncate 550K" $SCRATCH_MNT/bar
+# clone operations. This smaller size must not be aligned to the sector size of
+# the filesystem - the unaligned size is what can cause those invalid clone
+# operations.
+$XFS_IO_PROG -c "truncate 710K" $SCRATCH_MNT/bar
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr 2>&1 \
 	| _filter_scratch
