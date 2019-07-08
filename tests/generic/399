@@ -82,28 +82,38 @@ total_file_size=0
 i=1
 while true; do
 	file=$SCRATCH_MNT/encrypted_dir/file$i
-	if ! $XFS_IO_PROG -f $file -c 'pwrite 0 1M' &> $tmp.out; then
-		if ! grep -q 'No space left on device' $tmp.out; then
-			echo "FAIL: unexpected pwrite failure"
-			cat $tmp.out
-		elif [ -e $file ]; then
-			total_file_size=$((total_file_size + $(stat -c %s $file)))
-		fi
-		break
-	fi
-	total_file_size=$((total_file_size + $(stat -c %s $file)))
-	i=$((i + 1))
-	if [ $i -gt $fs_size_in_mb ]; then
-		echo "FAIL: filesystem never filled up!"
-		break
-	fi
-done
 
-# We shouldn't have been able to write more data than we had space for.
-if (( $total_file_size > $fs_size )); then
-	echo "FAIL: wrote $total_file_size bytes but should have only" \
-		"had space for $fs_size bytes at most"
-fi
+	$XFS_IO_PROG -f $file -c 'pwrite 0 1M' &> $tmp.out
+	echo "Writing $file..." >> $seqres.full
+	cat $tmp.out >> $seqres.full
+
+	file_size=0
+	if [ -e $file ]; then
+		file_size=$(stat -c %s $file)
+	fi
+
+	# We shouldn't have been able to write more data than we had space for.
+	(( total_file_size += file_size ))
+	if (( total_file_size > fs_size )); then
+		_fail "Wrote $total_file_size bytes but should have only" \
+		      "had space for $fs_size bytes at most!"
+	fi
+
+	# Stop if we hit ENOSPC.
+	if grep -q 'No space left on device' $tmp.out; then
+		break
+	fi
+
+	# Otherwise the file should have been successfully created.
+	if [ ! -e $file ]; then
+		_fail "$file failed to be created, but the fs isn't out of space yet!"
+	fi
+	if (( file_size != 1024 * 1024 )); then
+		_fail "Size of $file is wrong (possible write error?)." \
+		      "Got $file_size, expected 1 MiB"
+	fi
+	(( i++ ))
+done
 
 #
 # Unmount the filesystem and compute its compressed size.  It must be no smaller
