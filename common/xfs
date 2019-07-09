@@ -87,16 +87,35 @@ _scratch_find_xfs_min_logblocks()
 	# minimum log size.
 	local XFS_MIN_LOG_BYTES=2097152
 
-	_scratch_do_mkfs "$mkfs_cmd" "cat" $* -N -l size=$XFS_MIN_LOG_BYTES \
+	# Try formatting the filesystem with all the options given and the
+	# minimum log size.  We hope either that this succeeds or that mkfs
+	# tells us the required minimum log size for the feature set.
+	#
+	# We cannot use _scratch_do_mkfs because it will retry /any/ failed
+	# mkfs with MKFS_OPTIONS removed even if the only "failure" was that
+	# the log was too small.
+	local extra_mkfs_options="$* -N -l size=$XFS_MIN_LOG_BYTES"
+	eval "$mkfs_cmd $MKFS_OPTIONS $extra_mkfs_options $SCRATCH_DEV" \
 		2>$tmp.mkfserr 1>$tmp.mkfsstd
 	local mkfs_status=$?
+
+	# If the format fails for a reason other than the log being too small,
+	# try again without MKFS_OPTIONS because that's what _scratch_do_mkfs
+	# will do if we pass in the log size option.
+	if [ $mkfs_status -ne 0 ] &&
+	   ! grep -q 'log size.*too small, minimum' $tmp.mkfserr; then
+		eval "$mkfs_cmd $extra_mkfs_options $SCRATCH_DEV" \
+			2>$tmp.mkfserr 1>$tmp.mkfsstd
+		mkfs_status=$?
+	fi
 
 	# mkfs suceeded, so we must pick out the log block size to do the
 	# unit conversion
 	if [ $mkfs_status -eq 0 ]; then
-		local blksz="$(grep '^log.*bsize' $tmp.mkfsstd | \
+		blksz="$(grep '^log.*bsize' $tmp.mkfsstd | \
 			sed -e 's/log.*bsize=\([0-9]*\).*$/\1/g')"
 		echo $((XFS_MIN_LOG_BYTES / blksz))
+		rm -f $tmp.mkfsstd $tmp.mkfserr
 		return
 	fi
 
@@ -104,6 +123,7 @@ _scratch_find_xfs_min_logblocks()
 	if grep -q 'minimum size is' $tmp.mkfserr; then
 		grep 'minimum size is' $tmp.mkfserr | \
 			sed -e 's/^.*minimum size is \([0-9]*\) blocks/\1/g'
+		rm -f $tmp.mkfsstd $tmp.mkfserr
 		return
 	fi
 
@@ -111,6 +131,7 @@ _scratch_find_xfs_min_logblocks()
 	echo "Cannot determine minimum log size" >&2
 	cat $tmp.mkfsstd >> $seqres.full
 	cat $tmp.mkfserr >> $seqres.full
+	rm -f $tmp.mkfsstd $tmp.mkfserr
 }
 
 _scratch_mkfs_xfs()
