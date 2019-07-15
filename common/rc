@@ -2105,9 +2105,16 @@ _require_xfs_io_command()
 		;;
 	"copy_range")
 		local testcopy=$TEST_DIR/$$.copy.xfs_io
+		local copy_opts=$testfile
+		if [ "$param" == "-f" ]; then
+			# source file is the open destination file
+			testcopy=$testfile
+			copy_opts="0 -d 4k"
+		fi
 		$XFS_IO_PROG -F -f -c "pwrite 0 4k" $testfile > /dev/null 2>&1
-		testio=`$XFS_IO_PROG -F -f -c "copy_range $testfile" $testcopy 2>&1`
+		testio=`$XFS_IO_PROG -F -f -c "copy_range $param $copy_opts" $testcopy 2>&1`
 		rm -f $testcopy > /dev/null 2>&1
+		param_checked="$param"
 		;;
 	"falloc" )
 		testio=`$XFS_IO_PROG -F -f -c "falloc $param 0 1m" $testfile 2>&1`
