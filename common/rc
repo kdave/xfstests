@@ -1959,16 +1959,9 @@ _run_aiodio()
     return $status
 }
 
-# this test requires y2038 sysfs switch and filesystem
-# timestamp ranges support.
-_require_y2038()
+_require_timestamp_range()
 {
 	local device=${1:-$TEST_DEV}
-	local sysfsdir=/proc/sys/fs/fs-timestamp-check-on
-
-	if [ ! -e $sysfsdir ]; then
-		_notrun "no kernel support for y2038 sysfs switch"
-	fi
 
 	local tsmin tsmax
 	read tsmin tsmax <<<$(_filesystem_timestamp_range $device)
@@ -1980,23 +1973,32 @@ _require_y2038()
 _filesystem_timestamp_range()
 {
 	local device=${1:-$TEST_DEV}
+	u32max=$(((1<<32)-1))
+	s32min=-$((1<<31))
+	s32max=$(((1<<31)-1))
+	s64max=$(((1<<63)-1))
+	s64min=$((1<<63))
+
 	case $FSTYP in
-	ext4)
+	ext2)
+		echo "$s32min $s32max"
+		;;
+	ext3|ext4)
 		if [ $(dumpe2fs -h $device 2>/dev/null | grep "Inode size:" | cut -d: -f2) -gt 128 ]; then
-			echo "-2147483648 15032385535"
+			printf "%d %d\n" $s32min 0x37fffffff
 		else
-			echo "-2147483648 2147483647"
+			echo "$s32min $s32max"
 		fi
 		;;
 
-	xfs)
-		echo "-2147483648 2147483647"
-		;;
 	jfs)
-		echo "0 4294967295"
+		echo "0 $u32max"
 		;;
-	f2fs)
-		echo "-2147483648 2147483647"
+	xfs)
+		echo "$s32min $s32max"
+		;;
+	btrfs)
+		echo "$s64min $s64max"
 		;;
 	*)
 		echo "-1 -1"

@@ -4,15 +4,10 @@
 #
 # FS QA Test 402
 #
-# Tests to verify policy for filesystem timestamps for
-# supported ranges:
-# 1. Verify filesystem rw mount according to sysctl
-# timestamp_supported.
-# 2. Verify timestamp clamping for timestamps beyond max
-# timestamp supported.
+# Test to verify filesystem timestamps for supported ranges.
 #
-# Exit status 1: either or both tests above fail.
-# Exit status 0: both the above tests pass.
+# Exit status 1: test failed.
+# Exit status 0: test passed.
 #
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -60,15 +55,15 @@ run_test_individual()
 
 	# check if the time needs update
 	if [ $update_time -eq 1 ]; then
-		echo "Updating file: $file to timestamp `date -d @$timestamp`"  >> $seqres.full
+		echo "Updating file: $file to timestamp $timestamp"  >> $seqres.full
 		$XFS_IO_PROG -f -c "utimes $timestamp 0 $timestamp 0" $file
 		if [ $? -ne 0 ]; then
 			echo "Failed to update times on $file" | tee -a $seqres.full
 		fi
 	fi
 
-	tsclamp=$(($timestamp>$tsmax?$tsmax:$timestamp))
-	echo "Checking file: $file Updated timestamp is `date -d @$tsclamp`"  >> $seqres.full
+	tsclamp=$((timestamp<tsmin?tsmin:timestamp>tsmax?tsmax:timestamp))
+	echo "Checking file: $file Updated timestamp is $tsclamp"  >> $seqres.full
 	check_stat $file $tsclamp
 }
 
@@ -85,11 +80,11 @@ run_test()
 }
 
 _scratch_mkfs &>> $seqres.full 2>&1 || _fail "mkfs failed"
-_require_y2038 $SCRATCH_DEV
+_require_timestamp_range $SCRATCH_DEV
 
 read tsmin tsmax <<<$(_filesystem_timestamp_range $SCRATCH_DEV)
-echo min supported timestamp $tsmin $(date --date=@$tsmin) >> $seqres.full
-echo max supported timestamp $tsmax $(date --date=@$tsmax) >> $seqres.full
+echo min supported timestamp $tsmin >> $seqres.full
+echo max supported timestamp $tsmax >> $seqres.full
 
 # Test timestamps array
 
@@ -97,45 +92,13 @@ declare -a TIMESTAMPS=(
 	$tsmin
 	0
 	$tsmax
+	$((tsmax/2))
 	$((tsmax+1))
-	4294967295
-	8589934591
-	34359738367
 )
 
-# Max timestamp is hardcoded to Mon Jan 18 19:14:07 PST 2038
-sys_tsmax=2147483647
-echo "max timestamp that needs to be supported by fs for rw mount is" \
-	"$((sys_tsmax+1)) $(date --date=@$((sys_tsmax+1)))" >> $seqres.full
+_scratch_mount || _fail "scratch mount failed"
 
-read ts_check <<<$(cat /proc/sys/fs/fs-timestamp-check-on)
-
-_scratch_mount
-result=$?
-
-if [ $ts_check -ne 0 ]; then
-	echo "sysctl filesystem timestamp check is on" >> $seqres.full
-	# check for mount failure if the minimum requirement for max timestamp
-	# supported is not met.
-	if [ $sys_tsmax -ge $tsmax ]; then
-		if [ $result -eq 0 ]; then
-			echo "mount test failed"  | tee -a $seqres.full
-			exit
-		fi
-	else
-		if [ $result -ne 0 ]; then
-			echo "failed to mount $SCRATCH_DEV"  | tee -a $seqres.full
-			exit
-		fi
-	fi
-else
-	# if sysctl switch is off then mount should succeed always.
-	echo "sysctl filesystem timestamp check is off" >> $seqres.full
-	if [ $result -ne 0 ]; then
-		echo "failed to mount $SCRATCH_DEV and timestamp check is off"  >> $seqres.full
-		exit
-	fi
-fi
+status=0
 
 # Begin test case 1
 echo "In memory timestamps update test start" >> $seqres.full
@@ -166,8 +129,5 @@ run_test $update_time
 
 echo "On disk timestamps update test complete" >> $seqres.full
 
-echo "y2038 inode timestamp tests completed successfully"
-
-# success, all done
-status=0
+echo Silence is golden
 exit
