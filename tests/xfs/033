@@ -91,9 +91,17 @@ src/feature -P $SCRATCH_DEV && \
 	_notrun "PQuota are enabled, test needs controlled sb recovery"
 _scratch_unmount
 
+# We fixed some bugs in xfs_repair that caused us to have to reset the inode
+# link counts on the root inode twice.  That wasn't related to what this test
+# is checking, so remove the nlink reset line from the golden output and filter
+# old xfsprogs to avoid introducing new regressions.
+filter_repair() {
+	sed -e '/resetting inode INO nlinks from 1 to 2/d'
+}
+
 # rootino, rbmino, and rsumino are now set (lets blow em away!)
-_check_root_inos 0
-_check_root_inos -1 | _filter_bad_ids
+_check_root_inos 0 | filter_repair
+_check_root_inos -1 | filter_repair | _filter_bad_ids
 
 # success, all done
 status=0
