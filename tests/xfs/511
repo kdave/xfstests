@@ -1,0 +1,61 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 511
+#
+# Test statfs when project quota is set.
+# Uncover de7243057 fs/xfs: fix f_ffree value for statfs when project quota is set
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_scratch_unmount
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_scratch
+_require_xfs_quota
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_enable_pquota
+_qmount_option "prjquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
+
+# Create a directory to be project object, and create a file to take 64k space
+mkdir $SCRATCH_MNT/t
+$XFS_IO_PROG -f -c "pwrite 0 65536" -c sync $SCRATCH_MNT/t/file >>$seqres.full
+
+quota_cmd="$XFS_QUOTA_PROG -x"
+$quota_cmd -c "project -s -p $SCRATCH_MNT/t 42" $SCRATCH_MNT >/dev/null 2>&1
+$quota_cmd -c 'limit -p isoft=53 bsoft=100m 42' $SCRATCH_MNT
+
+# The itotal and size should be 53 and 102400(k), as above project quota limit.
+# The isued and used should be 2 and 64(k), as this case takes.
+df -k --output=file,itotal,iused,size,used $SCRATCH_MNT/t | \
+	_filter_scratch | _filter_spaces
+
+# success, all done
+status=0
+exit
