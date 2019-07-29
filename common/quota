@@ -111,12 +111,17 @@ _require_getnextquota()
 # prior to mount.  This is a relatively new feature ...
 _scratch_enable_pquota()
 {
-	[[ "$FSTYP" != ext[234] ]] && return
-
-	tune2fs -O quota,project $SCRATCH_DEV >>$seqres.full 2>&1
-	_try_scratch_mount >/dev/null 2>&1 \
-		|| _notrun "kernel doesn't support project feature on $FSTYP"
-	_scratch_unmount
+	case $FSTYP in
+	ext2|ext3|ext4)
+		tune2fs -O quota,project $SCRATCH_DEV >>$seqres.full 2>&1
+		_try_scratch_mount >/dev/null 2>&1 \
+			|| _notrun "kernel doesn't support project feature on $FSTYP"
+		_scratch_unmount
+		;;
+	f2fs)
+		_scratch_mkfs "-O extra_attr -O quota -O project_quota" >> $seqres.full 2>&1
+		;;
+	esac
 }
 
 #
