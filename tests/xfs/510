@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 510
+#
+# Regression test for a long-standing bug in BULKSTAT and INUMBERS where
+# the kernel fails to write thew new @lastip value back to userspace if
+# @ocount is NULL.
+#
+# This is a regression test for commit f16fe3ecde62 ("xfs: bulkstat should copy
+# lastip whenever userspace supplies one")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_require_test_program "bulkstat_null_ocount"
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+
+rm -f $seqres.full
+
+echo "Silence is golden."
+src/bulkstat_null_ocount $TEST_DIR
+
+# success, all done
+status=0
+exit

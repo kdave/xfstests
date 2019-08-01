@@ -1,0 +1,215 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2014 Red Hat, Inc.  All Rights Reserved.
+# Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 509
+#
+# Use the xfs_io bulkstat utility to verify bulkstat finds all inodes in a
+# filesystem.  Test under various inode counts, inobt record layouts and
+# bulkstat batch sizes.  Test v1 and v5 ioctls explicitly, as well as the
+# ioctl version autodetection code in libfrog.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+bstat_versions()
+{
+	echo "default"
+	echo "v1 -v1"
+	if [ -n "$has_v5" ]; then
+		echo "v5 -v5"
+	else
+		echo "v5"
+	fi
+}
+
+# Print the number of inodes counted by bulkstat
+bstat_count()
+{
+	local batchsize="$1"
+	local tag="$2"
+
+	bstat_versions | while read v_tag v_flag; do
+		echo "$tag($v_tag): passing \"$v_flag\" to bulkstat" >> $seqres.full
+		echo -n "bulkstat $tag($v_tag): "
+		$XFS_IO_PROG -c "bulkstat -n $batchsize $v_flag" $SCRATCH_MNT | grep ino | wc -l
+	done
+}
+
+# Print the number of inodes counted by per-ag bulkstat
+bstat_perag_count()
+{
+	local batchsize="$1"
+	local tag="$2"
+
+	local agcount=$(_xfs_mount_agcount $SCRATCH_MNT)
+
+	bstat_versions | while read v_tag v_flag; do
+		echo -n "bulkstat $tag($v_tag): "
+		seq 0 $((agcount - 1)) | while read ag; do
+			$XFS_IO_PROG -c "bulkstat -a $ag -n $batchsize $v_flag" $SCRATCH_MNT
+		done | grep ino | wc -l
+	done
+}
+
+# Sum the number of allocated inodes in each AG in a fs.
+inumbers_ag()
+{
+	local agcount="$1"
+	local batchsize="$2"
+	local mount="$3"
+	local v_flag="$4"
+
+	seq 0 $((agcount - 1)) | while read ag; do
+		$XFS_IO_PROG -c "inumbers -a $ag -n $batchsize $v_flag" $mount
+	done | grep alloccount | awk '{x += $3} END { print(x) }'
+}
+
+# Sum the number of allocated inodes in the whole fs all at once.
+inumbers_fs()
+{
+	local dir="$1"
+	local v_flag="$2"
+
+	$XFS_IO_PROG -c "inumbers $v_flag" "$dir" | grep alloccount | \
+		awk '{x += $3} END { print(x) }'
+}
+
+# Print the number of inodes counted by inumbers
+inumbers_count()
+{
+	local expect="$1"
+
+	# There probably aren't more than 10 hidden inodes, right?
+	local tolerance=10
+
+	# Force all background unlinked inode cleanup to run so that we don't
+	# race changes to the inode btree with our inumbers query.
+	_scratch_cycle_mount
+
+	bstat_versions | while read v_tag v_flag; do
+		echo -n "inumbers all($v_tag): "
+		nr=$(inumbers_fs $SCRATCH_MNT $v_flag)
+		_within_tolerance "inumbers" $nr $expect $tolerance -v
+
+		local agcount=$(_xfs_mount_agcount $SCRATCH_MNT)
+		for batchsize in 71 2 1; do
+			echo -n "inumbers $batchsize($v_tag): "
+			nr=$(inumbers_ag $agcount $batchsize $SCRATCH_MNT $v_flag)
+			_within_tolerance "inumbers" $nr $expect $tolerance -v
+		done
+	done
+}
+
+# Compare the src/bstat output against the xfs_io bstat output.
+# This compares the actual inode numbers output by one tool against another,
+# so we can't easily put the output in the golden output.
+bstat_compare()
+{
+	bstat_versions | while read v_tag v_flag; do
+		diff -u <(./src/bstat $SCRATCH_MNT | grep ino | awk '{print $2}') \
+			<($XFS_IO_PROG -c "bulkstat $v_flag" $SCRATCH_MNT | grep ino | awk '{print $3}')
+	done
+}
+
+# Print bulkstat counts using varied batch sizes
+bstat_test()
+{
+	expect=`find $SCRATCH_MNT -print | wc -l`
+	echo
+	echo "expect $expect"
+
+	for sz in 4096 71 32 1; do
+		bstat_count $sz "$sz all"
+		bstat_perag_count $sz "$sz perag"
+		bstat_compare
+		inumbers_count $expect
+	done
+}
+
+# Get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_require_scratch
+_require_xfs_io_command bulkstat
+_require_xfs_io_command bulkstat_single
+_require_xfs_io_command inumbers
+
+# Real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+
+rm -f $seqres.full
+
+DIRCOUNT=8
+INOCOUNT=$((2048 / DIRCOUNT))
+
+_scratch_mkfs "-d agcount=$DIRCOUNT" >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# Figure out if we have v5 bulkstat/inumbers ioctls.
+has_v5=
+bs_root_out="$($XFS_IO_PROG -c 'bulkstat_single root' $SCRATCH_MNT 2>>$seqres.full)"
+test -n "$bs_root_out" && has_v5=1
+
+echo "this will be 1 if we have v5 bulkstat: $has_v5" >> $seqres.full
+
+# If v5 bulkstat is present, query the root inode and compare it to the stat
+# output of $SCRATCH_MNT to make sure it gave us the correct number
+if [ -n "$has_v5" ]; then
+	bs_root=$(echo "$bs_root_out" | grep ino | awk '{print $3}')
+	stat_root=$(stat -c '%i' $SCRATCH_MNT)
+	if [ "$stat_root" -ne "$bs_root" ]; then
+		echo "stat says root is $stat_root but bulkstat says $bs_root"
+	fi
+fi
+
+# Create a set of directories and fill each with a fixed number of files
+for dir in $(seq 1 $DIRCOUNT); do
+	mkdir -p $SCRATCH_MNT/$dir
+	for i in $(seq 1 $INOCOUNT); do
+		touch $SCRATCH_MNT/$dir/$i
+	done
+done
+bstat_test
+
+# Remove every other file from each dir
+for dir in $(seq 1 $DIRCOUNT); do
+	for i in $(seq 2 2 $INOCOUNT); do
+		rm -f $SCRATCH_MNT/$dir/$i
+	done
+done
+bstat_test
+
+# Remove the entire second half of files
+for dir in $(seq 1 $DIRCOUNT); do
+	for i in $(seq $((INOCOUNT / 2)) $INOCOUNT); do
+		rm -f $SCRATCH_MNT/$dir/$i
+	done
+done
+bstat_test
+
+# Remove all regular files
+for dir in $(seq 1 $DIRCOUNT); do
+	rm -f $SCRATCH_MNT/$dir/*
+done
+bstat_test
+
+# Success, all done
+status=0
+exit
