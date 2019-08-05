@@ -63,7 +63,7 @@ main(int argc, char **argv)
 	/* <1> use normal disk read, this should be ok */
 	ret = read(fd, buffer, 4096);
 	if (ret != FILE_SIZE)
-		fail("buffered read returned %d, should be 300\n", ret);
+		fail("buffered read returned %d, should be %d\n", ret, FILE_SIZE);
 
 	/* <2> use AIO disk read, it sees error. */
 	memset(&myiocb, 0, sizeof(myiocb));
@@ -89,7 +89,7 @@ main(int argc, char **argv)
 		fail("io_getevents returned %d\n", ret);
 
 	/*
-	 *  If all goes well, we should see 300 bytes read.  If things
+	 *  If all goes well, we should see FILE_SIZE bytes read.  If things
 	 *  are broken, we may very well see a result of 4k.
 	 */
 	if (ie.res != FILE_SIZE)
