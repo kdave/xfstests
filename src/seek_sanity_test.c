@@ -1156,7 +1156,16 @@ static int test_basic_support(void)
 	if (ret)
 		goto out;
 
-	/* Is SEEK_DATA and SEEK_HOLE supported in the kernel? */
+	/* Is SEEK_DATA supported in the kernel? */
+	pos = lseek(fd, 0, SEEK_DATA);
+	if (pos == -1) {
+		fprintf(stderr, "Kernel does not support llseek(2) extension "
+			"SEEK_DATA. Aborting.\n");
+		ret = -1;
+		goto out;
+	}
+
+	/* Is SEEK_HOLE supported in the kernel? */
 	pos = lseek(fd, 0, SEEK_HOLE);
 	if (pos == -1) {
 		fprintf(stderr, "Kernel does not support llseek(2) extension "
@@ -1176,29 +1185,31 @@ static int test_basic_support(void)
 		goto out;
 	}
 
+	/* Is unwritten extent supported? */
 	ftruncate(fd, 0);
 	if (fallocate(fd, 0, 0, alloc_size * 2) == -1) {
-		if (errno == EOPNOTSUPP)
+		if (errno == EOPNOTSUPP) {
 			fprintf(stderr, "File system does not support fallocate.\n");
-		else {
+		} else {
 			fprintf(stderr, "ERROR %d: Failed to preallocate "
 				"space to %ld bytes. Aborting.\n", errno, (long) alloc_size);
 			ret = -1;
 		}
 		goto out;
-	} else if (fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
-			     0, alloc_size) == -1) {
-		fprintf(stderr, "File system does not support punch hole.\n");
-	} else {
-		punch_hole = 1;
 	}
 
 	pos = lseek(fd, 0, SEEK_DATA);
-	if (pos == 0) {
+	if (pos == 0)
 		fprintf(stderr, "File system does not support unwritten extents.\n");
-		goto out;
-	}
-	unwritten_extents = 1;
+	else
+		unwritten_extents = 1;
+
+	/* Is punch hole supported? */
+	if (fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+		      0, alloc_size) == -1)
+		fprintf(stderr, "File system does not support punch hole.\n");
+	else
+		punch_hole = 1;
 
 	printf("\n");
 
