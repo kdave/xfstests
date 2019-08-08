@@ -162,6 +162,8 @@ int main(int argc, char **argv)
 		case 'v':
 			log_writes_verbose++;
 			continue;
+		case '?':
+			usage();
 		default:
 			break;
 		}
