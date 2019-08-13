@@ -36,28 +36,29 @@ rm -f $seqres.full
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-# The first byte with a value of 0xae starts at an offset (2518890) which is not
-# a multiple of the block size.
+# The first byte with a value of 0xae starts at an offset (512Kb + 100) which is
+# not a multiple of the block size.
 $XFS_IO_PROG -f \
-	-c "pwrite -S 0x6b 0 2518890" \
-	-c "pwrite -S 0xae 2518890 102398" \
+	-c "pwrite -S 0x6b 0 524388" \
+	-c "pwrite -S 0xae 524388 256K" \
 	$SCRATCH_MNT/foo | _filter_xfs_io
 
-# Create a second file with a length not aligned to the block size, whose bytes
-# all have the value 0x6b, so that its extent(s) can be deduplicated with the
-# first file.
-$XFS_IO_PROG -f -c "pwrite -S 0x6b 0 557771" $SCRATCH_MNT/bar | _filter_xfs_io
+# Create a second file with a length not aligned to the block size (128K + 100),
+# whose bytes all have the value 0x6b, so that its extent(s) can be deduplicated
+# with the first file.
+$XFS_IO_PROG -f -c "pwrite -S 0x6b 0 131172" $SCRATCH_MNT/bar | _filter_xfs_io
 
 # The file is filled with bytes having the value 0x6b from offset 0 to offset
-# 2518889 and with the value 0xae from offset 2518890 to offset 2621287.
+# 524388 (512K + 100) and with the value 0xae from offset 524388 to offset
+# 786532 (512K + 100 + 256K).
 echo "File content before first deduplication:"
-od -t x1 $SCRATCH_MNT/foo
+od -A d -t x1 $SCRATCH_MNT/foo
 
 # Now deduplicate the entire second file into a range of the first file that
 # also has all bytes with the value 0x6b. The destination range's end offset
 # must not be aligned to the block size and must be less then the offset of
-# the first byte with the value 0xae (byte at offset 2518890).
-$XFS_IO_PROG -c "dedupe $SCRATCH_MNT/bar 0 1957888 557771" $SCRATCH_MNT/foo \
+# the first byte with the value 0xae (byte at offset 524388).
+$XFS_IO_PROG -c "dedupe $SCRATCH_MNT/bar 0 64K 131172" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
 
 # We should have exactly the same data we had before we asked for deduplication.
@@ -81,8 +82,9 @@ $XFS_IO_PROG -f -c "pwrite -S 0xae 0 100" $SCRATCH_MNT/baz | _filter_xfs_io
 # before.
 _scratch_cycle_mount
 
-# Now attempt to dedupe the single block of baz into foo.
-$XFS_IO_PROG -c "dedupe $SCRATCH_MNT/baz 0 2519040 100" $SCRATCH_MNT/foo \
+# Now attempt to dedupe the single block of baz into foo. The destination range,
+# in file foo, has all bytes with the same value (0xae) as file baz.
+$XFS_IO_PROG -c "dedupe $SCRATCH_MNT/baz 0 640K 100" $SCRATCH_MNT/foo \
     | _filter_xfs_io
 
 # Now attempt to unmount the filesystem before reading from the file. This is
