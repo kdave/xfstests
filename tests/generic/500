@@ -49,6 +49,12 @@ _supported_os Linux
 _require_scratch_nocheck
 _require_dm_target thin-pool
 
+# The unlink below will result in new metadata blocks for btrfs because of CoW,
+# and since we've filled the thinp device it'll return EIO, which will make
+# btrfs flip read only, making it fail this test when it just won't work right
+# for us in the first place.
+test $FSTYP == "btrfs"  && _notrun "btrfs doesn't work that way lol"
+
 # Require underlying device support discard
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
