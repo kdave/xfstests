@@ -76,8 +76,11 @@ int main(int argc, char ** argv)
 		unsigned int	bmap = 0;
 
 		ret = ioctl(fd, FIBMAP, &bmap);
-		if (ret < 0) {
-			perror("fibmap");
+		if (ret <= 0) {
+			if (ret < 0)
+				perror("fibmap");
+			else
+				fprintf(stderr, "fibmap returned no result\n");
 			free(fie);
 			close(fd);
 			return 1;
