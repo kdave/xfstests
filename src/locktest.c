@@ -61,8 +61,7 @@ extern int h_errno;
        
 #define HANDLE              int
 #define INVALID_HANDLE      -1
-#define OPEN(N,F)           (open(N, F|O_CREAT|O_BINARY| \
-                            (D_flag ? O_DIRECT : 0), 0644))
+#define OPEN(N,F)           (open(N, F|O_CREAT|O_BINARY, 0644))
 #define SEEK(H, O)          (lseek(H, O, SEEK_SET))
 #define READ(H, B, L)       (read(H, B, L))
 #define WRITE(H, B, L)      (write(H, B, L))
@@ -91,7 +90,6 @@ static SOCKET	s_fd = -1;              /* listen socket    */
 static SOCKET	c_fd = -1;	        /* IPC socket       */
 static HANDLE	f_fd = INVALID_HANDLE;	/* shared file      */
 static char	*buf;		        /* I/O buffer       */
-static int	D_flag = 0;
 
 #define 	WRLOCK	0
 #define 	RDLOCK	1
@@ -579,12 +577,7 @@ initialize(HANDLE fd)
     int 	offset = 0;
     int 	togo = FILE_SIZE;
 
-    if (D_flag) {
-        ibuf = (char *)ALLOC_ALIGNED(INIT_BUFSZ);
-    }
-    else {
-        ibuf = (char*)malloc(INIT_BUFSZ);
-    }
+    ibuf = (char*)malloc(INIT_BUFSZ);
     memset(ibuf, ':', INIT_BUFSZ);
 
     SEEK(fd, 0L);
@@ -614,15 +607,6 @@ int do_open(int flag)
 	/*NOTREACHED*/
     }
 
-#ifdef __sun
-    if (D_flag) {
-        directio(f_fd, DIRECTIO_ON);
-    }
-#elif defined(__APPLE__)
-    if (D_flag) {
-	fcntl(f_fd, F_NOCACHE, 1);
-    }
-#endif
     return PASS;
 }
 
@@ -826,18 +810,10 @@ main(int argc, char *argv[])
      * +10 is slop for the iteration number if do_write() ... never
      * needed unless maxio is very small
      */
-    if (D_flag) {
-        if ((buf = (char *)ALLOC_ALIGNED(maxio + 10)) == NULL) {
-	    perror("aligned alloc buf");
-	    exit(1);
-	    /*NOTREACHED*/
-        }
-    } else {
-        if ((buf = (char *)malloc(maxio + 10)) == NULL) {
-	    perror("malloc buf");
-	    exit(1);
-	    /*NOTREACHED*/
-        }
+    if ((buf = (char *)malloc(maxio + 10)) == NULL) {
+        perror("malloc buf");
+        exit(1);
+        /*NOTREACHED*/
     }
 
     setbuf(stderr, NULL);
@@ -1159,10 +1135,7 @@ main(int argc, char *argv[])
 	printf("%d tests run, %d failed\n", test_count, fail_count);
 }   
     if (buf) {
-        if (D_flag)
-            FREE_ALIGNED(buf);
-        else
-            free(buf);
+        free(buf);
     }
 
     
