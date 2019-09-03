@@ -81,7 +81,6 @@ static char	*prog;
 static char	*filename = 0;
 static int	debug = 0;
 static int	server = 1;
-static int	maxio = 8192;
 static int	port = 0;
 static int 	testnumber = -1;
 static int	saved_errno = 0;
@@ -89,7 +88,6 @@ static int	saved_errno = 0;
 static SOCKET	s_fd = -1;              /* listen socket    */
 static SOCKET	c_fd = -1;	        /* IPC socket       */
 static HANDLE	f_fd = INVALID_HANDLE;	/* shared file      */
-static char	*buf;		        /* I/O buffer       */
 
 #define 	WRLOCK	0
 #define 	RDLOCK	1
@@ -806,16 +804,6 @@ main(int argc, char *argv[])
     if (do_open(O_RDWR) == FAIL)
 	exit(1);
 
-    /*
-     * +10 is slop for the iteration number if do_write() ... never
-     * needed unless maxio is very small
-     */
-    if ((buf = (char *)malloc(maxio + 10)) == NULL) {
-        perror("malloc buf");
-        exit(1);
-        /*NOTREACHED*/
-    }
-
     setbuf(stderr, NULL);
 
     if (server) {
@@ -1134,10 +1122,6 @@ main(int argc, char *argv[])
     if(server)
 	printf("%d tests run, %d failed\n", test_count, fail_count);
 }   
-    if (buf) {
-        free(buf);
-    }
-
     
     exit(fail_count);
     /*NOTREACHED*/
