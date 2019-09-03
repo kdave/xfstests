@@ -175,7 +175,7 @@ char *descriptions[] = {
 };
 
 static int64_t tests[][6] =
-	/*	test #	Action	offset		length		expected	server/client */
+	/*	test #	Action	[offset|flags]	length		expected	server/client */
 	{ 	
 	/* Various simple tests exercising the list */
 
