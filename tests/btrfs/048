@@ -221,10 +221,11 @@ $BTRFS_UTIL_PROG property get $SCRATCH_MNT compression
 
 echo -e "\nTesting generation is unchanged after failed validation"
 $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
-$BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | grep '^generation'
+gen_before=$($BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | grep '^generation')
 $BTRFS_UTIL_PROG property set $SCRATCH_MNT compression 'lz' 2>&1 | _filter_scratch
 $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
-$BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | grep '^generation'
+gen_after=$($BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | grep '^generation')
+[ "$gen_after" == "$gen_before" ] || echo "filesystem generation changed"
 
 echo -e "\nTesting argument validation with options"
 $BTRFS_UTIL_PROG property set $SCRATCH_MNT compression 'zlib:3'
