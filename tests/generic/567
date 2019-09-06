@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. generic/567
+#
+# Test mapped writes against punch-hole to ensure we get the data
+# correctly written. This can expose data corruption bugs on filesystems
+# where the block size is smaller than the page size.
+#
+# (generic/029 is a similar test but for truncate.)
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "fpunch"
+
+testfile=$SCRATCH_MNT/testfile
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+# Punch a hole straddling two pages to check that the mapped write after the
+# hole-punching is correctly handled.
+
+$XFS_IO_PROG -t -f \
+-c "pwrite -S 0x58 0 12288" \
+-c "mmap -rw 0 12288" \
+-c "mwrite -S 0x5a 2048 8192" \
+-c "fpunch 2048 8192" \
+-c "mwrite -S 0x59 2048 8192" \
+-c "close"      \
+$testfile | _filter_xfs_io
+
+echo "==== Pre-Remount ==="
+hexdump -C $testfile
+_scratch_cycle_mount
+echo "==== Post-Remount =="
+hexdump -C $testfile
+
+status=0
+exit
