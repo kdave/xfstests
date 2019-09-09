@@ -34,6 +34,7 @@ _supported_os Linux
 _supported_fs generic
 _require_scratch
 _require_quota
+_require_xfs_quota_foreign
 _require_user
 
 rm -f $seqres.full
@@ -45,13 +46,13 @@ _qmount
 dir="$SCRATCH_MNT/dummy"
 mkdir -p $dir
 chown $qa_user $dir
-$XFS_QUOTA_PROG -x -f -c "limit -g bsoft=100k bhard=100k $qa_user" $SCRATCH_MNT
+$XFS_QUOTA_PROG -x -c "limit -g bsoft=100k bhard=100k $qa_user" $SCRATCH_MNT
 
 $XFS_IO_PROG -f -c 'pwrite -S 0x58 0 1m' $dir/foo >> $seqres.full
 chown $qa_user "${dir}/foo"
 _user_do "chgrp $qa_user ${dir}/foo" 2>&1 | _filter_scratch
 ls -la ${dir} >> $seqres.full
-$XFS_QUOTA_PROG -x -f -c 'report -hag' $SCRATCH_MNT >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'report -hag' $SCRATCH_MNT >> $seqres.full
 
 # success, all done
 status=0
