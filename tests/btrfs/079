@@ -77,6 +77,12 @@ _filter_error() {
 }
 
 fiemap_work() {
+	# Wait for any running 'filefrag' subcommand before exitting so that
+	# after the test kills the subshell running this function, it does not
+	# fail with EBUSY when unmounting the scratch device because the filefrag
+	# subcommand is still running with an open file on the scratch fs.
+	trap "wait; exit" SIGTERM
+
 	filename=$1
 	while true; do
 		$FILEFRAG_PROG $filename 2> $tmp.output 1> /dev/null
