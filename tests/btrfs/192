@@ -1,0 +1,175 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 192
+#
+# Test btrfs consistency after each FUA for a workload with snapshot creation
+# and removal
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	kill -q $pid1 &> /dev/null
+	kill -q $pid2 &> /dev/null
+	"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
+	wait
+	_log_writes_cleanup &> /dev/null
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+. ./common/dmlogwrites
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+
+_require_command "$KILLALL_PROG" killall
+_require_command "$BLKDISCARD_PROG" blkdiscard
+_require_btrfs_fs_feature "no_holes"
+_require_btrfs_mkfs_feature "no-holes"
+_require_log_writes
+_require_scratch
+_require_attrs
+
+# We require a 4K nodesize to ensure the test isn't too slow
+if [ $(get_page_size) -ne 4096 ]; then
+	_notrun "This test doesn't support non-4K page size yet"
+fi
+
+runtime=30
+nr_cpus=$("$here/src/feature" -o)
+# cap nr_cpus to 8 to avoid spending too much time on hosts with many cpus
+if [ $nr_cpus -gt 8 ]; then
+	nr_cpus=8
+fi
+fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 99999 -p $nr_cpus \
+		$FSSTRESS_AVOID)
+_log_writes_init $SCRATCH_DEV
+
+# Discard the whole devices so when some tree pointer is wrong, it won't point
+# to some older valid tree blocks, so we can detect it.
+$BLKDISCARD_PROG $LOGWRITES_DMDEV > /dev/null 2>&1
+
+# Use no-holes to avoid warnings of missing file extent items (expected
+# for holes due to mix of buffered and direct IO writes).
+# And use 4K nodesize to bump tree height.
+_log_writes_mkfs -O no-holes -n 4k >> $seqres.full
+_log_writes_mount
+
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/src > /dev/null
+mkdir -p $SCRATCH_MNT/snapshots
+mkdir -p $SCRATCH_MNT/src/padding
+
+random_file()
+{
+	local basedir=$1
+	echo "$basedir/$(ls $basedir | sort -R | tail -1)"
+}
+
+snapshot_workload()
+{
+	trap "wait; exit" SIGTERM
+
+	local i=0
+	while true; do
+		$BTRFS_UTIL_PROG subvolume snapshot \
+			$SCRATCH_MNT/src $SCRATCH_MNT/snapshots/$i \
+			> /dev/null
+		# Do something small to make snapshots different
+		rm -f "$(random_file $SCRATCH_MNT/src/padding)"
+		rm -f "$(random_file $SCRATCH_MNT/src/padding)"
+		touch "$(random_file $SCRATCH_MNT/src/padding)"
+		touch "$SCRATCH_MNT/src/padding/random_$RANDOM"
+
+		i=$(($i + 1))
+		sleep 1
+	done
+}
+
+delete_workload()
+{
+	trap "wait; exit" SIGTERM
+
+	while true; do
+		sleep 2
+		$BTRFS_UTIL_PROG subvolume delete \
+			"$(random_file $SCRATCH_MNT/snapshots)" \
+			> /dev/null 2>&1
+	done
+}
+
+# Replay and check each fua/flush (specified by $2) point.
+#
+# Since dm-log-writes records bio sequentially, even just replaying a range
+# still needs to iterate all records before the end point.
+# When number of records grows, it will be unacceptably slow, thus we need
+# to use relay-log itself to trigger fsck, avoid unnecessary seek.
+log_writes_fast_replay_check()
+{
+	local check_point=$1
+	local blkdev=$2
+	local fsck_command="$BTRFS_UTIL_PROG check $blkdev"
+	local ret
+
+	[ -z "$check_point" -o -z "$blkdev" ] && _fail \
+	"check_point and blkdev must be specified for log_writes_fast_replay_check"
+
+	$here/src/log-writes/replay-log --log $LOGWRITES_DEV \
+		--replay $blkdev --check $check_point --fsck "$fsck_command" \
+		&> $tmp.full_fsck
+	ret=$?
+	tail -n 150 $tmp.full_fsck > $seqres.full
+	[ $ret -ne 0 ] && _fail "fsck failed during replay"
+}
+
+xattr_value=$(printf '%0.sX' $(seq 1 3800))
+
+# Bumping tree height to level 2.
+for ((i = 0; i < 64; i++)); do
+	touch "$SCRATCH_MNT/src/padding/$i"
+	$SETFATTR_PROG -n 'user.x1' -v $xattr_value "$SCRATCH_MNT/src/padding/$i"
+done
+
+_log_writes_mark prepare
+
+snapshot_workload &
+pid1=$!
+delete_workload &
+pid2=$!
+
+"$FSSTRESS_PROG" $fsstress_args > /dev/null &
+sleep $runtime
+
+"$KILLALL_PROG" -q "$FSSTRESS_PROG" &> /dev/null
+kill $pid1 &> /dev/null
+kill $pid2 &> /dev/null
+wait
+_log_writes_unmount
+_log_writes_remove
+
+log_writes_fast_replay_check fua "$SCRATCH_DEV"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
