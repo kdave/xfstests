@@ -101,12 +101,41 @@ _rename_tests()
 #
 # This checks whether the renameat2 syscall is supported
 #
-_requires_renameat2()
+_require_renameat2()
 {
+	local flags=$1
+	local rename_dir=$TEST_DIR/$$
+	local cmd=""
+
 	if test ! -x src/renameat2; then
 		_notrun "renameat2 binary not found"
 	fi
-	if ! src/renameat2 -t; then
+
+	mkdir $rename_dir
+	touch $rename_dir/foo
+	case $flags in
+	"noreplace")
+		cmd="-n $rename_dir/foo $rename_dir/bar"
+		;;
+	"exchange")
+		touch $rename_dir/bar
+		cmd="-x $rename_dir/foo $rename_dir/bar"
+		;;
+	"whiteout")
+		touch $rename_dir/bar
+		cmd="-w $rename_dir/foo $rename_dir/bar"
+		;;
+	"")
+		cmd=""
+		;;
+	*)
+		rm -rf $rename_dir
+		_fail "_require_renameat2: only support noreplace,exchange,whiteout rename flags"
+		;;
+	esac
+	if ! src/renameat2 -t $cmd; then
+		rm -rf $rename_dir
 		_notrun "kernel doesn't support renameat2 syscall"
 	fi
+	rm -rf $rename_dir
 }
