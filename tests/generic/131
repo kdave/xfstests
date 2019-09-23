@@ -17,8 +17,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    kill $locktest_pid2 > /dev/null 2>&1
-    kill $locktest_pid1 > /dev/null 2>&1
+	kill $client_pid > /dev/null 2>&1
+	kill $server_pid > /dev/null 2>&1
 }
 
 # get standard environment, filters and checks
@@ -38,7 +38,7 @@ touch $TEST_DIR/server.out
 
 # Start the server
 src/locktest $TESTFILE 2>&1 > $TEST_DIR/server.out &
-locktest_pid1=$!
+server_pid=$!
 
 timeout=30
 while [ $timeout -gt 0 ]; do
@@ -50,7 +50,7 @@ while [ $timeout -gt 0 ]; do
 	fi
 
 	# check the existence of server process
-	if ! kill -s 0 $locktest_pid1 >/dev/null 2>&1; then
+	if ! kill -s 0 $server_pid >/dev/null 2>&1; then
 		echo "Server died abnormally"
 		exit 1
 	fi
@@ -65,7 +65,7 @@ fi
 
 # Start the client
 src/locktest -p $PORT -h localhost $TESTFILE 2>&1 > $TEST_DIR/client.out
-locktest_pid2=$!
+client_pid=$!
 result=$?
 if [ $result -eq 0 ]; then
 	echo success!
