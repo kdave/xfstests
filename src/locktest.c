@@ -146,7 +146,7 @@ static char *get_cmd_str(int cmd)
  * (or vice versa)
  */
 
-char *descriptions[] = {
+char *lock_descriptions[] = {
     /* 1 */"Add a lock to an empty lock list",
     /* 2 */"Add a lock to the start and end of a list - no overlaps",
     /* 3 */"Add a lock to the middle of a list - no overlap",
@@ -183,7 +183,7 @@ char *descriptions[] = {
     #endif
 };
 
-static int64_t tests[][6] =
+static int64_t lock_tests[][6] =
 	/*	test #	Action	[offset|flags]	length		expected	server/client */
 	{ 	
 	/* Various simple tests exercising the list */
@@ -673,7 +673,7 @@ int do_close(void)
     return PASS;
 }
 
-static void init_ctl(int32_t index)
+static void init_ctl(int64_t tests[][6], int32_t index)
 {
     ctl.test= (int32_t)tests[index][TEST_NUM];
     ctl.command = (int32_t)tests[index][COMMAND];
@@ -766,6 +766,9 @@ cleanup(void)
 }
 
 int
+run(int64_t tests[][6], char *descriptions[]);
+
+int
 main(int argc, char *argv[])
 {
     int		i, sts;
@@ -778,7 +781,7 @@ main(int argc, char *argv[])
     char	*p;
     extern char	*optarg;
     extern int	optind;
-    int fail_count = 0;; 
+    int fail_count = 0;
     
     atexit(cleanup);
     
@@ -962,7 +965,13 @@ main(int argc, char *argv[])
      *
      * real work is in here ...
      */
-    i = 0;
+    fail_count = run(lock_tests, lock_descriptions);
+
+    exit(fail_count);
+    /*NOTREACHED*/
+}
+
+int run(int64_t tests[][6], char *descriptions[])
 {
     int index = 0;
     int end = 0;
@@ -970,6 +979,7 @@ main(int argc, char *argv[])
     int last_test = 0;
     int test_count = -1;
     int fail_flag = 0;
+    int fail_count = 0;
     while(!end) {
 	if (server) {
 	    if(testnumber > 0) {
@@ -1033,7 +1043,7 @@ main(int argc, char *argv[])
 		    end=1;
 		} 
 		/* get the client to do something */
-		init_ctl(index);
+		init_ctl(tests, index);
 		if(debug)
 		    fprintf(stderr, "Sending command to client (%d) - %s - %lld:%lld\n", 
 					index,
@@ -1134,10 +1144,6 @@ main(int argc, char *argv[])
 	}
     }
     fprintf(stderr, "%d tests run, %d failed\n", test_count, fail_count);
-}   
-    
-    exit(fail_count);
-    /*NOTREACHED*/
+
+    return fail_count;
 }
-
-
