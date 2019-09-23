@@ -61,7 +61,6 @@ extern int h_errno;
        
 #define HANDLE              int
 #define INVALID_HANDLE      -1
-#define OPEN(N,F)           (open(N, F|O_CREAT|O_BINARY, 0644))
 #define SEEK(H, O)          (lseek(H, O, SEEK_SET))
 #define READ(H, B, L)       (read(H, B, L))
 #define WRITE(H, B, L)      (write(H, B, L))
@@ -598,12 +597,16 @@ initialize(HANDLE fd)
 
 int do_open(int flag)
 {
-    if ((f_fd = OPEN(filename, flag)) == INVALID_HANDLE) {
+    int flags = flag|O_CREAT|O_BINARY;
+
+    if(debug > 1)
+	fprintf(stderr, "do_open %s 0x%x\n", filename, flags);
+
+    if ((f_fd = open(filename, flags, 0666)) == INVALID_HANDLE) {
 	perror("shared file create");
 	return FAIL;
 	/*NOTREACHED*/
     }
-
     return PASS;
 }
 
