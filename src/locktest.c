@@ -963,7 +963,7 @@ main(int argc, char *argv[])
     int end = 0;
     int result = 0;
     int last_test = 0;
-    int test_count = 0;
+    int test_count = -1;
     int fail_flag = 0;
     while(!end) {
 	if (server) {
@@ -1058,15 +1058,13 @@ main(int argc, char *argv[])
 		    }
 		}
 	    }
-	    if(tests[index][TEST_NUM] != 0) {
-		if(last_test != tests[index][TEST_NUM]) {
-		    test_count++;
-		    if(fail_flag)
-			fail_count++;
-		    fail_flag = 0;
 
-		}
-		last_test = tests[index][TEST_NUM];
+	    if(last_test != tests[index][TEST_NUM]) {
+	        test_count++;
+	        if(fail_flag)
+		    fail_count++;
+	        fail_flag = 0;
+	        last_test = tests[index][TEST_NUM];
 	    }
 		
 	    index++;
@@ -1126,9 +1124,8 @@ main(int argc, char *argv[])
 		fprintf(stderr,"client: sending result to server (%d)\n", ctl.index);
 	    /* Send result to the server */
 	    send_ctl();
-	    if(tests[index][TEST_NUM] != 0) {
-		if(last_test != tests[index][TEST_NUM])
-		    test_count++;
+	    if(last_test != tests[index][TEST_NUM]) {
+		test_count++;
 		last_test = tests[index][TEST_NUM];
 	    }
 	}
