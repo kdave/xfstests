@@ -69,7 +69,6 @@ extern int h_errno;
 
 #define RAND()              (rand())
 #define SRAND(s)            (srand(s))
-#define SLEEP(s)            (sleep(s))
 
 #define MIN(A,B)            (((A)<(B))?(A):(B))
 #define MAX(A,B)            (((A)>(B))?(A):(B))
@@ -1036,10 +1035,6 @@ main(int argc, char *argv[])
 					descriptions[tests[index][TEST_NUM] - 1]);
 		    }
 		}
-	    }
-	    if (debug > 1) {
-		fprintf(stderr, "server sleeping ...\n");
-		SLEEP(1);
 	    }
 	    if(tests[index][TEST_NUM] != 0) {
 		if(last_test != tests[index][TEST_NUM]) {
