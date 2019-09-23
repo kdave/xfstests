@@ -647,7 +647,7 @@ static int do_lock(int cmd, int type, int start, int length)
     ret = fcntl(filedes, cmd, &fl);
     saved_errno = errno;	    
 
-    if(debug > 1 && ret)
+    if(ret)
 	fprintf(stderr, "do_lock: ret = %d, errno = %d (%s)\n", ret, errno, strerror(errno));
 
     return(ret==0?PASS:FAIL);
@@ -665,8 +665,11 @@ int do_close(void)
 
     saved_errno = errno;	    
 	
-    if (errno)
+    if (errno) {
+	fprintf(stderr, "%s errno = %d (%s)\n",
+		__FILE__, errno, strerror(errno));
 	return FAIL;
+    }
     return PASS;
 }
 
@@ -686,7 +689,7 @@ send_ctl(void)
 {
     int         nwrite;
 
-    if (debug > 1) {
+    if (debug) {
 	fprintf(stderr, "send_ctl: test=%d, command=%d offset=%"LL"d, length=%"LL"d, result=%d, error=%d\n", 
                 ctl.test, ctl.command, (long long)ctl.offset, (long long)ctl.length,ctl.result, ctl.error);
     }
@@ -741,7 +744,7 @@ void recv_ctl(void)
     ctl.index= bswap_uint32(ctl.index);
     ctl.error= bswap_uint32(ctl.error);
 
-    if (debug > 1) {
+    if (debug) {
 	fprintf(stderr, "recv_ctl: test=%d, command=%d offset=%"LL"d, length=%"LL"d, result=%d, error=%d\n", 
                 ctl.test, ctl.command, (long long)ctl.offset, (long long)ctl.length, ctl.result, ctl.error);
     }
@@ -977,7 +980,7 @@ main(int argc, char *argv[])
 	    }
 	    /* If we have a server command, deal with it */
 	    if(tests[index][WHO] == SERVER) {
-		if(debug>1)
+		if(debug)
 		    fprintf(stderr, "Got a server command (%d)\n", index);
 		if(tests[index][TEST_NUM] == 0) {
 		    index++;
@@ -1031,7 +1034,7 @@ main(int argc, char *argv[])
 		} 
 		/* get the client to do something */
 		init_ctl(index);
-		if(debug > 1)
+		if(debug)
 		    fprintf(stderr, "Sending command to client (%d) - %s - %lld:%lld\n", 
 					index,
 					get_cmd_str(ctl.command),
@@ -1068,7 +1071,7 @@ main(int argc, char *argv[])
 		
 	    index++;
 	} else { /* CLIENT */
-	    if(debug > 2)
+	    if(debug)
 		fprintf(stderr,"client: waiting...\n");
 	    /* wait for the server to do something */
 	    recv_ctl();
@@ -1120,7 +1123,7 @@ main(int argc, char *argv[])
 		ctl.result = PASS;
 		ctl.error = 0;
 	    }
-	    if(debug > 2)
+	    if(debug)
 		fprintf(stderr,"client: sending result to server (%d)\n", ctl.index);
 	    /* Send result to the server */
 	    send_ctl();
