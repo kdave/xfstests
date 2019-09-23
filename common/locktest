@@ -1,0 +1,91 @@
+##/bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2019 Intel Corp, All Rights Reserved
+
+SERVER_LOG=$TEST_DIR/server.out
+SERVER_PORT=$TEST_DIR/server.port
+CLIENT_LOG=$TEST_DIR/client.out
+TESTFILE=$TEST_DIR/lock_file
+client_pid=""
+server_pid=""
+
+_cleanup()
+{
+	kill $client_pid > /dev/null 2>&1
+	kill $server_pid > /dev/null 2>&1
+	rm -f $TESTFILE
+}
+
+_dump_logs_fail()
+{
+	fail_str=$1
+
+	echo "     ***** Client log *****" >> $seqres.full
+	cat $CLIENT_LOG >> $seqres.full
+	echo "     ***** Server log *****" >> $seqres.full
+	cat $SERVER_LOG >> $seqres.full
+	echo "     ***** End file details *****" >> $seqres.full
+	ls -la $TESTFILE >> $seqres.full
+	_fail $fail_str
+	exit 1
+}
+
+
+_run_generic() {
+	mode=$1
+
+	# set up log files
+	rm -f $SERVER_LOG
+	touch $SERVER_LOG
+	rm -f $SERVER_PORT
+	touch $SERVER_PORT
+	rm -f $CLIENT_LOG
+	touch $CLIENT_LOG
+
+	touch $TESTFILE
+
+	# Start the server
+	src/locktest $mode $TESTFILE 2> $SERVER_LOG 1> $SERVER_PORT &
+	server_pid=$!
+
+	timeout=30
+	while [ $timeout -gt 0 ]; do
+		sleep 1
+
+		PORT=$(cat $SERVER_PORT | grep "^server port: " | awk '{print $3}')
+		if [ -n "$PORT" ]; then
+			break
+		fi
+
+		# check the existence of server process
+		if ! kill -s 0 $server_pid >/dev/null 2>&1; then
+			_dump_logs_fail "Server died abnormally"
+		fi
+
+		let timeout=timeout-1
+	done
+
+	if [ -z "$PORT" ]; then
+		_dump_logs_fail "Could not get server port"
+	fi
+
+	# Start the client
+
+	src/locktest $mode -p $PORT -h localhost $TESTFILE 2> $CLIENT_LOG
+	client_result=$?
+	client_pid=$!
+	if [ $client_result -ne 0 ]; then
+		_dump_logs_fail "Client reported failure ($client_result)"
+	fi
+	wait $server_pid
+	server_result=$?
+	if [ $server_result -ne 0 ]; then
+		_dump_logs_fail "Server reported failure ($server_result)"
+	fi
+	echo success!
+	status=0
+}
+
+_run_locktest() {
+	_run_generic ""
+}
