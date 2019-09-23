@@ -827,6 +827,8 @@ main(int argc, char *argv[])
     }
 
     filename=argv[optind];
+    if (debug)
+	fprintf(stderr, "Working on file : %s\n", filename);
     if (do_open(O_RDWR) == FAIL)
 	exit(1);
 
@@ -905,10 +907,10 @@ main(int argc, char *argv[])
         struct hostent  *servInfo;
 
         if ((servInfo = gethostbyname(host)) == NULL) {
-	    printf("Couldn't get hostbyname for %s", host);
+	    fprintf(stderr, "Couldn't get hostbyname for %s", host);
 	    if (h_errno == HOST_NOT_FOUND)
-		printf(": host not found");
-	    printf("\n");
+		fprintf(stderr, ": host not found");
+	    fprintf(stderr, "\n");
             exit(1);
             /*NOTREACHED*/
         }
@@ -1011,16 +1013,14 @@ main(int argc, char *argv[])
 		    if( result != tests[index][RESULT]) {
 			fail_flag++;
 			/* We have a failure */
-			if(debug)
-			    fprintf(stderr, "Server failure in test %d, while %sing using offset %lld, length %lld - err = %d:%s\n", 
-					ctl.test,
-					get_cmd_str(tests[index][COMMAND]),
-						(long long)tests[index][OFFSET],
-						(long long)tests[index][LENGTH],
-						saved_errno, strerror(saved_errno));
-			fprintf(stderr, "Server failure in %lld:%s\n",
-					(long long)tests[index][TEST_NUM],
-					descriptions[tests[index][TEST_NUM] - 1]);
+			fprintf(stderr, "     ***** Server failure *****\n");
+			fprintf(stderr, "     in test %d, while %sing using offset %lld, length %lld - err = %d:%s\n",
+				ctl.test, get_cmd_str(tests[index][COMMAND]),
+				(long long)tests[index][OFFSET],
+				(long long)tests[index][LENGTH],
+				saved_errno, strerror(saved_errno));
+			fprintf(stderr, "     %d:%s\n",
+					ctl.test, descriptions[ctl.test - 1]);
 		    }
 		}
 	    /* else send it off to the client */
@@ -1047,14 +1047,13 @@ main(int argc, char *argv[])
 		     * not what the command returned */
 		    if( ctl.result == FAIL ) {
 			fail_flag++;
-			if(debug)
-			    fprintf(stderr, "Client failure in test %d, while %sing using offset %lld, length %lld - err = %d:%s\n",
+			fprintf(stderr, "     ***** Client failure *****\n");
+			fprintf(stderr, "     in test %d, while %sing using offset %lld, length %lld - err = %d:%s\n",
 					ctl.test, get_cmd_str(ctl.command),
 					(long long)ctl.offset, (long long)ctl.length,
 					ctl.error, strerror(ctl.error));
-			fprintf(stderr, "Client failure in %lld:%s\n",
-					(long long)tests[index][TEST_NUM],
-					descriptions[tests[index][TEST_NUM] - 1]);
+			fprintf(stderr, "     %d:%s\n",
+					ctl.test, descriptions[ctl.test - 1]);
 		    }
 		}
 	    }
@@ -1110,9 +1109,10 @@ main(int argc, char *argv[])
 		    break;
 	    }
 	    if( result != ctl.result ) {
-		if(debug)
-		    fprintf(stderr,"Got %d, wanted %d\n",
-				result, ctl.result);
+		fprintf(stderr,"Failure in %d:%s\n",
+			ctl.test, descriptions[ctl.test - 1]);
+		fprintf(stderr,"     Got %d, wanted %d\n",
+			result, ctl.result);
 		ctl.result = FAIL;
 		ctl.error = saved_errno;
 		fail_count++;
@@ -1130,8 +1130,7 @@ main(int argc, char *argv[])
 	    }
 	}
     }
-    if(server)
-	printf("%d tests run, %d failed\n", test_count, fail_count);
+    fprintf(stderr, "%d tests run, %d failed\n", test_count, fail_count);
 }   
     
     exit(fail_count);
