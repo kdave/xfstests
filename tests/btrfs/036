@@ -20,12 +20,19 @@ _cleanup()
 	# kill backgroud snapshots
 	if [ $snapshots_pid -ne 0 ] && ps -p $snapshots_pid | grep -q $snapshots_pid; then
 		kill -TERM $snapshots_pid 2> /dev/null
+		wait $snapshots_pid
 	fi
 	rm -f $tmp.*
 }
 
 do_snapshots()
 {
+	# Wait for any running 'btrfs subvolume snapshot' subcommand before
+	# exitting so that after the test kills the subshell running this
+	# function, it does not fail with EBUSY when unmounting the scratch
+	# device.
+	trap "wait; exit" SIGTERM
+
 	i=2
 	while [ 1 ]
 	do
