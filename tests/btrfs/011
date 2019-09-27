@@ -34,7 +34,7 @@ _cleanup()
 		kill -TERM $noise_pid
 	fi
 	wait
-	rm -f $tmp.tmp
+	rm -f $tmp.*
 	# we need this umount and couldn't rely on _require_scratch to umount
 	# it from next test, because we would replace SCRATCH_DEV, which is
 	# needed by _require_scratch, and make it umounted.
@@ -54,13 +54,17 @@ _require_scratch_dev_pool_equal_size
 _require_command "$WIPEFS_PROG" wipefs
 
 rm -f $seqres.full
-rm -f $tmp.tmp
+rm -f $tmp.*
 
 echo "*** test btrfs replace"
+
+# In seconds
+wait_time=1
 
 fill_scratch()
 {
 	local fssize=$1
+	local filler_pid
 
 	# Fill inline extents.
 	for i in `seq 1 500`; do
@@ -75,6 +79,30 @@ fill_scratch()
 	for i in `seq $fssize`; do
 		cp $SCRATCH_MNT/t0 $SCRATCH_MNT/t$i || _fail "cp failed"
 	done > /dev/null 2>> $seqres.full
+
+	# Ensure we have enough data so that dev-replace would take at least
+	# 2 * $wait_time, allowing we cancel the running replace.
+	# Some extra points:
+	# - Use XFS_IO_PROG instead of dd
+	#   fstests wraps dd, making it pretty hard to kill the real dd pid
+	# - Use 64K block size with Direct IO
+	#   64K is the same stripe size used in replace/scrub. Using Direct IO
+	#   ensure the IO speed is near device limit and comparable to replace
+	#   speed.
+	$XFS_IO_PROG -f -d -c "pwrite -b 64k 0 1E" "$SCRATCH_MNT/t_filler" &>\
+		$tmp.filler_result &
+	filler_pid=$!
+	sleep $((2 * $wait_time))
+	kill -KILL $filler_pid &> /dev/null
+	wait $filler_pid &> /dev/null
+
+	# If the system is too fast and the fs is too small, then skip the test
+	if grep -q "No space left" $tmp.filler_result; then
+		ls -alh $SCRATCH_MNT >> $seqres.full
+		cat $tmp.filler_result >> $seqres.full
+		_notrun "fs too small for this test"
+	fi
+	cat $tmp.filler_result
 	sync; sync
 }
 
@@ -147,7 +175,7 @@ btrfs_replace_test()
 	if [ "${with_cancel}Q" = "cancelQ" ]; then
 		# background the replace operation (no '-B' option given)
 		_run_btrfs_util_prog replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT
-		sleep 1
+		sleep $wait_time
 		_run_btrfs_util_prog replace cancel $SCRATCH_MNT
 
 		# 'replace status' waits for the replace operation to finish
@@ -157,10 +185,10 @@ btrfs_replace_test()
 		grep -q canceled $tmp.tmp || _fail "btrfs replace status (canceled) failed"
 	else
 		if [ "${quick}Q" = "thoroughQ" ]; then
-			# On current hardware, the thorough test runs
-			# more than a second. This is a chance to force
-			# a sync in the middle of the replace operation.
-			(sleep 1; sync) > /dev/null 2>&1 &
+			# The thorough test runs around 2 * $wait_time seconds.
+			# This is a chance to force a sync in the middle of the
+			# replace operation.
+			(sleep $wait_time; sync) > /dev/null 2>&1 &
 		fi
 		_run_btrfs_util_prog replace start -Bf $replace_options $source_dev $target_dev $SCRATCH_MNT
 
