@@ -45,6 +45,17 @@ _require_scratch_verity()
 	FSV_BLOCK_SIZE=$(get_page_size)
 }
 
+# Check for CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y.
+_require_fsverity_builtin_signatures()
+{
+	if [ ! -e /proc/keys ]; then
+		_notrun "kernel doesn't support keyrings"
+	fi
+	if ! awk '{print $9}' /proc/keys | grep -q '^\.fs-verity:$'; then
+		_notrun "kernel doesn't support fs-verity builtin signatures"
+	fi
+}
+
 _scratch_mkfs_verity()
 {
 	case $FSTYP in
@@ -90,6 +101,11 @@ _fsv_enable()
 _fsv_measure()
 {
         $FSVERITY_PROG measure "$@" | awk '{print $1}'
+}
+
+_fsv_sign()
+{
+	$FSVERITY_PROG sign "$@"
 }
 
 # Generate a file, then enable verity on it.
