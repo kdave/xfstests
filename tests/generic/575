@@ -1,0 +1,112 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2018 Google LLC
+#
+# FS QA Test generic/575
+#
+# Test that fs-verity is using the correct measurement values.  This test
+# verifies that fs-verity is doing its Merkle tree-based hashing correctly,
+# i.e. that it hasn't been broken by a change.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/verity
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_verity
+if [ $FSV_BLOCK_SIZE != 4096 ]; then
+	_notrun "4096-byte verity block size not supported on this platform"
+fi
+
+_scratch_mkfs_verity &>> $seqres.full
+_scratch_mount
+fsv_orig_file=$SCRATCH_MNT/file
+fsv_file=$SCRATCH_MNT/file.fsv
+
+algs=(sha256 sha512)
+
+# Try files with 0, 1, and multiple Merkle tree levels.
+file_sizes=(0 4096 65536 65536 100000000)
+
+# Try both unsalted and salted, and check that empty salt is the same as no salt
+salts=('' '' '' '--salt=' '--salt=f3c93fa6fb828c0e1587e5714ecf6f56')
+
+# The expected file measurements are here rather than in the expected output
+# file because not all hash algorithms may be available.
+sha256_vals=(
+sha256:3d248ca542a24fc62d1c43b916eae5016878e2533c88238480b26128a1f1af95
+sha256:babc284ee4ffe7f449377fbf6692715b43aec7bc39c094a95878904d34bac97e
+sha256:011e3f2b1dc89b75d78cddcc2a1b85cd8a64b2883e5f20f277ae4c0617e0404f
+sha256:011e3f2b1dc89b75d78cddcc2a1b85cd8a64b2883e5f20f277ae4c0617e0404f
+sha256:9d33cab743468fcbe4edab91a275b30dd543c12dd5e6ce6f2f737f66a1558f06
+)
+sha512_vals=(
+sha512:ccf9e5aea1c2a64efa2f2354a6024b90dffde6bbc017825045dce374474e13d10adb9dadcc6ca8e17a3c075fbd31336e8f266ae6fa93a6c3bed66f9e784e5abf
+sha512:928922686c4caf32175f5236a7f964e9925d10a74dc6d8344a8bd08b23c228ff5792573987d7895f628f39c4f4ebe39a7367d7aeb16aaa0cd324ac1d53664e61
+sha512:eab7224ce374a0a4babcb2db25e24836247f38b87806ad9be9e5ba4daac2f5b814fc0cbdfd9f1f8499b3c9a6c1b38fe08974cce49883ab4ccd04462fd2f9507f
+sha512:eab7224ce374a0a4babcb2db25e24836247f38b87806ad9be9e5ba4daac2f5b814fc0cbdfd9f1f8499b3c9a6c1b38fe08974cce49883ab4ccd04462fd2f9507f
+sha512:f7083a38644880d25539488313e9e5b41a4d431a0e383945129ad2c36e3c1d0f28928a424641bb1363c12b6e770578102566acea73baf1ce8ee15336f5ba2446
+)
+
+test_alg()
+{
+	local alg=$1
+	local -n vals=${alg}_vals
+	local i
+	local file_size
+	local expected actual salt_arg
+
+	_fsv_scratch_begin_subtest "Check for expected measurement values ($alg)"
+
+	if ! _fsv_have_hash_algorithm $alg $fsv_file; then
+		if [ "$alg" = sha256 ]; then
+			_fail "Something is wrong - sha256 hash should always be available"
+		fi
+		return 0
+	fi
+
+	for i in ${!file_sizes[@]}; do
+		file_size=${file_sizes[$i]}
+		expected=${vals[$i]}
+		salt_arg=${salts[$i]}
+
+		head -c $file_size /dev/zero > $fsv_orig_file
+		cp $fsv_orig_file $fsv_file
+		_fsv_enable --hash-alg=$alg $salt_arg $fsv_file
+		actual=$(_fsv_measure $fsv_file)
+		if [ "$actual" != "$expected" ]; then
+			echo "Mismatch: expected $expected, kernel calculated $actual (file_size=$file_size)"
+		fi
+		cmp $fsv_orig_file $fsv_file
+		rm -f $fsv_file
+	done
+}
+
+for alg in ${algs[@]}; do
+	test_alg $alg
+done
+
+# success, all done
+status=0
+exit
