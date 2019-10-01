@@ -1,0 +1,84 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test btrfs/195
+#
+# Test raid profile conversion. It's sufficient to test all dest profiles as
+# source profiles just rely on being able to read the data and metadata.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch_dev_pool 4
+
+
+declare -a TEST_VECTORS=(
+# $nr_dev_min:$data:$metadata:$data_convert:$metadata_convert
+"4:single:raid1"
+"4:single:raid0"
+"4:single:raid10"
+"4:single:dup"
+"4:single:raid5"
+"4:single:raid6"
+"2:raid1:single"
+)
+
+run_testcase() {
+	IFS=':' read -ra args <<< $1
+	num_disks=${args[0]}
+	src_type=${args[1]}
+	dst_type=${args[2]}
+
+	_scratch_dev_pool_get $num_disks
+
+	echo "=== Running test: $1 ===" >> $seqres.full
+
+	_scratch_pool_mkfs -d$src_type >> $seqres.full 2>&1
+	_scratch_mount
+
+	# Create random filesystem with 20k write ops
+	$FSSTRESS_PROG -d $SCRATCH_MNT -w -n 10000 $FSSTRESS_AVOID >>$seqres.full 2>&1
+
+	$BTRFS_UTIL_PROG balance start -f -dconvert=$dst_type $SCRATCH_MNT >> $seqres.full 2>&1
+	[ $? -eq 0 ] || echo "$1: Failed convert"
+
+	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1
+	[ $? -eq 0 ] || echo "$1: Scrub failed"
+
+	_scratch_unmount
+	_check_btrfs_filesystem $SCRATCH_DEV
+	_scratch_dev_pool_put
+}
+
+for i in "${TEST_VECTORS[@]}"; do
+	run_testcase $i
+done
+
+echo "Silence is golden"
+status=0
+exit
