@@ -1,0 +1,110 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Facebook.  All Rights Reserved.
+#
+# FS QA Test 196
+#
+# Test multi subvolume fsync to test a bug where we'd end up pointing at a block
+# we haven't written.  This was fixed by the patch
+#
+# btrfs: fix incorrect updating of log root tree
+#
+# Will do log replay and check the filesystem.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+fio_config=$tmp.fio
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_log_writes_cleanup &> /dev/null
+	_dmthin_cleanup
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmthin
+. ./common/dmlogwrites
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+
+# Use thin device as replay device, which requires $SCRATCH_DEV
+_require_scratch_nocheck
+# and we need extra device as log device
+_require_log_writes
+_require_dm_target thin-pool
+
+cat >$fio_config <<EOF
+[global]
+readwrite=write
+fallocate=none
+bs=4k
+fsync=1
+size=128k
+EOF
+
+for i in $(seq 0 49); do
+	echo "[foo$i]" >> $fio_config
+	echo "filename=$SCRATCH_MNT/$i/file" >> $fio_config
+done
+
+_require_fio $fio_config
+
+cat $fio_config >> $seqres.full
+
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
+_dmthin_init
+_log_writes_init $DMTHIN_VOL_DEV
+_log_writes_mkfs >> $seqres.full 2>&1
+_log_writes_mark mkfs
+
+_log_writes_mount
+
+# First create all the subvolumes
+for i in $(seq 0 49); do
+	$BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/$i" > /dev/null
+done
+
+$FIO_PROG $fio_config > /dev/null 2>&1
+_log_writes_unmount
+
+_log_writes_remove
+prev=$(_log_writes_mark_to_entry_number mkfs)
+[ -z "$prev" ] && _fail "failed to locate entry mark 'mkfs'"
+cur=$(_log_writes_find_next_fua $prev)
+[ -z "$cur" ] && _fail "failed to locate next FUA write"
+
+while [ ! -z "$cur" ]; do
+	_log_writes_replay_log_range $cur $DMTHIN_VOL_DEV >> $seqres.full
+
+	# We need to mount the fs because btrfsck won't bother checking the log.
+	_dmthin_mount
+	_dmthin_check_fs
+
+	prev=$cur
+	cur=$(_log_writes_find_next_fua $(($cur + 1)))
+	[ -z "$cur" ] && break
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
