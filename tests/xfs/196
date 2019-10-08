@@ -50,6 +50,8 @@ bytes=$((64 * 1024))
 
 # create sequential delayed allocation
 $XFS_IO_PROG -f -c "pwrite 0 $bytes" $file >> $seqres.full 2>&1
+$XFS_IO_PROG -c "bmap -elpv" $file | grep -q delalloc || \
+	_notrun "Unable to create delayed allocations"
 
 # Enable write drops. All buffered writes are dropped from this point on.
 _scratch_inject_error "drop_writes" 1
