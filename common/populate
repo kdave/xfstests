@@ -22,6 +22,26 @@ _require_xfs_db_blocktrash_z_command() {
 # Attempt to make files of "every" format for data, dirs, attrs etc.
 # (with apologies to Eric Sandeen for mutating xfser.sh)
 
+# Create a file of a given size.
+__populate_create_file() {
+	local sz="$1"
+	local fname="$2"
+
+	$XFS_IO_PROG -f -c "pwrite -S 0x62 -W -b 1m 0 $sz" "${fname}"
+}
+
+# Punch out every other hole in this file, if it exists.
+#
+# The goal here is to force the creation of a large number of metadata records
+# by creating a lot of tiny extent mappings in a file.  Callers should ensure
+# that fragmenting the file actually causes record creation.  Call this
+# function /after/ creating all other metadata structures.
+__populate_fragment_file() {
+	local fname="$1"
+
+	test -f "${fname}" && ./src/punch-alternating "${fname}"
+}
+
 # Create a large directory
 __populate_create_dir() {
 	name="$1"
@@ -156,13 +176,12 @@ _scratch_xfs_populate() {
 	# Regular files
 	# - FMT_EXTENTS
 	echo "+ extents file"
-	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 ${blksz}" "${SCRATCH_MNT}/S_IFREG.FMT_EXTENTS"
+	__populate_create_file $blksz "${SCRATCH_MNT}/S_IFREG.FMT_EXTENTS"
 
 	# - FMT_BTREE
 	echo "+ btree extents file"
 	nr="$((blksz * 2 / 16))"
-	$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/S_IFREG.FMT_BTREE"
-	./src/punch-alternating "${SCRATCH_MNT}/S_IFREG.FMT_BTREE"
+	__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/S_IFREG.FMT_BTREE"
 
 	# Directories
 	# - INLINE
@@ -257,8 +276,7 @@ _scratch_xfs_populate() {
 	# Free space btree
 	echo "+ freesp btree"
 	nr="$((blksz * 2 / 8))"
-	$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/BNOBT"
-	./src/punch-alternating "${SCRATCH_MNT}/BNOBT"
+	__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/BNOBT"
 
 	# Inode btree
 	echo "+ inobt btree"
@@ -280,8 +298,7 @@ _scratch_xfs_populate() {
 	if [ $is_rmapbt -gt 0 ]; then
 		echo "+ rmapbt btree"
 		nr="$((blksz * 2 / 24))"
-		$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/RMAPBT"
-		./src/punch-alternating "${SCRATCH_MNT}/RMAPBT"
+		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/RMAPBT"
 	fi
 
 	# Realtime Reverse-mapping btree
@@ -289,8 +306,7 @@ _scratch_xfs_populate() {
 	if [ $is_rmapbt -gt 0 ] && [ $is_rt -gt 0 ]; then
 		echo "+ rtrmapbt btree"
 		nr="$((blksz * 2 / 32))"
-		$XFS_IO_PROG -f -R -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/RTRMAPBT"
-		./src/punch-alternating "${SCRATCH_MNT}/RTRMAPBT"
+		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/RTRMAPBT"
 	fi
 
 	# Reference-count btree
@@ -298,14 +314,20 @@ _scratch_xfs_populate() {
 	if [ $is_reflink -gt 0 ]; then
 		echo "+ reflink btree"
 		nr="$((blksz * 2 / 12))"
-		$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/REFCOUNTBT"
+		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/REFCOUNTBT"
 		cp --reflink=always "${SCRATCH_MNT}/REFCOUNTBT" "${SCRATCH_MNT}/REFCOUNTBT2"
-		./src/punch-alternating "${SCRATCH_MNT}/REFCOUNTBT"
 	fi
 
 	# Copy some real files (xfs tests, I guess...)
 	echo "+ real files"
 	test $fill -ne 0 && __populate_fill_fs "${SCRATCH_MNT}" 5
+
+	# Make sure we get all the fragmentation we asked for
+	__populate_fragment_file "${SCRATCH_MNT}/S_IFREG.FMT_BTREE"
+	__populate_fragment_file "${SCRATCH_MNT}/BNOBT"
+	__populate_fragment_file "${SCRATCH_MNT}/RMAPBT"
+	__populate_fragment_file "${SCRATCH_MNT}/RTRMAPBT"
+	__populate_fragment_file "${SCRATCH_MNT}/REFCOUNTBT"
 
 	umount "${SCRATCH_MNT}"
 }
@@ -333,17 +355,16 @@ _scratch_ext4_populate() {
 	# Regular files
 	# - FMT_INLINE
 	echo "+ inline file"
-	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 1" "${SCRATCH_MNT}/S_IFREG.FMT_INLINE"
+	__populate_create_file 1 "${SCRATCH_MNT}/S_IFREG.FMT_INLINE"
 
 	# - FMT_EXTENTS
 	echo "+ extents file"
-	$XFS_IO_PROG -f -c "pwrite -S 0x61 0 ${blksz}" "${SCRATCH_MNT}/S_IFREG.FMT_EXTENTS"
+	__populate_create_file $blksz "${SCRATCH_MNT}/S_IFREG.FMT_EXTENTS"
 
 	# - FMT_ETREE
 	echo "+ extent tree file"
 	nr="$((blksz * 2 / 12))"
-	$XFS_IO_PROG -f -c "pwrite -S 0x62 0 $((blksz * nr))" "${SCRATCH_MNT}/S_IFREG.FMT_ETREE"
-	./src/punch-alternating "${SCRATCH_MNT}/S_IFREG.FMT_ETREE"
+	__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/S_IFREG.FMT_ETREE"
 
 	# Directories
 	# - INLINE
@@ -405,6 +426,9 @@ _scratch_ext4_populate() {
 	# Copy some real files (xfs tests, I guess...)
 	echo "+ real files"
 	test $fill -ne 0 && __populate_fill_fs "${SCRATCH_MNT}" 5
+
+	# Make sure we get all the fragmentation we asked for
+	__populate_fragment_file "${SCRATCH_MNT}/S_IFREG.FMT_ETREE"
 
 	umount "${SCRATCH_MNT}"
 }
