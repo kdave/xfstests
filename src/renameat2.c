@@ -18,10 +18,6 @@
 #define SYS_renameat2 353
 #endif
 
-#if !defined(SYS_renameat2) && defined(__i386__)
-#define SYS_renameat2 353
-#endif
-
 static int renameat2(int dfd1, const char *path1,
 		     int dfd2, const char *path2,
 		     unsigned int flags)
