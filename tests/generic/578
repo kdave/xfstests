@@ -1,0 +1,105 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-newer
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 578
+#
+# Make sure that we can handle multiple mmap writers to the same file.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.* $testdir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_test_program "mmap-write-concurrent"
+_require_command "$FILEFRAG_PROG" filefrag
+_require_test_reflink
+_require_cp_reflink
+
+rm -f $seqres.full
+
+compare() {
+	for i in $(seq 1 8); do
+		md5sum $testdir/file$i | _filter_test_dir
+		echo $testdir/file$i >> $seqres.full
+		od -tx1 -Ad -c $testdir/file$i >> $seqres.full
+	done
+}
+
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
+
+echo "Create the original files"
+blksz=65536
+filesz=$((blksz * 4))
+_pwrite_byte 0x61 0 $filesz $testdir/file1 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file3 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file4 >> $seqres.full
+_reflink_range $testdir/file1 0 $testdir/file5 $blksz $filesz >> $seqres.full
+_reflink_range $testdir/file1 0 $testdir/file6 $((blksz * 2)) $filesz >> $seqres.full
+_reflink_range $testdir/file1 0 $testdir/file7 $((blksz * 3)) $filesz >> $seqres.full
+_reflink_range $testdir/file1 0 $testdir/file8 $((blksz * 4)) $filesz >> $seqres.full
+_test_cycle_mount
+
+echo "Compare files before cow" | tee -a $seqres.full
+compare
+
+echo "mwrite all copies" | tee -a $seqres.full
+off=$(( (filesz / 2) - 168 ))
+len=337
+$here/src/mmap-write-concurrent $len \
+		$off $testdir/file1 \
+		$off $testdir/file2 \
+		$off $testdir/file3 \
+		$off $testdir/file4 \
+		$((off + blksz)) $testdir/file5 \
+		$((off + (blksz * 2))) $testdir/file6 \
+		$((off + (blksz * 3))) $testdir/file7 \
+		$((off + (blksz * 4))) $testdir/file8 \
+		168 $testdir/file1 \
+		$((blksz - 168)) $testdir/file2 \
+		$((filesz - 777)) $testdir/file3 \
+		$(((blksz * 3) - 168)) $testdir/file4 \
+
+
+echo "Compare files before remount" | tee -a $seqres.full
+compare
+_test_cycle_mount
+
+echo "Compare files after remount" | tee -a $seqres.full
+compare
+
+echo "Check for non-shared extents" | tee -a $seqres.full
+$FILEFRAG_PROG -v $testdir/file1 $testdir/file2 $testdir/file3 $testdir/file4 \
+		  $testdir/file5 $testdir/file6 $testdir/file7 $testdir/file8 \
+		  | grep '^[[:space:]]*[0-9]*:' > $testdir/fiemap
+cat $testdir/fiemap >> $seqres.full
+grep -q 'shared' $testdir/fiemap || \
+		echo "Expected to find shared extents"
+
+grep -q -v 'shared' $testdir/fiemap || \
+		echo "Expected to find non-shared extents"
+
+# success, all done
+status=0
+exit
