@@ -1,0 +1,127 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2019 Google LLC
+#
+# FS QA Test generic/580
+#
+# Basic test of the fscrypt filesystem-level encryption keyring
+# and v2 encryption policies.
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+echo
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption -v 2
+
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+
+test_with_policy_version()
+{
+	local vers=$1
+	local raw_key=""
+	local i
+
+	for i in {1..64}; do
+		raw_key+="\\x$(printf "%02x" $i)"
+	done
+
+	if (( vers == 1 )); then
+		# Key descriptor: arbitrary value
+		local keyspec="0000111122223333"
+		local add_enckey_args="-d $keyspec"
+	else
+		# Key identifier:
+		# HKDF-SHA512(key=raw_key, salt="", info="fscrypt\0\x01")
+		local keyspec="69b2f6edeee720cce0577937eb8a6751"
+		local add_enckey_args=""
+	fi
+
+	mkdir $dir
+	echo "# Setting v$vers encryption policy"
+	_set_encpolicy $dir $keyspec
+	echo "# Getting v$vers encryption policy"
+	_get_encpolicy $dir | _filter_scratch
+	if (( vers == 1 )); then
+		echo "# Getting v1 encryption policy using old ioctl"
+		_get_encpolicy $dir -1 | _filter_scratch
+	fi
+	echo "# Trying to create file without key added yet"
+	$XFS_IO_PROG -f $dir/file |& _filter_scratch
+	echo "# Getting encryption key status"
+	_enckey_status $SCRATCH_MNT $keyspec
+	echo "# Adding encryption key"
+	_add_enckey $SCRATCH_MNT "$raw_key" $add_enckey_args
+	echo "# Creating encrypted file"
+	echo contents > $dir/file
+	echo "# Getting encryption key status"
+	_enckey_status $SCRATCH_MNT $keyspec
+	echo "# Removing encryption key"
+	_rm_enckey $SCRATCH_MNT $keyspec
+	echo "# Getting encryption key status"
+	_enckey_status $SCRATCH_MNT $keyspec
+	echo "# Verifying that the encrypted directory was \"locked\""
+	cat $dir/file |& _filter_scratch
+	cat "$(find $dir -type f)" |& _filter_scratch | cut -d ' ' -f3-
+
+	# Test removing key with a file open.
+	echo "# Re-adding encryption key"
+	_add_enckey $SCRATCH_MNT "$raw_key" $add_enckey_args
+	echo "# Creating another encrypted file"
+	echo foo > $dir/file2
+	echo "# Removing key while an encrypted file is open"
+	exec 3< $dir/file
+	_rm_enckey $SCRATCH_MNT $keyspec
+	echo "# Non-open file should have been evicted"
+	cat $dir/file2 |& _filter_scratch
+	echo "# Open file shouldn't have been evicted"
+	cat $dir/file
+	echo "# Key should be in \"incompletely removed\" state"
+	_enckey_status $SCRATCH_MNT $keyspec
+	echo "# Closing file and removing key for real now"
+	exec 3<&-
+	_rm_enckey $SCRATCH_MNT $keyspec
+	cat $dir/file |& _filter_scratch
+
+	echo "# Cleaning up"
+	rm -rf $dir
+	_scratch_cycle_mount	# Clear all keys
+	echo
+}
+
+dir=$SCRATCH_MNT/dir
+
+test_with_policy_version 1
+
+test_with_policy_version 2
+
+echo "# Trying to remove absent key"
+_rm_enckey $SCRATCH_MNT abcdabcdabcdabcd
+
+# success, all done
+status=0
+exit
