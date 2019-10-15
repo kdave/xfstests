@@ -89,7 +89,7 @@ _require_encryption_policy_support()
 	mkdir $dir
 	_require_command "$KEYCTL_PROG" keyctl
 	_new_session_keyring
-	local keydesc=$(_generate_encryption_key)
+	local keydesc=$(_generate_session_encryption_key)
 	if _set_encpolicy $dir $keydesc $set_encpolicy_args \
 		2>&1 >>$seqres.full | egrep -q 'Invalid argument'; then
 		_notrun "kernel does not support encryption policy: '$set_encpolicy_args'"
@@ -153,7 +153,7 @@ _generate_key_descriptor()
 	echo $keydesc
 }
 
-# Generate a raw encryption key, but don't add it to the keyring yet.
+# Generate a raw encryption key, but don't add it to any keyring yet.
 _generate_raw_encryption_key()
 {
 	local raw=""
@@ -166,7 +166,7 @@ _generate_raw_encryption_key()
 
 # Add the specified raw encryption key to the session keyring, using the
 # specified key descriptor.
-_add_encryption_key()
+_add_session_encryption_key()
 {
 	local keydesc=$1
 	local raw=$2
@@ -209,26 +209,26 @@ _add_encryption_key()
 # keyctl program.  It's assumed the caller has already set up a test-scoped
 # session keyring using _new_session_keyring.
 #
-_generate_encryption_key()
+_generate_session_encryption_key()
 {
 	local keydesc=$(_generate_key_descriptor)
 	local raw=$(_generate_raw_encryption_key)
 
-	_add_encryption_key $keydesc $raw
+	_add_session_encryption_key $keydesc $raw
 
 	echo $keydesc
 }
 
 # Unlink an encryption key from the session keyring, given its key descriptor.
-_unlink_encryption_key()
+_unlink_session_encryption_key()
 {
 	local keydesc=$1
 	local keyid=$($KEYCTL_PROG search @s logon $FSTYP:$keydesc)
 	$KEYCTL_PROG unlink $keyid >>$seqres.full
 }
 
-# Revoke an encryption key from the keyring, given its key descriptor.
-_revoke_encryption_key()
+# Revoke an encryption key from the session keyring, given its key descriptor.
+_revoke_session_encryption_key()
 {
 	local keydesc=$1
 	local keyid=$($KEYCTL_PROG search @s logon $FSTYP:$keydesc)
@@ -412,7 +412,7 @@ _require_get_ciphertext_filename_support()
 		_scratch_mount
 		_new_session_keyring
 
-		local keydesc=$(_generate_encryption_key)
+		local keydesc=$(_generate_session_encryption_key)
 		local dir=$SCRATCH_MNT/test.${FUNCNAME[0]}
 		local file=$dir/$(perl -e 'print "A" x 255')
 		mkdir $dir
@@ -634,7 +634,7 @@ _verify_ciphertext_for_encryption_policy()
 	local raw_key=$(_generate_raw_encryption_key)
 	local keydesc=$(_generate_key_descriptor)
 	_new_session_keyring
-	_add_encryption_key $keydesc $raw_key
+	_add_session_encryption_key $keydesc $raw_key
 	local raw_key_hex=$(echo "$raw_key" | tr -d '\\x')
 
 	echo

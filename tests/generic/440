@@ -46,7 +46,7 @@ _scratch_mkfs_encrypted &>> $seqres.full
 _scratch_mount
 keydesc=$(_generate_key_descriptor)
 raw_key=$(_generate_raw_encryption_key)
-_add_encryption_key $keydesc $raw_key
+_add_session_encryption_key $keydesc $raw_key
 
 # Set up an encrypted directory containing a regular file, a subdirectory, and a
 # symlink.
@@ -65,7 +65,7 @@ echo
 echo "***** Parent has key, but child doesn't *****"
 exec 3< $SCRATCH_MNT/edir # pin inode with cached key in memory
 ls $SCRATCH_MNT/edir | sort
-_unlink_encryption_key $keydesc
+_unlink_session_encryption_key $keydesc
 cat $SCRATCH_MNT/edir/file |& _filter_scratch
 ls $SCRATCH_MNT/edir/subdir
 cat $SCRATCH_MNT/edir/symlink |& _filter_scratch
@@ -79,14 +79,14 @@ exec 3>&-
 # plaintext contents, even though its filename is shown in ciphertext!
 echo
 echo "***** Child has key, but parent doesn't *****"
-_add_encryption_key $keydesc $raw_key
+_add_session_encryption_key $keydesc $raw_key
 mkdir $SCRATCH_MNT/edir2
 _set_encpolicy $SCRATCH_MNT/edir2 $keydesc
 ln $SCRATCH_MNT/edir/file $SCRATCH_MNT/edir2/link
 _scratch_cycle_mount
 cat $SCRATCH_MNT/edir2/link
 exec 3< $SCRATCH_MNT/edir2/link # pin inode with cached key in memory
-_unlink_encryption_key $keydesc
+_unlink_session_encryption_key $keydesc
 stat $SCRATCH_MNT/edir/file |& _filter_scratch
 cat "$(find $SCRATCH_MNT/edir/ -type f)"
 exec 3>&-

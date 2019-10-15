@@ -56,7 +56,7 @@ _new_session_keyring
 keydesc=$(_generate_key_descriptor)
 raw_key=$(_generate_raw_encryption_key)
 mkdir $SCRATCH_MNT/edir
-_add_encryption_key $keydesc $raw_key
+_add_session_encryption_key $keydesc $raw_key
 _set_encpolicy $SCRATCH_MNT/edir $keydesc
 
 # Create two files in the directory: one whose name is valid in the base64
@@ -96,7 +96,7 @@ show_directory_with_key()
 # the correct number of them are listed by readdir, and save them for later.
 echo
 echo "***** Without encryption key *****"
-_unlink_encryption_key $keydesc
+_unlink_session_encryption_key $keydesc
 _scratch_cycle_mount
 echo "--- Directory listing:"
 ciphertext_names=( $(find $SCRATCH_MNT/edir -mindepth 1 | sort) )
@@ -109,7 +109,7 @@ show_file_contents
 # stale dentries.
 echo
 echo "***** With encryption key *****"
-_add_encryption_key $keydesc $raw_key
+_add_session_encryption_key $keydesc $raw_key
 show_directory_with_key
 
 # Test for ->d_revalidate() race conditions.
@@ -127,7 +127,7 @@ echo "***** After key revocation *****"
 	exec 3<$SCRATCH_MNT/edir
 	exec 4<$SCRATCH_MNT/edir/@@@
 	exec 5<$SCRATCH_MNT/edir/abcd
-	_revoke_encryption_key $keydesc
+	_revoke_session_encryption_key $keydesc
 	show_directory_with_key
 )
 
