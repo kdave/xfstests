@@ -382,9 +382,16 @@ _get_encryption_nonce()
 		#	flags: 0x2
 		#	master_key_descriptor: 0000000000000000
 		#	nonce: EFBD18765DF6414EC0A2CD5F91297E12
+		#
+		# Also support the case where the whole xattr is printed as hex,
+		# as is the case for fscrypt_context_v2.
+		#
+		#	xattr: e_name_index:9 e_name:c e_name_len:1 e_value_size:40 e_value:
+		#	020104020000000033809BFEBE68A4AD264079B30861DD5E6B9E72D07523C58794ACF52534BAA756
+		#
 		$DUMP_F2FS_PROG -i $inode $device | awk '
 			/\<e_name:c\>/ { found = 1 }
-			/^nonce:/ && found {
+			(/^nonce:/ || /^[[:xdigit:]]+$/) && found {
 				print substr($0, length($0) - 31, 32);
 				found = 0;
 			}'
@@ -405,6 +412,11 @@ _require_get_encryption_nonce_support()
 		;;
 	f2fs)
 		_require_command "$DUMP_F2FS_PROG" dump.f2fs
+		# For fscrypt_context_v2, we actually need a f2fs-tools version
+		# that has the patch "f2fs-tools: improve xattr value printing"
+		# (https://sourceforge.net/p/linux-f2fs/mailman/message/36648640/).
+		# Otherwise the xattr is incorrectly parsed as v1.  But just let
+		# the test fail in that case, as it was an f2fs-tools bug...
 		;;
 	*)
 		_notrun "_get_encryption_nonce() isn't implemented on $FSTYP"
@@ -554,7 +566,7 @@ _do_verify_ciphertext_for_encryption_policy()
 	local filenames_encryption_mode=$2
 	local policy_flags=$3
 	local set_encpolicy_args=$4
-	local keydesc=$5
+	local keyspec=$5
 	local raw_key_hex=$6
 	local crypt_cmd="$here/src/fscrypt-crypt-util $7"
 
@@ -576,7 +588,7 @@ _do_verify_ciphertext_for_encryption_policy()
 	done
 	dir=$SCRATCH_MNT/encdir
 	mkdir $dir
-	_set_encpolicy $dir $keydesc $set_encpolicy_args -f $policy_flags
+	_set_encpolicy $dir $keyspec $set_encpolicy_args -f $policy_flags
 	for src in $tmp.testfile_*; do
 		dst=$dir/${src##*.}
 		cp $src $dst
@@ -596,7 +608,7 @@ _do_verify_ciphertext_for_encryption_policy()
 		dir=$SCRATCH_MNT/encdir.pad$padding
 		mkdir $dir
 		dir_inode=$(stat -c %i $dir)
-		_set_encpolicy $dir $keydesc $set_encpolicy_args \
+		_set_encpolicy $dir $keyspec $set_encpolicy_args \
 			-f $((policy_flags | padding_flag))
 		for len in 1 3 15 16 17 32 100 254 255; do
 			name=$(tr -d -C a-zA-Z0-9 < /dev/urandom | head -c $len)
@@ -670,12 +682,14 @@ _fscrypt_mode_name_to_num()
 # policy of the specified type is used.
 #
 # The first two parameters are the contents and filenames encryption modes to
-# test.  Optionally, also specify 'direct' to test the DIRECT_KEY flag.
+# test.  Optionally, also specify 'direct' to test the DIRECT_KEY flag, and/or
+# 'v2' to test v2 policies.
 _verify_ciphertext_for_encryption_policy()
 {
 	local contents_encryption_mode=$1
 	local filenames_encryption_mode=$2
 	local opt
+	local policy_version=1
 	local policy_flags=0
 	local set_encpolicy_args=""
 	local crypt_util_args=""
@@ -683,6 +697,9 @@ _verify_ciphertext_for_encryption_policy()
 	shift 2
 	for opt; do
 		case "$opt" in
+		v2)
+			policy_version=2
+			;;
 		direct)
 			if [ $contents_encryption_mode != \
 			     $filenames_encryption_mode ]; then
@@ -701,10 +718,18 @@ _verify_ciphertext_for_encryption_policy()
 	set_encpolicy_args+=" -c $contents_mode_num"
 	set_encpolicy_args+=" -n $filenames_mode_num"
 
-	if (( policy_flags & 0x04 )); then
-		crypt_util_args+=" --kdf=none"
+	if (( policy_version > 1 )); then
+		set_encpolicy_args+=" -v 2"
+		crypt_util_args+=" --kdf=HKDF-SHA512"
+		if (( policy_flags & 0x04 )); then
+			crypt_util_args+=" --mode-num=$contents_mode_num"
+		fi
 	else
-		crypt_util_args+=" --kdf=AES-128-ECB"
+		if (( policy_flags & 0x04 )); then
+			crypt_util_args+=" --kdf=none"
+		else
+			crypt_util_args+=" --kdf=AES-128-ECB"
+		fi
 	fi
 	set_encpolicy_args=${set_encpolicy_args# }
 
@@ -713,7 +738,9 @@ _verify_ciphertext_for_encryption_policy()
 	_require_xfs_io_command "fiemap"
 	_require_get_encryption_nonce_support
 	_require_get_ciphertext_filename_support
-	_require_command "$KEYCTL_PROG" keyctl
+	if (( policy_version == 1 )); then
+		_require_command "$KEYCTL_PROG" keyctl
+	fi
 
 	echo "Creating encryption-capable filesystem" >> $seqres.full
 	_scratch_mkfs_encrypted &>> $seqres.full
@@ -721,9 +748,14 @@ _verify_ciphertext_for_encryption_policy()
 
 	echo "Generating encryption key" >> $seqres.full
 	local raw_key=$(_generate_raw_encryption_key)
-	local keydesc=$(_generate_key_descriptor)
-	_new_session_keyring
-	_add_session_encryption_key $keydesc $raw_key
+	if (( policy_version > 1 )); then
+		local keyspec=$(_add_enckey $SCRATCH_MNT "$raw_key" \
+				| awk '{print $NF}')
+	else
+		local keyspec=$(_generate_key_descriptor)
+		_new_session_keyring
+		_add_session_encryption_key $keyspec $raw_key
+	fi
 	local raw_key_hex=$(echo "$raw_key" | tr -d '\\x')
 
 	echo
@@ -737,7 +769,7 @@ _verify_ciphertext_for_encryption_policy()
 		"$filenames_encryption_mode" \
 		"$policy_flags" \
 		"$set_encpolicy_args" \
-		"$keydesc" \
+		"$keyspec" \
 		"$raw_key_hex" \
 		"$crypt_util_args"
 }
