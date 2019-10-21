@@ -313,7 +313,7 @@ _supports_filetype()
 		local testfile=$dir/$$.ftype
 		touch $testfile
 		# look for DT_UNKNOWN files
-		local unknowns=$(src/t_dir_type $dir u | wc -l)
+		local unknowns=$($here/src/t_dir_type $dir u | wc -l)
 		rm $testfile
 		# 0 unknowns is success
 		return $unknowns
@@ -386,10 +386,10 @@ _scratch_shutdown()
 		if [ -z $OVL_BASE_SCRATCH_DEV ]; then
 			_fail "_scratch_shutdown: call _require_scratch_shutdown first in test"
 		else
-			src/godown $* $OVL_BASE_SCRATCH_MNT
+			$here/src/godown $* $OVL_BASE_SCRATCH_MNT
 		fi
 	else
-		src/godown $* $SCRATCH_MNT
+		$here/src/godown $* $SCRATCH_MNT
 	fi
 }
 
@@ -1295,7 +1295,7 @@ _is_block_dev()
     fi
 
     if [ -b "$dev" ]; then
-        src/lstat64 "$dev" | $AWK_PROG '/Device type:/ { print $9 }'
+        $here/src/lstat64 "$dev" | $AWK_PROG '/Device type:/ { print $9 }'
     fi
 }
 
@@ -1314,7 +1314,7 @@ _is_char_dev()
 	fi
 
 	if [ -c "$dev" ]; then
-		src/lstat64 "$dev" | $AWK_PROG '/Device type:/ { print $9 }'
+		$here/src/lstat64 "$dev" | $AWK_PROG '/Device type:/ { print $9 }'
 	fi
 }
 
@@ -1919,10 +1919,10 @@ _require_aiodio()
 {
     if [ -z "$1" ]
     then
-        AIO_TEST=src/aio-dio-regress/aiodio_sparse2
+        AIO_TEST=$here/src/aio-dio-regress/aiodio_sparse2
         [ -x $AIO_TEST ] || _notrun "aio-dio utilities required"
     else
-        AIO_TEST=src/aio-dio-regress/$1
+        AIO_TEST=$here/src/aio-dio-regress/$1
         [ -x $AIO_TEST ] || _notrun "$AIO_TEST not built"
     fi
     _require_aio
@@ -1934,7 +1934,7 @@ _require_aiodio()
 #
 _require_test_program()
 {
-    local prog=src/$1
+    local prog=$here/src/$1
     [ -x $prog ] || _notrun "$prog not built"
 }
 
@@ -3095,7 +3095,7 @@ _require_exportfs()
 # Does shutdown work on this fs?
 _require_scratch_shutdown()
 {
-	[ -x src/godown ] || _notrun "src/godown executable not found"
+	[ -x $here/src/godown ] || _notrun "src/godown executable not found"
 
 	_scratch_mkfs > /dev/null 2>&1 || _notrun "_scratch_mkfs failed on $SCRATCH_DEV"
 	_scratch_mount
@@ -3108,11 +3108,11 @@ _require_scratch_shutdown()
 			# running shutdown to avoid shutting down base fs accidently.
 			_notrun "This test requires a valid $OVL_BASE_SCRATCH_DEV as ovl base fs"
 		else
-			src/godown -f $OVL_BASE_SCRATCH_MNT 2>&1 \
+			$here/src/godown -f $OVL_BASE_SCRATCH_MNT 2>&1 \
 			|| _notrun "Underlying filesystem does not support shutdown"
 		fi
 	else
-		src/godown -f $SCRATCH_MNT 2>&1 \
+		$here/src/godown -f $SCRATCH_MNT 2>&1 \
 			|| _notrun "$FSTYP does not support shutdown"
 	fi
 
@@ -3347,8 +3347,8 @@ _require_relatime()
 
 _require_userns()
 {
-	[ -x src/nsexec ] || _notrun "src/nsexec executable not found"
-	src/nsexec -U true 2>/dev/null || _notrun "userns not supported by this kernel"
+	[ -x $here/src/nsexec ] || _notrun "src/nsexec executable not found"
+	$here/src/nsexec -U true 2>/dev/null || _notrun "userns not supported by this kernel"
 }
 
 _create_loop_device()
@@ -3426,7 +3426,7 @@ _require_ofd_locks()
 	# EINVAL will be returned.
 	_require_test_program "t_ofd_locks"
 	touch $TEST_DIR/ofd_testfile
-	src/t_ofd_locks -t $TEST_DIR/ofd_testfile > /dev/null 2>&1
+	$here/src/t_ofd_locks -t $TEST_DIR/ofd_testfile > /dev/null 2>&1
 	[ $? -eq 22 ] && _notrun "Require OFD locks support"
 }
 

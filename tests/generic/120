@@ -31,14 +31,14 @@ _scratch_mkfs >/dev/null 2>&1 || _fail "mkfs failed"
 _compare_access_times()
 {
 	original_access_time="`cat $tmp.out | sed -n '5p'|awk '{ print substr($0,0,32)}'`"
-	accessed_time="`src/lstat64 $1 | sed -n '5p'| awk '{ print substr($0,0,32)}'`"
+	accessed_time="`$here/src/lstat64 $1 | sed -n '5p'| awk '{ print substr($0,0,32)}'`"
 	echo "*** compare access times ***"
 	if [ "$original_access_time" != "$accessed_time" ]
 		then
 		echo "*** file access time updated on $2 (unexpected) ***"
 		cat $tmp.out
 		echo "---------------------------------------------------"
-		src/lstat64 $1
+		$here/src/lstat64 $1
 		mount | grep $SCRATCH_MNT
 	fi
 
@@ -53,8 +53,8 @@ fi
 
 #executable file
 echo "*** copying file ***"
-cp src/lstat64 $SCRATCH_MNT
-src/lstat64 $SCRATCH_MNT/lstat64 >$tmp.out
+cp $here/src/lstat64 $SCRATCH_MNT
+$here/src/lstat64 $SCRATCH_MNT/lstat64 >$tmp.out
 sleep 5
 echo "*** executing file ***"
 $SCRATCH_MNT/lstat64 $SCRATCH_MNT/lstat64 >/dev/null
@@ -63,7 +63,7 @@ _compare_access_times $SCRATCH_MNT/lstat64 "executing file"
 #reading file
 echo "*** creating file ***"
 touch $SCRATCH_MNT/testfile
-src/lstat64 $SCRATCH_MNT/testfile >$tmp.out
+$here/src/lstat64 $SCRATCH_MNT/testfile >$tmp.out
 sleep 5
 echo "*** reading file ***"
 cat $SCRATCH_MNT/testfile >/dev/null
@@ -72,7 +72,7 @@ _compare_access_times $SCRATCH_MNT/testfile "reading file"
 #writing file
 echo "*** creating file ***"
 touch $SCRATCH_MNT/testfile2
-src/lstat64 $SCRATCH_MNT/testfile2 >$tmp.out
+$here/src/lstat64 $SCRATCH_MNT/testfile2 >$tmp.out
 sleep 5
 echo "*** writing to file ***"
 echo "asdf" >> $SCRATCH_MNT/testfile2
