@@ -1,0 +1,88 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Oracle.  All Rights Reserved.
+#
+# FS QA Test 197
+#
+# Test stale and alien btrfs-device in the fs devices list.
+#  Bug fixed in the kernel patch:
+#   btrfs: include non-missing as a qualifier for the latest_bdev
+#   btrfs: remove identified alien btrfs device in open_fs_devices
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	$UMOUNT_PROG $TEST_DIR/$seq.mnt >/dev/null 2>&1
+	rm -rf $TEST_DIR/$seq.mnt
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/filter.btrfs
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs btrfs
+_require_test
+_require_scratch
+_require_scratch_dev_pool 5
+
+workout()
+{
+	raid=$1
+	device_nr=$2
+
+	echo $raid
+	_scratch_dev_pool_get $device_nr
+	_spare_dev_get
+
+	_mkfs_dev $SPARE_DEV
+	mkdir -p $TEST_DIR/$seq.mnt
+	_mount $SPARE_DEV $TEST_DIR/$seq.mnt
+
+	_scratch_pool_mkfs "-d$raid -m$raid" >> $seqres.full 2>&1 || \
+							_fail "mkfs failed"
+
+	# Make device_1 an alien btrfs device for the raid created above by
+	# adding it to the $TEST_DIR/$seq.mnt
+
+	# don't test with the first device as auto fs check (_check_scratch_fs)
+	# picks the first device
+	device_1=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+	$BTRFS_UTIL_PROG device add -f "$device_1" "$TEST_DIR/$seq.mnt"
+
+	device_2=$(echo $SCRATCH_DEV_POOL | awk '{print $1}')
+	_mount -o degraded $device_2 $SCRATCH_MNT
+	# Check if missing device is reported as in the .out
+	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
+						_filter_btrfs_filesystem_show
+
+	$BTRFS_UTIL_PROG device remove "$device_1" "$TEST_DIR/$seq.mnt"
+	$UMOUNT_PROG $TEST_DIR/$seq.mnt
+	_scratch_unmount
+	_spare_dev_put
+	_scratch_dev_pool_put
+}
+
+workout "raid1" "2"
+workout "raid5" "3"
+workout "raid6" "4"
+workout "raid10" "4"
+
+# success, all done
+status=0
+exit
