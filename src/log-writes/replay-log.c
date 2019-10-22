@@ -64,8 +64,8 @@ static void usage(void)
 	fprintf(stderr, "\t--no-discard - don't process discard entries\n");
 	fprintf(stderr, "\t--fsck - the fsck command to run, must specify "
 		"--check\n");
-	fprintf(stderr, "\t--check [<number>|flush|fua] when to check the "
-		"file system, mush specify --fsck\n");
+	fprintf(stderr, "\t--check [<number>|flush|fua|discard] when to check "
+		"the file system, mush specify --fsck\n");
 	fprintf(stderr, "\t--start-sector <sector> - replay ops on region "
 		"from <sector> onto <device>\n");
 	fprintf(stderr, "\t--end-sector <sector> - replay ops on region "
@@ -115,6 +115,7 @@ enum log_replay_check_mode {
 	CHECK_NUMBER = 1,
 	CHECK_FUA = 2,
 	CHECK_FLUSH = 3,
+	CHECK_DISCARD = 4,
 };
 
 static int seek_to_mark(struct log *log, struct log_write_entry *entry,
@@ -253,6 +254,8 @@ int main(int argc, char **argv)
 				check_mode = CHECK_FLUSH;
 			} else if (!strcmp(optarg, "fua")) {
 				check_mode = CHECK_FUA;
+			} else if (!strcmp(optarg, "discard")) {
+				check_mode = CHECK_DISCARD;
 			} else {
 				check_mode = CHECK_NUMBER;
 				check_number = strtoull(optarg, &tmp, 0);
@@ -368,6 +371,9 @@ int main(int argc, char **argv)
 				ret = run_fsck(log, fsck_command);
 			else if ((check_mode == CHECK_FLUSH) &&
 				 should_stop(entry, LOG_FLUSH_FLAG, NULL))
+				ret = run_fsck(log, fsck_command);
+			else if ((check_mode == CHECK_DISCARD) &&
+				 should_stop(entry, LOG_DISCARD_FLAG, NULL))
 				ret = run_fsck(log, fsck_command);
 			else
 				ret = 0;
