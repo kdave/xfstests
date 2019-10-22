@@ -1,0 +1,77 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Oracle.  All Rights Reserved.
+#
+# FS QA Test 198
+#
+# Test stale and alien non-btrfs device in the fs devices list.
+#  Bug fixed in:
+#    btrfs: remove identified alien device in open_fs_devices
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/filter.btrfs
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_command "$WIPEFS_PROG" wipefs
+_require_scratch
+_require_scratch_dev_pool 4
+
+workout()
+{
+	raid=$1
+	device_nr=$2
+
+	echo $raid
+	_scratch_dev_pool_get $device_nr
+
+	_scratch_pool_mkfs "-d$raid -m$raid" >> $seqres.full 2>&1 || \
+							_fail "mkfs failed"
+
+	# Make device_1 a free btrfs device for the raid created above by
+	# clearing its superblock
+
+	# don't test with the first device as auto fs check (_check_scratch_fs)
+	# picks the first device
+	device_1=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+	$WIPEFS_PROG -a $device_1 >> $seqres.full 2>&1
+
+	device_2=$(echo $SCRATCH_DEV_POOL | awk '{print $1}')
+	_mount -o degraded $device_2 $SCRATCH_MNT
+	# Check if missing device is reported as in the 196.out
+	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
+						_filter_btrfs_filesystem_show
+
+	_scratch_unmount
+	_scratch_dev_pool_put
+}
+
+workout "raid1" "2"
+workout "raid5" "3"
+workout "raid6" "4"
+workout "raid10" "4"
+
+# success, all done
+status=0
+exit
