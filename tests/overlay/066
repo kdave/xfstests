@@ -1,0 +1,130 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Chengguang Xu <cgxu519@mykernel.net>
+# All Rights Reserved.
+#
+# FS QA Test 066
+#
+# Test overlayfs copy-up function for variant sparse files.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks.
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test.
+rm -f $seqres.full
+
+# real QA test starts here.
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# We have totally 14 test files in this test.
+# The detail as below:
+# 1 empty file(10M) + 2^0(K)..2^11(K) hole size files(each 10M) + 1 random hole size file(100M).
+#
+# Considering both upper and lower fs will fill zero when copy-up
+# hole area in the file, this test at least requires double disk
+# space of the sum of above test files' size.
+
+_require_fs_space $OVL_BASE_SCRATCH_MNT $(((10*1024*13 + 100*1024*1) * 2))
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+testfile="copyup_sparse_test"
+
+# Create a completely empty hole file(10M).
+file_size=10240
+$XFS_IO_PROG -fc "truncate ${file_size}K" "${lowerdir}/${testfile}_empty_holefile" \
+		 >>$seqres.full
+
+# Create 2^0(K)..2^11(K) hole size test files(each 10M).
+#
+# The pattern is like below, both hole and data are equal to
+# iosize except last hole.
+#
+# |-- hole --|-- data --| ... |-- data --|-- hole --|
+
+iosize=1
+max_iosize=2048
+file_size=10240
+max_pos=`expr $file_size - $max_iosize`
+
+while [ $iosize -le $max_iosize ]; do
+	pos=$iosize
+	$XFS_IO_PROG -fc "truncate ${file_size}K" \
+		"${lowerdir}/${testfile}_iosize${iosize}K_holefile" >>$seqres.full
+	while [ $pos -lt $max_pos ]; do
+		$XFS_IO_PROG -fc "pwrite ${pos}K ${iosize}K" \
+		"${lowerdir}/${testfile}_iosize${iosize}K_holefile" >>$seqres.full
+		pos=`expr $pos + $iosize + $iosize`
+	done
+	iosize=`expr $iosize + $iosize`
+done
+
+# Create test file with many random holes(hole size is between 1M and 5M),
+# total file size is 100M.
+
+pos=2048
+max_pos=81920
+file_size=102400
+min_hole=1024
+max_hole=5120
+
+$XFS_IO_PROG -fc "truncate ${file_size}K" "${lowerdir}/${testfile}_random_holefile" \
+		>>$seqres.full
+
+while [ $pos -le $max_pos ]; do
+	iosize=$(($RANDOM % ($max_hole - $min_hole) + $min_hole))
+	$XFS_IO_PROG -fc "pwrite ${pos}K ${iosize}K" \
+		"${lowerdir}/${testfile}_random_holefile" >>$seqres.full
+	pos=`expr $pos + $iosize + $iosize`
+done
+
+_scratch_mount
+
+# Open the test files, no errors are expected.
+for f in $SCRATCH_MNT/*; do
+	$XFS_IO_PROG -c "open" $f >>$seqres.full
+done
+
+echo "Silence is golden"
+
+# Check all copy-up files in upper layer.
+iosize=1
+while [ $iosize -le 2048 ]; do
+	diff "${lowerdir}/${testfile}_iosize${iosize}K_holefile" \
+		"${upperdir}/${testfile}_iosize${iosize}K_holefile" >>$seqres.full ||\
+		echo "${upperdir}/${testfile}_iosize${iosize}K_holefile" copy up failed!
+	iosize=`expr $iosize + $iosize`
+done
+
+diff "${lowerdir}/${testfile}_empty_holefile"  "${upperdir}/${testfile}_empty_holefile"  \
+	>>$seqres.full || echo "${upperdir}/${testfile}_empty_holefile" copy up failed!
+diff "${lowerdir}/${testfile}_random_holefile" "${upperdir}/${testfile}_random_holefile" \
+	>>$seqres.full || echo "${upperdir}/${testfile}_random_holefile" copy up failed!
+
+# success, all done
+status=0
+exit
