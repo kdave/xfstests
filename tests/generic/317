@@ -61,7 +61,10 @@ _print_numeric_uid()
     $here/src/lstat64 $file |head -3 |_filter_output
 
     echo "From user_ns"
-    $here/src/nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" $here/src/lstat64 $file |head -3 |_filter_output
+    # don't use $here/src/lstat64, as we're running cmd(src/lstat64) in
+    # nsexec as a regular user, and $here may contain path component that
+    # a regular user doesn't have search permission
+    $here/src/nsexec -s -U -M "0 $qa_user_id 1000" -G "0 $qa_user_id 1000" src/lstat64 $file |head -3 |_filter_output
 }
 
 _scratch_unmount >/dev/null 2>&1
