@@ -69,6 +69,9 @@ static int renameat2(int dfd1, const char *path1,
 #ifndef RENAME_NOREPLACE
 #define RENAME_NOREPLACE	(1 << 0)	/* Don't overwrite target */
 #endif
+#ifndef RENAME_EXCHANGE
+#define RENAME_EXCHANGE		(1 << 1)	/* Exchange source and dest */
+#endif
 #ifndef RENAME_WHITEOUT
 #define RENAME_WHITEOUT		(1 << 2)	/* Whiteout source */
 #endif
@@ -115,6 +118,7 @@ typedef enum {
 	OP_REMOVEFATTR,
 	OP_RENAME,
 	OP_RNOREPLACE,
+	OP_REXCHANGE,
 	OP_RWHITEOUT,
 	OP_RESVSP,
 	OP_RMDIR,
@@ -235,6 +239,7 @@ void	readv_f(int, long);
 void	removefattr_f(int, long);
 void	rename_f(int, long);
 void	rnoreplace_f(int, long);
+void	rexchange_f(int, long);
 void	rwhiteout_f(int, long);
 void	resvsp_f(int, long);
 void	rmdir_f(int, long);
@@ -296,6 +301,7 @@ opdesc_t	ops[] = {
 	{ OP_REMOVEFATTR, "removefattr", removefattr_f, 1, 1 },
 	{ OP_RENAME, "rename", rename_f, 2, 1 },
 	{ OP_RNOREPLACE, "rnoreplace", rnoreplace_f, 2, 1 },
+	{ OP_REXCHANGE, "rexchange", rexchange_f, 2, 1 },
 	{ OP_RWHITEOUT, "rwhiteout", rwhiteout_f, 2, 1 },
 	{ OP_RESVSP, "resvsp", resvsp_f, 1, 1 },
 	{ OP_RMDIR, "rmdir", rmdir_f, 1, 1 },
@@ -371,7 +377,8 @@ void	del_from_flist(int, int);
 int	dirid_to_name(char *, int);
 void	doproc(void);
 int	fent_to_name(pathname_t *, flist_t *, fent_t *);
-void	fix_parent(int, int);
+bool	fents_ancestor_check(fent_t *, fent_t *);
+void	fix_parent(int, int, bool);
 void	free_pathname(pathname_t *);
 int	generate_fname(fent_t *, int, pathname_t *, int *, int *);
 int	generate_xattr_name(int, char *, int);
@@ -1117,8 +1124,22 @@ fent_to_name(pathname_t *name, flist_t *flp, fent_t *fep)
 	return 1;
 }
 
+bool
+fents_ancestor_check(fent_t *fep, fent_t *dfep)
+{
+	fent_t  *tmpfep;
+
+	for (tmpfep = fep; tmpfep->parent != -1;
+	     tmpfep = dirid_to_fent(tmpfep->parent)) {
+		if (tmpfep->parent == dfep->id)
+			return true;
+	}
+
+	return false;
+}
+
 void
-fix_parent(int oldid, int newid)
+fix_parent(int oldid, int newid, bool swap)
 {
 	fent_t	*fep;
 	flist_t	*flp;
@@ -1129,6 +1150,8 @@ fix_parent(int oldid, int newid)
 		for (j = 0, fep = flp->fents; j < flp->nfiles; j++, fep++) {
 			if (fep->parent == oldid)
 				fep->parent = newid;
+			else if (swap && fep->parent == newid)
+				fep->parent = oldid;
 		}
 	}
 }
@@ -4256,6 +4279,7 @@ out:
 
 struct print_flags renameat2_flags [] = {
 	{ RENAME_NOREPLACE, "NOREPLACE"},
+	{ RENAME_EXCHANGE, "EXCHANGE"},
 	{ RENAME_WHITEOUT, "WHITEOUT"},
 	{ -1, NULL}
 };
@@ -4291,41 +4315,86 @@ do_renameat2(int opno, long r, int mode)
 		return;
 	}
 
-	/* get an existing directory for the destination parent directory name */
-	if (!get_fname(FT_DIRm, random(), NULL, NULL, &dfep, &v))
-		parid = -1;
-	else
-		parid = dfep->id;
-	v |= v1;
-
-	/* generate a new path using an existing parent directory in name */
-	init_pathname(&newf);
-	e = generate_fname(dfep, flp - flist, &newf, &id, &v1);
-	v |= v1;
-	if (!e) {
-		if (v) {
-			(void)fent_to_name(&f, &flist[FT_DIR], dfep);
-			printf("%d/%d: rename - no filename from %s\n",
-				procid, opno, f.path);
+	/*
+	 * Both pathnames must exist for the RENAME_EXCHANGE, and in
+	 * order to maintain filelist/filename integrity, we should
+	 * restrict exchange operation to files of the same type.
+	 */
+	if (mode == RENAME_EXCHANGE) {
+		which = 1 << (flp - flist);
+		init_pathname(&newf);
+		if (!get_fname(which, random(), &newf, NULL, &dfep, &v)) {
+			if (v)
+				printf("%d/%d: rename - no target filename\n",
+					procid, opno);
+			free_pathname(&newf);
+			free_pathname(&f);
+			return;
 		}
-		free_pathname(&newf);
-		free_pathname(&f);
-		return;
+		if (which == FT_DIRm && (fents_ancestor_check(fep, dfep) ||
+		    fents_ancestor_check(dfep, fep))) {
+			if (v)
+				printf("%d/%d: rename(REXCHANGE) %s and %s "
+					"have ancestor-descendant relationship\n",
+					procid, opno, f.path, newf.path);
+			free_pathname(&newf);
+			free_pathname(&f);
+			return;
+		}
+		v |= v1;
+		id = dfep->id;
+		parid = dfep->parent;
+	} else {
+		/*
+		 * Get an existing directory for the destination parent
+		 * directory name.
+		 */
+		if (!get_fname(FT_DIRm, random(), NULL, NULL, &dfep, &v))
+			parid = -1;
+		else
+			parid = dfep->id;
+		v |= v1;
+
+		/*
+		 * Generate a new path using an existing parent directory
+		 * in name.
+		 */
+		init_pathname(&newf);
+		e = generate_fname(dfep, flp - flist, &newf, &id, &v1);
+		v |= v1;
+		if (!e) {
+			if (v) {
+				(void)fent_to_name(&f, &flist[FT_DIR], dfep);
+				printf("%d/%d: rename - no filename from %s\n",
+					procid, opno, f.path);
+			}
+			free_pathname(&newf);
+			free_pathname(&f);
+			return;
+		}
 	}
 	e = rename_path(&f, &newf, mode) < 0 ? errno : 0;
 	check_cwd();
 	if (e == 0) {
 		int xattr_counter = fep->xattr_counter;
+		bool swap = (mode == RENAME_EXCHANGE) ? true : false;
 
 		oldid = fep->id;
 		oldparid = fep->parent;
 
+		/*
+		 * Swap the parent ids for RENAME_EXCHANGE, and replace the
+		 * old parent id for the others.
+		 */
 		if (flp - flist == FT_DIR)
-			fix_parent(oldid, id);
+			fix_parent(oldid, id, swap);
 
 		if (mode == RENAME_WHITEOUT) {
 			fep->xattr_counter = 0;
 			add_to_flist(flp - flist, id, parid, xattr_counter);
+		} else if (mode == RENAME_EXCHANGE) {
+			fep->xattr_counter = dfep->xattr_counter;
+			dfep->xattr_counter = xattr_counter;
 		} else {
 			del_from_flist(flp - flist, fep - flp->fents);
 			add_to_flist(flp - flist, id, parid, xattr_counter);
@@ -4356,6 +4425,12 @@ void
 rnoreplace_f(int opno, long r)
 {
 	do_renameat2(opno, r, RENAME_NOREPLACE);
+}
+
+void
+rexchange_f(int opno, long r)
+{
+	do_renameat2(opno, r, RENAME_EXCHANGE);
 }
 
 void
