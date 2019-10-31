@@ -4227,6 +4227,7 @@ rename_f(int opno, long r)
 	pathname_t	newf;
 	int		oldid;
 	int		parid;
+	int		oldparid;
 	int		v;
 	int		v1;
 
@@ -4265,10 +4266,12 @@ rename_f(int opno, long r)
 	if (e == 0) {
 		int xattr_counter = fep->xattr_counter;
 
-		if (flp - flist == FT_DIR) {
-			oldid = fep->id;
+		oldid = fep->id;
+		oldparid = fep->parent;
+
+		if (flp - flist == FT_DIR)
 			fix_parent(oldid, id);
-		}
+
 		del_from_flist(flp - flist, fep - flp->fents);
 		add_to_flist(flp - flist, id, parid, xattr_counter);
 	}
@@ -4277,7 +4280,7 @@ rename_f(int opno, long r)
 			newf.path, e);
 		if (e == 0) {
 			printf("%d/%d: rename del entry: id=%d,parent=%d\n",
-				procid, opno, fep->id, fep->parent);
+				procid, opno, oldid, oldparid);
 			printf("%d/%d: rename add entry: id=%d,parent=%d\n",
 				procid, opno, id, parid);
 		}
