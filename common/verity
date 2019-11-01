@@ -33,9 +33,12 @@ _require_scratch_verity()
 	# default.  E.g., ext4 only supports verity on extent-based files, so it
 	# doesn't work on ext3-style filesystems.  So, try actually using it.
 	echo foo > $SCRATCH_MNT/tmpfile
+	_disable_fsverity_signatures
 	if ! _fsv_enable $SCRATCH_MNT/tmpfile; then
+		_restore_fsverity_signatures
 		_notrun "$FSTYP verity isn't usable by default with these mkfs options"
 	fi
+	_restore_fsverity_signatures
 	rm -f $SCRATCH_MNT/tmpfile
 
 	_scratch_unmount
@@ -48,12 +51,38 @@ _require_scratch_verity()
 # Check for CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y.
 _require_fsverity_builtin_signatures()
 {
-	if [ ! -e /proc/keys ]; then
-		_notrun "kernel doesn't support keyrings"
-	fi
-	if ! awk '{print $9}' /proc/keys | grep -q '^\.fs-verity:$'; then
+	if [ ! -e /proc/sys/fs/verity/require_signatures ]; then
 		_notrun "kernel doesn't support fs-verity builtin signatures"
 	fi
+}
+
+# Disable mandatory signatures for fs-verity files, if they are supported.
+_disable_fsverity_signatures()
+{
+	if [ -e /proc/sys/fs/verity/require_signatures ]; then
+		if [ -z "$FSVERITY_SIG_CTL_ORIG" ]; then
+			FSVERITY_SIG_CTL_ORIG=$(</proc/sys/fs/verity/require_signatures)
+		fi
+		echo 0 > /proc/sys/fs/verity/require_signatures
+	fi
+}
+
+# Enable mandatory signatures for fs-verity files.
+# This assumes that _require_fsverity_builtin_signatures() was called.
+_enable_fsverity_signatures()
+{
+	if [ -z "$FSVERITY_SIG_CTL_ORIG" ]; then
+		FSVERITY_SIG_CTL_ORIG=$(</proc/sys/fs/verity/require_signatures)
+	fi
+	echo 1 > /proc/sys/fs/verity/require_signatures
+}
+
+# Restore the original signature verification setting.
+_restore_fsverity_signatures()
+{
+        if [ -n "$FSVERITY_SIG_CTL_ORIG" ]; then
+                echo "$FSVERITY_SIG_CTL_ORIG" > /proc/sys/fs/verity/require_signatures
+        fi
 }
 
 _scratch_mkfs_verity()

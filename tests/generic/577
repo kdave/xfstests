@@ -17,8 +17,8 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-	sysctl -w fs.verity.require_signatures=0 &>/dev/null
 	cd /
+	_restore_fsverity_signatures
 	rm -f $tmp.*
 }
 
@@ -71,7 +71,7 @@ $KEYCTL_PROG padd asymmetric '' %keyring:.fs-verity \
 	< $certfileder >> $seqres.full
 
 echo -e "\n# Enabling fs.verity.require_signatures"
-sysctl -w fs.verity.require_signatures=1
+_enable_fsverity_signatures
 
 echo -e "\n# Generating file and signing it for fs-verity"
 head -c 100000 /dev/zero > $fsv_orig_file
@@ -104,9 +104,9 @@ _fsv_enable $fsv_file |& _filter_scratch
 
 echo -e "\n# Opening verity file without signature (should fail)"
 reset_fsv_file
-sysctl -w fs.verity.require_signatures=0 &>> $seqres.full
+_disable_fsverity_signatures
 _fsv_enable $fsv_file
-sysctl -w fs.verity.require_signatures=1 &>> $seqres.full
+_enable_fsverity_signatures
 _scratch_cycle_mount
 md5sum $fsv_file |& _filter_scratch
 
