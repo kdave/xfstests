@@ -183,7 +183,7 @@ _fsv_scratch_corrupt_bytes()
 	sync	# Sync to avoid unwritten extents
 
 	cat > $tmp.bytes
-	local end=$(( offset + $(stat -c %s $tmp.bytes ) ))
+	local end=$(( offset + $(_get_filesize $tmp.bytes ) ))
 
 	# For each extent that intersects the requested range in order, add a
 	# command that writes the next part of the data to that extent.
@@ -234,7 +234,7 @@ _fsv_scratch_corrupt_merkle_tree()
 	ext4|f2fs)
 		# ext4 and f2fs store the Merkle tree after the file contents
 		# itself, starting at the next 65536-byte aligned boundary.
-		(( offset += ($(stat -c %s $file) + 65535) & ~65535 ))
+		(( offset += ($(_get_filesize $file) + 65535) & ~65535 ))
 		_fsv_scratch_corrupt_bytes $file $offset
 		;;
 	*)

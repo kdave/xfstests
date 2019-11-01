@@ -60,9 +60,9 @@ swapfile_cycle() {
 # Create a swap file with a large discontiguous range(?)
 echo "large discontig swap" | tee -a $seqres.full
 _pwrite_byte 0x58 0 $((len * 2)) $swapfile >> $seqres.full
-old_sz="$(stat -c '%s' $swapfile)"
+old_sz="$(_get_filesize $swapfile)"
 $XFS_IO_PROG -c "fcollapse $((len / 2)) $len" $swapfile >> $seqres.full 2>&1
-new_sz="$(stat -c '%s' $swapfile)"
+new_sz="$(_get_filesize $swapfile)"
 if [ $old_sz -gt $new_sz ]; then
 	swapfile_cycle $swapfile
 fi
@@ -71,9 +71,9 @@ rm -f $swapfile
 # Create a swap file with a small discontiguous range(?)
 echo "small discontig swap" | tee -a $seqres.full
 _pwrite_byte 0x58 0 $((len + 1024)) $swapfile >> $seqres.full
-old_sz="$(stat -c '%s' $swapfile)"
+old_sz="$(_get_filesize $swapfile)"
 $XFS_IO_PROG -c "fcollapse 66560 1024" $swapfile >> $seqres.full 2>&1
-new_sz="$(stat -c '%s' $swapfile)"
+new_sz="$(_get_filesize $swapfile)"
 if [ $old_sz -gt $new_sz ]; then
 	swapfile_cycle $swapfile
 fi
