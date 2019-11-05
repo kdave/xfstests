@@ -1,0 +1,122 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2019 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 200
+#
+# Check that send operations (full and incremental) are able to issue clone
+# operations for extents that are shared between the same file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -fr $send_files_dir
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+. ./common/punch
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_fssum
+_require_test
+_require_scratch_reflink
+_require_xfs_io_command "fiemap"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our first test file, which has an extent that is shared only with
+# itself and no other files. We want to verify a full send operation will
+# clone the extent.
+$XFS_IO_PROG -f -c "pwrite -S 0xb1 -b 64K 0 64K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 64K 64K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+# Create out second test file which initially, for the first send operation,
+# only has a single extent that is not shared.
+$XFS_IO_PROG -f -c "pwrite -S 0xc7 -b 64K 0 64K" $SCRATCH_MNT/bar \
+	| _filter_xfs_io
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
+	| _filter_scratch
+
+# Now clone the existing extent in file bar to itself at a different offset.
+# We want to verify the incremental send operation below will issue a clone
+# operation instead of a write operation.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 0 64K 64K" $SCRATCH_MNT/bar \
+	| _filter_xfs_io
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr 2>&1 \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base -f $send_files_dir/2.snap \
+	$SCRATCH_MNT/incr 2>&1 | _filter_scratch
+
+# Compute digests of the snapshot trees so that later we can compare against
+# digests of the trees in the new filesystem, to see if they match (no data or
+# metadata corruption happened).
+$FSSUM_PROG -A -f -w $send_files_dir/base.fssum $SCRATCH_MNT/base
+$FSSUM_PROG -A -f -w $send_files_dir/incr.fssum \
+	-x $SCRATCH_MNT/incr/base $SCRATCH_MNT/incr
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same file contents that the original filesystem had and that files foo
+# and bar have shared extents.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT
+
+# Compute digests of the snapshot trees in the new filesystem and compare them
+# to the ones in the original filesystem, they must match.
+$FSSUM_PROG -r $send_files_dir/base.fssum $SCRATCH_MNT/base
+$FSSUM_PROG -r $send_files_dir/incr.fssum $SCRATCH_MNT/incr
+
+num_extents=$(_count_extents $SCRATCH_MNT/base/foo)
+num_exclusive_extents=$(_count_exclusive_extents $SCRATCH_MNT/base/foo)
+if [ $num_extents -ne 2 ] || [ $num_exclusive_extents -ne 1 ]; then
+	echo "File foo does not have 2 shared extents in the base snapshot"
+	$XFS_IO_PROG -r -c "fiemap" $SCRATCH_MNT/base/foo
+fi
+
+num_extents=$(_count_extents $SCRATCH_MNT/incr/foo)
+num_exclusive_extents=$(_count_exclusive_extents $SCRATCH_MNT/incr/foo)
+if [ $num_extents -ne 2 ] || [ $num_exclusive_extents -ne 1 ]; then
+	echo "File foo does not have 2 shared extents in the incr snapshot"
+	$XFS_IO_PROG -r -c "fiemap" $SCRATCH_MNT/incr/foo
+fi
+
+num_extents=$(_count_extents $SCRATCH_MNT/incr/bar)
+num_exclusive_extents=$(_count_exclusive_extents $SCRATCH_MNT/incr/bar)
+if [ $num_extents -ne 2 ] || [ $num_exclusive_extents -ne 1 ]; then
+	echo "File bar does not have 2 shared extents in the incr snapshot"
+	$XFS_IO_PROG -r -c "fiemap" $SCRATCH_MNT/incr/bar
+fi
+
+status=0
+exit
