@@ -4499,6 +4499,8 @@ rmdir_f(int opno, long r)
 	int		e;
 	pathname_t	f;
 	fent_t		*fep;
+	int		oldid;
+	int		oldparid;
 	int		v;
 
 	init_pathname(&f);
@@ -4510,13 +4512,16 @@ rmdir_f(int opno, long r)
 	}
 	e = rmdir_path(&f) < 0 ? errno : 0;
 	check_cwd();
-	if (e == 0)
+	if (e == 0) {
+		oldid = fep->id;
+		oldparid = fep->parent;
 		del_from_flist(FT_DIR, fep - flist[FT_DIR].fents);
+	}
 	if (v) {
 		printf("%d/%d: rmdir %s %d\n", procid, opno, f.path, e);
 		if (e == 0)
 			printf("%d/%d: rmdir del entry: id=%d,parent=%d\n",
-				procid, opno, fep->id, fep->parent);
+				procid, opno, oldid, oldparid);
 	}
 	free_pathname(&f);
 }
@@ -4746,6 +4751,8 @@ unlink_f(int opno, long r)
 	pathname_t	f;
 	fent_t		*fep;
 	flist_t		*flp;
+	int		oldid;
+	int		oldparid;
 	int		v;
 
 	init_pathname(&f);
@@ -4757,13 +4764,16 @@ unlink_f(int opno, long r)
 	}
 	e = unlink_path(&f) < 0 ? errno : 0;
 	check_cwd();
-	if (e == 0)
+	if (e == 0) {
+		oldid = fep->id;
+		oldparid = fep->parent;
 		del_from_flist(flp - flist, fep - flp->fents);
+	}
 	if (v) {
 		printf("%d/%d: unlink %s %d\n", procid, opno, f.path, e);
 		if (e == 0)
 			printf("%d/%d: unlink del entry: id=%d,parent=%d\n",
-				procid, opno, fep->id, fep->parent);
+				procid, opno, oldid, oldparid);
 	}
 	free_pathname(&f);
 }
