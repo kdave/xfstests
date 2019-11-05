@@ -6,6 +6,7 @@
 #
 # Check out various mount/remount/unmount scenarious on a read-only blockdev.
 #
+seqfull=$0
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
@@ -33,6 +34,13 @@ _require_scratch_nocheck
 _require_scratch_shutdown
 _require_local_device $SCRATCH_DEV
 _require_norecovery
+
+# Select appropriate output file
+features=""
+if ! _has_metadata_journaling $SCRATCH_DEV >/dev/null; then
+	features="nojournal"
+fi
+_link_out_file "$features"
 
 _scratch_mkfs >/dev/null 2>&1
 

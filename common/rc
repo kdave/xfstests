@@ -3159,7 +3159,7 @@ _require_norecovery()
 # It's possible that TEST_DEV and SCRATCH_DEV have different features (it'd be
 # odd, but possible) so check $TEST_DEV by default, but we can optionall pass
 # any dev we want.
-_require_metadata_journaling()
+_has_metadata_journaling()
 {
 	if [ -z $1 ]; then
 		local dev=$TEST_DEV
@@ -3169,32 +3169,52 @@ _require_metadata_journaling()
 
 	case "$FSTYP" in
 	ext2|vfat|msdos|udf)
-		_notrun "$FSTYP does not support metadata journaling"
+		echo "$FSTYP does not support metadata journaling"
+		return 1
 		;;
 	ext4)
 		# ext4 could be mkfs'd without a journal...
 		_require_dumpe2fs
-		$DUMPE2FS_PROG -h $dev 2>&1 | grep -q has_journal || \
-			_notrun "$FSTYP on $dev not configured with metadata journaling"
+		$DUMPE2FS_PROG -h $dev 2>&1 | grep -q has_journal || {
+			echo "$FSTYP on $dev not configured with metadata journaling"
+			return 1
+		}
 		# ext4 might not load a journal
-		_exclude_scratch_mount_option "noload"
+		if _normalize_mount_options | grep -qw "noload"; then
+			echo "mount option \"noload\" not allowed in this test"
+			return 1
+		fi
 		;;
 	overlay)
 		# metadata journaling check is based on base filesystem configurations
 		# and  because -overlay option saves those configurations to OVL_BASE_*,
 		# adding restore/override the configurations before/after the check.
 		if [ ! -z $OVL_BASE_FSTYP -a $OVL_BASE_FSTYP != "overlay" ]; then
+			local ret
+
 			_overlay_config_restore
-			_require_metadata_journaling
+			_has_metadata_journaling
+			ret=$?
 			_overlay_config_override
+			return $ret
 		else
-			_notrun "No metadata journaling support for legacy overlay setup"
+			echo "No metadata journaling support for legacy overlay setup"
+			return 1
 		fi
 		;;
 	*)
 		# by default we pass; if you need to, add your fs above!
 		;;
 	esac
+	return 0
+}
+
+_require_metadata_journaling()
+{
+	local msg=$(_has_metadata_journaling $@)
+	if [ -n "$msg" ]; then
+		_notrun "$msg"
+	fi
 }
 
 _count_extents()
