@@ -3202,6 +3202,15 @@ _count_extents()
 	$XFS_IO_PROG -r -c "fiemap" $1 | tail -n +2 | grep -v hole | wc -l
 }
 
+# Similar to _count_extents() but if any extent is shared multiples times in
+# the file (reflinked to different file offsets), it is accounted as 1 extent
+# instead of N extents.
+_count_exclusive_extents()
+{
+	$XFS_IO_PROG -r -c "fiemap" $1 | tail -n +2 | grep -v hole | \
+		cut -d ' ' -f 3 | sort | uniq | wc -l
+}
+
 _count_holes()
 {
 	$XFS_IO_PROG -r -c "fiemap" $1 | tail -n +2 | grep hole | wc -l
