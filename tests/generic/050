@@ -39,26 +39,14 @@ _require_norecovery
 features=""
 if ! _has_metadata_journaling $SCRATCH_DEV >/dev/null; then
 	features="nojournal"
+elif [ "$FSTYP" = "xfs" ] && echo "$MOUNT_OPTIONS" | grep -q quota ; then
+	# Mounting with quota on XFS requires a writable fs, which means
+	# we expect to fail the ro blockdev test with with EPERM.
+	features="xfsquota"
 fi
 _link_out_file "$features"
 
 _scratch_mkfs >/dev/null 2>&1
-
-filter_ro_mount() {
-	local arg=""
-
-	if [ -n "$expect_mount_failure" ]; then
-		arg="s|mount: $SCRATCH_MNT: permission denied|mount: device write-protected, mounting read-only|g"
-	fi
-	sed -e "$arg" | _filter_ro_mount
-}
-
-# Mounting with quota on XFS requires a writable fs, which means
-# we expect to fail the ro blockdev test with with EPERM.
-expect_mount_failure=
-if [ "$FSTYP" = "xfs" ] && echo "$MOUNT_OPTIONS" | grep -q quota ; then
-	expect_mount_failure=1
-fi
 
 #
 # Mark the device read-only
@@ -70,25 +58,16 @@ blockdev --setro $SCRATCH_DEV
 # Mount it, and make sure we can't write to it, and we can unmount it again
 #
 echo "mounting read-only block device:"
-_try_scratch_mount 2>&1 | filter_ro_mount
-if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-	echo "touching file on read-only filesystem (should fail)"
-	touch $SCRATCH_MNT/foo 2>&1 | _filter_scratch
+_try_scratch_mount 2>&1 | _filter_ro_mount
+echo "touching file on read-only filesystem (should fail)"
+touch $SCRATCH_MNT/foo 2>&1 | _filter_scratch
 
-	#
-	# Apparently this used to be broken at some point:
-	#	http://oss.sgi.com/bugzilla/show_bug.cgi?id=807
-	#
-	echo "unmounting read-only filesystem"
-	_scratch_unmount 2>&1 | _filter_scratch
-elif [ -n "${expect_mount_failure}" ]; then
-	# Mount failed, so simulate EROFS instead of scribbling on root fs
-	echo "touching file on read-only filesystem (should fail)"
-	echo "touch: cannot touch 'SCRATCH_MNT/foo': Read-only file system"
-	echo "unmounting read-only filesystem"
-else
-	echo "Mount failed, though it wasn't supposed to!"
-fi
+#
+# Apparently this used to be broken at some point:
+#	http://oss.sgi.com/bugzilla/show_bug.cgi?id=807
+#
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch
 
 echo "setting device read-write"
 blockdev --setrw $SCRATCH_DEV
@@ -124,16 +103,9 @@ _scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 # data recovery hack.
 #
 echo "mounting filesystem with -o norecovery on a read-only device:"
-_try_scratch_mount -o norecovery 2>&1 | filter_ro_mount
-if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-	echo "unmounting read-only filesystem"
-	_scratch_unmount 2>&1 | _filter_scratch
-elif [ -n "${expect_mount_failure}" ]; then
-	# Mount failed, simulate correct output
-	echo "unmounting read-only filesystem"
-else
-	echo "Mount failed, though it wasn't supposed to!"
-fi
+_try_scratch_mount -o norecovery 2>&1 | _filter_ro_mount
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch
 
 echo "setting device read-write"
 blockdev --setrw $SCRATCH_DEV
