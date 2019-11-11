@@ -1978,13 +1978,14 @@ _require_timestamp_range()
 _filesystem_timestamp_range()
 {
 	local device=${1:-$TEST_DEV}
+	local fstyp=${2:-$FSTYP}
 	u32max=$(((1<<32)-1))
 	s32min=-$((1<<31))
 	s32max=$(((1<<31)-1))
 	s64max=$(((1<<63)-1))
 	s64min=$((1<<63))
 
-	case $FSTYP in
+	case $fstyp in
 	ext2)
 		echo "$s32min $s32max"
 		;;
@@ -2004,6 +2005,13 @@ _filesystem_timestamp_range()
 		;;
 	btrfs)
 		echo "$s64min $s64max"
+		;;
+	overlay)
+		if [ ! -z $OVL_BASE_FSTYP -a $OVL_BASE_FSTYP != "overlay" ]; then
+			_filesystem_timestamp_range $OVL_BASE_TEST_DEV $OVL_BASE_FSTYP
+		else
+			echo "-1 -1"
+		fi
 		;;
 	*)
 		echo "-1 -1"
