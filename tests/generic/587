@@ -1,0 +1,121 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 587
+#
+# Regression test to ensure that dquots are attached to the inode when we're
+# performing unwritten extent conversion after a directio write and the extent
+# mapping btree splits.  On an unpatched kernel, the quota accounting will be
+# become incorrect.
+#
+# This test accompanies the commit 2815a16d7ff623 "xfs: attach dquots and
+# reserve quota blocks during unwritten conversion".
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_user
+_require_quota
+_require_xfs_io_command "falloc"
+_require_scratch
+
+rm -f $seqres.full
+
+cat > $tmp.awk << ENDL
+{
+if (\$1 == qa_user && \$2 != blocks)
+	printf("%s: quota blocks %dKiB, expected %dKiB!\n", qa_user, \$2, blocks);
+}
+ENDL
+
+# Make sure that the quota blocks accounting for qa_user on the scratch fs
+# matches the stat blocks counter for the only file on the scratch fs that
+# is owned by qa_user.  Note that stat reports in units of 512b blocks whereas
+# repquota reports in units of 1k blocks.
+check_quota_accounting()
+{
+	$XFS_IO_PROG -c stat $testfile > $tmp.out
+	cat $tmp.out >> $seqres.full
+	local stat_blocks=$(grep 'stat.blocks' $tmp.out | awk '{print $3 / 2}')
+
+	_report_quota_blocks $SCRATCH_MNT > $tmp.out
+	cat $tmp.out >> $seqres.full
+	awk -v qa_user=$qa_user -v blocks=$stat_blocks -f $tmp.awk $tmp.out
+}
+
+_scratch_mkfs > $seqres.full
+
+# This test must have user quota enabled
+_qmount_option usrquota
+_qmount >> $seqres.full
+
+testfile=$SCRATCH_MNT/test-$seq
+touch $testfile
+chown $qa_user $testfile
+
+# Preallocate a file with just enough space that when we write every other
+# block of the file, the extent mapping tree will expand to a two-block tree.
+# Each tree block has a 56-byte header, and each mapping consumes 16 bytes.
+meta_blksz=$(_get_block_size $SCRATCH_MNT)
+file_blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+mappings_per_bmbt_block=$(( (meta_blksz - 56) / 16))
+extents_needed=$((mappings_per_bmbt_block * 2))
+sz=$((extents_needed * file_blksz))
+
+$XFS_IO_PROG -f -c "falloc 0 $sz" $testfile >> $seqres.full
+check_quota_accounting
+
+# Cycle the mount to detach dquots and expand the bmbt to a single block.
+_qmount >> $seqres.full
+for ((i = 0; i < mappings_per_bmbt_block; i += 2)); do
+	offset=$((i * file_blksz))
+	$XFS_IO_PROG -d -c "pwrite $offset $file_blksz" $testfile >> $seqres.full
+done
+check_quota_accounting
+
+# Cycle the mount to detach dquots and expand the bmbt to multiple blocks.
+# A buggy kernel will forget to attach the dquots before the bmbt split and
+# this will cause us to lose a block in the quota accounting.
+_qmount >> $seqres.full
+for ((i = mappings_per_bmbt_block; i < extents_needed; i += 2)); do
+	offset=$((i * file_blksz))
+	$XFS_IO_PROG -d -c "pwrite $offset $file_blksz" $testfile >> $seqres.full
+done
+check_quota_accounting
+
+# Remove the test file, which (if the quota accounting is incorrect) will
+# also trigger assertions when we try to free more blocks from the dquot than
+# were accounted to the dquot.  Only do this if assertions aren't going to be
+# fatal, since the check_quota_accounting above should be enough to fail the
+# test when the kernel is buggy.
+bug_on_assert="/sys/fs/xfs/debug/bug_on_assert"
+if [ -f $bug_on_assert ] && grep -q "0" $bug_on_assert; then
+	rm -f $testfile
+fi
+
+echo Silence is golden.
+# success, all done
+status=0
+exit
