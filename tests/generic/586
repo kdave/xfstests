@@ -1,0 +1,44 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2019, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 586
+#
+# Race an appending aio dio write to the second block of a file while
+# simultaneously fallocating to the first block.  Make sure that we end up
+# with a two-block file.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $testfile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs generic
+_require_aiodio "aio-dio-append-write-fallocate-race"
+_require_test
+_require_xfs_io_command "falloc"
+
+rm -f $seqres.full
+
+testfile=$TEST_DIR/test-$seq
+$AIO_TEST $testfile 100 >> $seqres.full
+
+echo Silence is golden.
+# success, all done
+status=0
+exit
