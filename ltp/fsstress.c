@@ -199,6 +199,7 @@ struct print_string {
 #define	FT_ANYm		((1 << FT_nft) - 1)
 #define	FT_REGFILE	(FT_REGm | FT_RTFm)
 #define	FT_NOTDIR	(FT_ANYm & (~FT_DIRm & ~FT_SUBVOLm))
+#define	FT_ANYDIR	(FT_DIRm | FT_SUBVOLm)
 
 #define	FLIST_SLOT_INCR	16
 #define	NDCACHE	64
@@ -3164,7 +3165,7 @@ creat_f(int opno, long r)
 	int		v;
 	int		v1;
 
-	if (!get_fname(FT_DIRm, r, NULL, NULL, &fep, &v1))
+	if (!get_fname(FT_ANYDIR, r, NULL, NULL, &fep, &v1))
 		parid = -1;
 	else
 		parid = fep->id;
@@ -3728,7 +3729,7 @@ getdents_f(int opno, long r)
 	int		v;
 
 	init_pathname(&f);
-	if (!get_fname(FT_DIRm, r, &f, NULL, NULL, &v))
+	if (!get_fname(FT_ANYDIR, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
 	dir = opendir_path(&f);
 	check_cwd();
@@ -3760,7 +3761,7 @@ getfattr_f(int opno, long r)
 	int             xattr_num;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, &fep, &v)) {
+	if (!get_fname(FT_REGFILE | FT_ANYDIR, r, &f, NULL, &fep, &v)) {
 		if (v)
 			printf("%d/%d: getfattr - no filename\n", procid, opno);
 		goto out;
@@ -3879,7 +3880,7 @@ listfattr_f(int opno, long r)
 	int             buffer_len;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, &fep, &v)) {
+	if (!get_fname(FT_REGFILE | FT_ANYDIR, r, &f, NULL, &fep, &v)) {
 		if (v)
 			printf("%d/%d: listfattr - no filename\n", procid, opno);
 		goto out;
@@ -3929,7 +3930,7 @@ mkdir_f(int opno, long r)
 	int		v;
 	int		v1;
 
-	if (!get_fname(FT_DIRm, r, NULL, NULL, &fep, &v))
+	if (!get_fname(FT_ANYDIR, r, NULL, NULL, &fep, &v))
 		parid = -1;
 	else
 		parid = fep->id;
@@ -3967,7 +3968,7 @@ mknod_f(int opno, long r)
 	int		v;
 	int		v1;
 
-	if (!get_fname(FT_DIRm, r, NULL, NULL, &fep, &v))
+	if (!get_fname(FT_ANYDIR, r, NULL, NULL, &fep, &v))
 		parid = -1;
 	else
 		parid = fep->id;
@@ -4325,7 +4326,7 @@ removefattr_f(int opno, long r)
 	int             xattr_num;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, &fep, &v)) {
+	if (!get_fname(FT_REGFILE | FT_ANYDIR, r, &f, NULL, &fep, &v)) {
 		if (v)
 			printf("%d/%d: removefattr - no filename\n", procid, opno);
 		goto out;
@@ -4645,7 +4646,7 @@ setfattr_f(int opno, long r)
 	int             xattr_num;
 
 	init_pathname(&f);
-	if (!get_fname(FT_REGFILE | FT_DIRm, r, &f, NULL, &fep, &v)) {
+	if (!get_fname(FT_REGFILE | FT_ANYDIR, r, &f, NULL, &fep, &v)) {
 		if (v)
 			printf("%d/%d: setfattr - no filename\n", procid, opno);
 		goto out;
@@ -4791,7 +4792,7 @@ subvol_create_f(int opno, long r)
 	int			err;
 
 	init_pathname(&f);
-	if (!get_fname(FT_DIRm | FT_SUBVOLm, r, NULL, NULL, &fep, &v))
+	if (!get_fname(FT_ANYDIR, r, NULL, NULL, &fep, &v))
 		parid = -1;
 	else
 		parid = fep->id;
@@ -4871,7 +4872,7 @@ symlink_f(int opno, long r)
 	int		v1;
 	char		*val;
 
-	if (!get_fname(FT_DIRm, r, NULL, NULL, &fep, &v))
+	if (!get_fname(FT_ANYDIR, r, NULL, NULL, &fep, &v))
 		parid = -1;
 	else
 		parid = fep->id;
