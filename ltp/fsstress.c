@@ -10,6 +10,9 @@
 #include <stddef.h>
 #include "global.h"
 
+#ifdef HAVE_BTRFSUTIL_H
+#include <btrfsutil.h>
+#endif
 #ifdef HAVE_ATTR_ATTRIBUTES_H
 #include <attr/attributes.h>
 #endif
@@ -127,6 +130,8 @@ typedef enum {
 	OP_SETXATTR,
 	OP_SPLICE,
 	OP_STAT,
+	OP_SUBVOL_CREATE,
+	OP_SUBVOL_DELETE,
 	OP_SYMLINK,
 	OP_SYNC,
 	OP_TRUNCATE,
@@ -149,6 +154,7 @@ typedef struct opdesc {
 
 typedef struct fent {
 	int	id;
+	int	ft;
 	int	parent;
 	int	xattr_counter;
 } fent_t;
@@ -176,20 +182,22 @@ struct print_string {
 	int max;
 };
 
-#define	FT_DIR	0
-#define	FT_DIRm	(1 << FT_DIR)
-#define	FT_REG	1
-#define	FT_REGm	(1 << FT_REG)
-#define	FT_SYM	2
-#define	FT_SYMm	(1 << FT_SYM)
-#define	FT_DEV	3
-#define	FT_DEVm	(1 << FT_DEV)
-#define	FT_RTF	4
-#define	FT_RTFm	(1 << FT_RTF)
-#define	FT_nft	5
-#define	FT_ANYm	((1 << FT_nft) - 1)
+#define	FT_DIR		0
+#define	FT_DIRm		(1 << FT_DIR)
+#define	FT_REG		1
+#define	FT_REGm		(1 << FT_REG)
+#define	FT_SYM		2
+#define	FT_SYMm		(1 << FT_SYM)
+#define	FT_DEV		3
+#define	FT_DEVm		(1 << FT_DEV)
+#define	FT_RTF		4
+#define	FT_RTFm		(1 << FT_RTF)
+#define	FT_SUBVOL	5
+#define	FT_SUBVOLm	(1 << FT_SUBVOL)
+#define	FT_nft		6
+#define	FT_ANYm		((1 << FT_nft) - 1)
 #define	FT_REGFILE	(FT_REGm | FT_RTFm)
-#define	FT_NOTDIR	(FT_ANYm & ~FT_DIRm)
+#define	FT_NOTDIR	(FT_ANYm & (~FT_DIRm & ~FT_SUBVOLm))
 
 #define	FLIST_SLOT_INCR	16
 #define	NDCACHE	64
@@ -248,6 +256,8 @@ void	setfattr_f(int, long);
 void	setxattr_f(int, long);
 void	splice_f(int, long);
 void	stat_f(int, long);
+void	subvol_create_f(int, long);
+void	subvol_delete_f(int, long);
 void	symlink_f(int, long);
 void	sync_f(int, long);
 void	truncate_f(int, long);
@@ -313,6 +323,8 @@ opdesc_t	ops[] = {
 	{ OP_SETXATTR, "setxattr", setxattr_f, 1, 1 },
 	{ OP_SPLICE, "splice", splice_f, 1, 1 },
 	{ OP_STAT, "stat", stat_f, 1, 0 },
+	{ OP_SUBVOL_CREATE, "subvol_create", subvol_create_f, 1, 1},
+	{ OP_SUBVOL_DELETE, "subvol_delete", subvol_delete_f, 1, 1},
 	{ OP_SYMLINK, "symlink", symlink_f, 2, 1 },
 	{ OP_SYNC, "sync", sync_f, 1, 1 },
 	{ OP_TRUNCATE, "truncate", truncate_f, 2, 1 },
@@ -328,6 +340,7 @@ flist_t	flist[FT_nft] = {
 	{ 0, 0, 'l', NULL },
 	{ 0, 0, 'c', NULL },
 	{ 0, 0, 'r', NULL },
+	{ 0, 0, 's', NULL },
 };
 
 int		dcache[NDCACHE];
@@ -372,11 +385,11 @@ int	creat_path(pathname_t *, mode_t);
 void	dcache_enter(int, int);
 void	dcache_init(void);
 fent_t	*dcache_lookup(int);
-void	dcache_purge(int);
+void	dcache_purge(int, int);
 void	del_from_flist(int, int);
 int	dirid_to_name(char *, int);
 void	doproc(void);
-int	fent_to_name(pathname_t *, flist_t *, fent_t *);
+int	fent_to_name(pathname_t *, fent_t *);
 bool	fents_ancestor_check(fent_t *, fent_t *);
 void	fix_parent(int, int, bool);
 void	free_pathname(pathname_t *);
@@ -407,6 +420,7 @@ int	unlink_path(pathname_t *);
 void	usage(void);
 void	write_freq(void);
 void	zero_freq(void);
+void	non_btrfs_freq(const char *);
 
 void sg_handler(int signum)
 {
@@ -560,6 +574,7 @@ int main(int argc, char **argv)
             exit(1);
         }
 
+	non_btrfs_freq(dirname);
 	(void)mkdir(dirname, 0777);
 	if (logname && logname[0] != '/') {
 		if (!getcwd(rpath, sizeof(rpath))){
@@ -795,6 +810,7 @@ add_to_flist(int ft, int id, int parent, int xattr_counter)
 	}
 	fep = &ftp->fents[ftp->nfiles++];
 	fep->id = id;
+	fep->ft = ft;
 	fep->parent = parent;
 	fep->xattr_counter = xattr_counter;
 }
@@ -962,18 +978,22 @@ dcache_lookup(int dirid)
 	int	i;
 
 	i = dcache[dirid % NDCACHE];
-	if (i >= 0 && (fep = &flist[FT_DIR].fents[i])->id == dirid)
+	if (i >= 0 && i < flist[FT_DIR].nfiles &&
+	    (fep = &flist[FT_DIR].fents[i])->id == dirid)
+		return fep;
+	if (i >= 0 && i < flist[FT_SUBVOL].nfiles &&
+	    (fep = &flist[FT_SUBVOL].fents[i])->id == dirid)
 		return fep;
 	return NULL;
 }
 
 void
-dcache_purge(int dirid)
+dcache_purge(int dirid, int ft)
 {
 	int	*dcp;
-
 	dcp = &dcache[dirid % NDCACHE];
-	if (*dcp >= 0 && flist[FT_DIR].fents[*dcp].id == dirid)
+	if (*dcp >= 0 && *dcp < flist[ft].nfiles &&
+	    flist[ft].fents[*dcp].id == dirid)
 		*dcp = -1;
 }
 
@@ -989,14 +1009,34 @@ del_from_flist(int ft, int slot)
 	flist_t	*ftp;
 
 	ftp = &flist[ft];
-	if (ft == FT_DIR)
-		dcache_purge(ftp->fents[slot].id);
+	if (ft == FT_DIR || ft == FT_SUBVOL)
+		dcache_purge(ftp->fents[slot].id, ft);
 	if (slot != ftp->nfiles - 1) {
-		if (ft == FT_DIR)
-			dcache_purge(ftp->fents[ftp->nfiles - 1].id);
+		if (ft == FT_DIR || ft == FT_SUBVOL)
+			dcache_purge(ftp->fents[ftp->nfiles - 1].id, ft);
 		ftp->fents[slot] = ftp->fents[--ftp->nfiles];
 	} else
 		ftp->nfiles--;
+}
+
+void
+delete_subvol_children(int parid)
+{
+	flist_t	*flp;
+	int	i;
+again:
+	for (i = 0, flp = flist; i < FT_nft; i++, flp++) {
+		int c;
+		for (c = 0; c < flp->nfiles; c++) {
+			if (flp->fents[c].parent == parid) {
+				int id = flp->fents[c].id;
+				del_from_flist(i, c);
+				if (i == FT_DIR || i == FT_SUBVOL)
+					delete_subvol_children(id);
+				goto again;
+			}
+		}
+	}
 }
 
 fent_t *
@@ -1005,15 +1045,21 @@ dirid_to_fent(int dirid)
 	fent_t	*efep;
 	fent_t	*fep;
 	flist_t	*flp;
+	int	ft = FT_DIR;
 
 	if ((fep = dcache_lookup(dirid)))
 		return fep;
-	flp = &flist[FT_DIR];
+again:
+	flp = &flist[ft];
 	for (fep = flp->fents, efep = &fep[flp->nfiles]; fep < efep; fep++) {
 		if (fep->id == dirid) {
 			dcache_enter(dirid, fep - flp->fents);
 			return fep;
 		}
+	}
+	if (ft == FT_DIR) {
+		ft = FT_SUBVOL;
+		goto again;
 	}
 	return NULL;
 }
@@ -1091,8 +1137,9 @@ errout:
  * Return 0 on error, 1 on success;
  */
 int
-fent_to_name(pathname_t *name, flist_t *flp, fent_t *fep)
+fent_to_name(pathname_t *name, fent_t *fep)
 {
+	flist_t	*flp = &flist[fep->ft];
 	char	buf[NAME_MAX + 1];
 	int	i;
 	fent_t	*pfep;
@@ -1112,7 +1159,7 @@ fent_to_name(pathname_t *name, flist_t *flp, fent_t *fep)
 #endif
 		if (pfep == NULL)
 			return 0;
-		e = fent_to_name(name, &flist[FT_DIR], pfep);
+		e = fent_to_name(name, pfep);
 		if (!e)
 			return 0;
 		append_pathname(name, "/");
@@ -1188,7 +1235,7 @@ generate_fname(fent_t *fep, int ft, pathname_t *name, int *idp, int *v)
 
 	/* prepend fep parent dir-name to it */
 	if (fep) {
-		e = fent_to_name(name, &flist[FT_DIR], fep);
+		e = fent_to_name(name, fep);
 		if (!e)
 			return 0;
 		append_pathname(name, "/");
@@ -1270,7 +1317,7 @@ get_fname(int which, long r, pathname_t *name, flist_t **flpp, fent_t **fepp,
 
 				/* fill-in what we were asked for */
 				if (name) {
-					e = fent_to_name(name, flp, fep);
+					e = fent_to_name(name, fep);
 #ifdef DEBUG
 					if (!e) {
 						fprintf(stderr, "%d: failed to get path for entry:"
@@ -1850,6 +1897,35 @@ zero_freq(void)
 
 	for (p = ops; p < ops_end; p++)
 		p->freq = 0;
+}
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
+opty_t btrfs_ops[] = {
+	OP_SUBVOL_CREATE,
+	OP_SUBVOL_DELETE,
+};
+
+void
+non_btrfs_freq(const char *path)
+{
+	opdesc_t		*p;
+#ifdef HAVE_BTRFSUTIL_H
+	enum btrfs_util_error	e;
+
+	e = btrfs_util_is_subvolume(path);
+	if (e != BTRFS_UTIL_ERROR_NOT_BTRFS)
+		return;
+#endif
+	for (p = ops; p < ops_end; p++) {
+		int i;
+		for (i = 0; i < ARRAY_SIZE(btrfs_ops); i++) {
+			if (p->op == btrfs_ops[i]) {
+				p->freq = 0;
+				break;
+			}
+		}
+	}
 }
 
 void inode_info(char *str, size_t sz, struct stat64 *s, int verbose)
@@ -3103,7 +3179,7 @@ creat_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			(void)fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, fep);
 			printf("%d/%d: creat - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -3767,7 +3843,7 @@ link_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			(void)fent_to_name(&l, &flist[FT_DIR], fep);
+			(void)fent_to_name(&l, fep);
 			printf("%d/%d: link - no filename from %s\n",
 				procid, opno, l.path);
 		}
@@ -3858,7 +3934,7 @@ mkdir_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			(void)fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, fep);
 			printf("%d/%d: mkdir - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -3896,7 +3972,7 @@ mknod_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			(void)fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, fep);
 			printf("%d/%d: mknod - no filename from %s\n",
 				procid, opno, f.path);
 		}
@@ -4364,7 +4440,7 @@ do_renameat2(int opno, long r, int mode)
 		v |= v1;
 		if (!e) {
 			if (v) {
-				(void)fent_to_name(&f, &flist[FT_DIR], dfep);
+				(void)fent_to_name(&f, dfep);
 				printf("%d/%d: rename - no filename from %s\n",
 					procid, opno, f.path);
 			}
@@ -4378,6 +4454,7 @@ do_renameat2(int opno, long r, int mode)
 	if (e == 0) {
 		int xattr_counter = fep->xattr_counter;
 		bool swap = (mode == RENAME_EXCHANGE) ? true : false;
+		int ft = flp - flist;
 
 		oldid = fep->id;
 		oldparid = fep->parent;
@@ -4386,7 +4463,7 @@ do_renameat2(int opno, long r, int mode)
 		 * Swap the parent ids for RENAME_EXCHANGE, and replace the
 		 * old parent id for the others.
 		 */
-		if (flp - flist == FT_DIR)
+		if (ft == FT_DIR || ft == FT_SUBVOL)
 			fix_parent(oldid, id, swap);
 
 		if (mode == RENAME_WHITEOUT) {
@@ -4648,6 +4725,86 @@ stat_f(int opno, long r)
 }
 
 void
+subvol_create_f(int opno, long r)
+{
+#ifdef HAVE_BTRFSUTIL_H
+	enum btrfs_util_error	e;
+	pathname_t		f;
+	fent_t			*fep;
+	int			id;
+	int			parid;
+	int			v;
+	int			v1;
+	int			err;
+
+	init_pathname(&f);
+	if (!get_fname(FT_DIRm | FT_SUBVOLm, r, NULL, NULL, &fep, &v))
+		parid = -1;
+	else
+		parid = fep->id;
+	err = generate_fname(fep, FT_SUBVOL, &f, &id, &v1);
+	v |= v1;
+	if (!err) {
+		if (v) {
+			(void)fent_to_name(&f, fep);
+			printf("%d/%d: subvol_create - no filename from %s\n",
+			       procid, opno, f.path);
+		}
+		free_pathname(&f);
+		return;
+	}
+	e = btrfs_util_create_subvolume(f.path, 0, NULL, NULL);
+	if (e == BTRFS_UTIL_OK)
+		add_to_flist(FT_SUBVOL, id, parid, 0);
+	if (v) {
+		printf("%d/%d: subvol_create %s %d(%s)\n", procid, opno,
+		       f.path, e, btrfs_util_strerror(e));
+		printf("%d/%d: subvol_create add id=%d,parent=%d\n", procid,
+		       opno, id, parid);
+	}
+	free_pathname(&f);
+#endif
+}
+
+void
+subvol_delete_f(int opno, long r)
+{
+#ifdef HAVE_BTRFSUTIL_H
+	enum btrfs_util_error	e;
+	pathname_t		f;
+	fent_t			*fep;
+	int			v;
+	int			oldid;
+	int			oldparid;
+
+	init_pathname(&f);
+	if (!get_fname(FT_SUBVOLm, r, &f, NULL, &fep, &v)) {
+		if (v)
+			printf("%d:%d: subvol_delete - no subvolume\n", procid,
+			       opno);
+		free_pathname(&f);
+		return;
+	}
+	e = btrfs_util_delete_subvolume(f.path, 0);
+	check_cwd();
+	if (e == BTRFS_UTIL_OK) {
+		oldid = fep->id;
+		oldparid = fep->parent;
+		delete_subvol_children(oldid);
+		del_from_flist(FT_SUBVOL, fep - flist[FT_SUBVOL].fents);
+	}
+	if (v) {
+		printf("%d/%d: subvol_delete %s %d(%s)\n", procid, opno, f.path,
+		       e, btrfs_util_strerror(e));
+		if (e == BTRFS_UTIL_OK)
+			printf("%d/%d: subvol_delete del entry: id=%d,parent=%d\n",
+			       procid, opno, oldid, oldparid);
+	}
+	free_pathname(&f);
+#endif
+}
+
+void
 symlink_f(int opno, long r)
 {
 	int		e;
@@ -4670,7 +4827,7 @@ symlink_f(int opno, long r)
 	v |= v1;
 	if (!e) {
 		if (v) {
-			(void)fent_to_name(&f, &flist[FT_DIR], fep);
+			(void)fent_to_name(&f, fep);
 			printf("%d/%d: symlink - no filename from %s\n",
 				procid, opno, f.path);
 		}

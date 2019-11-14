@@ -24,6 +24,10 @@ LCFLAGS += -DAIO
 LLDLIBS += -laio -lpthread
 endif
 
+ifeq ($(HAVE_LIBBTRFSUTIL), true)
+LLDLIBS += -lbtrfsutil
+endif
+
 ifeq ($(HAVE_FALLOCATE), true)
 LCFLAGS += -DFALLOCATE
 endif
