@@ -128,6 +128,7 @@ typedef enum {
 	OP_SETATTR,
 	OP_SETFATTR,
 	OP_SETXATTR,
+	OP_SNAPSHOT,
 	OP_SPLICE,
 	OP_STAT,
 	OP_SUBVOL_CREATE,
@@ -254,6 +255,7 @@ void	rmdir_f(int, long);
 void	setattr_f(int, long);
 void	setfattr_f(int, long);
 void	setxattr_f(int, long);
+void	snapshot_f(int, long);
 void	splice_f(int, long);
 void	stat_f(int, long);
 void	subvol_create_f(int, long);
@@ -321,6 +323,7 @@ opdesc_t	ops[] = {
 	{ OP_SETFATTR, "setfattr", setfattr_f, 2, 1 },
 	/* set project id (XFS_IOC_FSSETXATTR ioctl) */
 	{ OP_SETXATTR, "setxattr", setxattr_f, 1, 1 },
+	{ OP_SNAPSHOT, "snapshot", snapshot_f, 1, 1 },
 	{ OP_SPLICE, "splice", splice_f, 1, 1 },
 	{ OP_STAT, "stat", stat_f, 1, 0 },
 	{ OP_SUBVOL_CREATE, "subvol_create", subvol_create_f, 1, 1},
@@ -1902,6 +1905,7 @@ zero_freq(void)
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 opty_t btrfs_ops[] = {
+	OP_SNAPSHOT,
 	OP_SUBVOL_CREATE,
 	OP_SUBVOL_DELETE,
 };
@@ -4700,6 +4704,55 @@ setfattr_f(int opno, long r)
 out:
 	free(value);
 	free_pathname(&f);
+}
+
+void
+snapshot_f(int opno, long r)
+{
+#ifdef HAVE_BTRFSUTIL_H
+	enum btrfs_util_error	e;
+	pathname_t		f;
+	pathname_t		newf;
+	fent_t			*fep;
+	int			id;
+	int			parid;
+	int			v;
+	int			v1;
+	int			err;
+
+	init_pathname(&f);
+	if (!get_fname(FT_SUBVOLm, r, &f, NULL, &fep, &v)) {
+		if (v)
+			printf("%d/%d: snapshot - no subvolume\n", procid,
+			       opno);
+		free_pathname(&f);
+		return;
+	}
+	init_pathname(&newf);
+	parid = fep->id;
+	err = generate_fname(fep, FT_SUBVOL, &newf, &id, &v1);
+	v |= v1;
+	if (!err) {
+		if (v) {
+			(void)fent_to_name(&f, fep);
+			printf("%d/%d: snapshot - no filename from %s\n",
+			       procid, opno, f.path);
+		}
+		free_pathname(&f);
+		return;
+	}
+	e = btrfs_util_create_snapshot(f.path, newf.path, 0, NULL, NULL);
+	if (e == BTRFS_UTIL_OK)
+		add_to_flist(FT_SUBVOL, id, parid, 0);
+	if (v) {
+		printf("%d/%d: snapshot %s->%s %d(%s)\n", procid, opno,
+		       f.path, newf.path, e, btrfs_util_strerror(e));
+		printf("%d/%d: snapshot add id=%d,parent=%d\n", procid, opno,
+		       id, parid);
+	}
+	free_pathname(&newf);
+	free_pathname(&f);
+#endif
 }
 
 void
