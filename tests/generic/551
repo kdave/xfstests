@@ -55,12 +55,18 @@ do_test()
 	local size
 	local off
 	local truncsize
+	local total_size=0
+	local avail_mem=`_available_memory_bytes`
 
 	# the number of AIO write operation
 	num_oper=$((RANDOM % 64 + 1))
 
 	for ((i=0; i<num_oper; i++)); do
 		size=$(((RANDOM % max_io_size_b + 1) * diosize))
+		total_size=$((total_size + size*2))
+		if [[ $total_size -ge $avail_mem ]]; then
+			break
+		fi
 		off=$((RANDOM % max_io_size_b * diosize))
 		oper_list="$oper_list -a size=$size,off=$off"
 	done

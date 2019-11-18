@@ -910,6 +910,17 @@ _free_memory_bytes()
     free -b | grep ^Mem | awk '{print $4}'
 }
 
+_available_memory_bytes()
+{
+	nf=`free -b | grep ^Mem | awk '{print NF}'`
+	if [[ nf -lt 7 ]]; then
+		# Doesn't have available field. Fallback.
+		_free_memory_bytes
+	else
+		free -b | grep ^Mem | awk '{print $7}'
+	fi
+}
+
 # Create fs of certain size on scratch device
 # _scratch_mkfs_sized <size in bytes> [optional blocksize]
 _scratch_mkfs_sized()
