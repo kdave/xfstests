@@ -1,0 +1,182 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test 589
+#
+# Test mount shared subtrees, verify the move semantics:
+#
+# ---------------------------------------------------------------------------
+# |         MOVE MOUNT OPERATION                                            |
+# |**************************************************************************
+# |source(A)->| shared       |       private  |       slave    | unbindable |
+# | dest(B)  |               |                |                |            |
+# |   |      |               |                |                |            |
+# |   v      |               |                |                |            |
+# |**************************************************************************
+# |  shared  | shared        |     shared     | shared & slave |  invalid   |
+# |          |               |                |                |            |
+# |non-shared| shared        |      private   |      slave     | unbindable |
+# ***************************************************************************
+#   NOTE: moving a mount residing under a shared mount is invalid.
+#
+#-----------------------------------------------------------------------
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_clear_mount_stack
+	# make sure there's no bug cause dentry isn't be freed
+	rm -rf $MNTHEAD
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_scratch
+_require_local_device $SCRATCH_DEV
+
+fs_stress()
+{
+	local target=$1
+
+	$FSSTRESS_PROG -n 50 -p 3 -d $target >/dev/null
+	sync
+}
+
+# prepare some mountpoint dir
+SRCHEAD=$TEST_DIR/$seq-src
+DSTHEAD=$TEST_DIR/$seq-dst
+rm -rf $SRCHEAD $DSTHEAD
+mkdir $SRCHEAD $DSTHEAD 2>>$seqres.full
+mpA=$SRCHEAD/"$$"_mpA
+mpB=$SRCHEAD/"$$"_mpB
+mpC=$DSTHEAD/"$$"_mpC
+mpD=$DSTHEAD/"$$"_mpD
+
+find_mnt()
+{
+	echo "------"
+	findmnt -n -o TARGET,SOURCE $SCRATCH_DEV | \
+		sed -e "s;$mpA;mpA;g" \
+		    -e "s;$mpB;mpB;g" \
+		    -e "s;$mpC;mpC;g" \
+		    -e "s;$mpD;mpD;g" | \
+		_filter_spaces | _filter_testdir_and_scratch | sort
+	echo "======"
+}
+
+start_test()
+{
+	local type=$1
+
+	_scratch_mkfs >$seqres.full 2>&1
+
+	_get_mount -t $FSTYP $SCRATCH_DEV $SRCHEAD
+	# make sure $SRCHEAD is private
+	$MOUNT_PROG --make-private $SRCHEAD
+
+	_get_mount -t $FSTYP $SCRATCH_DEV $DSTHEAD
+	# test start with a bind, then make-shared $DSTHEAD
+	_get_mount --bind $DSTHEAD $DSTHEAD
+	$MOUNT_PROG --make-"${type}" $DSTHEAD
+	mkdir $mpA $mpB $mpC $mpD
+}
+
+end_test()
+{
+	_clear_mount_stack
+	rm -rf $mpA $mpB $mpC $mpD
+}
+
+move_run()
+{
+	local source=$1
+	local dest=$2
+
+	start_test $dest
+
+	echo "move $source to $dest"
+	_get_mount -t $FSTYP $SCRATCH_DEV $mpA
+	mkdir -p $mpA/dir 2>/dev/null
+	$MOUNT_PROG --make-shared $mpA
+	# need a peer for slave later
+	_get_mount --bind $mpA $mpB
+	$MOUNT_PROG --make-"$source" $mpB
+	# maybe unbindable at here
+	_get_mount --move $mpB $mpC 2>/dev/null
+	if [ $? -ne 0 ]; then
+		find_mnt
+		end_test
+		return 0
+	fi
+
+	# check mpC after move B to C
+	for m in $mpA $mpC; do
+		_get_mount -t $FSTYP $SCRATCH_DEV $m/dir
+		fs_stress $m/dir
+		find_mnt
+		_put_mount
+	done
+
+	# mpC will be in different parent mount, test moving from different
+	# parent mount, and moving a mount residing under a shared mount is
+	# invalid
+	_get_mount --move $mpC $mpD 2>/dev/null
+	if [ $? -ne 0 ]; then
+		find_mnt
+		end_test
+		return 0
+	fi
+	for m in $mpA $mpD; do
+		_get_mount -t $FSTYP $SCRATCH_DEV $m/dir
+		fs_stress $m/dir
+		find_mnt
+		_put_mount
+	done
+
+	end_test
+}
+
+move_test()
+{
+	#        source     dest
+	move_run shared     shared
+	move_run slave      shared
+	move_run private    shared
+	move_run unbindable shared
+
+	move_run shared     slave
+	move_run slave      slave
+	move_run private    slave
+	move_run unbindable slave
+
+	move_run shared     private
+	move_run slave      private
+	move_run private    private
+	move_run unbindable private
+}
+
+move_test
+
+# success, all done
+status=0
+exit

@@ -189,6 +189,12 @@ _get_mount()
 
 	_mount $scratch_opts $*
 	if [ $? -eq 0 ]; then
+		# mount --move operation updates the mountpoint, so remove
+		# the old one and insert the new one
+		if [[ "$*" =~ --move|-M ]]; then
+			MOUNTED_POINT_STACK=`echo $MOUNTED_POINT_STACK | \
+						cut -d\  -f2-`
+		fi
 		MOUNTED_POINT_STACK="$mnt_point $MOUNTED_POINT_STACK"
 	else
 		return 1
