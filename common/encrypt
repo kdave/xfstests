@@ -664,16 +664,26 @@ _do_verify_ciphertext_for_encryption_policy()
 	done
 }
 
+# fscrypt UAPI constants (see <linux/fscrypt.h>)
+
+FSCRYPT_MODE_AES_256_XTS=1
+FSCRYPT_MODE_AES_256_CTS=4
+FSCRYPT_MODE_AES_128_CBC=5
+FSCRYPT_MODE_AES_128_CTS=6
+FSCRYPT_MODE_ADIANTUM=9
+
+FSCRYPT_POLICY_FLAG_DIRECT_KEY=0x04
+
 _fscrypt_mode_name_to_num()
 {
 	local name=$1
 
 	case "$name" in
-	AES-256-XTS)		echo 1 ;; # FS_ENCRYPTION_MODE_AES_256_XTS
-	AES-256-CTS-CBC)	echo 4 ;; # FS_ENCRYPTION_MODE_AES_256_CTS
-	AES-128-CBC-ESSIV)	echo 5 ;; # FS_ENCRYPTION_MODE_AES_128_CBC
-	AES-128-CTS-CBC)	echo 6 ;; # FS_ENCRYPTION_MODE_AES_128_CTS
-	Adiantum)		echo 9 ;; # FS_ENCRYPTION_MODE_ADIANTUM
+	AES-256-XTS)		echo $FSCRYPT_MODE_AES_256_XTS ;;
+	AES-256-CTS-CBC)	echo $FSCRYPT_MODE_AES_256_CTS ;;
+	AES-128-CBC-ESSIV)	echo $FSCRYPT_MODE_AES_128_CBC ;;
+	AES-128-CTS-CBC)	echo $FSCRYPT_MODE_AES_128_CTS ;;
+	Adiantum)		echo $FSCRYPT_MODE_ADIANTUM ;;
 	*)			_fail "Unknown fscrypt mode: $name" ;;
 	esac
 }
@@ -705,7 +715,7 @@ _verify_ciphertext_for_encryption_policy()
 			     $filenames_encryption_mode ]; then
 				_fail "For direct key mode, contents and filenames modes must match"
 			fi
-			(( policy_flags |= 0x04 )) # FS_POLICY_FLAG_DIRECT_KEY
+			(( policy_flags |= FSCRYPT_POLICY_FLAG_DIRECT_KEY ))
 			;;
 		*)
 			_fail "Unknown option '$opt' passed to ${FUNCNAME[0]}"
@@ -721,11 +731,11 @@ _verify_ciphertext_for_encryption_policy()
 	if (( policy_version > 1 )); then
 		set_encpolicy_args+=" -v 2"
 		crypt_util_args+=" --kdf=HKDF-SHA512"
-		if (( policy_flags & 0x04 )); then
+		if (( policy_flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
 			crypt_util_args+=" --mode-num=$contents_mode_num"
 		fi
 	else
-		if (( policy_flags & 0x04 )); then
+		if (( policy_flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
 			crypt_util_args+=" --kdf=none"
 		else
 			crypt_util_args+=" --kdf=AES-128-ECB"
