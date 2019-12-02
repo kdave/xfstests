@@ -62,7 +62,15 @@ static void usage(FILE *fp)
 "                                Default: 4096 bytes\n"
 "  --decrypt                   Decrypt instead of encrypt\n"
 "  --file-nonce=NONCE          File's nonce as a 32-character hex string\n"
+"  --fs-uuid=UUID              The filesystem UUID as a 32-character hex string.\n"
+"                                Only required for --iv-ino-lblk-64.\n"
 "  --help                      Show this help\n"
+"  --inode-number=INUM         The file's inode number.  Only required for\n"
+"                                --iv-ino-lblk-64.\n"
+"  --iv-ino-lblk-64            Use the format where the IVs include the inode\n"
+"                                number and the same key is shared across files.\n"
+"                                Requires --kdf=HKDF-SHA512, --fs-uuid,\n"
+"                                --inode-number, and --mode-num.\n"
 "  --kdf=KDF                   Key derivation function to use: AES-128-ECB,\n"
 "                                HKDF-SHA512, or none.  Default: none\n"
 "  --mode-num=NUM              Derive per-mode key using mode number NUM\n"
@@ -1576,6 +1584,7 @@ static void test_adiantum(void)
  *----------------------------------------------------------------------------*/
 
 #define FILE_NONCE_SIZE		16
+#define UUID_SIZE		16
 #define MAX_KEY_SIZE		64
 
 static const struct fscrypt_cipher {
@@ -1694,6 +1703,18 @@ static u8 parse_mode_number(const char *arg)
 	return num;
 }
 
+static u32 parse_inode_number(const char *arg)
+{
+	char *tmp;
+	unsigned long long num = strtoull(arg, &tmp, 10);
+
+	if (num <= 0 || *tmp)
+		die("Invalid inode number: %s", arg);
+	if ((u32)num != num)
+		die("Inode number %s is too large; must be 32-bit", arg);
+	return num;
+}
+
 struct key_and_iv_params {
 	u8 master_key[MAX_KEY_SIZE];
 	int master_key_size;
@@ -1701,11 +1722,16 @@ struct key_and_iv_params {
 	u8 mode_num;
 	u8 file_nonce[FILE_NONCE_SIZE];
 	bool file_nonce_specified;
+	bool iv_ino_lblk_64;
+	u32 inode_number;
+	u8 fs_uuid[UUID_SIZE];
+	bool fs_uuid_specified;
 };
 
 #define HKDF_CONTEXT_KEY_IDENTIFIER	1
 #define HKDF_CONTEXT_PER_FILE_KEY	2
-#define HKDF_CONTEXT_PER_MODE_KEY	3
+#define HKDF_CONTEXT_DIRECT_KEY		3
+#define HKDF_CONTEXT_IV_INO_LBLK_64_KEY	4
 
 /*
  * Get the key and starting IV with which the encryption will actually be done.
@@ -1718,13 +1744,16 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 {
 	bool file_nonce_in_iv = false;
 	struct aes_key aes_key;
-	u8 info[8 + 1 + FILE_NONCE_SIZE] = "fscrypt";
+	u8 info[8 + 1 + 1 + UUID_SIZE] = "fscrypt";
 	size_t infolen = 8;
 	size_t i;
 
 	ASSERT(real_key_size <= params->master_key_size);
 
 	memset(iv, 0, sizeof(*iv));
+
+	if (params->iv_ino_lblk_64 && params->kdf != KDF_HKDF_SHA512)
+		die("--iv-ino-lblk-64 requires --kdf=HKDF-SHA512");
 
 	switch (params->kdf) {
 	case KDF_NONE:
@@ -1746,8 +1775,20 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 				    &real_key[i]);
 		break;
 	case KDF_HKDF_SHA512:
-		if (params->mode_num != 0) {
-			info[infolen++] = HKDF_CONTEXT_PER_MODE_KEY;
+		if (params->iv_ino_lblk_64) {
+			if (!params->fs_uuid_specified)
+				die("--iv-ino-lblk-64 requires --fs-uuid");
+			if (params->inode_number == 0)
+				die("--iv-ino-lblk-64 requires --inode-number");
+			if (params->mode_num == 0)
+				die("--iv-ino-lblk-64 requires --mode-num");
+			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_64_KEY;
+			info[infolen++] = params->mode_num;
+			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
+			infolen += UUID_SIZE;
+			put_unaligned_le32(params->inode_number, &iv->bytes[4]);
+		} else if (params->mode_num != 0) {
+			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
 			info[infolen++] = params->mode_num;
 			file_nonce_in_iv = true;
 		} else if (params->file_nonce_specified) {
@@ -1773,7 +1814,10 @@ enum {
 	OPT_BLOCK_SIZE,
 	OPT_DECRYPT,
 	OPT_FILE_NONCE,
+	OPT_FS_UUID,
 	OPT_HELP,
+	OPT_INODE_NUMBER,
+	OPT_IV_INO_LBLK_64,
 	OPT_KDF,
 	OPT_MODE_NUM,
 	OPT_PADDING,
@@ -1783,7 +1827,10 @@ static const struct option longopts[] = {
 	{ "block-size",      required_argument, NULL, OPT_BLOCK_SIZE },
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
 	{ "file-nonce",      required_argument, NULL, OPT_FILE_NONCE },
+	{ "fs-uuid",         required_argument, NULL, OPT_FS_UUID },
 	{ "help",            no_argument,       NULL, OPT_HELP },
+	{ "inode-number",    required_argument, NULL, OPT_INODE_NUMBER },
+	{ "iv-ino-lblk-64",  no_argument,       NULL, OPT_IV_INO_LBLK_64 },
 	{ "kdf",             required_argument, NULL, OPT_KDF },
 	{ "mode-num",        required_argument, NULL, OPT_MODE_NUM },
 	{ "padding",         required_argument, NULL, OPT_PADDING },
@@ -1831,9 +1878,21 @@ int main(int argc, char *argv[])
 				die("Invalid file nonce: %s", optarg);
 			params.file_nonce_specified = true;
 			break;
+		case OPT_FS_UUID:
+			if (hex2bin(optarg, params.fs_uuid, UUID_SIZE)
+			    != UUID_SIZE)
+				die("Invalid filesystem UUID: %s", optarg);
+			params.fs_uuid_specified = true;
+			break;
 		case OPT_HELP:
 			usage(stdout);
 			return 0;
+		case OPT_INODE_NUMBER:
+			params.inode_number = parse_inode_number(optarg);
+			break;
+		case OPT_IV_INO_LBLK_64:
+			params.iv_ino_lblk_64 = true;
+			break;
 		case OPT_KDF:
 			params.kdf = parse_kdf_algorithm(optarg);
 			break;
