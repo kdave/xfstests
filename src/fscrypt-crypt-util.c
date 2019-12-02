@@ -1703,6 +1703,10 @@ struct key_and_iv_params {
 	bool file_nonce_specified;
 };
 
+#define HKDF_CONTEXT_KEY_IDENTIFIER	1
+#define HKDF_CONTEXT_PER_FILE_KEY	2
+#define HKDF_CONTEXT_PER_MODE_KEY	3
+
 /*
  * Get the key and starting IV with which the encryption will actually be done.
  * If a KDF was specified, a subkey is derived from the master key and the mode
@@ -1743,11 +1747,11 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 		break;
 	case KDF_HKDF_SHA512:
 		if (params->mode_num != 0) {
-			info[infolen++] = 3; /* HKDF_CONTEXT_PER_MODE_KEY */
+			info[infolen++] = HKDF_CONTEXT_PER_MODE_KEY;
 			info[infolen++] = params->mode_num;
 			file_nonce_in_iv = true;
 		} else if (params->file_nonce_specified) {
-			info[infolen++] = 2; /* HKDF_CONTEXT_PER_FILE_KEY */
+			info[infolen++] = HKDF_CONTEXT_PER_FILE_KEY;
 			memcpy(&info[infolen], params->file_nonce,
 			       FILE_NONCE_SIZE);
 			infolen += FILE_NONCE_SIZE;
