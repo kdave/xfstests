@@ -1,0 +1,104 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Facebook.  All Rights Reserved.
+#
+# FS QA Test 590
+#
+# Test commit 0c4da70c83d4 ("xfs: fix realtime file data space leak") and
+# 69ffe5960df1 ("xfs: don't check for AG deadlock for realtime files in
+# bunmapi"). On XFS without the fixes, truncate will hang forever. On other
+# filesystems, this just tests writing into big fallocates.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	test -n "$loop" && _destroy_loop_device "$loop"
+	rm -f "$TEST_DIR/$seq"
+}
+
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch_nocheck
+
+maxextlen=$((0x1fffff))
+bs=4096
+rextsize=4
+filesz=$(((maxextlen + 1) * bs))
+
+extra_options=""
+# If we're testing XFS, set up the realtime device to reproduce the bug.
+if [[ $FSTYP = xfs ]]; then
+	# If we don't have a realtime device, set up a loop device on the test
+	# filesystem.
+	if [[ $USE_EXTERNAL != yes || -z $SCRATCH_RTDEV ]]; then
+		_require_test
+		loopsz="$((filesz + (1 << 26)))"
+		_require_fs_space "$TEST_DIR" $((loopsz / 1024))
+		$XFS_IO_PROG -c "truncate $loopsz" -f "$TEST_DIR/$seq"
+		loop="$(_create_loop_device "$TEST_DIR/$seq")"
+		USE_EXTERNAL=yes
+		SCRATCH_RTDEV="$loop"
+	fi
+	extra_options="$extra_options -bsize=$bs"
+	extra_options="$extra_options -r extsize=$((bs * rextsize))"
+	extra_options="$extra_options -d agsize=$(((maxextlen + 1) * bs / 2)),rtinherit=1"
+	# disable reflink as reflink not supported with realtime devices
+	if _scratch_mkfs_xfs_supported -m reflink=0 >/dev/null 2>&1; then
+		extra_options="$extra_options -m reflink=0"
+	fi
+fi
+_scratch_mkfs $extra_options >>$seqres.full 2>&1
+_scratch_mount
+_require_fs_space "$SCRATCH_MNT" $((filesz / 1024))
+
+# Allocate maxextlen + 1 blocks. As long as the allocator does something sane,
+# we should end up with two extents that look something like:
+#
+# u3.bmx[0-1] = [startoff,startblock,blockcount,extentflag]
+# 0:[0,0,2097148,1]
+# 1:[2097148,2097148,4,1]
+#
+# Extent 0 has blockcount = ALIGN_DOWN(maxextlen, rextsize). Extent 1 is
+# adjacent and has blockcount = rextsize. Both are unwritten.
+$XFS_IO_PROG -c "falloc 0 $filesz" -c fsync -f "$SCRATCH_MNT/file"
+
+# Write extent 0 + one block of extent 1. Our extents should end up like so:
+#
+# u3.bmx[0-1] = [startoff,startblock,blockcount,extentflag]
+# 0:[0,0,2097149,0]
+# 1:[2097149,2097149,3,1]
+#
+# Extent 0 is written and has blockcount = ALIGN_DOWN(maxextlen, rextsize) + 1,
+# Extent 1 is adjacent, unwritten, and has blockcount = rextsize - 1 and
+# startblock % rextsize = 1.
+#
+# The -b is just to speed things up (doing GBs of I/O in 4k chunks kind of
+# sucks).
+$XFS_IO_PROG -c "pwrite -b 1M -W 0 $(((maxextlen + 2 - rextsize) * bs))" \
+	"$SCRATCH_MNT/file" >> "$seqres.full"
+
+# Truncate the extents.
+$XFS_IO_PROG -c "truncate 0" -c fsync "$SCRATCH_MNT/file"
+
+# We need to do this before the loop device gets torn down.
+_scratch_unmount
+_check_scratch_fs
+
+echo "Silence is golden"
+status=0
+exit
