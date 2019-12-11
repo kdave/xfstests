@@ -44,12 +44,16 @@ _dmerror_unmount()
 
 _dmerror_cleanup()
 {
+	$DMSETUP_PROG resume error-test > /dev/null 2>&1
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
 	_dmsetup_remove error-test
 }
 
 _dmerror_load_error_table()
 {
+	local load_res=0
+	local resume_res=0
+
 	suspend_opt="--nolockfs"
 
 	if [ "$1" = "lockfs" ]; then
@@ -62,14 +66,20 @@ _dmerror_load_error_table()
 	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
 
 	$DMSETUP_PROG load error-test --table "$DMERROR_TABLE"
-	[ $? -ne 0 ] && _fail "dmsetup failed to load error table"
+	load_res=$?
 
 	$DMSETUP_PROG resume error-test
-	[ $? -ne 0 ] && _fail  "dmsetup resume failed"
+	resume_res=$?
+
+	[ $load_res -ne 0 ] && _fail "dmsetup failed to load error table"
+	[ $resume_res -ne 0 ] && _fail  "dmsetup resume failed"
 }
 
 _dmerror_load_working_table()
 {
+	local load_res=0
+	local resume_res=0
+
 	suspend_opt="--nolockfs"
 
 	if [ "$1" = "lockfs" ]; then
@@ -82,8 +92,11 @@ _dmerror_load_working_table()
 	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
 
 	$DMSETUP_PROG load error-test --table "$DMLINEAR_TABLE"
-	[ $? -ne 0 ] && _fail "dmsetup failed to load error table"
+	load_res=$?
 
 	$DMSETUP_PROG resume error-test
-	[ $? -ne 0 ] && _fail  "dmsetup resume failed"
+	resume_res=$?
+
+	[ $load_res -ne 0 ] && _fail "dmsetup failed to load error table"
+	[ $resume_res -ne 0 ] && _fail  "dmsetup resume failed"
 }
