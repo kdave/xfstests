@@ -51,22 +51,30 @@ _require_scratch_dev_pool 4
 _require_btrfs_command inspect-internal dump-tree
 _require_btrfs_fs_feature raid56
 
-get_physical_stripe0()
+get_physical()
 {
+	local stripe=$1
 	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
-	grep " DATA\|RAID6" -A 10 | \
-	$AWK_PROG '($1 ~ /stripe/ && $3 ~ /devid/ && $2 ~ /0/) { print $6 }'
+		grep " DATA\|RAID6" -A 10 | \
+		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$6 }"
 }
 
-get_physical_stripe1()
+get_devid()
 {
+	local stripe=$1
 	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
-	grep " DATA\|RAID6" -A 10 | \
-	$AWK_PROG '($1 ~ /stripe/ && $3 ~ /devid/ && $2 ~ /1/) { print $6 }'
+		grep " DATA\|RAID6" -A 10 | \
+		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$4 }"
+}
+
+get_device_path()
+{
+	local devid=$1
+	echo "$SCRATCH_DEV_POOL" | $AWK_PROG "{print \$$devid}"
 }
 
 _scratch_dev_pool_get 4
-# step 1: create a raid6 btrfs and create a 4K file
+# step 1: create a raid6 btrfs and create a 128K file
 echo "step 1......mkfs.btrfs" >>$seqres.full
 
 mkfs_opts="-d raid6 -b 1G"
@@ -80,18 +88,25 @@ _scratch_mount -o nospace_cache
 $XFS_IO_PROG -f -d -c "pwrite -S 0xaa 0 128K" -c "fsync" \
 	"$SCRATCH_MNT/foobar" | _filter_xfs_io
 
+logical=`${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar | _filter_filefrag | cut -d '#' -f 1`
 _scratch_unmount
 
-stripe_0=`get_physical_stripe0`
-stripe_1=`get_physical_stripe1`
-dev4=`echo $SCRATCH_DEV_POOL | awk '{print $4}'`
-dev3=`echo $SCRATCH_DEV_POOL | awk '{print $3}'`
+phy0=$(get_physical 0)
+devid0=$(get_devid 0)
+devpath0=$(get_device_path $devid0)
+phy1=$(get_physical 1)
+devid1=$(get_devid 1)
+devpath1=$(get_device_path $devid1)
 
-# step 2: corrupt the 1st and 2nd stripe (stripe 0 and 1)
-echo "step 2......simulate bitrot at offset $stripe_0 of device_4($dev4) and offset $stripe_1 of device_3($dev3)" >>$seqres.full
+# step 2: corrupt stripe #0 and #1
+echo "step 2......simulate bitrot at:" >>$seqres.full
+echo "      ......stripe #0: devid $devid0 devpath $devpath0 phy $phy0" \
+	>>$seqres.full
+echo "      ......stripe #1: devid $devid1 devpath $devpath1 phy $phy1" \
+	>>$seqres.full
 
-$XFS_IO_PROG -f -d -c "pwrite -S 0xbb $stripe_0 64K" $dev4 | _filter_xfs_io
-$XFS_IO_PROG -f -d -c "pwrite -S 0xbb $stripe_1 64K" $dev3 | _filter_xfs_io
+$XFS_IO_PROG -f -d -c "pwrite -S 0xbb $phy0 64K" $devpath0 > /dev/null
+$XFS_IO_PROG -f -d -c "pwrite -S 0xbb $phy1 64K" $devpath1 > /dev/null
 
 # step 3: read foobar to repair the bitrot
 echo "step 3......repair the bitrot" >> $seqres.full
