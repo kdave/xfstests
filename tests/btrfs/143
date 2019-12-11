@@ -54,30 +54,48 @@ _require_command "$FILEFRAG_PROG" filefrag
 
 get_physical()
 {
-        # $1 is logical address
-        # print chunk tree and find devid 2 which is $SCRATCH_DEV
-        $BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
-	grep $1 -A 6 | awk '($1 ~ /stripe/ && $3 ~ /devid/ && $4 ~ /1/) { print $6 }'
+	local logical=$1
+	local stripe=$2
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
+		grep $logical -A 6 | \
+		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$6 }"
+}
+
+get_devid()
+{
+	local logical=$1
+	local stripe=$2
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
+		grep $logical -A 6 | \
+		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$4 }"
+}
+
+get_device_path()
+{
+	local devid=$1
+	echo "$SCRATCH_DEV_POOL" | $AWK_PROG "{print \$$devid}"
 }
 
 SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
 
 start_fail()
 {
+	local sysfs_bdev="$1"
 	echo 100 > $DEBUGFS_MNT/fail_make_request/probability
 	# the 1st one fails the first bio which is reading 4k (or more due to
 	# readahead), and the 2nd one fails the retry of validation so that it
 	# triggers read-repair
 	echo 2 > $DEBUGFS_MNT/fail_make_request/times
 	echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
-	echo 1 > $SYSFS_BDEV/make-it-fail
+	echo 1 > $sysfs_bdev/make-it-fail
 }
 
 stop_fail()
 {
+	local sysfs_bdev="$1"
 	echo 0 > $DEBUGFS_MNT/fail_make_request/probability
 	echo 0 > $DEBUGFS_MNT/fail_make_request/times
-	echo 0 > $SYSFS_BDEV/make-it-fail
+	echo 0 > $sysfs_bdev/make-it-fail
 }
 
 _scratch_dev_pool_get 2
@@ -94,17 +112,21 @@ _scratch_mount -o nospace_cache,nodatasum
 $XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" |\
 	_filter_xfs_io_offset
 
-# step 2, corrupt the first 64k of one copy (on SCRATCH_DEV which is the first
-# one in $SCRATCH_DEV_POOL
+# step 2, corrupt the first 64k of stripe #1
 echo "step 2......corrupt file extent" >>$seqres.full
 
 ${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar >> $seqres.full
 logical_in_btrfs=`${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar | _filter_filefrag | cut -d '#' -f 1`
-physical_on_scratch=`get_physical ${logical_in_btrfs}`
+physical=`get_physical ${logical_in_btrfs} 1`
+devid=$(get_devid ${logical_in_btrfs} 1)
+target_dev=$(get_device_path $devid)
 
+SYSFS_BDEV=`_sysfs_dev $target_dev`
 _scratch_unmount
-$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical_on_scratch 64K" $SCRATCH_DEV |\
-	_filter_xfs_io_offset
+
+echo "corrupt stripe 1 devid $devid devpath $target_dev physical $physical" \
+	>> $seqres.full
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical 64K" $target_dev > /dev/null
 
 _scratch_mount -o nospace_cache
 
@@ -118,18 +140,18 @@ while [[ -z ${result} ]]; do
     # invalidate the page cache.
     _scratch_cycle_mount
 
-    start_fail
+    start_fail $SYSFS_BDEV
     result=$(bash -c "
         if [[ \$((\$\$ % 2)) -eq 1 ]]; then
                 exec $XFS_IO_PROG -c \"pread 0 4K\" \"$SCRATCH_MNT/foobar\"
         fi");
-    stop_fail
+    stop_fail $SYSFS_BDEV
 done
 
 _scratch_unmount
 
 # check if the repair works
-$XFS_IO_PROG -c "pread -v -b 512 $physical_on_scratch 512" $SCRATCH_DEV |\
+$XFS_IO_PROG -c "pread -v -b 512 $physical 512" $target_dev |\
 	_filter_xfs_io_offset
 
 _scratch_dev_pool_put
