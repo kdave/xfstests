@@ -241,9 +241,9 @@ _filter_xfs_io_units_modified()
 		/wrote/ {
 			split($2, bytes, "/")
 
-			bytes_written = bytes[1]
+			bytes_written = strtonum(bytes[1])
 
-			offset = $NF
+			offset = strtonum($NF)
 
 			unit_start = offset / unit_size
 			unit_start = int(unit_start)
@@ -487,16 +487,14 @@ _filter_busy_mount()
 _filter_od()
 {
 	BLOCK_SIZE=$(_get_block_size $SCRATCH_MNT)
-	while read line; do
-		if test "$line" = '*'
-		then
-			printf '*\n'
-			continue
-		fi
-
-		offset="${line%% *}"
-		printf '%o%s\n' $((offset / BLOCK_SIZE)) "${line#$offset}"
-	done
+	$AWK_PROG -v block_size=$BLOCK_SIZE '
+		/^[0-9]+/ {
+			offset = strtonum("0"$1);
+			$1 = sprintf("%o", offset / block_size);
+			print $0;
+		}
+		/\*/
+	'
 }
 
 # Remove quotes from failed mknod calls. Starting with Coreutils v8.25,
