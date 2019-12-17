@@ -517,6 +517,12 @@ sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 	int excl;
 	sum_file_data_t sum_file_data = flags[FLAG_STRUCTURE] ?
 			sum_file_data_strict : sum_file_data_permissive;
+	struct stat64 dir_st;
+
+	if (fstat64(dirfd, &dir_st)) {
+		perror("fstat");
+		exit(-1);
+	}
 
 	d = fdopendir(dirfd);
 	if (!d) {
@@ -570,6 +576,11 @@ sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 				path_prefix, path, strerror(errno));
 			exit(-1);
 		}
+
+		/* We are crossing into a different subvol, skip this subtree. */
+		if (st.st_dev != dir_st.st_dev)
+			goto next;
+
 		sum_add_u64(&meta, level);
 		sum_add(&meta, namelist[i], strlen(namelist[i]));
 		if (!S_ISDIR(st.st_mode))
