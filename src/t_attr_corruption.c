@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
 		.e = {
 			{htole16(1), 0, 0},
 			{htole16(4), 0, 0},
-			{htole16(0x10), 0, 0},
+			{htole16(0x10), htole16(4), 0},
 			{htole16(0x20), 0, 0},
 		},
 	};
