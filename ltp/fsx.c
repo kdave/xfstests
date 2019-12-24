@@ -1911,6 +1911,14 @@ fail:
 	return 0;
 }
 
+static inline bool
+range_overlaps(
+	unsigned long	off0,
+	unsigned long	off1,
+	unsigned long	size)
+{
+	return llabs((unsigned long long)off1 - off0) < size;
+}
 
 int
 test(void)
@@ -1993,7 +2001,7 @@ test(void)
 			offset2 = random();
 			TRIM_OFF(offset2, maxfilelen);
 			offset2 = offset2 & ~(block_size - 1);
-		} while (llabs(offset2 - offset) < size ||
+		} while (range_overlaps(offset, offset2, size) ||
 			 offset2 + size > maxfilelen);
 		break;
 	case OP_DEDUPE_RANGE:
@@ -2011,7 +2019,7 @@ test(void)
 				offset2 = random();
 				TRIM_OFF(offset2, file_size);
 				offset2 = offset2 & ~(block_size - 1);
-			} while (llabs(offset2 - offset) < size ||
+			} while (range_overlaps(offset, offset2, size) ||
 				 offset2 + size > file_size);
 			break;
 		}
@@ -2024,7 +2032,7 @@ test(void)
 			offset2 = random();
 			TRIM_OFF(offset2, maxfilelen);
 			offset2 -= offset2 % writebdy;
-		} while (llabs(offset2 - offset) < size ||
+		} while (range_overlaps(offset, offset2, size) ||
 			 offset2 + size > maxfilelen);
 		break;
 	}
