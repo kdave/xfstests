@@ -1778,10 +1778,14 @@ docloseopen(void)
 		prterr("docloseopen: close");
 		report_failure(180);
 	}
+	if (system("echo 3 > /proc/sys/vm/drop_caches")) {
+		prterr("docloseopen: drop_caches");
+		report_failure(181);
+	}
 	fd = open(fname, O_RDWR|o_direct, 0);
 	if (fd < 0) {
 		prterr("docloseopen: open");
-		report_failure(181);
+		report_failure(182);
 	}
 }
 
