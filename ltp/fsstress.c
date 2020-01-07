@@ -8,6 +8,7 @@
 #include <setjmp.h>
 #include <sys/uio.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "global.h"
 
 #ifdef HAVE_BTRFSUTIL_H
