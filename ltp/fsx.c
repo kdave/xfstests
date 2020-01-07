@@ -2211,10 +2211,10 @@ have_op:
 		check_contents();
 
 out:
-	if (sizechecks && testcalls > simulatedopcount)
-		check_size();
 	if (closeopen)
 		docloseopen();
+	if (sizechecks && testcalls > simulatedopcount)
+		check_size();
 	return 1;
 }
 
