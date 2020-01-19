@@ -1990,6 +1990,13 @@ _require_timestamp_range()
 	if [ $tsmin -eq -1 -a $tsmax -eq -1 ]; then
 		_notrun "filesystem $FSTYP timestamp bounds are unknown"
 	fi
+
+	# expect console warning from rw scratch mount if fs limit is near
+	if [ $tsmax -le $((1<<31)) ] && \
+		! _check_dmesg_for "filesystem being mounted at .* supports timestamps until"
+	then
+		_notrun "Kernel does not support timestamp limits"
+	fi
 }
 
 _filesystem_timestamp_range()

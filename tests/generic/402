@@ -16,7 +16,13 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 status=1	# failure is the default!
-trap "exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
 
 # Get standard environment, filters and checks.
 . ./common/rc
@@ -30,6 +36,7 @@ rm -f $seqres.full
 _supported_fs generic
 _supported_os Linux
 _require_scratch
+_require_check_dmesg
 _require_xfs_io_command utimes
 
 # Compare file timestamps obtained from stat
@@ -80,6 +87,8 @@ run_test()
 }
 
 _scratch_mkfs &>> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount || _fail "scratch mount failed"
+
 _require_timestamp_range $SCRATCH_DEV
 
 read tsmin tsmax <<<$(_filesystem_timestamp_range $SCRATCH_DEV)
@@ -95,8 +104,6 @@ declare -a TIMESTAMPS=(
 	$((tsmax/2))
 	$((tsmax+1))
 )
-
-_scratch_mount || _fail "scratch mount failed"
 
 status=0
 
