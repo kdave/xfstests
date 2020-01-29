@@ -1,0 +1,335 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc. All Rights Reserved.
+#
+# FS QA Test No. 513
+#
+# XFS mount options sanity check, refer to 'man 5 xfs'.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	$UMOUNT_PROG $LOOP_MNT 2>/dev/null
+	if [ -n "$LOOP_DEV" ];then
+		_destroy_loop_device $LOOP_DEV 2>/dev/null
+	fi
+	if [ -n "$LOOP_SPARE_DEV" ];then
+		_destroy_loop_device $LOOP_SPARE_DEV 2>/dev/null
+	fi
+	rm -f $LOOP_IMG
+	rm -f $LOOP_SPARE_IMG
+	rmdir $LOOP_MNT
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_test
+_require_loop
+_require_xfs_io_command "falloc"
+
+LOOP_IMG=$TEST_DIR/$seq.dev
+LOOP_SPARE_IMG=$TEST_DIR/$seq.logdev
+LOOP_MNT=$TEST_DIR/$seq.mnt
+
+echo "** create loop device"
+$XFS_IO_PROG -f -c "truncate 32g" $LOOP_IMG
+LOOP_DEV=`_create_loop_device $LOOP_IMG`
+
+echo "** create loop log device"
+$XFS_IO_PROG -f -c "truncate 1g" $LOOP_SPARE_IMG
+LOOP_SPARE_DEV=`_create_loop_device $LOOP_SPARE_IMG`
+
+echo "** create loop mount point"
+rmdir $LOOP_MNT 2>/dev/null
+mkdir -p $LOOP_MNT || _fail "cannot create loopback mount point"
+
+filter_loop()
+{
+	sed -e "s,\B$LOOP_MNT,LOOP_MNT,g" \
+	    -e "s,\B$LOOP_DEV,LOOP_DEV,g" \
+	    -e "s,\B$LOOP_SPARE_DEV,LOOP_SPARE_DEV,g"
+}
+
+# avoid the effection from MKFS_OPTIONS
+MKFS_OPTIONS=""
+do_mkfs()
+{
+	echo "FORMAT: $@" | filter_loop | tee -a $seqres.full
+	$MKFS_XFS_PROG -f $* $LOOP_DEV | _filter_mkfs >>$seqres.full 2>$tmp.mkfs
+	if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+		_fail "Fails on _mkfs_dev $* $LOOP_DEV"
+	fi
+	. $tmp.mkfs
+}
+
+is_dev_mounted()
+{
+	findmnt --source $LOOP_DEV >/dev/null
+	return $?
+}
+
+get_mount_info()
+{
+	findmnt --source $LOOP_DEV -o OPTIONS -n
+}
+
+force_unmount()
+{
+	$UMOUNT_PROG $LOOP_MNT >/dev/null 2>&1
+}
+
+# _do_test <mount options> <should be mounted?> [<key string> <key should be found?>]
+_do_test()
+{
+	local opts="$1"
+	local mounted="$2"	# pass or fail
+	local key="$3"
+	local found="$4"	# true or false
+	local rc
+	local info
+
+	# mount test
+	_mount $LOOP_DEV $LOOP_MNT $opts 2>>$seqres.full
+	rc=$?
+	if [ $rc -eq 0 ];then
+		if [ "${mounted}" = "fail" ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: expect mount to fail, but it succeeded"
+			return 1
+		fi
+		is_dev_mounted
+		if [ $? -ne 0 ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: fs not mounted even mount return 0"
+			return 1
+		fi
+	else
+		if [ "${mounted}" = "pass" ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: expect mount to succeed, but it failed"
+			return 1
+		fi
+		is_dev_mounted
+		if [ $? -eq 0 ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: fs is mounted even mount return non-zero"
+			return 1
+		fi
+	fi
+
+	# Skip below checking if "$key" argument isn't specified
+	if [ -z "$key" ];then
+		return 0
+	fi
+	# Check the mount options after fs mounted.
+	info=`get_mount_info`
+	echo ${info} | grep -q "${key}"
+	rc=$?
+	if [ $rc -eq 0 ];then
+		if [ "$found" != "true" ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: expected to find \"$key\" in mount info \"$info\""
+			return 1
+		fi
+	else
+		if [ "$found" != "false" ];then
+			echo "[FAILED]: mount $LOOP_DEV $LOOP_MNT $opts"
+			echo "ERROR: did not expect to find \"$key\" in \"$info\""
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
+do_test()
+{
+	# Print each argument, include nil ones
+	echo -n "TEST:" | tee -a $seqres.full
+	for i in "$@";do
+		echo -n " \"$i\"" | filter_loop | tee -a $seqres.full
+	done
+	echo | tee -a $seqres.full
+
+	# force unmount before testing
+	force_unmount
+	_do_test "$@"
+	# force unmount after testing
+	force_unmount
+}
+
+echo "** start xfs mount testing ..."
+# Test allocsize=size
+# Valid values for this option are page size (typically 4KiB) through to 1GiB
+do_mkfs
+if [ $dbsize -ge 1024 ];then
+	blsize="$((dbsize / 1024))k"
+fi
+do_test "" pass "allocsize" "false"
+do_test "-o allocsize=$blsize" pass "allocsize=$blsize" "true"
+do_test "-o allocsize=1048576k" pass "allocsize=1048576k" "true"
+do_test "-o allocsize=$((dbsize / 2))" fail
+do_test "-o allocsize=2g" fail
+
+# Test attr2
+do_mkfs -m crc=1
+do_test "" pass "attr2" "true"
+do_test "-o attr2" pass "attr2" "true"
+do_test "-o noattr2" fail
+do_mkfs -m crc=0
+do_test "" pass "attr2" "true"
+do_test "-o attr2" pass "attr2" "true"
+do_test "-o noattr2" pass "attr2" "false"
+
+# Test discard
+do_mkfs
+do_test "" pass "discard" "false"
+do_test "-o discard" pass "discard" "true"
+do_test "-o nodiscard" pass "discard" "false"
+
+# Test grpid|bsdgroups|nogrpid|sysvgroups
+do_test "" pass "grpid" "false"
+do_test "-o grpid" pass "grpid" "true"
+do_test "-o bsdgroups" pass "grpid" "true"
+do_test "-o nogrpid" pass "grpid" "false"
+do_test "-o sysvgroups" pass "grpid" "false"
+
+# Test filestreams
+do_test "" pass "filestreams" "false"
+do_test "-o filestreams" pass "filestreams" "true"
+
+# Test ikeep
+do_test "" pass "ikeep" "false"
+do_test "-o ikeep" pass "ikeep" "true"
+do_test "-o noikeep" pass "ikeep" "false"
+
+# Test inode32|inode64
+do_test "" pass "inode64" "true"
+do_test "-o inode32" pass "inode32" "true"
+do_test "-o inode64" pass "inode64" "true"
+
+# Test largeio
+do_test "" pass "largeio" "false"
+do_test "-o largeio" pass "largeio" "true"
+do_test "-o nolargeio" pass "largeio" "false"
+
+# Test logbufs=value. Valid numbers range from 2–8 inclusive.
+# New kernel (refer to 4f62282a3696 xfs: cleanup xlog_get_iclog_buffer_size)
+# prints "logbufs=N" in /proc/mounts, but old kernel not. So the default
+# 'display' about logbufs can't be expected, disable this test.
+#do_test "" pass "logbufs" "false"
+do_test "-o logbufs=8" pass "logbufs=8" "true"
+do_test "-o logbufs=2" pass "logbufs=2" "true"
+do_test "-o logbufs=1" fail
+do_test "-o logbufs=9" fail
+do_test "-o logbufs=99999999999999" fail
+
+# Test logbsize=value.
+do_mkfs -m crc=1 -l version=2
+# New kernel (refer to 4f62282a3696 xfs: cleanup xlog_get_iclog_buffer_size)
+# prints "logbsize=N" in /proc/mounts, but old kernel not. So the default
+# 'display' about logbsize can't be expected, disable this test.
+#do_test "" pass "logbsize" "false"
+do_test "-o logbsize=16384" pass "logbsize=16k" "true"
+do_test "-o logbsize=16k" pass "logbsize=16k" "true"
+do_test "-o logbsize=32k" pass "logbsize=32k" "true"
+do_test "-o logbsize=64k" pass "logbsize=64k" "true"
+do_test "-o logbsize=128k" pass "logbsize=128k" "true"
+do_test "-o logbsize=256k" pass "logbsize=256k" "true"
+do_test "-o logbsize=8k" fail
+do_test "-o logbsize=512k" fail
+do_mkfs -m crc=0 -l version=1
+# New kernel (refer to 4f62282a3696 xfs: cleanup xlog_get_iclog_buffer_size)
+# prints "logbsize=N" in /proc/mounts, but old kernel not. So the default
+# 'display' about logbsize can't be expected, disable this test.
+#do_test "" pass "logbsize" "false"
+do_test "-o logbsize=16384" pass "logbsize=16k" "true"
+do_test "-o logbsize=16k" pass "logbsize=16k" "true"
+do_test "-o logbsize=32k" pass "logbsize=32k" "true"
+do_test "-o logbsize=64k" fail
+
+# Test logdev
+do_mkfs
+do_test "" pass "logdev" "false"
+do_test "-o logdev=$LOOP_SPARE_DEV" fail
+do_mkfs -l logdev=$LOOP_SPARE_DEV
+do_test "-o logdev=$LOOP_SPARE_DEV" pass "logdev=$LOOP_SPARE_DEV" "true"
+do_test "" fail
+
+# Test noalign
+do_mkfs
+do_test "" pass "noalign" "false"
+do_test "-o noalign" pass "noalign" "true"
+
+# Test norecovery
+do_test "" pass "norecovery" "false"
+do_test "-o norecovery,ro" pass "norecovery" "true"
+do_test "-o norecovery" fail
+
+# Test nouuid
+do_test "" pass "nouuid" "false"
+do_test "-o nouuid" pass "nouuid" "true"
+
+# Test noquota
+do_test "" pass "noquota" "true"
+do_test "-o noquota" pass "noquota" "true"
+
+# Test uquota/usrquota/quota/uqnoenforce/qnoenforce
+do_test "" pass "usrquota" "false"
+do_test "-o uquota" pass "usrquota" "true"
+do_test "-o usrquota" pass "usrquota" "true"
+do_test "-o quota" pass "usrquota" "true"
+do_test "-o uqnoenforce" pass "usrquota" "true"
+do_test "-o qnoenforce" pass "usrquota" "true"
+
+# Test gquota/grpquota/gqnoenforce
+do_test "" pass "grpquota" "false"
+do_test "-o gquota" pass "grpquota" "true"
+do_test "-o grpquota" pass "grpquota" "true"
+do_test "-o gqnoenforce" pass "gqnoenforce" "true"
+
+# Test pquota/prjquota/pqnoenforce
+do_test "" pass "prjquota" "false"
+do_test "-o pquota" pass "prjquota" "true"
+do_test "-o prjquota" pass "prjquota" "true"
+do_test "-o pqnoenforce" pass "pqnoenforce" "true"
+
+# Test sunit=value and swidth=value
+do_mkfs -d sunit=128,swidth=128
+do_test "-o sunit=8,swidth=8" pass "sunit=8,swidth=8" "true"
+do_test "-o sunit=8,swidth=64" pass "sunit=8,swidth=64" "true"
+do_test "-o sunit=128,swidth=128" pass "sunit=128,swidth=128" "true"
+do_test "-o sunit=256,swidth=256" pass "sunit=256,swidth=256" "true"
+do_test "-o sunit=2,swidth=2" fail
+
+# Test swalloc
+do_mkfs
+do_test "" pass "swalloc" "false"
+do_test "-o swalloc" pass "swalloc" "true"
+
+# Test wsync
+do_test "" pass "wsync" "false"
+do_test "-o wsync" pass "wsync" "true"
+
+echo "** end of testing"
+# success, all done
+status=0
+exit
