@@ -45,14 +45,6 @@ _require_scratch_encryption -v 2
 _scratch_mkfs_encrypted &>> $seqres.full
 _scratch_mount
 
-# Set the fsgqa user's key quota to their current number of keys plus 5.
-orig_keys=$(_user_do "awk '/^[[:space:]]*$(id -u fsgqa):/{print \$4}' /proc/key-users | cut -d/ -f1")
-: ${orig_keys:=0}
-echo "orig_keys=$orig_keys" >> $seqres.full
-orig_maxkeys=$(</proc/sys/kernel/keys/maxkeys)
-keys_to_add=5
-echo $((orig_keys + keys_to_add)) > /proc/sys/kernel/keys/maxkeys
-
 dir=$SCRATCH_MNT/dir
 
 raw_key=""
@@ -98,6 +90,24 @@ _user_do_rm_enckey $SCRATCH_MNT $keyid
 
 _scratch_cycle_mount	# Clear all keys
 
+# Wait for any invalidated keys to be garbage-collected.
+i=0
+while grep -E -q '^[0-9a-f]+ [^ ]*i[^ ]*' /proc/keys; do
+	if ((++i >= 20)); then
+		echo "Timed out waiting for invalidated keys to be GC'ed" >> $seqres.full
+		break
+	fi
+	sleep 0.5
+done
+
+# Set the user key quota to the fsgqa user's current number of keys plus 5.
+orig_keys=$(_user_do "awk '/^[[:space:]]*$(id -u fsgqa):/{print \$4}' /proc/key-users | cut -d/ -f1")
+: ${orig_keys:=0}
+echo "orig_keys=$orig_keys" >> $seqres.full
+orig_maxkeys=$(</proc/sys/kernel/keys/maxkeys)
+keys_to_add=5
+echo $((orig_keys + keys_to_add)) > /proc/sys/kernel/keys/maxkeys
+
 echo
 echo "# Testing user key quota"
 for i in `seq $((keys_to_add + 1))`; do
@@ -105,6 +115,9 @@ for i in `seq $((keys_to_add + 1))`; do
 	_user_do_add_enckey $SCRATCH_MNT "$rand_raw_key" \
 	    | sed 's/ with identifier .*$//'
 done
+
+# Restore the original key quota.
+echo "$orig_maxkeys" > /proc/sys/kernel/keys/maxkeys
 
 rm -rf $dir
 echo
