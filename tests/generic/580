@@ -43,21 +43,12 @@ _scratch_mount
 test_with_policy_version()
 {
 	local vers=$1
-	local raw_key=""
-	local i
-
-	for i in {1..64}; do
-		raw_key+="\\x$(printf "%02x" $i)"
-	done
 
 	if (( vers == 1 )); then
-		# Key descriptor: arbitrary value
-		local keyspec="0000111122223333"
+		local keyspec=$TEST_KEY_DESCRIPTOR
 		local add_enckey_args="-d $keyspec"
 	else
-		# Key identifier:
-		# HKDF-SHA512(key=raw_key, salt="", info="fscrypt\0\x01")
-		local keyspec="69b2f6edeee720cce0577937eb8a6751"
+		local keyspec=$TEST_KEY_IDENTIFIER
 		local add_enckey_args=""
 	fi
 
@@ -75,7 +66,7 @@ test_with_policy_version()
 	echo "# Getting encryption key status"
 	_enckey_status $SCRATCH_MNT $keyspec
 	echo "# Adding encryption key"
-	_add_enckey $SCRATCH_MNT "$raw_key" $add_enckey_args
+	_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY" $add_enckey_args
 	echo "# Creating encrypted file"
 	echo contents > $dir/file
 	echo "# Getting encryption key status"
@@ -90,7 +81,7 @@ test_with_policy_version()
 
 	# Test removing key with a file open.
 	echo "# Re-adding encryption key"
-	_add_enckey $SCRATCH_MNT "$raw_key" $add_enckey_args
+	_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY" $add_enckey_args
 	echo "# Creating another encrypted file"
 	echo foo > $dir/file2
 	echo "# Removing key while an encrypted file is open"
