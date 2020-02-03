@@ -1,0 +1,155 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2019 Google LLC
+#
+# FS QA Test No. 593
+#
+# Test adding a key to a filesystem's fscrypt keyring via an
+# "fscrypt-provisioning" keyring key.  This is an alternative to the normal
+# method where the raw key is given directly.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption -v 2
+_require_command "$KEYCTL_PROG" keyctl
+
+_new_session_keyring
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+_require_add_enckey_by_key_id $SCRATCH_MNT
+
+test_with_policy_version()
+{
+	local vers=$1
+	local dir=$SCRATCH_MNT/dir
+	local keyid
+
+	echo
+	echo "# =========================="
+	echo "# Test with policy version $vers"
+	echo "# =========================="
+
+	case $vers in
+	1)
+		local keytype=$FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR
+		local keyspec=$TEST_KEY_DESCRIPTOR
+		local add_enckey_args="-d $TEST_KEY_DESCRIPTOR"
+		;;
+	2)
+		local keytype=$FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER
+		local keyspec=$TEST_KEY_IDENTIFIER
+		local add_enckey_args=""
+		;;
+	*)
+		_fail "Unknown policy version: $vers"
+		;;
+	esac
+
+	# First add the key in the regular way (raw key given directly), create
+	# an encrypted file with some contents, and remove the key.  After this,
+	# the encrypted file should no longer be readable.
+
+	echo -e "\n# Adding key to filesystem"
+	_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY" $add_enckey_args
+
+	echo -e "\n# Creating encrypted file"
+	mkdir $dir
+	_set_encpolicy $dir $keyspec
+	echo "contents" > $dir/file
+
+	echo -e "\n# Removing key from filesystem"
+	_rm_enckey $SCRATCH_MNT $keyspec
+	cat $dir/file |& _filter_scratch
+
+	# Now we should be able to add the key back via an fscrypt-provisioning
+	# key which contains the raw key, instead of providing the raw key
+	# directly.  After this, the encrypted file should be readable again.
+
+	echo -e "\n# Adding fscrypt-provisioning key"
+	keyid=$(_add_fscrypt_provisioning_key $keyspec $keytype "$TEST_RAW_KEY")
+
+	echo -e "\n# Adding key to filesystem via fscrypt-provisioning key"
+	$XFS_IO_PROG -c "add_enckey -k $keyid $add_enckey_args" $SCRATCH_MNT
+
+	echo -e "\n# Reading encrypted file"
+	cat $dir/file
+
+	echo -e "\n# Cleaning up"
+	rm -rf $dir
+	_scratch_cycle_mount	# Clear all keys
+}
+
+# Test with both v1 and v2 encryption policies.
+test_with_policy_version 1
+test_with_policy_version 2
+
+# Now test that invalid fscrypt-provisioning keys can't be created, that
+# fscrypt-provisioning keys can't be read back by userspace, and that the
+# filesystem only accepts properly matching fscrypt-provisioning keys.
+echo
+echo "# ================"
+echo "# Validation tests"
+echo "# ================"
+
+echo -e "\n# Adding an invalid fscrypt-provisioning key fails"
+echo "# ... bad type"
+_add_fscrypt_provisioning_key desc 0 "$TEST_RAW_KEY"
+echo "# ... bad type"
+_add_fscrypt_provisioning_key desc 10000 "$TEST_RAW_KEY"
+echo "# ... raw key too small"
+_add_fscrypt_provisioning_key desc $FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR ""
+echo "# ... raw key too large"
+_add_fscrypt_provisioning_key desc $FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR \
+	"$TEST_RAW_KEY$TEST_RAW_KEY"
+
+echo -e "\n# keyctl_read() doesn't work on fscrypt-provisioning keys"
+keyid=$(_add_fscrypt_provisioning_key desc $FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR \
+	"$TEST_RAW_KEY")
+$KEYCTL_PROG read $keyid
+$KEYCTL_PROG unlink $keyid @s
+
+echo -e "\n# Only keys with the correct fscrypt_provisioning_key_payload::type field can be added"
+echo "# ... keyring key is v1, filesystem wants v2 key"
+keyid=$(_add_fscrypt_provisioning_key desc $FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR \
+	"$TEST_RAW_KEY")
+$XFS_IO_PROG -c "add_enckey -k $keyid" $SCRATCH_MNT
+$KEYCTL_PROG unlink $keyid @s
+
+echo "# ... keyring key is v2, filesystem wants v1 key"
+keyid=$(_add_fscrypt_provisioning_key desc $FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER \
+	"$TEST_RAW_KEY")
+$XFS_IO_PROG -c "add_enckey -k $keyid -d $TEST_KEY_DESCRIPTOR" $SCRATCH_MNT
+$KEYCTL_PROG unlink $keyid @s
+
+echo -e "\n# Only keys of type fscrypt-provisioning can be added"
+keyid=$(head -c 64 /dev/urandom | $KEYCTL_PROG padd logon foo:desc @s)
+$XFS_IO_PROG -c "add_enckey -k $keyid" $SCRATCH_MNT
+$KEYCTL_PROG unlink $keyid @s
+
+# success, all done
+status=0
+exit

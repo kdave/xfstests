@@ -227,6 +227,28 @@ _generate_raw_encryption_key()
 	echo $raw
 }
 
+# Serialize an integer into a CPU-endian bytestring of the given length, and
+# print it as a string where each byte is hex-escaped.  For example,
+# `_num_to_hex 1000 4` == "\xe8\x03\x00\x00" if the CPU is little endian.
+_num_to_hex()
+{
+	local value=$1
+	local nbytes=$2
+	local i
+	local big_endian=$(echo -ne '\x11' | od -tx2 | head -1 | \
+			   cut -f2 -d' ' | cut -c1)
+
+	if (( big_endian )); then
+		for (( i = 0; i < nbytes; i++ )); do
+			printf '\\x%02x' $(((value >> (8*(nbytes-1-i))) & 0xff))
+		done
+	else
+		for (( i = 0; i < nbytes; i++ )); do
+			printf '\\x%02x' $(((value >> (8*i)) & 0xff))
+		done
+	fi
+}
+
 # Add the specified raw encryption key to the session keyring, using the
 # specified key descriptor.
 _add_session_encryption_key()
@@ -237,12 +259,12 @@ _add_session_encryption_key()
 	#
 	# Add the key to the session keyring.  The required structure is:
 	#
-	#	#define FS_MAX_KEY_SIZE 64
+	#	#define FSCRYPT_MAX_KEY_SIZE 64
 	#	struct fscrypt_key {
-	#		u32 mode;
-	#		u8 raw[FS_MAX_KEY_SIZE];
-	#		u32 size;
-	#	} __packed;
+	#		__u32 mode;
+	#		__u8 raw[FSCRYPT_MAX_KEY_SIZE];
+	#		__u32 size;
+	#	};
 	#
 	# The kernel ignores 'mode' but requires that 'size' be 64.
 	#
@@ -253,15 +275,8 @@ _add_session_encryption_key()
 	# nice to use the common key prefix, but for now use the filesystem-
 	# specific prefix to make it possible to test older kernels...
 	#
-	local big_endian=$(echo -ne '\x11' | od -tx2 | head -1 | \
-			   cut -f2 -d' ' | cut -c1 )
-	if (( big_endian )); then
-		local mode='\x00\x00\x00\x00'
-		local size='\x00\x00\x00\x40'
-	else
-		local mode='\x00\x00\x00\x00'
-		local size='\x40\x00\x00\x00'
-	fi
+	local mode=$(_num_to_hex 0 4)
+	local size=$(_num_to_hex 64 4)
 	echo -n -e "${mode}${raw}${size}" |
 		$KEYCTL_PROG padd logon $FSTYP:$keydesc @s >>$seqres.full
 }
@@ -387,6 +402,44 @@ _user_do_enckey_status()
 	shift 2
 
 	_user_do "$XFS_IO_PROG -c \"enckey_status $* $keyspec\" \"$mnt\""
+}
+
+# Require support for adding a key to a filesystem's fscrypt keyring via an
+# "fscrypt-provisioning" keyring key.
+_require_add_enckey_by_key_id()
+{
+	local mnt=$1
+
+	# Userspace support
+	_require_xfs_io_command "add_enckey" "-k"
+
+	# Kernel support
+	if $XFS_IO_PROG -c "add_enckey -k 12345" "$mnt" \
+		|& grep -q 'Invalid argument'; then
+		_notrun "Kernel doesn't support key_id parameter to FS_IOC_ADD_ENCRYPTION_KEY"
+	fi
+}
+
+# Add a key of type "fscrypt-provisioning" to the session keyring and print the
+# resulting key ID.
+_add_fscrypt_provisioning_key()
+{
+	local desc=$1
+	local type=$2
+	local raw=$3
+
+	# The format of the key payload must be:
+	#
+	#	struct fscrypt_provisioning_key_payload {
+	#		__u32 type;
+	#		__u32 __reserved;
+	#		__u8 raw[];
+	#	};
+	#
+	local type_hex=$(_num_to_hex $type 4)
+	local reserved=$(_num_to_hex 0 4)
+	echo -n -e "${type_hex}${reserved}${raw}" |
+		$KEYCTL_PROG padd fscrypt-provisioning "$desc" @s
 }
 
 # Retrieve the encryption nonce of the given inode as a hex string.  The nonce
@@ -716,6 +769,9 @@ FSCRYPT_MODE_ADIANTUM=9
 
 FSCRYPT_POLICY_FLAG_DIRECT_KEY=0x04
 FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64=0x08
+
+FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR=1
+FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER=2
 
 _fscrypt_mode_name_to_num()
 {
