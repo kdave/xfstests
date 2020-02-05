@@ -135,12 +135,12 @@ int	fd;				/* fd for our test file */
 blksize_t	block_size = 0;
 off_t		file_size = 0;
 off_t		biggest = 0;
-unsigned long	testcalls = 0;		/* calls to function "test" */
+long long	testcalls = 0;		/* calls to function "test" */
 
-unsigned long	simulatedopcount = 0;	/* -b flag */
+long long	simulatedopcount = 0;	/* -b flag */
 int	closeprob = 0;			/* -c flag */
 int	debug = 0;			/* -d flag */
-unsigned long	debugstart = 0;		/* -D flag */
+long long	debugstart = 0;		/* -D flag */
 char	filldata = 0;			/* -g flag */
 int	flush = 0;			/* -f flag */
 int	do_fsync = 0;			/* -y flag */
@@ -148,7 +148,7 @@ unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
 int	sizechecks = 1;			/* -n flag disables them */
 int	maxoplen = 64 * 1024;		/* -o flag */
 int	quiet = 0;			/* -q flag */
-unsigned long progressinterval = 0;	/* -p flag */
+long long	progressinterval = 0;	/* -p flag */
 int	readbdy = 1;			/* -r flag */
 int	style = 0;			/* -s flag */
 int	prealloc = 0;			/* -x flag */
@@ -157,7 +157,7 @@ int	writebdy = 1;			/* -w flag */
 long	monitorstart = -1;		/* -m flag */
 long	monitorend = -1;		/* -m flag */
 int	lite = 0;			/* -L flag */
-long	numops = -1;			/* -N flag */
+long long numops = -1;			/* -N flag */
 int	randomoplen = 1;		/* -O flag disables it */
 int	seed = 1;			/* -S flag */
 int     mapped_writes = 1;              /* -W flag disables */
@@ -788,7 +788,7 @@ doread(unsigned offset, unsigned size)
 		       (monitorstart == -1 ||
 			(offset + size > monitorstart &&
 			(monitorend == -1 || offset <= monitorend))))))
-		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%lld read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 	ret = lseek(fd, (off_t)offset, SEEK_SET);
 	if (ret == (off_t)-1) {
@@ -925,7 +925,7 @@ domapread(unsigned offset, unsigned size)
 		       (monitorstart == -1 ||
 			(offset + size > monitorstart &&
 			(monitorend == -1 || offset <= monitorend))))))
-		prt("%lu mapread\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%lld mapread\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
 	pg_offset = offset & PAGE_MASK;
@@ -1003,7 +1003,7 @@ dowrite(unsigned offset, unsigned size)
 		       (monitorstart == -1 ||
 			(offset + size > monitorstart &&
 			(monitorend == -1 || offset <= monitorend))))))
-		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%lld write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 	ret = lseek(fd, (off_t)offset, SEEK_SET);
 	if (ret == (off_t)-1) {
@@ -1070,7 +1070,7 @@ domapwrite(unsigned offset, unsigned size)
 		       (monitorstart == -1 ||
 			(offset + size > monitorstart &&
 			(monitorend == -1 || offset <= monitorend))))))
-		prt("%lu mapwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%lld mapwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
 	if (file_size > cur_filesize) {
@@ -1123,11 +1123,12 @@ dotruncate(unsigned size)
 
 	if (testcalls <= simulatedopcount)
 		return;
-	
+
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      size <= monitorend)))
-		prt("%lu trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
+		prt("%lld trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize,
+				size);
 	if (ftruncate(fd, (off_t)size) == -1) {
 	        prt("ftruncate1: %x\n", size);
 		prterr("dotruncate: ftruncate");
@@ -1168,7 +1169,7 @@ do_punch_hole(unsigned offset, unsigned length)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend))) {
-		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+		prt("%lld punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
@@ -1230,7 +1231,7 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend))) {
-		prt("%lu zero\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+		prt("%lld zero\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
@@ -1280,8 +1281,8 @@ do_collapse_range(unsigned offset, unsigned length)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend))) {
-		prt("%lu collapse\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
-			offset, offset+length, length);
+		prt("%lld collapse\tfrom 0x%x to 0x%x, (0x%x bytes)\n",
+				testcalls, offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
 		prt("collapse range: 0x%x to 0x%x\n", offset, offset + length);
@@ -1332,7 +1333,7 @@ do_insert_range(unsigned offset, unsigned length)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend))) {
-		prt("%lu insert\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+		prt("%lld insert\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
 	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
@@ -1724,7 +1725,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		      end_offset <= monitorend)))
-		prt("%lu falloc\tfrom 0x%x to 0x%x (0x%x bytes)\n", testcalls,
+		prt("%lld falloc\tfrom 0x%x to 0x%x (0x%x bytes)\n", testcalls,
 				offset, offset + length, length);
 	if (fallocate(fd, keep_size ? FALLOC_FL_KEEP_SIZE : 0, (loff_t)offset, (loff_t)length) == -1) {
 	        prt("fallocate: 0x%x to 0x%x\n", offset, offset + length);
@@ -1773,7 +1774,7 @@ docloseopen(void)
 		return;
 
 	if (debug)
-		prt("%lu close/open\n", testcalls);
+		prt("%lld close/open\n", testcalls);
 	if (close(fd)) {
 		prterr("docloseopen: close");
 		report_failure(180);
@@ -1797,7 +1798,7 @@ dofsync(void)
 	if (testcalls <= simulatedopcount)
 		return;
 	if (debug)
-		prt("%lu fsync\n", testcalls);
+		prt("%lld fsync\n", testcalls);
 	log4(OP_FSYNC, 0, 0, 0);
 	ret = fsync(fd);
 	if (ret < 0) {
@@ -1834,7 +1835,7 @@ cleanup(int sig)
 {
 	if (sig)
 		prt("signal %d\n", sig);
-	prt("testcalls = %lu\n", testcalls);
+	prt("testcalls = %lld\n", testcalls);
 	exit(sig);
 }
 
@@ -1942,7 +1943,7 @@ test(void)
 		debug = 1;
 
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
-		prt("%lu...\n", testcalls);
+		prt("%lld...\n", testcalls);
 
 	if (replayopsf) {
 		struct log_entry log_entry;
@@ -2293,13 +2294,13 @@ usage(void)
 }
 
 
-int
+long long
 getnum(char *s, char **e)
 {
-	int ret;
+	long long ret;
 
 	*e = (char *) 0;
-	ret = strtol(s, e, 0);
+	ret = strtoll(s, e, 0);
 	if (*e)
 		switch (**e) {
 		case 'b':
@@ -2487,7 +2488,8 @@ main(int argc, char **argv)
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				prt("Will begin at operation %ld\n", simulatedopcount);
+				prt("Will begin at operation %lld\n",
+						simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
 			simulatedopcount -= 1;
@@ -2854,7 +2856,7 @@ main(int argc, char **argv)
 		prterr("close");
 		report_failure(99);
 	}
-	prt("All %lu operations completed A-OK!\n", testcalls);
+	prt("All %lld operations completed A-OK!\n", testcalls);
 	if (recordops)
 		logdump();
 
