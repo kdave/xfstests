@@ -49,10 +49,10 @@ _basic_test()
 
 	# the shared values of both the original subvol and snapshot should
 	# match
-	a_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
+	a_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	a_shared=$(echo $a_shared | awk '{ print $2 }')
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT b)
-	b_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
+	b_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	b_shared=$(echo $b_shared | awk '{ print $2 }')
 	[ $b_shared -eq $a_shared ] || _fail "shared values don't match"
 }
@@ -68,12 +68,12 @@ _rescan_test()
 	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
 		$FSSTRESS_AVOID
 	sync
-	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
+	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	echo $output >> $seqres.full
 	refer=$(echo $output | awk '{ print $2 }')
 	excl=$(echo $output | awk '{ print $3 }')
 	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
-	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid)
+	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	echo $output >> $seqres.full
 	[ $refer -eq $(echo $output | awk '{ print $2 }') ] || \
 		_fail "reference values don't match after rescan"
