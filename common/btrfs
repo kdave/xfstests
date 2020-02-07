@@ -12,12 +12,14 @@ _btrfs_get_subvolid()
 
 # _require_btrfs_command <command> [<subcommand>|<option>]
 # We check for btrfs and (optionally) features of the btrfs command
-# It can both subfunction like "inspect-internal dump-tree" and
-# options like "check --qgroup-report"
+# This function support both subfunction like "inspect-internal dump-tree" and
+# options like "check --qgroup-report", and also subfunction options like
+# "subvolume delete --subvolid"
 _require_btrfs_command()
 {
 	local cmd=$1
 	local param=$2
+	local param_arg=$3
 	local safe_param
 
 	_require_command "$BTRFS_UTIL_PROG" btrfs
@@ -39,6 +41,13 @@ _require_btrfs_command()
 
 	$BTRFS_UTIL_PROG $cmd $param --help &> /dev/null
 	[ $? -eq 0 ] || _notrun "$BTRFS_UTIL_PROG too old (must support $cmd $param)"
+
+	test -z "$param_arg" && return
+
+	# replace leading "-"s for grep
+	safe_param=$(echo $param_arg | sed 's/^-*//')
+	$BTRFS_UTIL_PROG $cmd $param --help | grep -wq $safe_param || \
+		_notrun "$BTRFS_UTIL_PROG too old (must support $cmd $param $param_arg)"
 }
 
 # Require extra check on btrfs qgroup numbers
