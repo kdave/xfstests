@@ -35,6 +35,7 @@ rm -f $seqres.full
 # Test to make sure we can actually turn it on and it makes sense
 _basic_test()
 {
+	echo "=== basic test ===" >> $seqres.full
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
@@ -51,9 +52,12 @@ _basic_test()
 	# match
 	a_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	a_shared=$(echo $a_shared | awk '{ print $2 }')
+	echo "subvol a id=$subvolid" >> $seqres.full
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT b)
+	echo "subvol b id=$subvolid" >> $seqres.full
 	b_shared=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	b_shared=$(echo $b_shared | awk '{ print $2 }')
+	$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT >> $seqres.full
 	[ $b_shared -eq $a_shared ] || _fail "shared values don't match"
 }
 
@@ -61,6 +65,7 @@ _basic_test()
 #come up with the same answer
 _rescan_test()
 {
+	echo "=== rescan test ===" >> $seqres.full
 	# first with a blank subvol
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT/a
@@ -69,12 +74,12 @@ _rescan_test()
 		$FSSTRESS_AVOID
 	sync
 	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
-	echo $output >> $seqres.full
+	echo "qgroup values before rescan: $output" >> $seqres.full
 	refer=$(echo $output | awk '{ print $2 }')
 	excl=$(echo $output | awk '{ print $3 }')
 	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
 	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
-	echo $output >> $seqres.full
+	echo "qgroup values after rescan: $output" >> $seqres.full
 	[ $refer -eq $(echo $output | awk '{ print $2 }') ] || \
 		_fail "reference values don't match after rescan"
 	[ $excl -eq $(echo $output | awk '{ print $3 }') ] || \
@@ -84,6 +89,7 @@ _rescan_test()
 #basic exceed limit testing
 _limit_test_exceed()
 {
+	echo "=== limit exceed test ===" >> $seqres.full
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
@@ -95,6 +101,7 @@ _limit_test_exceed()
 #basic noexceed limit testing
 _limit_test_noexceed()
 {
+	echo "=== limit not exceed test ===" >> $seqres.full
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
