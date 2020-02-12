@@ -109,6 +109,15 @@ wait $snapshot_pid
 kill $delete_pid
 wait $delete_pid
 
+# By the async nature of qgroup tree scan and subvolume delete, the latest
+# qgroup counts at the time of umount might not be upto date, if it isn't
+# then the check will report the difference in count. The difference in
+# qgroup counts are anyway updated in the following mount, so it is not a
+# real issue that this test case is trying to verify. So make sure the
+# qgroup counts are in sync before unmount happens.
+
+$BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >> $seqres.full
+
 # success, all done
 echo "Silence is golden"
 
