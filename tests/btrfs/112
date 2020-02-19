@@ -83,22 +83,6 @@ test_cloning_inline_extents()
 	od -t x1 $SCRATCH_MNT/foo2
 	$XFS_IO_PROG -c "pwrite -S 0xee 0 90" $SCRATCH_MNT/foo2 | _filter_xfs_io
 
-	# Test cloning the inline extent against a file which has a size of zero
-	# but has a prealloc extent. It should not be possible as well to clone
-	# the inline extent from file bar into this file.
-	$XFS_IO_PROG -f -c "falloc -k 0 1M" $SCRATCH_MNT/foo3 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo3 \
-		| _filter_btrfs_cloner_error
-
-	# Doing IO against any range in the first 4K of the file should work.
-	# Due to a past clone ioctl bug which allowed cloning the inline extent,
-	# these operations resulted in EIO errors.
-	echo "First 50 bytes of foo3 after clone operation:"
-	# Should not be able to read any bytes, file has 0 bytes i_size (the
-	# clone operation failed and did not modify our file).
-	od -t x1 $SCRATCH_MNT/foo3
-	$XFS_IO_PROG -c "pwrite -S 0xff 0 90" $SCRATCH_MNT/foo3 | _filter_xfs_io
-
 	# Test cloning the inline extent against a file which consists of a
 	# single inline extent that has a size not greater than the size of
 	# bar's inline extent (40 < 50).
@@ -156,21 +140,6 @@ test_cloning_inline_extents()
 	echo "File foo7 data after clone operation:"
 	# Must have a size of 50 bytes, with all bytes having a value of 0xbb.
 	od -t x1 $SCRATCH_MNT/foo7
-
-	# Test cloning the inline extent against a file which has a size not
-	# greater than the size of bar's inline extent (20 < 50) but has
-	# a prealloc extent that goes beyond the file's size. It should not be
-	# possible to clone the inline extent from bar into this file.
-	$XFS_IO_PROG -f -c "falloc -k 0 1M" \
-			-c "pwrite -S 0x88 0 20" \
-			$SCRATCH_MNT/foo8 | _filter_xfs_io
-	$CLONER_PROG -s 0 -d 0 -l 0 $SCRATCH_MNT/bar $SCRATCH_MNT/foo8 \
-		| _filter_btrfs_cloner_error
-
-	echo "File foo8 data after clone operation:"
-	# Must have a size of 20 bytes, with all bytes having a value of 0x88
-	# (the clone operation did not modify our file).
-	od -t x1 $SCRATCH_MNT/foo8
 
 	_scratch_unmount
 }
