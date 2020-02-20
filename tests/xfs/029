@@ -19,7 +19,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 . ./common/rc
 . ./common/filter
 
-_filter_logprint()
+filter_logprint()
 {
 	perl -ne '
 	    s/data device: ([\w|\/.-]+)/data device: DDEV/;
@@ -31,6 +31,8 @@ _filter_logprint()
             s/(length of Log Record:) \d+/$1 <LEN>/;
             s/version: \d/version: <VERN>/;
 	    s/h_size: \d+/h_size: <H_SIZE>/;
+	    s/^~+[\r|\n]+$//;
+	    s/extended-header: cycle: 1[\r|\n]+$//;
 	    print;
 	'
 }
@@ -45,7 +47,7 @@ echo
 _scratch_mkfs_xfs | _filter_mkfs 2>/dev/null
 
 echo
-_scratch_xfs_logprint | _filter_logprint
+_scratch_xfs_logprint | filter_logprint
 
 status=0
 exit
