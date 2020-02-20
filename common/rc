@@ -1874,6 +1874,17 @@ _require_dm_target()
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
+	echo $MOUNT_OPTIONS | grep -q dax
+	if [ $? -eq 0 ]; then
+		case $target in
+		stripe|linear|log-writes)
+			;;
+		*)
+			_notrun "Cannot run tests with DAX on $target devices."
+			;;
+		esac
+	fi
+
 	modprobe dm-$target >/dev/null 2>&1
 
 	$DMSETUP_PROG targets 2>&1 | grep -q ^$target
