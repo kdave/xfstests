@@ -25,13 +25,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define PAGE(a) ((a)*0x1000)
-#define FILE_SIZE PAGE(4)
-
 void *dax_data;
 int nodax_fd;
 int dax_fd;
 bool done;
+static int pagesize;
+static int file_size;
 
 #define err_exit(op)                                                          \
 {                                                                             \
@@ -49,18 +48,18 @@ void punch_hole_fn(void *ptr)
 		read = 0;
 
 		do {
-			rc = pread(nodax_fd, dax_data + read, FILE_SIZE - read,
+			rc = pread(nodax_fd, dax_data + read, file_size - read,
 					read);
 			if (rc > 0)
 				read += rc;
 		} while (rc > 0);
 
-		if (read != FILE_SIZE || rc != 0)
+		if (read != file_size || rc != 0)
 			err_exit("pread");
 
 		rc = fallocate(dax_fd,
 				FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
-				0, FILE_SIZE);
+				0, file_size);
 		if (rc < 0)
 			err_exit("fallocate");
 
@@ -81,18 +80,18 @@ void zero_range_fn(void *ptr)
 		read = 0;
 
 		do {
-			rc = pread(nodax_fd, dax_data + read, FILE_SIZE - read,
+			rc = pread(nodax_fd, dax_data + read, file_size - read,
 					read);
 			if (rc > 0)
 				read += rc;
 		} while (rc > 0);
 
-		if (read != FILE_SIZE || rc != 0)
+		if (read != file_size || rc != 0)
 			err_exit("pread");
 
 		rc = fallocate(dax_fd,
 				FALLOC_FL_ZERO_RANGE | FALLOC_FL_KEEP_SIZE,
-				0, FILE_SIZE);
+				0, file_size);
 		if (rc < 0)
 			err_exit("fallocate");
 
@@ -113,11 +112,11 @@ void truncate_down_fn(void *ptr)
 
 		if (ftruncate(dax_fd, 0) < 0)
 			err_exit("ftruncate");
-		if (fallocate(dax_fd, 0, 0, FILE_SIZE) < 0)
+		if (fallocate(dax_fd, 0, 0, file_size) < 0)
 			err_exit("fallocate");
 
 		do {
-			rc = pread(nodax_fd, dax_data + read, FILE_SIZE - read,
+			rc = pread(nodax_fd, dax_data + read, file_size - read,
 					read);
 			if (rc > 0)
 				read += rc;
@@ -142,15 +141,15 @@ void collapse_range_fn(void *ptr)
 	while (!done) {
 		read = 0;
 
-		if (fallocate(dax_fd, 0, 0, FILE_SIZE) < 0)
+		if (fallocate(dax_fd, 0, 0, file_size) < 0)
 			err_exit("fallocate 1");
-		if (fallocate(dax_fd, FALLOC_FL_COLLAPSE_RANGE, 0, PAGE(1)) < 0)
+		if (fallocate(dax_fd, FALLOC_FL_COLLAPSE_RANGE, 0, pagesize) < 0)
 			err_exit("fallocate 2");
-		if (fallocate(dax_fd, 0, 0, FILE_SIZE) < 0)
+		if (fallocate(dax_fd, 0, 0, file_size) < 0)
 			err_exit("fallocate 3");
 
 		do {
-			rc = pread(nodax_fd, dax_data + read, FILE_SIZE - read,
+			rc = pread(nodax_fd, dax_data + read, file_size - read,
 					read);
 			if (rc > 0)
 				read += rc;
@@ -192,6 +191,9 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
+	pagesize = getpagesize();
+	file_size = 4 * pagesize;
+
 	dax_fd = open(argv[1], O_RDWR|O_CREAT, S_IRUSR|S_IWUSR);
 	if (dax_fd < 0)
 		err_exit("dax_fd open");
@@ -202,15 +204,15 @@ int main(int argc, char *argv[])
 
 	if (ftruncate(dax_fd, 0) < 0)
 		err_exit("dax_fd ftruncate");
-	if (fallocate(dax_fd, 0, 0, FILE_SIZE) < 0)
+	if (fallocate(dax_fd, 0, 0, file_size) < 0)
 		err_exit("dax_fd fallocate");
 
 	if (ftruncate(nodax_fd, 0) < 0)
 		err_exit("nodax_fd ftruncate");
-	if (fallocate(nodax_fd, 0, 0, FILE_SIZE) < 0)
+	if (fallocate(nodax_fd, 0, 0, file_size) < 0)
 		err_exit("nodax_fd fallocate");
 
-	dax_data = mmap(NULL, FILE_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED,
+	dax_data = mmap(NULL, file_size, PROT_READ|PROT_WRITE, MAP_SHARED,
 			dax_fd, 0);
 	if (dax_data == MAP_FAILED)
 		err_exit("mmap");
@@ -220,7 +222,7 @@ int main(int argc, char *argv[])
 	run_test(&truncate_down_fn);
 	run_test(&collapse_range_fn);
 
-	if (munmap(dax_data, FILE_SIZE) != 0)
+	if (munmap(dax_data, file_size) != 0)
 		err_exit("munmap");
 
 	err = close(dax_fd);
