@@ -80,6 +80,10 @@ _scratch_mount
 
 do_fdatasync_work()
 {
+	# Wait for running subcommand before exitting so that
+	# mountpoint is not busy when we try to unmount it
+	trap "wait; exit" SIGTERM
+
 	while [ 1 ]; do
 		$XFS_IO_PROG -f -c "fdatasync" $SCRATCH_MNT/testfile
 	done
@@ -89,6 +93,7 @@ do_fdatasync_work &
 datasync_work_pid=$!
 sleep 10
 kill $datasync_work_pid >/dev/null 2>&1
+wait
 
 # success, all done
 status=0
