@@ -1,0 +1,88 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test No. 044
+#
+# Test file timestamps are precise to nanoseconds with 256-byte inodes
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1       # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+       cd /
+       rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+_require_scratch
+_require_test_program "t_get_file_time"
+
+echo "Silence is golden"
+
+echo "Test timestamps with 256 inode size one device $SCRATCH_DEV" >$seqres.full
+_scratch_mkfs -t ext3 -I 256 >> $seqres.full 2>&1
+_scratch_mount
+
+# Create file
+touch "${SCRATCH_MNT}/tmp_file"
+sleep 1
+
+# Change atime, ctime and mtime of the file
+touch "${SCRATCH_MNT}/tmp_file"
+
+cur_time=`date '+%s %N'`
+sec=`echo $cur_time | $AWK_PROG {'print $1'}`
+nsec=`echo $cur_time | $AWK_PROG {'print $2'}`
+
+sec_atime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file atime sec`
+sec_mtime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file mtime sec`
+sec_ctime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file ctime sec`
+nsec_atime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file atime nsec`
+nsec_mtime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file mtime nsec`
+nsec_ctime=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file ctime nsec`
+
+# Test nanosecond
+if [ $nsec_atime -eq 0 -a $nsec_mtime -eq 0 -a $nsec_ctime -eq 0 ]; then
+       echo "The timestamp is not nanosecond(nsec_atime: $nsec_atime, \
+nsec_mtime: $nsec_mtime, nsec_ctime: $nsec_ctime, cur_time[ns]: $nsec)"
+fi
+
+# Check difference between file time and current time
+_within_tolerance "sec_atime" $sec_atime $sec 1
+_within_tolerance "sec_mtime" $sec_mtime $sec 1
+_within_tolerance "sec_ctime" $sec_ctime $sec 1
+
+_scratch_unmount >> $seqres.full 2>&1
+
+# Test mount to ext3 then mount back to ext4 and check timestamp again
+_mount -t ext3 `_scratch_mount_options $*` || _fail "ext3 mount failed"
+_scratch_unmount >> $seqres.full 2>&1
+_scratch_mount
+
+nsec_atime2=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file atime nsec`
+nsec_mtime2=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file mtime nsec`
+nsec_ctime2=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file ctime nsec`
+
+[ $nsec_atime -ne $nsec_atime2 ] && echo "File nanosecond timestamp atime has changed unexpected from $nsec_atime to $nsec_atime2"
+[ $nsec_mtime -ne $nsec_mtime2 ] && echo "File nanosecond timestamp mtime has changed unexpected from $nsec_mtime to $nsec_mtime2"
+[ $nsec_ctime -ne $nsec_ctime2 ] && echo "File nanosecond timestamp ctime has changed unexpected from $nsec_ctime to $nsec_ctime2"
+
+status=0
+exit

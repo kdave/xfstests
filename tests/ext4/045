@@ -1,0 +1,111 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test No. 045
+#
+# Test subdirectory limit of ext4.
+# We create more than 65000 subdirectories on the ext4 filesystem.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1       # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+SHORT_DIR=1
+LONG_DIR=2
+
+_cleanup()
+{
+       cd /
+       rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_supported_os Linux
+
+_require_scratch
+_require_test_program "t_create_short_dirs"
+_require_test_program "t_create_long_dirs"
+_require_dumpe2fs "$DUMPE2FS_PROG" dumpe2fs
+
+echo "Silence is golden"
+
+# Run a test case
+# $1: Number of directories to create
+# $2: create short dir or long dir
+# $3: parent directory
+workout()
+{
+       local dir_name_len=""
+       if [ $2 -eq $SHORT_DIR ]; then
+               dir_name_len="short name"
+       else
+               dir_name_len="long name"
+       fi
+
+       echo "Num of dirs to create: $1, Dir name len: $dir_name_len, " \
+               "Parent dir: $3" >> $seqres.full
+
+       _scratch_mkfs "-O extent,dir_nlink,dir_index -I 256" >> $seqres.full 2>&1
+       _scratch_mount
+
+       # create directories
+       mkdir -p $3 2> /dev/null
+
+       if [ $2 -eq $SHORT_DIR ]; then
+               $here/src/t_create_short_dirs $1 $3
+       else
+               $here/src/t_create_long_dirs $1 $3
+       fi
+
+       if [ $? -ne 0 ]; then
+               nr_dirs=`ls $3 | wc -l`
+               echo "Failed to create directories - $nr_dirs"
+               _scratch_unmount
+               return
+       fi
+
+       # delete directories
+       cd $3
+       ls | xargs rmdir
+       if [ $? -ne 0 ]; then
+               echo "Failed to remove directories in $3"
+               cd - > /dev/null
+               _scratch_unmount
+               return
+       fi
+       cd - > /dev/null
+       _scratch_unmount
+
+       # check dir_nlink is set
+       $DUMPE2FS_PROG -h $SCRATCH_DEV 2>> $seqres.full | grep '^Filesystem features' | grep -q dir_nlink
+       if [ $? -ne 0 ]; then
+               echo "Feature dir_nlink is not set, please check $seqres.full for detail"
+               return
+       fi
+}
+
+# main
+DIR_NUM=65537
+DIR_LEN=( $SHORT_DIR $LONG_DIR )
+PARENT_DIR="$SCRATCH_MNT/subdir"
+
+for ((i = 0; i < 2; i++)); do
+       workout $DIR_NUM ${DIR_LEN[$i]} $PARENT_DIR
+done
+
+status=0
+exit
