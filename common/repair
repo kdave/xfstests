@@ -29,7 +29,13 @@ _filter_repair()
 # for sb
 /- agno = / && next;	# remove each AG line (variable number)
 s/(pointer to) (\d+)/\1 INO/;
-s/(sb root inode value) (\d+)( \(NULLFSINO\))?/\1 INO/;
+# Changed inode output in 5.5.0
+s/sb root inode value /sb root inode /;
+s/realtime bitmap inode value /realtime bitmap inode /;
+s/realtime summary inode value /realtime summary inode /;
+s/ino pointer to /inode pointer to /;
+#
+s/(sb root inode) (\d+)( \(NULLFSINO\))?/\1 INO/;
 s/(realtime bitmap inode) (\d+)( \(NULLFSINO\))?/\1 INO/;
 s/(realtime summary inode) (\d+)( \(NULLFSINO\))?/\1 INO/;
 s/(inconsistent with calculated value) (\d+)/\1 INO/;
@@ -74,6 +80,8 @@ s/(inode chunk) (\d+)\/(\d+)/AGNO\/INO/;
 # sunit/swidth reset messages
 s/^(Note - .*) were copied.*/\1 fields have been reset./;
 s/^(Please) reset (with .*) if necessary/\1 set \2/;
+# remove new unlinked inode test
+/^bad next_unlinked/ && next;
 # And make them generic so we dont depend on geometry
 s/(stripe unit) \(.*\) (and width) \(.*\)/\1 (SU) \2 (SW)/;
 # corrupt sb messages
