@@ -63,9 +63,25 @@ run_test_individual()
 	# check if the time needs update
 	if [ $update_time -eq 1 ]; then
 		echo "Updating file: $file to timestamp $timestamp"  >> $seqres.full
-		$XFS_IO_PROG -f -c "utimes $timestamp 0 $timestamp 0" $file
-		if [ $? -ne 0 ]; then
+		rm -f $tmp.utimes
+		$XFS_IO_PROG -f -c "utimes $timestamp 0 $timestamp 0" $file > $tmp.utimes 2>&1
+		local res=$?
+
+		cat $tmp.utimes >> $seqres.full
+		if [ "$timestamp" -ne 0 ] && grep -q "Bad value" "$tmp.utimes"; then
+			echo "xfs_io could not interpret time value \"$timestamp\", skipping \"$file\" test." >> $seqres.full
+			rm -f $file $tmp.utimes
+			return
+		fi
+		cat $tmp.utimes
+		rm -f $tmp.utimes
+		if [ $res -ne 0 ]; then
 			echo "Failed to update times on $file" | tee -a $seqres.full
+		fi
+	else
+		if [ ! -f "$file" ]; then
+			echo "xfs_io did not create file for time value \"$timestamp\", skipping test." >> $seqres.full
+			return
 		fi
 	fi
 
