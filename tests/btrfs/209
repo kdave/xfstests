@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 209
+#
+# Test a scenario were we fsync a range of a file and have a power failure.
+# We want to check that after a power failure and mounting the filesystem, we
+# do not end up with a missing file extent representing a hole. This applies
+# only when not using the NO_HOLES feature.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/attr
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_dm_target flakey
+_require_btrfs_fs_feature "no_holes"
+_require_btrfs_mkfs_feature "no-holes"
+_require_xfs_io_command "sync_range"
+
+rm -f $seqres.full
+
+_scratch_mkfs -O ^no-holes >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create a 256K file with a single extent and fsync it to clear the full sync
+# bit from the inode - we want the msync below to trigger a fast fsync.
+$XFS_IO_PROG -f \
+	     -c "pwrite -S 0xab 0 256K" \
+	     -c "fsync" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Force a transaction commit and wipe out the log tree.
+sync
+
+# Dirty 768K of data, increasing the file size to 1Mb, and flush only the range
+# from 256K to 512K without updating the log tree (sync_file_range() does not
+# trigger fsync, it only starts writeback and waits for it to finish).
+$XFS_IO_PROG -c "pwrite -S 0xcd 256K 768K" \
+	     -c "sync_range -abw 256K 256K" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now dirty the range from 768K to 1M again and sync that range.
+$XFS_IO_PROG \
+    -c "mmap -w 768K 256K"        \
+    -c "mwrite -S 0xef 768K 256K" \
+    -c "msync -s 768K 256K"       \
+    -c "munmap"                   \
+    $SCRATCH_MNT/foo | _filter_xfs_io
+
+echo "File digest before power failure: $(_md5_checksum $SCRATCH_MNT/foo)"
+
+# Simulate a power failure and mount again the filesystem.
+_flakey_drop_and_remount
+
+# Should match what we got before the power failure.
+echo "File digest after power failure: $(_md5_checksum $SCRATCH_MNT/foo)"
+
+# We also want to check that fsck doesn't fail due to an error of a missing
+# file extent item that represents a hole for the range 256K to 512K. The
+# fstests framework does the fsck once the test exits.
+_unmount_flakey
+
+status=0
+exit
