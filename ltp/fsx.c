@@ -1200,6 +1200,9 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	unsigned end_offset;
 	int mode = FALLOC_FL_ZERO_RANGE;
 
+	if (keep_size)
+		mode |= FALLOC_FL_KEEP_SIZE;
+
 	if (length == 0) {
 		if (!quiet && testcalls > simulatedopcount)
 			prt("skipping zero length zero range\n");
