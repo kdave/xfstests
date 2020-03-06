@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Facebook.  All Rights Reserved.
+#
+# FS QA Test 207
+#
+# Test large DIO reads and writes with various profiles. Regression test for
+# patch "btrfs: fix RAID direct I/O reads with alternate csums".
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs btrfs
+_supported_os Linux
+# we check scratch dev after each loop
+_require_scratch_nocheck
+_require_scratch_dev_pool 4
+_btrfs_get_profile_configs
+
+for mkfs_opts in "${_btrfs_profile_configs[@]}"; do
+	echo "Test $mkfs_opts" >>$seqres.full
+	_scratch_pool_mkfs $mkfs_opts >>$seqres.full 2>&1
+	_scratch_mount >>$seqres.full 2>&1
+
+	dd if=/dev/urandom of="$SCRATCH_MNT/$seq" \
+		bs=1M count=64 conv=fsync status=none
+	dd if="$SCRATCH_MNT/$seq" of="$SCRATCH_MNT/$seq.dioread" \
+		bs=1M iflag=direct status=none
+	dd if="$SCRATCH_MNT/$seq" of="$SCRATCH_MNT/$seq.diowrite" \
+		bs=1M oflag=direct status=none
+	diff -q "$SCRATCH_MNT/$seq" "$SCRATCH_MNT/$seq.dioread" |
+		tee -a $seqres.full
+	diff -q "$SCRATCH_MNT/$seq" "$SCRATCH_MNT/$seq.diowrite" |
+		tee -a $seqres.full
+
+	_scratch_unmount
+	_check_scratch_fs
+done
+
+echo "Silence is golden"
+
+status=0
+exit
