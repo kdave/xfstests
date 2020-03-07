@@ -68,6 +68,11 @@ filter_loop()
 	    -e "s,\B$LOOP_SPARE_DEV,LOOP_SPARE_DEV,g"
 }
 
+filter_xfs_opt()
+{
+	sed -e "s,allocsize=$pagesz,allocsize=PAGESIZE,g"
+}
+
 # avoid the effection from MKFS_OPTIONS
 MKFS_OPTIONS=""
 do_mkfs()
@@ -165,7 +170,7 @@ do_test()
 	# Print each argument, include nil ones
 	echo -n "TEST:" | tee -a $seqres.full
 	for i in "$@";do
-		echo -n " \"$i\"" | filter_loop | tee -a $seqres.full
+		echo -n " \"$i\"" | filter_loop | filter_xfs_opt | tee -a $seqres.full
 	done
 	echo | tee -a $seqres.full
 
@@ -180,11 +185,12 @@ echo "** start xfs mount testing ..."
 # Test allocsize=size
 # Valid values for this option are page size (typically 4KiB) through to 1GiB
 do_mkfs
-if [ $dbsize -ge 1024 ];then
-	blsize="$((dbsize / 1024))k"
+pagesz=$(get_page_size)
+if [ $pagesz -ge 1024 ];then
+	pagesz="$((pagesz / 1024))k"
 fi
 do_test "" pass "allocsize" "false"
-do_test "-o allocsize=$blsize" pass "allocsize=$blsize" "true"
+do_test "-o allocsize=$pagesz" pass "allocsize=$pagesz" "true"
 do_test "-o allocsize=1048576k" pass "allocsize=1048576k" "true"
 do_test "-o allocsize=$((dbsize / 2))" fail
 do_test "-o allocsize=2g" fail
