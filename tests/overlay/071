@@ -35,6 +35,7 @@ _cleanup()
 	rm -f $tmp.*
 	# Unmount the nested overlay mount
 	$UMOUNT_PROG $mnt2 2>/dev/null
+	[ -z "$loopdev" ] || _destroy_loop_device $loopdev
 }
 
 # get standard environment, filters and checks
@@ -52,6 +53,7 @@ _require_command "$FLOCK_PROG" "flock"
 # We need to require all features together, because nfs_export cannot
 # be enabled when index is disabled
 _require_scratch_overlay_features index nfs_export redirect_dir
+_require_loop
 
 # Lower overlay lower layer is on test fs, upper is on scratch fs
 lower=$OVL_BASE_TEST_MNT/$OVL_LOWER-$seq
@@ -75,6 +77,10 @@ create_dirs()
 	# Re-create the nested overlay upper dirs
 	rm -rf $lower $upper2 $work2 $mnt2
 	mkdir $lower $upper2 $work2 $mnt2
+
+	# Create a loop device for blkdev tests
+	$XFS_IO_PROG -f -c "truncate 128k" $lower/img >> $seqres.full 2>&1
+	loopdev=`_create_loop_device $lower/img`
 }
 
 # Mount a nested overlay with $SCRATCH_MNT as lower layer
@@ -126,8 +132,8 @@ create_test_files()
 	ln -s $dir/file $dir/symlink
 	touch $dir/link
 	ln $dir/link $dir/link2
-	mknod $dir/chrdev c 1 1
-	mknod $dir/blkdev b 1 1
+	cp -a /dev/zero $dir/chrdev
+	cp -a $loopdev $dir/blkdev
 	mknod $dir/fifo p
 	$here/src/af_unix $dir/socket
 }
