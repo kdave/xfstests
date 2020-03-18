@@ -51,17 +51,21 @@ ENDL
 
 # Make sure that the quota blocks accounting for qa_user on the scratch fs
 # matches the stat blocks counter for the only file on the scratch fs that
-# is owned by qa_user.  Note that stat reports in units of 512b blocks whereas
-# repquota reports in units of 1k blocks.
+# is owned by qa_user.
 check_quota_accounting()
 {
+	# repquota rounds the raw numbers up to the nearest 1k when reporting
+	# space usage.  xfs_io stat always reports space usage in 512b units,
+	# so use an awk script to round this number up to the nearest 1k, just
+	# like repquota does.
 	$XFS_IO_PROG -c stat $testfile > $tmp.out
 	cat $tmp.out >> $seqres.full
-	local stat_blocks=$(grep 'stat.blocks' $tmp.out | awk '{print $3 / 2}')
+	local stat_blocks=$(grep 'stat.blocks' $tmp.out | \
+		awk '{printf("%d\n", ($3 + 1) / 2);}')
 
 	_report_quota_blocks $SCRATCH_MNT > $tmp.out
 	cat $tmp.out >> $seqres.full
-	awk -v qa_user=$qa_user -v blocks=$stat_blocks -f $tmp.awk $tmp.out
+	$AWK_PROG -v qa_user=$qa_user -v blocks=$stat_blocks -f $tmp.awk $tmp.out
 }
 
 _scratch_mkfs > $seqres.full
