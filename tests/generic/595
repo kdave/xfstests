@@ -1,0 +1,115 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2020 Google LLC
+#
+# FS QA Test No. 595
+#
+# Regression test for a bug in the FS_IOC_REMOVE_ENCRYPTION_KEY ioctl fixed by
+# commit 2b4eae95c736 ("fscrypt: don't evict dirty inodes after removing key").
+# This bug could cause writes to encrypted files to be lost if they raced with
+# the corresponding fscrypt master key being removed.  With f2fs, this bug could
+# also crash the kernel.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	# Stop all subprocesses.
+	touch $tmp.done
+	wait
+
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/encrypt
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch_encryption -v 2
+_require_command "$KEYCTL_PROG" keyctl
+
+_scratch_mkfs_encrypted &>> $seqres.full
+_scratch_mount
+
+dir=$SCRATCH_MNT/dir
+runtime=$((4 * TIME_FACTOR))
+
+# Create an encrypted directory.
+mkdir $dir
+_set_encpolicy $dir $TEST_KEY_IDENTIFIER
+_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY"
+
+# Start with a single-threaded reproducer:
+echo -e "\n# Single-threaded reproducer"
+# Keep a fd open to a file past its fscrypt master key being removed.
+exec 3>$dir/file
+_rm_enckey $SCRATCH_MNT $TEST_KEY_IDENTIFIER
+# Write to and close the open fd.
+echo contents >&3
+exec 3>&-
+# Drop any dentries which might be pinning the inode for "file".
+echo 2 > /proc/sys/vm/drop_caches
+# In buggy kernels, the inode for "file" was evicted despite the dirty data,
+# causing the dirty data to be lost.  Check whether the write made it through.
+_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY"
+cat $dir/file
+rm -f $dir/file
+
+# Also run a multi-threaded reproducer.  This is included for good measure, as
+# this type of thing tends to be good for finding other bugs too.
+echo -e "\n# Multi-threaded reproducer"
+touch $dir/file
+
+# One process add/removes the encryption key repeatedly.
+(
+	while [ ! -e $tmp.done ]; do
+		_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY" > /dev/null
+		_rm_enckey $SCRATCH_MNT $TEST_KEY_IDENTIFIER &> /dev/null
+	done
+) &
+
+# Another process repeatedly tries to append to the encrypted file.  The file is
+# re-opened each time, so that there are chances for the inode to be evicted.
+# Failures to open the file due to the key being removed are ignored.
+(
+	touch $tmp.expected
+	while [ ! -e $tmp.done ]; do
+		if sh -c "echo -n X >> $dir/file" 2>/dev/null; then
+			# Keep track of the expected file contents.
+			echo -n X >> $tmp.expected
+		fi
+	done
+) &
+
+# Run for a while.
+sleep $runtime
+
+# Stop all subprocesses.
+touch $tmp.done
+wait
+
+# Make sure no writes were lost.
+_add_enckey $SCRATCH_MNT "$TEST_RAW_KEY" > /dev/null
+stat $tmp.expected >> $seqres.full
+stat $dir/file >> $seqres.full
+cmp $tmp.expected $dir/file
+
+echo "Multi-threaded reproducer done"
+
+# success, all done
+status=0
+exit
