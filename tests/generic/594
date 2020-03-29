@@ -1,0 +1,108 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 594
+#
+# Test per-type(user, group and project) filesystem quota timers, make sure
+# each of grace time can be set/get properly.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+# V4 XFS doesn't support to mount project and group quota together
+if [ "$FSTYP" = "xfs" ];then
+	_require_scratch_xfs_crc
+fi
+_require_quota
+
+_scratch_mkfs >$seqres.full 2>&1
+_scratch_enable_pquota
+_qmount_option "usrquota,grpquota,prjquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
+
+MIN=60
+
+# get default time at first
+def_time=`repquota -u $SCRATCH_MNT | \
+		sed -n -e "/^Block/s/.* time: \(.*\); .* time: \(.*\)/\1 \2/p"`
+echo "Default block and inode grace timers are: $def_time" >> $seqres.full
+
+filter_repquota()
+{
+	local blocktime=$1
+	local inodetime=$2
+
+	_filter_scratch | sed -e "s,$blocktime,DEF_TIME,g" \
+			      -e "s,$inodetime,DEF_TIME,g"
+}
+
+echo "1. set project quota timer"
+setquota -t -P $((10 * MIN)) $((20 * MIN)) $SCRATCH_MNT
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+echo
+
+echo "2. set group quota timer"
+setquota -t -g $((30 * MIN)) $((40 * MIN)) $SCRATCH_MNT
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+echo
+
+echo "3. set user quota timer"
+setquota -t -u $((50 * MIN)) $((60 * MIN)) $SCRATCH_MNT
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+echo
+
+# cycle mount, make sure the quota timers are still right
+echo "4. cycle mount test-1"
+_qmount
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+echo
+
+# Run repair to force quota check
+echo "5. fsck to force quota check"
+_scratch_unmount
+_repair_scratch_fs >> $seqres.full 2>&1
+echo
+
+# Remount (this time to run quotacheck) and check the limits.  There's a bug
+# in quotacheck where we would reset the ondisk default grace period to zero
+# while the incore copy stays at whatever was read in prior to quotacheck.
+# This will show up after the /next/ remount.
+echo "6. cycle mount test-2"
+_qmount
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+echo
+
+# Remount and check the limits
+echo "7. cycle mount test-3"
+_qmount
+repquota -ugP $SCRATCH_MNT | grep "Report\|^Block" | filter_repquota $def_time
+
+# success, all done
+status=0
+exit
