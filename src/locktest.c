@@ -1030,6 +1030,7 @@ main(int argc, char *argv[])
     extern int	optind;
     int fail_count = 0;
     int run_leases = 0;
+    int test_setlease = 0;
     
     atexit(cleanup);
     
@@ -1042,7 +1043,7 @@ main(int argc, char *argv[])
 	    prog = p+1;
     }
 
-    while ((c = getopt(argc, argv, "dLn:h:p:?")) != EOF) {
+    while ((c = getopt(argc, argv, "dLn:h:p:t?")) != EOF) {
 	switch (c) {
 
 	case 'd':	/* debug flag */
@@ -1072,6 +1073,10 @@ main(int argc, char *argv[])
 	    }
 	    break;
 
+	case 't':
+	    test_setlease = 1;
+	    break;
+
 	case '?':
 	default:
 	    errflag++;
@@ -1089,6 +1094,13 @@ main(int argc, char *argv[])
 	fprintf(stderr, "Working on file : %s\n", filename);
     if (do_open(O_RDWR) == FAIL)
 	exit(1);
+
+    if (test_setlease == 1) {
+	fcntl(f_fd, F_SETLEASE, F_UNLCK);
+	saved_errno = errno;
+	close(f_fd);
+	exit(saved_errno);
+    }
 
     setbuf(stderr, NULL);
 
