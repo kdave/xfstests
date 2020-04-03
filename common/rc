@@ -4184,6 +4184,18 @@ _require_negative_timestamps() {
 	esac
 }
 
+# Require the 'accton' userspace tool and CONFIG_BSD_PROCESS_ACCT=y.
+_require_bsd_process_accounting()
+{
+	_require_command "$ACCTON_PROG" accton
+	$ACCTON_PROG on &> $tmp.test_accton
+	cat $tmp.test_accton >> $seqres.full
+	if grep 'Function not implemented' $tmp.test_accton; then
+		_notrun "BSD process accounting support unavailable"
+	fi
+	$ACCTON_PROG off >> $seqres.full
+}
+
 init_rc
 
 ################################################################################

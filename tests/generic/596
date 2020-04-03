@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2020 Google LLC
+#
+# FS QA Test No. 596
+#
+# Regression test for the bug fixed by commit 10a98cb16d80 ("xfs: clear
+# PF_MEMALLOC before exiting xfsaild thread").  If the bug exists, a kernel
+# WARNING should be triggered.  See the commit message for details.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	$ACCTON_PROG off >> $seqres.full
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_bsd_process_accounting
+_require_chattr S
+_require_test
+_require_scratch
+
+# To trigger the bug we must unmount a filesystem while BSD process accounting
+# is enabled.  The accounting file must also be located on a different
+# filesystem and have the sync flag set.
+
+accounting_file=$TEST_DIR/$seq
+
+rm -f $accounting_file
+touch $accounting_file
+$CHATTR_PROG +S $accounting_file
+
+_scratch_mkfs &>> $seqres.full
+$ACCTON_PROG $accounting_file >> $seqres.full
+_scratch_mount
+_scratch_unmount
+$ACCTON_PROG off >> $seqres.full
+
+echo "Silence is golden"
+
+status=0
+exit
