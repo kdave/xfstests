@@ -128,6 +128,18 @@ run_tests()
 
     echo "File bar6 digest = $(_md5_checksum $SCRATCH_MNT/bar6)"
 
+    # File foo3 a single inline extent of 500 bytes.
+    echo "Creating file foo3"
+    $XFS_IO_PROG -f -c "pwrite -S 0xbf 0 500" $SCRATCH_MNT/foo3 | _filter_xfs_io
+
+    # File bar7 is an empty file, has no extents.
+    touch $SCRATCH_MNT/bar7
+
+    echo "Cloning foo3 into bar7"
+    $XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo3" $SCRATCH_MNT/bar7 | _filter_xfs_io
+
+    echo "File bar7 digest = $(_md5_checksum $SCRATCH_MNT/bar7)"
+
     # Unmount and mount again the filesystem. We want to verify the reflink
     # operations were durably persisted.
     _scratch_cycle_mount
@@ -139,6 +151,7 @@ run_tests()
     echo "File bar4 digest = $(_md5_checksum $SCRATCH_MNT/bar4)"
     echo "File bar5 digest = $(_md5_checksum $SCRATCH_MNT/bar5)"
     echo "File bar6 digest = $(_md5_checksum $SCRATCH_MNT/bar6)"
+    echo "File bar7 digest = $(_md5_checksum $SCRATCH_MNT/bar7)"
 }
 
 _scratch_mkfs "-O ^no-holes" >>$seqres.full 2>&1
