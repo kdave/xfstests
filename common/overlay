@@ -137,9 +137,11 @@ _overlay_scratch_unmount()
 }
 
 # Check that a specific overlayfs feature is supported
-__check_scratch_overlay_feature()
+_check_overlay_feature()
 {
 	local feature=$1
+	local dev=$2
+	local mnt=$3
 
 	# overalyfs features (e.g. redirect_dir, index) are
 	# configurable from Kconfig (the build default), by module
@@ -153,10 +155,10 @@ __check_scratch_overlay_feature()
 	# index=off if underlying fs does not support file handles.
 	# Overlayfs only displays mount option if it differs from the default.
 	# Overlayfs may enable the feature, but fallback to read-only mount.
-	((( [ "$default" = N ] && _fs_options $SCRATCH_DEV | grep -q "${feature}=on" ) || \
-	  ( [ "$default" = Y ] && ! _fs_options $SCRATCH_DEV | grep -q "${feature}=off" )) && \
-	    touch $SCRATCH_MNT/foo 2>/dev/null ) || \
-	        _notrun "${FSTYP} feature '${feature}' cannot be enabled on ${SCRATCH_DEV}"
+	((( [ "$default" = N ] && _fs_options $dev | grep -q "${feature}=on" ) || \
+	  ( [ "$default" = Y ] && ! _fs_options $dev | grep -q "${feature}=off" )) && \
+	    touch $mnt/foo 2>/dev/null ) || \
+	        _notrun "${FSTYP} feature '${feature}' cannot be enabled on ${dev}"
 }
 
 # Require a set of overlayfs features
@@ -178,7 +180,7 @@ _require_scratch_overlay_features()
 	        _notrun "overlay features '${features[*]}' cannot be enabled on ${SCRATCH_DEV}"
 
 	for feature in ${features[*]}; do
-		__check_scratch_overlay_feature ${feature}
+		_check_overlay_feature ${feature} $SCRATCH_DEV $SCRATCH_MNT
 	done
 
 	_scratch_unmount
