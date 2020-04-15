@@ -37,6 +37,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/dmdust
 
 # remove previous $seqres.full before test
 rm -f $seqres.full
@@ -46,57 +47,11 @@ rm -f $seqres.full
 # Modify as appropriate.
 _supported_fs btrfs
 _supported_os Linux
-_require_fail_make_request
 _require_scratch_dev_pool 2
+_require_dm_target dust
 
 _require_btrfs_command inspect-internal dump-tree
 _require_command "$FILEFRAG_PROG" filefrag
-
-get_physical()
-{
-	local logical=$1
-	local stripe=$2
-	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
-		grep $logical -A 6 | \
-		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$6 }"
-}
-
-get_devid()
-{
-	local logical=$1
-	local stripe=$2
-	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
-		grep $logical -A 6 | \
-		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /$stripe/) { print \$4 }"
-}
-
-get_device_path()
-{
-	local devid=$1
-	echo "$SCRATCH_DEV_POOL" | $AWK_PROG "{print \$$devid}"
-}
-
-SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
-
-start_fail()
-{
-	local sysfs_bdev="$1"
-	echo 100 > $DEBUGFS_MNT/fail_make_request/probability
-	# the 1st one fails the first bio which is reading 4k (or more due to
-	# readahead), and the 2nd one fails the retry of validation so that it
-	# triggers read-repair
-	echo 2 > $DEBUGFS_MNT/fail_make_request/times
-	echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
-	echo 1 > $sysfs_bdev/make-it-fail
-}
-
-stop_fail()
-{
-	local sysfs_bdev="$1"
-	echo 0 > $DEBUGFS_MNT/fail_make_request/probability
-	echo 0 > $DEBUGFS_MNT/fail_make_request/times
-	echo 0 > $sysfs_bdev/make-it-fail
-}
 
 _scratch_dev_pool_get 2
 # step 1, create a raid1 btrfs which contains one 128k file.
@@ -117,41 +72,34 @@ echo "step 2......corrupt file extent" >>$seqres.full
 
 ${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar >> $seqres.full
 logical_in_btrfs=`${FILEFRAG_PROG} -v $SCRATCH_MNT/foobar | _filter_filefrag | cut -d '#' -f 1`
-physical=`get_physical ${logical_in_btrfs} 1`
-devid=$(get_devid ${logical_in_btrfs} 1)
-target_dev=$(get_device_path $devid)
-
-SYSFS_BDEV=`_sysfs_dev $target_dev`
+echo "Logical offset is $logical_in_btrfs" >>$seqres.full
 _scratch_unmount
 
-echo "corrupt stripe 1 devid $devid devpath $target_dev physical $physical" \
-	>> $seqres.full
-$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical 64K" $target_dev > /dev/null
+read -r stripe physical < <(
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 "$SCRATCH_DEV" |
+	grep "$logical_in_btrfs" -A 6 |
+	$AWK_PROG '$1 == "stripe" && $3 == "devid" && $4 == 1 { print $2 " " $6; exit }')
+echo "Physical offset of stripe $stripe is $physical on devid 1" >> $seqres.full
 
-_scratch_mount -o nospace_cache
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical 64K" "$SCRATCH_DEV" > /dev/null
+
+_init_dust
+_mount_dust
 
 # step 3, 128k buffered read (this read can repair bad copy)
 echo "step 3......repair the bad copy" >>$seqres.full
 
-# since raid1 consists of two copies, and the bad copy was put on stripe #1
-# while the good copy lies on stripe #0, the bad copy only gets access when the
-# reader's pid % 2 == 1 is true
-while [[ -z ${result} ]]; do
-    # invalidate the page cache.
-    _scratch_cycle_mount
-
-    start_fail $SYSFS_BDEV
-    result=$(bash -c "
-        if [[ \$((\$\$ % 2)) -eq 1 ]]; then
-                exec $XFS_IO_PROG -c \"pread 0 4K\" \"$SCRATCH_MNT/foobar\"
-        fi");
-    stop_fail $SYSFS_BDEV
+$DMSETUP_PROG message dust-test 0 addbadblock $((physical / 512))
+$DMSETUP_PROG message dust-test 0 enable
+while [[ -z $( (( BASHPID % 2 == stripe )) &&
+	       exec $XFS_IO_PROG -c "pread -b 128K 0 128K" "$SCRATCH_MNT/foobar") ]]; do
+	:
 done
 
-_scratch_unmount
+_cleanup_dust
 
 # check if the repair works
-$XFS_IO_PROG -c "pread -v -b 512 $physical 512" $target_dev |\
+$XFS_IO_PROG -c "pread -v -b 512 $physical 512" "$SCRATCH_DEV" |
 	_filter_xfs_io_offset
 
 _scratch_dev_pool_put
