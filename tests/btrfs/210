@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 210
+#
+# Test that a new snapshot created with qgroup inherit passed should mark
+# qgroup numbers inconsistent.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+
+_scratch_mkfs >/dev/null
+_scratch_mount
+
+$BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/src" > /dev/null
+_pwrite_byte 0xcd 0 16M "$SCRATCH_MNT/src/file" > /dev/null
+
+# Sync the fs to ensure data written to disk so that they can be accounted
+# by qgroup
+sync
+$BTRFS_UTIL_PROG quota enable "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG qgroup create 1/0 "$SCRATCH_MNT"
+
+# Create a snapshot with qgroup inherit
+$BTRFS_UTIL_PROG subvolume snapshot -i 1/0 "$SCRATCH_MNT/src" \
+	"$SCRATCH_MNT/snapshot" > /dev/null
+
+echo "Silence is golden"
+# If qgroup is not marked inconsistent automatically, btrfs check would
+# report error.
+
+# success, all done
+status=0
+exit
