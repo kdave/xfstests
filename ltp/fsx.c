@@ -2051,17 +2051,25 @@ test(void)
 			break;
 		}
 	case OP_COPY_RANGE:
-		TRIM_OFF_LEN(offset, size, file_size);
-		offset -= offset % readbdy;
-		if (o_direct)
-			size -= size % readbdy;
-		do {
-			offset2 = random();
-			TRIM_OFF(offset2, maxfilelen);
-			offset2 -= offset2 % writebdy;
-		} while (range_overlaps(offset, offset2, size) ||
-			 offset2 + size > maxfilelen);
-		break;
+		{
+			int tries = 0;
+
+			TRIM_OFF_LEN(offset, size, file_size);
+			offset -= offset % readbdy;
+			if (o_direct)
+				size -= size % readbdy;
+			do {
+				if (tries++ >= 30) {
+					size = 0;
+					break;
+				}
+				offset2 = random();
+				TRIM_OFF(offset2, maxfilelen);
+				offset2 -= offset2 % writebdy;
+			} while (range_overlaps(offset, offset2, size) ||
+				 offset2 + size > maxfilelen);
+			break;
+		}
 	}
 
 have_op:
