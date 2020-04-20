@@ -1244,6 +1244,17 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	}
 
 	memset(good_buf + offset, '\0', length);
+
+	if (!keep_size && end_offset > file_size) {
+		/*
+		 * If there's a gap between the old file size and the offset of
+		 * the zero range operation, fill the gap with zeroes.
+		 */
+		if (offset > file_size)
+			memset(good_buf + file_size, '\0', offset - file_size);
+
+		file_size = end_offset;
+	}
 }
 
 #else
@@ -2141,7 +2152,7 @@ have_op:
 		do_punch_hole(offset, size);
 		break;
 	case OP_ZERO_RANGE:
-		TRIM_OFF_LEN(offset, size, file_size);
+		TRIM_OFF_LEN(offset, size, maxfilelen);
 		do_zero_range(offset, size, keep_size);
 		break;
 	case OP_COLLAPSE_RANGE:
