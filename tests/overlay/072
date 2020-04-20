@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 072
+#
+# Test overlay nlink when adding upper hardlinks.
+#
+# nlink of overlay inode could be dropped indefinitely by adding
+# unaccounted upper hardlinks underneath a mounted overlay and
+# trying to remove them.
+#
+# This is a variant of test overlay/034 with mangling of upper instead
+# of lower hardlinks. Unlike overlay/034, this test does not require the
+# inode index feature and will pass whether is it enabled or disabled
+# by default.
+#
+# This is a regression test for kernel commit 83552eacdfc0
+# ("ovl: fix WARN_ON nlink drop to zero").
+# Without the fix, the test triggers
+# WARN_ON(inode->i_nlink == 0) in drop_link().
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create upper hardlink
+mkdir -p $upperdir
+touch $upperdir/0
+ln $upperdir/0 $upperdir/1
+
+_scratch_mount
+
+# Verify overlay inode nlink 2 same as upper inode
+stat -c '%h' $SCRATCH_MNT/0
+
+# Add upper hardlinks while overlay is mounted - overlay inode nlink
+# is not being updated
+ln $upperdir/0 $upperdir/2
+ln $upperdir/0 $upperdir/3
+
+# Unlink the 2 un-accounted upper hardlinks - overlay inode nlinks
+# drops 2 and may reach 0 if the situation is not detected
+rm $SCRATCH_MNT/2
+rm $SCRATCH_MNT/3
+
+# Check if getting ENOENT when trying to link !I_LINKABLE with nlink 0
+ln $SCRATCH_MNT/0 $SCRATCH_MNT/4
+
+# Unlink all hardlinks - if overlay inode nlink is 0, this will trigger
+# WARN_ON() in drop_nlink()
+rm $SCRATCH_MNT/0
+rm $SCRATCH_MNT/1
+rm $SCRATCH_MNT/4
+
+echo "Silence is golden"
+status=0
+exit
