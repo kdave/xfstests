@@ -1,0 +1,112 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 211
+#
+# Test that if we fsync a file with prealloc extents that start before and
+# after the file's size, we don't end up with missing parts of the extents
+# and implicit file holes after a power failure. Test both without and with
+# the NO_HOLES feature.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command "falloc" "-k"
+# fiemap needed by _count_extents()
+_require_xfs_io_command "fiemap"
+_require_btrfs_fs_feature "no_holes"
+_require_btrfs_mkfs_feature "no-holes"
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+run_test()
+{
+    # Create our test file with 2 consecutive prealloc extents, each with a size
+    # of 128Kb, and covering the range from 0 to 256Kb, with a file size of 0.
+    # Then fsync the file to record both extents in a log tree.
+    $XFS_IO_PROG -f -c "falloc -k 0 128K" $SCRATCH_MNT/foo
+    $XFS_IO_PROG -c "falloc -k 128K 128K" $SCRATCH_MNT/foo
+    $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
+
+    # Now do a redudant extent allocation for the range from 0 to 64Kb. This will
+    # merely increase the file size from 0 to 64Kb. Instead we could also do a
+    # truncate to set the file size to 64Kb.
+    $XFS_IO_PROG -c "falloc 0 64K" $SCRATCH_MNT/foo
+
+    # Fsync the file, so we update the log with the new file size. Here btrfs
+    # used to incorrectly set the number of bytes to 64Kb for the prealloc extent
+    # that covers the file range from 0 to 128Kb.
+    $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
+
+    # Now set the file size to 256K with a truncate and then fsync the file. We
+    # want to verify the log tree doesn't end up with an implicit hole for the
+    # file range from 64Kb to 128Kb. That would lead to an implicit hole after
+    # replaying the log and losing part of the prealloc extent, so a future write
+    # to anywhere in the file range from 64Kb to 128Kb would result in allocating
+    # a new extent and not use the extent previously allocated with fallocate().
+    $XFS_IO_PROG -c "truncate 256K" -c "fsync" $SCRATCH_MNT/foo
+
+    # Simulate a power failure and then mount again the filesystem to replay the
+    # log tree.
+    _flakey_drop_and_remount
+
+    # Unmount the filesystem and run 'btrfs check'/fsck to verify that we don't
+    # have a missing hole for the file range from 64K to 128K.
+    _unmount_flakey
+    _check_scratch_fs $FLAKEY_DEV
+
+    _mount_flakey
+
+    # Now write to the file range from 0 to 128K. After this we should still have
+    # rwo extents in our file, corresponding to the 2 extents we allocated before
+    # using fallocate(). In particular writing to the file range from 64Kb to
+    # 128Kb should not have allocated a new extent.
+    $XFS_IO_PROG -c "pwrite -S 0xab 0 128K" $SCRATCH_MNT/foo | _filter_xfs_io
+    echo "File extent count after write: $(_count_extents $SCRATCH_MNT/foo)"
+}
+
+_scratch_mkfs -O ^no-holes >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+echo "Testing without NO_HOLES feature"
+run_test
+
+_unmount_flakey
+_cleanup_flakey
+
+_scratch_mkfs -O no-holes >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+echo
+echo "Testing with the NO_HOLES feature"
+run_test
+
+_unmount_flakey
+status=0
+exit
