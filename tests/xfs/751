@@ -1,0 +1,182 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 751
+#
+# Update sunit and width and make sure that the filesystem still passes
+# xfs_repair afterwards.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -f $tmp.*
+	cd /
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/fuzzy
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_scratch_nocheck
+
+# Assume that if we can run scrub on the test dev we can run it on the scratch
+# fs too.
+run_scrub=0
+_supports_xfs_scrub $TEST_DIR $TEST_DEV && run_scrub=1
+
+log()
+{
+	echo "$@" | tee -a $seqres.full /dev/ttyprintk
+}
+
+__test_mount_opts()
+{
+	local mounted=0
+
+	# Try to mount the fs with our test options.
+	_try_scratch_mount "$@" >> $seqres.full 2>&1 && mounted=1
+	if [ $mounted -gt 0 ]; then
+		# Implant a sentinel file to see if repair nukes the directory
+		# later.  Scrub, unmount, and check for errors.
+		echo moo > $SCRATCH_MNT/a
+		grep "$SCRATCH_MNT" /proc/mounts >> $seqres.full
+		test $run_scrub -gt 0 && \
+			_scratch_scrub -n >> $seqres.full
+		_scratch_unmount
+		_scratch_xfs_repair -n >> $seqres.full 2>&1 || \
+			echo "Repair found problems."
+	else
+		echo "mount failed" >> $seqres.full
+	fi
+	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
+
+	# Run xfs_repair in repair mode to see if it can be baited into nuking
+	# the root filesystem on account of the sunit update.
+	_scratch_xfs_repair >> $seqres.full 2>&1
+
+	# If the previous mount succeeded, mount the fs and look for the file
+	# we implanted.
+	if [ $mounted -gt 0 ]; then
+		_scratch_mount
+		test -f $SCRATCH_MNT/a || echo "Root directory got nuked."
+		_scratch_unmount
+	fi
+
+	echo >> $seqres.full
+}
+
+test_sunit_opts()
+{
+	echo "Format with 4k stripe unit; 1x stripe width" >> $seqres.full
+	_scratch_mkfs -b size=4k -d sunit=8,swidth=8 >> $seqres.full 2>&1
+
+	__test_mount_opts "$@"
+}
+
+test_su_opts()
+{
+	local mounted=0
+
+	echo "Format with 256k stripe unit; 4x stripe width" >> $seqres.full
+	_scratch_mkfs -b size=1k -d su=256k,sw=4 >> $seqres.full 2>&1
+
+	__test_mount_opts "$@"
+}
+
+test_repair_detection()
+{
+	local mounted=0
+
+	echo "Format with 256k stripe unit; 4x stripe width" >> $seqres.full
+	_scratch_mkfs -b size=1k -d su=256k,sw=4 >> $seqres.full 2>&1
+
+	# Try to mount the fs with our test options.
+	_try_scratch_mount >> $seqres.full 2>&1 && mounted=1
+	if [ $mounted -gt 0 ]; then
+		# Implant a sentinel file to see if repair nukes the directory
+		# later.  Scrub, unmount, and check for errors.
+		echo moo > $SCRATCH_MNT/a
+		grep "$SCRATCH_MNT" /proc/mounts >> $seqres.full
+		test $run_scrub -gt 0 && \
+			_scratch_scrub -n >> $seqres.full
+		_scratch_unmount
+		_scratch_xfs_repair -n >> $seqres.full 2>&1 || \
+			echo "Repair found problems."
+	else
+		echo "mount failed" >> $seqres.full
+	fi
+
+	# Update the superblock like the kernel used to do.
+	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
+	_scratch_xfs_db -x -c 'sb 0' -c 'write -d unit 256' -c 'write -d width 1024' >> $seqres.full
+	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
+
+	# Run xfs_repair in repair mode to see if it can be baited into nuking
+	# the root filesystem on account of the sunit update.
+	_scratch_xfs_repair >> $seqres.full 2>&1
+
+	# If the previous mount succeeded, mount the fs and look for the file
+	# we implanted.
+	if [ $mounted -gt 0 ]; then
+		_scratch_mount
+		test -f $SCRATCH_MNT/a || echo "Root directory got nuked."
+		_scratch_unmount
+	fi
+
+	echo >> $seqres.full
+}
+
+# Format with a 256k stripe unit and 4x stripe width, and try various mount
+# options that want to change that and see if they blow up.  Normally you
+# would never change the stripe *unit*, so it's no wonder this is not well
+# tested.
+
+log "Test: no raid parameters"
+test_su_opts
+
+log "Test: 256k stripe unit; 4x stripe width"
+test_su_opts -o sunit=512,swidth=2048
+
+log "Test: 256k stripe unit; 5x stripe width"
+test_su_opts -o sunit=512,swidth=2560
+
+# Note: Larger stripe units probably won't mount
+log "Test: 512k stripe unit; 4x stripe width"
+test_su_opts -o sunit=1024,swidth=4096
+
+log "Test: 512k stripe unit; 3x stripe width"
+test_su_opts -o sunit=1024,swidth=3072
+
+# Note: Should succeed with kernel warnings, and should not create repair
+# failures or nuke the root directory.
+log "Test: 128k stripe unit; 8x stripe width"
+test_su_opts -o sunit=256,swidth=2048
+
+# Note: Should succeed without nuking the root dir
+log "Test: Repair of 128k stripe unit; 8x stripe width"
+test_repair_detection
+
+# Brian Foster noticed a bug in an earlier version of the patch that avoids
+# updating the ondisk sunit/swidth values if they would cause later repair
+# failures.  The bug was that we wouldn't convert the kernel mount option sunit
+# value to the correct incore units until after computing the inode geometry.
+# This caused it to behave incorrectly when the filesystem was formatted with
+# sunit=1fsb and the mount options try to increase swidth.
+log "Test: Formatting with sunit=1fsb,swidth=1fsb and mounting with larger swidth"
+test_sunit_opts -o sunit=8,swidth=64
+
+# success, all done
+status=0
+exit
