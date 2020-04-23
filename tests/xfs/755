@@ -1,0 +1,108 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 755
+#
+# Race freeze and fsmap for a while to see if we crash or livelock.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT > /dev/null 2>&1
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+# real QA test starts here
+_supported_os Linux
+_supported_fs xfs
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command "fsmap"
+_require_command "$KILLALL_PROG" killall
+
+echo "Format and populate"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+STRESS_DIR="$SCRATCH_MNT/testdir"
+mkdir -p $STRESS_DIR
+
+for i in $(seq 0 9); do
+	mkdir -p $STRESS_DIR/$i
+	for j in $(seq 0 9); do
+		mkdir -p $STRESS_DIR/$i/$j
+		for k in $(seq 0 9); do
+			echo x > $STRESS_DIR/$i/$j/$k
+		done
+	done
+done
+
+cpus=$(( $(src/feature -o) * 4 * LOAD_FACTOR))
+
+echo "Concurrent fsmap and freeze"
+filter_output() {
+	egrep -v '(Device or resource busy|Invalid argument)'
+}
+freeze_loop() {
+	end="$1"
+
+	while [ "$(date +%s)" -lt $end ]; do
+		$XFS_IO_PROG -x -c 'freeze' $SCRATCH_MNT 2>&1 | filter_output
+		$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT 2>&1 | filter_output
+	done
+}
+fsmap_loop() {
+	end="$1"
+
+	while [ "$(date +%s)" -lt $end ]; do
+		$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT > /dev/null
+	done
+}
+stress_loop() {
+	end="$1"
+
+	FSSTRESS_ARGS=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000 $FSSTRESS_AVOID)
+	while [ "$(date +%s)" -lt $end ]; do
+		$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full
+	done
+}
+
+start=$(date +%s)
+end=$((start + (30 * TIME_FACTOR) ))
+
+echo "Loop started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
+stress_loop $end &
+freeze_loop $end &
+fsmap_loop $end &
+
+# Wait until 2 seconds after the loops should have finished...
+while [ "$(date +%s)" -lt $((end + 2)) ]; do
+	sleep 1
+done
+
+# ...and clean up after the loops in case they didn't do it themselves.
+$KILLALL_PROG -TERM xfs_io fsstress >> $seqres.full 2>&1
+$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
+
+echo "Loop finished at $(date)" >> $seqres.full
+echo "Test done"
+
+# success, all done
+status=0
+exit
