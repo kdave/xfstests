@@ -41,6 +41,21 @@ bs=4096
 rextsize=4
 filesz=$(((maxextlen + 1) * bs))
 
+must_disable_feature() {
+	local feat="$1"
+
+	# If mkfs doesn't know about the feature, we don't need to disable it
+	$MKFS_XFS_PROG --help 2>&1 | grep -q "${feat}=0" || return 1
+
+	# If turning the feature on works, we don't need to disable it
+	_scratch_mkfs_xfs_supported -m "${feat}=1" "${disabled_features[@]}" \
+		> /dev/null 2>&1 && return 1
+
+	# Otherwise mkfs knows of the feature and formatting with it failed,
+	# so we do need to mask it.
+	return 0
+}
+
 extra_options=""
 # If we're testing XFS, set up the realtime device to reproduce the bug.
 if [[ $FSTYP = xfs ]]; then
@@ -54,14 +69,20 @@ if [[ $FSTYP = xfs ]]; then
 		loop="$(_create_loop_device "$TEST_DIR/$seq")"
 		USE_EXTERNAL=yes
 		SCRATCH_RTDEV="$loop"
+		disabled_features=()
+
+		# disable reflink if not supported by realtime devices
+		must_disable_feature reflink &&
+			disabled_features=(-m reflink=0)
+
+		# disable rmap if not supported by realtime devices
+		must_disable_feature rmapbt &&
+			disabled_features+=(-m rmapbt=0)
 	fi
 	extra_options="$extra_options -r extsize=$((bs * rextsize))"
 	extra_options="$extra_options -d agsize=$(((maxextlen + 1) * bs / 2)),rtinherit=1"
-	# disable reflink as reflink not supported with realtime devices
-	if _scratch_mkfs_xfs_supported -m reflink=0 >/dev/null 2>&1; then
-		extra_options="$extra_options -m reflink=0"
-	fi
-	_scratch_mkfs $extra_options >>$seqres.full 2>&1
+
+	_scratch_mkfs $extra_options "${disabled_features[@]}" >>$seqres.full 2>&1
 	_try_scratch_mount >>$seqres.full 2>&1 || \
 		_notrun "mount failed, kernel doesn't support realtime?"
 	_scratch_unmount
