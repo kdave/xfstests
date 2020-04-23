@@ -1,0 +1,69 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 913
+#
+# Make sure that the quota default grace period and maximum warning limits
+# survive quotacheck.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# real QA test starts here
+_supported_fs xfs
+_supported_os Linux
+_require_quota
+
+rm -f $seqres.full
+
+# Format filesystem and set up quota limits
+_scratch_mkfs > $seqres.full
+_qmount_option "usrquota"
+_scratch_mount >> $seqres.full
+
+$XFS_QUOTA_PROG -x -c 'timer -u 300m' $SCRATCH_MNT
+$XFS_QUOTA_PROG -x -c 'state' $SCRATCH_MNT | grep 'grace time'
+_scratch_unmount
+
+# Remount and check the limits
+_scratch_mount >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'state' $SCRATCH_MNT | grep 'grace time'
+_scratch_unmount
+
+# Run repair to force quota check
+_scratch_xfs_repair >> $seqres.full 2>&1
+
+# Remount (this time to run quotacheck) and check the limits.  There's a bug
+# in quotacheck where we would reset the ondisk default grace period to zero
+# while the incore copy stays at whatever was read in prior to quotacheck.
+# This will show up after the /next/ remount.
+_scratch_mount >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'state' $SCRATCH_MNT | grep 'grace time'
+_scratch_unmount
+
+# Remount and check the limits
+_scratch_mount >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'state' $SCRATCH_MNT | grep 'grace time'
+_scratch_unmount
+
+# success, all done
+status=0
+exit
