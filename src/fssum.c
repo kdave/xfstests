@@ -77,7 +77,7 @@ enum _flags {
 	NUM_FLAGS
 };
 
-const char flchar[] = "ugoamcdxes";
+const char flchar[] = "ugoamcdtes";
 char line[65536];
 
 int flags[NUM_FLAGS] = {1, 1, 1, 1, 1, 0, 1, 1, 0, 0};
@@ -131,28 +131,27 @@ usage(void)
 {
 	fprintf(stderr, "usage: fssum <options> <path>\n");
 	fprintf(stderr, "  options:\n");
-	fprintf(stderr, "    -f          : write out a full manifest file\n");
-	fprintf(stderr, "    -w <file>   : send output to file\n");
-	fprintf(stderr, "    -v          : verbose mode (debugging only)\n");
-	fprintf(stderr,
-		"    -r <file>   : read checksum or manifest from file\n");
-	fprintf(stderr, "    -[ugoamcdxe]: specify which fields to include in checksum calculation.\n");
-	fprintf(stderr, "         u      : include uid\n");
-	fprintf(stderr, "         g      : include gid\n");
-	fprintf(stderr, "         o      : include mode\n");
-	fprintf(stderr, "         m      : include mtime\n");
-	fprintf(stderr, "         a      : include atime\n");
-	fprintf(stderr, "         c      : include ctime\n");
-	fprintf(stderr, "         d      : include file data\n");
-	fprintf(stderr, "         x      : include xattrs\n");
-	fprintf(stderr, "         e      : include open errors (aborts otherwise)\n");
-	fprintf(stderr, "         s      : include block structure (holes)\n");
-	fprintf(stderr, "    -[UGOAMCDXES]: exclude respective field from calculation\n");
-	fprintf(stderr, "    -n          : reset all flags\n");
-	fprintf(stderr, "    -N          : set all flags\n");
-	fprintf(stderr, "    -x path     : exclude path when building checksum (multiple ok)\n");
-	fprintf(stderr, "    -h          : this help\n\n");
-	fprintf(stderr, "The default field mask is ugoamCdES. If the checksum/manifest is read from a\n");
+	fprintf(stderr, "    -f           : write out a full manifest file\n");
+	fprintf(stderr, "    -w <file>    : send output to file\n");
+	fprintf(stderr, "    -v           : verbose mode (debugging only)\n");
+	fprintf(stderr, "    -r <file>    : read checksum or manifest from file\n");
+	fprintf(stderr, "    -[ugoamcdtes]: specify which fields to include in checksum calculation.\n");
+	fprintf(stderr, "         u       : include uid\n");
+	fprintf(stderr, "         g       : include gid\n");
+	fprintf(stderr, "         o       : include mode\n");
+	fprintf(stderr, "         m       : include mtime\n");
+	fprintf(stderr, "         a       : include atime\n");
+	fprintf(stderr, "         c       : include ctime\n");
+	fprintf(stderr, "         d       : include file data\n");
+	fprintf(stderr, "         t       : include xattrs\n");
+	fprintf(stderr, "         e       : include open errors (aborts otherwise)\n");
+	fprintf(stderr, "         s       : include block structure (holes)\n");
+	fprintf(stderr, "    -[UGOAMCDTES]: exclude respective field from calculation\n");
+	fprintf(stderr, "    -n           : reset all flags\n");
+	fprintf(stderr, "    -N           : set all flags\n");
+	fprintf(stderr, "    -x path      : exclude path when building checksum (multiple ok)\n");
+	fprintf(stderr, "    -h           : this help\n\n");
+	fprintf(stderr, "The default field mask is ugoamCdtES. If the checksum/manifest is read from a\n");
 	fprintf(stderr, "file, the mask is taken from there and the values given on the command line\n");
 	fprintf(stderr, "are ignored.\n");
 	exit(-1);
@@ -713,7 +712,7 @@ main(int argc, char *argv[])
 	int plen;
 	int elen;
 	int n_flags = 0;
-	const char *allopts = "heEfuUgGoOaAmMcCdDsSnNw:r:vx:";
+	const char *allopts = "heEfuUgGoOaAmMcCdDtTsSnNw:r:vx:";
 
 	out_fp = stdout;
 	while ((c = getopt(argc, argv, allopts)) != EOF) {
@@ -735,6 +734,8 @@ main(int argc, char *argv[])
 		case 'C':
 		case 'd':
 		case 'D':
+		case 'T':
+		case 't':
 		case 'e':
 		case 'E':
 		case 's':
