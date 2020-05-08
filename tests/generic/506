@@ -43,15 +43,13 @@ rm -f $seqres.full
 _supported_fs generic
 _supported_os Linux
 
-_require_command "$LSATTR_PROG" lsattr
-_require_command "$CHATTR_PROG" chattr
-
 _require_scratch
 _require_scratch_shutdown
 
 _scratch_mkfs >/dev/null 2>&1
 _require_metadata_journaling $SCRATCH_DEV
-_scratch_mount
+_qmount_option "prjquota"
+_qmount
 _require_prjquota $SCRATCH_DEV
 _scratch_unmount
 
@@ -67,16 +65,16 @@ do_check()
 		sync
 	fi
 
-	$CHATTR_PROG -p 100 $testfile
+	$XFS_IO_PROG -x -c "chproj 100" $testfile
 
-	before=`$LSATTR_PROG -p $testfile`
+	before=`$XFS_IO_PROG -x -c "lsproj" $testfile`
 
 	$XFS_IO_PROG -f $testfile -c "fsync" | _filter_xfs_io
 
 	_scratch_shutdown | tee -a $seqres.full
 	_scratch_cycle_mount
 
-	after=`$LSATTR_PROG -p $testfile`
+	after=`$XFS_IO_PROG -x -c "lsproj" $testfile`
 
 	# check inode's project quota id
 	if [ "$before" != "$after" ]; then
