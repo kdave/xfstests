@@ -1,0 +1,117 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Chengguang Xu <cgxu519@mykernel.net>.
+# All Rights Reserved.
+#
+# FS QA Test 073
+#
+# Test whiteout inode sharing functionality.
+#
+# A "whiteout" is an object that has special meaning in overlayfs.
+# A whiteout on an upper layer will effectively hide a matching file
+# in the lower layer, making it appear as if the file didn't exist.
+#
+# Whiteout inode sharing means multiple whiteout objects will share
+# one inode in upper layer, without this feature every whiteout object
+# will consume one inode in upper layer.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+# Require index dir to test if workdir/work is not in use
+# which implies that whiteout sharing is supported
+_require_scratch_overlay_features index
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+
+# Make some testing files in lowerdir.
+# Argument:
+# $1: Testing file number
+make_lower_files()
+{
+	mkdir $lowerdir/dir
+	for name in `seq ${1}`; do
+		touch $lowerdir/${name} &>/dev/null
+	done
+}
+
+# Delete all copied-up files in upperdir.
+make_whiteout_files()
+{
+	# whiteout inode sharing implies that workdir/work is not in use
+	# If workdir/work is in use, delete of lower dir will fail and
+	# we won't run the test.
+	rmdir $workdir/work
+	rmdir $SCRATCH_MNT/dir &>/dev/null || \
+		_notrun "overlay does not support whiteout inode sharing"
+	rm $SCRATCH_MNT/* &>/dev/null
+}
+
+# Check link count of whiteout files.
+# Arguments:
+# $1: Testing file number
+# $2: Expected link count
+check_whiteout_files()
+{
+	for name in dir `seq ${1}`; do
+		local real_count=`stat -c %h $upperdir/${name} 2>/dev/null`
+		if [[ ${2} != $real_count ]]; then
+			echo "Expected link count is ${2} but real count is $real_count, file name is ${name}"
+		fi
+	done
+	local tmpfile_count=`ls $workdir/index/\#* 2>/dev/null |wc -l 2>/dev/null`
+	if [[ -n "$tmpfile_count" && $tmpfile_count > 1 ]]; then
+		echo "There are more than one whiteout tmpfile in index dir!"
+		ls -l $workdir/index/\#* 2>/dev/null
+	fi
+}
+
+# Run test case with specific arguments.
+# Arguments:
+# $1: Testing file number
+# $2: Expected link count
+run_test_case()
+{
+	_scratch_mkfs
+	make_lower_files ${1}
+	_scratch_mount -o "index=on"
+	make_whiteout_files
+	check_whiteout_files ${1} ${2}
+	_scratch_unmount
+}
+
+# Test case
+file_count=10
+# +1 for dir +1 for temp whiteout
+link_count=12
+run_test_case $file_count $link_count
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
