@@ -1,0 +1,80 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 902
+#
+# Test individual user ID quota grace period extension
+# This is the xfs_quota version of the test
+#
+# This test only exercises user quota because it's not known whether the
+# filesystem can set individual grace timers for each quota type
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_quota
+_require_user
+# for xfs_quota on generic fs
+_require_xfs_quota_foreign
+# for repquota (if setquota supports it, repquota does too)
+_require_setquota_project
+
+_scratch_mkfs >$seqres.full 2>&1
+_qmount_option "usrquota"
+_qmount
+
+echo "Silence is golden"
+
+# Test individual timer update functionality; if "-d" is accepted
+# this is xfs_quota that can do default /or/ individual timers
+$XFS_QUOTA_PROG -x -c "timer 0 -d" $SCRATCH_MNT 2>&1 \
+	| grep -q ^timer \
+	&& _notrun "xfs_quota does not support individual grace extension"
+
+# Set a default user inode grace period of 1 second
+$XFS_QUOTA_PROG -x -c "timer -u -i -d 1" $SCRATCH_MNT
+# Soft inode limit 1, hard limit 5
+$XFS_QUOTA_PROG -x -c "limit -u isoft=1 ihard=5 $qa_user" $SCRATCH_MNT
+# Run qa user over soft limit and go over grace period
+su $qa_user -c "touch $SCRATCH_MNT/file1 $SCRATCH_MNT/file2"
+sleep 3
+# Extend grace to now + 100s
+now=`date +%s`
+let set=now+100
+$XFS_QUOTA_PROG -x -c "timer -u -i 100 $qa_user" $SCRATCH_MNT
+# XXX We use repquota because xfs_quota doesn't know how to return
+# raw ("since epoch") grace expiry
+get=`repquota -up $SCRATCH_MNT | grep  "^$qa_user" | awk '{print $NF}'`
+
+if [ "$get" != "$set" ]; then
+	echo "set grace to $set but got grace $get"
+fi
+
+# success, all done
+status=0
+exit
