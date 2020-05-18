@@ -1,0 +1,128 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 598
+#
+# Test protected_regular and protected_fifos sysctls
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	rm -rf $TEST_DIR/$seq
+	[ ! -z "$REGULAR_PROTECTION" ] \
+		&& sysctl -qw fs.protected_regular=$REGULAR_PROTECTION
+	[ ! -z "$FIFO_PROTECTION" ] \
+		&& sysctl -qw fs.protected_fifos=$FIFO_PROTECTION
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_supported_os Linux
+_require_test
+_require_sysctl_variable fs.protected_regular
+_require_sysctl_variable fs.protected_fifos
+# su in _require_user prints warnings about user name starts with a digit,
+# discard the warning
+_require_user 123456-fsgqa >/dev/null 2>&1
+# Do this SECOND so that qa_user is fsgqa, and _user_do uses that account
+_require_user fsgqa
+
+USER1=123456-fsgqa
+USER2=fsgqa
+
+# Save current system state to reset when done
+REGULAR_PROTECTION=`sysctl -n fs.protected_regular`
+FIFO_PROTECTION=`sysctl -n fs.protected_fifos`
+
+test_access()
+{
+	FILENAME=$1
+
+	# sticky dir is world & group writable:
+	echo "= group & world writable dir"
+	chmod og+w $TEST_DIR/$seq/sticky_dir
+	# "open -f" opens O_CREAT
+	_user_do "$XFS_IO_PROG -c \"open -f $TEST_DIR/$seq/sticky_dir/$FILENAME\""
+	# sticky dir is only group writable:
+	echo "= only group writable dir"
+	chmod o-w $TEST_DIR/$seq/sticky_dir
+	_user_do "$XFS_IO_PROG -c \"open -f $TEST_DIR/$seq/sticky_dir/$FILENAME\""
+}
+
+setup_tree()
+{
+	# Create sticky dir owned by $USER2
+	mkdir -p $TEST_DIR/$seq
+	mkdir -p $TEST_DIR/$seq/sticky_dir
+	chmod 1777 $TEST_DIR/$seq/sticky_dir
+	chown $USER2.$USER2 $TEST_DIR/$seq/sticky_dir
+
+	# Create file & fifo in that dir owned by $USER1, and open
+	# normal read/write privs for world & group
+	$XFS_IO_PROG -c "open -f $TEST_DIR/$seq/sticky_dir/file"
+	chown $USER1.$USER1 $TEST_DIR/$seq/sticky_dir/file
+	chmod o+rw $TEST_DIR/$seq/sticky_dir/file
+
+	mkfifo $TEST_DIR/$seq/sticky_dir/fifo
+	chown $USER1.$USER1 $TEST_DIR/$seq/sticky_dir/fifo
+	chmod o+rw $TEST_DIR/$seq/sticky_dir/fifo
+}
+
+setup_tree
+
+# First test fs.protected_regular
+# With protection set to 1, O_CREAT opens in a world-writable sticky
+# directory should fail if the file exists, is owned by another, and
+# file owner != dir owner
+#
+# With protection set to 2, the same goes for group-writable
+# sticky directories
+
+echo "== Test file open when owned by another and file owner != dir owner"
+sysctl -w fs.protected_regular=0
+test_access file
+sysctl -w fs.protected_regular=1
+test_access file
+sysctl -w fs.protected_regular=2
+test_access file
+
+echo
+
+# Now test fs.protected_fifos
+# With protection set to 1, O_CREAT opens in a world-writable sticky
+# directory should fail if the fifo exists, is owned by another, and
+# file owner != dir owner
+#
+# With protection set to 2, the same goes for group-writable
+# sticky directories
+echo "== Test fifo open when owned by another and fifo owner != dir owner"
+sysctl -w fs.protected_fifos=0
+test_access fifo
+sysctl -w fs.protected_fifos=1
+test_access fifo
+sysctl -w fs.protected_fifos=2
+test_access fifo
+
+# success, all done
+status=0
+exit
