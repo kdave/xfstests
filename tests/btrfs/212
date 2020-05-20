@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 212
+#
+# Test if unmounting a fs with balance canceled can lead to crash.
+# This needs CONFIG_BTRFS_DEBUG compiled, which adds extra unmount time self-test
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	kill $balance_pid &> /dev/null
+	kill $cancel_pid &> /dev/null
+	"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
+	$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+	wait
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_command "$KILLALL_PROG" killall
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+runtime=15
+
+balance_workload()
+{
+	trap "wait; exit" SIGTERM
+	while true; do
+		_run_btrfs_balance_start &> /dev/null
+	done
+}
+
+cancel_workload()
+{
+	trap "wait; exit" SIGTERM
+	while true; do
+		$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+		sleep 2
+	done
+}
+
+$FSSTRESS_PROG -d $SCRATCH_MNT -w -n 100000  >> $seqres.full 2>/dev/null &
+balance_workload &
+balance_pid=$!
+
+cancel_workload &
+cancel_pid=$!
+
+sleep $runtime
+
+kill $balance_pid
+kill $cancel_pid
+"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
+$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+wait
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
