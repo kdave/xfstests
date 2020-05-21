@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 213
+#
+# Test if canceling a running balance can lead to dead looping balance
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	kill $write_pid &> /dev/null
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_scratch
+_require_xfs_io_command pwrite -D
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+runtime=4
+
+# Create enough IO so that we need around $runtime seconds to relocate it.
+#
+# Here we don't want any wrapper, as we want full control of the process.
+$XFS_IO_PROG -f -c "pwrite -D -b 1M 0 1024T" "$SCRATCH_MNT/file" &> /dev/null &
+write_pid=$!
+sleep $runtime
+kill $write_pid
+wait $write_pid
+
+# Now balance should take at least $runtime seconds, we can cancel it at
+# $runtime/2 to ensure a success cancel.
+_run_btrfs_balance_start -d --bg "$SCRATCH_MNT"
+sleep $(($runtime / 2))
+$BTRFS_UTIL_PROG balance cancel "$SCRATCH_MNT"
+
+# Now check if we can finish relocating metadata, which should finish very
+# quickly.
+$BTRFS_UTIL_PROG balance start -m "$SCRATCH_MNT" >> $seqres.full
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
