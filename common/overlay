@@ -363,3 +363,57 @@ _repair_overlay_scratch_fs()
 	esac
 	return $res
 }
+
+# This test requires that unionmount testsuite is installed at
+# $UNIONMOUNT_TESTSUITE and that it supports configuring layers and overlay
+# mount paths via UNIONMOUNT_* environment variables.
+_require_unionmount_testsuite()
+{
+	[ -x "$UNIONMOUNT_TESTSUITE/run" ] || \
+		_notrun "unionmount testsuite required."
+
+	# Verify that UNIONMOUNT_* vars are supported
+	local usage=`UNIONMOUNT_BASEDIR=_ "$UNIONMOUNT_TESTSUITE/run" 2>&1`
+	echo $usage | grep -wq "UNIONMOUNT_BASEDIR" || \
+		_notrun "newer version of unionmount testsuite required."
+}
+
+_unionmount_testsuite_run()
+{
+	[ "$FSTYP" = overlay ] || \
+		_notrun "Filesystem $FSTYP not supported with unionmount testsuite."
+
+	# Provide the mounted base fs for upper and lower dirs and the
+	# overlay mount point.
+	# unionmount testsuite will perform the overlay mount.
+	# test fs is used for lower layer in non-samefs runs.
+	# scratch fs is used for upper layer in non-samefs runs and
+	# for both layers in samefs runs.
+	if (echo $* | grep -qv samefs) ; then
+		_overlay_base_test_mount
+		export UNIONMOUNT_LOWERDIR=$OVL_BASE_TEST_DIR/union
+	fi
+	export UNIONMOUNT_BASEDIR=$OVL_BASE_SCRATCH_MNT/union
+
+	_scratch_mkfs
+	rm -rf $UNIONMOUNT_BASEDIR $UNIONMOUNT_LOWERDIR
+	mkdir -p $UNIONMOUNT_BASEDIR $UNIONMOUNT_LOWERDIR
+
+	cd $UNIONMOUNT_TESTSUITE
+	echo "run $* ..." > $seqres.full
+	./run $* >> $seqres.full || \
+		echo "unionmount testsuite failed! see $seqres.full for details."
+}
+
+_unionmount_testsuite_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+
+	[ -n "$UNIONMOUNT_BASEDIR" ] || return 0
+
+	# Cleanup overlay mount after unionmount testsuite run
+	cd $UNIONMOUNT_TESTSUITE
+	echo "run --clean-up ..." >> $seqres.full
+	./run --clean-up >> $seqres.full 2>&1
+}
