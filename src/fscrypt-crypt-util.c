@@ -63,10 +63,14 @@ static void usage(FILE *fp)
 "  --decrypt                   Decrypt instead of encrypt\n"
 "  --file-nonce=NONCE          File's nonce as a 32-character hex string\n"
 "  --fs-uuid=UUID              The filesystem UUID as a 32-character hex string.\n"
-"                                Only required for --iv-ino-lblk-64.\n"
+"                                Required for --iv-ino-lblk-32 and\n"
+"                                --iv-ino-lblk-64; otherwise is unused.\n"
 "  --help                      Show this help\n"
-"  --inode-number=INUM         The file's inode number.  Only required for\n"
-"                                --iv-ino-lblk-64.\n"
+"  --inode-number=INUM         The file's inode number.  Required for\n"
+"                                --iv-ino-lblk-32 and --iv-ino-lblk-64;\n"
+"                                otherwise is unused.\n"
+"  --iv-ino-lblk-32            Similar to --iv-ino-lblk-64, but selects the\n"
+"                                32-bit variant.\n"
 "  --iv-ino-lblk-64            Use the format where the IVs include the inode\n"
 "                                number and the same key is shared across files.\n"
 "                                Requires --kdf=HKDF-SHA512, --fs-uuid,\n"
@@ -141,6 +145,11 @@ static inline u32 rol32(u32 v, int n)
 static inline u32 ror32(u32 v, int n)
 {
 	return (v >> n) | (v << (32 - n));
+}
+
+static inline u64 rol64(u64 v, int n)
+{
+	return (v << n) | (v >> (64 - n));
 }
 
 static inline u64 ror64(u64 v, int n)
@@ -1580,6 +1589,50 @@ static void test_adiantum(void)
 #endif /* ENABLE_ALG_TESTS */
 
 /*----------------------------------------------------------------------------*
+ *                               SipHash-2-4                                  *
+ *----------------------------------------------------------------------------*/
+
+/*
+ * Reference: "SipHash: a fast short-input PRF"
+ *	https://cr.yp.to/siphash/siphash-20120918.pdf
+ */
+
+#define SIPROUND						\
+	do {							\
+		v0 += v1;	    v2 += v3;			\
+		v1 = rol64(v1, 13); v3 = rol64(v3, 16);		\
+		v1 ^= v0;	    v3 ^= v2;			\
+		v0 = rol64(v0, 32);				\
+		v2 += v1;	    v0 += v3;			\
+		v1 = rol64(v1, 17); v3 = rol64(v3, 21);		\
+		v1 ^= v2;	    v3 ^= v0;			\
+		v2 = rol64(v2, 32);				\
+	} while (0)
+
+/* Compute the SipHash-2-4 of a 64-bit number when formatted as little endian */
+static u64 siphash_1u64(const u64 key[2], u64 data)
+{
+	u64 v0 = key[0] ^ 0x736f6d6570736575ULL;
+	u64 v1 = key[1] ^ 0x646f72616e646f6dULL;
+	u64 v2 = key[0] ^ 0x6c7967656e657261ULL;
+	u64 v3 = key[1] ^ 0x7465646279746573ULL;
+	u64 m[2] = {data, (u64)sizeof(data) << 56};
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(m); i++) {
+		v3 ^= m[i];
+		SIPROUND;
+		SIPROUND;
+		v0 ^= m[i];
+	}
+
+	v2 ^= 0xff;
+	for (i = 0; i < 4; i++)
+		SIPROUND;
+	return v0 ^ v1 ^ v2 ^ v3;
+}
+
+/*----------------------------------------------------------------------------*
  *                               Main program                                 *
  *----------------------------------------------------------------------------*/
 
@@ -1723,15 +1776,39 @@ struct key_and_iv_params {
 	u8 file_nonce[FILE_NONCE_SIZE];
 	bool file_nonce_specified;
 	bool iv_ino_lblk_64;
+	bool iv_ino_lblk_32;
 	u32 inode_number;
 	u8 fs_uuid[UUID_SIZE];
 	bool fs_uuid_specified;
 };
 
 #define HKDF_CONTEXT_KEY_IDENTIFIER	1
-#define HKDF_CONTEXT_PER_FILE_KEY	2
+#define HKDF_CONTEXT_PER_FILE_ENC_KEY	2
 #define HKDF_CONTEXT_DIRECT_KEY		3
 #define HKDF_CONTEXT_IV_INO_LBLK_64_KEY	4
+#define HKDF_CONTEXT_DIRHASH_KEY	5
+#define HKDF_CONTEXT_IV_INO_LBLK_32_KEY	6
+#define HKDF_CONTEXT_INODE_HASH_KEY	7
+
+/* Hash the file's inode number using SipHash keyed by a derived key */
+static u32 hash_inode_number(const struct key_and_iv_params *params)
+{
+	u8 info[9] = "fscrypt";
+	union {
+		u64 words[2];
+		u8 bytes[16];
+	} hash_key;
+
+	info[8] = HKDF_CONTEXT_INODE_HASH_KEY;
+	hkdf_sha512(params->master_key, params->master_key_size,
+		    NULL, 0, info, sizeof(info),
+		    hash_key.bytes, sizeof(hash_key));
+
+	hash_key.words[0] = get_unaligned_le64(&hash_key.bytes[0]);
+	hash_key.words[1] = get_unaligned_le64(&hash_key.bytes[8]);
+
+	return (u32)siphash_1u64(hash_key.words, params->inode_number);
+}
 
 /*
  * Get the key and starting IV with which the encryption will actually be done.
@@ -1752,8 +1829,20 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 
 	memset(iv, 0, sizeof(*iv));
 
-	if (params->iv_ino_lblk_64 && params->kdf != KDF_HKDF_SHA512)
-		die("--iv-ino-lblk-64 requires --kdf=HKDF-SHA512");
+	if (params->iv_ino_lblk_64 || params->iv_ino_lblk_32) {
+		const char *opt = params->iv_ino_lblk_64 ? "--iv-ino-lblk-64" :
+							   "--iv-ino-lblk-32";
+		if (params->iv_ino_lblk_64 && params->iv_ino_lblk_32)
+			die("--iv-ino-lblk-64 and --iv-ino-lblk-32 are mutually exclusive");
+		if (params->kdf != KDF_HKDF_SHA512)
+			die("%s requires --kdf=HKDF-SHA512", opt);
+		if (!params->fs_uuid_specified)
+			die("%s requires --fs-uuid", opt);
+		if (params->inode_number == 0)
+			die("%s requires --inode-number", opt);
+		if (params->mode_num == 0)
+			die("%s requires --mode-num", opt);
+	}
 
 	switch (params->kdf) {
 	case KDF_NONE:
@@ -1776,23 +1865,24 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 		break;
 	case KDF_HKDF_SHA512:
 		if (params->iv_ino_lblk_64) {
-			if (!params->fs_uuid_specified)
-				die("--iv-ino-lblk-64 requires --fs-uuid");
-			if (params->inode_number == 0)
-				die("--iv-ino-lblk-64 requires --inode-number");
-			if (params->mode_num == 0)
-				die("--iv-ino-lblk-64 requires --mode-num");
 			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_64_KEY;
 			info[infolen++] = params->mode_num;
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
 			infolen += UUID_SIZE;
 			put_unaligned_le32(params->inode_number, &iv->bytes[4]);
+		} else if (params->iv_ino_lblk_32) {
+			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_32_KEY;
+			info[infolen++] = params->mode_num;
+			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
+			infolen += UUID_SIZE;
+			put_unaligned_le32(hash_inode_number(params),
+					   iv->bytes);
 		} else if (params->mode_num != 0) {
 			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
 			info[infolen++] = params->mode_num;
 			file_nonce_in_iv = true;
 		} else if (params->file_nonce_specified) {
-			info[infolen++] = HKDF_CONTEXT_PER_FILE_KEY;
+			info[infolen++] = HKDF_CONTEXT_PER_FILE_ENC_KEY;
 			memcpy(&info[infolen], params->file_nonce,
 			       FILE_NONCE_SIZE);
 			infolen += FILE_NONCE_SIZE;
@@ -1817,6 +1907,7 @@ enum {
 	OPT_FS_UUID,
 	OPT_HELP,
 	OPT_INODE_NUMBER,
+	OPT_IV_INO_LBLK_32,
 	OPT_IV_INO_LBLK_64,
 	OPT_KDF,
 	OPT_MODE_NUM,
@@ -1830,6 +1921,7 @@ static const struct option longopts[] = {
 	{ "fs-uuid",         required_argument, NULL, OPT_FS_UUID },
 	{ "help",            no_argument,       NULL, OPT_HELP },
 	{ "inode-number",    required_argument, NULL, OPT_INODE_NUMBER },
+	{ "iv-ino-lblk-32",  no_argument,       NULL, OPT_IV_INO_LBLK_32 },
 	{ "iv-ino-lblk-64",  no_argument,       NULL, OPT_IV_INO_LBLK_64 },
 	{ "kdf",             required_argument, NULL, OPT_KDF },
 	{ "mode-num",        required_argument, NULL, OPT_MODE_NUM },
@@ -1889,6 +1981,9 @@ int main(int argc, char *argv[])
 			return 0;
 		case OPT_INODE_NUMBER:
 			params.inode_number = parse_inode_number(optarg);
+			break;
+		case OPT_IV_INO_LBLK_32:
+			params.iv_ino_lblk_32 = true;
 			break;
 		case OPT_IV_INO_LBLK_64:
 			params.iv_ino_lblk_64 = true;

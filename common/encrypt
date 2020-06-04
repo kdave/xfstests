@@ -97,7 +97,8 @@ _require_encryption_policy_support()
 	echo "Checking whether kernel supports encryption policy: $set_encpolicy_args" \
 		>> $seqres.full
 
-	if (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 )); then
+	if (( policy_flags & (FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 |
+			      FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) )); then
 		_scratch_unmount
 		_scratch_mkfs_stable_inodes_encrypted &>> $seqres.full
 		_scratch_mount
@@ -769,6 +770,7 @@ FSCRYPT_MODE_ADIANTUM=9
 
 FSCRYPT_POLICY_FLAG_DIRECT_KEY=0x04
 FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64=0x08
+FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32=0x10
 
 FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR=1
 FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER=2
@@ -797,6 +799,7 @@ _fscrypt_mode_name_to_num()
 #	'v2':			test a v2 encryption policy
 #	'direct':		test the DIRECT_KEY policy flag
 #	'iv_ino_lblk_64':	test the IV_INO_LBLK_64 policy flag
+#	'iv_ino_lblk_32':	test the IV_INO_LBLK_32 policy flag
 #
 _verify_ciphertext_for_encryption_policy()
 {
@@ -826,6 +829,9 @@ _verify_ciphertext_for_encryption_policy()
 		iv_ino_lblk_64)
 			(( policy_flags |= FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 ))
 			;;
+		iv_ino_lblk_32)
+			(( policy_flags |= FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32 ))
+			;;
 		*)
 			_fail "Unknown option '$opt' passed to ${FUNCNAME[0]}"
 			;;
@@ -841,12 +847,13 @@ _verify_ciphertext_for_encryption_policy()
 		set_encpolicy_args+=" -v 2"
 		crypt_util_args+=" --kdf=HKDF-SHA512"
 		if (( policy_flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
-			if (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 )); then
-				_fail "'direct' and 'iv_ino_lblk_64' options are mutually exclusive"
-			fi
 			crypt_util_args+=" --mode-num=$contents_mode_num"
 		elif (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 )); then
 			crypt_util_args+=" --iv-ino-lblk-64"
+			crypt_util_contents_args+=" --mode-num=$contents_mode_num"
+			crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
+		elif (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32 )); then
+			crypt_util_args+=" --iv-ino-lblk-32"
 			crypt_util_contents_args+=" --mode-num=$contents_mode_num"
 			crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
 		fi
@@ -872,7 +879,8 @@ _verify_ciphertext_for_encryption_policy()
 	fi
 
 	echo "Creating encryption-capable filesystem" >> $seqres.full
-	if (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 )); then
+	if (( policy_flags & (FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 |
+			      FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) )); then
 		_scratch_mkfs_stable_inodes_encrypted &>> $seqres.full
 	else
 		_scratch_mkfs_encrypted &>> $seqres.full
