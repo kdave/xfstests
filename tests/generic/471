@@ -37,6 +37,17 @@ fi
 
 mkdir $testdir
 
+# Btrfs is a COW filesystem, so a RWF_NOWAIT write will always fail with -EAGAIN
+# when writing to a file range except if it's a NOCOW file and an extent for the
+# range already exists or if it's a COW file and preallocated/unwritten extent
+# exists in the target range. So to make sure that the last write succeeds on
+# all filesystems, use a NOCOW file on btrfs.
+if [ $FSTYP == "btrfs" ]; then
+	_require_chattr C
+	touch $testdir/f1
+	$CHATTR_PROG +C $testdir/f1
+fi
+
 # Create a file with pwrite nowait (will fail with EAGAIN)
 $XFS_IO_PROG -f -d -c "pwrite -N -V 1 -b 1M 0 1M" $testdir/f1
 
