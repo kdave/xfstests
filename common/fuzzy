@@ -14,6 +14,8 @@ _scratch_fuzz_modify() {
 	$XFS_IO_PROG -f -c "pwrite -S 0x63 0 ${blk_sz}" "/tmp/afile" > /dev/null
 	date="$(date)"
 	find "${SCRATCH_MNT}/" -type f 2> /dev/null | head -n "${nr}" | while read f; do
+		# try to remove append, immutable (and even dax) flag if exists
+		$XFS_IO_PROG -rc 'chattr -x -i -a' "$f" > /dev/null 2>&1
 		setfattr -n "user.date" -v "${date}" "$f"
 		cat "/tmp/afile" >> "$f"
 		mv "$f" "$f.longer"
