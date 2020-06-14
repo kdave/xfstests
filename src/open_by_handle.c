@@ -114,6 +114,7 @@ void usage(void)
 	fprintf(stderr, "open_by_handle -i <handles_file> <test_dir> [N] - read test files handles from file and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -o <handles_file> <test_dir> [N] - get file handles of test files and write handles to file\n");
 	fprintf(stderr, "open_by_handle -s <test_dir> [N] - wait in sleep loop after opening files by handle to keep them open\n");
+	fprintf(stderr, "open_by_handle -z <test_dir> [N] - query filesystem required buffer size\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -136,11 +137,12 @@ int main(int argc, char **argv)
 	int	create = 0, delete = 0, nlink = 1, move = 0;
 	int	rd = 0, wr = 0, wrafter = 0, parent = 0;
 	int	keepopen = 0, drop_caches = 1, sleep_loop = 0;
+	int	bufsz = MAX_HANDLE_SZ;
 
 	if (argc < 2)
 		usage();
 
-	while ((c = getopt(argc, argv, "cludmrwapknhi:o:s")) != -1) {
+	while ((c = getopt(argc, argv, "cludmrwapknhi:o:sz")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
@@ -198,6 +200,9 @@ int main(int argc, char **argv)
 			break;
 		case 's':
 			sleep_loop = 1;
+			break;
+		case 'z':
+			bufsz = 0;
 			break;
 		default:
 			fprintf(stderr, "illegal option '%s'\n", argv[optind]);
@@ -300,8 +305,16 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			handle[i].fh.handle_bytes = MAX_HANDLE_SZ;
+			handle[i].fh.handle_bytes = bufsz;
 			ret = name_to_handle_at(AT_FDCWD, fname, &handle[i].fh, &mount_id, 0);
+			if (bufsz < handle[i].fh.handle_bytes) {
+				/* Query the filesystem required bufsz and the file handle */
+				if (ret != -1 || errno != EOVERFLOW) {
+					fprintf(stderr, "Unexpected result from name_to_handle_at(%s)\n", fname);
+					return EXIT_FAILURE;
+				}
+				ret = name_to_handle_at(AT_FDCWD, fname, &handle[i].fh, &mount_id, 0);
+			}
 			if (ret < 0) {
 				strcat(fname, ": name_to_handle");
 				perror(fname);
@@ -334,8 +347,16 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			dir_handle.fh.handle_bytes = MAX_HANDLE_SZ;
+			dir_handle.fh.handle_bytes = bufsz;
 			ret = name_to_handle_at(AT_FDCWD, test_dir, &dir_handle.fh, &mount_id, 0);
+			if (bufsz < dir_handle.fh.handle_bytes) {
+				/* Query the filesystem required bufsz and the file handle */
+				if (ret != -1 || errno != EOVERFLOW) {
+					fprintf(stderr, "Unexpected result from name_to_handle_at(%s)\n", dname);
+					return EXIT_FAILURE;
+				}
+				ret = name_to_handle_at(AT_FDCWD, test_dir, &dir_handle.fh, &mount_id, 0);
+			}
 			if (ret < 0) {
 				strcat(dname, ": name_to_handle");
 				perror(dname);
