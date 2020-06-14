@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test No. 074
+#
+# Test two overlayfs file handle bugs:
+# 1. Failure to query file handle size
+#    Fixed by kernel commit 144da23beab8:
+#        ovl: return required buffer size for file handles
+#
+# 2. Kernel OOPS on open by hand crafted malformed file handle
+#    Fixed by kernel commit 9aafc1b01873:
+#        ovl: potential crash in ovl_fid_to_fh()
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs overlay
+_supported_os Linux
+_require_scratch
+_require_test_program "open_by_handle"
+# We need to require all features together, because nfs_export cannot
+# be enabled when index is disabled
+_require_scratch_overlay_features index nfs_export
+
+rm -f $seqres.full
+
+_scratch_mkfs
+_scratch_mount -o "index=on,nfs_export=on"
+
+testdir=$SCRATCH_MNT/testdir
+
+# Create directory with test file
+$here/src/open_by_handle -cp $testdir
+
+# Test query file handle size on dir and file
+$here/src/open_by_handle -pz $testdir
+
+# Export file handle into tmp file
+$here/src/open_by_handle -o $tmp.file_handle $testdir
+
+# Verify open by exported file handle
+$here/src/open_by_handle -i $tmp.file_handle $testdir
+
+# Mangle the exported file handle:
+# handle_bytes = 1
+# handle_type = OVL_FILEID_V0 (0xfb)
+# File handle is encoded in host order
+# The command below crafts this header for little endian.
+# On different big endian architectures the file handle will still
+# be malformed just not with the specific values to trigger the bug
+cp $tmp.file_handle $tmp.file_handle_v0
+$XFS_IO_PROG -c "pwrite -S 0 0 8" -c "pwrite -S 1 0 1" -c "pwrite -S 0xfb 4 1" \
+	$tmp.file_handle_v0 >> $seqres.full
+
+# Craft malformed v1 file handle:
+# handle_bytes = 1
+# handle_type = OVL_FILEID_V1 (0xf8)
+cp $tmp.file_handle $tmp.file_handle_v1
+$XFS_IO_PROG -c "pwrite -S 0 0 8" -c "pwrite -S 1 0 1" -c "pwrite -S 0xf8 4 1" \
+	$tmp.file_handle_v1 >> $seqres.full
+
+# Verify failure to open by mangled file handles
+# This will trigger NULL pointer dereference on affected kernels
+$here/src/open_by_handle -i $tmp.file_handle_v0 $testdir >> $seqres.full 2>&1 && \
+	_fail "open by mangaled file handle (v0) is expected to fail"
+# This may trigger out of bound access warning on affected kernels
+$here/src/open_by_handle -i $tmp.file_handle_v1 $testdir >> $seqres.full 2>&1 && \
+	_fail "open by mangaled file handle (v1) is expected to fail"
+
+echo "Silence is golden"
+status=0
+exit
