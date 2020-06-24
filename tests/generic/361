@@ -54,6 +54,11 @@ mkdir -p $fs_mnt
 loop_dev=$(_create_loop_device $fs_img)
 _mkfs_dev $loop_dev
 _mount $loop_dev $fs_mnt
+if [ "$FSTYP" = "xfs" ]; then
+	# Turn off all XFS metadata IO error retries
+	dname=$(_short_dev $loop_dev)
+	echo 0 | tee /sys/fs/xfs/$dname/error/*/*/* > /dev/null
+fi
 $XFS_IO_PROG -fc "pwrite 0 520m" $fs_mnt/testfile >>$seqres.full 2>&1
 
 # remount should not hang
