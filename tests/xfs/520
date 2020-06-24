@@ -1,0 +1,86 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 520
+#
+# Verify kernel doesn't hang when mounting a crafted image
+# with bad agf.freeblks metadata due to CVE-2020-12655.
+#
+# Also, check if
+# commit d0c7feaf8767 ("xfs: add agf freeblocks verify in xfs_agf_verify")
+# is included in the current kernel.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_scratch_unmount > /dev/null 2>&1
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs xfs
+_supported_os Linux
+_disable_dmesg_check
+_require_check_dmesg
+_require_scratch_nocheck
+
+force_crafted_metadata() {
+	_scratch_mkfs_xfs -f $fsdsopt "$4" >> $seqres.full 2>&1 || _fail "mkfs failed"
+	_scratch_xfs_set_metadata_field "$1" "$2" "$3" >> $seqres.full 2>&1
+	local kmsg="xfs/$seq: testing $1=$2 at $(date +"%F %T")"
+	local mounted=0
+	local hasmsg=0
+
+	echo "${kmsg}" > /dev/kmsg
+	_try_scratch_mount >> $seqres.full 2>&1 && mounted=1
+
+	if [ $mounted -ne 0 ]; then
+		dd if=/dev/zero of=$SCRATCH_MNT/test bs=65536 count=1 >> \
+			$seqres.full 2>&1
+		sync
+	fi
+
+	_dmesg_since_test_start | tac | sed -ne "0,\#${kmsg}#p" | tac | \
+		egrep -q 'Metadata corruption detected at' && hasmsg=1
+
+	_scratch_unmount > /dev/null 2>&1
+	[ $mounted -eq 0 -o $hasmsg -eq 1 ] || \
+		_fail "potential broken kernel (mounted=${mounted},hasmsg=${hasmsg})"
+}
+
+bigval=100000000
+fsdsopt="-d agcount=1,size=64m"
+
+force_crafted_metadata freeblks 0 "agf 0"
+force_crafted_metadata longest $bigval "agf 0"
+force_crafted_metadata length $bigval "agf 0"
+
+_scratch_mkfs_xfs_supported -m reflink=1 >> $seqres.full 2>&1 && \
+	force_crafted_metadata refcntblocks $bigval "agf 0" "-m reflink=1"
+
+_scratch_mkfs_xfs_supported -m rmapbt=1 >> $seqres.full 2>&1 && \
+	force_crafted_metadata rmapblocks $bigval "agf 0" "-m rmapbt=1"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
