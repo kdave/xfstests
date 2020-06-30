@@ -22,6 +22,8 @@ _cleanup()
 	cd /
 }
 
+rm -f $seqres.full
+
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/fuzzy
@@ -60,7 +62,8 @@ __test_mount_opts()
 	else
 		echo "mount failed" >> $seqres.full
 	fi
-	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
+	_scratch_xfs_get_sb_field unit >> $seqres.full
+	_scratch_xfs_get_sb_field width  >> $seqres.full
 
 	# Run xfs_repair in repair mode to see if it can be baited into nuking
 	# the root filesystem on account of the sunit update.
@@ -119,9 +122,12 @@ test_repair_detection()
 	fi
 
 	# Update the superblock like the kernel used to do.
-	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
-	_scratch_xfs_db -x -c 'sb 0' -c 'write -d unit 256' -c 'write -d width 1024' >> $seqres.full
-	_scratch_xfs_db -c 'sb 0' -c 'p unit width' >> $seqres.full
+	_scratch_xfs_get_sb_field unit >> $seqres.full
+	_scratch_xfs_get_sb_field width >> $seqres.full
+	_scratch_xfs_set_sb_field unit 256 >> $seqres.full
+	_scratch_xfs_set_sb_field width 1024 >> $seqres.full
+	_scratch_xfs_get_sb_field unit >> $seqres.full
+	_scratch_xfs_get_sb_field width >> $seqres.full
 
 	# Run xfs_repair in repair mode to see if it can be baited into nuking
 	# the root filesystem on account of the sunit update.
