@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 215
+#
+# Test that reading corrupted files would correctly increment device status
+# counters. This is fixed by the following linux kernel commit:
+# btrfs: Increment device corruption error in case of checksum error
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+get_physical()
+{
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 3 $SCRATCH_DEV | \
+		grep $1 -A2 | \
+		$AWK_PROG "(\$1 ~ /stripe/ && \$3 ~ /devid/ && \$2 ~ /0/) { print \$6 }"
+}
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+
+_scratch_mkfs > /dev/null
+# disable freespace inode to ensure file is the first thing in the data
+# blobk group
+_scratch_mount -o nospace_cache
+
+blocksize=$(_get_block_size $SCRATCH_MNT)
+filesize=$((8*$blocksize))
+uuid=$(findmnt -n -o UUID "$SCRATCH_MNT")
+
+if [ ! -e /sys/fs/btrfs/$uuid/bdi ]; then
+	_notrun "bdi link not found"
+fi
+
+#create an 8 block file
+$XFS_IO_PROG -d -f -c "pwrite -S 0xbb -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null
+
+logical_extent=$($FILEFRAG_PROG -v "$SCRATCH_MNT/foobar" | _filter_filefrag | cut -d '#' -f 1)
+physical_extent=$(get_physical $logical_extent)
+
+echo "logical = $logical_extent physical=$physical_extent" >> $seqres.full
+
+# corrupt first 4 blocks of file
+_scratch_unmount
+$XFS_IO_PROG -d -c "pwrite -S 0xaa -b $blocksize $physical_extent $((4*$blocksize))" $SCRATCH_DEV > /dev/null
+_scratch_mount
+
+# disable readahead to avoid skewing the counter
+echo 0 > /sys/fs/btrfs/$uuid/bdi/read_ahead_kb
+
+# buffered reads whould result in a single error since the read is done
+# page by page
+$XFS_IO_PROG -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
+errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
+if [ $errs -ne 1 ]; then
+	_fail "Errors: $errs expected: 1"
+fi
+
+# DIO does check every sector
+$XFS_IO_PROG -d -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
+errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
+if [ $errs -ne 5 ]; then
+	_fail "Errors: $errs expected: 1"
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
