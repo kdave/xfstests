@@ -26,6 +26,7 @@ subdir_xfile=""
 brief_test_summary=false
 do_report=false
 DUMP_OUTPUT=false
+iterations=1
 
 # This is a global variable used to pass test failure text to reporting gunk
 _err_msg=""
@@ -66,6 +67,7 @@ check options
     -n			show me, do not run tests
     -T			output timestamps
     -r			randomize test order
+    -i <n>		iterate the test list <n> times
     -d			dump test output to stdout
     -b			brief test summary
     -R fmt[,fmt]	generate report in formats specified. Supported format: [xunit]
@@ -297,7 +299,7 @@ while [ $# -gt 0 ]; do
 
 	-n)	showme=true ;;
         -r)	randomize=true ;;
-
+	-i)	iterations=$2; shift ;;
 	-T)	timestamp=true ;;
 	-d)	DUMP_OUTPUT=true ;;
 	-b)	brief_test_summary=true;;
@@ -525,7 +527,10 @@ else
 	trap "_wrapup; exit \$status" 0 1 2 3 15
 fi
 
-for section in $HOST_OPTIONS_SECTIONS; do
+function run_section()
+{
+	local section=$1
+
 	OLD_FSTYP=$FSTYP
 	OLD_TEST_FS_MOUNT_OPTS=$TEST_FS_MOUNT_OPTS
 	get_next_config $section
@@ -540,7 +545,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			fi
 		done
 		if $skip; then
-			continue
+			return
 		fi
 	fi
 
@@ -554,7 +559,7 @@ for section in $HOST_OPTIONS_SECTIONS; do
 			fi
 		done
 		if $skip; then
-			continue
+			return
 		fi
 	fi
 
@@ -700,6 +705,8 @@ for section in $HOST_OPTIONS_SECTIONS; do
 		seqres="$REPORT_DIR/$seqnum"
 
 		mkdir -p $RESULT_DIR
+		rm -f ${RESULT_DIR}/require_scratch*
+		rm -f ${RESULT_DIR}/require_test*
 		echo -n "$seqnum"
 
 		if $showme; then
@@ -858,6 +865,12 @@ for section in $HOST_OPTIONS_SECTIONS; do
 
 	_test_unmount 2> /dev/null
 	_scratch_unmount 2> /dev/null
+}
+
+for ((iters = 0; iters < $iterations; iters++)) do
+	for section in $HOST_OPTIONS_SECTIONS; do
+		run_section $section
+	done
 done
 
 interrupt=false
