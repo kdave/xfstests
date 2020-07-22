@@ -42,14 +42,16 @@ _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
 _mount_flakey
 
-$XFS_IO_PROG -f -c "pwrite -S 0x18 9000K 6908K" $SCRATCH_MNT/foo >>$seqres.full
-$XFS_IO_PROG -f -c "pwrite -S 0x20 2572K 156K" $SCRATCH_MNT/bar >>$seqres.full
+# Use file sizes and offsets/lengths for the clone operation that are multiples
+# of 64Kb, so that the test works on machine with any page size.
+$XFS_IO_PROG -f -s -c "pwrite -S 0x18 0 2M" $SCRATCH_MNT/foo >>$seqres.full
+$XFS_IO_PROG -f -s -c "pwrite -S 0x20 0 20M" $SCRATCH_MNT/bar >>$seqres.full
 
 # We clone from file foo into a range of file bar that overlaps the existing
-# extent at file bar. The destination offset of the reflink operation matches
-# the eof position of file bar minus 4Kb.
-$XFS_IO_PROG -c "fsync" \
-	     -c "reflink ${SCRATCH_MNT}/foo 0 2724K 15908K" \
+# extent at file bar. The clone operation must also extend the size of file bar.
+# Note: in order to trigger the original bug on btrfs, the destination file size
+# must be at least 16Mb and the destination file must have been fsynced before.
+$XFS_IO_PROG -c "reflink ${SCRATCH_MNT}/foo 0 19M 2M" \
 	     -c "fsync" \
 	     $SCRATCH_MNT/bar >>$seqres.full
 
