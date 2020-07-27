@@ -1,0 +1,139 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2009 Christoph Hellwig.
+# Copyright (c) 2020 Lukas Czerner.
+#
+# FS QA Test No. 002
+#
+# Copied from tests generic/050 and adjusted to support testing
+# read-only external journal device on ext4.
+#
+# Check out various mount/remount/unmount scenarious on a read-only
+# logdev blockdev.
+#
+# This problem has been addressed with proposed kernel patch
+# https://lore.kernel.org/linux-ext4/20200717090605.2612-1-lczerner@redhat.com/
+#
+seqfull=$0
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	cd /
+	blockdev --setrw $SCRATCH_LOGDEV
+	blockdev --setrw $SCRATCH_DEV
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext4 ext3
+_supported_os Linux
+
+_require_scratch_nocheck
+_require_scratch_shutdown
+_require_logdev
+_require_local_device $SCRATCH_DEV
+_require_local_device $SCRATCH_LOGDEV
+_require_norecovery
+
+_scratch_mkfs >/dev/null 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+
+#
+# Mark the log device read-only
+#
+echo "setting log device read-only"
+blockdev --setro $SCRATCH_LOGDEV
+
+#
+# Mount it, and make sure we can't write to it, and we can unmount it again
+#
+echo "mounting with read-only log device:"
+_try_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
+if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+	echo "touching file on read-only filesystem (should fail)"
+	touch $SCRATCH_MNT/foo 2>&1 | _filter_scratch
+fi
+
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+
+echo "setting log device read-write"
+blockdev --setrw $SCRATCH_LOGDEV
+
+echo "mounting with read-write log device:"
+_try_scratch_mount 2>&1 | _filter_scratch
+
+echo "touch files"
+touch $SCRATCH_MNT/{0,1,2,3,4,5,6,7,8,9}{0,1,2,3,4,5,6,7,8,9}
+
+echo "going down:"
+_scratch_shutdown -f
+
+echo "unmounting shutdown filesystem:"
+_scratch_unmount 2>&1 | _filter_scratch
+
+echo "setting log device read-only"
+blockdev --setro $SCRATCH_LOGDEV
+
+#
+# Mounting a filesystem that requires log-recovery fails even with
+# -o norecovery unless the fs device is read only or it's mounted
+# read only
+#
+echo "mounting filesystem that needs recovery with a read-only log device:"
+_try_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
+
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+
+
+echo "mounting filesystem with -o norecovery with a read-only log device:"
+_try_scratch_mount -o norecovery 2>&1 | _filter_ro_mount | _filter_scratch
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+
+#
+# This is the way out if the log device really is read-only.
+# Doesn't mean it's a good idea in practice, more a last resort
+# data recovery hack. Either the underlying fs device needs
+# to be read only as well, or we mount the file system read only
+#
+echo "setting fs device read-only"
+blockdev --setro $SCRATCH_DEV
+echo "mounting filesystem with -o norecovery with a read-only fs and log device:"
+_try_scratch_mount -o norecovery 2>&1 | _filter_ro_mount | _filter_scratch
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+echo "setting fs device read-write"
+blockdev --setrw $SCRATCH_DEV
+
+echo "mounting filesystem with -o norecovery,ro with a read-only log device:"
+_try_scratch_mount -o norecovery,ro 2>&1 | _filter_ro_mount | _filter_scratch
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+
+echo "setting log device read-write"
+blockdev --setrw $SCRATCH_LOGDEV
+
+#
+# But log recovery is performed when mount with -o ro as long as
+# the underlying device is not write protected.
+#
+echo "mounting filesystem that needs recovery with -o ro:"
+_try_scratch_mount -o ro 2>&1 | _filter_scratch
+
+# success, all done
+echo "*** done"
+rm -f $seqres.full
+status=0
