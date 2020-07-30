@@ -61,6 +61,7 @@ _filter_report()
 			$val = $ENV{'NUM_SPACE_FILES'};
 		}
 		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g' |
+	sed -e 's/ 65535 \[--------\]/ 00 \[--------\]/g' |
 	perl -npe '
 		s|^(.*?) (\d+) (\d+) (\d+)|$1 @{[$2 * 1024 /'$bsize']} @{[$3 * 1024 /'$bsize']} @{[$4 * 1024 /'$bsize']}|'
 }
@@ -128,9 +129,11 @@ _exercise()
 
 	echo "Using type=$type id=$id" >>$seqres.full
 
+	$XFS_QUOTA_PROG -x -c "warn -$type 65535 -d" $SCRATCH_DEV
+
 	echo
 	echo "*** report no quota settings" | tee -a $seqres.full
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
@@ -139,11 +142,11 @@ _exercise()
 	_file_as_id $SCRATCH_MNT/initme $id $type 1024 0
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
-	xfs_quota -D $tmp.projects -P $temp.projid -x \
+	$XFS_QUOTA_PROG -D $tmp.projects -P $temp.projid -x \
 		-c "limit -$type bsoft=${bsoft} bhard=${bhard} $id" \
 		-c "limit -$type isoft=$isoft ihard=$ihard $id" \
 		$SCRATCH_DEV
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
@@ -154,7 +157,8 @@ _exercise()
 	_file_as_id $SCRATCH_MNT/softie3 $id $type 1024 0
 	_file_as_id $SCRATCH_MNT/softie4 $id $type 1024 0
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" $SCRATCH_DEV
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
@@ -162,7 +166,9 @@ _exercise()
 	echo "*** push past the soft block limit" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie $id $type $bsize 300
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" \
+		-c "warn -b -$type 0 $id" $SCRATCH_DEV
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
@@ -174,7 +180,9 @@ _exercise()
 		_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 	done
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -x  -c "warn -b -$type 0 $id" \
+		-c "warn -i -$type 0 $id" $SCRATCH_DEV
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_report | LC_COLLATE=POSIX sort -ru
 
@@ -185,7 +193,8 @@ _exercise()
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
 	_qmount
-	xfs_quota -D $tmp.projects -P $tmp.projid -x \
+	$XFS_QUOTA_PROG -x -c "warn -b -$type 0 $id" $SCRATCH_DEV
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_and_check_blks | LC_COLLATE=POSIX sort -ru
 
