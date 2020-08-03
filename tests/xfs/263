@@ -59,6 +59,18 @@ function option_string()
 filter_quota_state() {
 	sed -e 's/Inode: #[0-9]\+/Inode #XXX/g' \
 	    -e '/max warnings:/d' \
+	    -e '/Blocks grace time:/d' \
+	    -e '/Inodes grace time:/d' \
+		| _filter_scratch
+}
+
+filter_quota_state2() {
+	sed -e '/User quota state on/d' \
+	    -e '/ Accounting: /d' \
+	    -e '/ Enforcement: /d' \
+	    -e '/ Inode: /d' \
+	    -e '/Blocks max warnings: /d' \
+	    -e '/Inodes max warnings: /d' \
 		| _filter_scratch
 }
 
@@ -70,7 +82,10 @@ function test_all_state()
 		# Some combinations won't mount on V4 supers (grp + prj)
 		_qmount_option "$OPTIONS"
 		_try_scratch_mount &>> $seqres.full || continue
-		$XFS_QUOTA_PROG -x -c "state" $SCRATCH_MNT | filter_quota_state
+		$XFS_QUOTA_PROG -x -c "state -u" $SCRATCH_MNT | filter_quota_state
+		$XFS_QUOTA_PROG -x -c "state -g" $SCRATCH_MNT | filter_quota_state
+		$XFS_QUOTA_PROG -x -c "state -p" $SCRATCH_MNT | filter_quota_state
+		$XFS_QUOTA_PROG -x -c "state -u" $SCRATCH_MNT | filter_quota_state2
 		_scratch_unmount
 	done
 }
