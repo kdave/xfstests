@@ -77,8 +77,10 @@ invalid_attribute_filter() {
 
 if [ "$USE_ATTR_SECURE" = yes ]; then
     ATTR_MODES="user security trusted"
+    ATTR_FILTER="^(user|security|trusted)"
 else
     ATTR_MODES="user trusted"
+    ATTR_FILTER="^(user|trusted)"
 fi
 for nsp in $ATTR_MODES; do
 	for inode in reg dir lnk dev/b dev/c dev/p; do
@@ -121,7 +123,7 @@ for nsp in $ATTR_MODES; do
 		getfattr -m $nsp -e hex -n $nsp.name2 $SCRATCH_MNT/$inode 2>&1 | invalid_attribute_filter
 
 		echo "*** final list (strings, type=$inode, nsp=$nsp)"
-		getfattr -m '.' -e hex $SCRATCH_MNT/$inode
+		getfattr -m $ATTR_FILTER -e hex $SCRATCH_MNT/$inode
 	
 	done
 done
@@ -151,11 +153,11 @@ _extend_test_bed
 
 echo
 echo "*** directory descent with us following symlinks"
-getfattr -h -L -R -m '.' -e hex $SCRATCH_MNT | _sort_getfattr_output
+getfattr -h -L -R -m "$ATTR_FILTER" -e hex $SCRATCH_MNT | _sort_getfattr_output
 
 echo
 echo "*** directory descent without following symlinks"
-getfattr -h -P -R -m '.' -e hex $SCRATCH_MNT | _sort_getfattr_output
+getfattr -h -P -R -m "$ATTR_FILTER" -e hex $SCRATCH_MNT | _sort_getfattr_output
 
 # 
 # Test the backup/restore code
@@ -168,7 +170,7 @@ _backup()
 	# we *do* sort the output by path, since it otherwise would depend on
 	# readdir order, which on some filesystems may change after re-creating
 	# the files.
-	_getfattr --absolute-names -dh -R -m '.' $SCRATCH_MNT | _sort_getfattr_output >$1
+	_getfattr --absolute-names -dh -R -m $ATTR_FILTER $SCRATCH_MNT | _sort_getfattr_output >$1
 	echo BACKUP $1 >>$seqres.full
 	cat $1 >> $seqres.full
 	[ ! -s $1 ] && echo "warning: $1 (backup file) is empty"
