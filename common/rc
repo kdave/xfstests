@@ -170,6 +170,16 @@ _get_filesize()
     stat -c %s "$1"
 }
 
+# Get hugepagesize in bytes
+_get_hugepagesize()
+{
+	local hugepgsz=$(awk '/Hugepagesize/ {print $2}' /proc/meminfo)
+	# Call _notrun if $hugepgsz is not a number
+	echo "$hugepgsz" | egrep -q ^[0-9]+$ || \
+		_notrun "Cannot get the value of Hugepagesize"
+	echo $((hugepgsz * 1024))
+}
+
 _mount()
 {
     $MOUNT_PROG `_mount_ops_filter $*`
