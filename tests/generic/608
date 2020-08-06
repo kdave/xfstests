@@ -1,0 +1,121 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Fujitsu.  All Rights Reserved.
+#
+# FS QA Test 608
+# Change FS_XFLAG_DAX on an existing file and check if S_DAX on
+# the file can take effect immediately by the following steps:
+# 1) Stop all applications which are using the file.
+# 2) Do drop_caches or umount & mount cycle.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch_dax_mountopt "dax=always"
+_require_dax_iflag
+_require_xfs_io_command "lsattr" "-v"
+_require_xfs_io_command "statx" "-r"
+
+test_drop_caches()
+{
+	local t_file=$SCRATCH_MNT/testfile
+
+	rm -f $t_file
+	touch $t_file
+	_check_xflag $t_file 0
+	_check_s_dax $t_file 0
+
+	exec 3< $t_file
+
+	$XFS_IO_PROG -c 'chattr +x' $t_file
+	_check_xflag $t_file 1
+	_check_s_dax $t_file 0
+
+	# One application is using test file and check if S_DAX on
+	# the file doesn't take effect immediately by drop_caches
+	echo 2 > /proc/sys/vm/drop_caches
+	_check_s_dax $t_file 0
+
+	exec 3<&-
+
+	# No application is using test file and check if S_DAX on
+	# the file takes effect immediately by drop_caches
+	echo 2 > /proc/sys/vm/drop_caches
+	_check_s_dax $t_file 1
+}
+
+test_cycle_mount()
+{
+	local option=$1
+	local t_dir=$SCRATCH_MNT/testdir
+	local t_file=$t_dir/testfile
+
+	mkdir -p $t_dir
+	$XFS_IO_PROG -c 'chattr +x' $t_dir
+	rm -f $t_file
+	touch $t_file
+	_check_xflag $t_file 1
+	_check_s_dax $t_file 1
+
+	exec 3< $t_file
+
+	$XFS_IO_PROG -c 'chattr -x' $t_file
+	_check_xflag $t_file 0
+	_check_s_dax $t_file 1
+
+	exec 3<&-
+
+	# No application is using test file and check if S_DAX on
+	# the file takes effect immediately by umount & mount
+	_scratch_cycle_mount "$option"
+	_check_s_dax $t_file 0
+}
+
+do_tests()
+{
+	local mount_option=$1
+	local cycle_mount_option=$2
+
+	_scratch_mount "$mount_option"
+
+	test_drop_caches
+
+	test_cycle_mount "$cycle_mount_option"
+
+	_scratch_unmount
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+
+# Mount with dax option
+do_tests "-o dax=inode" "dax=inode"
+
+# Mount without dax option
+export MOUNT_OPTIONS=""
+do_tests
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
