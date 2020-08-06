@@ -3188,6 +3188,58 @@ _require_scratch_dax()
 	_scratch_unmount
 }
 
+# Check if dax mount options are supported
+#
+# $1 can be either 'dax=always' or 'dax'
+#
+# dax=always
+#      Check for the new dax options (dax=inode, dax=always or dax=never)
+#      by passing "dax=always".
+# dax
+#      Check for the old dax or new dax=always by passing "dax".
+#
+# This only accepts 'dax=always' because dax=always, dax=inode and
+# dax=never are always supported together.  So if the other options are
+# required checking for 'dax=always' indicates support for the other 2.
+#
+# Return 0 if filesystem/device supports the specified dax option.
+# Return 1 if mount fails with the specified dax option.
+# Return 2 if /proc/mounts shows wrong dax option.
+_check_scratch_dax_mountopt()
+{
+	local option=$1
+
+	_require_scratch
+	_scratch_mkfs > /dev/null 2>&1
+
+	_try_scratch_mount "-o $option" > /dev/null 2>&1 || return 1
+
+	if _fs_options $SCRATCH_DEV | egrep -q "dax(=always|,|$)"; then
+		_scratch_unmount
+		return 0
+	else
+		_scratch_unmount
+		return 2
+	fi
+}
+
+# Throw notrun if _check_scratch_dax_mountopt() returns a non-zero value.
+_require_scratch_dax_mountopt()
+{
+	local mountopt=$1
+
+	_check_scratch_dax_mountopt "$mountopt"
+	local res=$?
+
+	[ $res -eq 1 ] && _notrun "mount $SCRATCH_DEV with $mountopt failed"
+	[ $res -eq 2 ] && _notrun "$SCRATCH_DEV $FSTYP does not support -o $mountopt"
+}
+
+_require_dax_iflag()
+{
+	_require_xfs_io_command "chattr" "x"
+}
+
 # Does norecovery support by this fs?
 _require_norecovery()
 {
