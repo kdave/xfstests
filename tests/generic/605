@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2017 Red Hat Inc.  All Rights Reserved.
 #
-# FS QA Test 260
+# FS QA Test 605
 #
 # Test per-inode DAX flag by mmap direct/buffered IO.
 #
@@ -28,76 +28,80 @@ _cleanup()
 # remove previous $seqres.full before test
 rm -f $seqres.full
 
-_supported_fs xfs
+_supported_fs generic
 _supported_os Linux
-_require_scratch_dax_mountopt "dax"
+_require_scratch_dax_mountopt "dax=always"
 _require_test_program "feature"
 _require_test_program "t_mmap_dio"
 _require_dax_iflag
 _require_xfs_io_command "falloc"
 
+SRC_DIR=$SCRATCH_MNT/src
+SRC_FILE=$SRC_DIR/tf_s
+DST_DIR=$SCRATCH_MNT/dst
+DST_FILE=$DST_DIR/tf_d
+
+prep_directories()
+{
+	mkdir -p $SRC_DIR $DST_DIR
+}
+
 prep_files()
 {
-	rm -f $SCRATCH_MNT/tf_{s,d}
-
+	rm -f $SRC_FILE $DST_FILE
 	$XFS_IO_PROG -f -c "falloc 0 $tsize" \
-		$SCRATCH_MNT/tf_{s,d} >> $seqres.full 2>&1
+		$SRC_FILE $DST_FILE >> $seqres.full 2>&1
 }
 
 t_both_dax()
 {
+	$XFS_IO_PROG -c "chattr +x" $SRC_DIR $DST_DIR
 	prep_files
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_{s,d}
 	# with O_DIRECT first
-	$here/src/t_mmap_dio $SCRATCH_MNT/tf_{s,d} $1 "dio both dax"
+	$here/src/t_mmap_dio $SRC_FILE $DST_FILE \
+		$1 "dio both dax"
 
 	prep_files
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_{s,d}
 	# again with buffered IO
-	$here/src/t_mmap_dio -b $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio -b $SRC_FILE $DST_FILE \
 		$1 "buffered both dax"
 }
 
 t_nondax_to_dax()
 {
+	$XFS_IO_PROG -c "chattr -x" $SRC_DIR
+	$XFS_IO_PROG -c "chattr +x" $DST_DIR
 	prep_files
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_s
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_d
-	$here/src/t_mmap_dio $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio $SRC_FILE $DST_FILE \
 		$1 "dio nondax to dax"
 
 	prep_files
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_s
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_d
-	$here/src/t_mmap_dio -b $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio -b $SRC_FILE $DST_FILE \
 		$1 "buffered nondax to dax"
 }
 
 t_dax_to_nondax()
 {
+	$XFS_IO_PROG -c "chattr +x" $SRC_DIR
+	$XFS_IO_PROG -c "chattr -x" $DST_DIR
 	prep_files
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_s
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_d
-	$here/src/t_mmap_dio $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio $SRC_FILE $DST_FILE \
 		$1 "dio dax to nondax"
 
 	prep_files
-	$XFS_IO_PROG -c "chattr +x" $SCRATCH_MNT/tf_s
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_d
-	$here/src/t_mmap_dio -b $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio -b $SRC_FILE $DST_FILE \
 		$1 "buffered dax to nondax"
 }
 
 t_both_nondax()
 {
+	$XFS_IO_PROG -c "chattr -x" $SRC_DIR $DST_DIR
 	prep_files
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_{s,d}
-	$here/src/t_mmap_dio $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio $SRC_FILE $DST_FILE \
 		$1 "dio both nondax"
 
 	prep_files
-	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT/tf_{s,d}
-	$here/src/t_mmap_dio -b $SCRATCH_MNT/tf_{s,d} \
+	$here/src/t_mmap_dio -b $SRC_FILE $DST_FILE \
 		$1 "buffered both nondax"
 }
 
@@ -112,6 +116,11 @@ t_dax_flag_mmap_dio()
 
 do_tests()
 {
+	local mount_option=$1
+
+	_scratch_mount "$mount_option"
+
+	prep_directories
 	# less than page size
 	t_dax_flag_mmap_dio 1024
 	# page size
@@ -119,22 +128,20 @@ do_tests()
 	# bigger sizes, for PMD faults
 	t_dax_flag_mmap_dio $((16 * 1024 * 1024))
 	t_dax_flag_mmap_dio $((64 * 1024 * 1024))
+
+	_scratch_unmount
 }
 
 # make xfs aligned for PMD fault testing
 _scratch_mkfs_geom $(_get_hugepagesize) 1 >> $seqres.full 2>&1
 
-# mount with dax option
-_scratch_mount "-o dax"
-
 tsize=$((128 * 1024 * 1024))
 
-do_tests
-_scratch_unmount
+# mount with dax=inode option
+do_tests "-o dax=inode"
 
-# mount again without dax option
+# mount without dax option
 export MOUNT_OPTIONS=""
-_scratch_mount
 do_tests
 
 # success, all done
