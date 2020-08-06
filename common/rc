@@ -3196,6 +3196,19 @@ _require_scratch_shutdown()
 	_scratch_unmount
 }
 
+_check_s_dax()
+{
+	local target=$1
+	local exp_s_dax=$2
+
+	local attributes=$($XFS_IO_PROG -c 'statx -r' $target | awk '/stat.attributes / { print $3 }')
+	if [ $exp_s_dax -eq 0 ]; then
+		(( attributes & 0x2000 )) && echo "$target has unexpected S_DAX flag"
+	else
+		(( attributes & 0x2000 )) || echo "$target doen't have expected S_DAX flag"
+	fi
+}
+
 # Check if dax mount options are supported
 #
 # $1 can be either 'dax=always' or 'dax'

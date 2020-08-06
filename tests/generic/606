@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Fujitsu.  All Rights Reserved.
+#
+# FS QA Test 606
+#
+# By the following cases, verify if statx() can query S_DAX flag
+# on regular file correctly.
+# 1) With dax=always option, FS_XFLAG_DAX is ignored and S_DAX flag
+#    always exists on regular file.
+# 2) With dax=inode option, setting/clearing FS_XFLAG_DAX can change
+#    S_DAX flag on regular file.
+# 3) With dax=never option, FS_XFLAG_DAX is ignored and S_DAX flag
+#    never exists on regular file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch_dax_mountopt "dax=always"
+_require_dax_iflag
+_require_xfs_io_command "statx" "-r"
+
+PARENT_DIR=$SCRATCH_MNT/testdir
+TEST_FILE=$PARENT_DIR/testfile
+
+test_s_dax()
+{
+	local dax_option=$1
+	local exp_s_dax1=$2
+	local exp_s_dax2=$3
+
+	# Mount with specified dax option
+	_scratch_mount "$dax_option"
+
+	# Prepare directory
+	mkdir -p $PARENT_DIR
+
+	rm -f $TEST_FILE
+	$XFS_IO_PROG -c "chattr +x" $PARENT_DIR
+	touch $TEST_FILE
+	# Check if setting FS_XFLAG_DAX changes S_DAX flag
+	_check_s_dax $TEST_FILE $exp_s_dax1
+
+	rm -f $TEST_FILE
+	$XFS_IO_PROG -c "chattr -x" $PARENT_DIR
+	touch $TEST_FILE
+	# Check if clearing FS_XFLAG_DAX changes S_DAX flag
+	_check_s_dax $TEST_FILE $exp_s_dax2
+
+	_scratch_unmount
+}
+
+do_tests()
+{
+	_scratch_mkfs >> $seqres.full 2>&1
+
+	# Mount with specified dax option
+	test_s_dax "-o dax=always" 1 1
+	test_s_dax "-o dax=never" 0 0
+	test_s_dax "-o dax=inode" 1 0
+	# Mount without dax option
+	export MOUNT_OPTIONS=""
+	test_s_dax "" 1 0
+}
+
+do_tests
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
