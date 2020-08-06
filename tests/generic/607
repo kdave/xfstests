@@ -1,0 +1,189 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Fujitsu.  All Rights Reserved.
+#
+# FS QA Test 607
+#
+# Verify the inheritance behavior of FS_XFLAG_DAX flag in various combinations.
+# 1) New files and directories automatically inherit FS_XFLAG_DAX from their parent directory.
+# 2) cp operation make files and directories inherit the FS_XFLAG_DAX from new parent directory.
+# 3) mv operation make files and directories preserve the FS_XFLAG_DAX from old parent directory.
+# In addition, setting/clearing FS_XFLAG_DAX flag is not impacted by dax mount options.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_dax_iflag
+_require_xfs_io_command "lsattr" "-v"
+
+# If a/ is +x, check that a's new children
+# inherit +x from a/.
+test_xflag_inheritance1()
+{
+	mkdir -p a
+	$XFS_IO_PROG -c "chattr +x" a
+	mkdir -p a/b/c
+	touch a/b/c/d
+
+	_check_xflag a 1
+	_check_xflag a/b 1
+	_check_xflag a/b/c 1
+	_check_xflag a/b/c/d 1
+
+	rm -rf a
+}
+
+# If a/ is +x and b/ is -x, check that:
+# 1) b's new children inherit -x from b/.
+# 2) a's new children(b/ is old) inherit +x from a/.
+test_xflag_inheritance2()
+{
+	mkdir -p a/b
+	$XFS_IO_PROG -c "chattr +x" a
+	mkdir -p a/b/c a/d
+	touch a/b/c/e a/d/f
+
+	_check_xflag a 1
+	_check_xflag a/b 0
+	_check_xflag a/b/c 0
+	_check_xflag a/b/c/e 0
+	_check_xflag a/d 1
+	_check_xflag a/d/f 1
+
+	rm -rf a
+}
+
+# If a/ is -x and b/ is +x, check that:
+# 1) b's new children inherit +x from b/.
+# 2) a's new children(b/ is old) inherit -x from a/.
+test_xflag_inheritance3()
+{
+	mkdir -p a/b
+	$XFS_IO_PROG -c "chattr +x" a/b
+	mkdir -p a/b/c a/d
+	touch a/b/c/e a/d/f
+
+	_check_xflag a 0
+	_check_xflag a/b 1
+	_check_xflag a/b/c 1
+	_check_xflag a/b/c/e 1
+	_check_xflag a/d 0
+	_check_xflag a/d/f 0
+
+	rm -rf a
+}
+
+# If a/, c/ are +x and b/ is -x, check that:
+# 1) c's new children inherit +x from c/.
+# 2) b's new children(c/ is old) inherit -x from b/.
+test_xflag_inheritance4()
+{
+	mkdir -p a
+	$XFS_IO_PROG -c "chattr +x" a
+	mkdir -p a/b/c
+	$XFS_IO_PROG -c "chattr -x" a/b
+	mkdir -p a/b/c/d a/b/e
+	touch a/b/c/d/f a/b/e/g
+
+	_check_xflag a 1
+	_check_xflag a/b 0
+	_check_xflag a/b/c 1
+	_check_xflag a/b/c/d 1
+	_check_xflag a/b/c/d/f 1
+	_check_xflag a/b/e 0
+	_check_xflag a/b/e/g 0
+
+	rm -rf a
+}
+
+# If a/ is +x and b/ is -x, check that:
+# 1) new b/c and b/g inherit -x from b/ by cp.
+# 2) new a/e inherits +x from a/ by cp.
+# 3) new b/d preserves +x from a/ by mv.
+# 4) new a/f and a/h preserve -x from b/ by mv.
+test_xflag_inheritance5()
+{
+	mkdir -p a b
+	$XFS_IO_PROG -c "chattr +x" a
+	mkdir -p a/c a/d b/e b/f
+	touch a/g b/h
+
+	cp -r a/c b/
+	cp -r b/e a/
+	cp -r a/g b/
+	mv a/d b/
+	mv b/f a/
+	mv b/h a/
+
+	_check_xflag b/c 0
+	_check_xflag b/d 1
+	_check_xflag a/e 1
+	_check_xflag a/f 0
+	_check_xflag b/g 0
+	_check_xflag a/h 0
+
+	rm -rf a b
+}
+
+do_xflag_tests()
+{
+	local option=$1
+
+	_scratch_mount "$option"
+	cd $SCRATCH_MNT
+
+	for i in $(seq 1 5); do
+		test_xflag_inheritance${i}
+	done
+
+	cd - > /dev/null
+	_scratch_unmount
+}
+
+do_tests()
+{
+	_scratch_mkfs >> $seqres.full 2>&1
+
+	# Mount without dax option
+	export MOUNT_OPTIONS=""
+	do_xflag_tests
+
+	# Mount with 'dax' or 'dax=always' option if fs supports it.
+	_check_scratch_dax_mountopt "dax" && do_xflag_tests "-o dax"
+
+	# Mount with 'dax=inode' and 'dax=never' options if fs supports them.
+	if _check_scratch_dax_mountopt "dax=always"; then
+		for dax_option in "dax=inode" "dax=never"; do
+			do_xflag_tests "-o $dax_option"
+		done
+	fi
+}
+
+do_tests
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
