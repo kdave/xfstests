@@ -1896,7 +1896,7 @@ _require_dm_target()
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
-	echo $MOUNT_OPTIONS | grep -q dax
+	_normalize_mount_options | egrep -q "dax(=always| |$)"
 	if [ $? -eq 0 ]; then
 		case $target in
 		stripe|linear|log-writes)
@@ -3483,12 +3483,16 @@ _normalize_mount_options()
 }
 
 # skip test if MOUNT_OPTIONS contains the given strings
+# Both dax and dax=always are excluded if dax or dax=always is passed
 _exclude_scratch_mount_option()
 {
 	local mnt_opts=$(_normalize_mount_options)
 
 	while [ $# -gt 0 ]; do
-		if echo $mnt_opts | grep -qw "$1"; then
+		local pattern=$1
+		echo "$pattern" | egrep -q "dax(=always|$)" && \
+			pattern="dax(=always| |$)"
+		if echo $mnt_opts | egrep -q "$pattern"; then
 			_notrun "mount option \"$1\" not allowed in this test"
 		fi
 		shift
