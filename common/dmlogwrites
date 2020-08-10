@@ -23,7 +23,18 @@ _require_log_writes()
 # explicitly. But this is considered as a temporary workaround, we want to move
 # all the DAX check back to _require_log_writes when dm-log-writes gains full
 # DAX support and remove this helper.
-_require_log_writes_dax()
+#
+# Check if dax mount options are supported
+# $1 can be either 'dax=always' or 'dax'
+# dax=always
+#      Check for the new dax options (dax=inode, dax=always or dax=never)
+#      by passing "dax=always".
+# dax
+#      Check for the old dax or new dax=always by passing "dax".
+# This only accepts 'dax=always' because dax=always, dax=inode and
+# dax=never are always supported together.  So if the other options are
+# required checking for 'dax=always' indicates support for the other 2.
+_require_log_writes_dax_mountopt()
 {
 	[ -z "$LOGWRITES_DEV" -o ! -b "$LOGWRITES_DEV" ] && \
 		_notrun "This test requires a valid \$LOGWRITES_DEV"
@@ -32,16 +43,19 @@ _require_log_writes_dax()
 	_require_test_program "log-writes/replay-log"
 
 	local ret=0
+	local mountopt=$1
+
 	_log_writes_init $SCRATCH_DEV
 	_log_writes_mkfs > /dev/null 2>&1
-	_log_writes_mount -o dax > /dev/null 2>&1
-	# Check options to be sure. XFS ignores dax option
+	_log_writes_mount "-o $mountopt" > /dev/null 2>&1
+	# Check options to be sure.
+	# XFS ignores dax option(or changes it to dax=never)
 	# and goes on if dev underneath does not support dax.
-	_fs_options $LOGWRITES_DMDEV | grep -qw "dax"
+	_fs_options $LOGWRITES_DMDEV | egrep -q "dax(=always|,|$)"
 	ret=$?
 	_log_writes_cleanup
 	if [ $ret -ne 0 ]; then
-		_notrun "$LOGWRITES_DMDEV $FSTYP does not support -o dax"
+		_notrun "$LOGWRITES_DMDEV $FSTYP does not support -o $mountopt"
 	fi
 }
 
