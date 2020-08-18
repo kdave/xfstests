@@ -135,10 +135,15 @@ corruption_test()
 	fi
 }
 
-corruption_test 131072 0 1
-corruption_test 131072 4095 1
+# Note: these tests just overwrite some bytes without checking their original
+# values.  Therefore, make sure to overwrite at least 5 or so bytes, to make it
+# nearly guaranteed that there will be a change -- even when the test file is
+# encrypted due to the test_dummy_encryption mount option being specified.
+
+corruption_test 131072 0 5
+corruption_test 131072 4091 5
 corruption_test 131072 65536 65536
-corruption_test 131072 131071 1
+corruption_test 131072 131067 5
 
 # Non-zeroed bytes in the final partial block beyond EOF should cause reads to
 # fail too.  Such bytes would be visible via mmap().
