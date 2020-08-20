@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Facebook.  All Rights Reserved.
+#
+# FS QA Test 218
+#
+# Regression test for the problem fixed by the patch
+#
+#  btrfs: init device stats for seed devices
+#
+# Make a seed device, add a sprout to it, and then make sure we can still read
+# the device stats for both devices after we remount with the new sprout device.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/filter.btrfs
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_supported_os Linux
+_require_test
+_require_scratch_dev_pool 2
+
+_scratch_dev_pool_get 2
+
+dev_seed=$(echo $SCRATCH_DEV_POOL | awk '{print $1}')
+dev_sprout=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+
+# Create the seed device
+_mkfs_dev $dev_seed
+_mount $dev_seed $SCRATCH_MNT
+$XFS_IO_PROG -f -d -c "pwrite -S 0xab 0 1M" $SCRATCH_MNT/foo > /dev/null
+$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
+	_filter_btrfs_filesystem_show
+_scratch_unmount
+$BTRFS_TUNE_PROG -S 1 $dev_seed
+
+# Mount the seed device and add the rw device
+_mount -o ro $dev_seed $SCRATCH_MNT
+_run_btrfs_util_prog device add -f $dev_sprout $SCRATCH_MNT
+$BTRFS_UTIL_PROG device stats $SCRATCH_MNT | _filter_scratch_pool
+_scratch_unmount
+
+# Now remount, validate the device stats do not fail
+_mount $dev_sprout $SCRATCH_MNT
+$BTRFS_UTIL_PROG device stats $SCRATCH_MNT | _filter_scratch_pool
+
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
