@@ -20,12 +20,14 @@ _cleanup()
 {
 	cd /
 	_log_writes_cleanup
+	_dmthin_cleanup
 	rm -f $tmp.*
 }
 
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/filter
+. ./common/dmthin
 . ./common/dmlogwrites
 
 # remove previous $seqres.full before test
@@ -34,12 +36,21 @@ rm -f $seqres.full
 # real QA test starts here
 _supported_fs generic
 _supported_os Linux
-_require_scratch
+_require_scratch_nocheck
 _require_log_writes_dax_mountopt "dax"
+_require_dm_target thin-pool
 _require_xfs_io_command "mmap" "-S"
 _require_xfs_io_command "log_writes"
 
-_log_writes_init $SCRATCH_DEV
+devsize=$((1024*1024*200 / 512))        # 200m phys/virt size
+csize=$((1024*64 / 512))                # 64k cluster size
+lowspace=$((1024*1024 / 512))           # 1m low space threshold
+
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
+_dmthin_init $devsize $devsize $csize $lowspace
+
+_log_writes_init $DMTHIN_VOL_DEV
 _log_writes_mkfs >> $seqres.full 2>&1
 _log_writes_mount -o dax
 
@@ -52,14 +63,14 @@ $XFS_IO_PROG -t -c "truncate $LEN" -c "mmap -S 0 $LEN" -c "mwrite 0 $LEN" \
 # Unmount the scratch dir and tear down the log writes target
 _log_writes_unmount
 _log_writes_remove
-_check_scratch_fs
+_dmthin_check_fs
 
 # destroy previous filesystem so we can be sure our rebuild works
-_scratch_mkfs >> $seqres.full 2>&1
+_mkfs_dev $DMTHIN_VOL_DEV >> $seqres.full 2>&1
 
 # check pre-unmap state
-_log_writes_replay_log preunmap $SCRATCH_DEV
-_scratch_mount
+_log_writes_replay_log preunmap $DMTHIN_VOL_DEV
+_dmthin_mount
 
 # We should see $SCRATCH_MNT/test as having 1 MiB in block allocations
 du -sh $SCRATCH_MNT/test | _filter_scratch | _filter_spaces
