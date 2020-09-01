@@ -16,6 +16,7 @@ status=1	# failure is the default!
 _cleanup()
 {
 	_log_writes_cleanup
+	_dmthin_cleanup
 }
 trap "_cleanup; exit \$status" 0 1 2 3 15
 
@@ -23,6 +24,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 . ./common/rc
 . ./common/filter
 . ./common/reflink
+. ./common/dmthin
 . ./common/dmlogwrites
 
 # real QA test starts here
@@ -32,6 +34,7 @@ _require_test
 _require_scratch_reflink
 _require_cp_reflink
 _require_log_writes
+_require_dm_target thin-pool
 
 rm -f $seqres.full
 
@@ -44,13 +47,12 @@ check_files()
 		local filename=$(basename $i)
 		local mark="${filename##*.}"
 		echo "checking $filename" >> $seqres.full
-		_log_writes_replay_log $filename $SCRATCH_DEV
-		_scratch_mount
+		_log_writes_replay_log $filename $DMTHIN_VOL_DEV
+		_dmthin_mount
 		local expected_md5=$(_md5_checksum $i)
 		local md5=$(_md5_checksum $SCRATCH_MNT/$name)
 		[ "${md5}" != "${expected_md5}" ] && _fail "$filename md5sum mismatched"
-		_scratch_unmount
-		_check_scratch_fs
+		_dmthin_check_fs
 	done
 }
 
@@ -58,8 +60,16 @@ SANITY_DIR=$TEST_DIR/fsxtests
 rm -rf $SANITY_DIR
 mkdir $SANITY_DIR
 
+devsize=$((1024*1024*200 / 512))        # 200m phys/virt size
+csize=$((1024*64 / 512))                # 64k cluster size
+lowspace=$((1024*1024 / 512))           # 1m low space threshold
+
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
+_dmthin_init $devsize $devsize $csize $lowspace
+
 # Create the log
-_log_writes_init $SCRATCH_DEV
+_log_writes_init $DMTHIN_VOL_DEV
 
 _log_writes_mkfs >> $seqres.full 2>&1
 
@@ -92,14 +102,13 @@ _log_writes_mark last
 _log_writes_unmount
 _log_writes_mark end
 _log_writes_remove
-_check_scratch_fs
+_dmthin_check_fs
 
 # check pre umount
 echo "checking pre umount" >> $seqres.full
-_log_writes_replay_log last $SCRATCH_DEV
-_scratch_mount
-_scratch_unmount
-_check_scratch_fs
+_log_writes_replay_log last $DMTHIN_VOL_DEV
+_dmthin_mount
+_dmthin_check_fs
 
 for j in `seq 0 $((NUM_FILES-1))`; do
 	check_files testfile$j
@@ -107,8 +116,8 @@ done
 
 # Check the end
 echo "checking post umount" >> $seqres.full
-_log_writes_replay_log end $SCRATCH_DEV
-_scratch_mount
+_log_writes_replay_log end $DMTHIN_VOL_DEV
+_dmthin_mount
 for j in `seq 0 $((NUM_FILES-1))`; do
 	md5=$(_md5_checksum $SCRATCH_MNT/testfile$j)
 	[ "${md5}" != "${test_md5[$j]}" ] && _fail "testfile$j end md5sum mismatched"
