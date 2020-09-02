@@ -1,0 +1,104 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Facebook.  All Rights Reserved.
+#
+# FS QA Test 219
+#
+# Test a variety of stale device usecases.  We cache the device and generation
+# to make sure we do not allow stale devices, which can end up with some wonky
+# behavior for loop back devices.  This was changed with
+#
+#   btrfs: allow single disk devices to mount with older generations
+#
+# But I've added a few other test cases so it's clear what we expect to happen
+# currently.
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	if [ ! -z "$loop_mnt" ]; then
+		$UMOUNT_PROG $loop_mnt
+		rm -rf $loop_mnt
+	fi
+	[ ! -z "$loop_mnt1" ] && rm -rf $loop_mnt1
+	[ ! -z "$fs_img1" ] && rm -rf $fs_img1
+	[ ! -z "$fs_img2" ] && rm -rf $fs_img2
+	[ ! -z "$loop_dev" ] && _destroy_loop_device $loop_dev
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_supported_os Linux
+_require_test
+_require_loop
+_require_btrfs_forget_or_module_loadable
+
+loop_mnt=$TEST_DIR/$seq.mnt
+loop_mnt1=$TEST_DIR/$seq.mnt1
+fs_img1=$TEST_DIR/$seq.img1
+fs_img2=$TEST_DIR/$seq.img2
+
+mkdir $loop_mnt
+mkdir $loop_mnt1
+
+$XFS_IO_PROG -f -c "truncate 256m" $fs_img1 >>$seqres.full 2>&1
+
+_mkfs_dev $fs_img1 >>$seqres.full 2>&1
+cp $fs_img1 $fs_img2
+
+# Normal single device case, should pass just fine
+_mount -o loop $fs_img1 $loop_mnt > /dev/null  2>&1 || \
+	_fail "Couldn't do initial mount"
+$UMOUNT_PROG $loop_mnt
+
+_btrfs_forget_or_module_reload
+
+# Now mount the new version again to get the higher generation cached, umount
+# and try to mount the old version.  Mount the new version again just for good
+# measure.
+loop_dev=`_create_loop_device $fs_img1`
+
+_mount $loop_dev $loop_mnt > /dev/null 2>&1 || \
+	_fail "Failed to mount the second time"
+$UMOUNT_PROG $loop_mnt
+
+_mount -o loop $fs_img2 $loop_mnt > /dev/null 2>&1 || \
+	_fail "We couldn't mount the old generation"
+$UMOUNT_PROG $loop_mnt
+
+_mount $loop_dev $loop_mnt > /dev/null 2>&1 || \
+	_fail "Failed to mount the second time"
+$UMOUNT_PROG $loop_mnt
+
+# Now we definitely can't mount them at the same time, because we're still tied
+# to the limitation of one fs_devices per fsid.
+_btrfs_forget_or_module_reload
+
+_mount $loop_dev $loop_mnt > /dev/null 2>&1 || \
+	_fail "Failed to mount the third time"
+_mount -o loop $fs_img2 $loop_mnt1 > /dev/null 2>&1 && \
+	_fail "We were allowed to mount when we should have failed"
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
