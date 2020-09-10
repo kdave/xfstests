@@ -175,30 +175,42 @@ _list_acl()
 
 _require_attrs()
 {
-    [ -n "$ATTR_PROG" ] || _notrun "attr command not found"
-    [ -n "$GETFATTR_PROG" ] || _notrun "getfattr command not found"
-    [ -n "$SETFATTR_PROG" ] || _notrun "setfattr command not found"
-
-    #
-    # Test if chacl is able to write an attribute on the target filesystems.
-    # On really old kernels the system calls might not be implemented at all,
-    # but the more common case is that the tested filesystem simply doesn't
-    # support attributes.  Note that we can't simply list attributes as
-    # various security modules generate synthetic attributes not actually
-    # stored on disk.
-    #
-    touch $TEST_DIR/syscalltest
-    attr -s "user.xfstests" -V "attr" $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
-    cat $TEST_DIR/syscalltest.out >> $seqres.full
-
-    if grep -q 'Function not implemented' $TEST_DIR/syscalltest.out; then
-      _notrun "kernel does not support attrs"
-    fi
-    if grep -q 'Operation not supported' $TEST_DIR/syscalltest.out; then
-      _notrun "attrs not supported by this filesystem type: $FSTYP"
-    fi
-
-    rm -f $TEST_DIR/syscalltest.out
+	local args
+	local nsp
+	
+	if [ $# -eq 0 ]; then
+		args="user"
+	else
+	  	args="$*"
+	fi
+	
+	[ -n "$ATTR_PROG" ] || _notrun "attr command not found"
+	[ -n "$GETFATTR_PROG" ] || _notrun "getfattr command not found"
+	[ -n "$SETFATTR_PROG" ] || _notrun "setfattr command not found"
+	
+	for nsp in $args; do
+		#
+		# Test if chacl is able to write an attribute on the target
+		# filesystems.  On really old kernels the system calls might
+		# not be implemented at all, but the more common case is that
+		# the tested filesystem simply doesn't support attributes.
+		# Note that we can't simply list attributes as various security
+		# modules generate synthetic attributes not actually stored on
+		# disk.
+		#
+		touch $TEST_DIR/syscalltest
+		$SETFATTR_PROG -n "$nsp.xfstests" -v "attr" $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
+		cat $TEST_DIR/syscalltest.out >> $seqres.full
+		
+		if grep -q 'Function not implemented' $TEST_DIR/syscalltest.out; then
+			_notrun "kernel does not support attrs"
+		fi
+		if grep -q 'Operation not supported' $TEST_DIR/syscalltest.out; then
+			_notrun "attr namespace $nsp not supported by this filesystem type: $FSTYP"
+		fi
+		
+		rm -f $TEST_DIR/syscalltest.out
+	done
 }
 
 _require_attr_v1()
