@@ -34,6 +34,9 @@
 #ifdef AIO
 #include <libaio.h>
 #endif
+#ifdef URING
+#include <liburing.h>
+#endif
 #include <sys/syscall.h>
 
 #ifndef MAP_FILE
@@ -176,6 +179,7 @@ int	integrity = 0;			/* -i flag */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
 int	aio = 0;
+int	uring = 0;
 int	mark_nr = 0;
 
 int page_size;
@@ -2237,7 +2241,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dknqxABEFJLOWZ] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dknqxBEFJLOWZ][-A|-U] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
@@ -2260,8 +2264,11 @@ usage(void)
 	-y synchronize changes to a file\n"
 
 #ifdef AIO
-"	-A: Use the AIO system calls\n"
+"	-A: Use the AIO system calls, -A excludes -U\n"
 #endif
+#ifdef URING
+"	-U: Use the IO_URING system calls, -U excludes -A\n"
+ #endif
 "	-D startingop: debug output starting at specified operation\n"
 #ifdef HAVE_LINUX_FALLOC_H
 "	-F: Do not use fallocate (preallocation) calls\n"
@@ -2429,6 +2436,112 @@ aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 }
 #endif
 
+#ifdef URING
+
+struct io_uring ring;
+#define URING_ENTRIES	1024
+
+int
+uring_setup()
+{
+	int ret;
+
+	ret = io_uring_queue_init(URING_ENTRIES, &ring, 0);
+	if (ret != 0) {
+		fprintf(stderr, "uring_setup: io_uring_queue_init failed: %s\n",
+				strerror(ret));
+		return -1;
+	}
+	return 0;
+}
+
+int
+uring_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+{
+	struct io_uring_sqe     *sqe;
+	struct io_uring_cqe     *cqe;
+	struct iovec            iovec;
+	int ret;
+	int res = 0;
+	char *p = buf;
+	unsigned l = len;
+	unsigned o = offset;
+
+	/*
+	 * Due to io_uring tries non-blocking IOs (especially read), that
+	 * always cause 'normal' short reading. To avoid this short read
+	 * fail, try to loop read/write (escpecilly read) data.
+	 */
+	while (l > 0) {
+		sqe = io_uring_get_sqe(&ring);
+		if (!sqe) {
+			fprintf(stderr, "uring_rw: io_uring_get_sqe failed: %s\n",
+					strerror(errno));
+			return -1;
+		}
+
+		iovec.iov_base = p;
+		iovec.iov_len = l;
+		if (rw == READ) {
+			io_uring_prep_readv(sqe, fd, &iovec, 1, o);
+		} else {
+			io_uring_prep_writev(sqe, fd, &iovec, 1, o);
+		}
+
+		ret = io_uring_submit_and_wait(&ring, 1);
+		if (ret != 1) {
+			fprintf(stderr, "errcode=%d\n", -ret);
+			fprintf(stderr, "uring %s: io_uring_submit failed: %s\n",
+					rw == READ ? "read":"write", strerror(-ret));
+			goto uring_error;
+		}
+
+		ret = io_uring_wait_cqe(&ring, &cqe);
+		if (ret != 0) {
+			fprintf(stderr, "errcode=%d\n", -ret);
+			fprintf(stderr, "uring %s: io_uring_wait_cqe failed: %s\n",
+					rw == READ ? "read":"write", strerror(-ret));
+			goto uring_error;
+		}
+
+		ret = cqe->res;
+		io_uring_cqe_seen(&ring, cqe);
+
+		if (ret > 0) {
+			o += ret;
+			l -= ret;
+			p += ret;
+			res += ret;
+		} else if (ret < 0) {
+			fprintf(stderr, "errcode=%d\n", -ret);
+			fprintf(stderr, "uring %s: io_uring failed: %s\n",
+					rw == READ ? "read":"write", strerror(-ret));
+			goto uring_error;
+		} else {
+			fprintf(stderr, "uring %s bad io length: %d instead of %u\n",
+					rw == READ ? "read":"write", res, len);
+			break;
+		}
+	}
+	return res;
+
+ uring_error:
+	/*
+	 * The caller expects error return in traditional libc
+	 * convention, i.e. -1 and the errno set to error.
+	 */
+	errno = -ret;
+	return -1;
+}
+#else
+int
+uring_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+{
+	fprintf(stderr, "io_rw: need IO_URING support!\n");
+	exit(111);
+}
+#endif
+
 int
 fsx_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 {
@@ -2436,6 +2549,8 @@ fsx_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 
 	if (aio) {
 		ret = aio_rw(rw, fd, buf, len, offset);
+	} else if (uring) {
+		ret = uring_rw(rw, fd, buf, len, offset);
 	} else {
 		if (rw == READ)
 			ret = read(fd, buf, len);
@@ -2498,7 +2613,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "b:c:dfg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:WXZ",
+				 "b:c:dfg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:UWXZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -2606,6 +2721,9 @@ main(int argc, char **argv)
 		case 'A':
 			aio = 1;
 			break;
+		case 'U':
+			uring = 1;
+			break;
 		case 'D':
 			debugstart = getnum(optarg, &endp);
 			if (debugstart < 1)
@@ -2696,6 +2814,11 @@ main(int argc, char **argv)
 	if (argc != 1)
 		usage();
 
+	if (aio && uring) {
+		fprintf(stderr, "-A and -U shouldn't be used together\n");
+		usage();
+	}
+
 	if (integrity && !dirpath) {
 		fprintf(stderr, "option -i <logdev> requires -P <dirpath>\n");
 		usage();
@@ -2785,6 +2908,10 @@ main(int argc, char **argv)
 #ifdef AIO
 	if (aio) 
 		aio_setup();
+#endif
+#ifdef URING
+	if (uring)
+		uring_setup();
 #endif
 
 	if (!(o_flags & O_TRUNC)) {
