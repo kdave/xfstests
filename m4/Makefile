@@ -14,6 +14,7 @@ LSRCFILES = \
 	package_dmapidev.m4 \
 	package_globals.m4 \
 	package_libcdev.m4 \
+	package_liburing.m4 \
 	package_ncurses.m4 \
 	package_pthread.m4 \
 	package_ssldev.m4 \

@@ -30,6 +30,11 @@
 #include <libaio.h>
 io_context_t	io_ctx;
 #endif
+#ifdef URING
+#include <liburing.h>
+#define URING_ENTRIES	1
+struct io_uring	ring;
+#endif
 #include <sys/syscall.h>
 #include <sys/xattr.h>
 
@@ -139,6 +144,8 @@ typedef enum {
 	OP_TRUNCATE,
 	OP_UNLINK,
 	OP_UNRESVSP,
+	OP_URING_READ,
+	OP_URING_WRITE,
 	OP_WRITE,
 	OP_WRITEV,
 	OP_LAST
@@ -267,6 +274,8 @@ void	sync_f(int, long);
 void	truncate_f(int, long);
 void	unlink_f(int, long);
 void	unresvsp_f(int, long);
+void	uring_read_f(int, long);
+void	uring_write_f(int, long);
 void	write_f(int, long);
 void	writev_f(int, long);
 char	*xattr_flag_to_string(int);
@@ -335,6 +344,8 @@ opdesc_t	ops[] = {
 	{ OP_TRUNCATE, "truncate", truncate_f, 2, 1 },
 	{ OP_UNLINK, "unlink", unlink_f, 1, 1 },
 	{ OP_UNRESVSP, "unresvsp", unresvsp_f, 1, 1 },
+	{ OP_URING_READ, "uring_read", uring_read_f, 1, 0 },
+	{ OP_URING_WRITE, "uring_write", uring_write_f, 1, 1 },
 	{ OP_WRITE, "write", write_f, 4, 1 },
 	{ OP_WRITEV, "writev", writev_f, 4, 1 },
 }, *ops_end;
@@ -693,6 +704,12 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 #endif
+#ifdef URING
+			if (io_uring_queue_init(URING_ENTRIES, &ring, 0)) {
+				fprintf(stderr, "io_uring_queue_init failed\n");
+				exit(1);
+			}
+#endif
 			for (i = 0; !loops || (i < loops); i++)
 				doproc();
 #ifdef AIO
@@ -701,7 +718,9 @@ int main(int argc, char **argv)
 				return 1;
 			}
 #endif
-
+#ifdef URING
+			io_uring_queue_exit(&ring);
+#endif
 			cleanup_flist();
 			free(freq_table);
 			return 0;
@@ -2167,6 +2186,108 @@ do_aio_rw(int opno, long r, int flags)
 		       f.path, st, (long long)off, (int)len, e);
 	free_pathname(&f);
 	close(fd);
+}
+#endif
+
+#ifdef URING
+void
+do_uring_rw(int opno, long r, int flags)
+{
+	char		*buf = NULL;
+	int		e;
+	pathname_t	f;
+	int		fd = -1;
+	size_t		len;
+	int64_t		lr;
+	off64_t		off;
+	struct stat64	stb;
+	int		v;
+	char		st[1024];
+	struct io_uring_sqe	*sqe;
+	struct io_uring_cqe	*cqe;
+	struct iovec	iovec;
+	int		iswrite = (flags & (O_WRONLY | O_RDWR)) ? 1 : 0;
+
+	init_pathname(&f);
+	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
+		if (v)
+			printf("%d/%d: do_uring_rw - no filename\n", procid, opno);
+		goto uring_out;
+	}
+	fd = open_path(&f, flags);
+	e = fd < 0 ? errno : 0;
+	check_cwd();
+	if (fd < 0) {
+		if (v)
+			printf("%d/%d: do_uring_rw - open %s failed %d\n",
+			       procid, opno, f.path, e);
+		goto uring_out;
+	}
+	if (fstat64(fd, &stb) < 0) {
+		if (v)
+			printf("%d/%d: do_uring_rw - fstat64 %s failed %d\n",
+			       procid, opno, f.path, errno);
+		goto uring_out;
+	}
+	inode_info(st, sizeof(st), &stb, v);
+	if (!iswrite && stb.st_size == 0) {
+		if (v)
+			printf("%d/%d: do_uring_rw - %s%s zero size\n", procid, opno,
+			       f.path, st);
+		goto uring_out;
+	}
+	sqe = io_uring_get_sqe(&ring);
+	if (!sqe) {
+		if (v)
+			printf("%d/%d: do_uring_rw - io_uring_get_sqe failed\n",
+			       procid, opno);
+		goto uring_out;
+	}
+	lr = ((int64_t)random() << 32) + random();
+	len = (random() % FILELEN_MAX) + 1;
+	buf = malloc(len);
+	if (!buf) {
+		if (v)
+			printf("%d/%d: do_uring_rw - malloc failed\n",
+			       procid, opno);
+		goto uring_out;
+	}
+	iovec.iov_base = buf;
+	iovec.iov_len = len;
+	if (iswrite) {
+		off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
+		off %= maxfsize;
+		memset(buf, nameseq & 0xff, len);
+		io_uring_prep_writev(sqe, fd, &iovec, 1, off);
+	} else {
+		off = (off64_t)(lr % stb.st_size);
+		io_uring_prep_readv(sqe, fd, &iovec, 1, off);
+	}
+
+	if ((e = io_uring_submit_and_wait(&ring, 1)) != 1) {
+		if (v)
+			printf("%d/%d: %s - io_uring_submit failed %d\n", procid, opno,
+			       iswrite ? "uring_write" : "uring_read", e);
+		goto uring_out;
+	}
+	if ((e = io_uring_wait_cqe(&ring, &cqe)) < 0) {
+		if (v)
+			printf("%d/%d: %s - io_uring_wait_cqe failed %d\n", procid, opno,
+			       iswrite ? "uring_write" : "uring_read", e);
+		goto uring_out;
+	}
+	if (v)
+		printf("%d/%d: %s %s%s [%lld, %d(res=%d)] %d\n",
+		       procid, opno, iswrite ? "uring_write" : "uring_read",
+		       f.path, st, (long long)off, (int)len, cqe->res, e);
+	io_uring_cqe_seen(&ring, cqe);
+
+ uring_out:
+	if (buf)
+		free(buf);
+	if (fd != -1)
+		close(fd);
+	free_pathname(&f);
 }
 #endif
 
@@ -5042,6 +5163,22 @@ unresvsp_f(int opno, long r)
 			(long long)off, (long long)fl.l_len, e);
 	free_pathname(&f);
 	close(fd);
+}
+
+void
+uring_read_f(int opno, long r)
+{
+#ifdef URING
+	do_uring_rw(opno, r, O_RDONLY);
+#endif
+}
+
+void
+uring_write_f(int opno, long r)
+{
+#ifdef URING
+	do_uring_rw(opno, r, O_WRONLY);
+#endif
 }
 
 void

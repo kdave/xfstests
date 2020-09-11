@@ -24,6 +24,11 @@ LCFLAGS += -DAIO
 LLDLIBS += -laio -lpthread
 endif
 
+ifeq ($(HAVE_URING), true)
+LCFLAGS += -DURING
+LLDLIBS += -luring
+endif
+
 ifeq ($(HAVE_LIBBTRFSUTIL), true)
 LLDLIBS += -lbtrfsutil
 endif
