@@ -181,16 +181,11 @@ int	mark_nr = 0;
 int page_size;
 int page_mask;
 int mmap_mask;
-#ifdef AIO
-int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
+int fsx_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
 #define READ 0
 #define WRITE 1
-#define fsxread(a,b,c,d)	aio_rw(READ, a,b,c,d)
-#define fsxwrite(a,b,c,d)	aio_rw(WRITE, a,b,c,d)
-#else
-#define fsxread(a,b,c,d)	read(a,b,c)
-#define fsxwrite(a,b,c,d)	write(a,b,c)
-#endif
+#define fsxread(a,b,c,d)	fsx_rw(READ, a,b,c,d)
+#define fsxwrite(a,b,c,d)	fsx_rw(WRITE, a,b,c,d)
 
 const char *replayops = NULL;
 const char *recordops = NULL;
@@ -2347,7 +2342,8 @@ getnum(char *s, char **e)
 io_context_t	io_ctx;
 struct iocb 	iocb;
 
-int aio_setup()
+int
+aio_setup()
 {
 	int ret;
 	ret = io_queue_init(QSZ, &io_ctx);
@@ -2360,7 +2356,7 @@ int aio_setup()
 }
 
 int
-__aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 {
 	struct io_event event;
 	static struct timespec ts;
@@ -2425,13 +2421,21 @@ out_error:
 	errno = -ret;
 	return -1;
 }
+#else
+aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+{
+	fprintf(stderr, "io_rw: need AIO support!\n");
+	exit(111);
+}
+#endif
 
-int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
+int
+fsx_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 {
 	int ret;
 
 	if (aio) {
-		ret = __aio_rw(rw, fd, buf, len, offset);
+		ret = aio_rw(rw, fd, buf, len, offset);
 	} else {
 		if (rw == READ)
 			ret = read(fd, buf, len);
@@ -2440,8 +2444,6 @@ int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 	}
 	return ret;
 }
-
-#endif
 
 #define test_fallocate(mode) __test_fallocate(mode, #mode)
 
@@ -2602,7 +2604,7 @@ main(int argc, char **argv)
 			do_fsync = 1;
 			break;
 		case 'A':
-		        aio = 1;
+			aio = 1;
 			break;
 		case 'D':
 			debugstart = getnum(optarg, &endp);
