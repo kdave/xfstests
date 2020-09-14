@@ -2158,6 +2158,7 @@ _require_xfs_io_command()
 	local param="$*"
 	local param_checked=""
 	local opts=""
+	local attr_info=""
 
 	local testfile=$TEST_DIR/$$.xfs_io
 	local testio
@@ -2173,9 +2174,11 @@ _require_xfs_io_command()
 		# 'tPnE' flags are only valid for a directory so check them on a directory.
 		if echo "$param" | egrep -q 't|P|n|E'; then
 			testio=`$XFS_IO_PROG -F -c "chattr +$param" $testdir 2>&1`
+			attr_info=`$XFS_IO_PROG -F -r -c "lsattr" $testdir | awk '{print $1}'`
 			$XFS_IO_PROG -F -r -c "chattr -$param" $testdir 2>&1
 		else
 			testio=`$XFS_IO_PROG -F -f -c "chattr +$param" $testfile 2>&1`
+			attr_info=`$XFS_IO_PROG -F -r -c "lsattr" $testfile | awk '{print $1}'`
 			$XFS_IO_PROG -F -r -c "chattr -$param" $testfile 2>&1
 		fi
 		param_checked="+$param"
@@ -2299,6 +2302,19 @@ _require_xfs_io_command()
 		# built on kernels not supporting pwritev2() calls
 		echo $testio | grep -q "\(invalid option\|not supported\)" && \
 			_notrun "xfs_io $command doesn't support $param"
+	fi
+
+	# On XFS, ioctl(FSSETXATTR)(called by xfs_io -c "chattr") maskes off unsupported
+	# or invalid flags silently so need to check these flags by extra ioctl(FSGETXATTR)
+	# (called by xfs_io -c "lsattr").
+	# The following URL explains why we don't change the behavior of XFS.
+	# https://www.spinics.net/lists/linux-xfs/msg44725.html
+	if [ -n "$attr_info" -a "$FSTYP" = "xfs" ]; then
+		local num=${#param}
+		for i in $(seq 0 $((num-1))); do
+			echo $attr_info | grep -q "${param:$i:1}" || \
+				_notrun "xfs_io $command +${param:$i:1} support is missing (unknown flag in kernel)"
+		done
 	fi
 }
 
