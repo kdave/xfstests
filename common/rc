@@ -2163,14 +2163,23 @@ _require_xfs_io_command()
 	local testio
 	case $command in
 	"chattr")
+		local testdir=$TEST_DIR/$$.attr_dir
+		mkdir $TEST_DIR/$$.attr_dir
 		if [ -z "$param" ]; then
 			param=s
 		fi
 		# Test xfs_io chattr support AND
 		# filesystem FS_IOC_FSSETXATTR support
-		testio=`$XFS_IO_PROG -F -f -c "chattr +$param" $testfile 2>&1`
-		$XFS_IO_PROG -F -f -r -c "chattr -$param" $testfile 2>&1
+		# 'tPnE' flags are only valid for a directory so check them on a directory.
+		if echo "$param" | egrep -q 't|P|n|E'; then
+			testio=`$XFS_IO_PROG -F -c "chattr +$param" $testdir 2>&1`
+			$XFS_IO_PROG -F -r -c "chattr -$param" $testdir 2>&1
+		else
+			testio=`$XFS_IO_PROG -F -f -c "chattr +$param" $testfile 2>&1`
+			$XFS_IO_PROG -F -r -c "chattr -$param" $testfile 2>&1
+		fi
 		param_checked="+$param"
+		rm -rf $testdir 2>&1 > /dev/null
 		;;
 	"chproj")
 		testio=`$XFS_IO_PROG -F -f -c "chproj 0" $testfile 2>&1`
