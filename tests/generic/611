@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc. All Rights Reserved.
+#
+# FS QA Test 611
+#
+# Verify that metadata won't get corrupted when extended attribute
+# name of size one is set.
+#
+# This test verifies the problem fixed in kernel with commit
+# f4020438fab0 ("xfs: fix boundary test in xfs_attr_shortform_verify")
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs generic
+_supported_os Linux
+_require_scratch
+_require_attrs
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+localfile="${SCRATCH_MNT}/testfile"
+
+touch "${localfile}"
+"${SETFATTR_PROG}" -n user.a "${localfile}"
+
+# Make sure that changes are written to disk
+_scratch_cycle_mount
+
+# If the target bug isn't fixed, getfattr fails
+${GETFATTR_PROG} --absolute-names -n user.a $localfile | grep 'user.a'
+
+status=0
+exit
