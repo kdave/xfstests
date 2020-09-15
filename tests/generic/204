@@ -76,9 +76,13 @@ files=$((space / (direntlen + isize + dbsize)))
 echo files $files, resvblks $resv_blks >> $seqres.full
 _scratch_resvblks $resv_blks >> $seqres.full 2>&1
 
+filter() {
+	test $FSTYP != xfs && sed -e '/No space left on device/d'
+}
+
 for i in `seq -w 1 $files`; do
-    echo -n > $SCRATCH_MNT/$i
-    echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i
+	(echo -n > $SCRATCH_MNT/$i;
+	 echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX > $SCRATCH_MNT/$i) 2>&1 | filter
 done
 
 # success, all done
