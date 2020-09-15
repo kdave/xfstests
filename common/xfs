@@ -103,7 +103,7 @@ _scratch_find_xfs_min_logblocks()
 	# try again without MKFS_OPTIONS because that's what _scratch_do_mkfs
 	# will do if we pass in the log size option.
 	if [ $mkfs_status -ne 0 ] &&
-	   ! grep -q 'log size.*too small, minimum' $tmp.mkfserr; then
+	   ! egrep -q '(log size.*too small, minimum|external log device.*too small, must be)' $tmp.mkfserr; then
 		eval "$mkfs_cmd $extra_mkfs_options $SCRATCH_DEV" \
 			2>$tmp.mkfserr 1>$tmp.mkfsstd
 		mkfs_status=$?
@@ -123,6 +123,12 @@ _scratch_find_xfs_min_logblocks()
 	if grep -q 'minimum size is' $tmp.mkfserr; then
 		grep 'minimum size is' $tmp.mkfserr | \
 			sed -e 's/^.*minimum size is \([0-9]*\) blocks/\1/g'
+		rm -f $tmp.mkfsstd $tmp.mkfserr
+		return
+	fi
+	if grep -q 'external log device.*too small, must be' $tmp.mkfserr; then
+		grep 'external log device.*too small, must be' $tmp.mkfserr | \
+			sed -e 's/^.*must be at least \([0-9]*\) blocks/\1/g'
 		rm -f $tmp.mkfsstd $tmp.mkfserr
 		return
 	fi
