@@ -76,7 +76,13 @@ echo "+ corrupt image"
 logstart="$(_scratch_xfs_get_sb_field logstart)"
 logstart="$(_scratch_xfs_db -c "convert fsblock ${logstart} byte" | sed -e 's/^.*(\([0-9]*\).*$/\1/g')"
 logblocks="$(_scratch_xfs_get_sb_field logblocks)"
-$XFS_IO_PROG -f -c "pwrite -S 0x62 ${logstart} $((logblocks * blksz))" "${SCRATCH_DEV}" >> $seqres.full
+
+if [ "$USE_EXTERNAL" = yes ] && [ ! -z "$SCRATCH_LOGDEV" ]; then
+	logdev=$SCRATCH_LOGDEV
+else
+	logdev=$SCRATCH_DEV
+fi
+$XFS_IO_PROG -f -c "pwrite -S 0x62 ${logstart} $((logblocks * blksz))" $logdev >> $seqres.full
 
 echo "+ mount image"
 _try_scratch_mount 2>/dev/null && _fail "mount should not succeed"
