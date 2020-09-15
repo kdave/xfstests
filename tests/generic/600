@@ -60,7 +60,9 @@ let set=now+100
 setquota -T -u $qa_user 0 100 $SCRATCH_MNT 2>&1 | grep -v "^setquota"
 get=`repquota -up $SCRATCH_MNT | grep  "^$qa_user" | awk '{print $NF}'`
 
-if [ "$get" != "$set" ]; then
+# Either the new expiry must match; or be one second after the set time, to
+# deal with the seconds counter incrementing.
+if [ "$get" != "$set" ] && [ "$get" -ne "$((set + 1))" ]; then
 	echo "set grace to $set but got grace $get"
 fi
 

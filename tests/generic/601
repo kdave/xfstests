@@ -71,7 +71,9 @@ $XFS_QUOTA_PROG -x -c "timer -u -i 100 $qa_user" $SCRATCH_MNT
 # raw ("since epoch") grace expiry
 get=`repquota -up $SCRATCH_MNT | grep  "^$qa_user" | awk '{print $NF}'`
 
-if [ "$get" != "$set" ]; then
+# Either the new expiry must match; or be one second after the set time, to
+# deal with the seconds counter incrementing.
+if [ "$get" != "$set" ] && [ "$get" -ne "$((set + 1))" ]; then
 	echo "set grace to $set but got grace $get"
 fi
 
