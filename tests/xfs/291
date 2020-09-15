@@ -110,7 +110,9 @@ _scratch_metadump $tmp.metadump || _fail "xfs_metadump failed"
 xfs_mdrestore $tmp.metadump $tmp.img || _fail "xfs_mdrestore failed"
 [ "$USE_EXTERNAL" = yes ] && [ -n "$SCRATCH_RTDEV" ] && \
 	rt_repair_opts="-r $SCRATCH_RTDEV"
-$XFS_REPAIR_PROG $rt_repair_opts -f $tmp.img >> $seqres.full 2>&1 || \
+[ "$USE_EXTERNAL" = yes ] && [ -n "$SCRATCH_LOGDEV" ] && \
+	log_repair_opts="-l $SCRATCH_LOGDEV"
+$XFS_REPAIR_PROG $rt_repair_opts $log_repair_opts -f $tmp.img >> $seqres.full 2>&1 || \
 	_fail "xfs_repair of metadump failed"
 
 # Yes it can; success, all done
