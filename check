@@ -391,6 +391,13 @@ _wipe_counters()
 	unset try notrun bad
 }
 
+_global_log() {
+	echo "$1" >> $check.log
+	if $OPTIONS_HAVE_SECIONS; then
+		echo "$1" >> ${REPORT_DIR}/check.log
+	fi
+}
+
 _wrapup()
 {
 	seq="check"
@@ -415,10 +422,13 @@ _wrapup()
 				}' \
 				| sort -n >$tmp.out
 			mv $tmp.out $check.time
+			if $OPTIONS_HAVE_SECTIONS; then
+				cp $check.time ${REPORT_DIR}/check.time
+			fi
 		fi
 
-		echo "" >>$check.log
-		date >>$check.log
+		_global_log ""
+		_global_log "$(date)"
 
 		echo "SECTION       -- $section" >>$tmp.summary
 		echo "=========================" >>$tmp.summary
@@ -427,29 +437,33 @@ _wrapup()
 				echo "Ran:$try"
 				echo "Ran:$try" >>$tmp.summary
 			fi
-			echo "Ran:$try" >>$check.log
+			_global_log "Ran:$try"
 		fi
 
 		$interrupt && echo "Interrupted!" | tee -a $check.log
+		if $OPTIONS_HAVE_SECIONS; then
+			$interrupt && echo "Interrupted!" | tee -a \
+				${REPORT_DIR}/check.log
+		fi
 
 		if [ ! -z "$notrun" ]; then
 			if [ $brief_test_summary == "false" ]; then
 				echo "Not run:$notrun"
 				echo "Not run:$notrun" >>$tmp.summary
 			fi
-			echo "Not run:$notrun" >>$check.log
+			_global_log "Not run:$notrun"
 		fi
 
 		if [ ! -z "$n_bad" -a $n_bad != 0 ]; then
 			echo "Failures:$bad"
 			echo "Failed $n_bad of $n_try tests"
-			echo "Failures:$bad" >>$check.log
-			echo "Failed $n_bad of $n_try tests" >>$check.log
+			_global_log "Failures:$bad"
+			_global_log "Failed $n_bad of $n_try tests"
 			echo "Failures:$bad" >>$tmp.summary
 			echo "Failed $n_bad of $n_try tests" >>$tmp.summary
 		else
 			echo "Passed all $n_try tests"
-			echo "Passed all $n_try tests" >>$check.log
+			_global_log "Passed all $n_try tests"
 			echo "Passed all $n_try tests" >>$tmp.summary
 		fi
 		echo "" >>$tmp.summary
