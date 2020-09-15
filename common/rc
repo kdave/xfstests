@@ -2163,6 +2163,12 @@ _require_xfs_io_command()
 	local testfile=$TEST_DIR/$$.xfs_io
 	local testio
 	case $command in
+	"lsattr")
+		# Test xfs_io lsattr support and filesystem FS_IOC_FSSETXATTR
+		# support.
+		testio=`$XFS_IO_PROG -F -f -c "lsattr $param" $testfile 2>&1`
+		param_checked="$param"
+		;;
 	"chattr")
 		local testdir=$TEST_DIR/$$.attr_dir
 		mkdir $TEST_DIR/$$.attr_dir
@@ -3230,7 +3236,7 @@ _check_s_dax()
 	if [ $exp_s_dax -eq 0 ]; then
 		(( attributes & 0x2000 )) && echo "$target has unexpected S_DAX flag"
 	else
-		(( attributes & 0x2000 )) || echo "$target doen't have expected S_DAX flag"
+		(( attributes & 0x2000 )) || echo "$target doesn't have expected S_DAX flag"
 	fi
 }
 
@@ -3242,7 +3248,7 @@ _check_xflag()
 	if [ $exp_xflag -eq 0 ]; then
 		_test_inode_flag dax $target && echo "$target has unexpected FS_XFLAG_DAX flag"
 	else
-		_test_inode_flag dax $target || echo "$target doen't have expected FS_XFLAG_DAX flag"
+		_test_inode_flag dax $target || echo "$target doesn't have expected FS_XFLAG_DAX flag"
 	fi
 }
 
