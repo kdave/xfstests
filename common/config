@@ -46,7 +46,7 @@ export LC_ALL=C
 PATH=".:$PATH"
 
 export HOST=`hostname -s`
-export HOSTOS=`uname -s`
+test `uname -s` = "Linux" || _fatal "fstests only supports Linux"
 
 export MODULAR=0               # using XFS as a module or not
 export BOOT="/boot"            # install target for kernels
@@ -143,7 +143,7 @@ export PS_ALL_FLAGS="-ef"
 
 export DF_PROG="$(type -P df)"
 [ "$DF_PROG" = "" ] && _fatal "df not found"
-[ "$HOSTOS" = "Linux" ] && export DF_PROG="$DF_PROG -T -P"
+export DF_PROG="$DF_PROG -T -P"	# Linux
 
 export XFS_IO_PROG="$(type -P xfs_io)"
 [ "$XFS_IO_PROG" = "" ] && _fatal "xfs_io not found"
@@ -242,29 +242,25 @@ if [ "$UDEV_SETTLE_PROG" == "" ]; then
 fi
 export UDEV_SETTLE_PROG
 
-case "$HOSTOS" in
-    Linux)
-	export MKFS_XFS_PROG=$(type -P mkfs.xfs)
-	export MKFS_EXT4_PROG=$(type -P mkfs.ext4)
-	export MKFS_UDF_PROG=$(type -P mkudffs)
-	export MKFS_BTRFS_PROG=$(set_mkfs_prog_path_with_opts btrfs)
-	export MKFS_F2FS_PROG=$(set_mkfs_prog_path_with_opts f2fs)
-	export DUMP_F2FS_PROG=$(type -P dump.f2fs)
-	export F2FS_IO_PROG=$(type -P f2fs_io)
-	export BTRFS_UTIL_PROG=$(type -P btrfs)
-	export BTRFS_SHOW_SUPER_PROG=$(type -P btrfs-show-super)
-	export BTRFS_CONVERT_PROG=$(type -P btrfs-convert)
-	export BTRFS_TUNE_PROG=$(type -P btrfstune)
-	export XFS_FSR_PROG=$(type -P xfs_fsr)
-	export MKFS_NFS_PROG="false"
-	export MKFS_CIFS_PROG="false"
-	export MKFS_OVERLAY_PROG="false"
-	export MKFS_REISER4_PROG=$(type -P mkfs.reiser4)
-	export E2FSCK_PROG=$(type -P e2fsck)
-	export TUNE2FS_PROG=$(type -P tune2fs)
-	export FSCK_OVERLAY_PROG=$(type -P fsck.overlay)
-        ;;
-esac
+export MKFS_XFS_PROG=$(type -P mkfs.xfs)
+export MKFS_EXT4_PROG=$(type -P mkfs.ext4)
+export MKFS_UDF_PROG=$(type -P mkudffs)
+export MKFS_BTRFS_PROG=$(set_mkfs_prog_path_with_opts btrfs)
+export MKFS_F2FS_PROG=$(set_mkfs_prog_path_with_opts f2fs)
+export DUMP_F2FS_PROG=$(type -P dump.f2fs)
+export F2FS_IO_PROG=$(type -P f2fs_io)
+export BTRFS_UTIL_PROG=$(type -P btrfs)
+export BTRFS_SHOW_SUPER_PROG=$(type -P btrfs-show-super)
+export BTRFS_CONVERT_PROG=$(type -P btrfs-convert)
+export BTRFS_TUNE_PROG=$(type -P btrfstune)
+export XFS_FSR_PROG=$(type -P xfs_fsr)
+export MKFS_NFS_PROG="false"
+export MKFS_CIFS_PROG="false"
+export MKFS_OVERLAY_PROG="false"
+export MKFS_REISER4_PROG=$(type -P mkfs.reiser4)
+export E2FSCK_PROG=$(type -P e2fsck)
+export TUNE2FS_PROG=$(type -P tune2fs)
+export FSCK_OVERLAY_PROG=$(type -P fsck.overlay)
 
 # SELinux adds extra xattrs which can mess up our expected output.
 # So, mount with a context, and they won't be created.
@@ -753,9 +749,7 @@ if [ -z "$CONFIG_INCLUDED" ]; then
 
 	# Autodetect fs type based on what's on $TEST_DEV unless it's been set
 	# externally
-	if [ -z "$FSTYP" ] && \
-	   [ "$HOSTOS" == "Linux" -o "$OSTYPE" == "linux-gnu" ] && \
-	   [ ! -z "$TEST_DEV" ]; then
+	if [ -z "$FSTYP" ] && [ ! -z "$TEST_DEV" ]; then
 		FSTYP=`blkid -c /dev/null -s TYPE -o value $TEST_DEV`
 	fi
 	FSTYP=${FSTYP:=xfs}

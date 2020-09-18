@@ -31,19 +31,13 @@ _math()
 
 dd()
 {
-   if [ "$HOSTOS" == "Linux" ]
-   then	
 	command dd --help 2>&1 | grep noxfer >/dev/null
-	
 	if [ "$?" -eq 0 ]
 	    then
 		command dd status=noxfer $@
 	    else
 		command dd $@
-    	fi
-   else
-	command dd $@
-   fi
+	fi
 }
 
 # Prints the md5 checksum of a given file
@@ -971,7 +965,7 @@ _scratch_mkfs_sized()
 
     local blocks=`expr $fssize / $blocksize`
 
-    if [ "$HOSTOS" == "Linux" -a -b "$SCRATCH_DEV" ]; then
+    if [ -b "$SCRATCH_DEV" ]; then
 	local devsize=`blockdev --getsize64 $SCRATCH_DEV`
 	[ "$fssize" -gt "$devsize" ] && _notrun "Scratch device too small"
     fi
@@ -1743,11 +1737,6 @@ _require_logdev()
 #
 _require_loop()
 {
-    if [ "$HOSTOS" != "Linux" ]
-    then
-	_notrun "This test requires linux for loopback device support"
-    fi
-
     modprobe loop >/dev/null 2>&1
     if grep loop /proc/devices >/dev/null 2>&1
     then
@@ -1761,11 +1750,6 @@ _require_loop()
 #
 _require_ext2()
 {
-    if [ "$HOSTOS" != "Linux" ]
-    then
-	_notrun "This test requires linux for ext2 filesystem support"
-    fi
-
     modprobe ext2 >/dev/null 2>&1
     if grep ext2 /proc/filesystems >/dev/null 2>&1
     then
