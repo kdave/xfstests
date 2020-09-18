@@ -935,116 +935,115 @@ _available_memory_bytes()
 # _scratch_mkfs_sized <size in bytes> [optional blocksize]
 _scratch_mkfs_sized()
 {
-    local fssize=$1
-    local blocksize=$2
-    local def_blksz
+	local fssize=$1
+	local blocksize=$2
+	local def_blksz
 
-    case $FSTYP in
-    xfs)
-	def_blksz=`echo $MKFS_OPTIONS|sed -rn 's/.*-b ?size= ?+([0-9]+).*/\1/p'`
-	;;
-    ext2|ext3|ext4|ext4dev|udf|btrfs|reiser4|ocfs2|reiserfs)
-	def_blksz=`echo $MKFS_OPTIONS| sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
-	;;
-    jfs)
-	def_blksz=4096
-	;;
-    esac
+	case $FSTYP in
+	xfs)
+		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-b ?size= ?+([0-9]+).*/\1/p'`
+		;;
+	ext2|ext3|ext4|ext4dev|udf|btrfs|reiser4|ocfs2|reiserfs)
+		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
+		;;
+	jfs)
+		def_blksz=4096
+		;;
+	esac
 
-    [ -n "$def_blksz" ] && blocksize=$def_blksz
-    [ -z "$blocksize" ] && blocksize=4096
+	[ -n "$def_blksz" ] && blocksize=$def_blksz
+	[ -z "$blocksize" ] && blocksize=4096
 
-
-    local re='^[0-9]+$'
-    if ! [[ $fssize =~ $re ]] ; then
-        _notrun "error: _scratch_mkfs_sized: fs size \"$fssize\" not an integer."
-    fi
-    if ! [[ $blocksize =~ $re ]] ; then
-        _notrun "error: _scratch_mkfs_sized: block size \"$blocksize\" not an integer."
-    fi
-
-    local blocks=`expr $fssize / $blocksize`
-
-    if [ -b "$SCRATCH_DEV" ]; then
-	local devsize=`blockdev --getsize64 $SCRATCH_DEV`
-	[ "$fssize" -gt "$devsize" ] && _notrun "Scratch device too small"
-    fi
-
-    if [ "$FSTYP" = "xfs" ] && [ -b "$SCRATCH_RTDEV" ]; then
-	local rtdevsize=`blockdev --getsize64 $SCRATCH_RTDEV`
-	[ "$fssize" -gt "$rtdevsize" ] && _notrun "Scratch rt device too small"
-	rt_ops="-r size=$fssize"
-    fi
-
-    case $FSTYP in
-    xfs)
-	# don't override MKFS_OPTIONS that set a block size.
-	echo $MKFS_OPTIONS |egrep -q "b?size="
-	if [ $? -eq 0 ]; then
-		_scratch_mkfs_xfs -d size=$fssize $rt_ops
-	else
-		_scratch_mkfs_xfs -d size=$fssize $rt_ops -b size=$blocksize
+	local re='^[0-9]+$'
+	if ! [[ $fssize =~ $re ]] ; then
+		_notrun "error: _scratch_mkfs_sized: fs size \"$fssize\" not an integer."
 	fi
-	;;
-    ext2|ext3|ext4|ext4dev)
-	${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
-	;;
-    gfs2)
-	# mkfs.gfs2 doesn't automatically shrink journal files on small
-	# filesystems, so the journal files may end up being bigger than the
-	# filesystem, which will cause mkfs.gfs2 to fail.  Until that's fixed,
-	# shrink the journal size to at most one eigth of the filesystem and at
-	# least 8 MiB, the minimum size allowed.
-	local min_journal_size=8
-	local default_journal_size=128
-	if (( fssize/8 / (1024*1024) < default_journal_size )); then
-	    local journal_size=$(( fssize/8 / (1024*1024) ))
-	    (( journal_size >= min_journal_size )) || journal_size=$min_journal_size
-	    MKFS_OPTIONS="-J $journal_size $MKFS_OPTIONS"
+	if ! [[ $blocksize =~ $re ]] ; then
+		_notrun "error: _scratch_mkfs_sized: block size \"$blocksize\" not an integer."
 	fi
-	${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -O -b $blocksize $SCRATCH_DEV $blocks
-	;;
-    ocfs2)
-	yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
-	;;
-    udf)
-	$MKFS_UDF_PROG $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
-	;;
-    btrfs)
-	local mixed_opt=
-	# minimum size that's needed without the mixed option.
-	# Ref: btrfs-prog: btrfs_min_dev_size()
-	# Non mixed mode is also the default option.
-	(( fssize < $((256 * 1024 *1024)) )) && mixed_opt='--mixed'
-	$MKFS_BTRFS_PROG $MKFS_OPTIONS $mixed_opt -b $fssize $SCRATCH_DEV
-	;;
-    jfs)
-	${MKFS_PROG}.$FSTYP $MKFS_OPTIONS $SCRATCH_DEV $blocks
-	;;
-    reiserfs)
-	${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
-	;;
-    reiser4)
-	# mkfs.resier4 requires size in KB as input for creating filesystem
-	$MKFS_REISER4_PROG $MKFS_OPTIONS -y -b $blocksize $SCRATCH_DEV \
-			   `expr $fssize / 1024`
-	;;
-    f2fs)
-	# mkfs.f2fs requires # of sectors as an input for the size
-	local sector_size=`blockdev --getss $SCRATCH_DEV`
-	$MKFS_F2FS_PROG $MKFS_OPTIONS $SCRATCH_DEV `expr $fssize / $sector_size`
-	;;
-    tmpfs)
-	local free_mem=`_free_memory_bytes`
-	if [ "$free_mem" -lt "$fssize" ] ; then
-	   _notrun "Not enough memory ($free_mem) for tmpfs with $fssize bytes"
+
+	local blocks=`expr $fssize / $blocksize`
+
+	if [ -b "$SCRATCH_DEV" ]; then
+		local devsize=`blockdev --getsize64 $SCRATCH_DEV`
+		[ "$fssize" -gt "$devsize" ] && _notrun "Scratch device too small"
 	fi
-	export MOUNT_OPTIONS="-o size=$fssize $TMPFS_MOUNT_OPTIONS"
-	;;
-    *)
-	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_sized"
-	;;
-    esac
+
+	if [ "$FSTYP" = "xfs" ] && [ -b "$SCRATCH_RTDEV" ]; then
+		local rtdevsize=`blockdev --getsize64 $SCRATCH_RTDEV`
+		[ "$fssize" -gt "$rtdevsize" ] && _notrun "Scratch rt device too small"
+		rt_ops="-r size=$fssize"
+	fi
+
+	case $FSTYP in
+	xfs)
+		# don't override MKFS_OPTIONS that set a block size.
+		echo $MKFS_OPTIONS |egrep -q "b?size="
+		if [ $? -eq 0 ]; then
+			_scratch_mkfs_xfs -d size=$fssize $rt_ops
+		else
+			_scratch_mkfs_xfs -d size=$fssize $rt_ops -b size=$blocksize
+		fi
+		;;
+	ext2|ext3|ext4|ext4dev)
+		${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+		;;
+	gfs2)
+		# mkfs.gfs2 doesn't automatically shrink journal files on small
+		# filesystems, so the journal files may end up being bigger than the
+		# filesystem, which will cause mkfs.gfs2 to fail.  Until that's fixed,
+		# shrink the journal size to at most one eigth of the filesystem and at
+		# least 8 MiB, the minimum size allowed.
+		local min_journal_size=8
+		local default_journal_size=128
+		if (( fssize/8 / (1024*1024) < default_journal_size )); then
+			local journal_size=$(( fssize/8 / (1024*1024) ))
+			(( journal_size >= min_journal_size )) || journal_size=$min_journal_size
+			MKFS_OPTIONS="-J $journal_size $MKFS_OPTIONS"
+		fi
+		${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -O -b $blocksize $SCRATCH_DEV $blocks
+		;;
+	ocfs2)
+		yes | ${MKFS_PROG}.$FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+		;;
+	udf)
+		$MKFS_UDF_PROG $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+		;;
+	btrfs)
+		local mixed_opt=
+		# minimum size that's needed without the mixed option.
+		# Ref: btrfs-prog: btrfs_min_dev_size()
+		# Non mixed mode is also the default option.
+		(( fssize < $((256 * 1024 *1024)) )) && mixed_opt='--mixed'
+		$MKFS_BTRFS_PROG $MKFS_OPTIONS $mixed_opt -b $fssize $SCRATCH_DEV
+		;;
+	jfs)
+		${MKFS_PROG}.$FSTYP $MKFS_OPTIONS $SCRATCH_DEV $blocks
+		;;
+	reiserfs)
+		${MKFS_PROG}.$FSTYP $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
+		;;
+	reiser4)
+		# mkfs.resier4 requires size in KB as input for creating filesystem
+		$MKFS_REISER4_PROG $MKFS_OPTIONS -y -b $blocksize $SCRATCH_DEV \
+				   `expr $fssize / 1024`
+		;;
+	f2fs)
+		# mkfs.f2fs requires # of sectors as an input for the size
+		local sector_size=`blockdev --getss $SCRATCH_DEV`
+		$MKFS_F2FS_PROG $MKFS_OPTIONS $SCRATCH_DEV `expr $fssize / $sector_size`
+		;;
+	tmpfs)
+		local free_mem=`_free_memory_bytes`
+		if [ "$free_mem" -lt "$fssize" ] ; then
+		   _notrun "Not enough memory ($free_mem) for tmpfs with $fssize bytes"
+		fi
+		export MOUNT_OPTIONS="-o size=$fssize $TMPFS_MOUNT_OPTIONS"
+		;;
+	*)
+		_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_sized"
+		;;
+	esac
 }
 
 # Emulate an N-data-disk stripe w/ various stripe units
