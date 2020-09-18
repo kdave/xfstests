@@ -976,14 +976,20 @@ _scratch_mkfs_sized()
 	[ "$fssize" -gt "$devsize" ] && _notrun "Scratch device too small"
     fi
 
+    if [ "$FSTYP" = "xfs" ] && [ -b "$SCRATCH_RTDEV" ]; then
+	local rtdevsize=`blockdev --getsize64 $SCRATCH_RTDEV`
+	[ "$fssize" -gt "$rtdevsize" ] && _notrun "Scratch rt device too small"
+	rt_ops="-r size=$fssize"
+    fi
+
     case $FSTYP in
     xfs)
 	# don't override MKFS_OPTIONS that set a block size.
 	echo $MKFS_OPTIONS |egrep -q "b?size="
 	if [ $? -eq 0 ]; then
-		_scratch_mkfs_xfs -d size=$fssize
+		_scratch_mkfs_xfs -d size=$fssize $rt_ops
 	else
-		_scratch_mkfs_xfs -d size=$fssize -b size=$blocksize
+		_scratch_mkfs_xfs -d size=$fssize $rt_ops -b size=$blocksize
 	fi
 	;;
     ext2|ext3|ext4|ext4dev)
