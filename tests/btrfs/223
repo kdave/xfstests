@@ -1,0 +1,71 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. btrfs/223
+#
+# Test that after replacing a device, if we run fstrim against the filesystem
+# we do not trim/discard allocated chunks in the new device. We verify that
+# allocated chunks in the new device were not trim/discarded by mounting the
+# new device only in degraded mode, as this is the easiest way to verify it.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch_dev_pool 3
+_require_command "$WIPEFS_PROG" wipefs
+
+rm -f $seqres.full
+
+_scratch_dev_pool_get 2
+_spare_dev_get
+dev1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $1 }')
+dev2=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $2 }')
+
+_scratch_pool_mkfs "-m raid1 -d raid1"
+_scratch_mount
+_require_batched_discard $SCRATCH_MNT
+
+# Add a test file with some data.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 10M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Replace the first device, $dev1, with a new device.
+$BTRFS_UTIL_PROG replace start -Bf $dev1 $SPARE_DEV $SCRATCH_MNT
+
+# Run fstrim, it should not trim/discard allocated extents in the new device.
+$FSTRIM_PROG $SCRATCH_MNT
+
+# Unmount the filesystem.
+_scratch_unmount
+
+# Mount the filesystem in degraded mode using the new device and verify that the
+# mount succeeds and our file exists, with a size of 10Mb and all its bytes have
+# a value of 0xab.
+$WIPEFS_PROG -a $dev1 $dev2 >> $seqres.full 2>&1
+_mount -o degraded $SPARE_DEV $SCRATCH_MNT
+
+echo "File foo data:"
+od -A d -t x1 $SCRATCH_MNT/foo
+
+_spare_dev_put
+_scratch_dev_pool_put
+
+status=0
+exit
