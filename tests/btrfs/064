@@ -4,9 +4,11 @@
 #
 # FSQA Test No. btrfs/064
 #
-# Run btrfs balance and replace operations simultaneously with fsstress
-# running in background.
-#
+# Run btrfs balance and replace operations simultaneously with fsstress running
+# in the background, check with the scrub if all the blocks are ok.
+# Balance and replace operations are mutually exclusive operations they can't
+# run simultaneously. One of them is expected to fail when the other is running.
+
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
@@ -62,6 +64,8 @@ run_test()
 	$FSSTRESS_PROG $args >/dev/null 2>&1 &
 	fsstress_pid=$!
 
+	# Start both balance and replace in the background.
+	# Either balance or replace shall run, the other fails.
 	echo -n "Start balance worker: " >>$seqres.full
 	_btrfs_stress_balance $SCRATCH_MNT >/dev/null 2>&1 &
 	balance_pid=$!
