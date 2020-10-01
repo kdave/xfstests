@@ -26,6 +26,7 @@
 #include <linux/types.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1756,18 +1757,6 @@ static u8 parse_mode_number(const char *arg)
 	return num;
 }
 
-static u32 parse_inode_number(const char *arg)
-{
-	char *tmp;
-	unsigned long long num = strtoull(arg, &tmp, 10);
-
-	if (num <= 0 || *tmp)
-		die("Invalid inode number: %s", arg);
-	if ((u32)num != num)
-		die("Inode number %s is too large; must be 32-bit", arg);
-	return num;
-}
-
 struct key_and_iv_params {
 	u8 master_key[MAX_KEY_SIZE];
 	int master_key_size;
@@ -1777,7 +1766,7 @@ struct key_and_iv_params {
 	bool file_nonce_specified;
 	bool iv_ino_lblk_64;
 	bool iv_ino_lblk_32;
-	u32 inode_number;
+	u64 inode_number;
 	u8 fs_uuid[UUID_SIZE];
 	bool fs_uuid_specified;
 };
@@ -1842,6 +1831,8 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			die("%s requires --inode-number", opt);
 		if (params->mode_num == 0)
 			die("%s requires --mode-num", opt);
+		if (params->inode_number > UINT32_MAX)
+			die("%s can't use --inode-number > UINT32_MAX", opt);
 	}
 
 	switch (params->kdf) {
@@ -1957,8 +1948,9 @@ int main(int argc, char *argv[])
 	while ((c = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (c) {
 		case OPT_BLOCK_SIZE:
+			errno = 0;
 			block_size = strtoul(optarg, &tmp, 10);
-			if (block_size <= 0 || *tmp)
+			if (block_size <= 0 || *tmp || errno)
 				die("Invalid block size: %s", optarg);
 			break;
 		case OPT_DECRYPT:
@@ -1980,7 +1972,10 @@ int main(int argc, char *argv[])
 			usage(stdout);
 			return 0;
 		case OPT_INODE_NUMBER:
-			params.inode_number = parse_inode_number(optarg);
+			errno = 0;
+			params.inode_number = strtoull(optarg, &tmp, 10);
+			if (params.inode_number <= 0 || *tmp || errno)
+				die("Invalid inode number: %s", optarg);
 			break;
 		case OPT_IV_INO_LBLK_32:
 			params.iv_ino_lblk_32 = true;
