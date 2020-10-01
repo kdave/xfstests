@@ -1692,16 +1692,32 @@ static const struct fscrypt_cipher *find_fscrypt_cipher(const char *name)
 	return NULL;
 }
 
-struct fscrypt_iv {
-	union {
-		__le64 block_num;
-		u8 bytes[32];
+union fscrypt_iv {
+	/* usual IV format */
+	struct {
+		/* logical block number within the file */
+		__le64 block_number;
+
+		/* per-file nonce; only set in DIRECT_KEY mode */
+		u8 nonce[FILE_NONCE_SIZE];
+	};
+	/* IV format for IV_INO_LBLK_* modes */
+	struct {
+		/*
+		 * IV_INO_LBLK_64: logical block number within the file
+		 * IV_INO_LBLK_32: hashed inode number + logical block number
+		 *		   within the file, mod 2^32
+		 */
+		__le32 block_number32;
+
+		/* IV_INO_LBLK_64: inode number */
+		__le32 inode_number;
 	};
 };
 
 static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
-		       struct fscrypt_iv *iv, bool decrypting,
-		       size_t block_size, size_t padding)
+		       union fscrypt_iv *iv, bool decrypting,
+		       size_t block_size, size_t padding, bool is_bnum_32bit)
 {
 	u8 *buf = xmalloc(block_size);
 	size_t res;
@@ -1718,13 +1734,18 @@ static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
 		memset(&buf[res], 0, crypt_len - res);
 
 		if (decrypting)
-			cipher->decrypt(key, iv->bytes, buf, buf, crypt_len);
+			cipher->decrypt(key, (u8 *)iv, buf, buf, crypt_len);
 		else
-			cipher->encrypt(key, iv->bytes, buf, buf, crypt_len);
+			cipher->encrypt(key, (u8 *)iv, buf, buf, crypt_len);
 
 		full_write(STDOUT_FILENO, buf, crypt_len);
 
-		iv->block_num = cpu_to_le64(le64_to_cpu(iv->block_num) + 1);
+		if (is_bnum_32bit)
+			iv->block_number32 = cpu_to_le32(
+					le32_to_cpu(iv->block_number32) + 1);
+		else
+			iv->block_number = cpu_to_le64(
+					le64_to_cpu(iv->block_number) + 1);
 	}
 	free(buf);
 }
@@ -1806,7 +1827,7 @@ static u32 hash_inode_number(const struct key_and_iv_params *params)
  */
 static void get_key_and_iv(const struct key_and_iv_params *params,
 			   u8 *real_key, size_t real_key_size,
-			   struct fscrypt_iv *iv)
+			   union fscrypt_iv *iv)
 {
 	bool file_nonce_in_iv = false;
 	struct aes_key aes_key;
@@ -1860,14 +1881,14 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			info[infolen++] = params->mode_num;
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
 			infolen += UUID_SIZE;
-			put_unaligned_le32(params->inode_number, &iv->bytes[4]);
+			iv->inode_number = cpu_to_le32(params->inode_number);
 		} else if (params->iv_ino_lblk_32) {
 			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_32_KEY;
 			info[infolen++] = params->mode_num;
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
 			infolen += UUID_SIZE;
-			put_unaligned_le32(hash_inode_number(params),
-					   iv->bytes);
+			iv->block_number32 =
+				cpu_to_le32(hash_inode_number(params));
 		} else if (params->mode_num != 0) {
 			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
 			info[infolen++] = params->mode_num;
@@ -1888,7 +1909,7 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 	}
 
 	if (file_nonce_in_iv && params->file_nonce_specified)
-		memcpy(&iv->bytes[8], params->file_nonce, FILE_NONCE_SIZE);
+		memcpy(iv->nonce, params->file_nonce, FILE_NONCE_SIZE);
 }
 
 enum {
@@ -1928,7 +1949,7 @@ int main(int argc, char *argv[])
 	size_t padding = 0;
 	const struct fscrypt_cipher *cipher;
 	u8 real_key[MAX_KEY_SIZE];
-	struct fscrypt_iv iv;
+	union fscrypt_iv iv;
 	char *tmp;
 	int c;
 
@@ -2025,6 +2046,7 @@ int main(int argc, char *argv[])
 
 	get_key_and_iv(&params, real_key, cipher->keysize, &iv);
 
-	crypt_loop(cipher, real_key, &iv, decrypting, block_size, padding);
+	crypt_loop(cipher, real_key, &iv, decrypting, block_size, padding,
+		   params.iv_ino_lblk_64 || params.iv_ino_lblk_32);
 	return 0;
 }
