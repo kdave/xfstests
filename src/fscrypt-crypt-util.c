@@ -59,6 +59,8 @@ static void usage(FILE *fp)
 "WARNING: this program is only meant for testing, not for \"real\" use!\n"
 "\n"
 "Options:\n"
+"  --block-number=BNUM         Starting block number for IV generation.\n"
+"                                Default: 0\n"
 "  --block-size=BLOCK_SIZE     Encrypt each BLOCK_SIZE bytes independently.\n"
 "                                Default: 4096 bytes\n"
 "  --decrypt                   Decrypt instead of encrypt\n"
@@ -1787,6 +1789,7 @@ struct key_and_iv_params {
 	bool file_nonce_specified;
 	bool iv_ino_lblk_64;
 	bool iv_ino_lblk_32;
+	u64 block_number;
 	u64 inode_number;
 	u8 fs_uuid[UUID_SIZE];
 	bool fs_uuid_specified;
@@ -1839,6 +1842,9 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 
 	memset(iv, 0, sizeof(*iv));
 
+	/* Overridden later for iv_ino_lblk_{64,32} */
+	iv->block_number = cpu_to_le64(params->block_number);
+
 	if (params->iv_ino_lblk_64 || params->iv_ino_lblk_32) {
 		const char *opt = params->iv_ino_lblk_64 ? "--iv-ino-lblk-64" :
 							   "--iv-ino-lblk-32";
@@ -1852,6 +1858,8 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			die("%s requires --inode-number", opt);
 		if (params->mode_num == 0)
 			die("%s requires --mode-num", opt);
+		if (params->block_number > UINT32_MAX)
+			die("%s can't use --block-number > UINT32_MAX", opt);
 		if (params->inode_number > UINT32_MAX)
 			die("%s can't use --inode-number > UINT32_MAX", opt);
 	}
@@ -1881,6 +1889,7 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			info[infolen++] = params->mode_num;
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
 			infolen += UUID_SIZE;
+			iv->block_number32 = cpu_to_le32(params->block_number);
 			iv->inode_number = cpu_to_le32(params->inode_number);
 		} else if (params->iv_ino_lblk_32) {
 			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_32_KEY;
@@ -1888,7 +1897,9 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
 			infolen += UUID_SIZE;
 			iv->block_number32 =
-				cpu_to_le32(hash_inode_number(params));
+				cpu_to_le32(hash_inode_number(params) +
+					    params->block_number);
+			iv->inode_number = 0;
 		} else if (params->mode_num != 0) {
 			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
 			info[infolen++] = params->mode_num;
@@ -1913,6 +1924,7 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 }
 
 enum {
+	OPT_BLOCK_NUMBER,
 	OPT_BLOCK_SIZE,
 	OPT_DECRYPT,
 	OPT_FILE_NONCE,
@@ -1927,6 +1939,7 @@ enum {
 };
 
 static const struct option longopts[] = {
+	{ "block-number",    required_argument, NULL, OPT_BLOCK_NUMBER },
 	{ "block-size",      required_argument, NULL, OPT_BLOCK_SIZE },
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
 	{ "file-nonce",      required_argument, NULL, OPT_FILE_NONCE },
@@ -1968,6 +1981,12 @@ int main(int argc, char *argv[])
 
 	while ((c = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (c) {
+		case OPT_BLOCK_NUMBER:
+			errno = 0;
+			params.block_number = strtoull(optarg, &tmp, 10);
+			if (*tmp || errno)
+				die("Invalid block number: %s", optarg);
+			break;
 		case OPT_BLOCK_SIZE:
 			errno = 0;
 			block_size = strtoul(optarg, &tmp, 10);
