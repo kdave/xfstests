@@ -1,0 +1,27 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright 2020 Google LLC
+
+# Require f2fs compression support on the scratch filesystem.
+# Optionally, check for support for a specific compression algorithm.
+_require_scratch_f2fs_compression()
+{
+	local algorithm=$1
+
+	_require_scratch
+
+	if [ ! -e /sys/fs/f2fs/features/compression ]; then
+		_notrun "Kernel doesn't support f2fs compression"
+	fi
+	# Note: '-O compression' is only accepted when used in
+	# combination with extra_attr.
+	if ! _scratch_mkfs -O compression,extra_attr >> $seqres.full; then
+		_notrun "f2fs-tools doesn't support compression"
+	fi
+	if [ -n "$algorithm" ]; then
+		if ! _scratch_mount "-o compress_algorithm=$algorithm"; then
+			_notrun "Kernel doesn't support $algorithm compression algorithm for f2fs"
+		fi
+		_scratch_unmount
+	fi
+}
