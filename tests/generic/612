@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 612
+#
+# Regression test for reflink corruption present as of:
+# 78f0cc9d55cb "xfs: don't use delalloc extents for COW on files with extsize hints"
+# and (inadvertently) fixed as of:
+# 36adcbace24e "xfs: fill out the srcmap in iomap_begin"
+# upstream, and in the 5.4 stable tree with:
+# aee38af574a1 "xfs: trim IO to found COW extent limit"
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_test
+_require_test_reflink
+
+DIR=$TEST_DIR/dir.$seq
+mkdir -p $DIR
+rm -f $DIR/a $DIR/b
+
+# This test essentially creates an existing COW extent which
+# covers the first 1M, and then does another IO that overlaps it,
+# but extends beyond it.  The bug was that we did not trim the
+# new IO to the end of the existing COW extent, and so the IO
+# extended past the COW blocks and corrupted the reflinked files(s).
+
+# Make all files w/ 1m hints; create original 2m file
+$XFS_IO_PROG -c "extsize 1048576" $DIR >/dev/null 2>&1
+$XFS_IO_PROG -c "cowextsize 1048576" $DIR >/dev/null 2>&1
+
+echo "Create file b"
+$XFS_IO_PROG -f -c "pwrite -S 0x0 0 2m" -c fsync $DIR/b | _filter_xfs_io
+
+# Make a reflinked copy
+echo "Reflink copy from b to a"
+cp --reflink=always $DIR/b $DIR/a
+
+echo "Contents of b"
+hexdump -C $DIR/b
+
+# Cycle mount to get stuff out of cache
+_test_cycle_mount
+
+# Create a 1m-hinted IO at offset 0, then
+# do another IO that overlaps but extends past the 1m hint
+echo "Write to a"
+$XFS_IO_PROG -c "pwrite -S 0xa 0k -b 4k 4k" \
+       -c "pwrite -S 0xa 4k -b 1m 1m" \
+       $DIR/a | _filter_xfs_io
+
+$XFS_IO_PROG -c fsync $DIR/a
+
+echo "Contents of b now:"
+hexdump -C $DIR/b
+
+# success, all done
+status=0
+exit
