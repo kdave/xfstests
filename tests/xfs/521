@@ -1,0 +1,82 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 521
+#
+# Tests xfs_growfs on the realtime volume to make sure none of it blows up.
+# This is a regression test for the following patches:
+#
+# xfs: Set xfs_buf type flag when growing summary/bitmap files
+# xfs: Set xfs_buf's b_ops member when zeroing bitmap/summary files
+# xfs: fix realtime bitmap/summary file truncation when growing rt volume
+# xfs: make xfs_growfs_rt update secondary superblocks
+# xfs: annotate grabbing the realtime bitmap/summary locks in growfs
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_scratch_unmount >> $seqres.full 2>&1
+	test -e "$rtdev" && losetup -d $rtdev >> $seqres.full 2>&1
+	rm -f $tmp.* $TEST_DIR/$seq.rtvol
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+# Note that we don't _require_realtime because we synthesize a rt volume
+# below.
+_require_scratch_nocheck
+_require_no_large_scratch_dev
+
+echo "Create fake rt volume"
+truncate -s 400m $TEST_DIR/$seq.rtvol
+rtdev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
+
+echo "Format and mount 100m rt volume"
+export USE_EXTERNAL=yes
+export SCRATCH_RTDEV=$rtdev
+_scratch_mkfs -r size=100m > $seqres.full
+_scratch_mount || _notrun "Could not mount scratch with synthetic rt volume"
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Check rt volume stats"
+$XFS_IO_PROG -c 'chattr +t' $testdir
+$XFS_INFO_PROG $SCRATCH_MNT >> $seqres.full
+before=$(stat -f -c '%b' $testdir)
+
+echo "Create some files"
+_pwrite_byte 0x61 0 1m $testdir/original >> $seqres.full
+
+echo "Grow fs"
+$XFS_GROWFS_PROG $SCRATCH_MNT 2>&1 |  _filter_growfs >> $seqres.full
+_scratch_cycle_mount
+
+echo "Recheck 400m rt volume stats"
+$XFS_INFO_PROG $SCRATCH_MNT >> $seqres.full
+after=$(stat -f -c '%b' $testdir)
+_within_tolerance "rt volume size" $after $((before * 4)) 5% -v
+
+echo "Create more copies to make sure the bitmap really works"
+cp -p $testdir/original $testdir/copy3
+
+echo "Check filesystem"
+_check_xfs_filesystem $SCRATCH_DEV none $rtdev
+
+# success, all done
+status=0
+exit
