@@ -43,7 +43,7 @@ check_capabilities()
 	local ret
 	file="$1"
 	cap="$2"
-	ret=$($GETCAP_PROG "$file")
+	ret=$(_getcap "$file")
 	if [ -z "$ret" ]; then
 		echo "$ret"
 		echo "missing capability in file $file"
@@ -74,7 +74,7 @@ full_nocap_inc_withcap_send()
 	$BTRFS_UTIL_PROG subvolume snapshot -r "$FS1" "$FS1/snap_init" >/dev/null
 	$BTRFS_UTIL_PROG send "$FS1/snap_init" -q | $BTRFS_UTIL_PROG receive "$FS2" -q
 	# ensure that we don't have capabilities set
-	ret=$($GETCAP_PROG "$FS2/snap_init/foo.bar")
+	ret=$(_getcap "$FS2/snap_init/foo.bar")
 	if [ -n "$ret" ]; then
 		echo "File contains capabilities when it shouldn't"
 	fi
@@ -84,7 +84,7 @@ full_nocap_inc_withcap_send()
 	$BTRFS_UTIL_PROG subvolume snapshot -r "$FS1" "$FS1/snap_inc" >/dev/null
 	$BTRFS_UTIL_PROG send -p "$FS1/snap_init" "$FS1/snap_inc" -q | \
 					$BTRFS_UTIL_PROG receive "$FS2" -q
-	check_capabilities "$FS2/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice+ep"
+	check_capabilities "$FS2/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice=ep"
 
 	_scratch_unmount
 }
@@ -107,25 +107,25 @@ roundtrip_send()
 	$SETCAP_PROG "cap_sys_ptrace+ep cap_sys_nice+ep" "$FS1/foo.bar"
 	$BTRFS_UTIL_PROG subvolume snapshot -r "$FS1" "$FS1/snap_init" >/dev/null
 	$BTRFS_UTIL_PROG send "$FS1/snap_init" -q | $BTRFS_UTIL_PROG receive "$FS2" -q
-	check_capabilities "$FS2/snap_init/foo.bar" "cap_sys_ptrace,cap_sys_nice+ep"
+	check_capabilities "$FS2/snap_init/foo.bar" "cap_sys_ptrace,cap_sys_nice=ep"
 
 	# Test incremental send with different owner/group but same capabilities
 	chgrp 100 "$FS1/foo.bar"
 	$SETCAP_PROG "cap_sys_ptrace+ep cap_sys_nice+ep" "$FS1/foo.bar"
 	$BTRFS_UTIL_PROG subvolume snapshot -r "$FS1" "$FS1/snap_inc" >/dev/null
-	check_capabilities "$FS1/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice+ep"
+	check_capabilities "$FS1/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice=ep"
 	$BTRFS_UTIL_PROG send -p "$FS1/snap_init" "$FS1/snap_inc" -q | \
 				$BTRFS_UTIL_PROG receive "$FS2" -q
-	check_capabilities "$FS2/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice+ep"
+	check_capabilities "$FS2/snap_inc/foo.bar" "cap_sys_ptrace,cap_sys_nice=ep"
 
 	# Test capabilities after incremental send with different group and capabilities
 	chgrp 0 "$FS1/foo.bar"
 	$SETCAP_PROG "cap_sys_time+ep cap_syslog+ep" "$FS1/foo.bar"
 	$BTRFS_UTIL_PROG subvolume snapshot -r "$FS1" "$FS1/snap_inc2" >/dev/null
-	check_capabilities "$FS1/snap_inc2/foo.bar" "cap_sys_time,cap_syslog+ep"
+	check_capabilities "$FS1/snap_inc2/foo.bar" "cap_sys_time,cap_syslog=ep"
 	$BTRFS_UTIL_PROG send -p "$FS1/snap_inc" "$FS1/snap_inc2" -q | \
 				$BTRFS_UTIL_PROG receive "$FS2"  -q
-	check_capabilities "$FS2/snap_inc2/foo.bar" "cap_sys_time,cap_syslog+ep"
+	check_capabilities "$FS2/snap_inc2/foo.bar" "cap_sys_time,cap_syslog=ep"
 
 	_scratch_unmount
 }
