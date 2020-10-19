@@ -1,0 +1,23 @@
+#
+# CephFS specific common functions.
+#
+
+# _ceph_create_file_layout <filename> <stripe unit> <stripe count> <object size>
+# This function creates a new empty file and sets the file layout according to
+# parameters.  It will exit if the file already exists.
+_ceph_create_file_layout()
+{
+	local fname=$1
+	local stripe_unit=$2
+	local stripe_count=$3
+	local obj_size=$4
+
+	if [ -e $fname ]; then
+		echo "File $fname already exists."
+		exit 1
+	fi
+	touch $fname
+	$SETFATTR_PROG -n ceph.file.layout \
+		-v "stripe_unit=$objsz stripe_count=1 object_size=$objsz" \
+		$fname
+}
