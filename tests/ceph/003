@@ -1,0 +1,116 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. ceph/005
+#
+# Test copy_file_range with infile = outfile
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment
+. common/rc
+. common/filter
+. common/attr
+. common/reflink
+
+# real QA test starts here
+_supported_fs ceph
+
+_require_xfs_io_command "copy_range"
+_require_attrs
+_require_test
+
+workdir=$TEST_DIR/test-$seq
+rm -rf $workdir
+mkdir $workdir
+rm -f $seqres.full
+
+check_range()
+{
+	local file=$1
+	local off0=$2
+	local off1=$3
+	local val=$4
+	_read_range $file $off0 $off1 | grep -v -q $val
+	[ $? -eq 0 ] && echo "file $file is not '$val' in [ $off0 $off1 ]"
+}
+
+objsz=4194304
+halfobj=$(($objsz / 2))
+file="$workdir/file-$objsz"
+copy="$workdir/copy-$objsz"
+dest="$workdir/dest-$objsz"
+backup="$file.backup"
+
+# object_size has to be a multiple of stripe_unit
+_ceph_create_file_layout $file $objsz 1 $objsz
+_ceph_create_file_layout $backup $objsz 1 $objsz
+
+$XFS_IO_PROG -c "pwrite -S 0x61 0 $objsz" $file >> $seqres.full 2>&1
+$XFS_IO_PROG -c "pwrite -S 0x62 $objsz $objsz" $file >> $seqres.full 2>&1
+$XFS_IO_PROG -c "pwrite -S 0x63 $(($objsz * 2)) $objsz" $file >> $seqres.full 2>&1
+
+cp $file $backup
+
+echo "  Copy single object to the end:"
+echo "    aaaa|bbbb|cccc => aaaa|bbbb|aaaa"
+$XFS_IO_PROG -c "copy_range -s 0 -d $(($objsz * 2)) -l $objsz $file" "$file"
+check_range $file 0 $objsz 61
+check_range $file $objsz $objsz 62
+check_range $file $(($objsz * 2)) $objsz 61
+
+echo "  Copy single object to the beginning:"
+echo "    aaaa|bbbb|aaaa => bbbb|bbbb|aaaa"
+$XFS_IO_PROG -c "copy_range -s $objsz -d 0 -l $objsz $file" "$file"
+check_range $file 0 $(($objsz * 2)) 62
+check_range $file $(($objsz * 2)) $objsz 61
+
+echo "  Copy single object to the middle:"
+echo "    bbbb|bbbb|aaaa => bbbb|aaaa|aaaa"
+$XFS_IO_PROG -c "copy_range -s $(($objsz * 2)) -d $objsz -l $objsz $file" "$file"
+check_range $file 0 $objsz 62
+check_range $file $objsz $(($objsz * 2)) 61
+
+cp $backup $file
+echo "  Cross object boundary (no full object copy)"
+echo "    aaaa|bbbb|cccc => aaaa|bbaa|aacc"
+$XFS_IO_PROG -c "copy_range -s 0 -d $(($objsz + $halfobj)) -l $objsz $file" "$file"
+check_range $file 0 $objsz 61
+check_range $file $objsz $halfobj 62
+check_range $file $(($objsz + $halfobj)) $objsz 61
+check_range $file $(($objsz * 2 + $halfobj)) $halfobj 63
+
+cp $backup $file
+echo "    aaaa|bbbb|cccc => aaaa|bbaa|bbcc"
+$XFS_IO_PROG -c "copy_range -s $halfobj -d $(($objsz + $halfobj)) -l $objsz $file" "$file"
+check_range $file 0 $objsz 61
+check_range $file $objsz $halfobj 62
+check_range $file $(($objsz + $halfobj)) $halfobj 61
+check_range $file $(($objsz * 2)) $halfobj 62
+check_range $file $(($objsz * 2 + $halfobj)) $halfobj 63
+
+cp $backup $file
+echo "    aaaa|bbbb|cccc => aaaa|bbbb|aabb"
+$XFS_IO_PROG -c "copy_range -s $halfobj -d $(($objsz * 2)) -l $objsz $file" "$file"
+check_range $file 0 $objsz 61
+check_range $file $objsz $objsz 62
+check_range $file $(($objsz * 2)) $halfobj 61
+check_range $file $(($objsz * 2 + $halfobj)) $halfobj 62
+
+#success, all done
+status=0
+exit
