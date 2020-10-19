@@ -1,0 +1,79 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. ceph/002
+#
+# Test bug found while testing copy_file_range.
+#
+# This bug was an issue with how the OSDs handled the truncate_seq, copying it
+# from the original object into the destination object.  This test ensures the
+# kernel client correctly handles fixed/non-fixed OSDs.
+#
+# The bug was tracked here:
+#
+#   https://tracker.ceph.com/issues/37378
+#
+# The most relevant commits are:
+#
+#   ceph OSD:     dcd6a99ef9f5 ("osd: add new 'copy-from2' operation")
+#   linux kernel: 78beb0ff2fec ("ceph: use copy-from2 op in copy_file_range")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment
+. common/rc
+. common/filter
+. common/attr
+
+# real QA test starts here
+_supported_fs ceph
+
+_require_xfs_io_command "copy_range"
+_require_attrs
+_require_test
+
+workdir=$TEST_DIR/test-$seq
+rm -rf $workdir
+mkdir $workdir
+rm -f $seqres.full
+
+# Use 4M object size
+objsz=4194304
+file="$workdir/file-$objsz"
+dest="$workdir/dest-$objsz"
+
+# object_size has to be a multiple of stripe_unit
+_ceph_create_file_layout $file $objsz 1 $objsz
+_ceph_create_file_layout $dest $objsz 1 $objsz
+
+# Create a 3 objects size files
+$XFS_IO_PROG -c "pwrite -S 0x61 0 $objsz" $file >> $seqres.full 2>&1
+$XFS_IO_PROG -c "pwrite -S 0x62 $objsz $objsz" $file >> $seqres.full 2>&1
+$XFS_IO_PROG -c "pwrite -S 0x63 $(($objsz * 2)) $objsz" $file >> $seqres.full 2>&1
+
+$XFS_IO_PROG -c "pwrite -S 0x64 0 $(($objsz * 3))" $dest >> $seqres.full 2>&1
+# Truncate the destination file (messing up with the truncate_seq)
+$XFS_IO_PROG -c "truncate 0" $dest >> $seqres.full 2>&1
+
+# copy the whole file over
+$XFS_IO_PROG -c "copy_range -s 0 -d 0 -l $(($objsz * 3)) $file" "$dest"
+
+hexdump $dest
+
+#success, all done
+status=0
+exit
