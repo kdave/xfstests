@@ -4,11 +4,15 @@
 #
 # FS QA Test 163
 #
-# Test case to verify that a seed device can be replaced
+# Test case to verify that a sprouted device can be replaced
 #  Create a seed device
 #  Create a sprout device
 #  Remount RW
-#  Run device replace on the seed device
+#  Run device replace on the sprout device
+#
+# Depends on the kernel patch
+#   c6a5d954950c btrfs: fail replace of seed device
+
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
 echo "QA output created by $seq"
@@ -38,6 +42,7 @@ rm -f $seqres.full
 _supported_fs btrfs
 _require_command "$BTRFS_TUNE_PROG" btrfstune
 _require_scratch_dev_pool 3
+_require_btrfs_forget_or_module_loadable
 
 _scratch_dev_pool_get 3
 
@@ -51,7 +56,7 @@ create_seed()
 	run_check _mount $dev_seed $SCRATCH_MNT
 	$XFS_IO_PROG -f -d -c "pwrite -S 0xab 0 4M" $SCRATCH_MNT/foobar >\
 		/dev/null
-	echo -- gloden --
+	echo -- golden --
 	od -x $SCRATCH_MNT/foobar
 	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
@@ -63,22 +68,28 @@ add_sprout()
 {
 	_run_btrfs_util_prog device add -f $dev_sprout $SCRATCH_MNT
 	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_mount -o remount,rw $dev_sprout $SCRATCH_MNT
+	$XFS_IO_PROG -f -c "pwrite -S 0xcd 0 4M" $SCRATCH_MNT/foobar2 >\
+		/dev/null
 }
 
-replace_seed()
+replace_sprout()
 {
-	_run_btrfs_util_prog replace start -fB $dev_seed $dev_replace_tgt $SCRATCH_MNT
+	_run_btrfs_util_prog replace start -fB $dev_sprout $dev_replace_tgt $SCRATCH_MNT
 	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
-	run_check _mount $dev_replace_tgt $SCRATCH_MNT
+	_btrfs_forget_or_module_reload
+	run_check _mount -o device=$dev_seed $dev_replace_tgt $SCRATCH_MNT
 	echo -- sprout --
 	od -x $SCRATCH_MNT/foobar
+	od -x $SCRATCH_MNT/foobar2
 	_scratch_unmount
 
 }
 
 seed_is_mountable()
 {
+	_btrfs_forget_or_module_reload
 	run_check _mount $dev_seed $SCRATCH_MNT
 	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
@@ -86,7 +97,7 @@ seed_is_mountable()
 
 create_seed
 add_sprout
-replace_seed
+replace_sprout
 
 seed_is_mountable
 
