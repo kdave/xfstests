@@ -1,0 +1,140 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. btrfs/226
+#
+# Test several (btrfs specific) scenarios with RWF_NOWAIT writes, cases where
+# they should fail and cases where they should succeed.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch_reflink
+_require_chattr C
+_require_odirect
+_require_xfs_io_command pwrite -N
+_require_xfs_io_command falloc -k
+_require_xfs_io_command fpunch
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Test a write against COW file/extent - should fail with -EAGAIN. Disable the
+# NOCOW attribute of the file just in case MOUNT_OPTIONS has "-o nodatacow".
+echo "Testing write against COW file"
+touch $SCRATCH_MNT/f1
+$CHATTR_PROG -C $SCRATCH_MNT/f1
+$XFS_IO_PROG -s -c "pwrite -S 0xab 0 128K" $SCRATCH_MNT/f1 | _filter_xfs_io
+$XFS_IO_PROG -d -c "pwrite -N -V 1 -S 0xff 32K 64K" $SCRATCH_MNT/f1
+
+# Check no data was written.
+echo "File data after write attempt:"
+od -A d -t x1 $SCRATCH_MNT/f1
+
+# Create a file with two extents (NOCOW), then create a snapshot, unshare the
+# first extent by writing to it without RWF_NOWAIT, and then attempt to write
+# to a file range that includes both the non-shared and the shared extent -
+# should fail with -EAGAIN.
+echo
+echo "Testing write against extent shared across snapshots"
+touch $SCRATCH_MNT/f2
+$CHATTR_PROG +C $SCRATCH_MNT/f2
+$XFS_IO_PROG -s -c "pwrite -S 0xab 0 64K" \
+	     -c "pwrite -S 0xcd 64K 64K" \
+	     $SCRATCH_MNT/f2 | _filter_xfs_io
+
+$BTRFS_UTIL_PROG subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap \
+    | _filter_scratch
+
+# Write into the range of the first extent so that that range no longer has a
+# shared extent.
+$XFS_IO_PROG -s -c "pwrite -S 0xab 0 64K" $SCRATCH_MNT/f2 | _filter_xfs_io
+
+# Attempt to write into the file range, using RWF_NOWAIT, that covers the
+# non-shared and the shared extents, should fail.
+$XFS_IO_PROG -d -c "pwrite -N -V 1 -S 0xff -b 64K 32K 64K" $SCRATCH_MNT/f2
+
+# Check no data was written.
+echo "File data after write attempt:"
+od -A d -t x1 $SCRATCH_MNT/f2
+
+# Create a file that has an extent shared with file f2. Attempting to write
+# into a range that covers the shared extent should fail with -EAGAIN.
+echo
+echo "Testing write against shared extent through reflink"
+touch $SCRATCH_MNT/f3
+$CHATTR_PROG +C $SCRATCH_MNT/f3
+$XFS_IO_PROG -s -c "pwrite -S 0xab -b 64K 0 64K" \
+	     -c "reflink $SCRATCH_MNT/f2 64K 64K 64K" \
+	     $SCRATCH_MNT/f3 | _filter_xfs_io
+
+# Should fail, range 64K to 96K has a shared extent.
+$XFS_IO_PROG -d -c "pwrite -N -V 1 -S 0xff -b 64K 32K 64K" $SCRATCH_MNT/f3
+
+# Check no data was written.
+echo "File data after write attempt:"
+od -A d -t x1 $SCRATCH_MNT/f3
+
+# Create a file with a prealloc extent at eof and attempt to write to it, it
+# should succeed.
+echo
+echo "Testing write against prealloc extent at eof"
+$XFS_IO_PROG -f -s -c "pwrite -S 0xab 0 64K" \
+	     -c "falloc -k 64K 64K" \
+	     $SCRATCH_MNT/f4 | _filter_xfs_io
+
+# Should succeed.
+$XFS_IO_PROG -d -c "pwrite -N -V 1 -S 0xcd -b 64K 64K 64K" $SCRATCH_MNT/f4 \
+    | _filter_xfs_io
+
+# Check the file has the expected data.
+echo "File after write:"
+od -A d -t x1 $SCRATCH_MNT/f4
+
+# Attempts to write to ranges that have a hole, should fail with -EAGAIN.
+echo
+echo "Testing writes against ranges with holes"
+touch $SCRATCH_MNT/f5
+$CHATTR_PROG +C $SCRATCH_MNT/f5
+# 3 64Kb extents, with a 64K hole at offset 128K.
+$XFS_IO_PROG -s -d -c "pwrite -S 0xab -b 64K 0 64K" \
+	     -s -d -c "pwrite -S 0xcd -b 64K 64K 64K" \
+	     -s -d -c "pwrite -S 0xef -b 64K 192K 64K" \
+	     $SCRATCH_MNT/f5 | _filter_xfs_io
+
+# Should fail, second half of the range maps to a hole.
+$XFS_IO_PROG -d -c "pwrite -N -V 1 -S 0x11 -b 128K 64K 128K" $SCRATCH_MNT/f5
+
+# Now try with a range that starts with a hole and ends with an extent, should
+# fail as well.
+$XFS_IO_PROG -c "fpunch 0 64K" \
+	     -d -c "pwrite -N -V 1 -S 0x22 -b 128K 0 128K" \
+	     $SCRATCH_MNT/f5
+
+# Check no data was written.
+echo "File data after write attempt:"
+od -A d -t x1 $SCRATCH_MNT/f5
+
+status=0
+exit
