@@ -1,0 +1,84 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 IBM Corporation. All Rights Reserved.
+#
+# FS QA Test No. ext4/046
+#
+# Test writes to falloc file with filesize > 4GB and make sure to verify
+# the file checksum both before and after mount.
+# This test is to check whether unwritten extents gets properly converted
+# to written extent on a filesystem with bs < ps with dioread_nolock.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+_supported_fs ext4
+_require_scratch
+_require_xfs_io_command "falloc"
+_require_scratch_size $((6 * 1024 * 1024)) #kB
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount "-o dioread_nolock" >> $seqres.full 2>&1
+
+# Get blksz
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+testfile=$SCRATCH_MNT/testfile-$seq
+
+# Fallocate testfile with size > 4G
+fsize=$((5 * 1024 * 1024 * 1024))
+$XFS_IO_PROG -f -c "falloc 0 $fsize" $testfile >> $seqres.full 2>&1
+
+# First write at offset < 4G (at few alternative blks)
+off=$((3 * 1024 * 1024 * 1024))
+for i in 1 2 3 4; do
+	$XFS_IO_PROG -f \
+		-c "pwrite $off $blksz" \
+		$testfile >> $seqres.full 2>&1
+	off=$(($off + (2*$blksz)))
+done
+
+# Then write at offset > 4G (at few alternative blks) to check
+# any 32bit overflow case in map.m_lblk
+off=$((4 * 1024 * 1024 * 1024))
+for i in 1 2 3 4; do
+	$XFS_IO_PROG -f \
+		-c "pwrite $off $blksz" \
+		$testfile >> $seqres.full 2>&1
+	off=$(($off + (2*$blksz)))
+done
+
+# ==== Pre-Remount ===
+md5_pre=`md5sum $testfile | cut -d' ' -f1`
+echo "Pre-Remount md5sum of $testfile = $md5_pre" >> $seqres.full
+
+_scratch_cycle_mount
+
+# ==== Post-Remount ===
+md5_post=`md5sum $testfile | cut -d' ' -f1`
+echo "Post-Remount md5sum of $testfile = $md5_post" >> $seqres.full
+test $md5_pre != $md5_post && echo "md5sum mismatch"
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
