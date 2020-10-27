@@ -49,10 +49,21 @@ seq 1 $nr | while read i; do
 done
 sync
 
+ino_0=$(stat -c '%i' $SCRATCH_MNT/file.0)
+ino_64=$(stat -c '%i' $SCRATCH_MNT/file.64)
+ino_128=$(stat -c '%i' $SCRATCH_MNT/file.128)
+
+echo "Check filesystem"
+_scratch_unmount
+_scratch_xfs_db -c "inode $ino_0" -c print \
+	-c "inode $ino_64" -c print \
+	-c "inode $ino_128" -c print | grep reflink | sed -e 's/^v[0-9]*/vX/g'
+_scratch_mount
+
 echo "Check files"
 for i in 0 $((nr / 2)) $nr; do
 	md5sum $SCRATCH_MNT/file.$i | _filter_scratch
-	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i | _filter_scratch
+	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i >> $seqres.full
 done
 
 echo "CoW all files"
@@ -63,12 +74,15 @@ done
 echo "Repair filesystem"
 _scratch_unmount
 _repair_scratch_fs >> $seqres.full
+_scratch_xfs_db -c "inode $ino_0" -c print \
+	-c "inode $ino_64" -c print \
+	-c "inode $ino_128" -c print | grep reflink | sed -e 's/^v[0-9]*/vX/g'
 _scratch_mount
 
 echo "Check files again"
 for i in 0 $((nr / 2)) $nr; do
 	md5sum $SCRATCH_MNT/file.$i | _filter_scratch
-	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i | _filter_scratch
+	$XFS_IO_PROG -c 'lsattr -v' $SCRATCH_MNT/file.$i >> $seqres.full
 done
 
 echo "Done"
