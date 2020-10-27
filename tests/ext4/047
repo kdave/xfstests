@@ -1,0 +1,56 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Fujitsu.  All Rights Reserved.
+#
+# FS QA Test 047
+#
+# This is a regression test for kernel patch:
+# commit aa2f77920b74 ("ext4: disallow modifying DAX inode flag if inline_data has been set")
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_require_scratch_dax_mountopt "dax=always"
+_require_dax_iflag
+_require_scratch_ext4_feature "inline_data"
+
+TESTFILE=$SCRATCH_MNT/testfile
+
+_scratch_mkfs_ext4 -O inline_data > $seqres.full 2>&1
+
+_scratch_mount "-o dax=inode" >> $seqres.full 2>&1
+
+echo "Need to make some inline data..." > $TESTFILE
+
+# It's fine to disallow modifying DAX inode flag on the file which
+# has inline_data flag.
+if $XFS_IO_PROG -c "chattr +x" $TESTFILE >> $seqres.full 2>&1; then
+	_scratch_cycle_mount "dax=inode"
+	echo 'Append data' >> $TESTFILE
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
