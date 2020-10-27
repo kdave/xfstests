@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 524
+#
+# Test formatting with a well known config file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap '_cleanup; exit $status' 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $def_cfgfile $fsimg
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_test
+_require_scratch_nocheck
+_require_xfs_mkfs_cfgfile
+
+echo "Silence is golden"
+
+def_cfgfile=$TEST_DIR/a
+fsimg=$TEST_DIR/a.img
+rm -f $def_cfgfile $fsimg
+$XFS_IO_PROG -c "truncate 20t" -f $fsimg
+
+cat > $def_cfgfile << ENDL
+[metadata]
+crc = 1
+rmapbt = 1
+reflink = 1
+
+[inode]
+sparse = 1
+ENDL
+
+$MKFS_XFS_PROG -c options=$def_cfgfile -f $SCRATCH_DEV > $tmp.mkfs
+cat $tmp.mkfs >> $seqres.full
+grep -q 'crc=1' $tmp.mkfs || echo 'v5 not enabled'
+grep -q 'rmapbt=1' $tmp.mkfs || echo 'rmap not enabled'
+grep -q 'reflink=1' $tmp.mkfs || echo 'reflink not enabled'
+grep -q 'sparse=1' $tmp.mkfs || echo 'sparse inodes not enabled'
+
+# success, all done
+status=0
+exit

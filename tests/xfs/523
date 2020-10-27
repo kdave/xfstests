@@ -1,0 +1,195 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2020 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 523
+#
+# Feed invalid mkfs config files to the mkfs parser to ensure that they are
+# recognized as invalid.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap '_cleanup; exit $status' 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $def_cfgfile $fsimg
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_test
+_require_scratch_nocheck
+_require_xfs_mkfs_cfgfile
+
+def_cfgfile=$TEST_DIR/a
+fsimg=$TEST_DIR/a.img
+rm -f $def_cfgfile $fsimg
+$XFS_IO_PROG -c "truncate 20t" -f $fsimg
+
+test_mkfs_config() {
+	local cfgfile="$1"
+	if [ -z "$cfgfile" ] || [ "$cfgfile" = "-" ]; then
+		cfgfile=$def_cfgfile
+		cat > $cfgfile
+	fi
+	$MKFS_XFS_PROG -c options=$cfgfile -f -N $fsimg >> $seqres.full 2> $tmp.err
+	if [ $? -eq 0 ]; then
+		echo "Test passed, should have failed! Config file parameters:"
+		cat $cfgfile
+	fi
+}
+
+echo Spaces in a section name
+test_mkfs_config << ENDL
+[meta data]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[meta	data]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[ metadata]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[metadata ]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[ metadata ]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[ metadata] 
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+[metadata ] 
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+ [ metadata]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+ [metadata ]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+ [ metadata ]
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+ [metadata ] 
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+ [ metadata ] 
+crc = 0
+ENDL
+test_mkfs_config << ENDL
+   	 		 	 [	  	 		metadata		  	  	    	  ] 	 	 	    	
+crc = 0
+ENDL
+
+echo Spaces in the middle of a key name
+test_mkfs_config << ENDL
+[metadata]
+c rc = 0
+ENDL
+
+echo Invalid value
+test_mkfs_config << ENDL
+[metadata]
+crc = waffles
+ENDL
+
+echo Nonexistent sections
+test_mkfs_config << ENDL
+[goober]
+crc = 0
+ENDL
+
+echo Nonexistent keys
+test_mkfs_config << ENDL
+[metadata]
+goober = 0
+ENDL
+
+echo Only zero or one
+test_mkfs_config << ENDL
+[metadata]
+crc = 50
+ENDL
+test_mkfs_config << ENDL
+[metadata]
+crc = -1
+ENDL
+
+echo sysctl style files
+test_mkfs_config << ENDL
+metadata.crc = 1
+ENDL
+
+echo binaries
+test_mkfs_config $MKFS_XFS_PROG 2>&1 | sed -e "s#$MKFS_XFS_PROG#MKFS_XFS_PROG#g"
+
+echo respecified options
+test_mkfs_config << ENDL
+[metadata]
+crc = 0
+crc = 1
+ENDL
+
+echo respecified sections
+test_mkfs_config << ENDL
+[metadata]
+crc = 0
+[metadata]
+crc = 1
+ENDL
+
+echo ambiguous comment/section names
+test_mkfs_config << ENDL
+[meta#data]
+crc = 0
+ENDL
+
+echo ambiguous comment/variable names
+test_mkfs_config << ENDL
+[metadata]
+fo#o = 0
+ENDL
+test_mkfs_config << ENDL
+[metadata]
+foo#=# 0
+ENDL
+test_mkfs_config << ENDL
+[metadata]
+foo =# 0
+ENDL
+test_mkfs_config << ENDL
+[metadata]
+crc = 0;This is an eol comment.
+ENDL
+
+# success, all done
+status=0
+exit
