@@ -41,6 +41,8 @@ cat $tmp.mkfs > "$seqres.full" 2>&1
 _scratch_mount
 blksz="$(_get_block_size $SCRATCH_MNT)"
 
+rtextsz_blks=$((rtextsz / blksz))
+
 # inode core size is at least 176 bytes; btree header is 56 bytes;
 # rtrmap record is 32 bytes; and rtrmap key/pointer are 56 bytes.
 i_ptrs=$(( (isize - 176) / 56 ))
@@ -52,14 +54,14 @@ len=$((blocks * rtextsz))
 echo "Create some files"
 $XFS_IO_PROG -f -R -c "falloc 0 $len" -c "pwrite -S 0x68 -b 1048576 0 $len" $SCRATCH_MNT/f1 >> $seqres.full
 $XFS_IO_PROG -f -R -c "falloc 0 $len" -c "pwrite -S 0x68 -b 1048576 0 $len" $SCRATCH_MNT/f2 >> $seqres.full
-$here/src/punch-alternating $SCRATCH_MNT/f1 >> "$seqres.full"
-$here/src/punch-alternating $SCRATCH_MNT/f2 >> "$seqres.full"
+$here/src/punch-alternating -i $((2 * rtextsz_blks)) -s $rtextsz_blks $SCRATCH_MNT/f1 >> "$seqres.full"
+$here/src/punch-alternating -i $((2 * rtextsz_blks)) -s $rtextsz_blks $SCRATCH_MNT/f2 >> "$seqres.full"
 echo garbage > $SCRATCH_MNT/f3
 ino=$(stat -c '%i' $SCRATCH_MNT/f3)
 _scratch_unmount
 
 echo "Corrupt fs"
-fsbno=$(_scratch_xfs_db -c "inode $ino" -c 'bmap' | \
+fsbno=$(_scratch_xfs_db -c "inode $ino" -c 'bmap' | grep 'flag 0' | head -n 1 | \
 	sed -e 's/^.*startblock \([0-9]*\) .*$/\1/g')
 
 _scratch_xfs_db -x -c 'sb 0' -c 'addr rrmapino' \
