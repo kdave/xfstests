@@ -78,19 +78,6 @@ diff -r $SCRATCH_MNT/edir $SCRATCH_MNT/ref_dir
 # every time this test is run, even if we were to put a fixed key into the
 # keyring instead of a random one.  The same applies to symlink targets.
 #
-# TODO: there are some inconsistencies in which error codes are returned on
-# different kernel versions and filesystems when trying to create a file or
-# subdirectory without access to the parent directory's encryption key.  It's
-# planned to consistently use ENOKEY, but for now make this test accept multiple
-# error codes...
-#
-
-filter_create_errors()
-{
-	sed -e 's/No such file or directory/Required key not available/' \
-	    -e 's/Permission denied/Required key not available/' \
-	    -e 's/Operation not permitted/Required key not available/'
-}
 
 _unlink_session_encryption_key $keydesc
 _scratch_cycle_mount
@@ -110,12 +97,12 @@ md5sum $(find $SCRATCH_MNT/edir -maxdepth 1 -type f | head -1) |& \
 # Try to create new files, directories, and symlinks in the encrypted directory,
 # both with and without using correctly base-64 encoded filenames.  These should
 # all fail with ENOKEY.
-$XFS_IO_PROG -f $SCRATCH_MNT/edir/newfile |& filter_create_errors | _filter_scratch
-$XFS_IO_PROG -f $SCRATCH_MNT/edir/0123456789abcdef |& filter_create_errors | _filter_scratch
-mkdir $SCRATCH_MNT/edir/newdir |& filter_create_errors | _filter_scratch
-mkdir $SCRATCH_MNT/edir/0123456789abcdef |& filter_create_errors | _filter_scratch
-ln -s foo $SCRATCH_MNT/edir/newlink |& filter_create_errors | _filter_scratch
-ln -s foo $SCRATCH_MNT/edir/0123456789abcdef |& filter_create_errors | _filter_scratch
+$XFS_IO_PROG -f $SCRATCH_MNT/edir/newfile |& _filter_scratch
+$XFS_IO_PROG -f $SCRATCH_MNT/edir/0123456789abcdef |& _filter_scratch
+mkdir $SCRATCH_MNT/edir/newdir |& _filter_scratch
+mkdir $SCRATCH_MNT/edir/0123456789abcdef |& _filter_scratch
+ln -s foo $SCRATCH_MNT/edir/newlink |& _filter_scratch
+ln -s foo $SCRATCH_MNT/edir/0123456789abcdef |& _filter_scratch
 
 # Delete the encrypted directory (should succeed)
 rm -r $SCRATCH_MNT/edir
