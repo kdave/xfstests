@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 614
+#
+# Test that after doing a memory mapped write to an empty file, a call to
+# stat(2) reports a non-zero number of used blocks.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -c "truncate 64K"      \
+	     -c "mmap -w 0 64K"        \
+	     -c "mwrite -S 0xab 0 64K" \
+	     -c "munmap"               \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+blocks_used=$(stat -c %b $SCRATCH_MNT/foobar)
+if [ $blocks_used -eq 0 ]; then
+    echo "error: stat(2) reported 0 used blocks"
+fi
+
+echo "Silence is golden"
+
+status=0
+exit
