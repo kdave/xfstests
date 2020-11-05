@@ -34,7 +34,7 @@ int main(int argc, char **argv)
 		}
 
 		if (d != i) {
-			fprintf(stderr, "bad data, offset = %u", i * 4);
+			fprintf(stderr, "bad data, offset = %u, got %d wanted %d\n", i * 4, d, i);
 			exit(1);
 		}
 	}
