@@ -521,6 +521,12 @@ _expunge_test()
 	return 0
 }
 
+# Can we run systemd scopes?
+HAVE_SYSTEMD_SCOPES=
+systemctl reset-failed "fstests-check" &>/dev/null
+systemd-run --quiet --unit "fstests-check" --scope bash -c "exit 77" &> /dev/null
+test $? -eq 77 && HAVE_SYSTEMD_SCOPES=yes
+
 # Make the check script unattractive to the OOM killer...
 OOM_SCORE_ADJ="/proc/self/oom_score_adj"
 test -w ${OOM_SCORE_ADJ} && echo -1000 > ${OOM_SCORE_ADJ}
@@ -528,8 +534,26 @@ test -w ${OOM_SCORE_ADJ} && echo -1000 > ${OOM_SCORE_ADJ}
 # ...and make the tests themselves somewhat more attractive to it, so that if
 # the system runs out of memory it'll be the test that gets killed and not the
 # test framework.
+#
+# If systemd is available, run the entire test script in a scope so that we can
+# kill all subprocesses of the test if it fails to clean up after itself.  This
+# is essential for ensuring that the post-test unmount succeeds.  Note that
+# systemd doesn't automatically remove transient scopes that fail to terminate
+# when systemd tells them to terminate (e.g. programs stuck in D state when
+# systemd sends SIGKILL), so we use reset-failed to tear down the scope.
 _run_seq() {
-	bash -c "test -w ${OOM_SCORE_ADJ} && echo 250 > ${OOM_SCORE_ADJ}; exec ./$seq"
+	local cmd=(bash -c "test -w ${OOM_SCORE_ADJ} && echo 250 > ${OOM_SCORE_ADJ}; exec ./$seq")
+
+	if [ -n "${HAVE_SYSTEMD_SCOPES}" ]; then
+		local unit="$(systemd-escape "fs$seq").scope"
+		systemctl reset-failed "${unit}" &> /dev/null
+		systemd-run --quiet --unit "${unit}" --scope "${cmd[@]}"
+		res=$?
+		systemctl stop "${unit}" &> /dev/null
+		return "${res}"
+	else
+		"${cmd[@]}"
+	fi
 }
 
 _detect_kmemleak
