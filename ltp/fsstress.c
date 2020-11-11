@@ -394,7 +394,7 @@ struct print_string	flag_str = {0};
 void	add_to_flist(int, int, int, int);
 void	append_pathname(pathname_t *, char *);
 int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
-int	attr_remove_path(pathname_t *, const char *, int);
+int	attr_remove_path(pathname_t *, const char *);
 int	attr_set_path(pathname_t *, const char *, const char *, const int);
 void	check_cwd(void);
 void	cleanup_flist(void);
@@ -889,18 +889,18 @@ attr_list_path(pathname_t *name,
 }
 
 int
-attr_remove_path(pathname_t *name, const char *attrname, int flags)
+attr_remove_path(pathname_t *name, const char *attrname)
 {
 	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
-	rval = attr_remove(name->path, attrname, flags);
+	rval = lremovexattr(name->path, attrname);
 	if (rval >= 0 || errno != ENAMETOOLONG)
 		return rval;
 	separate_pathname(name, buf, &newname);
 	if (chdir(buf) == 0) {
-		rval = attr_remove_path(&newname, attrname, flags);
+		rval = attr_remove_path(&newname, attrname);
 		assert(chdir("..") == 0);
 	}
 	free_pathname(&newname);
@@ -2362,7 +2362,10 @@ attr_remove_f(int opno, long r)
 		free_pathname(&f);
 		return;
 	}
-	e = attr_remove_path(&f, aname, ATTR_DONTFOLLOW) < 0 ? errno : 0;
+	if (attr_remove_path(&f, aname) < 0)
+		e = errno;
+	else
+		e = 0;
 	check_cwd();
 	if (v)
 		printf("%d/%d: attr_remove %s %s %d\n",
