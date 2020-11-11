@@ -154,6 +154,16 @@ _scratch_xfs_populate() {
 
 	_populate_xfs_qmount_option
 	_scratch_mount
+
+	# We cannot directly force the filesystem to create the metadata
+	# structures we want; we can only achieve this indirectly by carefully
+	# crafting files and a directory tree.  Therefore, we must have exact
+	# control over the layout and device selection of all files created.
+	# Clear the rtinherit flag on the root directory so that files are
+	# always created on the data volume regardless of MKFS_OPTIONS.  We can
+	# set the realtime flag when needed.
+	$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT
+
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
 	dblksz="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep naming.*bsize | sed -e 's/^.*bsize=//g' -e 's/\([0-9]*\).*$/\1/g')"
 	crc="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep crc= | sed -e 's/^.*crc=//g' -e 's/\([0-9]*\).*$/\1/g')"
@@ -306,6 +316,7 @@ _scratch_xfs_populate() {
 	if [ $is_rmapbt -gt 0 ] && [ $is_rt -gt 0 ]; then
 		echo "+ rtrmapbt btree"
 		nr="$((blksz * 2 / 32))"
+		$XFS_IO_PROG -R -f -c 'truncate 0' "${SCRATCH_MNT}/RTRMAPBT"
 		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/RTRMAPBT"
 	fi
 
