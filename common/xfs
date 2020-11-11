@@ -174,6 +174,26 @@ _scratch_mkfs_xfs()
 	return $mkfs_status
 }
 
+# Get the size of an allocation unit of a file.  Normally this is just the
+# block size of the file, but for realtime files, this is the realtime extent
+# size.
+_xfs_get_file_block_size()
+{
+	local path="$1"
+
+	if ! ($XFS_IO_PROG -c "stat -v" "$path" 2>&1 | egrep -q '(rt-inherit|realtime)'); then
+		_get_block_size "$path"
+		return
+	fi
+
+	# Otherwise, call xfs_info until we find a mount point or the root.
+	path="$(readlink -m "$path")"
+	while ! $XFS_INFO_PROG "$path" &>/dev/null && [ "$path" != "/" ]; do
+		path="$(dirname "$path")"
+	done
+	$XFS_INFO_PROG "$path" | grep realtime | sed -e 's/^.*extsz=\([0-9]*\).*$/\1/g'
+}
+
 # xfs_check script is planned to be deprecated. But, we want to
 # be able to invoke "xfs_check" behavior in xfstests in order to
 # maintain the current verification levels.
