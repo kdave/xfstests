@@ -2769,8 +2769,7 @@ main(int argc, char **argv)
 			randomoplen = 0;
 			break;
 		case 'P':
-			strncpy(dname, optarg, sizeof(dname));
-			strcat(dname, "/");
+			snprintf(dname, sizeof(dname), "%s/", optarg);
 			dirpath = strlen(dname);
 			break;
                 case 'R':
@@ -2799,7 +2798,7 @@ main(int argc, char **argv)
 			break;
 		case 255:  /* --record-ops */
 			if (optarg)
-				strncpy(opsfile, optarg, sizeof(opsfile));
+				snprintf(opsfile, sizeof(opsfile), "%s", optarg);
 			recordops = opsfile;
 			break;
 		case 256:  /* --replay-ops */
