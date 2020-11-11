@@ -395,7 +395,7 @@ void	add_to_flist(int, int, int, int);
 void	append_pathname(pathname_t *, char *);
 int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
 int	attr_remove_path(pathname_t *, const char *, int);
-int	attr_set_path(pathname_t *, const char *, const char *, const int, int);
+int	attr_set_path(pathname_t *, const char *, const char *, const int);
 void	check_cwd(void);
 void	cleanup_flist(void);
 int	creat_path(pathname_t *, mode_t);
@@ -909,19 +909,19 @@ attr_remove_path(pathname_t *name, const char *attrname, int flags)
 
 int
 attr_set_path(pathname_t *name, const char *attrname, const char *attrvalue,
-	      const int valuelength, int flags)
+	      const int valuelength)
 {
 	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
-	rval = attr_set(name->path, attrname, attrvalue, valuelength, flags);
+	rval = lsetxattr(name->path, attrname, attrvalue, valuelength, 0);
 	if (rval >= 0 || errno != ENAMETOOLONG)
 		return rval;
 	separate_pathname(name, buf, &newname);
 	if (chdir(buf) == 0) {
-		rval = attr_set_path(&newname, attrname, attrvalue, valuelength,
-			flags);
+		rval = attr_set_path(&newname, attrname, attrvalue,
+				     valuelength);
 		assert(chdir("..") == 0);
 	}
 	free_pathname(&newname);
@@ -2392,8 +2392,10 @@ attr_set_f(int opno, long r)
 		len = 1;
 	aval = malloc(len);
 	memset(aval, nameseq & 0xff, len);
-	e = attr_set_path(&f, aname, aval, len, ATTR_DONTFOLLOW) < 0 ?
-		errno : 0;
+	if (attr_set_path(&f, aname, aval, len) < 0)
+		e = errno;
+	else
+		e = 0;
 	check_cwd();
 	free(aval);
 	if (v)
