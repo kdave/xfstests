@@ -1642,6 +1642,7 @@ static u64 siphash_1u64(const u64 key[2], u64 data)
 #define FILE_NONCE_SIZE		16
 #define UUID_SIZE		16
 #define MAX_KEY_SIZE		64
+#define MAX_IV_SIZE		ADIANTUM_IV_SIZE
 
 static const struct fscrypt_cipher {
 	const char *name;
@@ -1715,6 +1716,8 @@ union fscrypt_iv {
 		/* IV_INO_LBLK_64: inode number */
 		__le32 inode_number;
 	};
+	/* Any extra bytes up to the algorithm's IV size must be zeroed */
+	u8 bytes[MAX_IV_SIZE];
 };
 
 static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
@@ -1736,9 +1739,9 @@ static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
 		memset(&buf[res], 0, crypt_len - res);
 
 		if (decrypting)
-			cipher->decrypt(key, (u8 *)iv, buf, buf, crypt_len);
+			cipher->decrypt(key, iv->bytes, buf, buf, crypt_len);
 		else
-			cipher->encrypt(key, (u8 *)iv, buf, buf, crypt_len);
+			cipher->encrypt(key, iv->bytes, buf, buf, crypt_len);
 
 		full_write(STDOUT_FILENO, buf, crypt_len);
 
