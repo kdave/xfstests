@@ -1,0 +1,207 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 IBM Corporation. All Rights Reserved.
+#
+# FS QA Test 619
+#
+# ENOSPC regression test in a multi-threaded scenario. Test allocation
+# strategies of the file system and validate space anomalies as reported by
+# the system versus the allocated by the program.
+#
+# The test is motivated by a bug in ext4 systems where-in ENOSPC is
+# reported by the file system even though enough space for allocations is
+# available[1].
+# [1]: https://patchwork.ozlabs.org/patch/1294003
+#
+# Linux kernel patch series that fixes the above regression:
+# 53f86b170dfa ("ext4: mballoc: add blocks to PA list under same spinlock
+#               after allocating blocks")
+# cf5e2ca6c990 ("ext4: mballoc: refactor ext4_mb_discard_preallocations()")
+# 07b5b8e1ac40 ("ext4: mballoc: introduce pcpu seqcnt for freeing PA to
+#               improve ENOSPC handling")
+# 8ef123fe02ca ("ext4: mballoc: refactor ext4_mb_good_group()")
+# 993778306e79 ("ext4: mballoc: use lock for checking free blocks while
+#               retrying")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+FS_SIZE=$((240*1024*1024)) # 240MB
+DEBUG=1 # set to 0 to disable debug statements in shell and c-prog
+FACT=0.7
+
+# Disk allocation methods
+FALLOCATE=1
+FTRUNCATE=2
+
+# Helps to build TEST_VECTORS
+SMALL_FILE_SIZE=$((512 * 1024)) # in Bytes
+BIG_FILE_SIZE=$((1536 * 1024))  # in Bytes
+MIX_FILE_SIZE=$((2048 * 1024))  # (BIG + SMALL small file size)
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_require_scratch
+_require_test_program "t_enospc"
+_require_xfs_io_command "falloc"
+
+debug()
+{
+	if [ $DEBUG -eq 1 ]; then
+		echo "$1" >> $seqres.full
+	fi
+}
+
+# Calculate the number of threads needed to fill the disk space
+# Arguments
+# $1: the size of a file
+# $2: ratio in which $1 file should be split into multiple files.
+# $3: percentage of the disk space should be used during the test
+# Calculate the number of threads needed to fill the disk space
+calc_thread_cnt()
+{
+	local file_ratio_unit=$1
+	local file_ratio=$2
+	local disk_saturation=$3
+	local tot_avail_size
+	local avail_size
+	local thread_cnt
+
+	IFS=',' read -ra fratio <<< $file_ratio
+	file_ratio_cnt=${#fratio[@]}
+
+	tot_avail_size=$($DF_PROG --block-size=1 $SCRATCH_DEV | awk 'FNR == 2 { print $5 }')
+	avail_size=$(echo $tot_avail_size*$disk_saturation | $BC_PROG)
+	thread_cnt=$(echo "$file_ratio_cnt*($avail_size/$file_ratio_unit)" | $BC_PROG)
+
+	debug "Total available size: $tot_avail_size"
+	debug "Available size: $avail_size"
+	debug "Thread count: $thread_cnt"
+
+	echo ${thread_cnt}
+}
+
+# Arguments
+# $1: a string containing test configuration separated by a colon.
+#     $1 is treated as an array of arguments to the function.
+#     Description of each array element is given below.
+#
+# @1: name of the test
+# @2: thread in t_enospec exerciser will allocate file of @2 size
+# @3: defines the proportion in which the file size defined in @2
+#     should be divided into two files.
+#     (valid @3: more than two values are not allowed)
+#                values should be comma separated)
+#                sum of all values must be 1)
+# @4: define the percentage of available memory should be used to
+#     during the test.
+# @5: defines the disk allocation method (fallocate/ftruncate)
+# @6: number of the test should run
+run_testcase()
+{
+	IFS=':' read -ra args <<< $1
+	local test_name=${args[0]}
+	local file_ratio_unit=${args[1]}
+	local file_ratio=${args[2]}
+	local disk_saturation=${args[3]}
+	local disk_alloc_method=${args[4]}
+	local test_iteration_cnt=${args[5]}
+	local extra_args=""
+	local thread_cnt
+
+	if [ "$disk_alloc_method" == "$FALLOCATE" ]; then
+		extra_args="$extra_args -f"
+	fi
+
+	# enable the debug statements in c program
+	if [ "$DEBUG" -eq 1 ]; then
+		extra_args="$extra_args -v"
+	fi
+
+	debug "============ Test details start ============"
+	debug "Test name: $test_name"
+	debug "File ratio unit: $file_ratio_unit"
+	debug "File ratio: $file_ratio"
+	debug "Disk saturation $disk_saturation"
+	debug "Disk alloc method $disk_alloc_method"
+	debug "Test iteration count: $test_iteration_cnt"
+	debug "Extra arg: $extra_args"
+
+	for i in $(eval echo "{1..$test_iteration_cnt}"); do
+		# Setup the device
+		_scratch_mkfs_sized $FS_SIZE >> $seqres.full 2>&1
+		_scratch_mount
+
+		debug "===== Test: $test_name iteration: $i starts ====="
+		thread_cnt=$(calc_thread_cnt $file_ratio_unit $file_ratio $disk_saturation)
+
+		# Start the test
+		$here/src/t_enospc -t $thread_cnt -s $file_ratio_unit -r $file_ratio -p $SCRATCH_MNT $extra_args >> $seqres.full
+
+		status=$(echo $?)
+		if [ $status -ne 0 ]; then
+			use_per=$($DF_PROG -h | grep $SCRATCH_MNT | awk '{print substr($6, 1, length($6)-1)}' | $BC_PROG)
+			alloc_per=$(echo "$FACT * 100" | $BC_PROG)
+			# We are here since t_enospc failed with an error code.
+			# If the used filesystem space is still < available space - that means
+			# the test failed due to FS wrongly reported ENOSPC.
+			if [ $(echo "$use_per < $alloc_per" | $BC_PROG) -ne 0 ]; then
+				if [ $status -eq 134 ]; then
+					# SIGABRT asserted exit code = 134
+					echo "FAIL: Aborted assertion faliure"
+				elif [ $status -eq 7 ]; then
+					# SIGBUS asserted exit code = 7
+					echo "FAIL: ENOSPC BUS faliure"
+				fi
+				echo "$test_name failed at iteration count: $i"
+				echo "$($DF_PROG -h $SCRATCH_MNT)"
+				echo "Allocated: $alloc_per% Used: $use_per%"
+				exit
+			fi
+		fi
+
+		# Make space for other tests
+		_scratch_unmount
+
+		debug "===== Test: $test_name iteration: $i ends ====="
+	done
+	debug "============ Test details end ============="
+}
+
+declare -a TEST_VECTORS=(
+# test-name:file-ratio-unit:file-ratio:disk-saturation:disk-alloc-method:test-iteration-cnt
+"Small-file-fallocate-test:$SMALL_FILE_SIZE:1:$FACT:$FALLOCATE:3"
+"Big-file-fallocate-test:$BIG_FILE_SIZE:1:$FACT:$FALLOCATE:3"
+"Mix-file-fallocate-test:$MIX_FILE_SIZE:0.75,0.25:$FACT:$FALLOCATE:3"
+"Small-file-ftruncate-test:$SMALL_FILE_SIZE:1:$FACT:$FTRUNCATE:3"
+"Big-file-ftruncate-test:$BIG_FILE_SIZE:1:$FACT:$FTRUNCATE:3"
+"Mix-file-ftruncate-test:$MIX_FILE_SIZE:0.75,0.25:$FACT:$FTRUNCATE:3"
+)
+
+# real QA test starts here
+for i in "${TEST_VECTORS[@]}"; do
+	run_testcase $i
+done
+
+echo "Silence is golden"
+status=0
+exit
