@@ -3221,10 +3221,27 @@ _check_s_dax()
 	local exp_s_dax=$2
 
 	local attributes=$($XFS_IO_PROG -c 'statx -r' $target | awk '/stat.attributes / { print $3 }')
+
+	# The original attribute bit value, STATX_ATTR_DAX (0x2000), conflicted
+	# with STATX_ATTR_MOUNT_ROOT.  Therefore, STATX_ATTR_DAX was changed to
+	# 0x00200000.
+	#
+	# Because DAX tests do not run on root mounts, STATX_ATTR_MOUNT_ROOT
+	# should always be 0.  Check for the old flag and fail the test if that
+	# occurs.
+
+	if [ $(( attributes & 0x2000 )) -ne 0 ]; then
+		echo "$target has an unexpected STATX_ATTR_MOUNT_ROOT flag set"
+		echo "which used to be STATX_ATTR_DAX"
+		echo "     This test should not be running on the root inode..."
+		echo "     Does the kernel have the following patch?"
+		echo "     72d1249e2ffd uapi: fix statx attribute value overlap for DAX & MOUNT_ROOT"
+	fi
+
 	if [ $exp_s_dax -eq 0 ]; then
-		(( attributes & 0x2000 )) && echo "$target has unexpected S_DAX flag"
+		(( attributes & 0x00200000 )) && echo "$target has unexpected S_DAX flag"
 	else
-		(( attributes & 0x2000 )) || echo "$target doesn't have expected S_DAX flag"
+		(( attributes & 0x00200000 )) || echo "$target doesn't have expected S_DAX flag"
 	fi
 }
 
