@@ -6,7 +6,7 @@
 #
 # Test that reading corrupted files would correctly increment device status
 # counters. This is fixed by the following linux kernel commit:
-# btrfs: Increment device corruption error in case of checksum error
+# 814723e0a55a ("btrfs: increment device corruption error in case of checksum error")
 #
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -70,19 +70,19 @@ _scratch_mount
 # disable readahead to avoid skewing the counter
 echo 0 > /sys/fs/btrfs/$uuid/bdi/read_ahead_kb
 
-# buffered reads whould result in a single error since the read is done
-# page by page
+# buffered reads whould result in 2 errors since readahead code always submits
+# at least 1 page worth of IO and it will be counted as an error as well
 $XFS_IO_PROG -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
-if [ $errs -ne 1 ]; then
-	_fail "Errors: $errs expected: 1"
+if [ $errs -ne 2 ]; then
+	_fail "Errors: $errs expected: 2"
 fi
 
 # DIO does check every sector
 $XFS_IO_PROG -d -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
-if [ $errs -ne 5 ]; then
-	_fail "Errors: $errs expected: 1"
+if [ $errs -ne 6 ]; then
+	_fail "Errors: $errs expected: 6"
 fi
 
 # success, all done
