@@ -1608,6 +1608,37 @@ _require_scratch_size()
 	[ $devsize -lt $1 ] && _notrun "scratch dev too small"
 }
 
+# require a scratch dev of a minimum size (in kb) and should not be checked
+# post test
+_require_scratch_size_nocheck()
+{
+	[ $# -eq 1 ] || _fail "_require_scratch_size: expected size param"
+
+	_require_scratch_nocheck
+	local devsize=`_get_device_size $SCRATCH_DEV`
+	[ $devsize -lt $1 ] && _notrun "scratch dev too small"
+}
+
+# require scratch fs which supports >16T of filesystem size.
+_require_scratch_16T_support()
+{
+	case $FSTYP in
+	ext2|ext3|f2fs)
+		_notrun "$FSTYP doesn't support >16T filesystem"
+		;;
+	ext4)
+		_scratch_mkfs >> $seqres.full 2>&1
+		_scratch_mount
+		local blocksize=$(_get_block_size $SCRATCH_MNT)
+		if [ $blocksize -lt 4096 ]; then
+			_notrun "This test requires >16T fs support"
+		fi
+		_scratch_unmount
+		;;
+	*)
+		;;
+	esac
+}
 
 # this test needs a test partition - check we're ok & mount it
 #

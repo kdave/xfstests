@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Christian Kujau. All Rights Reserved.
+# Copyright (c) 2020 Ritesh Harjani. All Rights Reserved.
+#
+# FS QA Test generic/620
+#
+# Since the test is not specific to ext4, hence adding it to generic.
+#
+# Add this test to check for regression which was reported when ext4 bmap aops
+# was moved to use iomap APIs. jbd2 calls bmap() kernel function from
+# fs/inode.c which was failing since iomap_bmap() implementation earlier
+# returned 0 for block addr > INT_MAX.
+#
+# This regression was fixed with following kernel commit commit b75dfde1212
+# ("fibmap: Warn and return an error in case of block > INT_MAX")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_dmhugedisk_cleanup
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmhugedisk
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# Modify as appropriate.
+_supported_fs generic
+_require_scratch_16T_support
+_require_scratch_size_nocheck $((4 * 1024 * 1024)) #kB
+_require_dmhugedisk
+
+# 17TB dm huge-test-zer0 device
+# (in terms of 512 sectors)
+sectors=$((2*1024*1024*1024*17))
+chunk_size=128
+
+_dmhugedisk_init $sectors $chunk_size
+_mkfs_dev $DMHUGEDISK_DEV
+_mount $DMHUGEDISK_DEV $SCRATCH_MNT || _fail "mount failed for $DMHUGEDISK_DEV $SCRATCH_MNT"
+testfile=$SCRATCH_MNT/testfile-$seq
+
+$XFS_IO_PROG -fc "pwrite -S 0xaa 0 1m" -c "fsync" $testfile | _filter_xfs_io
+
+# success, all done
+status=0
+exit
