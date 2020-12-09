@@ -12,9 +12,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <attr/attributes.h>
+#include <sys/xattr.h>
 
 #define MAX_EA_NAME 30
+#define MAX_VALUELEN	(64*1024)
 
 /*
  * multi_open_unlink path_prefix num_files sleep_time
@@ -40,7 +41,7 @@ main(int argc, char *argv[])
 	int sleep_time = 60;
 	int num_files = 100;
 	int num_eas = 0;
-	int value_size = ATTR_MAX_VALUELEN;
+	int value_size = MAX_VALUELEN;
 	int fd = -1;
 	int i,j,c;
 
@@ -87,7 +88,6 @@ main(int argc, char *argv[])
 			int sts;
 			char *attrvalue;
 			char attrname[MAX_EA_NAME];
-			int flags = 0;
 
 			snprintf(attrname, MAX_EA_NAME, "user.name.%d", j);
 
@@ -98,7 +98,7 @@ main(int argc, char *argv[])
 				return 1;
 			}
 
-			sts = attr_set(path, attrname, attrvalue, value_size, flags);
+			sts = setxattr(path, attrname, attrvalue, value_size, 0);
 			if (sts == -1) {
 				fprintf(stderr, "%s: failed to create EA \"%s\" of size %d on path \"%s\": %s\n",
 					prog, attrname, value_size, path, strerror(errno));
