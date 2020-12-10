@@ -1,0 +1,122 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. btrfs/227
+#
+# Test that an incremental send operation succeeds, and produces the correct
+# results, after removing a directory and all its files, unmounting the
+# filesystem, mounting the filesystem again and creating a new file (or
+# directory).
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -fr $send_files_dir
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_require_test
+_require_scratch
+_require_fssum
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+mkdir $SCRATCH_MNT/dir
+touch $SCRATCH_MNT/dir/file1
+touch $SCRATCH_MNT/dir/file2
+touch $SCRATCH_MNT/dir/file3
+
+# Filesystem looks like:
+#
+# .                                     (ino 256)
+# |----- dir/                           (ino 257)
+#         |----- file1                  (ino 258)
+#         |----- file2                  (ino 259)
+#         |----- file3                  (ino 260)
+#
+
+# Now create the base snapshot, which is going to be the parent snapshot for
+# a later incremental send.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+	$SCRATCH_MNT/mysnap1 > /dev/null
+
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap \
+	$SCRATCH_MNT/mysnap1 2>&1 1>/dev/null | _filter_scratch
+
+# Now remove our directory and all its files.
+rm -fr $SCRATCH_MNT/dir
+
+# Unmount the filesystem and mount it again. This is to ensure that the next
+# inode that is created ends up with the same inode number that our directory
+# "dir" had, 257, which is the first free "objectid" available after mounting
+# again the filesystem.
+_scratch_cycle_mount
+
+# Now create a new file (it could be a directory as well).
+touch $SCRATCH_MNT/newfile
+
+# Filesystem now looks like:
+#
+# .                                     (ino 256)
+# |----- newfile                        (ino 257)
+#
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+		 $SCRATCH_MNT/mysnap2 > /dev/null
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+		 $SCRATCH_MNT/mysnap2 2>&1 1>/dev/null | _filter_scratch
+
+$FSSUM_PROG -A -f -w $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
+$FSSUM_PROG -A -f -w $send_files_dir/2.fssum \
+	-x $SCRATCH_MNT/mysnap2/mysnap1 $SCRATCH_MNT/mysnap2
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same content that the original filesystem had.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT > /dev/null
+
+# The receive operation below used to fail with the following error:
+#
+#    ERROR: chown o257-9-0 failed: No such file or directory
+#
+# This is because when the kernel was processing old inode 257 (the directory),
+# it had to delay its removal because its children inodes, "file1", "file2" and
+# "file3", have higher inode numbers and will be processed (and unlinked) later.
+# Then when it processed the new inode 257 (named "newfile"), it got confused
+# and though that this inode was the one with a delayed removal and therefore
+# generate an orphan name for it ("o257-9-0") instead of its current name of
+# "newfile", causing the receiver to fail since there is no file with that
+# orphan name.
+#
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT > /dev/null
+
+$FSSUM_PROG -r $send_files_dir/1.fssum $SCRATCH_MNT/mysnap1
+$FSSUM_PROG -r $send_files_dir/2.fssum $SCRATCH_MNT/mysnap2
+
+status=0
+exit
