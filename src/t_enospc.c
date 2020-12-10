@@ -44,6 +44,7 @@ void handle_sigbus(int sig)
 
 void enospc_test(int id)
 {
+	int i;
 	int fd;
 	char fpath[255] = {0};
 	char *addr;
@@ -85,7 +86,7 @@ void enospc_test(int id)
 	addr = mmap(NULL, size, PROT_WRITE, MAP_SHARED, fd, 0);
 	assert(addr != MAP_FAILED);
 
-	for (int i = 0; i < size; i++) {
+	for (i = 0; i < size; i++) {
 		addr[i] = 0xAB;
 	}
 
@@ -104,10 +105,11 @@ void *spawn_test_thread(void *arg)
 
 void _run_test(int threads)
 {
+	int i;
 	pthread_t tid[threads];
 
 	pthread_barrier_init(&bar, NULL, threads+1);
-	for (int i = 0; i < threads; i++) {
+	for (i = 0; i < threads; i++) {
 		struct thread_s *thread_info = (struct thread_s *) malloc(sizeof(struct thread_s));
 		thread_info->id = i;
 		assert(pthread_create(&tid[i], NULL, spawn_test_thread, thread_info) == 0);
@@ -115,7 +117,7 @@ void _run_test(int threads)
 
 	pthread_barrier_wait(&bar);
 
-	for (int i = 0; i <threads; i++) {
+	for (i = 0; i < threads; i++) {
 		assert(pthread_join(tid[i], NULL) == 0);
 	}
 
