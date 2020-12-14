@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
 #
-# FS QA Test No. 011
+# FS QA Test No. 563
 #
 # This test verifies that cgroup aware writeback properly accounts I/Os in
 # various scenarios. We perform reads/writes from different combinations of
@@ -26,6 +26,8 @@ _cleanup()
 
 	echo $$ > $cgdir/cgroup.procs
 	rmdir $cgdir/$seq-cg* > /dev/null 2>&1
+	umount $SCRATCH_MNT > /dev/null 2>&1
+	_destroy_loop_device $LOOP_DEV > /dev/null 2>&1
 }
 
 # get standard environment, filters and checks
@@ -40,16 +42,14 @@ rm -f $seqres.full
 
 # Modify as appropriate.
 _supported_fs generic
-_require_scratch
+_require_scratch_nocheck
 _require_cgroup2 io
+_require_loop
 
 # cgroup v2 writeback is only support on block devices so far
 _require_block_device $SCRATCH_DEV
 
-smajor=$((0x`stat -L -c %t $SCRATCH_DEV`))
-sminor=$((0x`stat -L -c %T $SCRATCH_DEV`))
 cgdir=$CGROUP2_PATH
-
 iosize=$((1024 * 1024 * 8))
 
 # Check cgroup read/write charges against expected values. Allow for some
@@ -89,12 +89,19 @@ reset()
 	rmdir $cgdir/$seq-cg* > /dev/null 2>&1
 	$XFS_IO_PROG -fc "pwrite 0 $iosize" $SCRATCH_MNT/file \
 		>> $seqres.full 2>&1
-	_scratch_cycle_mount || _fail "mount failed"
+	umount $SCRATCH_MNT || _fail "umount failed"
+	_mount $LOOP_DEV $SCRATCH_MNT || _fail "mount failed"
 	stat $SCRATCH_MNT/file > /dev/null
 }
 
-_scratch_mkfs >> $seqres.full 2>&1
-_scratch_mount
+# cgroup I/O accounting doesn't work on partitions. Use a loop device to rule
+# that out.
+LOOP_DEV=$(_create_loop_device $SCRATCH_DEV)
+smajor=$((0x`stat -L -c %t $LOOP_DEV`))
+sminor=$((0x`stat -L -c %T $LOOP_DEV`))
+
+_mkfs_dev $LOOP_DEV >> $seqres.full 2>&1
+_mount $LOOP_DEV $SCRATCH_MNT || _fail "mount failed"
 
 echo "+io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
 
