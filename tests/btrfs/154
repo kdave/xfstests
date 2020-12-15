@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2020 Synology.  All Rights Reserved.
+#
+# FS QA Test No. 154
+#
+# Test if btrfs rename handle dir item collision correctly
+# Without patch fix, rename will fail with EOVERFLOW, and filesystem
+# is forced readonly.
+#
+# This bug is going to be fixed by a patch for kernel titled
+# "btrfs: correctly calculate item size used when item key collision happens"
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_command $PYTHON2_PROG python2
+
+rm -f $seqres.full
+
+# Currently in btrfs the node/leaf size can not be smaller than the page
+# size (but it can be greater than the page size). So use the largest
+# supported node/leaf size (64Kb) so that the test can run on any platform
+# that Linux supports.
+_scratch_mkfs "--nodesize 65536" >>$seqres.full 2>&1
+_scratch_mount
+
+#
+# In the following for loop, we'll create a leaf fully occupied by
+# only one dir item with many forged collision names in it.
+#
+# leaf 22544384 items 1 free space 0 generation 6 owner FS_TREE
+# leaf 22544384 flags 0x1(WRITTEN) backref revision 1
+# fs uuid 9064ba52-3d2c-4840-8e26-35db08fa17d7
+# chunk uuid 9ba39317-3159-46c9-a75a-965ab1e94267
+#    item 0 key (256 DIR_ITEM 3737737011) itemoff 25 itemsize 65410
+#    ...
+#
+
+$PYTHON2_PROG $here/src/btrfs_crc32c_forged_name.py -d $SCRATCH_MNT -c 310
+echo "Silence is golden"
+
+# success, all done
+status=0; exit
