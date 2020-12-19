@@ -376,6 +376,13 @@ _require_unionmount_testsuite()
 	local usage=`UNIONMOUNT_BASEDIR=_ "$UNIONMOUNT_TESTSUITE/run" 2>&1`
 	echo $usage | grep -wq "UNIONMOUNT_BASEDIR" || \
 		_notrun "newer version of unionmount testsuite required."
+
+	[ -n "$OVERLAY_MOUNT_OPTIONS" ] || return
+	# If custom overlay mount options are used
+	# verify that UNIONMOUNT_MNTOPTIONS var is supported
+	local usage=`UNIONMOUNT_MNTOPTIONS=_ "$UNIONMOUNT_TESTSUITE/run" 2>&1`
+	echo $usage | grep -wq "UNIONMOUNT_MNTOPTIONS" || \
+		_notrun "newer version of unionmount testsuite required to support OVERLAY_MOUNT_OPTIONS."
 }
 
 _unionmount_testsuite_run()
@@ -394,6 +401,7 @@ _unionmount_testsuite_run()
 		export UNIONMOUNT_LOWERDIR=$OVL_BASE_TEST_DIR/union
 	fi
 	export UNIONMOUNT_BASEDIR=$OVL_BASE_SCRATCH_MNT/union
+	export UNIONMOUNT_MNTOPTIONS="$OVERLAY_MOUNT_OPTIONS"
 
 	_scratch_mkfs
 	rm -rf $UNIONMOUNT_BASEDIR $UNIONMOUNT_LOWERDIR
