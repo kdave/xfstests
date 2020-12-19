@@ -55,6 +55,8 @@ do
 	[ $fs = ext3 ] && preargs="-F"
 	[ $fs = ext4 ] && preargs="-F"
 	[ $fs = ext4dev ] && preargs="-F"
+	# jffs2 mkfs requires '-r $directory' and '-o $image'
+	[ $fs = jffs2 ] && preargs="-r /proc/fs -o"
 
 	# overwite the first few Kb - should blow away superblocks
 	$here/src/devzero -n 20 $SCRATCH_DEV >/dev/null
@@ -66,6 +68,9 @@ do
 
 	if [ $? -eq 0 ] ; then
 		# next, ensure we don't overwrite it
+		# jffs2 mkfs doesn't check overwrite case
+		[ $fs = jffs2 ] && continue
+
 		echo "=== Attempting $FSTYP overwrite of $fs..." >>$seqres.full
 		${MKFS_PROG} -t $FSTYP $SCRATCH_DEV >>$seqres.full 2>&1
 
