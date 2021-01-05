@@ -5,7 +5,7 @@
 # FS QA Test No. 496
 #
 # Test various swapfile activation oddities on filesystems that support
-# fallocated swapfiles.
+# fallocated swapfiles (for given fs ext4/xfs)
 #
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -61,8 +61,18 @@ touch $swapfile
 $CHATTR_PROG +C $swapfile >> $seqres.full 2>&1
 $XFS_IO_PROG -f -c "falloc 0 $len" $swapfile >> $seqres.full
 "$here/src/mkswap" $swapfile
-"$here/src/swapon" $swapfile >> $seqres.full 2>&1 || \
-	_notrun "fallocated swap not supported here"
+
+# ext4/xfs should not fail for swapon on fallocated files
+case $FSTYP in
+ext4|xfs)
+	"$here/src/swapon" $swapfile >> $seqres.full 2>&1 || \
+		_fail "swapon failed on fallocated file"
+	;;
+*)
+	"$here/src/swapon" $swapfile >> $seqres.full 2>&1 || \
+		_notrun "fallocated swap not supported here"
+	;;
+esac
 swapoff $swapfile
 
 # Create a fallocated swap file and touch every other $PAGE_SIZE to create
