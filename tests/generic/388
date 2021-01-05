@@ -66,8 +66,14 @@ for i in $(seq 1 $((50 * TIME_FACTOR)) ); do
 		ps -e | grep fsstress > /dev/null 2>&1
 	done
 
-	# quit if mount fails so we don't shutdown the host fs
-	_scratch_cycle_mount || _fail "cycle mount failed"
+	# Toggle between rw and ro mounts for recovery. Quit if any mount
+	# attempt fails so we don't shutdown the host fs.
+	if [ $((RANDOM % 2)) -eq 0 ]; then
+		_scratch_cycle_mount || _fail "cycle mount failed"
+	else
+		_scratch_cycle_mount "ro" || _fail "cycle ro mount failed"
+		_scratch_cycle_mount || _fail "cycle rw mount failed"
+	fi
 done
 
 # success, all done
