@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2020 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 228
+#
+# Test correct operation of free objectid related functionality
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+_require_btrfs_command inspect-internal dump-tree
+
+_scratch_mkfs > /dev/null
+_scratch_mount
+
+# create a new subvolume to validate its objectid is initialized accordingly,
+# the expected value is 256 as this is the first free objectid in a new file
+# system
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/newvol >> $seqres.full 2>&1 \
+	|| _fail "couldn't create subvol"
+
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t1 $SCRATCH_DEV \
+	| grep -q "256 ROOT_ITEM"  ||	_fail "First subvol with id 256 doesn't exist"
+
+# create new file in the new subvolume to validate its objectid is set as
+# expected
+touch $SCRATCH_MNT/newvol/file1 || _fail "Cannot create file in new subvol"
+
+# ensure we have consistent view on-disk
+sync
+
+# get output related to the new root's dir entry
+output_file=$tmp.output
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t5 $SCRATCH_DEV | grep -A2 "256 DIR_ITEM 1903355334" > $output_file
+
+# get the objectid of the new root
+new_root_id=$($AWK_PROG '/location key/{printf $3}' $output_file | tr -d  '(')
+[ $new_root_id -eq 256 ] || _fail "New root id not equal to 256"
+
+# the given root should always be item number 2, since it's the only item
+item_seq=$($AWK_PROG '/item/ {printf $2}' $output_file)
+[ $item_seq -eq 2 ] || _fail "New root not at item idx 2"
+
+# now parse the structure of the new subvol's tree
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t256 $SCRATCH_DEV > $output_file
+
+# this is the subvol's own ino
+first_ino=$($AWK_PROG '/item 0/{printf $4}' $output_file | tr -d '(')
+[ $first_ino -eq 256 ] || _fail "First ino objectid in subvol not 256"
+
+# this is ino of first file in subvol
+second_ino=$($AWK_PROG '/item 4/{printf $4}' $output_file | tr -d '(')
+[ $second_ino -eq 257 ] || _fail "Second ino objectid in subvol not 257"
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
