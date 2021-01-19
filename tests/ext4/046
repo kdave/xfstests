@@ -31,13 +31,22 @@ _cleanup()
 # remove previous $seqres.full before test
 rm -f $seqres.full
 
+_require_check_dmesg
 _supported_fs ext4
 _require_scratch
 _require_xfs_io_command "falloc"
 _require_scratch_size $((6 * 1024 * 1024)) #kB
 
 _scratch_mkfs >> $seqres.full 2>&1
-_scratch_mount "-o dioread_nolock" >> $seqres.full 2>&1
+if ! _try_scratch_mount "-o dioread_nolock" >> $seqres.full 2>&1; then
+	err_str="can't mount with dioread_nolock if block size != PAGE_SIZE"
+	_check_dmesg_for ${err_str}
+	if [ $? -eq 0 ]; then
+		_notrun "mount failed, ext4 doesn't support bs < ps with dioread_nolock"
+	else
+		_fail "mount failed with dioread_nolock"
+	fi
+fi
 
 # Get blksz
 blksz=$(_get_file_block_size $SCRATCH_MNT)
