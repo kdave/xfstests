@@ -35,6 +35,7 @@ io_context_t	io_ctx;
 #include <liburing.h>
 #define URING_ENTRIES	1
 struct io_uring	ring;
+bool have_io_uring;			/* to indicate runtime availability */
 #endif
 #include <sys/syscall.h>
 #include <sys/xattr.h>
@@ -706,9 +707,15 @@ int main(int argc, char **argv)
 			}
 #endif
 #ifdef URING
+			have_io_uring = true;
+			/* If ENOSYS, just ignore uring, other errors are fatal. */
 			if (io_uring_queue_init(URING_ENTRIES, &ring, 0)) {
-				fprintf(stderr, "io_uring_queue_init failed\n");
-				exit(1);
+				if (errno == ENOSYS) {
+					have_io_uring = false;
+				} else {
+					fprintf(stderr, "io_uring_queue_init failed\n");
+					exit(1);
+				}
 			}
 #endif
 			for (i = 0; !loops || (i < loops); i++)
@@ -720,7 +727,8 @@ int main(int argc, char **argv)
 			}
 #endif
 #ifdef URING
-			io_uring_queue_exit(&ring);
+			if (have_io_uring)
+				io_uring_queue_exit(&ring);
 #endif
 			cleanup_flist();
 			free(freq_table);
@@ -2207,6 +2215,9 @@ do_uring_rw(int opno, long r, int flags)
 	struct io_uring_cqe	*cqe;
 	struct iovec	iovec;
 	int		iswrite = (flags & (O_WRONLY | O_RDWR)) ? 1 : 0;
+
+	if (!have_io_uring)
+		return;
 
 	init_pathname(&f);
 	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
