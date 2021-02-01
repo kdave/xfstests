@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 		.sa_handler	= handle_signal,
 	};
 	enum verbs verb = TEST_SWAPON;
-	void *p;
+	void *p = NULL;
 	ssize_t sz;
 	int fd = -1;
 	int ret, c;
