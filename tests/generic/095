@@ -98,8 +98,11 @@ _require_fio $fio_config
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
+# There's a known EIO failure to report collisions between directio and buffered
+# writes to userspace, refer to upstream linux 5a9d929d6e13. So ignore EIO error
+# at here.
+$FIO_PROG $fio_config --ignore_error=,EIO --output=$seqres.full
 echo "Silence is golden"
-$FIO_PROG $fio_config >>$seqres.full 2>&1
 
 # xfs generates WARNINGs on purpose when applications mix buffered/mmap IO with
 # direct IO on the same file. On the other hand, this fio job has been proven
