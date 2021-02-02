@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 527
+#
+# Regression test for incorrect validation of ondisk dquot type flags when
+# we're switching between group and project quotas while mounting a V4
+# filesystem.  This test doesn't actually force the creation of a V4 fs because
+# even V5 filesystems ought to be able to switch between the two without
+# triggering corruption errors.
+#
+# The appropriate XFS patch is:
+# xfs: fix incorrect root dquot corruption error when switching group/project
+# quota types
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/quota
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_debug
+_require_quota
+_require_scratch
+_require_check_dmesg
+
+rm -f $seqres.full
+
+echo "Format filesystem" | tee -a $seqres.full
+_scratch_mkfs > $seqres.full
+
+echo "Mount with project quota" | tee -a $seqres.full
+_qmount_option 'prjquota'
+_qmount
+_require_prjquota $SCRATCH_DEV
+
+echo "Mount with group quota" | tee -a $seqres.full
+_qmount_option 'grpquota'
+_qmount
+$here/src/feature -G $SCRATCH_DEV || echo "group quota didn't mount?"
+
+echo "Check dmesg for corruption"
+_dmesg_since_test_start | grep corruption
+
+# success, all done
+status=0
+exit
