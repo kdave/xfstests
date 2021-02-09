@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
+#include <malloc.h>
 
 #define SECTOR_SIZE 512
 #define BUFFER_SIZE (150 * SECTOR_SIZE)
@@ -143,9 +144,9 @@ int main(int argc, char *argv[])
 		   do_splice == do_splice1 ? "sequential" : "concurrent",
 		   (open_flags & O_DIRECT) ? "with" : "without");
 
-	buffer = aligned_alloc(SECTOR_SIZE, BUFFER_SIZE);
+	buffer = memalign(SECTOR_SIZE, BUFFER_SIZE);
 	if (buffer == NULL)
-		err(1, "aligned_alloc");
+		err(1, "memalign");
 
 	fd = open(filename, open_flags, 0666);
 	if (fd == -1)
