@@ -8,6 +8,9 @@
 
 #define TEST_UTIME
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1895,105 +1898,45 @@ static int check_test_area(const char *dir)
      return 0;
 }
 
-static int create_test_area(const char *dir)
+static int create_dir(char **ppath, const char *fmt, const char *dir)
 {
-     int fd;
-     char *path;
-     static const char *acl_u_text = "u::rw-,g::rw-,o::rw-,u:nobody:rw-,m::rw-";
-     static const char *acl_u_text_d = "u::rwx,g::rwx,o::rwx,u:nobody:rwx,m::rwx";
+     const char *path;
      struct stat st;
-     static const char *immutable = "This is an immutable file.\nIts contents cannot be altered.\n";
-     static const char *append_only = "This is an append-only file.\nIts contents cannot be altered.\n"
-	  "Data can only be appended.\n---\n";
 
-     if (getuid()) {
-	  fprintf(stderr, "%s: you are not root, go away.\n", __progname);
+     if (asprintf(ppath, fmt, dir) == -1) {
 	  return 1;
      }
-
-     if (stat(dir, &st) == 0) {
+     path = *ppath;
+     if (stat(path, &st) == 0) {
 	  fprintf(stderr, "%s: Test area directory %s must not exist for test area creation.\n",
-		  __progname, dir);
+		  __progname, path);
 	  return 1;
      }
-
-     umask(0000);
-     if (mkdir(dir, 0777) != 0) {
-	  fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, dir, strerror(errno));
+     if (mkdir(path, 0777) != 0) {
+	  fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
 	  return 1;
      }
+     return 0;
+}
 
-     asprintf(&path, "%s/immutable.d", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
+static int create_file(char **ppath, const char *fmt, const char *dir)
+{
+     const char *path;
+     int fd;
+
+     if (asprintf(ppath, fmt, dir) == -1) {
+	  return 1;
      }
-     free(path);
-
-     asprintf(&path, "%s/empty-immutable.d", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     free(path);
-
-     asprintf(&path, "%s/append-only.d", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     free(path);
-
-     asprintf(&path, "%s/empty-append-only.d", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     free(path);
-
-     asprintf(&path, "%s/immutable.d/dir", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     free(path);
-
-     asprintf(&path, "%s/append-only.d/dir", dir);
-     if (mkdir(path, 0777) != 0) {
-          fprintf(stderr, "%s: error creating directory %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     free(path);
-
-     asprintf(&path, "%s/append-only.d/file", dir);
+     path = *ppath;
      if ((fd = open(path, O_WRONLY|O_CREAT|O_EXCL, 0666)) == -1) {
 	  fprintf(stderr, "%s: error creating file %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
-     close(fd);
-     free(path);
+     return fd;
+}
 
-     asprintf(&path, "%s/immutable.d/file", dir);
-     if ((fd = open(path, O_WRONLY|O_CREAT|O_EXCL, 0666)) == -1) {
-          fprintf(stderr, "%s: error creating file %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     close(fd);
-     free(path);
-
-     asprintf(&path, "%s/immutable.f", dir);
-     if ((fd = open(path, O_WRONLY|O_CREAT|O_EXCL, 0666)) == -1) {
-          fprintf(stderr, "%s: error creating file %s: %s\n", __progname, path, strerror(errno));
-          return 1;
-     }
-     if (write(fd, immutable, strlen(immutable)) != strlen(immutable)) {
-	  fprintf(stderr, "%s: error writing file %s: %s\n", __progname, path, strerror(errno));
-	  return 1;
-     }
-     if (fadd_acl(fd, acl_u_text)) {
-	  perror("acl");
-	  return 1;
-     }
+static int create_xattrs(int fd)
+{
      if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
 	  if (errno != EOPNOTSUPP) {
 	       perror("setxattr");
@@ -2006,6 +1949,76 @@ static int create_test_area(const char *dir)
 	       return 1;
 	  }
      }
+     return 0;
+}
+
+static int create_test_area(const char *dir)
+{
+     int fd;
+     char *path;
+     static const char *acl_u_text = "u::rw-,g::rw-,o::rw-,u:nobody:rw-,m::rw-";
+     static const char *acl_u_text_d = "u::rwx,g::rwx,o::rwx,u:nobody:rwx,m::rwx";
+     static const char *immutable = "This is an immutable file.\nIts contents cannot be altered.\n";
+     static const char *append_only = "This is an append-only file.\nIts contents cannot be altered.\n"
+	  "Data can only be appended.\n---\n";
+
+     if (getuid()) {
+	  fprintf(stderr, "%s: you are not root, go away.\n", __progname);
+	  return 1;
+     }
+
+     umask(0000);
+     if (create_dir(&path, "%s", dir)) {
+	  return 1;
+     }
+     free(path);
+
+     if (create_dir(&path, "%s/append-only.d", dir)) {
+	  return 1;
+     }
+     free(path);
+
+     if (create_dir(&path, "%s/append-only.d/dir", dir)) {
+	  return 1;
+     }
+     free(path);
+
+     if ((fd = create_file(&path, "%s/append-only.d/file", dir)) == -1) {
+          return 1;
+     }
+     close(fd);
+     free(path);
+
+     if (create_dir(&path, "%s/immutable.d", dir)) {
+	  return 1;
+     }
+     free(path);
+
+     if (create_dir(&path, "%s/immutable.d/dir", dir)) {
+	  return 1;
+     }
+     free(path);
+
+     if ((fd = create_file(&path, "%s/immutable.d/file", dir)) == -1) {
+          return 1;
+     }
+     close(fd);
+     free(path);
+
+     if ((fd = create_file(&path, "%s/immutable.f", dir)) == -1) {
+          return 1;
+     }
+     if (write(fd, immutable, strlen(immutable)) != strlen(immutable)) {
+	  fprintf(stderr, "%s: error writing file %s: %s\n", __progname, path, strerror(errno));
+	  return 1;
+     }
+     if (fadd_acl(fd, acl_u_text)) {
+	  perror("acl");
+	  return 1;
+     }
+     if (create_xattrs(fd)) {
+	  return 1;
+     }
      if (fsetflag(path, fd, 1, 1)) {
           perror("fsetflag");
           close(fd);
@@ -2014,8 +2027,7 @@ static int create_test_area(const char *dir)
      close(fd);
      free(path);
 
-     asprintf(&path, "%s/append-only.f", dir);
-     if ((fd = open(path, O_WRONLY|O_CREAT|O_EXCL, 0666)) == -1) {
+     if ((fd = create_file(&path, "%s/append-only.f", dir)) == -1) {
           fprintf(stderr, "%s: error creating file %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
@@ -2027,17 +2039,8 @@ static int create_test_area(const char *dir)
           perror("acl");
           return 1;
      }
-     if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
-     }
-     if (fsetxattr(fd, "user.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
+     if (create_xattrs(fd)) {
+	  return 1;
      }
      if (fsetflag(path, fd, 1, 0)) {
           perror("fsetflag");
@@ -2056,17 +2059,8 @@ static int create_test_area(const char *dir)
           perror("acl");
           return 1;
      }
-     if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
-     }
-     if (fsetxattr(fd, "user.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
+     if (create_xattrs(fd)) {
+	  return 1;
      }
      if (fsetflag(path, fd, 1, 1)) {
           perror("fsetflag");
@@ -2076,7 +2070,9 @@ static int create_test_area(const char *dir)
      close(fd);
      free(path);
 
-     asprintf(&path, "%s/empty-immutable.d", dir);
+     if (create_dir(&path, "%s/empty-immutable.d", dir)) {
+	  return 1;
+     }
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2098,17 +2094,8 @@ static int create_test_area(const char *dir)
           perror("acl");
           return 1;
      }
-     if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
-     }
-     if (fsetxattr(fd, "user.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
-	  if (errno != EOPNOTSUPP) {
-	       perror("setxattr");
-	       return 1;
-	  }
+     if (create_xattrs(fd)) {
+	  return 1;
      }
      if (fsetflag(path, fd, 1, 0)) {
           perror("fsetflag");
@@ -2118,7 +2105,9 @@ static int create_test_area(const char *dir)
      close(fd);
      free(path);
 
-     asprintf(&path, "%s/empty-append-only.d", dir);
+     if (create_dir(&path, "%s/empty-append-only.d", dir)) {
+	  return 1;
+     }
      if ((fd = open(path, O_RDONLY)) == -1) {
           fprintf(stderr, "%s: error opening %s: %s\n", __progname, path, strerror(errno));
           return 1;
@@ -2242,6 +2231,7 @@ int main(int argc, char **argv)
 {
      int ret;
      int failed = 0;
+     int runtest = 1, create = 0, remove = 0;
 
 /* this arg parsing is gross, but who cares, its a test program */
 
@@ -2251,30 +2241,27 @@ int main(int argc, char **argv)
      }
 
      if (!strcmp(argv[1], "-c")) {
-	  if (argc == 3) {
-	       if ((ret = create_test_area(argv[argc-1])))
-		    return ret;
-	  } else {
-	       fprintf(stderr, "usage: t_immutable -c test_area_dir\n");
-	       return 1;
-	  }
+	  create = 1;
      } else if (!strcmp(argv[1], "-C")) {
-          if (argc == 3) {
-               return create_test_area(argv[argc-1]);
-          } else {
-               fprintf(stderr, "usage: t_immutable -C test_area_dir\n");
-               return 1;
-          }
+	  /* Prepare test area without running tests */
+	  create = 1;
+	  runtest = 0;
      } else if (!strcmp(argv[1], "-r")) {
-	  if (argc == 3)
-	       return remove_test_area(argv[argc-1]);
-	  else {
-	       fprintf(stderr, "usage: t_immutable -r test_area_dir\n");
-	       return 1;
-	  }
-     } else if (argc != 2) {
-	  fprintf(stderr, "usage: t_immutable [-c|-r] test_area_dir\n");
+	  remove = 1;
+     }
+
+     if (argc != 2 + (create | remove)) {
+	  fprintf(stderr, "usage: t_immutable [-C|-c|-r] test_area_dir\n");
 	  return 1;
+     }
+
+     if (create) {
+	  ret = create_test_area(argv[argc-1]);
+	  if (ret || !runtest) {
+               return ret;
+	  }
+     } else if (remove) {
+	  return remove_test_area(argv[argc-1]);
      }
 
      umask(0000);
