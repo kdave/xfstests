@@ -32,7 +32,6 @@ _supported_fs xfs
 _require_scratch
 _require_error_injection
 _require_xfs_io_error_injection "rmap_finish_one"
-_require_no_rtinherit
 
 rm -f $seqres.full
 
@@ -42,6 +41,10 @@ sz=$((blksz * blks))
 echo "Format filesystem"
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount >> $seqres.full
+
+# This test depends on specific behaviors of the data device, so create all
+# files on it.
+$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT
 
 echo "Create files"
 touch $SCRATCH_MNT/file1
