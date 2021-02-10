@@ -1898,6 +1898,8 @@ static int check_test_area(const char *dir)
      return 0;
 }
 
+static int allow_existing;
+
 static int create_dir(char **ppath, const char *fmt, const char *dir)
 {
      const char *path;
@@ -1908,6 +1910,9 @@ static int create_dir(char **ppath, const char *fmt, const char *dir)
      }
      path = *ppath;
      if (stat(path, &st) == 0) {
+	  if (allow_existing && S_ISDIR(st.st_mode)) {
+	       return 0;
+	  }
 	  fprintf(stderr, "%s: Test area directory %s must not exist for test area creation.\n",
 		  __progname, path);
 	  return 1;
@@ -1921,6 +1926,7 @@ static int create_dir(char **ppath, const char *fmt, const char *dir)
 
 static int create_file(char **ppath, const char *fmt, const char *dir)
 {
+     int flags = O_WRONLY|O_CREAT | (allow_existing ? 0 : O_EXCL);
      const char *path;
      int fd;
 
@@ -1928,7 +1934,7 @@ static int create_file(char **ppath, const char *fmt, const char *dir)
 	  return 1;
      }
      path = *ppath;
-     if ((fd = open(path, O_WRONLY|O_CREAT|O_EXCL, 0666)) == -1) {
+     if ((fd = open(path, flags, 0666)) == -1) {
 	  fprintf(stderr, "%s: error creating file %s: %s\n", __progname, path, strerror(errno));
           return 1;
      }
@@ -1937,13 +1943,15 @@ static int create_file(char **ppath, const char *fmt, const char *dir)
 
 static int create_xattrs(int fd)
 {
-     if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
+     int flags = allow_existing ? 0 : XATTR_CREATE;
+
+     if (fsetxattr(fd, "trusted.test", "readonly", strlen("readonly"), flags) != 0) {
 	  if (errno != EOPNOTSUPP) {
 	       perror("setxattr");
 	       return 1;
 	  }
      }
-     if (fsetxattr(fd, "user.test", "readonly", strlen("readonly"), XATTR_CREATE) != 0) {
+     if (fsetxattr(fd, "user.test", "readonly", strlen("readonly"), flags) != 0) {
 	  if (errno != EOPNOTSUPP) {
 	       perror("setxattr");
 	       return 1;
@@ -2214,6 +2222,10 @@ static int remove_test_area(const char *dir)
 	  return 1;
      }
 
+     if (allow_existing) {
+	     return 0;
+     }
+
      pid = fork();
      if (!pid) {
 	  execl("/bin/rm", "rm", "-rf", dir, NULL);
@@ -2236,7 +2248,7 @@ int main(int argc, char **argv)
 /* this arg parsing is gross, but who cares, its a test program */
 
      if (argc < 2) {
-	  fprintf(stderr, "usage: t_immutable [-C|-c|-r] test_area_dir\n");
+	  fprintf(stderr, "usage: t_immutable [-C|-c|-R|-r] test_area_dir\n");
 	  return 1;
      }
 
@@ -2246,18 +2258,24 @@ int main(int argc, char **argv)
 	  /* Prepare test area without running tests */
 	  create = 1;
 	  runtest = 0;
+	  /* With existing test area, only setflags */
+	  allow_existing = 1;
      } else if (!strcmp(argv[1], "-r")) {
 	  remove = 1;
+     } else if (!strcmp(argv[1], "-R")) {
+	  /* Cleanup flags on test area but leave the files */
+	  remove = 1;
+	  allow_existing = 1;
      }
 
      if (argc != 2 + (create | remove)) {
-	  fprintf(stderr, "usage: t_immutable [-C|-c|-r] test_area_dir\n");
+	  fprintf(stderr, "usage: t_immutable [-C|-c|-R|-r] test_area_dir\n");
 	  return 1;
      }
 
      if (create) {
 	  ret = create_test_area(argv[argc-1]);
-	  if (ret || !runtest) {
+	  if (ret || allow_existing || !runtest) {
                return ret;
 	  }
      } else if (remove) {
