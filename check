@@ -20,6 +20,7 @@ diff="diff -u"
 showme=false
 have_test_arg=false
 randomize=false
+exact_order=false
 export here=`pwd`
 xfile=""
 subdir_xfile=""
@@ -67,6 +68,7 @@ check options
     -n			show me, do not run tests
     -T			output timestamps
     -r			randomize test order
+    --exact-order	run tests in the exact order specified
     -i <n>		iterate the test list <n> times
     -d			dump test output to stdout
     -b			brief test summary
@@ -249,17 +251,22 @@ _prepare_test_list()
 		trim_test_list $list
 	done
 
-	# sort the list of tests into numeric order
-	if $randomize; then
-		if type shuf >& /dev/null; then
-			sorter="shuf"
+	# sort the list of tests into numeric order unless we're running tests
+	# in the exact order specified
+	if ! $exact_order; then
+		if $randomize; then
+			if type shuf >& /dev/null; then
+				sorter="shuf"
+			else
+				sorter="awk -v seed=$RANDOM -f randomize.awk"
+			fi
 		else
-			sorter="awk -v seed=$RANDOM -f randomize.awk"
+			sorter="cat"
 		fi
+		list=`sort -n $tmp.list | uniq | $sorter`
 	else
-		sorter="cat"
+		list=`cat $tmp.list`
 	fi
-	list=`sort -n $tmp.list | uniq | $sorter`
 	rm -f $tmp.list
 }
 
@@ -304,7 +311,20 @@ while [ $# -gt 0 ]; do
 	-udiff)	diff="$diff -u" ;;
 
 	-n)	showme=true ;;
-        -r)	randomize=true ;;
+	-r)
+		if $exact_order; then
+			echo "Cannot specify -r and --exact-order."
+			exit 1
+		fi
+		randomize=true
+		;;
+	--exact-order)
+		if $randomize; then
+			echo "Cannnot specify --exact-order and -r."
+			exit 1
+		fi
+		exact_order=true
+		;;
 	-i)	iterations=$2; shift ;;
 	-T)	timestamp=true ;;
 	-d)	DUMP_OUTPUT=true ;;
