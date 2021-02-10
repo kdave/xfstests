@@ -90,6 +90,11 @@ _test_streams() {
 	local use_directio="$7"
 	local expected_result="$8"	# "fail" if failure is expected
 
+	# Disable the scratch rt device to avoid test failures relating to the
+	# rt bitmap consuming free space in our small data device and throwing
+	# off the filestreams allocator.
+	unset SCRATCH_RTDEV
+
 	local size=`expr $agsize \* 1024 \* 1024 \* $agcount`
 	_scratch_mkfs_xfs -dsize=$size,agcount=$agcount >/dev/null 2>&1 \
 		|| _fail "mkfs failed"

@@ -57,6 +57,11 @@ _require_xfs_io_command "falloc"
 # check for filestreams
 _check_filestreams_support || _notrun "filestreams not available"
 
+# Disable the scratch rt device to avoid test failures relating to the rt
+# bitmap consuming free space in our small data device and throwing off the
+# filestreams allocator.
+unset SCRATCH_RTDEV
+
 # use small AGs for frequent stream switching
 _scratch_mkfs_xfs -d agsize=20m,size=2g >> $seqres.full 2>&1 ||
 	_fail "mkfs failed"
