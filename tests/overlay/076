@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 076
+#
+# Support for chattr on overlayfs directories was added in kernel v5.10
+# by commit 61536bed2149 ("ovl: support [S|G]ETFLAGS and FS[S|G]ETXATTR
+# ioctls for directories").  That commit introduced a deadlock.
+#
+# This is a regression test for the fix commit b854cc659dcb ("ovl: avoid
+# deadlock on directory ioctl")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1        # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+        cd /
+        $CHATTR_PROG -i $lowerdir/foo > /dev/null 2>&1
+        $CHATTR_PROG -i $upperdir/foo > /dev/null 2>&1
+        rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_require_scratch
+_require_chattr i
+
+# remove all files from previous runs
+_scratch_mkfs
+
+# prepare lower test file
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+mkdir -p $lowerdir
+mkdir $lowerdir/foo
+
+# mounting overlay
+_scratch_mount
+
+# Try to add the immutable attributes, it will invoke ioctl() on the directory
+# The ioctl will fail on kernel < 5.10, succeed on kernel >= 5.10.15 and hang
+# on kernel v5.10..v5.10.14.  Anything but hang is considered a test success.
+$CHATTR_PROG +i $SCRATCH_MNT/foo > /dev/null 2>&1
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
