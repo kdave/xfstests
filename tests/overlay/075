@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test No. 075
+#
+# Run the t_immutable test program for immutable/append-only files
+# and directories that exist in overlayfs lower layer.
+#
+# This test is similar and was derived from generic/079, but instead
+# of creating new files which are created in upper layer, prepare
+# the test area in lower layer before running the t_immutable test on
+# the overlayfs mount.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+timmutable=$here/src/t_immutable
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	# -r will fail to remove test dirs, because we added subdirs
+	# we just need to remove the flags so use -R
+	$timmutable -R $upperdir/testdir &> /dev/null
+	$timmutable -R $lowerdir/testdir &> /dev/null
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+_supported_fs overlay
+
+_require_chattr ia
+_require_test_program "t_immutable"
+_require_scratch
+
+_scratch_mkfs
+
+# Preparing test area files in lower dir and check chattr support of base fs
+mkdir -p $lowerdir
+mkdir -p $upperdir
+$timmutable -C $lowerdir/testdir >$tmp.out 2>&1
+if grep -q -e 'Operation not supported' -e "Inappropriate ioctl" $tmp.out; then
+	_notrun "Setting immutable/append flag not supported"
+fi
+# Remove the immutable/append-only flags and create subdirs
+$timmutable -R $lowerdir/testdir >$tmp.out 2>&1
+for dir in $lowerdir/testdir/*.d; do
+	mkdir $dir/subdir
+done
+# Restore the immutable/append-only flags
+$timmutable -C $lowerdir/testdir >$tmp.out 2>&1
+
+_scratch_mount
+
+# Test immutability of files in overlay
+echo "Before directories copy up"
+$timmutable $SCRATCH_MNT/testdir 2>&1
+
+# Trigger copy-up of immutable/append-only dirs by touching their subdirs
+# inode flags are not copied-up, so immutable/append-only flags are lost
+for dir in $SCRATCH_MNT/testdir/*.d; do
+	touch $dir/subdir
+done
+
+# Trigger copy-up of append-only files by touching them
+# inode flags are not copied-up, so append-only flags are lost
+# touch on the immutable files is expected to fail, so immutable
+# flags will not be lost
+for file in $SCRATCH_MNT/testdir/*.f; do
+	touch $file > /dev/null 2>&1
+done
+
+# immutable/append-only flags still exist on the overlay in-core inode
+# After mount cycle, flags are forever lost
+_scratch_cycle_mount
+
+# Test immutability of files in overlay after directories copy-up
+echo "After directories copy up"
+$timmutable $SCRATCH_MNT/testdir 2>&1
+
+status=$?
+exit
