@@ -28,6 +28,7 @@ brief_test_summary=false
 do_report=false
 DUMP_OUTPUT=false
 iterations=1
+istop=false
 
 # This is a global variable used to pass test failure text to reporting gunk
 _err_msg=""
@@ -70,6 +71,7 @@ check options
     -r			randomize test order
     --exact-order	run tests in the exact order specified
     -i <n>		iterate the test list <n> times
+    -I <n>		iterate the test list <n> times, but stops iterating further in case of any test failure
     -d			dump test output to stdout
     -b			brief test summary
     -R fmt[,fmt]	generate report in formats specified. Supported format: [xunit]
@@ -326,6 +328,7 @@ while [ $# -gt 0 ]; do
 		exact_order=true
 		;;
 	-i)	iterations=$2; shift ;;
+	-I) 	iterations=$2; istop=true; shift ;;
 	-T)	timestamp=true ;;
 	-d)	DUMP_OUTPUT=true ;;
 	-b)	brief_test_summary=true;;
@@ -952,6 +955,11 @@ function run_section()
 for ((iters = 0; iters < $iterations; iters++)) do
 	for section in $HOST_OPTIONS_SECTIONS; do
 		run_section $section
+		if [ "$sum_bad" != 0 ] && [ "$istop" = true ]; then
+			interrupt=false
+			status=`expr $sum_bad != 0`
+			exit
+		fi
 	done
 done
 
