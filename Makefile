@@ -39,9 +39,6 @@ endif
 
 LIB_SUBDIRS = include lib
 TOOL_SUBDIRS = ltp src m4 common
-ifeq ($(HAVE_DMAPI), true)
-TOOL_SUBDIRS += dmapi
-endif
 
 export TESTS_DIR = tests
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
