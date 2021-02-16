@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 231
+#
+# Test that when using the NO_HOLES feature, if we truncate down a file, clone a
+# file range covering only a hole into an offset beyond the current file size,
+# and then fsync the file, after a power failure we get the expected file content
+# and we do not get stale data corresponding to file extents that existed before
+# truncating the file.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+_require_btrfs_fs_feature "no_holes"
+_require_btrfs_mkfs_feature "no-holes"
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+_scratch_mkfs -O no-holes >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test file with 3 extents of 256K and a 256K hole at offset 256K.
+# The file has a size of 1280K.
+$XFS_IO_PROG -f -s \
+	     -c "pwrite -S 0xab -b 256K 0 256K" \
+	     -c "pwrite -S 0xcd -b 256K 512K 256K" \
+	     -c "pwrite -S 0xef -b 256K 768K 256K" \
+	     -c "pwrite -S 0x73 -b 256K 1024K 256K" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Make sure it's durably persisted. We want the last committed super block to
+# point to this particular file extent layout.
+sync
+
+# Now truncate our file to a smaller size, falling within a position of the
+# second extent. This sets the full sync runtime flag on the inode.
+# Then fsync the file to log it and clear the full sync flag from the inode.
+# The third extent is no longer part of the file and therefore it is not logged.
+$XFS_IO_PROG -c "truncate 800K" -c "fsync" $SCRATCH_MNT/foobar
+
+# Now do a clone operation that only clones the hole and sets back the file size
+# to match the size it had before the truncate operation (1280K).
+$XFS_IO_PROG \
+	-c "reflink $SCRATCH_MNT/foobar 256K 1024K 256K" \
+	-c "fsync" \
+	$SCRATCH_MNT/foobar | _filter_xfs_io
+
+echo "File data before power failure:"
+od -A d -t x1 $SCRATCH_MNT/foobar
+
+# Simulate a power failure and then mount again the filesystem to replay the log
+# tree.
+_flakey_drop_and_remount
+
+# This should match what we got before the power failure. The range from 1024K
+# to 1280K should be a hole and not point to an extent full of bytes with a
+# value of 0x73.
+echo "File data after power failure:"
+od -A d -t x1 $SCRATCH_MNT/foobar
+
+_unmount_flakey
+status=0
+exit
