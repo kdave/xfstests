@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 232
+#
+# Test that performing io and exhausting qgroup limit won't deadlock. This
+# exercises issues fixed by the following kernel commits:
+#
+# 4f6a49de64fd ("btrfs: unlock extents in btrfs_zero_range in case of quota
+# reservation errors")
+# 4d14c5cde5c2 ("btrfs: don't flush from btrfs_delayed_inode_reserve_metadata")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+writer()
+{
+	while true; do
+		args=`_scale_fsstress_args -p 20 -n 1000 $FSSTRESS_AVOID -d $SCRATCH_MNT/stressdir`
+		$FSSTRESS_PROG $args >/dev/null 2>&1
+	done
+}
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+
+_require_scratch_size $((2 * 1024 * 1024))
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+_pwrite_byte 0xcd 0 900m $SCRATCH_MNT/file >> $seqres.full
+# Make sure the data reach disk so later qgroup scan can see it
+sync
+
+$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT
+$BTRFS_UTIL_PROG quota rescan -w $SCRATCH_MNT >> $seqres.full
+# set the limit to 1 g, leaving us just 100mb of slack space
+$BTRFS_UTIL_PROG qgroup limit 1G 0/5 $SCRATCH_MNT
+
+writer &
+writer_pid=$!
+
+# Give time for the background thread to generate some load
+sleep 30
+
+kill $writer_pid
+wait
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
