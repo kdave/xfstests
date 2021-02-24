@@ -1,0 +1,79 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright 2021 Google LLC
+#
+# FS QA Test No. 624
+#
+# Test retrieving the Merkle tree and fs-verity descriptor of a verity file
+# using FS_IOC_READ_VERITY_METADATA.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+. ./common/verity
+
+rm -f $seqres.full
+
+_supported_fs generic
+_require_scratch_verity
+_disable_fsverity_signatures
+# For the output of this test to always be the same, it has to use a specific
+# Merkle tree block size.
+if [ $FSV_BLOCK_SIZE != 4096 ]; then
+	_notrun "4096-byte verity block size not supported on this platform"
+fi
+
+_scratch_mkfs_verity &>> $seqres.full
+_scratch_mount
+
+echo -e "\n# Creating a verity file"
+fsv_file=$SCRATCH_MNT/file
+# Always use the same file contents, so that the output of the test is always
+# the same.  Also use a file that is large enough to have multiple Merkle tree
+# levels, so that the test verifies that the blocks are returned in the expected
+# order.  A 1 MB file with SHA-256 and a Merkle tree block size of 4096 will
+# have 3 Merkle tree blocks (3*4096 bytes): two at level 0 and one at level 1.
+head -c 1000000 /dev/zero > $fsv_file
+merkle_tree_size=$((3 * FSV_BLOCK_SIZE))
+fsverity_descriptor_size=256
+_fsv_enable $fsv_file --salt=abcd
+_require_fsverity_dump_metadata $fsv_file
+_fsv_measure $fsv_file
+
+echo -e "\n# Dumping Merkle tree"
+_fsv_dump_merkle_tree $fsv_file | sha256sum
+
+echo -e "\n# Dumping Merkle tree (in chunks)"
+# The above test may get the whole tree in one read, so also try reading it in
+# chunks.
+for (( i = 0; i < merkle_tree_size; i += 997 )); do
+	_fsv_dump_merkle_tree $fsv_file --offset=$i --length=997
+done | sha256sum
+
+echo -e "\n# Dumping descriptor"
+# Note that the hash that is printed here should be the same hash that was
+# printed by _fsv_measure above.
+_fsv_dump_descriptor $fsv_file | sha256sum
+
+echo -e "\n# Dumping descriptor (in chunks)"
+for (( i = 0; i < fsverity_descriptor_size; i += 13 )); do
+	_fsv_dump_descriptor $fsv_file --offset=$i --length=13
+done | sha256sum
+
+# success, all done
+status=0
+exit
