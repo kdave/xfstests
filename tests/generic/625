@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright 2021 Google LLC
+#
+# FS QA Test No. 625
+#
+# Test retrieving the built-in signature of a verity file using
+# FS_IOC_READ_VERITY_METADATA.
+#
+# This is separate from the other tests for FS_IOC_READ_VERITY_METADATA because
+# the fs-verity built-in signature support is optional.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+. ./common/verity
+
+rm -f $seqres.full
+
+_supported_fs generic
+_require_scratch_verity
+_require_fsverity_builtin_signatures
+
+_scratch_mkfs_verity &>> $seqres.full
+_scratch_mount
+
+echo -e "\n# Setting up signed verity file"
+_fsv_generate_cert $tmp.key $tmp.cert $tmp.cert.der
+_fsv_clear_keyring
+_fsv_load_cert $tmp.cert.der
+fsv_file=$SCRATCH_MNT/file
+echo foo > $fsv_file
+_fsv_sign $fsv_file $tmp.sig --key=$tmp.key --cert=$tmp.cert >> $seqres.full
+_fsv_enable $fsv_file --signature=$tmp.sig
+_require_fsverity_dump_metadata $fsv_file
+
+echo -e "\n# Dumping and comparing signature"
+_fsv_dump_signature $fsv_file > $tmp.sig2
+# The signature returned by FS_IOC_READ_VERITY_METADATA should exactly match the
+# one we passed to FS_IOC_ENABLE_VERITY earlier.
+cmp $tmp.sig $tmp.sig2
+
+echo -e "\n# Dumping and comparing signature (in chunks)"
+sig_size=$(stat -c %s $tmp.sig)
+for (( i = 0; i < sig_size; i += 13 )); do
+	_fsv_dump_signature $fsv_file --offset=$i --length=13
+done > $tmp.sig2
+cmp $tmp.sig $tmp.sig2
+
+# success, all done
+status=0
+exit
