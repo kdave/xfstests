@@ -48,12 +48,47 @@ _require_scratch_verity()
 	FSV_BLOCK_SIZE=$(get_page_size)
 }
 
-# Check for CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y.
+# Check for CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y, as well as the userspace
+# commands needed to generate certificates and add them to the kernel.
 _require_fsverity_builtin_signatures()
 {
 	if [ ! -e /proc/sys/fs/verity/require_signatures ]; then
 		_notrun "kernel doesn't support fs-verity builtin signatures"
 	fi
+	_require_command "$OPENSSL_PROG" openssl
+	_require_command "$KEYCTL_PROG" keyctl
+}
+
+# Use the openssl program to generate a private key and a X.509 certificate for
+# use with fs-verity built-in signature verification, and convert the
+# certificate to DER format.
+_fsv_generate_cert()
+{
+	local keyfile=$1
+	local certfile=$2
+	local certfileder=$3
+
+	if ! $OPENSSL_PROG req -newkey rsa:4096 -nodes -batch -x509 \
+			-keyout $keyfile -out $certfile &>> $seqres.full; then
+		_fail "Failed to generate certificate and private key (see $seqres.full)"
+	fi
+	$OPENSSL_PROG x509 -in $certfile -out $certfileder -outform der
+}
+
+# Clear the .fs-verity keyring.
+_fsv_clear_keyring()
+{
+	$KEYCTL_PROG clear %keyring:.fs-verity
+}
+
+# Load the given X.509 certificate in DER format into the .fs-verity keyring so
+# that the kernel can use it to verify built-in signatures.
+_fsv_load_cert()
+{
+	local certfileder=$1
+
+	$KEYCTL_PROG padd asymmetric '' %keyring:.fs-verity \
+		< $certfileder >> $seqres.full
 }
 
 # Disable mandatory signatures for fs-verity files, if they are supported.

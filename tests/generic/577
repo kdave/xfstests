@@ -34,8 +34,6 @@ rm -f $seqres.full
 _supported_fs generic
 _require_scratch_verity
 _require_fsverity_builtin_signatures
-_require_command "$OPENSSL_PROG" openssl
-_require_command "$KEYCTL_PROG" keyctl
 
 _scratch_mkfs_verity &>> $seqres.full
 _scratch_mount
@@ -53,21 +51,14 @@ othersigfile=$tmp.othersig
 
 echo -e "\n# Generating certificates and private keys"
 for suffix in '' '.2'; do
-	if ! $OPENSSL_PROG req -newkey rsa:4096 -nodes -batch -x509 \
-			-keyout $keyfile$suffix -out $certfile$suffix \
-			&>> $seqres.full; then
-		_fail "Failed to generate certificate and private key (see $seqres.full)"
-	fi
-	$OPENSSL_PROG x509 -in $certfile$suffix -out $certfileder$suffix \
-		-outform der
+	_fsv_generate_cert $keyfile$suffix $certfile$suffix $certfileder$suffix
 done
 
 echo -e "\n# Clearing fs-verity keyring"
-$KEYCTL_PROG clear %keyring:.fs-verity
+_fsv_clear_keyring
 
 echo -e "\n# Loading first certificate into fs-verity keyring"
-$KEYCTL_PROG padd asymmetric '' %keyring:.fs-verity \
-	< $certfileder >> $seqres.full
+_fsv_load_cert $certfileder
 
 echo -e "\n# Enabling fs.verity.require_signatures"
 _enable_fsverity_signatures
