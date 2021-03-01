@@ -37,13 +37,14 @@ _cleanup()
 
 # real QA test starts here
 _require_scratch_nocheck
-# This test uses "dm" without taking into account the data could be on
-# realtime subvolume, thus the test will fail with rtinherit=1
-_require_no_rtinherit
 _require_dm_target error
 _require_xfs_io_command "syncfs"
 
 rm -f $seqres.full
+
+# Disable the scratch rt device to avoid test failures relating to the rt
+# bitmap consuming all the free space in our small data device.
+unset SCRATCH_RTDEV
 
 echo "Format and mount"
 _scratch_mkfs > $seqres.full 2>&1
