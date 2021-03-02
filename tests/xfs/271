@@ -38,6 +38,16 @@ _scratch_mount
 
 agcount=$(_xfs_mount_agcount $SCRATCH_MNT)
 
+# mkfs lays out btree root blocks in the order bnobt, cntbt, inobt, finobt,
+# rmapbt, refcountbt, and then allocates AGFL blocks.  Since GETFSMAP has the
+# same owner (per-AG metadata) for rmap btree blocks and blocks on the AGFL and
+# the reverse mapping index merges records, the number of per-AG extents
+# reported will vary depending on whether the refcount btree is enabled.
+$XFS_INFO_PROG $SCRATCH_MNT | grep -q reflink=1
+has_reflink=$(( 1 - $? ))
+perag_metadata_exts=2
+test $has_reflink -gt 0 && perag_metadata_exts=$((perag_metadata_exts + 1))
+
 echo "Get fsmap" | tee -a $seqres.full
 $XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT > $TEST_DIR/fsmap
 cat $TEST_DIR/fsmap >> $seqres.full
@@ -48,7 +58,7 @@ _within_tolerance "AG header count" $(wc -l < $TEST_DIR/testout) $agcount 0 -v
 
 echo "Check freesp/rmap btrees" | tee -a $seqres.full
 grep 'per-AG metadata[[:space:]]*[0-9]*[[:space:]]*([0-9]*\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
-_within_tolerance "freesp extent count" $(wc -l < $TEST_DIR/testout) $((agcount * 3)) 0 999999 -v
+_within_tolerance "freesp extent count" $(wc -l < $TEST_DIR/testout) $((agcount * perag_metadata_exts)) 0 999999 -v
 
 echo "Check inode btrees" | tee -a $seqres.full
 grep 'inode btree[[:space:]]*[0-9]*[[:space:]]*([0-9]*\.\.' $TEST_DIR/fsmap | tee -a $seqres.full > $TEST_DIR/testout
