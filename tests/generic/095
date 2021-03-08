@@ -29,11 +29,13 @@ _cleanup()
 _supported_fs generic
 _require_scratch
 _require_odirect
+_require_aio
 
 iodepth=$((16 * LOAD_FACTOR))
 iodepth_batch=$((8 * LOAD_FACTOR))
 numjobs=$((5 * LOAD_FACTOR))
 fio_config=$tmp.fio
+fio_out=$tmp.fio.out
 cat >$fio_config <<EOF
 [global]
 bs=8k
@@ -101,7 +103,8 @@ _scratch_mount
 # There's a known EIO failure to report collisions between directio and buffered
 # writes to userspace, refer to upstream linux 5a9d929d6e13. So ignore EIO error
 # at here.
-$FIO_PROG $fio_config --ignore_error=,EIO --output=$seqres.full
+$FIO_PROG $fio_config --ignore_error=,EIO --output=$fio_out
+cat $fio_out >> $seqres.full
 echo "Silence is golden"
 
 # xfs generates WARNINGs on purpose when applications mix buffered/mmap IO with

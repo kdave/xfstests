@@ -15,8 +15,15 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 fio_config=$tmp.fio
+fio_out=$tmp.fio.out
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
 
 # get standard environment, filters and checks
 . ./common/rc
@@ -27,6 +34,7 @@ _supported_fs generic
 _require_test
 _require_scratch
 _require_odirect
+_require_aio
 _require_block_device $SCRATCH_DEV
 
 NUM_JOBS=$((4*LOAD_FACTOR))
@@ -104,47 +112,32 @@ rm -f $seqres.full
 _require_fio $fio_config
 _require_xfs_io_command "falloc"
 
-_workout()
-{
-	echo ""
-	echo "Run fio with random aio-dio pattern"
-	echo ""
-	cat $fio_config >>  $seqres.full
-	run_check $FIO_PROG $fio_config &
-	pid=$!
-	echo "Start fallocate/truncate loop"
-
-	for ((i=0; ; i++))
-	do
-	    for ((k=1; k <= NUM_JOBS; k++))
-	    do
-		$XFS_IO_PROG -f -c "falloc 0 $FILE_SIZE" \
-			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
-	    done
-	    for ((k=1; k <= NUM_JOBS; k++))
-	    do
-		$XFS_IO_PROG -c "truncate  0" \
-			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
-	    done
-	    # Following like will check that pid is still run.
-	    # Once fio exit we can stop fallocate/truncate loop
-	    pgrep -f "$FIO_PROG" > /dev/null 2>&1 || break
-	done
-	wait $pid
-}
-
 _scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount
 
-if ! _workout; then
-	_scratch_unmount 2>/dev/null
-	exit
-fi
+echo ""
+echo "Run fio with random aio-dio pattern"
+echo ""
+cat $fio_config >>  $seqres.full
+$FIO_PROG $fio_config --output=$fio_out &
+pid=$!
+echo "Start fallocate/truncate loop"
 
-if ! _scratch_unmount; then
-	echo "failed to umount"
-	status=1
-	exit
-fi
+for ((i=0; ; i++)); do
+	for ((k=1; k <= NUM_JOBS; k++)); do
+		$XFS_IO_PROG -f -c "falloc 0 $FILE_SIZE" \
+			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
+	done
+	for ((k=1; k <= NUM_JOBS; k++)); do
+		$XFS_IO_PROG -c "truncate  0" \
+			$SCRATCH_MNT/direct_aio.$k.0 >> $seqres.full 2>&1
+	done
+	# Following like will check that pid is still run.
+	# Once fio exit we can stop fallocate/truncate loop
+	pgrep -f "$FIO_PROG" > /dev/null 2>&1 || break
+done
+wait $pid
+cat $fio_out >> $seqres.full
+
 status=0
 exit

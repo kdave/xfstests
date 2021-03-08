@@ -15,8 +15,15 @@ echo "QA output created by $seq"
 here=`pwd`
 tmp=/tmp/$$
 fio_config=$tmp.fio
+fio_out=$tmp.fio.out
 status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
 
 # get standard environment, filters and checks
 . ./common/rc
@@ -26,6 +33,7 @@ trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
 _supported_fs generic
 _require_scratch
 _require_odirect
+_require_aio
 _require_block_device $SCRATCH_DEV
 
 # xfs_io is not required for this test, but it's the best way to verify
@@ -37,9 +45,8 @@ rm -f $seqres.full
 
 NUM_JOBS=$((4*LOAD_FACTOR))
 BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
-if [ $((BLK_DEV_SIZE)) -gt 1048576 ]
-then
-    BLK_DEV_SIZE=1048576
+if [ $((BLK_DEV_SIZE)) -gt 1048576 ]; then
+	BLK_DEV_SIZE=1048576
 fi
 FS_SIZE=$((BLK_DEV_SIZE * 512))
 
@@ -115,29 +122,17 @@ rw=randwrite
 filename=aio-dio-verifier
 EOF
 
-_workout()
-{
-	echo ""
-	echo "Run fio with random aio-dio pattern"
-	echo ""
-	cat $fio_config >>  $seqres.full
-	run_check $FIO_PROG $fio_config
-}
-
 _require_fio $fio_config
 
 _scratch_mkfs_sized $FS_SIZE >> $seqres.full 2>&1
 _scratch_mount
 
-if ! _workout; then
-	_scratch_unmount 2>/dev/null
-	exit
-fi
+echo ""
+echo "Run fio with random aio-dio pattern"
+echo ""
+cat $fio_config >>  $seqres.full
+$FIO_PROG $fio_config --output=$fio_out
+cat $fio_out >> $seqres.full
 
-if ! _scratch_unmount; then
-	echo "failed to umount"
-	status=1
-	exit
-fi
 status=0
 exit
