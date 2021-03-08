@@ -1,0 +1,106 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+#
+# FSQA Test No. 627
+#
+# AIO/DIO stress test
+# Run random AIO/DIO activity on an file system with unwritten regions
+#
+# This test verifies that the an unwritten extent is properly marked
+# as written after writing into it.
+#
+# There was a hard-to-hit bug which would occasionally trigger with
+# ext4 for which this test was a reproducer.  This has been fixed
+# after moving ext4 to use iomap for Direct I/O's, although as of this
+# writing, there are still some occasional failures on ext4 when block
+# size < page size.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+fio_config=$tmp.fio
+fio_out=$tmp.fio.out
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_scratch
+_require_odirect
+_require_aio
+_require_block_device $SCRATCH_DEV
+
+NUM_JOBS=$((4*LOAD_FACTOR))
+BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
+FILE_SIZE=$(((BLK_DEV_SIZE * 512) * 3 / 4))
+
+max_file_size=$((5 * 1024 * 1024 * 1024))
+if [ $max_file_size -lt $FILE_SIZE ]; then
+	FILE_SIZE=$max_file_size
+fi
+SIZE=$((FILE_SIZE / 2))
+
+cat >$fio_config <<EOF
+###########
+# $seq test fio activity
+# Filenames derived from jobsname and jobid like follows:
+# ${JOB_NAME}.${JOB_ID}.${ITERATION_ID}
+[global]
+ioengine=libaio
+bs=128k
+directory=${SCRATCH_MNT}
+filesize=${FILE_SIZE}
+size=${FILE_SIZE}
+io_size=${SIZE}
+iodepth=$((128*$LOAD_FACTOR))
+fallocate=native
+
+# Perform direct aio and verify data
+# This test case should check use-after-free issues
+[aio-dio-verifier]
+numjobs=1
+verify=crc32c-intel
+verify_fatal=1
+verify_dump=1
+verify_backlog=1024
+verify_async=4
+direct=1
+random_generator=lfsr
+blocksize_range=4k-8200k
+rw=randwrite
+filename=test-file
+
+EOF
+
+rm -f $seqres.full
+
+_require_fio $fio_config
+_require_xfs_io_command "falloc"
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+echo ""
+echo "Run fio with random aio-dio pattern"
+echo ""
+cat $fio_config >> $seqres.full
+$FIO_PROG $fio_config --output=$fio_out
+cat $fio_out >> $seqres.full
+
+status=0
+exit
