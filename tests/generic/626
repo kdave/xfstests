@@ -1,0 +1,74 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 HUAWEI.  All Rights Reserved.
+# Copyright (c) 2021 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 626
+#
+# Test RENAME_WHITEOUT on filesystem without space to create one more inodes.
+# This is a regression test for kernel commit:
+#   6b4b8e6b4ad8 ("ext4: ext4: fix bug for rename with RENAME_WHITEOUT")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/populate
+. ./common/renameat2
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_renameat2 whiteout
+
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+# Create lots of files, to help to trigger the bug easily
+NR_FILE=$((4 * 64))
+for ((i=0; i<NR_FILE; i++));do
+	touch $SCRATCH_MNT/srcfile$i
+done
+# Try to fill the whole fs
+nr_free=$(stat -f -c '%f' $SCRATCH_MNT)
+blksz="$(_get_block_size $SCRATCH_MNT)"
+_fill_fs $((nr_free * blksz)) $SCRATCH_MNT/fill_space $blksz 0 >> $seqres.full 2>&1
+# Use empty files to fill the rest
+for ((i=0; i<10000; i++));do
+	touch $SCRATCH_MNT/fill_file$i 2>/dev/null
+	# Until no more files can be created
+	if [ $? -ne 0 ];then
+		break
+	fi
+done
+# ENOSPC is expected here
+for ((i=0; i<NR_FILE; i++));do
+	$here/src/renameat2 -w $SCRATCH_MNT/srcfile$i $SCRATCH_MNT/dstfile$i >> $seqres.full 2>&1
+done
+_scratch_cycle_mount
+# Expect no errors at here
+for ((i=0; i<NR_FILE; i++));do
+	ls -l $SCRATCH_MNT/srcfile$i >/dev/null
+done
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
