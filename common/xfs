@@ -432,6 +432,27 @@ _supports_xfs_scrub()
 	return 0
 }
 
+# Save a snapshot of a corrupt xfs filesystem for later debugging.
+_xfs_metadump() {
+	local metadump="$1"
+	local device="$2"
+	local logdev="$3"
+	local compressopt="$4"
+	shift; shift; shift; shift
+	local options="$@"
+	test -z "$options" && options="-a -o"
+
+	if [ "$logdev" != "none" ]; then
+		options="$options -l $logdev"
+	fi
+
+	$XFS_METADUMP_PROG $options "$device" "$metadump"
+	res=$?
+	[ "$compressopt" = "compress" ] && [ -n "$DUMP_COMPRESSOR" ] &&
+		$DUMP_COMPRESSOR "$metadump" &> /dev/null
+	return $res
+}
+
 # run xfs_check and friends on a FS.
 _check_xfs_filesystem()
 {
@@ -448,14 +469,16 @@ _check_xfs_filesystem()
 		extra_options="-f"
 	fi
 
-	if [ "$2" != "none" ]; then
-		extra_log_options="-l$2"
-		extra_mount_options="-ologdev=$2"
+	local logdev="$2"
+	if [ "$logdev" != "none" ]; then
+		extra_log_options="-l$logdev"
+		extra_mount_options="-ologdev=$logdev"
 	fi
 
-	if [ "$3" != "none" ]; then
-		extra_rt_options="-r$3"
-		extra_mount_options=$extra_mount_options" -ortdev=$3"
+	local rtdev="$3"
+	if [ "$rtdev" != "none" ]; then
+		extra_rt_options="-r$rtdev"
+		extra_mount_options=$extra_mount_options" -ortdev=$rtdev"
 	fi
 	extra_mount_options=$extra_mount_options" $MOUNT_OPTIONS"
 
@@ -520,8 +543,15 @@ _check_xfs_filesystem()
 	fi
 	rm -f $tmp.fs_check $tmp.logprint $tmp.repair
 
+	if [ "$ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
+		local flatdev="$(basename "$device")"
+		_xfs_metadump "$seqres.$flatdev.check.md" "$device" "$logdev" \
+			compress >> $seqres.full
+	fi
+
 	# Optionally test the index rebuilding behavior.
 	if [ -n "$TEST_XFS_REPAIR_REBUILD" ]; then
+		rebuild_ok=1
 		$XFS_REPAIR_PROG $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
 		if [ $? -ne 0 ]; then
 			_log_err "_check_xfs_filesystem: filesystem on $device is inconsistent (rebuild)"
@@ -530,6 +560,7 @@ _check_xfs_filesystem()
 			echo "*** end xfs_repair output"	>>$seqres.full
 
 			ok=0
+			rebuild_ok=0
 		fi
 		rm -f $tmp.repair
 
@@ -541,8 +572,15 @@ _check_xfs_filesystem()
 			echo "*** end xfs_repair output"	>>$seqres.full
 
 			ok=0
+			rebuild_ok=0
 		fi
 		rm -f $tmp.repair
+
+		if [ "$rebuild_ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
+			local flatdev="$(basename "$device")"
+			_xfs_metadump "$seqres.$flatdev.rebuild.md" "$device" \
+				"$logdev" compress >> $seqres.full
+		fi
 	fi
 
 	if [ $ok -eq 0 ]; then
