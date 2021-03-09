@@ -824,6 +824,17 @@ _scratch_populate_cache_tag() {
 _scratch_populate_restore_cached() {
 	local metadump="$1"
 
+	# If we're configured for compressed dumps and there isn't already an
+	# uncompressed dump, see if we can use DUMP_COMPRESSOR to decompress
+	# something.
+	if [ -n "$DUMP_COMPRESSOR" ]; then
+		for compr in "$metadump".*; do
+			[ -e "$compr" ] && $DUMP_COMPRESSOR -d -f -k "$compr" && break
+		done
+	fi
+
+	test -r "$metadump" || return 1
+
 	case "${FSTYP}" in
 	"xfs")
 		xfs_mdrestore "${metadump}" "${SCRATCH_DEV}" && return 0
@@ -855,8 +866,7 @@ _scratch_populate_cached() {
 		rm -rf "${POPULATE_METADUMP}"
 
 	# Try to restore from the metadump
-	test -r "${POPULATE_METADUMP}" && \
-		_scratch_populate_restore_cached "${POPULATE_METADUMP}" && \
+	_scratch_populate_restore_cached "${POPULATE_METADUMP}" && \
 		return
 
 	# Oh well, just create one from scratch
@@ -867,6 +877,13 @@ _scratch_populate_cached() {
 		_scratch_xfs_populate $@
 		_scratch_xfs_populate_check
 		_scratch_xfs_metadump "${POPULATE_METADUMP}"
+
+		local logdev=
+		[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+			logdev=$SCRATCH_LOGDEV
+
+		_xfs_metadump "$POPULATE_METADUMP" "$SCRATCH_DEV" "$logdev" \
+			compress
 		;;
 	"ext2"|"ext3"|"ext4")
 		_scratch_ext4_populate $@
