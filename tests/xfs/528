@@ -1,0 +1,183 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 528
+#
+# Make sure that regular fallocate functions work ok when the realtime extent
+# size is and isn't a power of 2.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	_scratch_unmount >> $seqres.full 2>&1
+	test -e "$rtdev" && losetup -d $rtdev >> $seqres.full 2>&1
+	rm -f $tmp.* $TEST_DIR/$seq.rtvol
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_loop
+_require_command "$FILEFRAG_PROG" filefrag
+_require_xfs_io_command "fpunch"
+_require_xfs_io_command "fzero"
+_require_xfs_io_command "fcollapse"
+_require_xfs_io_command "finsert"
+# Note that we don't _require_realtime because we synthesize a rt volume
+# below.  This also means we cannot run the post-test check.
+_require_scratch_nocheck
+
+log() {
+	echo "$@" | tee -a $seqres.full
+}
+
+mk_file() {
+	local file="$1"
+	local rextsize="$2"
+
+	$XFS_IO_PROG -f \
+		-c "pwrite -S 0x57 -b $rextsize 0 $rextsize" \
+		-c "pwrite -S 0x58 -b $rextsize $rextsize $rextsize" \
+		-c "pwrite -S 0x59 -b $rextsize $((rextsize * 2)) $rextsize" \
+		-c fsync \
+		"$file" >> $seqres.full
+}
+
+check_file() {
+	$FILEFRAG_PROG -v "$1" >> $seqres.full
+	od -tx1 -Ad -c "$1" >> $seqres.full
+	md5sum "$1" | _filter_scratch | tee -a $seqres.full
+}
+
+test_ops() {
+	local rextsize=$1
+	local sz=$((rextsize * 3))
+	local unaligned_sz=65536
+	local unaligned_off=$((rextsize * 2 + unaligned_sz))
+	local lunaligned_sz=$((rextsize * 2))
+	local lunaligned_off=$unaligned_sz
+
+	log "Format rtextsize=$rextsize"
+	_scratch_unmount
+	_scratch_mkfs -r extsize=$rextsize >> $seqres.full
+	_try_scratch_mount || \
+		_notrun "Could not mount rextsize=$rextsize with synthetic rt volume"
+
+	# Force all files to be realtime files
+	$XFS_IO_PROG -c 'chattr +t' $SCRATCH_MNT
+
+	log "Test regular write, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/write $rextsize
+	check_file $SCRATCH_MNT/write
+
+	log "Test aligned falloc, rextsize=$rextsize"
+	$XFS_IO_PROG -f -c "falloc 0 $sz" $SCRATCH_MNT/falloc >> $seqres.full
+	check_file $SCRATCH_MNT/falloc
+
+	log "Test aligned fcollapse, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/collapse $rextsize
+	$XFS_IO_PROG -f -c "fcollapse $rextsize $rextsize" $SCRATCH_MNT/collapse >> $seqres.full
+	check_file $SCRATCH_MNT/collapse
+
+	log "Test aligned finsert, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/insert $rextsize
+	$XFS_IO_PROG -f -c "finsert $rextsize $rextsize" $SCRATCH_MNT/insert >> $seqres.full
+	check_file $SCRATCH_MNT/insert
+
+	log "Test aligned fzero, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/zero $rextsize
+	$XFS_IO_PROG -f -c "fzero $rextsize $rextsize" $SCRATCH_MNT/zero >> $seqres.full
+	check_file $SCRATCH_MNT/zero
+
+	log "Test aligned fpunch, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/punch $rextsize
+	$XFS_IO_PROG -f -c "fpunch $rextsize $rextsize" $SCRATCH_MNT/punch >> $seqres.full
+	check_file $SCRATCH_MNT/punch
+
+	log "Test unaligned falloc, rextsize=$rextsize"
+	$XFS_IO_PROG -f -c "falloc $unaligned_off $unaligned_sz" $SCRATCH_MNT/ufalloc >> $seqres.full
+	check_file $SCRATCH_MNT/ufalloc
+
+	log "Test unaligned fcollapse, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/ucollapse $rextsize
+	$XFS_IO_PROG -f -c "fcollapse $unaligned_off $unaligned_sz" $SCRATCH_MNT/ucollapse >> $seqres.full
+	check_file $SCRATCH_MNT/ucollapse
+
+	log "Test unaligned finsert, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/uinsert $rextsize
+	$XFS_IO_PROG -f -c "finsert $unaligned_off $unaligned_sz" $SCRATCH_MNT/uinsert >> $seqres.full
+	check_file $SCRATCH_MNT/uinsert
+
+	log "Test unaligned fzero, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/uzero $rextsize
+	$XFS_IO_PROG -f -c "fzero $unaligned_off $unaligned_sz" $SCRATCH_MNT/uzero >> $seqres.full
+	check_file $SCRATCH_MNT/uzero
+
+	log "Test unaligned fpunch, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/upunch $rextsize
+	$XFS_IO_PROG -f -c "fpunch $unaligned_off $unaligned_sz" $SCRATCH_MNT/upunch >> $seqres.full
+	check_file $SCRATCH_MNT/upunch
+
+	log "Test large unaligned fzero, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/luzero $rextsize
+	$XFS_IO_PROG -f -c "fzero $lunaligned_off $lunaligned_sz" $SCRATCH_MNT/luzero >> $seqres.full
+	check_file $SCRATCH_MNT/luzero
+
+	log "Test large unaligned fpunch, rextsize=$rextsize"
+	mk_file $SCRATCH_MNT/lpunch $rextsize
+	$XFS_IO_PROG -f -c "fpunch $lunaligned_off $lunaligned_sz" $SCRATCH_MNT/lpunch >> $seqres.full
+	check_file $SCRATCH_MNT/lpunch
+
+	log "Remount and compare"
+	_scratch_cycle_mount
+	check_file $SCRATCH_MNT/write
+	check_file $SCRATCH_MNT/falloc
+	check_file $SCRATCH_MNT/collapse
+	check_file $SCRATCH_MNT/insert
+	check_file $SCRATCH_MNT/zero
+	check_file $SCRATCH_MNT/punch
+	check_file $SCRATCH_MNT/ufalloc
+	check_file $SCRATCH_MNT/ucollapse
+	check_file $SCRATCH_MNT/uinsert
+	check_file $SCRATCH_MNT/uzero
+	check_file $SCRATCH_MNT/upunch
+	check_file $SCRATCH_MNT/luzero
+	check_file $SCRATCH_MNT/lpunch
+
+	log "Check everything, rextsize=$rextsize"
+	_check_scratch_fs
+}
+
+echo "Create fake rt volume"
+$XFS_IO_PROG -f -c "truncate 400m" $TEST_DIR/$seq.rtvol
+rtdev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
+
+echo "Make sure synth rt volume works"
+export USE_EXTERNAL=yes
+export SCRATCH_RTDEV=$rtdev
+_scratch_mkfs > $seqres.full
+_try_scratch_mount || \
+	_notrun "Could not mount with synthetic rt volume"
+
+# power of two
+test_ops 262144
+
+# not a power of two
+test_ops 327680
+
+# success, all done
+status=0
+exit
