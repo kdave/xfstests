@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 142
+#
+# This is a regression test for commit d0c20d38af13 "xfs: fix
+# xfs_bmap_validate_extent_raw when checking attr fork of rt files", which
+# fixes the bmap record validator so that it will not check the attr fork
+# extent mappings of a realtime file against the size of the realtime volume.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_realtime
+
+rm -f $seqres.full
+
+# Format filesystem with very tiny realtime volume
+_scratch_mkfs -r size=256k > $seqres.full
+_scratch_mount >> $seqres.full
+
+# Create a realtime file
+$XFS_IO_PROG -f -R -c 'pwrite 0 64k' -c stat $SCRATCH_MNT/v >> $seqres.full
+
+# Add enough xattr data to force creation of xattr blocks at a higher address
+# on the data device than the size of the realtime volume
+for i in `seq 0 16`; do
+	$ATTR_PROG -s user.test$i $SCRATCH_MNT/v < $SCRATCH_MNT/v >> $seqres.full
+done
+
+# Force flushing extent maps to disk to trip the verifier
+_scratch_cycle_mount
+
+# Now let that unmount
+echo Silence is golden.
+
+# success, all done
+status=0
+exit
