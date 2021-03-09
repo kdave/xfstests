@@ -14,14 +14,8 @@
 #ifdef HAVE_BTRFSUTIL_H
 #include <btrfsutil.h>
 #endif
-#ifdef HAVE_ATTR_ATTRIBUTES_H
-#include <attr/attributes.h>
-#endif
 #ifdef HAVE_LINUX_FIEMAP_H
 #include <linux/fiemap.h>
-#endif
-#ifndef HAVE_ATTR_LIST
-#define attr_list(path, buf, size, flags, cursor) (errno = -ENOSYS, -1)
 #endif
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>

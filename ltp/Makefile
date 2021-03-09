@@ -13,11 +13,6 @@ LDIRT = $(TARGETS)
 LCFLAGS = -DXFS
 LCFLAGS += -I$(TOPDIR)/src #Used for including $(TOPDIR)/src/global.h
 
-ifeq ($(HAVE_ATTR_LIST), true)
-LCFLAGS += -DHAVE_ATTR_LIST
-LLDLIBS += $(LIBATTR)
-endif
-
 ifeq ($(HAVE_AIO), true)
 TARGETS += aio-stress
 LCFLAGS += -DAIO

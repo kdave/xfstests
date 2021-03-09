@@ -10,7 +10,6 @@ LSRCFILES = \
 	package_acldev.m4 \
 	package_aiodev.m4 \
 	package_gdbmdev.m4 \
-	package_attrdev.m4 \
 	package_dmapidev.m4 \
 	package_globals.m4 \
 	package_libcdev.m4 \
