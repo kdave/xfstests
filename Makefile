@@ -43,7 +43,7 @@ TOOL_SUBDIRS = ltp src m4 common
 export TESTS_DIR = tests
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
 
-default: include/builddefs $(DMAPI_MAKEFILE)
+default: include/builddefs
 ifeq ($(HAVE_BUILDDEFS), no)
 	$(Q)$(MAKE) $(MAKEOPTS) $@
 else
