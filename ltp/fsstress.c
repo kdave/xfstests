@@ -394,7 +394,7 @@ struct print_string	flag_str = {0};
 
 void	add_to_flist(int, int, int, int);
 void	append_pathname(pathname_t *, char *);
-int	attr_list_path(pathname_t *, char *, const int, int, attrlist_cursor_t *);
+int	attr_list_path(pathname_t *, char *, const int);
 int	attr_remove_path(pathname_t *, const char *);
 int	attr_set_path(pathname_t *, const char *, const char *, const int);
 void	check_cwd(void);
@@ -869,27 +869,35 @@ append_pathname(pathname_t *name, char *str)
 }
 
 int
+attr_list_count(char *buffer, int buffersize)
+{
+	char *p = buffer;
+	char *end = buffer + buffersize;
+	int count = 0;
+
+	while (p < end && *p != 0) {
+		count++;
+		p += strlen(p) + 1;
+	}
+
+	return count;
+}
+
+int
 attr_list_path(pathname_t *name,
 	       char *buffer,
-	       const int buffersize,
-	       int flags,
-	       attrlist_cursor_t *cursor)
+	       const int buffersize)
 {
 	char		buf[NAME_MAX + 1];
 	pathname_t	newname;
 	int		rval;
 
-	if (flags != ATTR_DONTFOLLOW) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	rval = attr_list(name->path, buffer, buffersize, flags, cursor);
+	rval = llistxattr(name->path, buffer, buffersize);
 	if (rval >= 0 || errno != ENAMETOOLONG)
 		return rval;
 	separate_pathname(name, buf, &newname);
 	if (chdir(buf) == 0) {
-		rval = attr_list_path(&newname, buffer, buffersize, flags, cursor);
+		rval = attr_list_path(&newname, buffer, buffersize);
 		assert(chdir("..") == 0);
 	}
 	free_pathname(&newname);
@@ -2313,32 +2321,24 @@ aread_f(int opno, long r)
 void
 attr_remove_f(int opno, long r)
 {
-	attrlist_ent_t		*aep;
-	attrlist_t		*alist;
-	char			*aname;
-	char			buf[4096];
-	attrlist_cursor_t	cursor;
+	char			*bufname;
+	char			*bufend;
+	char			*aname = NULL;
+	char			buf[XATTR_LIST_MAX];
 	int			e;
 	int			ent;
 	pathname_t		f;
-	int			total;
+	int			total = 0;
 	int			v;
 	int			which;
 
 	init_pathname(&f);
 	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
-	total = 0;
-	bzero(&cursor, sizeof(cursor));
-	do {
-		bzero(buf, sizeof(buf));
-		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
-		check_cwd();
-		if (e)
-			break;
-		alist = (attrlist_t *)buf;
-		total += alist->al_count;
-	} while (alist->al_more);
+	e = attr_list_path(&f, buf, sizeof(buf));
+	check_cwd();
+	if (e > 0)
+		total = attr_list_count(buf, e);
 	if (total == 0) {
 		if (v)
 			printf("%d/%d: attr_remove - no attrs for %s\n",
@@ -2346,25 +2346,19 @@ attr_remove_f(int opno, long r)
 		free_pathname(&f);
 		return;
 	}
+
 	which = (int)(random() % total);
-	bzero(&cursor, sizeof(cursor));
+	bufname = buf;
+	bufend = buf + e;
 	ent = 0;
-	aname = NULL;
-	do {
-		bzero(buf, sizeof(buf));
-		e = attr_list_path(&f, buf, sizeof(buf), ATTR_DONTFOLLOW, &cursor);
-		check_cwd();
-		if (e)
-			break;
-		alist = (attrlist_t *)buf;
-		if (which < ent + alist->al_count) {
-			aep = (attrlist_ent_t *)
-				&buf[alist->al_offset[which - ent]];
-			aname = aep->a_name;
+	while (bufname < bufend) {
+		if (which < ent) {
+			aname = bufname;
 			break;
 		}
-		ent += alist->al_count;
-	} while (alist->al_more);
+		ent++;
+		bufname += strlen(bufname) + 1;
+	}
 	if (aname == NULL) {
 		if (v)
 			printf(
