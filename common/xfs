@@ -503,6 +503,17 @@ _check_xfs_filesystem()
 	# Run online scrub if we can.
 	mntpt="$(_is_dev_mounted $device)"
 	if [ -n "$mntpt" ] && _supports_xfs_scrub "$mntpt" "$device"; then
+		# Tests can create a scenario in which a call to syncfs() issued
+		# at the end of the execution of the test script would return an
+		# error code. xfs_scrub internally calls syncfs() before
+		# starting the actual online consistency check operation. Since
+		# such a call to syncfs() fails, xfs_scrub ends up returning
+		# without performing consistency checks on the test
+		# filesystem. This can mask a possible on-disk data structure
+		# corruption. Hence consume such a possible syncfs() failure
+		# before executing a scrub operation.
+		$XFS_IO_PROG -c syncfs $mntpt >> $seqres.full 2>&1
+
 		"$XFS_SCRUB_PROG" $scrubflag -v -d -n $mntpt > $tmp.scrub 2>&1
 		if [ $? -ne 0 ]; then
 			_log_err "_check_xfs_filesystem: filesystem on $device failed scrub"
