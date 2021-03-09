@@ -1,0 +1,162 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 144
+#
+# Check that quota softlimit warnings work the way they should.  This means
+# that we can disobey the softlimit up to warnlimit times before it turns into
+# hard(er) enforcement.  This is a functional test for quota warnings, but
+# since the functionality has been broken for decades, this is also a
+# regression test for commit 4b8628d57b72 ("xfs: actually bump warning counts
+# when we send warnings").
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_quota
+_require_scratch
+
+rm -f $seqres.full
+
+qsetup()
+{
+	opt=$1
+	enforce=0
+	if [ $opt = "u" -o $opt = "uno" ]; then
+		type=u
+		eval `_choose_uid`
+	elif [ $opt = "g" -o $opt = "gno" ]; then
+		type=g
+		eval `_choose_gid`
+	elif [ $opt = "p" -o $opt = "pno" ]; then
+		type=p
+		eval `_choose_prid`
+	fi
+	[ $opt = "u" -o $opt = "g" -o $opt = "p" ] && enforce=1
+
+	echo "Using type=$type id=$id" >> $seqres.full
+}
+
+exercise() {
+	_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
+	cat $tmp.mkfs >>$seqres.full
+
+	# keep the blocksize and data size for dd later
+	. $tmp.mkfs
+
+	_qmount
+
+	qsetup $1
+
+	echo "Using type=$type id=$id" >>$seqres.full
+
+	echo
+	echo "*** report initial settings" | tee -a $seqres.full
+	$XFS_QUOTA_PROG -x \
+		-c "limit -$type isoft=3 ihard=500000 $id" \
+		-c "warn -$type -i -d 13" \
+		$SCRATCH_DEV
+	$XFS_QUOTA_PROG -x \
+		-c "state -$type" >> $seqres.full
+	$XFS_QUOTA_PROG -x \
+		-c "repquota -birnN -$type" $SCRATCH_DEV |
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
+
+	echo
+	echo "*** push past the soft inode limit" | tee -a $seqres.full
+	_file_as_id $SCRATCH_MNT/softok1 $id $type $bsize 0
+	_file_as_id $SCRATCH_MNT/softok2 $id $type $bsize 0
+	_file_as_id $SCRATCH_MNT/softok3 $id $type $bsize 0
+	_file_as_id $SCRATCH_MNT/softwarn1 $id $type $bsize 0
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "repquota -birnN -$type" $SCRATCH_DEV |
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
+
+	echo
+	echo "*** push further past the soft inode limit" | tee -a $seqres.full
+	for warn_nr in $(seq 2 5); do
+		_file_as_id $SCRATCH_MNT/softwarn$warn_nr $id $type $bsize 0
+	done
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "repquota -birnN -$type" $SCRATCH_DEV |
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
+
+	echo
+	echo "*** push past the soft inode warning limit" | tee -a $seqres.full
+	for warn_nr in $(seq 6 15); do
+		_file_as_id $SCRATCH_MNT/softwarn$warn_nr $id $type $bsize 0
+	done
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+		-c "repquota -birnN -$type" $SCRATCH_DEV |
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
+
+	echo
+	echo "*** unmount"
+	_scratch_unmount
+}
+
+_scratch_mkfs > $seqres.full
+_scratch_mount >> $seqres.full
+
+chmod a+rwx $SCRATCH_MNT $seqres.full	# arbitrary users will write here
+bsize=$(_get_file_block_size $SCRATCH_MNT)
+_scratch_unmount
+
+cat >$tmp.projects <<EOF
+1:$SCRATCH_MNT
+EOF
+
+cat >$tmp.projid <<EOF
+root:0
+scratch:1
+EOF
+
+projid_file="$tmp.projid"
+
+echo "*** user"
+_qmount_option "uquota"
+exercise u
+
+echo "*** group"
+_qmount_option "gquota"
+exercise g
+
+echo "*** uqnoenforce"
+_qmount_option "uqnoenforce"
+exercise uno
+
+echo "*** gqnoenforce"
+_qmount_option "gqnoenforce"
+exercise gno
+
+echo "*** pquota"
+_qmount_option "pquota"
+exercise p
+
+echo "*** pqnoenforce"
+_qmount_option "pqnoenforce"
+exercise pno
+
+# success, all done
+status=0
+exit
