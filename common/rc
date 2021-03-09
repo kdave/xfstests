@@ -584,6 +584,18 @@ _scratch_mkfs_ext4()
 	return $mkfs_status
 }
 
+_ext4_metadump()
+{
+	local device="$1"
+	local dumpfile="$2"
+	local compressopt="$3"
+
+	test -n "$E2IMAGE_PROG" || _fail "e2image not installed"
+	$E2IMAGE_PROG -Q "$device" "$dumpfile"
+	[ "$compressopt" = "compress" ] && [ -n "$DUMP_COMPRESSOR" ] &&
+		$DUMP_COMPRESSOR "$dumpfile" &>> "$seqres.full"
+}
+
 _test_mkfs()
 {
     case $FSTYP in
@@ -2728,6 +2740,15 @@ _check_generic_filesystem()
         ok=0
     fi
     rm -f $tmp.fsck
+
+    if [ $ok -eq 0 ] && [ -n "$DUMP_CORRUPT_FS" ]; then
+        case "$FSTYP" in
+        ext*)
+            local flatdev="$(basename "$device")"
+            _ext4_metadump "$seqres.$flatdev.check.qcow2" "$device" compress
+            ;;
+        esac
+    fi
 
     if [ $ok -eq 0 ]
     then
