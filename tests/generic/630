@@ -1,0 +1,52 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 630
+#
+# Make sure that mmap and file writers racing with FIDEDUPERANGE cannot write
+# to the file after the dedupe prep function has decided that the file contents
+# are identical and we can therefore go ahead with the remapping.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch_dedupe
+_require_test_program "deduperace"
+
+rm -f $seqres.full
+
+nr_ops=$((TIME_FACTOR * 10000))
+
+# Format filesystem
+_scratch_mkfs > $seqres.full
+_scratch_mount
+
+# Test once with mmap writes
+$here/src/deduperace -c $SCRATCH_MNT -n $nr_ops
+
+# Test again with pwrites for the lulz
+$here/src/deduperace -c $SCRATCH_MNT -n $nr_ops -w
+
+echo Silence is golden.
+# success, all done
+status=0
+exit
