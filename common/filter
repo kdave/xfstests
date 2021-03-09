@@ -637,5 +637,29 @@ _filter_getcap()
         sed -e "s/= //" -e "s/\+/=/g"
 }
 
+# Filter user/group/project id numbers out of quota reports, and standardize
+# the block counts to use filesystem block size.  Callers must set the id and
+# bsize variables before calling this function.
+_filter_quota_report()
+{
+	test -n "$id" || echo "id must be set"
+	test -n "$bsize" || echo "block size must be set"
+
+	tr -s '[:space:]' | \
+	perl -npe '
+		s/^\#'$id' /[NAME] /g;
+		s/^\#0 \d+ /[ROOT] 0 /g;
+		s/6 days/7 days/g' |
+	perl -npe '
+		$val = 0;
+		if ($ENV{'LARGE_SCRATCH_DEV'}) {
+			$val = $ENV{'NUM_SPACE_FILES'};
+		}
+		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g' |
+	sed -e 's/ 65535 \[--------\]/ 00 \[--------\]/g' |
+	perl -npe '
+		s|^(.*?) (\d+) (\d+) (\d+)|$1 @{[$2 * 1024 /'$bsize']} @{[$3 * 1024 /'$bsize']} @{[$4 * 1024 /'$bsize']}|'
+}
+
 # make sure this script returns success
 /bin/true

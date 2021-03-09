@@ -47,24 +47,6 @@ bhard=$(( 1000 * $bsize ))
 isoft=4
 ihard=10
 
-_filter_report()
-{
-	tr -s '[:space:]' | \
-	perl -npe '
-		s/^\#'$id' /[NAME] /g;
-		s/^\#0 \d+ /[ROOT] 0 /g;
-		s/6 days/7 days/g' |
-	perl -npe '
-		$val = 0;
-		if ($ENV{'LARGE_SCRATCH_DEV'}) {
-			$val = $ENV{'NUM_SPACE_FILES'};
-		}
-		s/(^\[ROOT\] \S+ \S+ \S+ \S+ \[--------\] )(\S+)/$1@{[$2 - $val]}/g' |
-	sed -e 's/ 65535 \[--------\]/ 00 \[--------\]/g' |
-	perl -npe '
-		s|^(.*?) (\d+) (\d+) (\d+)|$1 @{[$2 * 1024 /'$bsize']} @{[$3 * 1024 /'$bsize']} @{[$4 * 1024 /'$bsize']}|'
-}
-
 # The actual point at which limit enforcement takes place for the
 # hard block limit is variable depending on filesystem blocksize,
 # and iosize.  What we want to test is that the limit is enforced
@@ -84,7 +66,7 @@ _filter_and_check_blks()
 			}
 			s/^(\#'$id'\s+)(\d+)/\1 =OK=/g;
 		}
-	' | _filter_report
+	' | _filter_quota_report
 }
 
 _qsetup()
@@ -134,7 +116,7 @@ _exercise()
 	echo "*** report no quota settings" | tee -a $seqres.full
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
-		_filter_report | LC_COLLATE=POSIX sort -ru
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
 
 	echo
 	echo "*** report initial settings" | tee -a $seqres.full
@@ -147,7 +129,7 @@ _exercise()
 		$SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
-		_filter_report | LC_COLLATE=POSIX sort -ru
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
 
 	echo
 	echo "*** push past the soft inode limit" | tee -a $seqres.full
@@ -159,7 +141,7 @@ _exercise()
 	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
-		_filter_report | LC_COLLATE=POSIX sort -ru
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
 
 	echo
 	echo "*** push past the soft block limit" | tee -a $seqres.full
@@ -169,7 +151,7 @@ _exercise()
 		-c "warn -b -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
-		_filter_report | LC_COLLATE=POSIX sort -ru
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
@@ -183,7 +165,7 @@ _exercise()
 		-c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
-		_filter_report | LC_COLLATE=POSIX sort -ru
+		_filter_quota_report | LC_COLLATE=POSIX sort -ru
 
 	echo
 	# Note: for quota accounting (not enforcement), EDQUOT is not expected
