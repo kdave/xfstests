@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 629
+#
+# Make sure that copy_file_range forces the log out if we open the file with
+# O_SYNC or set FS_XFLAG_SYNC on the file.  We test that it actually forced the
+# log by using dm-error to shut down the fs without flushing the log and then
+# remounting to check file contents.  This is a regression test for commit
+# 5ffce3cc22a0 ("xfs: force the log after remapping a synchronous-writes file")
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_dmerror_unmount
+	_dmerror_cleanup
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmerror
+
+# real QA test starts here
+_supported_fs generic
+_require_dm_target error
+_require_xfs_io_command "chattr" "s"
+_require_scratch
+
+rm -f $seqres.full
+
+# Format filesystem and set up quota limits
+_scratch_mkfs > $seqres.full
+_require_metadata_journaling $SCRATCH_DEV
+_dmerror_init
+_dmerror_mount
+
+# Test that O_SYNC actually results in file data being written even if the
+# fs immediately dies
+echo "test o_sync write"
+$XFS_IO_PROG -x -f -s -c "pwrite -S 0x58 0 1m -b 1m" $SCRATCH_MNT/0 >> $seqres.full
+_dmerror_load_error_table
+_dmerror_unmount
+_dmerror_load_working_table
+_dmerror_mount
+md5sum $SCRATCH_MNT/0 | _filter_scratch
+
+# Set up initial files for copy test
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 1m -b 1m' $SCRATCH_MNT/a >> $seqres.full
+touch $SCRATCH_MNT/b
+sync
+
+# Test that unaligned copy file range forces dirty data/metadata to disk when
+# destination file opened with O_SYNC
+echo "test unaligned copy range o_sync"
+$XFS_IO_PROG -x -s -c "copy_range -s 13 -d 13 -l 1048550 $SCRATCH_MNT/a" $SCRATCH_MNT/b >> $seqres.full
+_dmerror_load_error_table
+_dmerror_unmount
+_dmerror_load_working_table
+_dmerror_mount
+md5sum $SCRATCH_MNT/a $SCRATCH_MNT/b | _filter_scratch
+
+# Set up dest file with chattr +S
+rm -f $SCRATCH_MNT/b
+touch $SCRATCH_MNT/b
+chattr +S $SCRATCH_MNT/b
+sync
+
+# Test that unaligned copy file range forces dirty data/metadata to disk when
+# destination file has the sync iflag set
+echo "test unaligned copy range iflag"
+$XFS_IO_PROG -x -c "copy_range -s 13 -d 13 -l 1048550 $SCRATCH_MNT/a" $SCRATCH_MNT/b >> $seqres.full
+_dmerror_load_error_table
+_dmerror_unmount
+_dmerror_load_working_table
+_dmerror_mount
+md5sum $SCRATCH_MNT/a $SCRATCH_MNT/b | _filter_scratch
+
+# success, all done
+status=0
+exit
