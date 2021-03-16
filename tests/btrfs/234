@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. btrfs/234
+#
+# Test cases where a direct IO write, with O_DSYNC, can not be done and has to
+# fallback to a buffered write.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+_require_odirect
+_require_chattr c
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# Create a test file with compression enabled (chattr +c).
+touch $SCRATCH_MNT/foo
+$CHATTR_PROG +c $SCRATCH_MNT/foo
+
+# Now do a buffered write to create compressed extents.
+$XFS_IO_PROG -s -c "pwrite -S 0xab -b 1M 0 1M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now do the direct IO write with O_DSYNC into a file range that contains
+# compressed extents. It should fallback to buffered IO and succeed.
+$XFS_IO_PROG -d -s -c "pwrite -S 0xcd 512K 512K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now try doing a direct IO write, with O_DSYNC, for a range that starts with
+# non-aligned offset. It should also fallback to buffered IO and succeed.
+$XFS_IO_PROG -f -d -s -c "pwrite -S 0xef 1111 512K" $SCRATCH_MNT/bar | _filter_xfs_io
+
+# Unmount, mount again, and verify we have the expected data.
+_scratch_cycle_mount
+
+echo "File foo data:"
+od -A d -t x1 $SCRATCH_MNT/foo
+echo "File bar data:"
+od -A d -t x1 $SCRATCH_MNT/bar
+
+status=0
+exit
