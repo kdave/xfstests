@@ -1,0 +1,152 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 233
+#
+# Test that subvolume deletion is resumed on RW mounts, that it is not performed
+# on RO mounts and that after remounting a filesystem from RO to RW mode, it is
+# performed.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+_require_dm_target flakey
+_require_btrfs_command inspect-internal dump-tree
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+check_subvol_orphan_item_exists()
+{
+	# Check that the orphan item for our subvolume exists in the root tree.
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 1 $SCRATCH_DEV | \
+		grep -q 'ORPHAN ORPHAN_ITEM 256'
+	[ $? -ne 0 ] && echo "subvolume orphan item is missing"
+}
+
+check_subvol_orphan_item_not_exists()
+{
+	# Check that the orphan item for our subvolume does not exists in the
+	# root tree.
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 1 $SCRATCH_DEV | \
+		grep -q 'ORPHAN ORPHAN_ITEM 256'
+	[ $? -eq 0 ] && echo "subvolume orphan item still exists"
+}
+
+check_subvol_btree_exists()
+{
+	$BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV | \
+		grep -q 'file tree key (256 ROOT_ITEM 0)'
+	[ $? -ne 0 ] && echo "subvolume btree is missing"
+}
+
+check_subvol_btree_not_exists()
+{
+	$BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV | \
+		grep -q 'file tree key (256 ROOT_ITEM 0)'
+	[ $? -eq 0 ] && echo "subvolume btree still exists"
+}
+
+create_subvol_with_orphan()
+{
+	$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/testsv | _filter_scratch
+
+	# Create a file in our subvolume and make it durably persisted.
+	touch $SCRATCH_MNT/testsv/foobar
+	sync
+
+	# Now open a file descriptor on the file and, while holding the file
+	# open, delete the subvolume, then 'sync' to durably persist the orphan
+	# item for the subvolume.
+	exec 73< $SCRATCH_MNT/testsv/foobar
+	$BTRFS_UTIL_PROG subvolume delete $SCRATCH_MNT/testsv | _filter_scratch
+	sync
+
+	# Now silently drop writes on the device, close the file descriptor and
+	# unmount the filesystem. After this we should have an orphan item in
+	# root tree for the subvolume, so that its tree is deleted on the next
+	# RW mount.
+	_load_flakey_table $FLAKEY_DROP_WRITES
+	exec 73>&-
+	_unmount_flakey
+
+	check_subvol_orphan_item_exists
+	check_subvol_btree_exists
+
+	_load_flakey_table $FLAKEY_ALLOW_WRITES
+}
+
+create_subvol_with_orphan
+
+# Mount the filesystem in RW mode and unmount it. After that, the subvolume
+# and its orphan item should not exist anymore.
+# Use a commit interval lower than the default (30 seconds) so that the test
+# is faster and we spend less time waiting for transaction commits.
+MOUNT_OPTIONS="-o commit=1"
+_mount_flakey
+$BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >>$seqres.full
+_unmount_flakey
+
+check_subvol_orphan_item_not_exists
+check_subvol_btree_not_exists
+
+# Now lets check a RO mount does not trigger subvolume deletion.
+_cleanup_flakey
+_scratch_mkfs >>$seqres.full 2>&1
+_init_flakey
+_mount_flakey
+
+create_subvol_with_orphan
+MOUNT_OPTIONS="-o ro,commit=1"
+_mount_flakey
+# The subvolume path should not be accessible anymore, even if deletion of the
+# subvolume btree did not happen yet.
+[ -e $SCRATCH_MNT/testsv ] && echo "subvolume path still exists"
+_unmount_flakey
+
+# The subvolume btree should still exist, even though the path is not accessible.
+check_subvol_btree_exists
+# The orphan item for the subvolume should still exist, as the subvolume btree
+# was not yet deleted.
+check_subvol_orphan_item_exists
+
+# Mount the filesystem RO again.
+_mount_flakey
+
+# Now remount RW, then unmount and then check the subvolume's orphan item, btree
+# and path don't exist anymore.
+MOUNT_OPTIONS="-o remount,rw"
+_mount_flakey
+$BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >>$seqres.full
+[ -e $SCRATCH_MNT/testsv ] && echo "subvolume path still exists"
+_unmount_flakey
+
+check_subvol_orphan_item_not_exists
+check_subvol_btree_not_exists
+
+status=0
+exit
