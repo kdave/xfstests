@@ -15,6 +15,7 @@
 #include <string.h>
 #include <errno.h>
 #include <linux/fs.h>
+#include "global.h"
 
 static char zerobuf[65536];
 
