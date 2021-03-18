@@ -32,6 +32,10 @@ _cleanup()
 
 writer()
 {
+	# Wait for running fsstress subcommand before exitting so that
+	# mountpoint is not busy when we try to unmount it.
+	trap "wait; exit" SIGTERM
+
 	while true; do
 		args=`_scale_fsstress_args -p 20 -n 1000 $FSSTRESS_AVOID -d $SCRATCH_MNT/stressdir`
 		$FSSTRESS_PROG $args >/dev/null 2>&1
