@@ -1,0 +1,98 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 150
+#
+# Make sure the xfs_db path command works the way the author thinks it does.
+# This means that it can navigate to random inodes, fails on paths that don't
+# resolve.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_db_command "path"
+_require_scratch
+
+echo "Format filesystem and populate"
+_scratch_mkfs > $seqres.full
+_scratch_mount >> $seqres.full
+
+mkdir $SCRATCH_MNT/a
+mkdir $SCRATCH_MNT/a/b
+$XFS_IO_PROG -f -c 'pwrite 0 61' $SCRATCH_MNT/a/c >> $seqres.full
+ln -s -f c $SCRATCH_MNT/a/d
+mknod $SCRATCH_MNT/a/e b 8 0
+ln -s -f b $SCRATCH_MNT/a/f
+
+_scratch_unmount
+
+echo "Check xfs_db path on directories"
+_scratch_xfs_db -c 'path /a' -c print | grep -q 'sfdir.*count.* 5$' || \
+	echo "Did not find directory /a"
+
+_scratch_xfs_db -c 'path /a/b' -c print | grep -q sfdir || \
+	echo "Did not find empty sf directory /a/b"
+
+echo "Check xfs_db path on files"
+_scratch_xfs_db -c 'path /a/c' -c print | grep -q 'core.size.*61' || \
+	echo "Did not find 61-byte file /a/c"
+
+echo "Check xfs_db path on file symlinks"
+_scratch_xfs_db -c 'path /a/d' -c print | grep -q symlink || \
+	echo "Did not find symlink /a/d"
+
+echo "Check xfs_db path on bdevs"
+_scratch_xfs_db -c 'path /a/e' -c print | grep -q 'format.*dev' || \
+	echo "Did not find bdev /a/e"
+
+echo "Check xfs_db path on dir symlinks"
+_scratch_xfs_db -c 'path /a/f' -c print | grep -q symlink || \
+	echo "Did not find symlink /a/f"
+
+echo "Check nonexistent path"
+_scratch_xfs_db -c 'path /does/not/exist'
+
+echo "Check xfs_db path on file path with multiple slashes"
+_scratch_xfs_db -c 'path /a////////c' -c print | grep -q 'core.size.*61' || \
+	echo "Did not find 61-byte file /a////////c"
+
+echo "Check xfs_db path on file path going in and out of /a to get to /a/c"
+_scratch_xfs_db -c 'path /a/.././a/.././a/c' -c print | grep -q 'core.size.*61' || \
+	echo "Did not find 61-byte file /a/.././a/.././a/c"
+
+echo "Check xfs_db path on file path going above the root to get to /a/c"
+_scratch_xfs_db -c 'path /../../../a/c' -c print | grep -q 'core.size.*61' || \
+	echo "Did not find 61-byte file  /../../../a/c"
+
+echo "Check xfs_db path on file path going to then above the root to get to /a/c"
+_scratch_xfs_db -c 'path /a/../../../a/c' -c print | grep -q 'core.size.*61' || \
+	echo "Did not find 61-byte file  /a/../../../a/c"
+
+echo "Check xfs_db path component that isn't a directory"
+_scratch_xfs_db -c 'path /a/c/b' -c print
+
+echo "Check xfs_db path on a dot-dot applied to a non-directory"
+_scratch_xfs_db -c 'path /a/c/../b' -c print
+
+# success, all done
+status=0
+exit
