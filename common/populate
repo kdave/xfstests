@@ -808,13 +808,23 @@ _fill_fs()
 _scratch_populate_cache_tag() {
 	local extra_descr=""
 	local size="$(blockdev --getsz "${SCRATCH_DEV}")"
+	local logdev_sz="none"
+	local rtdev_sz="none"
+
+	if [ "${USE_EXTERNAL}" = "yes" ] && [ -n "${SCRATCH_LOGDEV}" ]; then
+		logdev_sz="$(blockdev --getsz "${SCRATCH_LOGDEV}")"
+	fi
+
+	if [ "${USE_EXTERNAL}" = "yes" ] && [ -n "${SCRATCH_RTDEV}" ]; then
+		rtdev_sz="$(blockdev --getsz "${SCRATCH_RTDEV}")"
+	fi
 
 	case "${FSTYP}" in
 	"ext4")
-		extra_descr="LOGDEV ${SCRATCH_LOGDEV} USE_EXTERNAL ${USE_EXTERNAL}"
+		extra_descr="LOGDEV_SIZE ${logdev_sz}"
 		;;
 	"xfs")
-		extra_descr="LOGDEV ${SCRATCH_LOGDEV} USE_EXTERNAL ${USE_EXTERNAL} RTDEV ${SCRATCH_RTDEV}"
+		extra_descr="LOGDEV_SIZE ${logdev_sz} RTDEV_SIZE ${rtdev_sz}"
 		_populate_xfs_qmount_option
 		if echo "${MOUNT_OPTIONS}" | grep -q 'usrquota'; then
 			extra_descr="${extra_descr} QUOTAS"
