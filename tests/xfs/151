@@ -1,0 +1,107 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 151
+#
+# Make sure the xfs_db ls command works the way the author thinks it does.
+# This means that we can list the current directory, list an arbitrary path,
+# and we can't list things that aren't directories.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_db_command "path"
+_require_xfs_db_command "ls"
+_require_scratch
+
+echo "Format filesystem and populate"
+_scratch_mkfs > $seqres.full
+_scratch_mount >> $seqres.full
+
+$XFS_INFO_PROG $SCRATCH_MNT | grep -q ftype=1 || \
+	_notrun "filesystem does not support ftype"
+
+filter_ls() {
+	awk '
+BEGIN { cookie = 0; }
+{
+	if (cookie == 0)
+		cookie = $1;
+	printf("+%d %s %s %s %s %s\n", $1 - cookie, $2, $3, $4, $5, $6);
+	cookie = $1;
+}' | \
+	sed	-e "s/ $root_ino directory / root directory /g" \
+		-e "s/ $a_ino directory / a_ino directory /g" \
+		-e "s/ $b_ino directory / b_ino directory /g" \
+		-e "s/ $c_ino regular / c_ino regular /g" \
+		-e "s/ $d_ino symlink / d_ino symlink /g" \
+		-e "s/ $e_ino blkdev / e_ino blkdev /g" \
+		-e "s/ $f_ino chardev / f_ino chardev /g" \
+		-e "s/ $g_ino fifo / g_ino fifo /g" \
+		-e "s/ $big0_ino regular / big0_ino regular /g" \
+		-e "s/ $big1_ino regular / big1_ino regular /g" \
+		-e "s/ $h_ino regular / g_ino regular /g"
+}
+
+mkdir $SCRATCH_MNT/a
+mkdir $SCRATCH_MNT/a/b
+$XFS_IO_PROG -f -c 'pwrite 0 61' $SCRATCH_MNT/a/c >> $seqres.full
+ln -s -f b $SCRATCH_MNT/a/d
+mknod $SCRATCH_MNT/a/e b 0 0
+mknod $SCRATCH_MNT/a/f c 0 0
+mknod $SCRATCH_MNT/a/g p
+touch $SCRATCH_MNT/a/averylongnameforadirectorysothatwecanpushthecookieforward
+touch $SCRATCH_MNT/a/andmakethefirstcolumnlookmoreinterestingtopeoplelolwtfbbq
+touch $SCRATCH_MNT/a/h
+
+root_ino=$(stat -c '%i' $SCRATCH_MNT)
+a_ino=$(stat -c '%i' $SCRATCH_MNT/a)
+b_ino=$(stat -c '%i' $SCRATCH_MNT/a/b)
+c_ino=$(stat -c '%i' $SCRATCH_MNT/a/c)
+d_ino=$(stat -c '%i' $SCRATCH_MNT/a/d)
+e_ino=$(stat -c '%i' $SCRATCH_MNT/a/e)
+f_ino=$(stat -c '%i' $SCRATCH_MNT/a/f)
+g_ino=$(stat -c '%i' $SCRATCH_MNT/a/g)
+big0_ino=$(stat -c '%i' $SCRATCH_MNT/a/avery*)
+big1_ino=$(stat -c '%i' $SCRATCH_MNT/a/andma*)
+h_ino=$(stat -c '%i' $SCRATCH_MNT/a/h)
+
+_scratch_unmount
+
+echo "Manually navigate to root dir then list"
+_scratch_xfs_db -c 'sb 0' -c 'addr rootino' -c ls | filter_ls
+
+echo "Use path to navigate to root dir then list"
+_scratch_xfs_db -c 'path /' -c ls | filter_ls
+
+echo "Use path to navigate to /a then list"
+_scratch_xfs_db -c 'path /a' -c ls | filter_ls
+
+echo "Use path to navigate to /a/b then list"
+_scratch_xfs_db -c 'path /a/b' -c ls | filter_ls
+
+echo "Use path to navigate to /a/c (non-dir) then list"
+_scratch_xfs_db -c 'path /a/c' -c ls
+
+# success, all done
+status=0
+exit
