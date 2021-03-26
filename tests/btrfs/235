@@ -1,0 +1,113 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. btrfs/235
+#
+# Test that if we set a capability on a file but not on the next files we create,
+# send/receive operations only apply the capability to the first file, the one
+# for which we have set a capability.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -fr $send_files_dir
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_require_test
+_require_scratch
+_require_command "$SETCAP_PROG" setcap
+_require_command "$GETCAP_PROG" getcap
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -f $seqres.full
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+touch $SCRATCH_MNT/foo
+touch $SCRATCH_MNT/bar
+touch $SCRATCH_MNT/baz
+
+# Set a capability only on file foo. Note that file foo has a lower inode number
+# then files bar and baz - we want to test that if a file with a lower inode
+# number has a capability set, after a send/receive, the capability is not set
+# on the next files that have higher inode numbers.
+$SETCAP_PROG cap_net_raw=p $SCRATCH_MNT/foo
+
+# Now create the base snapshot, which is going to be the parent snapshot for
+# a later incremental send.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+	$SCRATCH_MNT/mysnap1 > /dev/null
+
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap \
+	$SCRATCH_MNT/mysnap1 2>&1 1>/dev/null | _filter_scratch
+
+# Now do something similar as before, but this time to test incremental
+# send/receive instead.
+
+touch $SCRATCH_MNT/foo2
+touch $SCRATCH_MNT/bar2
+touch $SCRATCH_MNT/baz2
+
+# Add a capability to file bar now. We want to check later that the capability
+# is not added to file baz or any of the new files foo2, bar2 and baz2.
+$SETCAP_PROG cap_net_raw=p $SCRATCH_MNT/bar
+
+# Add a capability to the new file foo2, we want to check later that it is not
+# incorrectly propagated to the new files bar2 and baz2.
+$SETCAP_PROG cap_sys_nice=ep $SCRATCH_MNT/foo2
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+		 $SCRATCH_MNT/mysnap2 > /dev/null
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+		 $SCRATCH_MNT/mysnap2 2>&1 1>/dev/null | _filter_scratch
+
+# Now recreate the filesystem by receiving both send streams.
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT > /dev/null
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT > /dev/null
+
+echo "File mysnap1/foo capabilities:"
+_getcap $SCRATCH_MNT/mysnap1/foo | _filter_scratch
+echo "File mysnap1/bar capabilities:"
+_getcap $SCRATCH_MNT/mysnap1/bar | _filter_scratch
+echo "File mysnap1/baz capabilities:"
+_getcap $SCRATCH_MNT/mysnap1/baz | _filter_scratch
+
+echo "File mysnap2/foo capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/foo | _filter_scratch
+echo "File mysnap2/bar capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/bar | _filter_scratch
+echo "File mysnap2/baz capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/baz | _filter_scratch
+echo "File mysnap2/foo2 capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/foo2 | _filter_scratch
+echo "File mysnap2/bar2 capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/bar2 | _filter_scratch
+echo "File mysnap2/baz2 capabilities:"
+_getcap $SCRATCH_MNT/mysnap2/baz2 | _filter_scratch
+
+status=0
+exit
