@@ -7,6 +7,12 @@
 # file change immediately when all applications close the file.
 # It's a regression test for:
 # 'commit 77573fa310d9 ("fs: Kill DCACHE_DONTCACHE dentry even if DCACHE_REFERENCED is set")'
+#
+# Write data into a file and then enable DAX on the file immediately,
+# the written data which is still in the buffer should be synchronized
+# to disk instead of discarded when the corresponding inode is evicted.
+# It's a regression test for:
+# 'commit 88149082bb8e ("fs: Handle I_DONTCACHE in iput_final() instead of generic_drop_inode()"'
 
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -87,6 +93,26 @@ test_disable_dax()
 	_check_s_dax $t_file 0
 }
 
+test_buffered_data_lost()
+{
+	local t_file=$SCRATCH_MNT/datafile
+
+	# Write data into a file
+	echo "Buffered data" > $t_file
+
+	# Then enable DAX on the file immediately
+	$XFS_IO_PROG -c 'chattr +x' $t_file
+
+	# Without commit 77573fa310d9, ensure inode can
+	# be evicted by drop_caches
+	echo 2 > /proc/sys/vm/drop_caches
+
+	# The written data which is still in the buffer should not be lost
+	grep -q "Buffered data" $t_file || echo "Buffered data is lost"
+
+	rm -f $t_file
+}
+
 do_tests()
 {
 	local mount_option=$1
@@ -99,6 +125,9 @@ do_tests()
 	# Do test for commit 77573fa310d9
 	test_enable_dax
 	test_disable_dax
+
+	# Do test for commit 88149082bb8e
+	test_buffered_data_lost
 
 	_scratch_unmount
 }
