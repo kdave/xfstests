@@ -37,6 +37,12 @@ _workout()
 	cp $FSSTRESS_PROG  $tmp.fsstress.bin
 	$SETCAP_PROG cap_chown=epi  $tmp.fsstress.bin
 
+	# io_uring accounts memory it needs under the rlimit memlocked option,
+	# which can be quite low on some setups (especially 64K pagesize). root
+	# isn't under this restriction, but regular users are. To avoid the
+	# io_uring_queue_init fail on ENOMEM, set max locked memory to unlimited
+	# temporarily.
+	ulimit -l unlimited
 	(su $qa_user -c "$tmp.fsstress.bin $args" &) > /dev/null 2>&1
 
 	echo "Run dd writers in parallel"

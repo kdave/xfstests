@@ -43,6 +43,12 @@ _fsstress()
 -f rename=10 -f fsync=2 -f write=15 -f dwrite=15 \
 -n $count -d $out -p 7`
 
+	# io_uring accounts memory it needs under the rlimit memlocked option,
+	# which can be quite low on some setups (especially 64K pagesize). root
+	# isn't under this restriction, but regular users are. To avoid the
+	# io_uring_queue_init fail on ENOMEM, set max locked memory to unlimited
+	# temporarily.
+	ulimit -l unlimited
 	echo "fsstress $args" >> $seqres.full
 	if ! su $qa_user -c "$FSSTRESS_PROG $args" | tee -a $seqres.full | _filter_num
 	then
