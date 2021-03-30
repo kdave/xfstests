@@ -3,10 +3,10 @@
 # Copyright (c) 2020 Fujitsu.  All Rights Reserved.
 #
 # FS QA Test 608
-# Change FS_XFLAG_DAX on an existing file and check if S_DAX on
-# the file can take effect immediately by the following steps:
-# 1) Stop all applications which are using the file.
-# 2) Do drop_caches or umount & mount cycle.
+# Toggling FS_XFLAG_DAX on an existing file can make S_DAX on the
+# file change immediately when all applications close the file.
+# It's a regression test for:
+# 'commit 77573fa310d9 ("fs: Kill DCACHE_DONTCACHE dentry even if DCACHE_REFERENCED is set")'
 
 seq=`basename $0`
 seqres=$RESULT_DIR/$seq
@@ -36,7 +36,7 @@ _require_dax_iflag
 _require_xfs_io_command "lsattr" "-v"
 _require_xfs_io_command "statx" "-r"
 
-test_drop_caches()
+test_enable_dax()
 {
 	local t_file=$SCRATCH_MNT/testfile
 
@@ -49,24 +49,19 @@ test_drop_caches()
 
 	$XFS_IO_PROG -c 'chattr +x' $t_file
 	_check_xflag $t_file 1
-	_check_s_dax $t_file 0
-
-	# One application is using test file and check if S_DAX on
-	# the file doesn't take effect immediately by drop_caches
-	echo 2 > /proc/sys/vm/drop_caches
+	# One application is using test file and S_DAX
+	# on the file is not changed immediately
 	_check_s_dax $t_file 0
 
 	exec 3<&-
 
-	# No application is using test file and check if S_DAX on
-	# the file takes effect immediately by drop_caches
-	echo 2 > /proc/sys/vm/drop_caches
+	# No application is using test file and S_DAX
+	# on the file is changed immediately
 	_check_s_dax $t_file 1
 }
 
-test_cycle_mount()
+test_disable_dax()
 {
-	local option=$1
 	local t_dir=$SCRATCH_MNT/testdir
 	local t_file=$t_dir/testfile
 
@@ -81,29 +76,29 @@ test_cycle_mount()
 
 	$XFS_IO_PROG -c 'chattr -x' $t_file
 	_check_xflag $t_file 0
+	# One application is using test file and S_DAX
+	# on the file is not changed immediately
 	_check_s_dax $t_file 1
 
 	exec 3<&-
 
-	# No application is using test file and check if S_DAX on
-	# the file takes effect immediately by umount & mount
-	_scratch_cycle_mount "$option"
+	# No application is using test file and S_DAX
+	# on the file is changed immediately
 	_check_s_dax $t_file 0
 }
 
 do_tests()
 {
 	local mount_option=$1
-	local cycle_mount_option=$2
 
 	_scratch_mount "$mount_option"
 
 	# Make sure the root dir doesn't have FS_XFLAG_DAX set before we start.
 	$XFS_IO_PROG -c "chattr -x" $SCRATCH_MNT &>> $seqres.full
 
-	test_drop_caches
-
-	test_cycle_mount "$cycle_mount_option"
+	# Do test for commit 77573fa310d9
+	test_enable_dax
+	test_disable_dax
 
 	_scratch_unmount
 }
@@ -111,7 +106,7 @@ do_tests()
 _scratch_mkfs >> $seqres.full 2>&1
 
 # Mount with dax option
-do_tests "-o dax=inode" "dax=inode"
+do_tests "-o dax=inode"
 
 # Mount without dax option
 export MOUNT_OPTIONS=""
