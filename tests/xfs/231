@@ -22,9 +22,10 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _cleanup()
 {
-    cd /
-    echo $old_cow_lifetime > /proc/sys/fs/xfs/speculative_cow_prealloc_lifetime
-    rm -rf $tmp.*
+	cd /
+	test -n "$old_cowgc_interval" && \
+		_xfs_set_cowgc_interval $old_cowgc_interval
+	rm -rf $tmp.*
 }
 
 # get standard environment, filters and checks
@@ -40,7 +41,7 @@ _require_xfs_io_command "cowextsize"
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fiemap"
 
-old_cow_lifetime=$(cat /proc/sys/fs/xfs/speculative_cow_prealloc_lifetime)
+old_cowgc_interval=$(_xfs_get_cowgc_interval)
 
 rm -f $seqres.full
 
@@ -74,7 +75,7 @@ md5sum $testdir/file2 | _filter_scratch
 md5sum $testdir/file2.chk | _filter_scratch
 
 echo "CoW and leave leftovers"
-echo 2 > /proc/sys/fs/xfs/speculative_cow_prealloc_lifetime
+_xfs_set_cowgc_interval 2
 seq 2 2 $((nr - 1)) | while read f; do
 	$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz * f - 1)) 1" $testdir/file2 >> $seqres.full
 	$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz * f - 1)) 1" $testdir/file2.chk >> $seqres.full
@@ -91,7 +92,7 @@ done
 $XFS_IO_PROG -f -c "falloc 0 $filesize" $testdir/junk >> $seqres.full
 
 echo "CoW and leave leftovers"
-echo $old_cow_lifetime > /proc/sys/fs/xfs/speculative_cow_prealloc_lifetime
+_xfs_set_cowgc_interval $old_cowgc_interval
 seq 2 2 $((nr - 1)) | while read f; do
 	$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz * f)) 1" $testdir/file2 >> $seqres.full
 	$XFS_IO_PROG -f -c "pwrite -S 0x63 $((blksz * f)) 1" $testdir/file2.chk >> $seqres.full
