@@ -277,7 +277,13 @@ _scratch_xfs_admin()
 			_notrun 'xfs_admin does not support rt devices'
 		rt_opts+=(-r "$SCRATCH_RTDEV")
 	fi
-	$XFS_ADMIN_PROG "${rt_opts[@]}" "$@" "${options[@]}"
+
+	# xfs_admin in xfsprogs 5.11 has a bug where an external log device
+	# forces xfs_db to be invoked, potentially with zero command arguments.
+	# When this happens, xfs_db will wait for input on stdin, which causes
+	# fstests to hang.  Since xfs_admin is not an interactive tool, we
+	# can redirect stdin from /dev/null to prevent this issue.
+	$XFS_ADMIN_PROG "${rt_opts[@]}" "$@" "${options[@]}" < /dev/null
 }
 
 _scratch_xfs_logprint()
