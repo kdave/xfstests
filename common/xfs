@@ -269,9 +269,15 @@ _test_xfs_db()
 _scratch_xfs_admin()
 {
 	local options=("$SCRATCH_DEV")
+	local rt_opts=()
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 		options+=("$SCRATCH_LOGDEV")
-	$XFS_ADMIN_PROG "$@" "${options[@]}"
+	if [ "$USE_EXTERNAL" = yes ] && [ -n "$SCRATCH_RTDEV" ]; then
+		$XFS_ADMIN_PROG --help 2>&1 | grep -q 'rtdev' || \
+			_notrun 'xfs_admin does not support rt devices'
+		rt_opts+=(-r "$SCRATCH_RTDEV")
+	fi
+	$XFS_ADMIN_PROG "${rt_opts[@]}" "$@" "${options[@]}"
 }
 
 _scratch_xfs_logprint()
