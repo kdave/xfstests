@@ -54,6 +54,8 @@ echo "* Delalloc to written extent conversion"
 
 testfile=$SCRATCH_MNT/testfile
 
+touch $testfile
+
 echo "Inject reduce_max_iextents error tag"
 _scratch_inject_error reduce_max_iextents 1
 
@@ -74,9 +76,17 @@ if (( $nextents > 10 )); then
 	exit 1
 fi
 
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
 rm $testfile
 
 echo "* Fallocate unwritten extents"
+
+touch $testfile
+
+echo "Inject reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 1
 
 echo "Fallocate fragmented file"
 for i in $(seq 0 2 $((nr_blks - 1))); do
@@ -93,9 +103,17 @@ if (( $nextents > 10 )); then
 	exit 1
 fi
 
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
 rm $testfile
 
 echo "* Directio write"
+
+touch $testfile
+
+echo "Inject reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 1
 
 echo "Create fragmented file via directio writes"
 for i in $(seq 0 2 $((nr_blks - 1))); do
@@ -112,14 +130,14 @@ if (( $nextents > 10 )); then
 	exit 1
 fi
 
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
 rm $testfile
 
 # Check if XFS gracefully returns with an error code when we try to increase
 # extent count of user quota inode beyond the pseudo max extent count limit.
 echo "* Extend quota inodes"
-
-echo "Disable reduce_max_iextents error tag"
-_scratch_inject_error reduce_max_iextents 0
 
 echo "Consume free space"
 fillerdir=$SCRATCH_MNT/fillerdir

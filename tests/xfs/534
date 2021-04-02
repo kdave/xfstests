@@ -45,9 +45,6 @@ bsize=$(_get_file_block_size $SCRATCH_MNT)
 
 testfile=${SCRATCH_MNT}/testfile
 
-echo "Inject reduce_max_iextents error tag"
-_scratch_inject_error reduce_max_iextents 1
-
 nr_blks=15
 
 for io in Buffered Direct; do
@@ -62,6 +59,9 @@ for io in Buffered Direct; do
 		xfs_io_flag="-d"
 	fi
 
+	echo "Inject reduce_max_iextents error tag"
+	_scratch_inject_error reduce_max_iextents 1
+
 	echo "$io write to every other block of fallocated space"
 	for i in $(seq 1 2 $((nr_blks - 1))); do
 		$XFS_IO_PROG -f -s $xfs_io_flag -c "pwrite $((i * bsize)) $bsize" \
@@ -75,6 +75,9 @@ for io in Buffered Direct; do
 		echo "Extent count overflow check failed: nextents = $nextents"
 		exit 1
 	fi
+
+	echo "Disable reduce_max_iextents error tag"
+	_scratch_inject_error reduce_max_iextents 0
 
 	rm $testfile
 done

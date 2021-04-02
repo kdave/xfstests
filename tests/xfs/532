@@ -63,9 +63,6 @@ for dentry in $(ls -1 $fillerdir/); do
 	$here/src/punch-alternating $fillerdir/$dentry >> $seqres.full
 done
 
-echo "Inject reduce_max_iextents error tag"
-_scratch_inject_error reduce_max_iextents 1
-
 echo "Inject bmap_alloc_minlen_extent error tag"
 _scratch_inject_error bmap_alloc_minlen_extent 1
 
@@ -73,6 +70,9 @@ echo "* Set xattrs"
 
 echo "Create \$testfile"
 touch $testfile
+
+echo "Inject reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 1
 
 echo "Create xattrs"
 nr_attrs=$((bsize * 20 / attr_len))
@@ -90,6 +90,9 @@ if (( $naextents > 10 )); then
 	exit 1
 fi
 
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
 echo "Remove \$testfile"
 rm $testfile
 
@@ -97,9 +100,6 @@ echo "* Remove xattrs"
 
 echo "Create \$testfile"
 touch $testfile
-
-echo "Disable reduce_max_iextents error tag"
-_scratch_inject_error reduce_max_iextents 0
 
 echo "Create initial xattr extents"
 
@@ -132,7 +132,10 @@ if [[ $? == 0 ]]; then
 	exit 1
 fi
 
-rm $testfile && echo "Successfully removed \$testfile"
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
+rm $testfile
 
 # success, all done
 status=0

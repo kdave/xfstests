@@ -49,13 +49,15 @@ nr_blks=30
 
 testfile=$SCRATCH_MNT/testfile
 
-echo "Inject reduce_max_iextents error tag"
-_scratch_inject_error reduce_max_iextents 1
-
 for op in fpunch finsert fcollapse fzero; do
 	echo "* $op regular file"
 
 	echo "Create \$testfile"
+	touch $testfile
+
+	echo "Inject reduce_max_iextents error tag"
+	_scratch_inject_error reduce_max_iextents 1
+
 	$XFS_IO_PROG -f -s \
 		     -c "pwrite -b $((nr_blks * bsize)) 0 $((nr_blks * bsize))" \
 		     $testfile  >> $seqres.full
@@ -74,6 +76,9 @@ for op in fpunch finsert fcollapse fzero; do
 		echo "Extent count overflow check failed: nextents = $nextents"
 		exit 1
 	fi
+
+	echo "Disable reduce_max_iextents error tag"
+	_scratch_inject_error reduce_max_iextents 0
 
 	rm $testfile
 done

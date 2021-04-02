@@ -51,6 +51,9 @@ nr_blks=15
 srcfile=${SCRATCH_MNT}/srcfile
 dstfile=${SCRATCH_MNT}/dstfile
 
+touch $srcfile
+touch $dstfile
+
 echo "Inject reduce_max_iextents error tag"
 _scratch_inject_error reduce_max_iextents 1
 
@@ -77,9 +80,17 @@ if (( $nextents > 10 )); then
 	exit 1
 fi
 
+echo "Disable reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 0
+
 rm $dstfile
 
 echo "* Funshare shared extent"
+
+touch $dstfile
+
+echo "Inject reduce_max_iextents error tag"
+_scratch_inject_error reduce_max_iextents 1
 
 echo "Share the extent with \$dstfile"
 _reflink $srcfile $dstfile >> $seqres.full
