@@ -28,6 +28,7 @@ _cleanup()
 # get standard environment, filters and checks
 . ./common/rc
 . ./common/inject
+. ./common/filter
 
 # real QA test starts here
 _supported_fs xfs
@@ -36,15 +37,21 @@ _require_scratch
 _require_test_program "t_open_tmpfiles"
 
 rm -f $seqres.full
-_scratch_mkfs >> $seqres.full 2>&1
+
+_scratch_mkfs | _filter_mkfs 2> $tmp.mkfs > /dev/null
+cat $tmp.mkfs >> $seqres.full
+. $tmp.mkfs
+
 _scratch_mount
 
 # Load up all the CPUs, two threads per CPU.
 nr_cpus=$(( $(getconf _NPROCESSORS_ONLN) * 2 ))
 
-# Set ULIMIT_NOFILE to min(file-max / $nr_cpus / 2, 30000 files per cpu per LOAD_FACTOR)
+# Set ULIMIT_NOFILE to min(file-max / $nr_cpus / 2, 50000 files per AG per LOAD_FACTOR)
 # so that this test doesn't take forever or OOM the box
-max_files=$((30000 * LOAD_FACTOR))
+max_files=$((50000 * agcount * LOAD_FACTOR))
+max_files=$((max_files / $nr_cpus))
+
 max_allowable_files=$(( $(cat /proc/sys/fs/file-max) / $nr_cpus / 2 ))
 test $max_allowable_files -gt 0 && test $max_files -gt $max_allowable_files && \
 	max_files=$max_allowable_files
