@@ -1,0 +1,377 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+#
+# Copyright (c) 2021 Christian Brauner <christian.brauner@ubuntu.com>
+# All Rights Reserved.
+#
+# FS QA Test No. 152
+#
+# Exercise basic xfs_quota functionality (user/group/project quota)
+# Use of "sync" mount option here is an attempt to get deterministic
+# allocator behaviour.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+wipe_mounts()
+{
+	umount "${SCRATCH_MNT}/idmapped" >/dev/null 2>&1
+	_scratch_unmount >/dev/null 2>&1
+}
+
+_cleanup()
+{
+	cd /
+	wipe_mounts
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/quota
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs xfs
+_require_idmapped_mounts
+_require_test_program "idmapped-mounts/mount-idmapped"
+_require_scratch
+_require_xfs_quota
+_require_user fsgqa
+_require_user fsgqa2
+_require_group fsgqa
+_require_group fsgqa2
+
+_scratch_mkfs_xfs >>$seqres.full 2>&1
+
+uqid=`id -u fsgqa`
+gqid=`id -g fsgqa`
+
+uqid2=`id -u fsgqa2`
+gqid2=`id -g fsgqa2`
+
+pqid=10
+cat >$tmp.projects <<EOF
+$pqid:$SCRATCH_MNT
+EOF
+
+cat >$tmp.projid <<EOF
+root:0
+fsgqa:$pqid
+EOF
+
+create_files_unmapped()
+{
+	local bs=$1
+	local inum=$2
+
+	echo "Using type=$type id=$id" >> $seqres.full
+
+	for ((i=0; i<$((inum-1)); i++)); do
+		_file_as_id $SCRATCH_MNT/unmapped/inode$i $id $type 1024 0
+	done
+
+	_file_as_id $SCRATCH_MNT/unmapped/block $id $type $bs 1
+}
+
+create_files_idmapped()
+{
+	local bs=$1
+	local inum=$2
+
+	echo "Using type=$type id=$id2" >> $seqres.full
+
+	for ((i=0; i<$((inum-1)); i++)); do
+		_file_as_id $SCRATCH_MNT/idmapped/inode$i $id2 $type 1024 0
+	done
+
+	_file_as_id $SCRATCH_MNT/idmapped/block $id2 $type $bs 1
+}
+
+clean_files()
+{
+	rm -rf $SCRATCH_MNT/unmapped 2>/dev/null
+	rm -rf $SCRATCH_MNT/idmapped 2>/dev/null
+	rm -rf $tmp.quot 2>/dev/null
+	rm -rf $tmp.quota 2>/dev/null
+}
+
+filter_quot()
+{
+	_filter_quota | grep -v "root \|\#0 " \
+		| sed -e '/#[0-9]*/s/#[0-9]*/#ID/g'
+}
+
+filter_report()
+{
+	_filter_quota | grep -v "^root \|^\#0 " \
+		| sed -e '/^#[0-9]*/s/^#[0-9]*/#ID/g'
+}
+
+filter_quota()
+{
+	_filter_quota | sed -e "/Disk quotas for/s/([0-9]*)/(ID)/g" \
+			    -e "/Disk quotas for/s/#[0-9]*/#ID/g"
+}
+
+filter_state()
+{
+	_filter_quota | sed -e "s/Inode: #[0-9]* (0 blocks, 0 extents)/Inode: #[INO] (0 blocks, 0 extents)/g" \
+			    -e "s/Inode: #[0-9]* ([0-9]* blocks, [0-9]* extents)/Inode: #[INO] (X blocks, Y extents)/g" \
+			    -e "/[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/s/ [0-9][0-9]:[0-9][0-9]:[0-9][0-9]//g" \
+			    -e '/max warnings:/d'
+}
+
+test_quot()
+{
+	local opt="$*"
+
+	echo "checking quot command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "quot -$type $opt -bi" $SCRATCH_MNT | filter_quot
+}
+
+test_report()
+{
+	local opt="$*"
+
+	echo "checking report command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "report -$type $opt -bi" \
+			$SCRATCH_MNT | filter_report
+}
+
+test_quota()
+{
+	local opt="$*"
+
+	echo "checking quota command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "quota -$type $opt -bi $id" \
+			$SCRATCH_MNT | filter_quota
+}
+
+test_limit()
+{
+	local bs=$1
+	local bh=$2
+	local is=$3
+	local ih=$4
+
+	echo "checking limit command (type=$type, bsoft=$bs, bhard=$bh, isoft=$is, ihard=$ih)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "limit -$type bsoft=$bs bhard=$bh fsgqa" \
+			-c "limit -$type isoft=$is ihard=$ih fsgqa" \
+			$SCRATCH_MNT
+
+	# let the timer day transition happen
+	sleep 2
+}
+
+test_timer()
+{
+	echo "checking timer command (type=$type)"
+	# set 3days+1h for time won't become 2days soon
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "timer -$type -bi 73h" \
+			$SCRATCH_MNT | _filter_scratch
+}
+
+test_disable()
+{
+	echo "checking disable command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "disable -$type -v" \
+			$SCRATCH_MNT | filter_state
+}
+
+test_enable()
+{
+	echo "checking enable command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "enable -$type -v" $SCRATCH_MNT | filter_state
+}
+
+test_off()
+{
+	echo "checking off command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "off -$type -v" $SCRATCH_MNT | _filter_scratch
+}
+
+test_remove()
+{
+	echo "checking remove command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "remove -$type -v" \
+			$SCRATCH_MNT | _filter_scratch
+}
+
+test_state()
+{
+	echo "checking state command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "state -$type" $SCRATCH_MNT | filter_state
+}
+
+test_dump()
+{
+	echo "checking dump command (type=$type)"
+	rm -f $tmp.backup 2>>/dev/null
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "dump -$type -f $tmp.backup" \
+			$SCRATCH_MNT | _filter_scratch
+}
+
+test_restore()
+{
+	echo "checking restore command (type=$type)"
+	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
+			-c "restore -$type -f $tmp.backup" \
+			$SCRATCH_MNT | _filter_scratch
+}
+
+wipe_scratch()
+{
+	wipe_mounts
+	_scratch_mkfs_xfs >>$seqres.full 2>&1
+}
+
+qmount_idmapped()
+{
+	wipe_mounts
+	_try_scratch_mount || _fail "qmount failed"
+
+	mkdir -p "${SCRATCH_MNT}/unmapped"
+	mkdir -p "${SCRATCH_MNT}/idmapped"
+
+	$here/src/idmapped-mounts/mount-idmapped \
+		--map-mount b:$id:$id2:1 \
+		--map-mount b:0:0:1 \
+		"$SCRATCH_MNT/unmapped" "$SCRATCH_MNT/idmapped" || _fail "mount-idmapped failed"
+
+	chmod ugo+rwx $SCRATCH_MNT
+	chmod ugo+rwx $SCRATCH_MNT/unmapped
+	chmod ugo+rwx $SCRATCH_MNT/idmapped
+}
+
+test_xfs_quota()
+{
+	# init quota
+	echo "init quota limit and timer, and dump it"
+	if [ "$idmapped" -eq 1 ]; then
+		echo "create_files_idmapped 1024k 15"; create_files_idmapped 1024k 15
+	else
+		echo "create_files_unmapped 1024k 15"; create_files_unmapped 1024k 15
+	fi
+	echo "quota remount"; qmount_idmapped
+	echo ; test_quot
+	echo ; test_timer
+	echo ; test_limit 512k 2048k 10 20
+	echo ; test_dump
+
+	# report options test
+	echo "report options test"
+	echo ; test_report
+	echo "-N option"; test_report -N
+	echo "-L -U options"; test_report -L $id -U $id
+	echo "-t option"; test_report -t
+	echo "-n option"; test_report -n
+	echo "-h option"; test_report -h
+
+	# quot options test
+	echo "quot options test"
+	echo ; test_quot
+	echo "-f option"; test_quot -f $tmp.quot
+	cat $tmp.quot | filter_quot
+	echo "-n option"; test_quot -n
+
+	# quota options test
+	echo ; test_quota
+	echo "-f option"; test_quota -f $tmp.quota
+	cat $tmp.quota | filter_quota
+	echo "-N option"; test_quota -N
+	echo "-n option"; test_quota -n
+	echo "-h option"; test_quota -h
+
+	# disable/enable test
+	echo "disable quota"
+	echo ; test_disable
+	echo ; test_report -N
+	echo "expect a remove error at here"; test_remove
+	echo ; test_enable
+	echo ; test_report -N
+
+	# off and remove test
+	echo "off and remove test"
+	echo ; test_limit 100m 100m 100 100
+	echo ; test_quota -N
+	echo ; test_off
+	echo ; test_state
+	echo ; test_remove
+	echo ; test_report -N
+	echo "quota remount"; qmount_idmapped
+	echo ; test_report -N
+
+	# restore test
+	echo "restore quota"
+	echo ; test_restore
+	echo ; test_report -N
+	echo ; test_state
+	echo "cleanup files"; clean_files
+}
+
+echo "----------------------- uquota,sync,unmapped ---------------------------"
+wipe_scratch
+_qmount_option "uquota,sync"
+type=u
+id=$uqid
+id2=$uqid2
+idmapped=0
+qmount_idmapped
+test_xfs_quota
+
+echo "----------------------- uquota,sync,idmapped ---------------------------"
+wipe_scratch
+_qmount_option "uquota,sync"
+type=u
+id=$uqid
+id2=$uqid2
+idmapped=1
+qmount_idmapped
+test_xfs_quota
+
+echo "----------------------- gquota,sync,unmapped ---------------------------"
+wipe_scratch
+_qmount_option "gquota,sync"
+type=g
+id=$gqid
+id2=$gqid2
+idmapped=0
+qmount_idmapped
+test_xfs_quota
+
+echo "----------------------- gquota,sync,idmapped ---------------------------"
+wipe_scratch
+_qmount_option "gquota,sync"
+type=g
+id=$gqid
+id2=$gqid2
+idmapped=1
+qmount_idmapped
+test_xfs_quota
+
+wipe_mounts
+
+# success, all done
+status=0
+exit
