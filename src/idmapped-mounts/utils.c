@@ -88,7 +88,7 @@ pid_t do_clone(int (*fn)(void *), void *arg, int flags)
 #endif
 }
 
-static int get_userns_fd_cb(void *data)
+int get_userns_fd_cb(void *data)
 {
 	return kill(getpid(), SIGSTOP);
 }

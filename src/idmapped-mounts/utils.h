@@ -20,6 +20,7 @@
 #include "missing.h"
 
 extern pid_t do_clone(int (*fn)(void *), void *arg, int flags);
+extern int get_userns_fd_cb(void *data);
 extern int get_userns_fd(unsigned long nsid, unsigned long hostid,
 			 unsigned long range);
 extern ssize_t read_nointr(int fd, void *buf, size_t count);

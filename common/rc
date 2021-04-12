@@ -342,6 +342,36 @@ _scratch_mount()
 	_try_scratch_mount $* || _fail "mount failed"
 }
 
+_scratch_mount_idmapped()
+{
+	local type="$1"
+	local id="$2"
+
+	if [ "$type" = "u" ]; then
+		# This means root will be able to create files as uid %id in
+		# the underlying filesystem by going through the idmapped mount.
+		$here/src/idmapped-mounts/mount-idmapped --map-mount u:0:$id:1 \
+							 --map-mount u:$id:0:1 \
+							 --map-mount g:0:0:1 \
+							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+	elif [ "$type" = "g" ]; then
+		# This means root will be able to create files as gid %id in
+		# the underlying filesystem by going through the idmapped mount.
+		$here/src/idmapped-mounts/mount-idmapped --map-mount g:0:$id:1 \
+							 --map-mount g:$id:0:1 \
+							 --map-mount u:0:0:1 \
+							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+	elif [ "$type" = "b" ]; then
+		# This means root will be able to create files as uid and gid
+		# %id in the underlying filesystem by going through the idmapped mount.
+		$here/src/idmapped-mounts/mount-idmapped --map-mount b:0:$id:1 \
+							 --map-mount b:$id:0:1 \
+							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+	else
+		_fail "usage: either \"u\" (uid), \"g\" (gid), or \"b\" (uid and gid) must be specified "
+	fi
+}
+
 _scratch_unmount()
 {
 	case "$FSTYP" in
@@ -355,6 +385,11 @@ _scratch_unmount()
 		$UMOUNT_PROG $SCRATCH_DEV
 		;;
 	esac
+}
+
+_scratch_umount_idmapped()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
 }
 
 _scratch_remount()
