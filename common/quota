@@ -329,5 +329,25 @@ _report_quota_inodes() {
 	repquota $1 | egrep "^($qa_user|root|nobody)" | awk '{print $1, $6, $7, $8}' | sort -r
 }
 
+# Determine which type of quota we're using
+_qsetup()
+{
+	opt=$1
+	enforce=0
+	if [ $opt = "u" -o $opt = "uno" ]; then
+		type=u
+		eval `_choose_uid`
+	elif [ $opt = "g" -o $opt = "gno" ]; then
+		type=g
+		eval `_choose_gid`
+	elif [ $opt = "p" -o $opt = "pno" ]; then
+		type=p
+		eval `_choose_prid`
+	fi
+	[ $opt = "u" -o $opt = "g" -o $opt = "p" ] && enforce=1
+
+	echo "Using type=$type id=$id" >> $seqres.full
+}
+
 # make sure this script returns success
 /bin/true
