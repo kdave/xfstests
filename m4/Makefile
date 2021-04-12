@@ -11,6 +11,7 @@ LSRCFILES = \
 	package_aiodev.m4 \
 	package_gdbmdev.m4 \
 	package_globals.m4 \
+	package_libcap.m4 \
 	package_libcdev.m4 \
 	package_liburing.m4 \
 	package_ncurses.m4 \

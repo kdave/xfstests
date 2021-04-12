@@ -1980,6 +1980,40 @@ _require_io_uring()
 	esac
 }
 
+# test whether the mount_setattr syscall is available
+_require_mount_setattr()
+{
+	$here/src/feature -r
+	case $? in
+	0)
+		;;
+	1)
+		_notrun "kernel does not support mount_setattr syscall"
+		;;
+	*)
+		_fail "unexpected error testing for mount_setattr support"
+		;;
+	esac
+}
+
+# test whether idmapped mounts are supported
+_require_idmapped_mounts()
+{
+        IDMAPPED_MOUNTS_TEST=$here/src/idmapped-mounts/idmapped-mounts
+        [ -x $IDMAPPED_MOUNTS_TEST ] || _notrun "idmapped-mounts utilities required"
+
+	_require_mount_setattr
+
+	$here/src/idmapped-mounts/idmapped-mounts --supported \
+		--device "$TEST_DEV" \
+		--mount "$TEST_DIR" \
+		--fstype "$FSTYP"
+
+	if [ $? -ne 0 ]; then
+		_notrun "idmapped-mounts not support by $FSTYP"
+	fi
+}
+
 # this test requires that a test program exists under src/
 # $1 - command (require)
 #
