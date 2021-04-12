@@ -1,0 +1,46 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+#
+# Copyright (c) 2021 Christian Brauner <christian.brauner@ubuntu.com>
+# All Rights Reserved.
+#
+# FS QA Test No. 632
+#
+# Regression test to verify that creating a series of detached mounts,
+# attaching them to the filesystem, and unmounting them does not trigger an
+# integer overflow in ns->mounts causing the kernel to block any new mounts in
+# count_mounts() and returning ENOSPC because it falsely assumes that the
+# maximum number of mounts in the mount namespace has been reached, i.e. it
+# thinks it can't fit the new mounts into the mount namespace anymore.
+#
+# Kernel commit ee2e3f50629f ("mount: fix mounting of detached mounts onto
+# targets that reside on shared mounts") fixed the bug.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+. ./common/rc
+
+rm -f $seqres.full
+
+_supported_fs generic
+_require_test
+_require_test_program "detached_mounts_propagation"
+
+$here/src/detached_mounts_propagation $TEST_DIR >> $seqres.full
+status=$?
+
+echo silence is golden
+exit
