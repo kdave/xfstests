@@ -103,6 +103,9 @@ sminor=$((0x`stat -L -c %T $LOOP_DEV`))
 _mkfs_dev $LOOP_DEV >> $seqres.full 2>&1
 _mount $LOOP_DEV $SCRATCH_MNT || _fail "mount failed"
 
+drop_io_cgroup=
+grep -q -w io $cgdir/cgroup.subtree_control || drop_io_cgroup=1
+
 echo "+io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
 
 # Read and write from a single group.
@@ -143,7 +146,9 @@ $XFS_IO_PROG -c fsync $SCRATCH_MNT/file
 check_cg $cgdir/$seq-cg $iosize $iosize
 check_cg $cgdir/$seq-cg-2 0 0
 
-echo "-io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
+if [ "$drop_io_cgroup" = 1 ]; then
+	echo "-io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
+fi
 
 # success, all done
 status=0
