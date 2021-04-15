@@ -2421,7 +2421,8 @@ _format_swapfile() {
 	# Swap files must be nocow on Btrfs.
 	$CHATTR_PROG +C "$fname" > /dev/null 2>&1
 	_pwrite_byte 0x61 0 "$sz" "$fname" >> $seqres.full
-	$MKSWAP_PROG "$fname" >> $seqres.full
+	# Ignore permission complaints on filesystems that don't support perms
+	$MKSWAP_PROG "$fname" 2> >(grep -v 'insecure permission' >&2) >> $seqres.full
 }
 
 # Check that the filesystem supports swapfiles
