@@ -37,6 +37,13 @@ _require_relatime
 
 rm -f $seqres.full
 
+if [ "$FSTYP" = "exfat" ]; then
+	# exfat's timestamp for access_time has double seconds granularity
+	access_delay=2.1
+else
+	access_delay=1
+fi
+
 _stat() {
 	stat -c "%x;%y;%z" $1
 }
@@ -79,14 +86,14 @@ echo "aaa" > $TPATH/dir1/file1
 file1_stat_before_first_access=`_stat $TPATH/dir1/file1`
 
 # Accessing file1 the first time
-sleep 1
+sleep $access_delay
 cat $TPATH/dir1/file1 > /dev/null
 file1_stat_after_first_access=`_stat $TPATH/dir1/file1`
 _compare_stat_times YNN "$file1_stat_before_first_access" \
 	"$file1_stat_after_first_access" "after accessing file1 first time"
 
 # Accessing file1 a second time
-sleep 1
+sleep $access_delay
 cat $TPATH/dir1/file1 > /dev/null
 file1_stat_after_second_access=`_stat $TPATH/dir1/file1`
 _compare_stat_times NNN "$file1_stat_after_first_access" \
@@ -109,7 +116,7 @@ _compare_stat_times NYY "$dir2_stat_before_file_creation" \
 
 # Accessing file2
 file2_stat_before_first_access=`_stat $TPATH/dir2/file2`
-sleep 1
+sleep $access_delay
 cat $TPATH/dir2/file2 > /dev/null
 file2_stat_after_first_access=`_stat $TPATH/dir2/file2`
 _compare_stat_times YNN "$file2_stat_before_first_access" \
@@ -135,11 +142,15 @@ echo "xyz" > $TPATH/dir1/file1
 file1_stat_after_modify=`_stat $TPATH/dir1/file1`
 _compare_stat_times NYY "$file1_stat_before_modify" \
 	"$file1_stat_after_modify" "after modifying file1"
-sleep 1
-mv $TPATH/dir1/file1 $TPATH/dir1/file1_renamed
-file1_stat_after_change=`_stat $TPATH/dir1/file1_renamed`
-_compare_stat_times NNY "$file1_stat_after_modify" \
-	"$file1_stat_after_change" "after changing file1"
+
+# exfat does not support last metadata change timestamp
+if [ "$FSTYP" != "exfat" ]; then
+	sleep 1
+	mv $TPATH/dir1/file1 $TPATH/dir1/file1_renamed
+	file1_stat_after_change=`_stat $TPATH/dir1/file1_renamed`
+	_compare_stat_times NNY "$file1_stat_after_modify" \
+		"$file1_stat_after_change" "after changing file1"
+fi
 
 # Mounting with strictatime option and
 # accessing a previously created file twice
@@ -148,7 +159,7 @@ cat $TPATH/dir2/file3 > /dev/null
 file3_stat_after_second_access=`_stat $TPATH/dir2/file3`
 _compare_stat_times YNN "$file3_stat_after_first_access" \
 	"$file3_stat_after_second_access" "after accessing file3 second time"
-sleep 1
+sleep $access_delay
 cat $TPATH/dir2/file3 > /dev/null
 file3_stat_after_third_access=`_stat $TPATH/dir2/file3`
 _compare_stat_times YNN "$file3_stat_after_second_access" \
