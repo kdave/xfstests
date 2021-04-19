@@ -2185,6 +2185,40 @@ _require_user()
     [ "$?" == "0" ] || _notrun "$qa_user cannot execute commands."
 }
 
+# check for a chown support
+#
+_require_chown()
+{
+	local rnd_uid=4242
+	local file="$TEST_DIR/chown_testfile"
+
+	rm -f $file
+	touch $file
+	chown ${rnd_uid}:${rnd_uid} $file >/dev/null 2>&1 \
+		|| _notrun "chown is not supported ${FSTYP}"
+}
+
+
+# check for a chmod support
+# Since chmod sometimes fails silently actual functionality test is done
+#
+_require_chmod()
+{
+	local file="$TEST_DIR/chmod_testfile"
+
+	rm -f $file
+	touch $file
+
+	# get original file mode
+	local mode=`stat --format="0%a" $file`
+	# flip the user's read bit
+	let mode^=0400
+	chmod `printf '%o' "$mode"` $file
+	# check that the chmod actually flipped the bit
+	[ `stat --format="0%a" $file` == `printf '0%o' "$mode"` ] \
+		|| _notrun "chmod is not supported ${FSTYP}"
+}
+
 # check for a group on the machine, fsgqa as default
 #
 _require_group()
