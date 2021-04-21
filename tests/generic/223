@@ -43,6 +43,11 @@ for SUNIT_K in 8 16 32 64 128; do
 	_scratch_mkfs_geom $SUNIT_BYTES 4 $BLOCKSIZE >> $seqres.full 2>&1
 	_scratch_mount
 
+	# This test checks for stripe alignments of space allocations on the
+	# filesystem.  Make sure all files get created on the main device,
+	# which for XFS means no rt files.
+	test "$FSTYP" = "xfs" && $XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT
+
 	for SIZE_MULT in 1 2 8 64 256; do
 		let SIZE=$SIZE_MULT*$SUNIT_BYTES
 
