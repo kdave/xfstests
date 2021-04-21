@@ -1,0 +1,125 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 635
+#
+# Make sure we can store and retrieve timestamps on the extremes of the
+# date ranges supported by userspace, and the common places where overflows
+# can happen.  This test also ensures that the timestamps are persisted
+# correctly after a shutdown.
+#
+# This differs from generic/402 in that we don't constrain ourselves to the
+# range that the filesystem claims to support; we attempt various things that
+# /userspace/ can parse, and then check that the vfs clamps and persists the
+# values correctly.
+#
+# NOTE: Old kernels (pre 5.4) allow filesystems to truncate timestamps silently
+# when writing timestamps to disk!  This test detects this silent truncation
+# and fails.  If you see a failure on such a kernel, contact your distributor
+# for an update.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_scratch_shutdown
+
+rm -f $seqres.full
+
+_scratch_mkfs > $seqres.full
+_scratch_mount
+
+# Does our userspace even support large dates?
+test_bigdates=1
+touch -d 'May 30 01:53:03 UTC 2514' $SCRATCH_MNT 2>/dev/null || test_bigdates=0
+
+# And can we do statx?
+test_statx=1
+($XFS_IO_PROG -c 'help statx' | grep -q 'Print raw statx' && \
+ $XFS_IO_PROG -c 'statx -r' $SCRATCH_MNT 2>/dev/null | grep -q 'stat.mtime') || \
+	test_statx=0
+
+echo "Userspace support of large timestamps: $test_bigdates" >> $seqres.full
+echo "xfs_io support of statx: $test_statx" >> $seqres.full
+
+touchme() {
+	local arg="$1"
+	local name="$2"
+
+	echo "$arg" > $SCRATCH_MNT/t_$name
+	touch -d "$arg" $SCRATCH_MNT/t_$name
+}
+
+report() {
+	local files=($SCRATCH_MNT/t_*)
+	for file in "${files[@]}"; do
+		echo "${file}: $(cat "${file}")"
+		TZ=UTC stat -c '%y %Y %n' "${file}"
+		test $test_statx -gt 0 && \
+			$XFS_IO_PROG -c 'statx -r' "${file}" | grep 'stat.mtime'
+	done
+}
+
+# -2147483648 (S32_MIN, or classic unix min)
+touchme 'Dec 13 20:45:52 UTC 1901' s32_min
+
+# 2147483647 (S32_MAX, or classic unix max)
+touchme 'Jan 19 03:14:07 UTC 2038' s32_max
+
+# 7956915742, all twos
+touchme 'Feb 22 22:22:22 UTC 2222' all_twos
+
+if [ $test_bigdates -gt 0 ]; then
+	# 16299260424 (u64 nsec counter from s32_min, like xfs does)
+	touchme 'Tue Jul  2 20:20:24 UTC 2486' u64ns_from_s32_min
+
+	# 15032385535 (u34 time if you start from s32_min, like ext4 does)
+	touchme 'May 10 22:38:55 UTC 2446' u34_from_s32_min
+
+	# 17179869183 (u34 time if you start from the unix epoch)
+	touchme 'May 30 01:53:03 UTC 2514' u34_max
+
+	# Latest date we can synthesize(?)
+	touchme 'Dec 31 23:59:59 UTC 2147483647' abs_max_time
+
+	# Earliest date we can synthesize(?)
+	touchme 'Jan 1 00:00:00 UTC 0' abs_min_time
+fi
+
+# Query timestamps from incore
+echo before >> $seqres.full
+report > $tmp.before_crash
+cat $tmp.before_crash >> $seqres.full
+
+_scratch_shutdown -f
+_scratch_cycle_mount
+
+# Query timestamps from disk
+echo after >> $seqres.full
+report > $tmp.after_crash
+cat $tmp.after_crash >> $seqres.full
+
+# Did they match?
+cmp -s $tmp.before_crash $tmp.after_crash
+
+# success, all done
+status=0
+exit
