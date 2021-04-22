@@ -1,0 +1,114 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 157
+#
+# Functional testing for xfs_admin to ensure that it parses arguments correctly
+# with regards to data devices that are files, external logs, and realtime
+# devices.
+#
+# Because this test synthesizes log and rt devices (by modifying the test run
+# configuration), it does /not/ require the ability to mount the scratch
+# filesystem.  This increases test coverage while isolating the weird bits to a
+# single test.
+#
+# This is partially a regression test for "xfs_admin: pick up log arguments
+# correctly", insofar as the issue fixed by that patch was discovered with an
+# earlier revision of this test.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.* $fake_logfile $fake_rtfile $fake_datafile
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_test
+_require_scratch_nocheck
+_require_command "$XFS_ADMIN_PROG" "xfs_admin"
+
+rm -f $seqres.full
+
+# Create some fake sparse files for testing external devices and whatnot
+fake_datafile=$TEST_DIR/$seq.scratch.data
+rm -f $fake_datafile
+truncate -s 500m $fake_datafile
+
+fake_logfile=$TEST_DIR/$seq.scratch.log
+rm -f $fake_logfile
+truncate -s 500m $fake_logfile
+
+fake_rtfile=$TEST_DIR/$seq.scratch.rt
+rm -f $fake_rtfile
+truncate -s 500m $fake_rtfile
+
+# Save the original variables
+orig_ddev=$SCRATCH_DEV
+orig_external=$USE_EXTERNAL
+orig_logdev=$SCRATCH_LOGDEV
+orig_rtdev=$SCRATCH_RTDEV
+
+scenario() {
+	echo "$@" | tee -a $seqres.full
+
+	SCRATCH_DEV=$orig_ddev
+	USE_EXTERNAL=$orig_external
+	SCRATCH_LOGDEV=$orig_logdev
+	SCRATCH_RTDEV=$orig_rtdev
+}
+
+check_label() {
+	_scratch_mkfs -L oldlabel >> $seqres.full
+	_scratch_xfs_db -c label
+	_scratch_xfs_admin -L newlabel "$@" >> $seqres.full
+	_scratch_xfs_db -c label
+	_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+}
+
+scenario "S1: Check that label setting with file image"
+SCRATCH_DEV=$fake_datafile
+check_label -f
+
+scenario "S2: Check that setting with logdev works"
+USE_EXTERNAL=yes
+SCRATCH_LOGDEV=$fake_logfile
+check_label
+
+scenario "S3: Check that setting with rtdev works"
+USE_EXTERNAL=yes
+SCRATCH_RTDEV=$fake_rtfile
+check_label
+
+scenario "S4: Check that setting with rtdev + logdev works"
+USE_EXTERNAL=yes
+SCRATCH_LOGDEV=$fake_logfile
+SCRATCH_RTDEV=$fake_rtfile
+check_label
+
+scenario "S5: Check that setting with nortdev + nologdev works"
+USE_EXTERNAL=
+SCRATCH_LOGDEV=
+SCRATCH_RTDEV=
+check_label
+
+scenario "S6: Check that setting with bdev incorrectly flagged as file works"
+check_label -f
+
+# success, all done
+status=0
+exit

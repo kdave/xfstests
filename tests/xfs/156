@@ -1,0 +1,93 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 156
+#
+# Functional testing for xfs_admin to make sure that it handles option parsing
+# correctly for functionality that's relevant to V5 filesystems.  It doesn't
+# test the options that apply only to V4 filesystems because that disk format
+# is deprecated.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_command "$XFS_ADMIN_PROG" "xfs_admin"
+
+rm -f $seqres.full
+
+note() {
+	echo "$@" | tee -a $seqres.full
+}
+
+note "S0: Initialize filesystem"
+_scratch_mkfs -L origlabel -m uuid=babababa-baba-baba-baba-babababababa >> $seqres.full
+_scratch_xfs_db -c label -c uuid
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S1: Set a filesystem label"
+_scratch_xfs_admin -L newlabel >> $seqres.full
+_scratch_xfs_db -c label
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S2: Clear filesystem label"
+_scratch_xfs_admin -L -- >> $seqres.full
+_scratch_xfs_db -c label
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S3: Try to set oversized label"
+_scratch_xfs_admin -L thisismuchtoolongforxfstohandle >> $seqres.full
+_scratch_xfs_db -c label
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S4: Set filesystem UUID"
+_scratch_xfs_admin -U deaddead-dead-dead-dead-deaddeaddead >> $seqres.full
+_scratch_xfs_db -c uuid
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S5: Zero out filesystem UUID"
+_scratch_xfs_admin -U nil >> $seqres.full
+_scratch_xfs_db -c uuid
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S6: Randomize filesystem UUID"
+old_uuid="$(_scratch_xfs_db -c uuid)"
+_scratch_xfs_admin -U generate >> $seqres.full
+new_uuid="$(_scratch_xfs_db -c uuid)"
+if [ "$new_uuid" = "$old_uuid" ]; then
+	echo "UUID randomization failed? $old_uuid == $new_uuid"
+fi
+_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+
+note "S7: Restore original filesystem UUID"
+if _check_scratch_xfs_features V5 >/dev/null; then
+	# Only V5 supports the metauuid feature that enables us to restore the
+	# original UUID after a change.
+	_scratch_xfs_admin -U restore >> $seqres.full
+	_scratch_xfs_db -c uuid
+else
+	echo "UUID = babababa-baba-baba-baba-babababababa"
+fi
+
+# success, all done
+status=0
+exit

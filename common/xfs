@@ -1143,3 +1143,13 @@ _check_scratch_xfs_features()
 	echo "${output[@]}"
 	test "${found}" -eq "$#"
 }
+
+# Decide if xfs_repair knows how to set (or clear) a filesystem feature.
+_require_xfs_repair_upgrade()
+{
+	local type="$1"
+
+	$XFS_REPAIR_PROG -c "$type=garbagevalue" 2>&1 | \
+		grep -q 'unknown option' && \
+		_notrun "xfs_repair does not support upgrading fs with $type"
+}
