@@ -1,0 +1,98 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 158
+#
+# Check that we can upgrade a filesystem to support inobtcount and that
+# everything works properly after the upgrade.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_xfs_inobtcount
+_require_command "$XFS_ADMIN_PROG" "xfs_admin"
+_require_xfs_repair_upgrade inobtcount
+
+rm -f $seqres.full
+
+# Make sure we can't format a filesystem with inobtcount and not finobt.
+_scratch_mkfs -m crc=1,inobtcount=1,finobt=0 &> $seqres.full && \
+	echo "Should not be able to format with inobtcount but not finobt."
+
+# Make sure we can't upgrade a V4 filesystem
+_scratch_mkfs -m crc=0,inobtcount=0,finobt=0 >> $seqres.full
+_scratch_xfs_admin -O inobtcount=1 2>> $seqres.full
+_check_scratch_xfs_features INOBTCNT
+
+# Make sure we can't upgrade a filesystem to inobtcount without finobt.
+_scratch_mkfs -m crc=1,inobtcount=0,finobt=0 >> $seqres.full
+_scratch_xfs_admin -O inobtcount=1 2>> $seqres.full
+_check_scratch_xfs_features INOBTCNT
+
+# Format V5 filesystem without inode btree counter support and populate it.
+_scratch_mkfs -m crc=1,inobtcount=0 >> $seqres.full
+_scratch_mount
+
+mkdir $SCRATCH_MNT/stress
+$FSSTRESS_PROG -d $SCRATCH_MNT/stress -n 1000 >> $seqres.full
+echo moo > $SCRATCH_MNT/urk
+
+_scratch_unmount
+
+# Upgrade filesystem to have the counters and inject failure into repair and
+# make sure that the only path forward is to re-run repair on the filesystem.
+echo "Fail partway through upgrading"
+XFS_REPAIR_FAIL_AFTER_PHASE=2 _scratch_xfs_repair -c inobtcount=1 2>> $seqres.full
+test $? -eq 137 || echo "repair should have been killed??"
+_check_scratch_xfs_features NEEDSREPAIR INOBTCNT
+_try_scratch_mount &> $tmp.mount
+res=$?
+_filter_scratch < $tmp.mount
+if [ $res -eq 0 ]; then
+	echo "needsrepair should have prevented mount"
+	_scratch_unmount
+fi
+
+echo "Re-run repair to finish upgrade"
+_scratch_xfs_repair 2>> $seqres.full
+_check_scratch_xfs_features NEEDSREPAIR INOBTCNT
+
+echo "Filesystem should be usable again"
+_scratch_mount
+$FSSTRESS_PROG -d $SCRATCH_MNT/stress -n 1000 >> $seqres.full
+_scratch_unmount
+_check_scratch_fs
+_check_scratch_xfs_features INOBTCNT
+
+echo "Make sure we have nonzero counters"
+_scratch_xfs_db -c 'agi 0' -c 'print ino_blocks fino_blocks' | \
+	sed -e 's/= 0$/= ZERO/g' -e 's/= [0-9]*/= NONZERO/g'
+
+echo "Make sure we can't re-add inobtcount"
+_scratch_xfs_admin -O inobtcount=1 2>> $seqres.full
+
+echo "Mount again, look at our files"
+_scratch_mount >> $seqres.full
+cat $SCRATCH_MNT/urk
+
+status=0
+exit
