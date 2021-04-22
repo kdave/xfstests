@@ -312,6 +312,14 @@ _scratch_xfs_check()
 	_xfs_check $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
+# Check for secret debugging hooks in xfs_repair
+_require_libxfs_debug_flag() {
+	local hook="$1"
+
+	grep -q "$hook" "$(type -P xfs_repair)" || \
+		_notrun "libxfs debug hook $hook not detected?"
+}
+
 _scratch_xfs_repair()
 {
 	SCRATCH_OPTIONS=""
@@ -1113,4 +1121,25 @@ _xfs_get_cowgc_interval() {
 	else
 		_fail "Can't find cowgc interval procfs knob?"
 	fi
+}
+
+# Print the status of the given features on the scratch filesystem.
+# Returns 0 if all features are found, 1 otherwise.
+_check_scratch_xfs_features()
+{
+	local features="$(_scratch_xfs_db -c 'version')"
+	local output=("FEATURES:")
+	local found=0
+
+	for feature in "$@"; do
+		local status="NO"
+		if echo "${features}" | grep -q -w "${feature}"; then
+			status="YES"
+			found=$((found + 1))
+		fi
+		output+=("${feature}:${status}")
+	done
+
+	echo "${output[@]}"
+	test "${found}" -eq "$#"
 }

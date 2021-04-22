@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 155
+#
+# Populate a filesystem with all types of metadata, then run repair with the
+# libxfs write failure trigger set to go after a single write.  Check that the
+# injected error trips, causing repair to abort, that needsrepair is set on the
+# fs, the kernel won't mount; and that a non-injecting repair run clears
+# needsrepair and makes the filesystem mountable again.
+#
+# Repeat with the trip point set to successively higher numbers of writes until
+# we hit ~200 writes or repair manages to run to completion without tripping.
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1    # failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/populate
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_nocheck
+_require_scratch_xfs_crc		# needsrepair only exists for v5
+_require_populate_commands
+_require_libxfs_debug_flag LIBXFS_DEBUG_WRITE_CRASH
+
+rm -f $seqres.full
+
+# Populate the filesystem
+_scratch_populate_cached nofill >> $seqres.full 2>&1
+
+max_writes=200			# 200 loops should be enough for anyone
+nr_incr=$((13 / TIME_FACTOR))
+test $nr_incr -lt 1 && nr_incr=1
+for ((nr_writes = 1; nr_writes < max_writes; nr_writes += nr_incr)); do
+	# Add a tiny bit of randomness into each run
+	allowed_writes=$(( nr_writes + (RANDOM % 7) ))
+	echo "Setting debug hook to crash after $allowed_writes writes." >> $seqres.full
+
+	# Start a repair and force it to abort after some number of writes
+	LIBXFS_DEBUG_WRITE_CRASH=ddev=$allowed_writes \
+			_scratch_xfs_repair 2>> $seqres.full
+	res=$?
+	if [ $res -ne 0 ] && [ $res -ne 137 ]; then
+		echo "repair failed with $res??"
+		break
+	elif [ $res -eq 0 ]; then
+		[ $nr_writes -eq 1 ] && \
+			echo "ran to completion on the first try?"
+		break
+	fi
+
+	# Check the state of NEEDSREPAIR after repair fails.  If it isn't set
+	# but repair -n says the fs is clean, then it's possible that the
+	# injected error caused it to abort immediately after the write that
+	# cleared NEEDSREPAIR.
+	if ! _check_scratch_xfs_features NEEDSREPAIR > /dev/null &&
+	   ! _scratch_xfs_repair -n &>> $seqres.full; then
+		echo "NEEDSREPAIR should be set on corrupt fs"
+	fi
+done
+
+# If NEEDSREPAIR is still set on the filesystem, ensure that a full run
+# cleans everything up.
+if _check_scratch_xfs_features NEEDSREPAIR > /dev/null; then
+	echo "Clearing NEEDSREPAIR" >> $seqres.full
+	_scratch_xfs_repair 2>> $seqres.full
+	_check_scratch_xfs_features NEEDSREPAIR > /dev/null && \
+		echo "Repair failed to clear NEEDSREPAIR on the $nr_writes writes test"
+fi
+
+# success, all done
+echo Silence is golden.
+status=0
+exit
