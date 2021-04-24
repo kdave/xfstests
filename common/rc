@@ -2539,8 +2539,13 @@ _require_scratch_swapfile()
 	case "$FSTYP" in
 	ext2|ext3|ext4)
 		if ! swapon "$SCRATCH_MNT/swap" >/dev/null 2>&1; then
-			_scratch_unmount
-			_fail "swapon failed for $FSTYP"
+			if _check_s_dax "$SCRATCH_MNT/swap" 1 >/dev/null; then
+				_scratch_unmount
+				_notrun "swapfiles are not supported"
+			else
+				_scratch_unmount
+				_fail "swapon failed for $FSTYP"
+			fi
 		fi
 		;;
 	*)
@@ -3404,6 +3409,7 @@ _check_s_dax()
 {
 	local target=$1
 	local exp_s_dax=$2
+	local ret=0
 
 	local attributes=$($XFS_IO_PROG -c 'statx -r' $target | awk '/stat.attributes / { print $3 }')
 
@@ -3424,10 +3430,17 @@ _check_s_dax()
 	fi
 
 	if [ $exp_s_dax -eq 0 ]; then
-		(( attributes & 0x00200000 )) && echo "$target has unexpected S_DAX flag"
+		if (( attributes & 0x00200000 )); then
+			echo "$target has unexpected S_DAX flag"
+			ret=1
+		fi
 	else
-		(( attributes & 0x00200000 )) || echo "$target doesn't have expected S_DAX flag"
+		if ! (( attributes & 0x00200000 )); then
+			echo "$target doesn't have expected S_DAX flag"
+			ret=2
+		fi
 	fi
+	return $ret
 }
 
 _check_xflag()
