@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 CTERA Networks. All Rights Reserved.
+#
+# Check that directory modifications to an open dir are observed
+# by a new open fd
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+
+rm -f $seqres.full
+
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
+
+# Use small getdents bufsize to fit less than 10 entries
+# stuct linux_dirent64 is 20 bytes not including d_name
+bufsize=200
+
+# Check readdir content of an empty dir changes when adding a new file
+echo -e "\nCreate file 0 in an open dir:" >> $seqres.full
+$here/src/t_dir_offset2 $testdir $bufsize "+0" 2>&1 >> $seqres.full || \
+	echo "Missing created file in open dir (see $seqres.full for details)"
+
+# Create enough files to be returned in multiple gendents() calls.
+# At least one of the files that we delete will not be listed in the
+# first call, so we may encounter stale entries in following calls.
+for n in {1..100}; do
+    touch $testdir/$n
+done
+
+# Check readdir content changes after removing files
+for n in {1..10}; do
+	echo -e "\nRemove file ${n}0 in an open dir:" >> $seqres.full
+	$here/src/t_dir_offset2 $testdir $bufsize "-${n}0" 2>&1 >> $seqres.full || \
+		echo "Found unlinked files in open dir (see $seqres.full for details)"
+done
+
+# success, all done
+echo "Silence is golden"
+status=0
