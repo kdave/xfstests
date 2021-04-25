@@ -96,7 +96,7 @@ static const struct option longopts[] = {
 int main(int argc, char *argv[])
 {
 	int exit_code = EXIT_SUCCESS, index = 0;
-	int dfd, fd_tree, new_argc, ret;
+	int dfd, fd_tree, new_argc, ret, i;
 	char *base_dir;
 	char *const *new_argv;
 	char target[PATH_MAX];
@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
 	 * Having a mount table with 10000 mounts is already quite excessive
 	 * and shoult account even for weird test systems.
 	 */
-	for (size_t i = 0; i < 10000; i++) {
+	for (i = 0; i < 10000; i++) {
 		fd_tree = sys_open_tree(dfd, "detached-move-mount",
 					OPEN_TREE_CLONE |
 					OPEN_TREE_CLOEXEC |
