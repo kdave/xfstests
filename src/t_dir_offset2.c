@@ -8,11 +8,13 @@
  * that these offsets are seekable to entry with the right inode.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
@@ -32,7 +34,7 @@ static uint64_t d_ino_history[HISTORY_LEN];
 
 void usage()
 {
-	fprintf(stderr, "usage: t_dir_offset2: <dir> [bufsize]\n");
+	fprintf(stderr, "usage: t_dir_offset2: <dir> [[bufsize] <filename> [-v]]\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -45,6 +47,9 @@ int main(int argc, char *argv[])
 	int bpos, total, i;
 	off_t lret;
 	int retval = EXIT_SUCCESS;
+	const char *filename = NULL;
+	int exists = 0, found = 0;
+	int verbose = 0;
 
 	if (argc > 2) {
 		bufsize = atoi(argv[2]);
@@ -52,6 +57,12 @@ int main(int argc, char *argv[])
 			usage();
 		if (bufsize > BUF_SIZE)
 			bufsize = BUF_SIZE;
+
+		if (argc > 3) {
+			filename = argv[3];
+			if (argc > 4 && !strcmp(argv[4], "-v"))
+				verbose = 1;
+		}
 	} else if (argc < 2) {
 		usage();
 	}
@@ -60,6 +71,14 @@ int main(int argc, char *argv[])
 	if (fd < 0) {
 		perror("open");
 		exit(EXIT_FAILURE);
+	}
+
+	if (filename) {
+		exists = !faccessat(fd, filename, F_OK, AT_SYMLINK_NOFOLLOW);
+		if (!exists && errno != ENOENT) {
+			perror("faccessat");
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	total = 0;
@@ -91,7 +110,25 @@ int main(int argc, char *argv[])
 			}
 			d_off_history[total] = d->d_off;
 			d_ino_history[total] = d->d_ino;
+			if (filename) {
+				if (verbose)
+					printf("entry #%d: %s (d_ino=%lld, d_off=%lld)\n",
+					       i, d->d_name, (long long int)d->d_ino,
+					       (long long int)d->d_off);
+				if (!strcmp(filename, d->d_name))
+					found = 1;
+			}
 			bpos += d->d_reclen;
+		}
+	}
+
+	if (filename) {
+		if (exists == found) {
+			printf("entry %s %sfound as expected\n", filename, found ? "" : "not ");
+		} else {
+			fprintf(stderr, "%s entry %s\n",
+				exists ? "missing" : "stale", filename);
+			exit(EXIT_FAILURE);
 		}
 	}
 
