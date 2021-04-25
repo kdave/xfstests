@@ -30,15 +30,31 @@ struct linux_dirent64 {
 static uint64_t d_off_history[HISTORY_LEN];
 static uint64_t d_ino_history[HISTORY_LEN];
 
-int
-main(int argc, char *argv[])
+void usage()
 {
-	int fd, nread;
+	fprintf(stderr, "usage: t_dir_offset2: <dir> [bufsize]\n");
+	exit(EXIT_FAILURE);
+}
+
+int main(int argc, char *argv[])
+{
+	int fd;
 	char buf[BUF_SIZE];
+	int nread, bufsize = BUF_SIZE;
 	struct linux_dirent64 *d;
 	int bpos, total, i;
 	off_t lret;
 	int retval = EXIT_SUCCESS;
+
+	if (argc > 2) {
+		bufsize = atoi(argv[2]);
+		if (!bufsize)
+			usage();
+		if (bufsize > BUF_SIZE)
+			bufsize = BUF_SIZE;
+	} else if (argc < 2) {
+		usage();
+	}
 
 	fd = open(argv[1], O_RDONLY | O_DIRECTORY);
 	if (fd < 0) {
@@ -48,7 +64,7 @@ main(int argc, char *argv[])
 
 	total = 0;
 	for ( ; ; ) {
-		nread = syscall(SYS_getdents64, fd, buf, BUF_SIZE);
+		nread = syscall(SYS_getdents64, fd, buf, bufsize);
 		if (nread == -1) {
 			perror("getdents");
 			exit(EXIT_FAILURE);
@@ -89,7 +105,7 @@ main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 
-		nread = syscall(SYS_getdents64, fd, buf, BUF_SIZE);
+		nread = syscall(SYS_getdents64, fd, buf, bufsize);
 		if (nread == -1) {
 			perror("getdents");
 			exit(EXIT_FAILURE);
