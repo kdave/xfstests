@@ -1,0 +1,117 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 077
+#
+# Test invalidate of readdir cache
+#
+# This is a regression test for kernel commit 65cd913ec9d9
+# ("ovl: invalidate readdir cache on changes to dir with origin")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs overlay
+_require_scratch_nocheck
+
+# Use small getdents bufsize to fit less than 10 entries
+# stuct linux_dirent64 is 20 bytes not including d_name
+bufsize=200
+
+# Create enough files to be returned in multiple gendents() calls.
+# At least one of the files that we delete will not be listed in the
+# first call, so we may encounter stale entries in following calls.
+create_files() {
+	for n in {1..100}; do
+		touch ${1}/${2}${n}
+	done
+}
+
+# remove all files from previous runs
+_scratch_mkfs
+
+# Create test area with a merge dir, a "former" merge dir,
+# a pure upper dir and impure upper dir. For each case, overlayfs
+# readdir cache is used a bit differently.
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+
+mkdir -p $lowerdir/merge $lowerdir/former $upperdir/pure $upperdir/impure
+# Lower files in merge dir are listed first
+create_files $lowerdir/merge m
+# Files to be moved into impure upper dir
+create_files $lowerdir o
+# File to be copied up to make former merge dir impure
+touch $lowerdir/former/f100
+
+_scratch_mount
+
+create_files $SCRATCH_MNT/pure p
+create_files $SCRATCH_MNT/former f
+# Copy up file so readdir will need to lookup its origin d_ino
+touch $SCRATCH_MNT/merge/m100
+# Move copied up files so readdir will need to lookup origin d_ino
+mv $SCRATCH_MNT/o* $SCRATCH_MNT/impure/
+
+# Remove the lower directory and mount overlay again to create
+# a "former merge dir"
+$UMOUNT_PROG $SCRATCH_MNT
+rm -rf $lowerdir/former
+_scratch_mount
+
+# Check readdir cache invalidate on pure upper dir
+echo -e "\nCreate file in pure upper dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/pure $bufsize "+p0" 2>&1 >> $seqres.full || \
+	echo "Missing created file in pure upper dir (see $seqres.full for details)"
+echo -e "\nRemove file in pure upper dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/pure $bufsize "-p100" 2>&1 >> $seqres.full || \
+	echo "Found unlinked file in pure upper dir (see $seqres.full for details)"
+
+# Check readdir cache invalidate on impure upper dir
+echo -e "\nCreate file in impure upper dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/impure $bufsize "+o0" 2>&1 >> $seqres.full || \
+	echo "Missing created file in impure upper dir (see $seqres.full for details)"
+echo -e "\nRemove file in impure upper dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/impure $bufsize  "-o100" 2>&1 >> $seqres.full || \
+	echo "Found unlinked file in impure upper dir (see $seqres.full for details)"
+
+# Check readdir cache invalidate on merge dir
+echo -e "\nCreate file in merge dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/merge $bufsize "+m0" 2>&1 >> $seqres.full || \
+	echo "Missing created file in merge dir (see $seqres.full for details)"
+echo -e "\nRemove file in merge dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/merge $bufsize "-m100" 2>&1 >> $seqres.full || \
+	echo "Found unlinked file in merge dir (see $seqres.full for details)"
+
+# Check readdir cache invalidate on former merge dir
+echo -e "\nCreate file in former merge dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/former $bufsize "+f0" 2>&1 >> $seqres.full || \
+	echo "Missing created file in former merge dir (see $seqres.full for details)"
+echo -e "\nRemove file in former merge dir:" >> $seqres.full
+$here/src/t_dir_offset2 $SCRATCH_MNT/former $bufsize "-f100" 2>&1 >> $seqres.full || \
+	echo "Found unlinked file in former merge dir (see $seqres.full for details)"
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
