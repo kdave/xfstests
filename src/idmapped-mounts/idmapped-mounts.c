@@ -874,8 +874,8 @@ static int fsids_unmapped(void)
 	}
 
 	/* try to rename a file */
-	if (!renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (!renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 	if (errno != EOVERFLOW) {
@@ -884,8 +884,8 @@ static int fsids_unmapped(void)
 	}
 
 	/* try to rename a directory */
-	if (!renameat2(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (!renameat(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 	if (errno != EOVERFLOW) {
@@ -1048,11 +1048,11 @@ static int fsids_mapped(void)
 			die("failure: create hardlink");
 
 		/* try to rename a file */
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
 			die("failure: rename");
 
 		/* try to rename a directory */
-		if (renameat2(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME, 0))
+		if (renameat(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME))
 			die("failure: rename");
 
 		/* remove file */
@@ -1183,14 +1183,14 @@ static int create_in_userns(void)
 			die("failure: check ownership");
 
 		/* try to rename a file */
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
 			die("failure: create");
 
 		if (!expected_uid_gid(open_tree_fd, FILE1_RENAME, 0, 0, 0))
 			die("failure: check ownership");
 
 		/* try to rename a file */
-		if (renameat2(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME, 0))
+		if (renameat(open_tree_fd, DIR1, open_tree_fd, DIR1_RENAME))
 			die("failure: create");
 
 		if (!expected_uid_gid(open_tree_fd, DIR1_RENAME, 0, 0, 0))
@@ -1558,8 +1558,8 @@ static int rename_crossing_mounts(void)
 	 * interested in making sure we're not introducing an accidental way to
 	 * violate that restriction or that suddenly this becomes possible.
 	 */
-	if (!renameat2(open_tree_fd, FILE1, t_dir1_fd, FILE1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (!renameat(open_tree_fd, FILE1, t_dir1_fd, FILE1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 	if (errno != EXDEV) {
@@ -1654,8 +1654,8 @@ static int rename_crossing_idmapped_mounts(void)
 	 * interested in making sure we're not introducing an accidental way to
 	 * violate that restriction or that suddenly this becomes possible.
 	 */
-	if (!renameat2(open_tree_fd1, FILE1, open_tree_fd2, FILE1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (!renameat(open_tree_fd1, FILE1, open_tree_fd2, FILE1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 	if (errno != EXDEV) {
@@ -1726,8 +1726,8 @@ static int rename_from_idmapped_mount(void)
 	}
 
 	/* We're not crossing a mountpoint so this must succeed. */
-	if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 
@@ -1794,7 +1794,7 @@ static int rename_from_idmapped_mount_in_userns(void)
 			die("failure: check ownership");
 
 		/* We're not crossing a mountpoint so this must succeed. */
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
 			die("failure: create");
 
 		if (!expected_uid_gid(open_tree_fd, FILE1_RENAME, 0, 0, 0))
@@ -5157,17 +5157,17 @@ static int sticky_bit_rename(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE1_RENAME, dir_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1_RENAME, dir_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2_RENAME, dir_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2_RENAME, dir_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5200,13 +5200,13 @@ static int sticky_bit_rename(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (!renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
@@ -5239,17 +5239,17 @@ static int sticky_bit_rename(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE1_RENAME, dir_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1_RENAME, dir_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2_RENAME, dir_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2_RENAME, dir_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5286,17 +5286,17 @@ static int sticky_bit_rename(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE1_RENAME, dir_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1_RENAME, dir_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2_RENAME, dir_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2_RENAME, dir_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5410,17 +5410,17 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5453,13 +5453,13 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (!renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
@@ -5492,17 +5492,17 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5538,17 +5538,17 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		if (!switch_ids(1000, 1000))
 			die("failure: switch_ids");
 
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5670,17 +5670,17 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 		if (!switch_userns(attr.userns_fd, 1000, 1000, true))
 			die("failure: switch_userns");
 
-		if (renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE1_RENAME, dir_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE1_RENAME, dir_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(dir_fd, FILE2_RENAME, dir_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(dir_fd, FILE2_RENAME, dir_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5718,23 +5718,23 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 		if (!switch_userns(attr.userns_fd, 1000, 1000, true))
 			die("failure: switch_userns");
 
-		if (!renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
@@ -5772,27 +5772,27 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 		if (!switch_userns(attr.userns_fd, 1000, 1000, true))
 			die("failure: switch_userns");
 
-		if (!renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -5834,28 +5834,28 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 			die("failure: switch_userns");
 
 		/* we don't own the directory from the original mount */
-		if (!renameat2(dir_fd, FILE1, dir_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE1, dir_fd, FILE1_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
-		if (!renameat2(dir_fd, FILE2, dir_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(dir_fd, FILE2, dir_fd, FILE2_RENAME))
+			die("failure: renameat");
 		if (errno != EPERM)
 			die("failure: errno");
 
 		/* we own the file from the idmapped mount */
-		if (renameat2(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1, open_tree_fd, FILE1_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2, open_tree_fd, FILE2_RENAME))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE1_RENAME, open_tree_fd, FILE1))
+			die("failure: renameat");
 
-		if (renameat2(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2, 0))
-			die("failure: renameat2");
+		if (renameat(open_tree_fd, FILE2_RENAME, open_tree_fd, FILE2))
+			die("failure: renameat");
 
 		exit(EXIT_SUCCESS);
 	}
