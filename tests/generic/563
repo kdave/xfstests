@@ -60,6 +60,8 @@ check_cg()
 	cgname=$(basename $cgroot)
 	expectedread=$2
 	expectedwrite=$3
+	readtol=$4
+	writetol=$5
 	rbytes=0
 	wbytes=0
 
@@ -71,8 +73,8 @@ check_cg()
 			awk -F = '{ print $2 }'`
 	fi
 
-	_within_tolerance "read" $rbytes $expectedread 5% -v
-	_within_tolerance "write" $wbytes $expectedwrite 5% -v
+	_within_tolerance "read" $rbytes $expectedread $readtol -v
+	_within_tolerance "write" $wbytes $expectedwrite $writetol -v
 }
 
 # Move current process to another cgroup.
@@ -116,7 +118,7 @@ $XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" -c fsync \
 	$SCRATCH_MNT/file >> $seqres.full 2>&1
 switch_cg $cgdir
 $XFS_IO_PROG -c fsync $SCRATCH_MNT/file
-check_cg $cgdir/$seq-cg $iosize $iosize
+check_cg $cgdir/$seq-cg $iosize $iosize 5% 5%
 
 # Write from one cgroup then read and write from a second. Writes are charged to
 # the first group and nothing to the second.
@@ -129,8 +131,12 @@ $XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" $SCRATCH_MNT/file \
 	>> $seqres.full 2>&1
 switch_cg $cgdir
 $XFS_IO_PROG -c fsync $SCRATCH_MNT/file
-check_cg $cgdir/$seq-cg 0 $iosize
-check_cg $cgdir/$seq-cg-2 0 0
+# Use a fixed value tolerance for the expected value of zero here
+# because filesystems might perform a small number of metadata reads to
+# complete the write. On ext2/3 with 1k block size, the read bytes is
+# as large as 33792.
+check_cg $cgdir/$seq-cg 0 $iosize 33792 5%
+check_cg $cgdir/$seq-cg-2 0 0 0 0
 
 # Read from one cgroup, read & write from a second. Both reads and writes are
 # charged to the first group and nothing to the second.
@@ -143,8 +149,8 @@ $XFS_IO_PROG -c "pread 0 $iosize" -c "pwrite 0 $iosize" $SCRATCH_MNT/file \
 	>> $seqres.full 2>&1
 switch_cg $cgdir
 $XFS_IO_PROG -c fsync $SCRATCH_MNT/file
-check_cg $cgdir/$seq-cg $iosize $iosize
-check_cg $cgdir/$seq-cg-2 0 0
+check_cg $cgdir/$seq-cg $iosize $iosize 5% 5%
+check_cg $cgdir/$seq-cg-2 0 0 0 0
 
 if [ "$drop_io_cgroup" = 1 ]; then
 	echo "-io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
