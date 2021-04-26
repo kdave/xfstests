@@ -16,11 +16,9 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stdbool.h>
-#include <sys/acl.h>
 #include <sys/fsuid.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/sysmacros.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 
