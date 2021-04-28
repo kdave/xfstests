@@ -28,6 +28,10 @@ _populate_scratch()
 	_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs
 	. $tmp.mkfs
 	_scratch_mount
+	# This test looks at specific behaviors of the xfs_db freesp command,
+	# which reports on the contents of the free space btrees for the data
+	# device.  Don't let anything get created on the realtime volume.
+	$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT
 	dd if=/dev/zero of=$SCRATCH_MNT/foo count=200 bs=4096 >/dev/null 2>&1 &
 	dd if=/dev/zero of=$SCRATCH_MNT/goo count=400 bs=4096 >/dev/null 2>&1 &
 	dd if=/dev/zero of=$SCRATCH_MNT/moo count=800 bs=4096 >/dev/null 2>&1 &
