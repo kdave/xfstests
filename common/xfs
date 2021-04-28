@@ -1185,3 +1185,19 @@ _xfs_timestamp_range()
 			awk '{printf("%s %s", $1, $2);}'
 	fi
 }
+
+# Require that the scratch device exists, that mkfs can format with bigtime
+# enabled, that the kernel can mount such a filesystem, and that xfs_info
+# advertises the presence of that feature.
+_require_scratch_xfs_bigtime()
+{
+	_require_scratch
+
+	_scratch_mkfs -m bigtime=1 &>/dev/null || \
+		_notrun "mkfs.xfs doesn't support bigtime feature"
+	_try_scratch_mount || \
+		_notrun "kernel doesn't support xfs bigtime feature"
+	$XFS_INFO_PROG "$SCRATCH_MNT" | grep -q -w "bigtime=1" || \
+		_notrun "bigtime feature not advertised on mount?"
+	_scratch_unmount
+}
