@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 162
+#
+# Make sure that attrs are handled properly when repair has to reset the root
+# directory.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 7 15
+
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_nocheck
+
+rm -f $seqres.full
+
+echo "Format and populate btree attr root dir"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
+__populate_create_attr "${SCRATCH_MNT}" "$((64 * blksz / 40))" true
+_scratch_unmount
+
+echo "Break the root directory"
+_scratch_xfs_fuzz_metadata_field core.mode zeroes 'sb 0' 'addr rootino' >> $seqres.full 2>&1
+
+echo "Detect bad root directory"
+_scratch_xfs_repair -n >> $seqres.full 2>&1 && \
+	echo "Should have detected bad root dir"
+
+echo "Fix bad root directory"
+_scratch_xfs_repair >> $seqres.full 2>&1
+
+echo "Detect fixed root directory"
+_scratch_xfs_repair -n >> $seqres.full 2>&1
+
+echo "Mount test"
+_scratch_mount
+
+# success, all done
+status=0
+exit
