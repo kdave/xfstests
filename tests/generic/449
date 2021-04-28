@@ -43,6 +43,11 @@ _require_attrs trusted
 _scratch_mkfs_sized $((256 * 1024 * 1024)) >> $seqres.full 2>&1
 _scratch_mount || _fail "mount failed"
 
+# This is a test of xattr behavior when we run out of disk space for xattrs,
+# so make sure the pwrite goes to the data device and not the rt volume.
+test "$FSTYP" = "xfs" && \
+	$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT
+
 TFILE=$SCRATCH_MNT/testfile.$seq
 
 # Create the test file and choose its permissions
