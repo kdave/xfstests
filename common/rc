@@ -1931,6 +1931,50 @@ _require_dm_target()
 	fi
 }
 
+_zone_type()
+{
+	local target=$1
+	if [ -z $target ]; then
+		echo "Usage: _zone_type <device>"
+		exit 1
+	fi
+	local sdev=`_short_dev $target`
+
+	if [ -e /sys/block/${sdev}/queue/zoned ]; then
+		cat /sys/block/${sdev}/queue/zoned
+	else
+		echo none
+	fi
+}
+
+_require_zoned_device()
+{
+	local target=$1
+	if [ -z $target ]; then
+		echo "Usage: _require_zoned_device <device>"
+		exit 1
+	fi
+
+	local type=`_zone_type ${target}`
+	if [ "${type}" = "none" ]; then
+		_notrun "this test require zoned block device"
+	fi
+}
+
+_require_non_zoned_device()
+{
+	local target=$1
+	if [ -z $target ]; then
+		echo "Usage: _require_non_zoned_device <device>"
+		exit 1
+	fi
+
+	local type=`_zone_type ${target}`
+	if [ "${type}" != "none" ]; then
+		_notrun "this test require non-zoned block device"
+	fi
+}
+
 # this test requires the ext4 kernel support crc feature on scratch device
 #
 _require_scratch_ext4_crc()
