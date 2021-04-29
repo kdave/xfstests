@@ -1144,6 +1144,18 @@ _check_scratch_xfs_features()
 	test "${found}" -eq "$#"
 }
 
+# Skip a test if any of the given fs features aren't present on the scratch
+# filesystem.  The scratch fs must have been formatted already.
+_require_scratch_xfs_features()
+{
+	local features="$(_scratch_xfs_db -c 'version' 2>/dev/null)"
+
+	for feature in "$@"; do
+		echo "${features}" | grep -q -w "${feature}" ||
+			_notrun "Missing scratch feature: ${feature}"
+	done
+}
+
 # Decide if xfs_repair knows how to set (or clear) a filesystem feature.
 _require_xfs_repair_upgrade()
 {
