@@ -1,0 +1,103 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test 237
+#
+# Test that zone autoreclaim works as expected, that is: if the dirty
+# threshold is exceeded the data gets relocated to new block group and the
+# old block group gets deleted. On block group deletion, the underlying device
+# zone also needs to be reset.
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_btrfs_command inspect-internal dump-tree
+_require_btrfs_command filesystem sync
+_require_command "$BLKZONE_PROG" blkzone
+_require_zoned_device "$SCRATCH_DEV"
+
+get_data_bg()
+{
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t CHUNK $SCRATCH_DEV |\
+		grep -A 1 "CHUNK_ITEM" | grep -B 1 "type DATA" |\
+		grep -Eo "CHUNK_ITEM [[:digit:]]+" | cut -d ' ' -f 2
+}
+
+zonesize=$(cat /sys/block/$(_short_dev $SCRATCH_DEV)/queue/chunk_sectors)
+zonesize=$((zonesize << 9))
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount -o commit=1 # 1s commit time to speed up test
+
+uuid=$(findmnt -n -o UUID "$SCRATCH_MNT")
+reclaim_threshold=75
+echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold
+fill_percent=$((reclaim_threshold + 2))
+rest_percent=$((90 - fill_percent)) # make sure we're not creating a new BG
+fill_size=$((zonesize * fill_percent / 100))
+rest=$((zonesize * rest_percent / 100))
+
+# step 1, fill FS over $fillsize
+$XFS_IO_PROG -fc "pwrite 0 $fill_size" $SCRATCH_MNT/$seq.test1 >> $seqres.full
+$XFS_IO_PROG -fc "pwrite 0 $rest" $SCRATCH_MNT/$seq.test2 >> $seqres.full
+$BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+
+zones_before=$($BLKZONE_PROG report $SCRATCH_DEV | grep -v -e em -e nw | wc -l)
+echo "Before reclaim: $zones_before zones open" >> $seqres.full
+old_data_zone=$(get_data_bg)
+old_data_zone=$((old_data_zone >> 9))
+printf "Old data zone 0x%x\n" $old_data_zone >> $seqres.full
+
+# step 2, delete the 1st $fill_size sized file to trigger reclaim
+rm $SCRATCH_MNT/$seq.test1
+$BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+sleep 2 # 1 transaction commit for 'rm' and 1 for balance
+
+# check that we don't have more zones open than before
+zones_after=$($BLKZONE_PROG report $SCRATCH_DEV | grep -v -e em -e nw | wc -l)
+echo "After reclaim: $zones_after zones open" >> $seqres.full
+
+# Check that old data zone was reset
+old_wptr=$($BLKZONE_PROG report -o $old_data_zone -c 1 $SCRATCH_DEV |\
+	grep -Eo "wptr 0x[[:xdigit:]]+" | cut -d ' ' -f 2)
+if [ "$old_wptr" != "0x000000" ]; then
+	_fail "Old wptr still at $old_wptr"
+fi
+
+new_data_zone=$(get_data_bg)
+new_data_zone=$((new_data_zone >> 9))
+printf "New data zone 0x%x\n" $new_data_zone >> $seqres.full
+
+# Check that data was really relocated to a different zone
+if [ $old_data_zone -eq $new_data_zone ]; then
+	echo "New zone same as old zone"
+fi
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
