@@ -618,7 +618,7 @@ __attribute__((unused)) static int print_r(int fd, const char *path)
 		ret = fstatat(fd, path, &st,
 			      AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW);
 	if (!ret)
-		fprintf(stderr, "mode(%o):uid(%d):gid(%d) -> %s",
+		fprintf(stderr, "mode(%o):uid(%d):gid(%d) -> %s\n",
 			(st.st_mode & ~S_IFMT), st.st_uid, st.st_gid,
 			(path && *path) ? path : "(null)");
 
