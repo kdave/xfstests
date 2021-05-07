@@ -80,6 +80,8 @@
 
 #define die(format, ...) die_errno(errno, format, ##__VA_ARGS__)
 
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+
 uid_t t_overflowuid = 65534;
 gid_t t_overflowgid = 65534;
 
@@ -8733,7 +8735,7 @@ static const struct option longopts[] = {
 struct t_idmapped_mounts {
 	int (*test)(void);
 	const char *description;
-} t_idmapped_mounts[] = {
+} basic_suite[] = {
 	{ acls,								"posix acls on regular mounts",									},
 	{ create_in_userns,						"create operations in user namespace",								},
 	{ device_node_in_userns,					"device node in user namespace",								},
@@ -8785,9 +8787,44 @@ struct t_idmapped_mounts {
 	{ threaded_idmapped_mount_interactions,				"threaded operations on idmapped mounts",							},
 };
 
+static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
+{
+	int i;
+
+	for (i = 0; i < suite_size; i++) {
+		struct t_idmapped_mounts *t = &suite[i];
+		int ret;
+		pid_t pid;
+
+		test_setup();
+
+		pid = fork();
+		if (pid < 0)
+			return false;
+
+		if (pid == 0) {
+			ret = t->test();
+			if (ret) {
+				fprintf(stderr, "failure: %s\n", t->description);
+				exit(EXIT_FAILURE);
+			}
+
+			exit(EXIT_SUCCESS);
+		}
+
+		ret = wait_for_pid(pid);
+		test_cleanup();
+
+		if (ret)
+			return false;
+	}
+
+	return true;
+}
+
 int main(int argc, char *argv[])
 {
-	int i, fret, ret;
+	int fret, ret;
 	int index = 0;
 	bool supported = false;
 
@@ -8874,33 +8911,8 @@ int main(int argc, char *argv[])
 
 	fret = EXIT_FAILURE;
 
-	/* Proper test suite run. */
-	for (i = 0; i < (sizeof(t_idmapped_mounts) / sizeof(t_idmapped_mounts[0])); i++) {
-		struct t_idmapped_mounts *t = &t_idmapped_mounts[i];
-		pid_t pid;
-
-		test_setup();
-
-		pid = fork();
-		if (pid < 0)
-			goto out;
-
-		if (pid == 0) {
-			ret = t->test();
-			if (ret) {
-				fprintf(stderr, "failure: %s\n", t->description);
-				exit(EXIT_FAILURE);
-			}
-
-			exit(EXIT_SUCCESS);
-		}
-
-		ret = wait_for_pid(pid);
-		test_cleanup();
-
-		if (ret)
-			goto out;
-	}
+	if (!run_test(basic_suite, ARRAY_SIZE(basic_suite)))
+		goto out;
 
 	fret = EXIT_SUCCESS;
 
