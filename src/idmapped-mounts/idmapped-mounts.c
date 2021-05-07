@@ -369,11 +369,6 @@ static bool is_sticky(int dfd, const char *path, int flags)
 	return (st.st_mode & S_ISVTX) > 0;
 }
 
-static inline int set_cloexec(int fd)
-{
-	return fcntl(fd, F_SETFD, FD_CLOEXEC);
-}
-
 static inline bool switch_fsids(uid_t fsuid, gid_t fsgid)
 {
 	if (setfsgid(fsgid))
