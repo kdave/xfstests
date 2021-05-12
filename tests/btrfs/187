@@ -64,9 +64,19 @@ dedupe_two_files()
 
 dedupe_files_loop()
 {
-	trap "wait; exit" SIGTERM
+	local stop=0
 
-	while true; do
+	# Avoid executing 'wait' inside the trap, because when we receive
+	# SIGTERM we might be already executing the wait command in the while
+	# loop below. When that is the case, bash 5.0+ with debug enabled prints
+	# a warning message that makes the test fail due to a mismatch with the
+	# golden output. That warning message is the following:
+	#
+	# warning: wait_for: recursively setting old_sigint_handler to wait_sigint_handler: running_trap = 16
+	#
+	trap "stop=1" SIGTERM
+
+	while [ $stop -eq 0 ]; do
 		for ((i = 1; i <= 5; i++)); do
 			dedupe_two_files &
 		done
