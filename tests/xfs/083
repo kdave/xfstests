@@ -44,7 +44,7 @@ scratch_repair() {
 
 	FSCK_LOG="${tmp}-fuzz-${fsck_pass}.log"
 	echo "++ fsck pass ${fsck_pass}" > "${FSCK_LOG}"
-	_scratch_xfs_repair >> "${FSCK_LOG}" 2>&1
+	_repair_scratch_fs >> "${FSCK_LOG}" 2>&1
 	res=$?
 	if [ "${res}" -eq 0 ]; then
 		echo "++ allegedly fixed, reverify" >> "${FSCK_LOG}"
@@ -105,7 +105,7 @@ echo "+ populate fs image" >> $seqres.full
 _scratch_populate >> $seqres.full
 
 echo "+ check fs" >> $seqres.full
-_scratch_xfs_repair >> $seqres.full 2>&1 || _fail "should pass initial fsck"
+_repair_scratch_fs >> $seqres.full 2>&1 || _fail "should pass initial fsck"
 
 echo "++ corrupt image" >> $seqres.full
 _scratch_xfs_db -x -c blockget -c "blocktrash ${FUZZ_ARGS}" >> $seqres.full 2>&1
@@ -129,7 +129,7 @@ done
 echo "+ fsck loop returns ${fsck_loop_ret}" >> $seqres.full
 
 echo "++ check fs for round 2" >> $seqres.full
-_scratch_xfs_repair >> $seqres.full 2>&1
+_repair_scratch_fs >> $seqres.full 2>&1
 
 ROUND2_LOG="${tmp}-round2-${fsck_pass}.log"
 echo "++ mount image (2)" >> $ROUND2_LOG
@@ -150,7 +150,7 @@ umount "${SCRATCH_MNT}" >> $ROUND2_LOG 2>&1
 cat "$ROUND2_LOG" >> $seqres.full
 
 echo "++ check fs (2)" >> $seqres.full
-_scratch_xfs_repair >> $seqres.full 2>&1
+_repair_scratch_fs >> $seqres.full 2>&1
 
 egrep -q '(did not fix|makes no progress)' $seqres.full && echo "xfs_repair failed" | tee -a $seqres.full
 if [ "$(wc -l < "$ROUND2_LOG")" -ne 8 ]; then
