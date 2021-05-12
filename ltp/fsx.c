@@ -1662,7 +1662,7 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 			prt("copy range: 0x%x to 0x%x at 0x%x\n", offset,
 					offset + length, dest);
 			prt("do_copy_range: asked %u, copied %u??\n",
-					nr, olen);
+					olen, nr);
 			report_failure(161);
 		} else if (nr > 0)
 			olen -= nr;
