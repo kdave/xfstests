@@ -46,8 +46,21 @@ _scratch_mkfs > /dev/null
 # blobk group
 _scratch_mount -o nospace_cache
 
+pagesize=$(get_page_size)
 blocksize=$(_get_block_size $SCRATCH_MNT)
-filesize=$((8*$blocksize))
+
+# For subpage case, since we still do read in full page size, if have 8 corrupted
+# sectors in one page, then even we just try to read one sector of that page,
+# all 8 corruption will be reported.
+# So here we chose the filesize using page size.
+filesize=$((8*$pagesize))
+if [ $blocksize -le $pagesize ]; then
+	sectors_per_page=$(($pagesize / $blocksize))
+else
+	# We don't support multi-page sectorsize yet
+	_notrun "this test doesn't support sectorsize $blocksize with page size $pagesize yet"
+fi
+
 uuid=$(findmnt -n -o UUID "$SCRATCH_MNT")
 
 if [ ! -e /sys/fs/btrfs/$uuid/bdi ]; then
@@ -64,24 +77,24 @@ echo "logical = $logical_extent physical=$physical_extent" >> $seqres.full
 
 # corrupt first 4 blocks of file
 _scratch_unmount
-$XFS_IO_PROG -d -c "pwrite -S 0xaa -b $blocksize $physical_extent $((4*$blocksize))" $SCRATCH_DEV > /dev/null
+$XFS_IO_PROG -d -c "pwrite -S 0xaa -b $pagesize $physical_extent $((4 * $pagesize))" $SCRATCH_DEV > /dev/null
 _scratch_mount
 
 # disable readahead to avoid skewing the counter
 echo 0 > /sys/fs/btrfs/$uuid/bdi/read_ahead_kb
 
-# buffered reads whould result in 2 errors since readahead code always submits
-# at least 1 page worth of IO and it will be counted as an error as well
+# buffered reads whould result in 2 * sectors_per_page errors since readahead code always submits
+# at least 1 page worth of IO and it will be counted as error(s) as well
 $XFS_IO_PROG -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
-if [ $errs -ne 2 ]; then
+if [ $errs -ne $((2 * $sectors_per_page)) ]; then
 	_fail "Errors: $errs expected: 2"
 fi
 
 # DIO does check every sector
 $XFS_IO_PROG -d -c "pread -b $filesize 0 $filesize" "$SCRATCH_MNT/foobar" > /dev/null 2>&1
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | awk '/corruption_errs/ { print $2 }')
-if [ $errs -ne 6 ]; then
+if [ $errs -ne $((6 * $sectors_per_page)) ]; then
 	_fail "Errors: $errs expected: 6"
 fi
 
