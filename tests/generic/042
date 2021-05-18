@@ -41,10 +41,16 @@ _crashtest()
 	img=$SCRATCH_MNT/$seq.img
 	mnt=$SCRATCH_MNT/$seq.mnt
 	file=$mnt/file
+	size=25M
+
+	# 25M is too small for f2fs.
+	if [ $FSTYP == "f2fs" ]; then
+		size=38M
+	fi
 
 	# Create an fs on a small, initialized image. The pattern is written to
 	# the image to detect stale data exposure.
-	$XFS_IO_PROG -f -c "truncate 0" -c "pwrite -S 0xCD 0 25M" $img \
+	$XFS_IO_PROG -f -c "truncate 0" -c "pwrite -S 0xCD 0 $size" $img \
 		>> $seqres.full 2>&1
 	_mkfs_dev $img >> $seqres.full 2>&1
 
