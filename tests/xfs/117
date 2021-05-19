@@ -39,8 +39,7 @@ _require_xfs_db_blocktrash_z_command
 test -z "${FUZZ_ARGS}" && FUZZ_ARGS="-n 8 -3"
 
 rm -f $seqres.full
-TESTDIR="${SCRATCH_MNT}/scratchdir"
-TESTFILE="${TESTDIR}/testfile"
+victimdir="${SCRATCH_MNT}/scratchdir"
 
 echo "+ create scratch fs"
 _scratch_mkfs_xfs > /dev/null
@@ -50,37 +49,49 @@ _scratch_mount
 blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
 
 echo "+ make some files"
-mkdir -p "${TESTDIR}"
-for x in `seq 1 1024`; do
-	touch "${SCRATCH_MNT}/junk.${x}"
-	inode="$(stat -c '%i' "${SCRATCH_MNT}/junk.${x}")"
-	if [ "$x" -gt 512 ] && [ "$((inode % 64))" -eq 0 ]; then
-		mv "${SCRATCH_MNT}/junk.${x}" "${TESTFILE}.1"
-		break
-	fi
+mkdir -p "$victimdir"
+
+rootdir="$(stat -c '%i' "$SCRATCH_MNT")"
+rootchunk=$(( rootdir / 64 ))
+
+# First we create some dummy file so that the victim files don't get created
+# in the same inode chunk as the root directory, because a corrupt inode in
+# the root chunk causes mount to fail.
+for ((i = 0; i < 256; i++)); do
+	fname="$SCRATCH_MNT/dummy.$i"
+	touch "$fname"
+	ino="$(stat -c '%i' "$fname")"
+	ichunk=$(( ino / 64 ))
+	test "$ichunk" -gt "$rootchunk" && break
 done
-for x in `seq 2 64`; do
-	touch "${TESTFILE}.${x}"
+
+# Now create some victim files
+inos=()
+for ((i = 0; i < 64; i++)); do
+	fname="$victimdir/test.$i"
+	touch "$fname"
+	inos+=("$(stat -c '%i' "$fname")")
 done
-inode="$(stat -c '%i' "${TESTFILE}.1")"
+echo "First victim inode is: " >> $seqres.full
+stat -c '%i' "$fname" >> $seqres.full
 umount "${SCRATCH_MNT}"
 
 echo "+ check fs"
 _scratch_xfs_repair -n >> $seqres.full 2>&1 || _fail "xfs_repair should not fail"
 
 echo "+ corrupt image"
-seq "${inode}" "$((inode + 63))" | while read ino; do
+for ino in "${inos[@]}"; do
 	_scratch_xfs_db -x -c "inode ${ino}" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full 2>&1
 done
 
 echo "+ mount image && modify files"
 broken=1
 if _try_scratch_mount >> $seqres.full 2>&1; then
-
-	for x in `seq 1 64`; do
-		stat "${TESTFILE}.${x}" >> $seqres.full 2>&1
+	for ((i = 0; i < 64; i++)); do
+		fname="$victimdir/test.$i"
+		stat "$fname" &>> $seqres.full
 		test $? -eq 0 && broken=0
-		touch "${TESTFILE}.${x}" >> $seqres.full 2>&1
+		touch "$fname" &>> $seqres.full
 		test $? -eq 0 && broken=0
 	done
 	umount "${SCRATCH_MNT}"
