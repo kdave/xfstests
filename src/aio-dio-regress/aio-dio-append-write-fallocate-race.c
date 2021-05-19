@@ -65,7 +65,7 @@ test(
 	}
 	blocksize = sbuf.st_blksize;
 
-	ret = posix_memalign((void **)&buf, blocksize, blocksize);
+	ret = posix_memalign((void **)&buf, sysconf(_SC_PAGESIZE), blocksize);
 	if (ret) {
 		errno = ret;
 		perror("buffer");
