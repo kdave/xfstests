@@ -47,7 +47,7 @@ _scratch_mount
 
 # Set realtime inherit flag on scratch mount, suppress output
 # as this may simply error out on future kernels
-$XFS_IO_PROG -c 'chattr +t' $SCRATCH_MNT &> /dev/null
+_xfs_force_bdev realtime $SCRATCH_MNT &> /dev/null
 
 # Check if 't' is actually set, as xfs_io returns 0 even when it fails to set
 # an attribute. And erroring out here is fine, this would be desired behavior
@@ -60,7 +60,7 @@ if $XFS_IO_PROG -c 'lsattr' $SCRATCH_MNT | grep -q 't'; then
 	# Remove the testfile and rt inherit flag after we are done or
 	# xfs_repair will fail.
 	rm -f $SCRATCH_MNT/testfile
-	$XFS_IO_PROG -c 'chattr -t' $SCRATCH_MNT | tee -a $seqres.full 2>&1
+	_xfs_force_bdev data $SCRATCH_MNT | tee -a $seqres.full 2>&1
 fi
 
 # success, all done

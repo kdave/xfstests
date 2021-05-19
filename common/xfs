@@ -194,6 +194,31 @@ _xfs_get_file_block_size()
 	$XFS_INFO_PROG "$path" | grep realtime | sed -e 's/^.*extsz=\([0-9]*\).*$/\1/g'
 }
 
+# Set or clear the realtime status of every supplied path.  The first argument
+# is either 'data' or 'realtime'.  All other arguments should be paths to
+# existing directories or empty regular files.
+#
+# For each directory, each file subsequently created will target the given
+# device for file data allocations.  For each empty regular file, each
+# subsequent file data allocation will be on the given device.
+_xfs_force_bdev()
+{
+	local device="$1"
+	shift
+	local chattr_arg=""
+
+	case "$device" in
+	"data")		chattr_arg="-t";;
+	"realtime")	chattr_arg="+t";;
+	*)
+		echo "${device}: Don't know what device this is?"
+		return 1
+		;;
+	esac
+
+	$XFS_IO_PROG -c "chattr $chattr_arg" "$@"
+}
+
 _xfs_get_fsxattr()
 {
 	local field="$1"
