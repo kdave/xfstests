@@ -203,7 +203,7 @@ static void *round_ptr_up(void *ptr, unsigned long align, unsigned long offset)
 {
 	unsigned long ret = (unsigned long)ptr;
 
-	ret = ((ret + align - 1) & ~(align - 1));
+	ret = roundup_64(ret, align);
 	ret += offset;
 	return (void *)ret;
 }
@@ -1948,12 +1948,12 @@ static void generate_dest_range(bool bdy_align,
 
 	TRIM_OFF_LEN(*src_offset, *size, file_size);
 	if (bdy_align) {
-		*src_offset -= *src_offset % readbdy;
+		*src_offset = rounddown_64(*src_offset, readbdy);
 		if (o_direct)
-			*size -= *size % readbdy;
+			*size = rounddown_64(*size, readbdy);
 	} else {
-		*src_offset = *src_offset & ~(block_size - 1);
-		*size = *size & ~(block_size - 1);
+		*src_offset = rounddown_64(*src_offset, block_size);
+		*size = rounddown_64(*size, block_size);
 	}
 
 	do {
@@ -1964,9 +1964,9 @@ static void generate_dest_range(bool bdy_align,
 		*dst_offset = random();
 		TRIM_OFF(*dst_offset, max_range_end);
 		if (bdy_align)
-			*dst_offset -= *dst_offset % writebdy;
+			*dst_offset = rounddown_64(*dst_offset, writebdy);
 		else
-			*dst_offset = *dst_offset & ~(block_size - 1);
+			*dst_offset = rounddown_64(*dst_offset, block_size);
 	} while (range_overlaps(*src_offset, *dst_offset, *size) ||
 		 *dst_offset + *size > max_range_end);
 }
@@ -2156,8 +2156,8 @@ have_op:
 		break;
 	case OP_COLLAPSE_RANGE:
 		TRIM_OFF_LEN(offset, size, file_size - 1);
-		offset = offset & ~(block_size - 1);
-		size = size & ~(block_size - 1);
+		offset = rounddown_64(offset, block_size);
+		size = rounddown_64(size, block_size);
 		if (size == 0) {
 			log4(OP_COLLAPSE_RANGE, offset, size, FL_SKIPPED);
 			goto out;
@@ -2167,8 +2167,8 @@ have_op:
 	case OP_INSERT_RANGE:
 		TRIM_OFF(offset, file_size);
 		TRIM_LEN(file_size, size, maxfilelen);
-		offset = offset & ~(block_size - 1);
-		size = size & ~(block_size - 1);
+		offset = rounddown_64(offset, block_size);
+		size = rounddown_64(size, block_size);
 		if (size == 0) {
 			log4(OP_INSERT_RANGE, offset, size, FL_SKIPPED);
 			goto out;

@@ -2140,7 +2140,7 @@ do_aio_rw(int opno, long r, int flags)
 			" fallback to stat()\n",
 				procid, opno, f.path, st, errno);
 		diob.d_mem = diob.d_miniosz = stb.st_blksize;
-		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
+		diob.d_maxiosz = rounddown_64(INT_MAX, diob.d_miniosz);
 	}
 	dio_env = getenv("XFS_DIO_MIN");
 	if (dio_env)
@@ -2608,7 +2608,7 @@ clonerange_f(
 
 	/* Calculate offsets */
 	len = (random() % FILELEN_MAX) + 1;
-	len &= ~(stat1.st_blksize - 1);
+	len = rounddown_64(len, stat1.st_blksize);
 	if (len == 0)
 		len = stat1.st_blksize;
 	if (len > stat1.st_size)
@@ -2620,7 +2620,7 @@ clonerange_f(
 	else
 		off1 = (off64_t)(lr % MIN(stat1.st_size - len, MAXFSIZE));
 	off1 %= maxfsize;
-	off1 &= ~(stat1.st_blksize - 1);
+	off1 = rounddown_64(off1, stat1.st_blksize);
 
 	/*
 	 * If srcfile == destfile, randomly generate destination ranges
@@ -2631,7 +2631,7 @@ clonerange_f(
 		lr = ((int64_t)random() << 32) + random();
 		off2 = (off64_t)(lr % max_off2);
 		off2 %= maxfsize;
-		off2 &= ~(stat2.st_blksize - 1);
+		off2 = rounddown_64(off2, stat2.st_blksize);
 	} while (stat1.st_ino == stat2.st_ino && llabs(off2 - off1) < len);
 
 	/* Clone data blocks */
@@ -2968,7 +2968,7 @@ deduperange_f(
 
 	/* Never try to dedupe more than half of the src file. */
 	len = (random() % FILELEN_MAX) + 1;
-	len &= ~(stat[0].st_blksize - 1);
+	len = rounddown_64(len, stat[0].st_blksize);
 	if (len == 0)
 		len = stat[0].st_blksize / 2;
 	if (len > stat[0].st_size / 2)
@@ -2981,7 +2981,7 @@ deduperange_f(
 	else
 		off[0] = (off64_t)(lr % MIN(stat[0].st_size - len, MAXFSIZE));
 	off[0] %= maxfsize;
-	off[0] &= ~(stat[0].st_blksize - 1);
+	off[0] = rounddown_64(off[0], stat[0].st_blksize);
 
 	/*
 	 * If srcfile == destfile[i], randomly generate destination ranges
@@ -2997,7 +2997,7 @@ deduperange_f(
 			else
 				off[i] = (off64_t)(lr % MIN(stat[i].st_size - len, MAXFSIZE));
 			off[i] %= maxfsize;
-			off[i] &= ~(stat[i].st_blksize - 1);
+			off[i] = rounddown_64(off[i], stat[i].st_blksize);
 		} while (stat[0].st_ino == stat[i].st_ino &&
 			 llabs(off[i] - off[0]) < len &&
 			 tries++ < 10);
@@ -3406,7 +3406,7 @@ dread_f(int opno, long r)
 			" fallback to stat()\n",
 				procid, opno, f.path, st, errno);
 		diob.d_mem = diob.d_miniosz = stb.st_blksize;
-		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
+		diob.d_maxiosz = rounddown_64(INT_MAX, diob.d_miniosz);
 	}
 
 	dio_env = getenv("XFS_DIO_MIN");
@@ -3483,7 +3483,7 @@ dwrite_f(int opno, long r)
 				" %s%s return %d, fallback to stat()\n",
 			       procid, opno, f.path, st, errno);
 		diob.d_mem = diob.d_miniosz = stb.st_blksize;
-		diob.d_maxiosz = INT_MAX & ~(diob.d_miniosz - 1);
+		diob.d_maxiosz = rounddown_64(INT_MAX, diob.d_miniosz);
 	}
 
 	dio_env = getenv("XFS_DIO_MIN");
@@ -3579,8 +3579,8 @@ do_fallocate(int opno, long r, int mode)
 	 */
 	if ((mode & (FALLOC_FL_COLLAPSE_RANGE | FALLOC_FL_INSERT_RANGE)) &&
 		(opno % 2)) {
-		off = ((off + stb.st_blksize - 1) & ~(stb.st_blksize - 1));
-		len = ((len + stb.st_blksize - 1) & ~(stb.st_blksize - 1));
+		off = roundup_64(off, stb.st_blksize);
+		len = roundup_64(len, stb.st_blksize);
 	}
 	mode |= FALLOC_FL_KEEP_SIZE & random();
 	e = fallocate(fd, mode, (loff_t)off, (loff_t)len) < 0 ? errno : 0;
@@ -4186,7 +4186,7 @@ do_mmap(int opno, long r, int prot)
 
 	lr = ((int64_t)random() << 32) + random();
 	off = (off64_t)(lr % stb.st_size);
-	off &= (off64_t)(~(sysconf(_SC_PAGE_SIZE) - 1));
+	off = rounddown_64(off, sysconf(_SC_PAGE_SIZE));
 	len = (size_t)(random() % MIN(stb.st_size - off, FILELEN_MAX)) + 1;
 
 	flags = (random() % 2) ? MAP_SHARED : MAP_PRIVATE;

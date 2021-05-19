@@ -171,4 +171,17 @@
 #include <sys/mman.h>
 #endif
 
+static inline unsigned long long
+rounddown_64(unsigned long long x, unsigned int y)
+{
+	x /= y;
+	return x * y;
+}
+
+static inline unsigned long long
+roundup_64(unsigned long long x, unsigned int y)
+{
+	return rounddown_64(x + y - 1, y);
+}
+
 #endif /* GLOBAL_H */
