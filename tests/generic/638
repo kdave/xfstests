@@ -1,0 +1,57 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test 638
+#
+# This case mmaps several pages of a file, alloc pages, copy data with pages
+# overlapping, e.g:
+#       +-----------------------+
+#       |        (copy)         |
+#       |                       V
+#    +---------------+---------------+------------
+#    |AAAA| ........ |AAAA| ... |AAAA|AAAA|
+#    +---------------+---------------+------------
+#                       |            ^
+#                       |   (copy)   |
+#                       +------------+
+#
+# This's a regression test cover kernel commit:
+#   4f06dd92b5d0 ("fuse: fix write deadlock")
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_test_program "t_mmap_writev_overlap"
+
+pagesize=`getconf PAGE_SIZE`
+testfile=$TEST_DIR/mmap-writev-overlap
+$XFS_IO_PROG -f -c "truncate 0" $testfile
+$here/src/t_mmap_writev_overlap -b $pagesize -c 2 -l 64 $testfile
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
