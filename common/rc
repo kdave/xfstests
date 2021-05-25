@@ -1065,6 +1065,9 @@ _scratch_mkfs_sized()
 		fi
 		export MOUNT_OPTIONS="-o size=$fssize $TMPFS_MOUNT_OPTIONS"
 		;;
+	bcachefs)
+		$MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS --fs_size=$fssize --block_size=$blocksize $SCRATCH_DEV
+		;;
 	*)
 		_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_sized"
 		;;
@@ -1133,6 +1136,9 @@ _scratch_mkfs_blocksized()
     ocfs2)
 	yes | ${MKFS_PROG} -t $FSTYP -F $MKFS_OPTIONS -b $blocksize -C $blocksize $SCRATCH_DEV
 	;;
+    bcachefs)
+	${MKFS_PROG} -t $FSTYP $MKFS_OPTIONS --block_size=$blocksize $SCRATCH_DEV
+	;;
     *)
 	_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_blocksized"
 	;;
@@ -1179,6 +1185,11 @@ _repair_scratch_fs()
 	fi
 	return $res
         ;;
+    bcachefs)
+	# With bcachefs, if fsck detects any errors we consider it a bug and we
+	# want the test to fail:
+	_check_scratch_fs
+	;;
     *)
 	local dev=$SCRATCH_DEV
 	local fstyp=$FSTYP
