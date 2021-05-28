@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Huawei.  All Rights Reserved.
+#
+# FS QA Test 049
+#
+# Regression test for kernel commit a149d2a5cabb (ext4: fix check to prevent
+# false positive report of incorrect used inodes)
+#
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+here=`pwd`
+tmp=/tmp/$$
+status=1	# failure is the default!
+trap "_cleanup; exit \$status" 0 1 2 3 15
+
+_cleanup()
+{
+    cd /
+    rm -f $tmp.*
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+_require_scratch
+
+sdev=$(_short_dev ${SCRATCH_DEV})
+# default sleep interval
+sleep_time=5
+
+echo "+ create scratch fs"
+_scratch_mkfs_ext4 -b 4096 -g 8192 -N 1024 -I 4096 >> $seqres.full 2>&1
+
+echo "+ mount fs"
+_scratch_mount -o errors=remount-ro
+# The default maximum wake-up delay of the lazy init thread of ext4 is
+# EXT4_DEF_LI_MAX_START_DELAY (5s).
+# After mounting the file system, the lazy init thread will be awakened to
+# perform group initialization at 0~5s after the current time. If an error
+# is detected during the initialization process, it will be set to read-only,
+# so the test case needs to delay a little while waiting for the init thread
+# to execute.
+sleep $sleep_time
+
+echo "+ check mountpoint status"
+cat /proc/self/mounts | grep -w ${SCRATCH_MNT} | \
+    $AWK_PROG '{print $4}' | grep -oE '^rw,' | tee -a $seqres.full
+
+echo "+ check mountpoint writability"
+test -w $SCRATCH_MNT || echo "scratch mount should still be writable"
+
+echo "+ check dmesg"
+_check_dmesg_for "\(${sdev}\): Remounting filesystem read-only" && \
+    echo "scratch dev should not be remounted to read-only"
+
+# success, all done
+status=0
+exit
