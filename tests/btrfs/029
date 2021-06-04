@@ -65,8 +65,10 @@ _create_reflinks()
     echo "reflink=always:"
     cp --reflink=always $1 $2 >> $seqres.full 2>&1 || echo "cp reflink failed"
 
-    # The failed target actually gets created by cp:
-    ls $2 | _filter_testdir_and_scratch
+    # The failed target gets created with zero sizes by cp(1) version 8.32. But
+    # in older cp(1) version 8.30 target file is not created when the
+    # cp --reflink=always fails.
+    ls $2 >> $seqres.full 2>&1
 }
 
 echo "test reflinks across different devices"
