@@ -30,6 +30,7 @@ _cleanup()
 	# we just need to remove the flags so use -R
 	$timmutable -R $upperdir/testdir &> /dev/null
 	$timmutable -R $lowerdir/testdir &> /dev/null
+	$timmutable -R $lowerdir/testdir.before &> /dev/null
 	rm -f $tmp.*
 }
 
@@ -45,13 +46,16 @@ _require_scratch
 
 _scratch_mkfs
 
-# Preparing test area files in lower dir and check chattr support of base fs
+# Check chattr support of base fs
 mkdir -p $lowerdir
 mkdir -p $upperdir
-$timmutable -C $lowerdir/testdir >$tmp.out 2>&1
+$timmutable -C $lowerdir/testdir.before >$tmp.out 2>&1
 if grep -q -e 'Operation not supported' -e "Inappropriate ioctl" $tmp.out; then
 	_notrun "Setting immutable/append flag not supported"
 fi
+
+# Prepare test area files in lower dir
+$timmutable -C $lowerdir/testdir >$tmp.out 2>&1
 # Remove the immutable/append-only flags and create subdirs
 $timmutable -R $lowerdir/testdir >$tmp.out 2>&1
 for dir in $lowerdir/testdir/*.d; do
@@ -62,9 +66,9 @@ $timmutable -C $lowerdir/testdir >$tmp.out 2>&1
 
 _scratch_mount
 
-# Test immutability of files in overlay
+# Test immutability of files in overlay before copy up
 echo "Before directories copy up"
-$timmutable $SCRATCH_MNT/testdir 2>&1
+$timmutable $SCRATCH_MNT/testdir.before 2>&1
 
 # Trigger copy-up of immutable/append-only dirs by touching their subdirs
 # inode flags are not copied-up, so immutable/append-only flags are lost
