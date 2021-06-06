@@ -69,6 +69,8 @@ _scratch_mount
 # Test immutability of files in overlay before copy up
 echo "Before directories copy up"
 $timmutable $SCRATCH_MNT/testdir.before 2>&1
+# Remove the immutable/append-only flags before mount cycle
+$timmutable -R $SCRATCH_MNT/testdir.before &> /dev/null
 
 # Trigger copy-up of immutable/append-only dirs by touching their subdirs
 # inode flags are not copied-up, so immutable/append-only flags are lost
@@ -88,9 +90,18 @@ done
 # After mount cycle, flags are forever lost
 _scratch_cycle_mount
 
+# Verify that files can be deleted from overlay fs after clearing
+# immutable/append-only flags and mount cycle
+rm -rf $SCRATCH_MNT/testdir.before
+
 # Test immutability of files in overlay after directories copy-up
 echo "After directories copy up"
 $timmutable $SCRATCH_MNT/testdir 2>&1
+
+# Verify that files can be deleted from overlay fs after clearing
+# immutable/append-only flags
+$timmutable -R $SCRATCH_MNT/testdir &> /dev/null
+rm -rf $SCRATCH_MNT/testdir
 
 status=$?
 exit
