@@ -26,6 +26,11 @@ _supported_fs ext4
 _require_scratch
 _require_command "$DEBUGFS_PROG" debugfs
 
+big_endian=$(echo -ne '\x11' | od -tx2 | head -1 | cut -f2 -d' ' | cut -c1)
+if (( big_endian )); then
+	_require_od_endian_flag
+fi
+
 testdir="${SCRATCH_MNT}/testdir"
 
 # get block number filename's dir ent
@@ -44,7 +49,13 @@ get_offset() {
 # argument 1: block
 # argument 2: offset
 get_reclen() {
-	echo $(od $SCRATCH_DEV --skip-bytes=$(($1 * $blocksize + $2 + 4)) --read-bytes=2  -d -An  --endian=little | tr -d ' \t\n\r')
+	if (( big_endian )); then
+		echo $(od $SCRATCH_DEV --skip-bytes=$(($1 * $blocksize + $2 + 4)) --read-bytes=2  -d -An  --endian=little | \
+			tr -d ' \t\n\r')
+	else
+		echo $(od $SCRATCH_DEV --skip-bytes=$(($1 * $blocksize + $2 + 4)) --read-bytes=2  -d -An | \
+			tr -d ' \t\n\r')
+	fi
 }
 
 # reads portion of dirent that should be zero'd out (starting at offset of name_len = 6)
