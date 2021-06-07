@@ -1,0 +1,115 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Google, Inc. All Rights Reserved.
+#
+# FS QA Test No. 050
+#
+# Test checkpoint and zeroout of journal via ioctl EXT4_IOC_CHECKPOINT
+#
+
+seq=`basename $0`
+seqres=$RESULT_DIR/$seq
+echo "QA output created by $seq"
+
+status=1       # failure is the default!
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# remove previous $seqres.full before test
+rm -f $seqres.full
+
+# real QA test starts here
+_supported_fs ext4
+
+_require_scratch
+_require_command "$DEBUGFS_PROG" debugfs
+
+checkpoint_journal=$here/src/checkpoint_journal
+_require_test_program "checkpoint_journal"
+
+# convert output from stat<journal_inode> to list of block numbers
+get_journal_extents() {
+	inode_info=$($DEBUGFS_PROG $SCRATCH_DEV -R "stat <8>" 2>> $seqres.full)
+	echo -e "\nJournal info:" >> $seqres.full
+	echo "$inode_info" >> $seqres.full
+
+	extents_line=$(echo "$inode_info" | awk '/EXTENTS:/{ print NR; exit }')
+	get_extents=$(echo "$inode_info" | sed -n "$(($extents_line + 1))"p)
+
+	# get just the physical block numbers
+	get_extents=$(echo "$get_extents" |  perl -pe 's|\(.*?\):||g' | sed -e 's/, /\n/g' | perl -pe 's|(\d+)-(\d+)|\1 \2|g')
+
+	echo "$get_extents"
+}
+
+
+# checks all extents are zero'd out except for the superblock
+# arg 1: extents (output of get_journal_extents())
+check_extents() {
+	echo -e "\nChecking extents:" >> $seqres.full
+	echo "$1" >> $seqres.full
+
+	super_block="true"
+	echo "$1" | while IFS= read line; do
+		start_block=$(echo $line | cut -f1 -d' ')
+		end_block=$(echo $line | cut -f2 -d' ' -s)
+
+		# if first block of journal, shouldn't be wiped
+		if [ "$super_block" == "true" ]; then
+			super_block="false"
+
+			#if super block only block in this extent, skip extent
+			if [ -z "$end_block" ]; then
+				continue;
+			fi
+			start_block=$(($start_block + 1))
+		fi
+
+		if [ ! -z "$end_block" ]; then
+			blocks=$(($end_block - $start_block + 1))
+		else
+			blocks=1
+		fi
+
+		check=$(od $SCRATCH_DEV --skip-bytes=$(($start_block * $blocksize)) --read-bytes=$(($blocks * $blocksize)) -An -v | sed -e 's/[0 \t\n\r]//g')
+
+		[ ! -z "$check" ] && echo "error" && break
+	done
+}
+
+testdir="${SCRATCH_MNT}/testdir"
+
+_scratch_mkfs_sized $((64 * 1024 * 1024)) >> $seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_scratch_mount >> $seqres.full 2>&1
+blocksize=$(_get_block_size $SCRATCH_MNT)
+mkdir $testdir
+
+# check if ioctl present, skip test if not present
+$checkpoint_journal $SCRATCH_MNT --dry-run || _notrun "journal checkpoint ioctl not present on device"
+
+# create some files to add some entries to journal
+for i in {1..100}; do
+	echo > $testdir/$i
+done
+
+# make sure these files get to the journal
+sync --file-system $testdir/1
+
+# call ioctl to checkpoint and zero-fill journal blocks
+$checkpoint_journal $SCRATCH_MNT --erase=zeroout || _fail "ioctl returned error"
+
+extents=$(get_journal_extents)
+
+# check journal blocks zeroed out
+ret=$(check_extents "$extents")
+[ "$ret" = "error" ] && _fail "Journal was not zero-filled"
+
+_scratch_unmount >> $seqres.full 2>&1
+
+echo "Silence is golden"
+
+status=0
+exit
