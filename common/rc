@@ -1124,6 +1124,15 @@ _scratch_mkfs_blocksized()
     fi
 
     case $FSTYP in
+    btrfs)
+	test -f /sys/fs/btrfs/features/supported_sectorsizes || \
+		_notrun "Subpage sectorsize support is not found in $FSTYP"
+
+	grep -wq $blocksize /sys/fs/btrfs/features/supported_sectorsizes || \
+		_notrun "$FSTYP does not support sectorsize=$blocksize yet"
+
+	_scratch_mkfs --sectorsize=$blocksize
+	;;
     xfs)
 	_scratch_mkfs_xfs $MKFS_OPTIONS -b size=$blocksize
 	;;
