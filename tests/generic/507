@@ -9,13 +9,13 @@
 # i_flags can be recovered after sudden power-cuts.
 # 1. touch testfile;
 # 1.1 sync (optional)
-# 2. chattr +[AsSu] testfile
+# 2. chattr +[ASai] testfile
 # 3. xfs_io -f testfile -c "fsync";
 # 4. godown;
 # 5. umount;
 # 6. mount;
 # 7. check i_flags
-# 8. chattr -[AsSu] testfile
+# 8. chattr -[ASai] testfile
 # 9. xfs_io -f testfile -c "fsync";
 # 10. godown;
 # 11. umount;
@@ -34,6 +34,7 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _cleanup()
 {
 	cd /
+	$CHATTR_PROG -ai $testfile &> /dev/null
 	rm -f $tmp.*
 }
 
@@ -49,7 +50,7 @@ _supported_fs generic
 
 _require_command "$LSATTR_PROG" lasttr
 _require_command "$CHATTR_PROG" chattr
-_require_chattr AsSu
+_require_chattr ASai
 
 _require_scratch
 _require_scratch_shutdown
@@ -79,7 +80,7 @@ do_check()
 
 	before=`$LSATTR_PROG $testfile`
 
-	$XFS_IO_PROG -f $testfile -c "fsync" | _filter_xfs_io
+	$XFS_IO_PROG -r -f $testfile -c "fsync" | _filter_xfs_io
 
 	_scratch_shutdown | tee -a $seqres.full
 	_scratch_cycle_mount
@@ -101,7 +102,7 @@ do_check()
 
 	before=`$LSATTR_PROG $testfile`
 
-	$XFS_IO_PROG -f $testfile -c "fsync" | _filter_xfs_io
+	$XFS_IO_PROG -r -f $testfile -c "fsync" | _filter_xfs_io
 
 	_scratch_shutdown | tee -a $seqres.full
 	_scratch_cycle_mount
@@ -122,7 +123,7 @@ do_check()
 
 echo "Silence is golden"
 
-opts="A s S u"
+opts="A S a i"
 for i in $opts; do
 	do_check $i
 	do_check $i sync
