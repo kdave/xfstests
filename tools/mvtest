@@ -29,26 +29,11 @@ test ! -e "tests/${dest}" || die "Test \"${src}\" already exists."
 sid="$(basename "${src}")"
 did="$(basename "${dest}")"
 
-sgroup="$(basename "$(dirname "tests/${src}")")"
-dgroup="$(basename "$(dirname "tests/${dest}")")"
-
-sgroupfile="tests/${sgroup}/group"
-dgroupfile="tests/${dgroup}/group"
-
 git mv "tests/${src}" "tests/${dest}"
 git mv "tests/${src}.out" "tests/${dest}.out"
 sed -e "s/^# FS[[:space:]]*QA.*Test.*[0-9]\+$/# FS QA Test No. ${did}/g" -i "tests/${dest}"
 sed -e "s/^QA output created by ${sid}$/QA output created by ${did}/g" -i "tests/${dest}.out"
 sed -e "s/test-${sid}/test-${did}/g" -i "tests/${dest}.out"
-
-grpline="$(grep "^${sid} " "${sgroupfile}")"
-newgrpline="$(echo "${grpline}" | sed -e "s/^${sid} /${did} /g")"
-
-sed -e "/^${sid} .*$/d" -i "${sgroupfile}"
-cp "${dgroupfile}" "${dgroupfile}.new"
-append "${dgroupfile}.new" "${newgrpline}"
-"${dir}/sort-group" "${dgroupfile}.new"
-mv "${dgroupfile}.new" "${dgroupfile}"
 
 echo "Moved \"${src}\" to \"${dest}\"."
 
