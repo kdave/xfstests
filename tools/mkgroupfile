@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Generate a group file from the _begin_fstest call in each test.
+
+if [ "$1" = "--help" ]; then
+	echo "Usage: (cd tests/XXX/ ; ../../tools/mkgroupfile [output])"
+	exit 1
+fi
+
+test_dir="$PWD"
+groupfile="$1"
+
+if [ ! -x ../../check ]; then
+	echo "$0: Run this from tests/XXX/."
+	exit 1
+fi
+
+generate_groupfile() {
+	cat << ENDL
+# QA groups control file, automatically generated.
+# See _begin_fstest in each test for details.
+
+ENDL
+	cd ../../
+	export GENERATE_GROUPS=yes
+	grep -R -l "^_begin_fstest" "$test_dir/" 2>/dev/null | while read testfile; do
+		test -x "$testfile" && "$testfile"
+	done | sort -g
+	cd "$test_dir"
+}
+
+if [ -z "$groupfile" ] || [ "$groupfile" = "-" ]; then
+	# Dump the group file to stdout and exit
+	generate_groupfile
+	exit 0
+fi
+
+# Otherwise, write the group file to disk somewhere.
+ngroupfile="${groupfile}.new"
+rm -f "$ngroupfile"
+generate_groupfile >> "$ngroupfile"
+mv "$ngroupfile" "$groupfile"

@@ -7,6 +7,10 @@ include $(TOPDIR)/include/builddefs
 
 TESTS_SUBDIRS = $(sort $(dir $(wildcard $(CURDIR)/[[:lower:]]*/)))
 
+SUBDIRS = $(wildcard [[:lower:]]*)
+
+default: $(SUBDIRS)
+
 include $(BUILDRULES)
 
 install: $(addsuffix -install,$(TESTS_SUBDIRS))

@@ -4,16 +4,20 @@
 
 TOPDIR = ../..
 include $(TOPDIR)/include/builddefs
+include $(TOPDIR)/include/buildgrouplist
 
 SHARED_DIR = shared
 TARGET_DIR = $(PKG_LIB_DIR)/$(TESTS_DIR)/$(SHARED_DIR)
+DIRT = group.list
+
+default: $(DIRT)
 
 include $(BUILDRULES)
 
 install:
 	$(INSTALL) -m 755 -d $(TARGET_DIR)
 	$(INSTALL) -m 755 $(TESTS) $(TARGET_DIR)
-	$(INSTALL) -m 644 group $(TARGET_DIR)
+	$(INSTALL) -m 644 group.list $(TARGET_DIR)
 	$(INSTALL) -m 644 $(OUTFILES) $(TARGET_DIR)
 
 # Nothing.
