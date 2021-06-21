@@ -17,25 +17,19 @@
 # space, allocates inodes to ENOSPC and then verifies that most of the available
 # inodes (.i.e., free space) have been consumed.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto enospc punch
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _consume_freesp()
 {
@@ -65,8 +59,6 @@ _require_scratch
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
 _require_xfs_sparse_inodes
-
-rm -f $seqres.full
 
 _scratch_mkfs "-d size=50m -m crc=1 -i sparse" |
 	_filter_mkfs > /dev/null 2> $tmp.mkfs

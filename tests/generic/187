@@ -14,23 +14,17 @@
 #   - CoW across the halfway mark.
 #   - Check that the files are now different where we say they're different.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto clone punch
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
 #    rm -rf $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
@@ -41,8 +35,6 @@ _require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
 test $FSTYP = "btrfs" && _notrun "Can't fragment free space on btrfs."
 _require_odirect
-
-rm -f $seqres.full
 
 _fragment_freesp()
 {

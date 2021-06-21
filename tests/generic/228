@@ -6,10 +6,10 @@
 #
 # Check if fallocate respects RLIMIT_FSIZE
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest rw auto prealloc quick
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -18,13 +18,10 @@ _cleanup()
 	ulimit -c $ulimit_c
 }
 
-here=`pwd`
 tmp=$TEST_DIR/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15 25
+_register_cleanup "_cleanup" 25
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 
 # real QA test starts here
 # generic, but xfs_io's fallocate must work
@@ -33,8 +30,6 @@ _supported_fs generic
 _require_test
 
 [ -n "$XFS_IO_PROG" ] || _notrun "xfs_io executable not found"
-
-rm -f $seqres.full
 
 # Sanity check to see if fallocate works
 _require_xfs_io_command "falloc"

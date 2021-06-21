@@ -19,15 +19,12 @@
 # To check the filesystems after replacing a device, a scrub run is
 # performed, a btrfsck run, and finally the filesystem is remounted.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto replace volume
 
-here=`pwd`
-tmp=/tmp/$$
-status=1
 noise_pid=0
 
+# Override the default cleanup function.
 _cleanup()
 {
 	if [ $noise_pid -ne 0 ] && ps -p $noise_pid | grep -q $noise_pid; then
@@ -40,10 +37,8 @@ _cleanup()
 	# needed by _require_scratch, and make it umounted.
 	_scratch_unmount > /dev/null 2>&1
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -54,7 +49,6 @@ _require_scratch_dev_pool_equal_size
 _require_scratch_size $((10 * 1024 * 1024)) #kB
 _require_command "$WIPEFS_PROG" wipefs
 
-rm -f $seqres.full
 rm -f $tmp.*
 
 echo "*** test btrfs replace"

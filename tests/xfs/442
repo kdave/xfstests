@@ -9,15 +9,10 @@
 # This is a general regression/stress test for numerous quota bugs with
 # reflink and copy on write.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto stress clone quota
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -25,8 +20,7 @@ _cleanup()
 	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/quota
 . ./common/filter
 . ./common/reflink
@@ -37,8 +31,6 @@ _supported_fs xfs
 _require_scratch_reflink
 _require_quota
 _require_command "$KILLALL_PROG" "killall"
-
-rm -f $seqres.full
 
 report_quota_blocks() {
 	$XFS_QUOTA_PROG -x -c "report $1" $SCRATCH_MNT | \

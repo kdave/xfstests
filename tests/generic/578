@@ -6,23 +6,17 @@
 #
 # Make sure that we can handle multiple mmap writers to the same file.
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick rw clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	rm -rf $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
@@ -32,8 +26,6 @@ _require_test_program "mmap-write-concurrent"
 _require_command "$FILEFRAG_PROG" filefrag
 _require_test_reflink
 _require_cp_reflink
-
-rm -f $seqres.full
 
 compare() {
 	for i in $(seq 1 8); do
@@ -79,7 +71,6 @@ $here/src/mmap-write-concurrent $len \
 		$((blksz - 168)) $testdir/file2 \
 		$((filesz - 777)) $testdir/file3 \
 		$(((blksz * 3) - 168)) $testdir/file4 \
-
 
 echo "Compare files before remount" | tee -a $seqres.full
 compare

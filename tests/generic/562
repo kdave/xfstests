@@ -8,21 +8,10 @@
 # many small extents, when the fs is nearly full, the clone operation does
 # not fail and produces the correct result.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto clone punch
 
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
@@ -31,8 +20,6 @@ _supported_fs generic
 _require_scratch_reflink
 _require_test_program "punch-alternating"
 _require_xfs_io_command "fpunch"
-
-rm -f $seqres.full
 
 _scratch_mkfs_sized $((512 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount

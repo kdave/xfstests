@@ -9,31 +9,23 @@
 #   - Write to the beginning, middle, and end
 #   - Check that the files are now different where we say they're different.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
     rm -rf $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
 # real QA test starts here
 _require_test_reflink
 _require_cp_reflink
-
-rm -f $seqres.full
 
 testdir=$TEST_DIR/test-$seq
 rm -rf $testdir
@@ -106,7 +98,6 @@ _compare_range $testdir/file1 18 $testdir/file2 18 17 \
 _compare_range $testdir/file2 18 $testdir/file3 18 17 \
        || echo "Start sections of 2-3 do not match"
 
-
 _compare_range  $testdir/file1 $((blksz * 16 - 17)) \
 		$testdir/file2 $((blksz * 16 - 17)) 82 \
        || echo "Middle sections of 1-2 do not match"
@@ -122,7 +113,6 @@ _compare_range  $testdir/file1 $((blksz * 48 - 120)) \
 _compare_range  $testdir/file2 $((blksz * 48 - 120)) \
 		$testdir/file3 $((blksz * 48 - 120)) 100 \
        || echo "End sections of 2-3 do not match"
-
 
 _compare_range  $testdir/file1 $((blksz * 14)) \
 		$testdir/file2 $((blksz * 14)) $blksz \

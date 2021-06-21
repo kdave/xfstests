@@ -6,13 +6,8 @@
 #
 # Check use of ACLs (extended attributes) on a full filesystem
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1
+. ./common/preamble
+_begin_fstest acl attr auto enospc
 
 # Something w/ enough data to fill 256M of fs...
 filler=""
@@ -26,16 +21,16 @@ filler=""
 	[ $(( $(du -h -m /usr | tail -1| cut -f1) * 2 )) -ge 256 ] && \
 	filler=/usr
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	echo "*** unmount"
 	_scratch_unmount 2>/dev/null
 }
-trap "_cleanup; rm -f $tmp.*; exit \$status" 0 1 2 3 15
+_register_cleanup "_cleanup; rm -f $tmp.*"
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/attr
 
@@ -51,7 +46,6 @@ _require_user
 
 echo "*** create filesystem"
 
-rm -f $seqres.full
 _scratch_unmount >/dev/null 2>&1
 echo "*** MKFS ***"                         >>$seqres.full
 echo ""                                     >>$seqres.full

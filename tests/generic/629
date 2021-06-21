@@ -10,15 +10,10 @@
 # remounting to check file contents.  This is a regression test for commit
 # 5ffce3cc22a0 ("xfs: force the log after remapping a synchronous-writes file")
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick rw copy_range
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -27,8 +22,7 @@ _cleanup()
 	_dmerror_cleanup
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/dmerror
 
@@ -38,8 +32,6 @@ _require_dm_target error
 _require_xfs_io_command "chattr" "s"
 _require_xfs_io_command "copy_range"
 _require_scratch
-
-rm -f $seqres.full
 
 # Format filesystem and set up quota limits
 _scratch_mkfs > $seqres.full

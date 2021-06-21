@@ -8,17 +8,12 @@
 # include a variety of fs operations, freeze the filesystem and verify that
 # there are no oustanding reservations against the log.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto freeze log metadata quick
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
+# Import common functions.
 
-# get standard environment, filters and checks
-. ./common/rc
-
+# Override the default cleanup function.
 _cleanup()
 {
 	$KILLALL_PROG -9 fsstress 2>/dev/null
@@ -27,7 +22,6 @@ _cleanup()
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # Use the information exported by XFS to sysfs to determine whether the log has
 # active reservations after a filesystem freeze.
@@ -70,8 +64,6 @@ _require_scratch
 _require_freeze
 _require_xfs_sysfs $(_short_dev $TEST_DEV)/log
 _require_command "$KILLALL_PROG" killall
-
-rm -f $seqres.full
 
 echo "Silence is golden."
 

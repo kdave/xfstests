@@ -6,22 +6,17 @@
 #
 # Test xfs_copy
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest copy auto
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/attr
 
 # don't put fs images in /tmp
 imgs=$TEST_DIR/$$
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -32,7 +27,6 @@ _cleanup()
 	[ -d $imgs.source_dir ] && rm -rf $imgs.source_dir
 	rm -f $imgs.* $tmp.* /var/tmp/xfs_copy.log.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 _filter_copy()
 {
@@ -115,8 +109,6 @@ _require_attrs
 _require_xfs_copy
 _require_scratch
 _require_loop
-
-rm -f $seqres.full
 
 _scratch_mkfs_xfs -dsize=41m,agcount=2 >>$seqres.full 2>&1
 _scratch_mount

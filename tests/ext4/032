@@ -7,14 +7,8 @@
 # Ext4 online resize tests of small and crucial resizes with bigalloc
 # feature.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto quick ioctl resize
 
 BLK_SIZ=4096
 CLUSTER_SIZ=4096
@@ -74,6 +68,7 @@ ext4_online_resize()
 	_destroy_loop_device $LOOP_DEVICE && LOOP_DEVICE=
 }
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -84,10 +79,6 @@ _cleanup()
 }
 
 # get standard environment and checks
-. ./common/rc
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 _supported_fs ext4
@@ -101,8 +92,6 @@ _require_command "$RESIZE2FS_PROG" resize2fs
 
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
-
-rm -f $seqres.full
 
 mkdir -p $IMG_MNT || _fail "cannot create loopback mount point"
 

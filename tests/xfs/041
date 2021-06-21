@@ -9,24 +9,18 @@
 #
 set +x
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest growfs ioctl auto
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
     _scratch_unmount
     rm -f $tmp.*
 }
-trap "_cleanup ; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -44,7 +38,6 @@ _fill()
 }
 
 _do_die_on_error=message_only
-rm -f $seqres.full
 agsize=32
 echo -n "Make $agsize megabyte filesystem on SCRATCH_DEV and mount... "
 _scratch_mkfs_xfs -dsize=${agsize}m,agcount=1 2>&1 >/dev/null || _fail "mkfs failed"

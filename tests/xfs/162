@@ -7,23 +7,12 @@
 # Make sure that attrs are handled properly when repair has to reset the root
 # directory.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick attr repair
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 7 15
+_register_cleanup "_cleanup" BUS
 
-_cleanup()
-{
-	cd /
-	rm -rf $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/populate
 . ./common/fuzzy
@@ -33,8 +22,6 @@ _supported_fs xfs
 _require_scratch_nocheck
 _require_populate_commands
 _require_xfs_db_command "fuzz"
-
-rm -f $seqres.full
 
 echo "Format and populate btree attr root dir"
 _scratch_mkfs > "$seqres.full" 2>&1

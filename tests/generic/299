@@ -8,25 +8,13 @@
 # Run random AIO/DIO activity and fallocate/truncate simultaneously
 # Test will operate on huge sparsed files so ENOSPC is expected.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto aio enospc rw stress
 
-here=`pwd`
-tmp=/tmp/$$
 fio_config=$tmp.fio
 fio_out=$tmp.fio.out
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -106,8 +94,6 @@ bs=4k
 rw=randrw
 filename=buffered-aio-verifier
 EOF
-
-rm -f $seqres.full
 
 _require_fio $fio_config
 _require_xfs_io_command "falloc"

@@ -6,15 +6,10 @@
 #
 # Check that we can't modify a block device that's an active swap device.
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick rw swap
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -22,8 +17,7 @@ _cleanup()
 	rm -rf $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -32,8 +26,6 @@ _require_test_program swapon
 _require_scratch_nocheck
 _require_block_device $SCRATCH_DEV
 test -e /dev/snapshot && _notrun "userspace hibernation to swap is enabled"
-
-rm -f $seqres.full
 
 $MKSWAP_PROG "$SCRATCH_DEV" >> $seqres.full
 

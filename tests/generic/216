@@ -10,31 +10,23 @@
 # This test is dependent on the system page size, so we cannot use md5 in
 # the golden output; we can only compare to a check file.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
     rm -rf $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
 # real QA test starts here
 _require_scratch_reflink
 _require_xfs_io_command "falloc"
-
-rm -f $seqres.full
 
 pagesz=$(getconf PAGE_SIZE)
 blksz=$((pagesz / 4))

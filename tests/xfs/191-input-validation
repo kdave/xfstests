@@ -7,15 +7,10 @@
 # mkfs.xfs input validation test. Designed to break mkfs.xfs if it doesn't
 # filter garbage input or invalid option combinations correctly.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick mkfs realtime
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -23,8 +18,7 @@ _cleanup()
 	[ -n "$loopdev" ] && _destroy_loop_device $loopdev
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -35,7 +29,6 @@ _require_test
 _require_loop
 _require_xfs_mkfs_validation
 
-rm -f $seqres.full
 echo silence is golden
 
 # clear out any options to mkfs first. We want to test realtime and external log
@@ -248,8 +241,6 @@ do_mkfs_fail -l lazy-count=0 -m crc=1 $SCRATCH_DEV
 do_mkfs_fail -l version=1 -m crc=1 $SCRATCH_DEV
 do_mkfs_fail -l version=0  $SCRATCH_DEV
 
-
-
 # naming section, should pass
 do_mkfs_pass -n size=65536 $SCRATCH_DEV
 do_mkfs_pass -n version=2 $SCRATCH_DEV
@@ -295,13 +286,11 @@ do_mkfs_pass -r extsize=4k $SCRATCH_DEV
 do_mkfs_pass -r extsize=1G $SCRATCH_DEV
 do_mkfs_pass -r noalign $SCRATCH_DEV
 
-
 # realtime section, should fail
 do_mkfs_fail -r rtdev=$SCRATCH_DEV
 do_mkfs_fail -r extsize=256 $SCRATCH_DEV
 do_mkfs_fail -r extsize=2G $SCRATCH_DEV
 do_mkfs_fail -r size=65536 $SCRATCH_DEV
-
 
 # inode section, should pass
 do_mkfs_pass -i size=256 -m crc=0 $SCRATCH_DEV
@@ -318,7 +307,6 @@ do_mkfs_pass -i attr=2 $SCRATCH_DEV
 do_mkfs_pass -i projid32bit $SCRATCH_DEV
 do_mkfs_pass -i sparse=0 $SCRATCH_DEV
 do_mkfs_pass -i sparse -m crc $SCRATCH_DEV
-
 
 # inode section, should fail
 do_mkfs_fail -i size=256 -m crc $SCRATCH_DEV

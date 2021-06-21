@@ -6,20 +6,13 @@
 #
 # Test data journaling flag switch for a single file  
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto enospc rw
 
 # ext3 and ext4 don't support direct IO in journalling mode
 write_opt_list="iflag=noatime conv=notrunc conv=fsync"
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 _workout()
 {
@@ -68,7 +61,6 @@ _supported_fs ext3 ext4
 _require_scratch
 _exclude_scratch_mount_option dax
 
-rm -f $seqres.full
 _scratch_mkfs_sized $((64 * 1024 * 1024)) >> $seqres.full 2>&1
 _scratch_mount
 

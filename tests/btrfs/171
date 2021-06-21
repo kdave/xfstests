@@ -10,28 +10,12 @@
 # Fixed by the following kernel patch:
 # "btrfs: qgroup: Dirty all qgroups before rescan"
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick qgroup
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/filter.btrfs
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 _supported_fs btrfs
@@ -39,7 +23,6 @@ _require_scratch
 
 _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
-
 
 # Populate the fs
 $BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/subvol" > /dev/null
@@ -50,7 +33,6 @@ _pwrite_byte 0xcdcd 0 1M "$SCRATCH_MNT/subvol/file1" > /dev/null
 sync
 $BTRFS_UTIL_PROG subvolume snapshot "$SCRATCH_MNT/subvol" \
 	"$SCRATCH_MNT/snapshot" > /dev/null
-
 
 $BTRFS_UTIL_PROG quota enable "$SCRATCH_MNT" > /dev/null
 $BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT" > /dev/null

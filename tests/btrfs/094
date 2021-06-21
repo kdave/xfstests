@@ -17,22 +17,17 @@
 #
 #   Btrfs: incremental send, fix clone operations for compressed extents
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick send
 
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	rm -fr $send_files_dir
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -42,7 +37,6 @@ _require_cloner
 
 send_files_dir=$TEST_DIR/btrfs-test-$seq
 
-rm -f $seqres.full
 rm -fr $send_files_dir
 mkdir $send_files_dir
 
@@ -66,7 +60,6 @@ $XFS_IO_PROG -f -c "pwrite -S 0xaa $((16 * $BLOCK_SIZE)) $((32 * $BLOCK_SIZE))" 
 # [44, 48[.
 $XFS_IO_PROG -c "pwrite -S 0xbb $((16 * $BLOCK_SIZE)) $((28 * $BLOCK_SIZE))" \
 	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
-
 
 # Now rewrite the block range [45, 48[. This will make the inode's
 # metadata continue to point the 32 block extent we created earlier,

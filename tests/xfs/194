@@ -6,15 +6,10 @@
 #
 # Test mapping around/over holes for sub-page blocks
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest rw auto
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
@@ -26,15 +21,13 @@ _cleanup()
     rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # only xfs supported due to use of xfs_bmap
 _supported_fs xfs
 
 # real QA test starts here
-rm -f $seqres.full
 
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
@@ -85,7 +78,6 @@ _scratch_mkfs_xfs -m crc=0 -b size=$blksize >/dev/null 2>&1
 _scratch_mount
 test "$(_get_block_size $SCRATCH_MNT)" = $blksize || \
 	_notrun "Could not get $blksize-byte blocks"
-
 
 # 512b block / 4k page example:
 #

@@ -16,14 +16,8 @@
 # ("fs: fix lazytime expiration handling in __writeback_single_inode()").
 # This test failed on XFS without that commit.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto shutdown metadata atime
 
 DIRTY_EXPIRE_CENTISECS_ORIG=$(</proc/sys/vm/dirty_expire_centisecs)
 DIRTY_WRITEBACK_CENTISECS_ORIG=$(</proc/sys/vm/dirty_writeback_centisecs)
@@ -71,16 +65,14 @@ expire_timestamps()
 	restore_expiration_settings
 }
 
+# Override the default cleanup function.
 _cleanup()
 {
 	restore_expiration_settings
 	rm -f $tmp.*
 }
 
-. ./common/rc
 . ./common/filter
-
-rm -f $seqres.full
 
 _supported_fs generic
 # This test uses the shutdown command, so it has to use the scratch filesystem

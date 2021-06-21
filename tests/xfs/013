@@ -10,18 +10,13 @@
 # and modifies a sparsely allocated set of inodes in combination with an
 # fsstress workload.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto metadata stress
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
+# Override the default cleanup function.
 _cleanup()
 {
 	$KILLALL_PROG -9 fsstress 2>/dev/null
@@ -30,7 +25,6 @@ _cleanup()
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 filter_enospc() {
 	sed -e '/^.*No space left on device.*/d'
@@ -93,8 +87,6 @@ _require_scratch
 _require_xfs_mkfs_finobt
 _require_xfs_finobt
 _require_command "$KILLALL_PROG" killall
-
-rm -f $seqres.full
 
 _scratch_mkfs_xfs "-m crc=1,finobt=1 -d agcount=2" | \
 	_filter_mkfs 2>> $seqres.full

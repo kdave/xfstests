@@ -12,23 +12,17 @@
 #   - Check that we successfully avoid deduping with holes, unwritten
 #     extents, and non-matches; but actually dedupe real matches.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto clone dedupe
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
     rm -rf $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
@@ -36,8 +30,6 @@ _cleanup()
 _require_test_reflink
 _require_test_dedupe
 _require_xfs_io_command "falloc"
-
-rm -f $seqres.full
 
 testdir=$TEST_DIR/test-$seq
 rm -rf $testdir

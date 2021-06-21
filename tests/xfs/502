@@ -11,22 +11,11 @@
 # Here we force the use of the slow iunlink bucket walk code, using every
 # CPU possible.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
+. ./common/preamble
+_begin_fstest auto quick unlink
 testfile=$TEST_DIR/$seq.txt
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/inject
 . ./common/filter
 
@@ -35,8 +24,6 @@ _supported_fs xfs
 _require_xfs_io_error_injection "iunlink_fallback"
 _require_scratch
 _require_test_program "t_open_tmpfiles"
-
-rm -f $seqres.full
 
 _scratch_mkfs | _filter_mkfs 2> $tmp.mkfs > /dev/null
 cat $tmp.mkfs >> $seqres.full

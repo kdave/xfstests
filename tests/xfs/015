@@ -9,20 +9,8 @@
 # Regression test for
 # xfs: allow inode allocations in post-growfs disk space
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-    cd /
-    rm -f $tmp.*
-}
+. ./common/preamble
+_begin_fstest auto enospc growfs
 
 create_file()
 {
@@ -41,8 +29,7 @@ create_file()
 	done
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -55,8 +42,6 @@ _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 _require_fs_space $SCRATCH_MNT 131072
 _scratch_unmount
-
-rm -f $seqres.full
 
 _scratch_mkfs_sized $((32 * 1024 * 1024)) > $tmp.mkfs.raw
 cat $tmp.mkfs.raw | _filter_mkfs >$seqres.full 2>$tmp.mkfs

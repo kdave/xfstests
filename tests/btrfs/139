@@ -9,27 +9,11 @@
 #
 # Finally we create files to exceed the quota.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto qgroup limit
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 _supported_fs btrfs
 # We at least need 2GB of free space on $SCRATCH_DEV
@@ -44,7 +28,6 @@ _run_btrfs_util_prog subvolume create $SUBVOL
 _run_btrfs_util_prog quota enable $SCRATCH_MNT
 _run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
 _run_btrfs_util_prog qgroup limit -e 1G $SUBVOL
-
 
 # Write and delete files within 1G limits, multiple times
 for i in $(seq 1 5); do

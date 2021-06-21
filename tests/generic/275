@@ -9,22 +9,16 @@
 #
 #creator
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto rw enospc
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	_scratch_unmount
 }
 
-. ./common/rc
 . ./common/filter
 
 # real QA test starts here
@@ -34,8 +28,6 @@ _require_scratch
 echo "------------------------------"
 echo "write until ENOSPC test"
 echo "------------------------------"
-
-rm -f $seqres.full
 
 _scratch_unmount 2>/dev/null
 _scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seqres.full 2>&1

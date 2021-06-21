@@ -21,15 +21,10 @@
 #
 # Verify if all three checkpoints match
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest replace volume balance
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -37,13 +32,9 @@ _cleanup()
 	_btrfs_rescan_devices
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/module
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 
@@ -91,7 +82,6 @@ dd if=/dev/zero of="$SCRATCH_MNT"/tf1 bs=$bs count=1 \
 _run_btrfs_util_prog filesystem show
 _run_btrfs_util_prog filesystem df $SCRATCH_MNT
 count=$(( count-- ))
-
 
 #-------------degraded-init-------------------
 echo >> $seqres.full

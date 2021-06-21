@@ -13,23 +13,10 @@
 # lower than current size and leads to a BUG_ON in in ext4_alloc_group_tables()
 # hitting on flex_gd->count == 0.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick resize
 
-here=`pwd`
-tmp=/tmp/$$
-status=1        # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -37,8 +24,6 @@ _supported_fs ext4
 _require_scratch
 _exclude_scratch_mount_option dax
 _require_command "$RESIZE2FS_PROG" resize2fs
-
-rm -f $seqres.full
 
 $MKFS_EXT4_PROG -F -b 1024 -E "resize=262144" $SCRATCH_DEV 32768 >> $seqres.full 2>&1
 _scratch_mount

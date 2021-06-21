@@ -10,23 +10,17 @@
 #   - Modify the original file
 #   - Modify the reflinked file
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
     rm -f $tmp.* $testdir
 }
 
-# get standard environment, filters and checks
-. common/rc
+# Import common functions.
 . common/filter
 . common/reflink
 
@@ -47,8 +41,6 @@ _checksum_files() {
         md5sum $testdir1/$F | _filter_test_dir
     done
 }
-
-rm -f $seqres.full
 
 echo "Create the original file and reflink to copy1, copy2"
 $XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $testdir1/original \

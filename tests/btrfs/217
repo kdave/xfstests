@@ -9,27 +9,11 @@
 # - shrink device
 # - fstrim
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick trim dangerous
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 
@@ -45,7 +29,6 @@ _scratch_mount
 # Fstrim to populate the device->alloc_status CHUNK_TRIMMED bits
 $FSTRIM_PROG -v $SCRATCH_MNT >> $seqres.full 2>&1 || \
 	_notrun "FSTRIM not supported"
-
 
 # Shrink the fs to 4G, so the existing CHUNK_TRIMMED bits are beyond
 # device boundary

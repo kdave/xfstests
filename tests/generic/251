@@ -9,20 +9,16 @@
 # does not change after copied into SCRATCH_MNT test if FITRIM implementation
 # corrupts the filesystem (data/metadata).
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest ioctl trim
 
-here=`pwd`
 tmp=`mktemp -d`
-status=1    # failure is the default!
 trap "_cleanup; exit \$status" 0 1 3
 trap "_destroy; exit \$status" 2 15
 chpid=0
 mypid=$$
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -32,6 +28,7 @@ _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 _require_batched_discard $SCRATCH_MNT
 
+# Override the default cleanup function.
 _cleanup()
 {
 	rm -rf $tmp

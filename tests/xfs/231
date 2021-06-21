@@ -11,15 +11,10 @@
 # - Wait for the reclaim to run.
 # - Write more and see how bad fragmentation is.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -28,8 +23,7 @@ _cleanup()
 	rm -rf $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 
@@ -42,8 +36,6 @@ _require_xfs_io_command "falloc"
 _require_xfs_io_command "fiemap"
 
 old_cowgc_interval=$(_xfs_get_cowgc_interval)
-
-rm -f $seqres.full
 
 echo "Format and mount"
 _scratch_mkfs > $seqres.full 2>&1

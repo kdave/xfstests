@@ -9,15 +9,12 @@
 # This is a regression test for kernel commit:
 #   96e6e8f4a68d ("vfs: add missing checks to copy_file_range")
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick copy_range
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 7 15
+_register_cleanup "_cleanup" BUS
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -25,14 +22,11 @@ _cleanup()
 	[ -z "$loopdev" ] || _destroy_loop_device $loopdev
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
 _supported_fs generic
-
-rm -f $seqres.full
 
 _require_test
 _require_loop
@@ -58,8 +52,6 @@ _require_xfs_io_command "copy_range" "-f"
 testdir="$TEST_DIR/test-$seq"
 rm -rf $testdir
 mkdir $testdir
-
-rm -f $seqres.full
 
 $XFS_IO_PROG -f -c "pwrite -S 0x61 0 128k" $testdir/file >> $seqres.full 2>&1
 

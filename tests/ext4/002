@@ -15,24 +15,18 @@
 # https://lore.kernel.org/linux-ext4/20200717090605.2612-1-lczerner@redhat.com/
 #
 seqfull=$0
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest shutdown mount auto quick
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	blockdev --setrw $SCRATCH_LOGDEV
 	blockdev --setrw $SCRATCH_DEV
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -96,7 +90,6 @@ _try_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
 echo "unmounting read-only filesystem"
 _scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 
-
 echo "mounting filesystem with -o norecovery with a read-only log device:"
 _try_scratch_mount -o norecovery 2>&1 | _filter_ro_mount | _filter_scratch
 echo "unmounting read-only filesystem"
@@ -134,5 +127,4 @@ _try_scratch_mount -o ro 2>&1 | _filter_scratch
 
 # success, all done
 echo "*** done"
-rm -f $seqres.full
 status=0

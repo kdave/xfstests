@@ -8,25 +8,13 @@
 # Run random AIO/DIO activity and fallocate/punch_hole simultaneously
 # Test will operate on huge sparsed file so ENOSPC is expected.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto aio enospc preallocrw stress punch
 
-here=`pwd`
-tmp=/tmp/$$
 fio_config=$tmp.fio
 fio_out=$tmp.fio.out
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -40,8 +28,6 @@ _require_block_device $SCRATCH_DEV
 # the test system supports fallocate() for allocation and hole punching
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
-
-rm -f $seqres.full
 
 NUM_JOBS=$((4*LOAD_FACTOR))
 BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`

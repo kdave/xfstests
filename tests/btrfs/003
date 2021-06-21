@@ -6,16 +6,11 @@
 #
 # btrfs vol tests
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto replace volume balance
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
 dev_removed=0
 removed_dev_htl=""
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # Check if all scratch dev pools are deletable
 deletable_scratch_dev_pool()
@@ -32,6 +27,7 @@ deletable_scratch_dev_pool()
 	return 0
 }
 
+# Override the default cleanup function.
 _cleanup()
 {
     cd /
@@ -42,16 +38,13 @@ _cleanup()
     fi
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 _supported_fs btrfs
 _require_scratch
 _require_scratch_dev_pool 4
 _require_command "$WIPEFS_PROG" wipefs
-
-rm -f $seqres.full
 
 # Test cases related to raid in btrfs
 _test_raid0()

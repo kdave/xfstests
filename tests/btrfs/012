@@ -13,23 +13,10 @@
 # 5) roll back conversion to original ext4
 # 6) verify rolled-back fs integrity & contents
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto convert
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-    cd /
-    rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter.btrfs
 
 # real QA test starts here
@@ -43,8 +30,6 @@ _require_command "$MKFS_EXT4_PROG" mkfs.ext4
 _require_command "$E2FSCK_PROG" e2fsck
 
 _require_fs_space $SCRATCH_MNT $(du -s /lib/modules/`uname -r` | ${AWK_PROG} '{print $1}')
-
-rm -f $seqres.full
 
 BLOCK_SIZE=`_get_block_size $TEST_DIR`
 

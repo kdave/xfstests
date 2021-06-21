@@ -8,23 +8,10 @@
 # timers work properly after the upgrade.  You need a quota-tools containing
 # commit 16b60cb9e315ed for this test to run properly; v4.06 should do.
 
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick bigtime quota
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/quota
 
@@ -44,8 +31,6 @@ $QUOTA_PROG --help 2>&1 | grep -q projectname || \
 
 date --date='Jan 1 00:00:00 UTC 2040' > /dev/null 2>&1 || \
 	_notrun "Userspace does not support dates past 2038."
-
-rm -f $seqres.full
 
 # Format V5 filesystem without bigtime support and populate it
 _scratch_mkfs -m crc=1,bigtime=0 >> $seqres.full

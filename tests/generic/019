@@ -7,17 +7,12 @@
 # Run fsstress and fio(dio/aio and mmap) and simulate disk failure
 # check filesystem consistency at the end.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest aio dangerous enospc rw stress
 
-here=`pwd`
-tmp=/tmp/$$
 fio_config=$tmp.fio
-status=1	# failure is the default!
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 _supported_fs generic
 _require_scratch
@@ -55,13 +50,13 @@ stop_fail_scratch_dev()
     echo 0 > $SYSFS_BDEV/make-it-fail
 }
 
+# Override the default cleanup function.
 _cleanup()
 {
     poweron_scratch_dev
     disallow_fail_make_request
     rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 1 2 3 15
 
 RUN_TIME=$((20+10*$TIME_FACTOR))
 NUM_JOBS=$((4*LOAD_FACTOR))
@@ -156,7 +151,6 @@ _workout()
 
 # real QA test starts here
 
-rm -f $seqres.full
 _scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount
 allow_fail_make_request

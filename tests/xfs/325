@@ -7,15 +7,10 @@
 # Reflink a file with a few dozen extents, CoW a few blocks, and rm.
 # Inject an error during extent freeing to test log recovery.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick clone
 
-here=`pwd`
-tmp=/tmp/$$
-status=1    # failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -23,8 +18,7 @@ _cleanup()
 	rm -rf $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/reflink
 . ./common/inject
@@ -35,8 +29,6 @@ _require_cp_reflink
 _require_scratch_reflink
 _require_error_injection
 _require_xfs_io_error_injection "free_extent"
-
-rm -f $seqres.full
 
 blksz=65536
 blks=30

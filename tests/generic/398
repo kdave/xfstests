@@ -11,29 +11,13 @@
 # not test enforcement of this constraint on lookup, which is still needed to
 # detect offline changes.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick encrypt
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/encrypt
 . ./common/renameat2
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 _supported_fs generic
@@ -58,7 +42,6 @@ touch $edir1/efile1
 touch $edir2/efile2
 touch $udir/ufile
 
-
 # Test linking and renaming an encrypted file into an encrypted directory with a
 # different encryption policy.  Should fail with EXDEV.
 
@@ -68,7 +51,6 @@ ln $edir1/efile1 $edir2/efile1 |& _filter_scratch
 echo -e "\n*** Rename encrypted => encrypted ***"
 $here/src/renameat2 $edir1/efile1 $edir2/efile1
 
-
 # Test linking and renaming an unencrypted file into an encrypted directory.
 # Should fail with EXDEV.
 
@@ -77,7 +59,6 @@ ln $udir/ufile $edir1/ufile |& _filter_scratch
 
 echo -e "\n*** Rename unencrypted => encrypted ***"
 $here/src/renameat2 $udir/ufile $edir1/ufile
-
 
 # Test linking and renaming an encrypted file into an unencrypted directory.
 # Should succeed.
@@ -89,7 +70,6 @@ rm $udir/efile1 # undo
 echo -e "\n*** Rename encrypted => unencrypted ***"
 $here/src/renameat2 $edir1/efile1 $udir/efile1
 $here/src/renameat2 $udir/efile1 $edir1/efile1 # undo
-
 
 # Test renaming a forbidden (unencrypted, or encrypted with a different
 # encryption policy) file into an encrypted directory via an exchange (cross
@@ -104,7 +84,6 @@ $here/src/renameat2 -x $udir/ufile $edir1/efile1
 echo -e "\n*** Exchange encrypted <=> unencrypted ***"
 $here/src/renameat2 -x $edir1/efile1 $udir/ufile
 
-
 # Test a file with a special type, i.e. not regular, directory, or symlink.
 # Since such files are not subject to encryption, there should be no
 # restrictions on linking or renaming them into encrypted directories.
@@ -118,7 +97,6 @@ mkfifo $udir/fifo
 $here/src/renameat2 -x $udir/fifo $edir1/fifo
 ln -v $edir1/fifo $edir2/fifo | _filter_scratch
 rm $edir1/fifo $edir2/fifo $udir/fifo
-
 
 # Now test that *without* access to the encrypted key, we cannot use an exchange
 # (cross rename) operation to move a forbidden file into an encrypted directory.

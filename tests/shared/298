@@ -6,17 +6,8 @@
 #
 # Test that filesystem sends discard requests only on free blocks
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-. ./common/rc
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
+. ./common/preamble
+_begin_fstest auto trim
 
 _supported_fs ext4 xfs btrfs
 _require_test
@@ -36,6 +27,7 @@ fi
 [ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-super
 [ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-tree
 
+# Override the default cleanup function.
 _cleanup()
 {
 	$UMOUNT_PROG $loop_dev &> /dev/null
@@ -137,7 +129,6 @@ merge_ranges()
 	rm $tmp_file
 }
 
-here=`pwd`
 tmp=`mktemp -d`
 
 img_file=$TEST_DIR/$$.fs

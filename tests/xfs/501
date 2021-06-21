@@ -11,16 +11,13 @@
 # Here we force the use of the slow iunlink bucket walk code in a single
 # threaded situation.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
+. ./common/preamble
+_begin_fstest auto quick unlink
 testfile=$TEST_DIR/$seq.txt
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 delay_knob="/sys/fs/xfs/debug/log_recovery_delay"
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -28,8 +25,7 @@ _cleanup()
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/inject
 
 # real QA test starts here
@@ -39,7 +35,6 @@ _require_xfs_sysfs debug/log_recovery_delay
 _require_scratch
 _require_test_program "t_open_tmpfiles"
 
-rm -f $seqres.full
 _scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount
 

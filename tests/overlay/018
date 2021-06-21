@@ -11,21 +11,10 @@
 # - modify A to trigger copy up
 # - file A is no longer a hardlink of file B
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick copyup hardlink
 
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -34,8 +23,6 @@ _require_scratch
 _require_scratch_feature index
 _require_test_program "t_dir_type"
 
-rm -f $seqres.full
-
 _scratch_mkfs >>$seqres.full 2>&1
 
 # Create 2 hardlinked files in lower
@@ -43,7 +30,6 @@ lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
 mkdir -p $lowerdir
 echo "zero" >> $lowerdir/foo
 ln $lowerdir/foo $lowerdir/bar
-
 
 # Record inode numbers in format <ino> <nlink>
 function record_ino_nlink()
@@ -75,7 +61,6 @@ function check_ino_nlink()
 
 # Enable overlay index feature to prevent breaking hardlinks on copy up
 _scratch_mount -o index=on
-
 
 rm -f $tmp.*
 

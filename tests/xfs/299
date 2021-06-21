@@ -8,26 +8,20 @@
 #       uquota, gquota, pquota
 #       uqnoenforce, gqnoenforce, pqnoenforce
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quota
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/quota
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # real QA test starts here
 _supported_fs xfs
@@ -189,7 +183,6 @@ _exercise u
 
 echo "*** unmount"
 _scratch_unmount
-
 
 _scratch_mkfs_xfs -m crc=1 2>/dev/null | _filter_mkfs 2>$tmp.mkfs
 cat $tmp.mkfs >>$seqres.full

@@ -10,17 +10,10 @@
 # background fsstress workload. It will decrease the shrink size if
 # larger size fails. And totally repeat 2 * TIME_FACTOR times.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto growfs shrinkfs ioctl prealloc stress
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "rm -f $tmp.*; exit \$status" 0 1 2 3 15
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 create_scratch()
@@ -55,7 +48,6 @@ _supported_fs xfs
 _require_scratch_xfs_shrink
 _require_xfs_io_command "falloc"
 
-rm -f $seqres.full
 _scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs >/dev/null
 . $tmp.mkfs	# extract blocksize and data size for scratch device
 

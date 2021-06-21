@@ -10,23 +10,12 @@
 # with the logicalsector size, and make sure the fallbacks work for
 # devices that don't support write_same or discard.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest blockdev rw punch collapse insert zero
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 7 15
+_register_cleanup "_cleanup" BUS
 
-_cleanup()
-{
-    cd /
-    rm -rf $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/scsi_debug
 
@@ -37,7 +26,6 @@ _require_xfs_io_command "finsert"
 _require_xfs_io_command "fcollapse"
 _require_xfs_io_command "fzero"
 _require_xfs_io_command "fpunch"
-
 
 echo "Create and format"
 dev=$(_get_scsi_debug_dev 4096 4096 0 4 "lbpws=1 lbpws10=1")

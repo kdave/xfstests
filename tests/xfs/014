@@ -11,19 +11,14 @@
 # new writers reclaim said preallocations rather than prematurely fail with
 # ENOSPC/EDQUOT.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto enospc quick quota
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/quota
 
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -31,7 +26,6 @@ _cleanup()
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
 # Create a file using a repeated open, extending write and close pattern. This
 # causes the preallocation to persist after the file is closed. Preallocation
@@ -151,8 +145,6 @@ _require_loop
 _require_quota
 _require_user
 _require_group
-
-rm -f $seqres.full
 
 echo "Silence is golden."
 

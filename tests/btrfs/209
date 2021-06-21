@@ -9,13 +9,10 @@
 # do not end up with a missing file extent representing a hole. This applies
 # only when not using the NO_HOLES feature.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto quick log
 
+# Override the default cleanup function.
 _cleanup()
 {
 	_cleanup_flakey
@@ -23,8 +20,7 @@ _cleanup()
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/attr
 . ./common/filter
 . ./common/dmflakey
@@ -36,8 +32,6 @@ _require_dm_target flakey
 _require_btrfs_fs_feature "no_holes"
 _require_btrfs_mkfs_feature "no-holes"
 _require_xfs_io_command "sync_range"
-
-rm -f $seqres.full
 
 _scratch_mkfs -O ^no-holes >>$seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV

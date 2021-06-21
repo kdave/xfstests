@@ -8,13 +8,10 @@
 # layout, if we punch a hole that starts at file offset 0 and fsync the file,
 # after replaying the log the hole exists.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto quick punch log
 
+# Override the default cleanup function.
 _cleanup()
 {
 	_cleanup_flakey
@@ -22,8 +19,7 @@ _cleanup()
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/attr
 . ./common/filter
 . ./common/dmflakey
@@ -37,8 +33,6 @@ _require_xfs_io_command "fpunch"
 _require_btrfs_fs_feature "no_holes"
 _require_btrfs_mkfs_feature "no-holes"
 _require_odirect
-
-rm -f $seqres.full
 
 run_test_leading_hole()
 {
@@ -162,7 +156,6 @@ run_test_middle_hole()
     _unmount_flakey
     _cleanup_flakey
 }
-
 
 echo "Testing with hole offset 0 hole length 65536"
 run_test_leading_hole

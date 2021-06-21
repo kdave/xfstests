@@ -18,15 +18,10 @@
 #
 # This test might hang the filesystem when ran on an unpatched kernel
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto freeze thin
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
+# Override the default cleanup function.
 _cleanup()
 {
 	cd /
@@ -36,8 +31,7 @@ _cleanup()
 	$LVM_PROG pvremove -ff $SCRATCH_DEV >>$seqres.full 2>&1
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 
 # real QA test starts here
 
@@ -50,9 +44,6 @@ _require_dm_target snapshot
 _require_command $LVM_PROG lvm
 _require_command "$THIN_CHECK_PROG" thin_check
 _require_freeze
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 vgname=vg_$seq
 lvname=lv_$seq
@@ -79,7 +70,6 @@ $LVM_PROG lvcreate  --virtualsize $virtsize \
 		    -n $lvname >>$seqres.full 2>&1
 
 _mkfs_dev /dev/mapper/$vgname-$lvname >>$seqres.full 2>&1
-
 
 # Running the test over the original volume doesn't reproduce the problem
 # reliably, while, running it over a snapshot, makes the problem 100%

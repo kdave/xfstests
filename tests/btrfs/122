@@ -7,34 +7,16 @@
 # Test that qgroup counts are valid after snapshot creation. This has
 # been broken in btrfs since Linux v4.1
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick snapshot qgroup
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
-
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 _supported_fs btrfs
 _require_scratch
 _require_btrfs_qgroup_report
-
-rm -f $seqres.full
 
 # Force a small leaf size to make it easier to blow out our root
 # subvolume tree
@@ -61,7 +43,6 @@ _run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT "$SCRATCH_MNT/snaps/snap1"
 _run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT "$SCRATCH_MNT/snaps/snap2"
 
 _scratch_unmount
-
 
 # qgroup will be checked by fstest at _check_scratch_fs()
 status=0

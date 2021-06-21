@@ -7,20 +7,15 @@
 # Test mkfs against thin provision device, which has very small backing size,
 # mkfs should return error when it hits EIO.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto mkfs thin
 
 # Initialize dmthin device with very small backing size & very big virtual
 # size, with the hope that mkfs hit EIO at mkfs time
 BACKING_SIZE=$((1 * 1024 * 1024 / 512))			# 1M
 VIRTUAL_SIZE=$((1 * 1024 * 1024 * 1024 * 1024 / 512))	# 1T
 
+# Override the default cleanup function.
 _cleanup()
 {
 	_dmthin_cleanup
@@ -28,13 +23,9 @@ _cleanup()
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/dmthin
-
-# remove previous $seqres.full before test
-rm -f $seqres.full
 
 # real QA test starts here
 _supported_fs generic

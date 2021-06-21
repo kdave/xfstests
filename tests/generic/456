@@ -14,24 +14,18 @@
 # i_disksize and fixed by commit 801674f34ecf ("ext4: do not zeroout extents
 # beyond i_disksize").
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick metadata collapse zero prealloc
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-
+# Override the default cleanup function.
 _cleanup()
 {
 	_cleanup_flakey
 	cd /
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/dmflakey
 
@@ -43,8 +37,6 @@ _require_dm_target flakey
 _require_xfs_io_command "falloc" "-k"
 _require_xfs_io_command "fzero"
 _require_xfs_io_command "fcollapse"
-
-rm -f $seqres.full
 
 _scratch_mkfs >> $seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV

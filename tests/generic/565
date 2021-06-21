@@ -9,29 +9,16 @@
 #
 # 5dae222a5ff0 vfs: allow copy_file_range to copy across devices
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto quick copy_range
 
-here=`pwd`
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 7 15
+_register_cleanup "_cleanup" BUS
 
-_cleanup()
-{
-	cd /
-	rm -rf $tmp.*
-}
-
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
 _supported_fs generic
-
-rm -f $seqres.full
 
 _require_test
 _require_scratch
@@ -40,11 +27,9 @@ _require_xfs_io_command "copy_range"
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-
 testdir=$TEST_DIR/test-$seq
 rm -rf $testdir
 mkdir $testdir
-rm -f $seqres.full
 
 $XFS_IO_PROG -f -c "pwrite -S 0x61 0 128k" $testdir/file >> $seqres.full 2>&1
 

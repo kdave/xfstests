@@ -9,25 +9,20 @@
 # run filefrag to get the extent mapping and follow the backrefs.
 # We check to end up back at the original file with the correct offset.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
+. ./common/preamble
+_begin_fstest auto rw metadata
 
-here=`pwd`
-tmp=/tmp/$$
-status=1
 noise_pid=0
 
+# Override the default cleanup function.
 _cleanup()
 {
 	rm $tmp.running
 	wait
 	rm -f $tmp.*
 }
-trap "_cleanup; exit \$status" 0 1 2 3 15
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 
 # real QA test starts here
@@ -37,8 +32,6 @@ _require_no_large_scratch_dev
 _require_btrfs_command inspect-internal logical-resolve
 _require_btrfs_command inspect-internal inode-resolve
 _require_command "$FILEFRAG_PROG" filefrag
-
-rm -f $seqres.full
 
 FILEFRAG_FILTER='
 	if (/blocks? of (\d+) bytes/) {

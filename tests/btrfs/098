@@ -8,21 +8,17 @@
 # lower file offset, after a power failure our file has the same content it
 # had before the power failure and after the extent cloning operation.
 #
-seq=`basename $0`
-seqres=$RESULT_DIR/$seq
-echo "QA output created by $seq"
-tmp=/tmp/$$
-status=1	# failure is the default!
-trap "_cleanup; exit \$status" 0 1 2 3 15
+. ./common/preamble
+_begin_fstest auto quick metadata clone log
 
+# Override the default cleanup function.
 _cleanup()
 {
 	_cleanup_flakey
 	rm -f $tmp.*
 }
 
-# get standard environment, filters and checks
-. ./common/rc
+# Import common functions.
 . ./common/filter
 . ./common/dmflakey
 
@@ -31,8 +27,6 @@ _supported_fs btrfs
 _require_scratch
 _require_dm_target flakey
 _require_cloner
-
-rm -f $seqres.full
 
 _scratch_mkfs >>$seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV
@@ -50,7 +44,6 @@ BLOCK_SIZE=$(_get_block_size $SCRATCH_MNT)
 $XFS_IO_PROG -f -c "pwrite -S 0xaa $((200 * $BLOCK_SIZE)) $((25 * $BLOCK_SIZE))" \
 		-c "fsync"                     \
 		$SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
-
 
 # Now clone part of our extent into file offset mapped by 100th block. This adds
 # a file extent item to our inode's metadata that points to the 25 block extent
