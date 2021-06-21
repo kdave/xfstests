@@ -1,0 +1,138 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+
+# Move group tags from the groups file into the test files themselves.
+
+if [ -z "$1" ] || [ "$1" = "--help" ]; then
+	echo "Usage: $0 test_dir [test_dirs...]"
+	exit 1
+fi
+
+obliterate_group_file() {
+	sed -e 's/^#.*$//g' < group | while read test groups; do
+		if [ -z "$test" ]; then
+			continue;
+		elif [ ! -e "$test" ]; then
+			echo "Ignoring unknown test file \"$test\"."
+			continue
+		fi
+
+		# Replace all the open-coded test preparation code with a
+		# single call to _begin_fstest.
+		sed -e '/^seqres=\$RESULT_DIR\/\$seq$/d' \
+		    -e '/^seqres=\"\$RESULT_DIR\/\$seq\"$/d' \
+		    -e '/^echo "QA output created by \$seq"$/d' \
+		    -e '/^here=`pwd`$/d' \
+		    -e '/^here=\$(pwd)$/d' \
+		    -e '/^here=\$PWD$/d' \
+		    -e '/^here=\"`pwd`\"$/d' \
+		    -e '/^tmp=\/tmp\/\$\$$/d' \
+		    -e '/^status=1.*failure.*is.*the.*default/d' \
+		    -e '/^status=1.*FAILure.*is.*the.*default/d' \
+		    -e '/^status=1.*success.*is.*the.*default/d' \
+		    -e '/^status=1.*default.*failure/d' \
+		    -e '/^echo.*QA output created by.*seq/d' \
+		    -e '/^# remove previous \$seqres.full before test/d' \
+		    -e '/^rm -f \$seqres.full/d' \
+		    -e 's|^# get standard environment, filters and checks|# Import common functions.|g' \
+		    -e '/^\. \.\/common\/rc/d' \
+		    -e '/^\. common\/rc/d' \
+		    -e 's|^seq=.*$|. ./common/preamble\n_begin_fstest '"$groups"'|g' \
+		    -i "$test"
+
+		# Replace the open-coded trap calls that register cleanup code
+		# with a call to _register_cleanup.
+		#
+		# For tests that registered empty-string cleanups or open-coded
+		# calls to remove $tmp files, remove the _register_cleanup
+		# calls entirely because the default _cleanup does that for us.
+		#
+		# For tests that now have a _register_cleanup call for the
+		# _cleanup function, remove the explicit call because
+		# _begin_fstest already registers that for us.
+		#
+		# For tests that override _cleanup, insert a comment noting
+		# that it is overriding the default, to match the ./new
+		# template.
+		sed -e 's|^trap "exit \\\$status" 0 1 2 3 15|_register_cleanup ""|g' \
+		    -e 's|^trap "\(.*\)[[:space:]]*; exit \\\$status" 0 1 2 3 15|_register_cleanup "\1"|g' \
+		    -e 's|^trap "\(.*\)[[:space:]]*; exit \\\$status" 1 2 3 15|_register_cleanup "\1"|g' \
+		    -e 's|^trap '"'"'\(.*\)[[:space:]]*; exit \$status'"'"' 0 1 2 3 15|_register_cleanup "\1"|g' \
+		    -e 's|^trap "\(.*\)[[:space:]]*; exit \\\$status" 0 1 2 3 7 15|_register_cleanup "\1" BUS|g' \
+		    -e 's|^_register_cleanup "[[:space:]]*\([^[:space:]]*\)[[:space:]]*"|_register_cleanup "\1"|g' \
+		    -e '/^_register_cleanup ""$/d' \
+		    -e '/^_register_cleanup "rm -f \$tmp.*"$/d' \
+		    -e '/^_register_cleanup "_cleanup"$/d' \
+		    -e 's|^_cleanup()|# Override the default cleanup function.\n_cleanup()|g' \
+		    -i "$test"
+
+		# If the test doesn't import any common functionality,
+		# get rid of the pointless comment.
+		if ! grep -q '^\. .*common' "$test"; then
+			sed -e '/^# Import common functions.$/d' -i "$test"
+		fi
+
+		# Replace the "status=1" lines that don't have the usual
+		# "failure is the default" message if there's no other code
+		# between _begin_fstest and status=1.
+		if grep -q '^status=1$' "$test"; then
+			awk '
+BEGIN {
+	saw_groupinfo = 0;
+}
+{
+	if ($0 ~ /^_begin_fstest/) {
+		saw_groupinfo = 1;
+		printf("%s\n", $0);
+	} else if ($0 ~ /^status=1$/) {
+		if (saw_groupinfo == 0) {
+			printf("%s\n", $0);
+		}
+	} else if ($0 == "") {
+		printf("\n");
+	} else {
+		saw_groupinfo = 0;
+		printf("%s\n", $0);
+	}
+}
+' < "$test" > "$test.new"
+			cat "$test.new" > "$test"
+			rm -f "$test.new"
+		fi
+
+		# Get rid of _cleanup functions that match the standard one.
+		# Thanks to Eric Biggers for providing this.
+		sed -z -E \
+			-e 's/(#[^#\n]*\n)*_cleanup\(\)\n\{\n(\s+cd \/\n)?\s+rm -r?f "?\$tmp"?\.\*\n\}\n\n?//' \
+			-e 's/(#[^#\n]*\n)*_cleanup\(\)\n\{\n(\s+cd \/\n)?\s+rm -fr "?\$tmp"?\.\*\n\}\n\n?//' \
+			-i "$test"
+
+		# Collapse sequences of blank lines to a single blank line.
+		awk '
+BEGIN {
+	saw_blank = 0;
+}
+{
+	if ($0 ~ /^$/) {
+		if (saw_blank == 0) {
+			printf("\n");
+			saw_blank = 1;
+		}
+	} else {
+		printf("%s\n", $0);
+		saw_blank = 0;
+	}
+}
+' < "$test" > "$test.new"
+		cat "$test.new" > "$test"
+		rm -f "$test.new"
+	done
+}
+
+curr_dir="$PWD"
+for tdir in "$@"; do
+	cd "tests/$tdir"
+	obliterate_group_file
+	cd "$curr_dir"
+done
