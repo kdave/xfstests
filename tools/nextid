@@ -1,1 +1,31 @@
-sort-group
+#!/bin/bash
+
+# Compute the next available test id in a given test directory.
+
+if [ $# != 1 ] || [ "$1" = "--help" ] || [ ! -d "tests/$1/" ]; then
+	echo "Usage: $0 test_dir"
+	exit 1
+fi
+
+. ./common/test_names
+
+i=0
+eof=1
+
+while read found other_junk;
+do
+	i=$((i+1))
+	id=`printf "%03d" $i`
+	if [ "$id" != "$found" ]; then
+		eof=0
+		break
+	fi
+done < <(cd "tests/$1/" ; ../../tools/mkgroupfile | \
+	 grep "^$VALID_TEST_NAME\>" | tr - ' ')
+
+if [ $eof -eq 1 ]; then
+   i=$((i+1))
+   id=`printf "%03d" $i`
+fi
+
+echo "$1/$id"
