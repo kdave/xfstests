@@ -140,7 +140,8 @@ Running tests:
     - ./check '*/001' '*/002' '*/003'
     - ./check '*/06?'
     - Groups of tests maybe ran by: ./check -g [group(s)]
-      See the 'group' file for details on groups
+      See the tests/*/group.list files after building xfstests to learn about
+      each test's group memberships.
     - If you want to run all tests regardless of what group they are in
       (including dangerous tests), use the "all" group: ./check -g all
     - To randomize test order: ./check -r [test(s)]
@@ -174,8 +175,8 @@ Test script environment:
 
     When developing a new test script keep the following things in
     mind.  All of the environment variables and shell procedures are
-    available to the script once the "common/rc" file has been
-    sourced.
+    available to the script once the "common/preamble" file has been
+    sourced and the "_begin_fstest" function has been called.
 
      1. The tests are run from an arbitrary directory.  If you want to
 	do operations on an XFS filesystem (good idea, eh?), then do
@@ -248,6 +249,22 @@ Test script environment:
 	  and "custom-name" is the optional string entered into a prompt
 	  in the ./new script. It can contain only alphanumeric characters
 	  and dash. Note the "NNN-" part is added automatically.
+
+     6. Test group membership: Each test can be associated with any number
+	of groups for convenient selection of subsets of tests.  Group names
+	can be any sequence of non-whitespace characters.  Test authors
+	associate a test with groups by passing the names of those groups as
+	arguments to the _begin_fstest function.  For example, the code:
+
+	_begin_fstest auto quick subvol snapshot
+
+	associates the current test with the "auto", "quick", "subvol", and
+	"snapshot" groups.  It is not necessary to specify the "all" group
+	in the list because that group is computed at run time.
+
+	The build process scans test files for _begin_fstest invocations and
+	compiles the group list from that information.  In other words, test
+	files must call _begin_fstest or they will not be run.
 
 Verified output:
 
