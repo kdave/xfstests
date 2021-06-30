@@ -27,10 +27,18 @@ _require_xfs_io_command "falloc"
 _consume_freesp()
 {
 	file=$1
+	left=512
 
 	# consume nearly all available space (leave ~512kB)
 	avail=`_get_available_space $SCRATCH_MNT`
-	filesizekb=$((avail / 1024 - 512))
+
+	# f2fs uses index(radix) tree as mapping metadata, its space overhead
+	# is about one thousandth of the data
+	if [ $FSTYP == "f2fs" ]; then
+		left=$((left + avail / 1024000))
+	fi
+
+	filesizekb=$((avail / 1024 - $left))
 	$XFS_IO_PROG -fc "falloc 0 ${filesizekb}k" $file
 }
 
