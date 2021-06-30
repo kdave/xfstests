@@ -6,8 +6,8 @@ TOPDIR = ../..
 include $(TOPDIR)/include/builddefs
 include $(TOPDIR)/include/buildgrouplist
 
-TEST_DIR = overlay
-TARGET_DIR = $(PKG_LIB_DIR)/$(TESTS_DIR)/$(TEST_DIR)
+OVERLAY_DIR = overlay
+TARGET_DIR = $(PKG_LIB_DIR)/$(TESTS_DIR)/$(OVERLAY_DIR)
 DIRT = group.list
 
 default: $(DIRT)
