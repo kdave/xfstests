@@ -21,6 +21,8 @@ HAVE_BUILDDEFS = $(shell test -f $(TOPDIR)/include/builddefs && echo yes || echo
 
 ifeq ($(HAVE_BUILDDEFS), yes)
 include $(TOPDIR)/include/builddefs
+else
+export TESTS_DIR = tests
 endif
 
 SRCTAR = $(PKG_NAME)-$(PKG_VERSION).tar.gz
@@ -40,7 +42,6 @@ endif
 LIB_SUBDIRS = include lib
 TOOL_SUBDIRS = ltp src m4 common
 
-export TESTS_DIR = tests
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
 
 default: include/builddefs
