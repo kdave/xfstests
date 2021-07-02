@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021, Jeff Layton <jlayton@redhat.com>
+#
+# FS QA Test No. 639
+#
+# Open a file and write a little data to it. Unmount (to clean out the cache)
+# and then mount again. Then write some data to it beyond the EOF and ensure
+# the result is correct.
+#
+# Prompted by a bug in ceph_write_begin that was fixed by commit 827a746f405d.
+#
+. ./common/preamble
+_begin_fstest auto quick rw
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+
+testfile="$TEST_DIR/test_write_begin.$$"
+
+# write some data to file and fsync it out
+$XFS_IO_PROG -f -c "pwrite -q 0 32" $testfile
+
+# cycle the mount to clean out the pagecache
+_test_cycle_mount
+
+# now, write to the file (near the end)
+$XFS_IO_PROG -c "pwrite -q 32 32" $testfile
+
+# dump what we think is in there
+echo "The result should be 64 bytes filled with 0xcd:"
+hexdump -C $testfile
+
+status=0
+exit
