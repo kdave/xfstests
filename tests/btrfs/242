@@ -1,0 +1,49 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 Oracle. All Rights Reserved.
+#
+# FS QA Test 242
+#
+# Test that fstrim can run on the degraded filesystem
+#   Kernel requires fix for the null pointer deref in btrfs_trim_fs()
+#     [patch] btrfs: check for missing device in btrfs_trim_fs
+
+. ./common/preamble
+_begin_fstest auto quick volume trim
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_require_btrfs_forget_or_module_loadable
+_require_scratch_dev_pool 2
+
+_scratch_dev_pool_get 2
+dev1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $1 }')
+
+_scratch_pool_mkfs "-m raid1 -d raid1"
+_scratch_mount
+_require_batched_discard $SCRATCH_MNT
+
+# Add a test file with some data.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 10M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Unmount the filesystem.
+_scratch_unmount
+
+# Mount the filesystem in degraded mode
+_btrfs_forget_or_module_reload
+_mount -o degraded $dev1 $SCRATCH_MNT
+
+# Run fstrim, it should skip on the missing device.
+$FSTRIM_PROG $SCRATCH_MNT
+
+# Verify data integrity as in the golden output.
+echo "File foo data:"
+od -A d -t x1 $SCRATCH_MNT/foo
+
+_scratch_dev_pool_put
+
+status=0
+exit
