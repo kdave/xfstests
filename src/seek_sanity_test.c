@@ -395,8 +395,12 @@ static int test18(int fd, int testnum)
 	int ret = 0;
 
 	/* file size doesn't matter in this test, set to 0 */
+	ftruncate(fd, 0);
+
 	ret += do_lseek(testnum, 1, fd, 0, SEEK_HOLE, -1, -1);
 	ret += do_lseek(testnum, 2, fd, 0, SEEK_DATA, -1, -1);
+	ret += do_lseek(testnum, 3, fd, 0, SEEK_HOLE, LLONG_MIN, -1);
+	ret += do_lseek(testnum, 4, fd, 0, SEEK_DATA, LLONG_MIN, -1);
 
 	return ret;
 }
