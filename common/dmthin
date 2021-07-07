@@ -113,8 +113,12 @@ _dmthin_init()
 	_dmsetup_create $DMTHIN_DATA_NAME --table "$DMTHIN_DATA_TABLE" || \
 		_fatal "failed to create dm thin data device"
 
-	# Zap the pool metadata dev
-	dd if=/dev/zero of=$DMTHIN_META_DEV bs=4096 count=1 &>/dev/null
+	# Zap the pool metadata dev.  Explicitly fsync the zeroes to disk
+	# because a slow-running udev running concurrently with dd can maintain
+	# an open file descriptor.  The block layer only flushes the page cache
+	# on last close, which means that the thin pool creation below will
+	# see the (stale) ondisk contents and fail.
+	dd if=/dev/zero of=$DMTHIN_META_DEV bs=4096 count=1 conv=fsync &>/dev/null
 
 	# Thin pool
 	# "start length thin-pool metadata_dev data_dev data_block_size low_water_mark"
