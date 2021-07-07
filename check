@@ -525,17 +525,20 @@ _summary()
 
 _check_filesystems()
 {
+	local ret=0
+
 	if [ -f ${RESULT_DIR}/require_test ]; then
-		_check_test_fs || err=true
+		_check_test_fs || ret=1
 		rm -f ${RESULT_DIR}/require_test*
 	else
 		_test_unmount 2> /dev/null
 	fi
 	if [ -f ${RESULT_DIR}/require_scratch ]; then
-		_check_scratch_fs || err=true
+		_check_scratch_fs || ret=1
 		rm -f ${RESULT_DIR}/require_scratch*
 	fi
 	_scratch_unmount 2> /dev/null
+	return $ret
 }
 
 _expunge_test()
@@ -558,11 +561,15 @@ test $? -eq 77 && HAVE_SYSTEMD_SCOPES=yes
 
 # Make the check script unattractive to the OOM killer...
 OOM_SCORE_ADJ="/proc/self/oom_score_adj"
-test -w ${OOM_SCORE_ADJ} && echo -1000 > ${OOM_SCORE_ADJ}
+function _adjust_oom_score() {
+	test -w "${OOM_SCORE_ADJ}" && echo "$1" > "${OOM_SCORE_ADJ}"
+}
+_adjust_oom_score -1000
 
 # ...and make the tests themselves somewhat more attractive to it, so that if
 # the system runs out of memory it'll be the test that gets killed and not the
-# test framework.
+# test framework.  The test is run in a separate process without any of our
+# functions, so we open-code adjusting the OOM score.
 #
 # If systemd is available, run the entire test script in a scope so that we can
 # kill all subprocesses of the test if it fails to clean up after itself.  This
@@ -875,9 +882,12 @@ function run_section()
 			rm -f ${RESULT_DIR}/require_scratch*
 			err=true
 		else
-			# the test apparently passed, so check for corruption
-			# and log messages that shouldn't be there.
-			_check_filesystems
+			# The test apparently passed, so check for corruption
+			# and log messages that shouldn't be there.  Run the
+			# checking tools from a subshell with adjusted OOM
+			# score so that the OOM killer will target them instead
+			# of the check script itself.
+			(_adjust_oom_score 250; _check_filesystems) || err=true
 			_check_dmesg || err=true
 		fi
 
