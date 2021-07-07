@@ -16,8 +16,36 @@ _begin_fstest rw filestreams
 
 # real QA test starts here
 _supported_fs xfs
-
+_require_command "$FILEFRAG_PROG" filefrag
 _require_scratch
+
+# The first _test_streams call sets up the filestreams allocator to fail and
+# then checks that it actually failed.  It does this by creating a very small
+# filesystem, writing a lot of data in parallel to separate streams, and then
+# flushes the dirty data, also in parallel.  To trip the allocator, the test
+# relies on writeback combining adjacent dirty ranges into large allocation
+# requests which eventually bleed across AGs.  This happens either because the
+# big writes are slow enough that filestreams contexts expire between
+# allocation requests, or because the AGs are so full at allocation time that
+# the bmapi allocator decides to scan for a less full AG.  Either way, stream
+# directories share AGs, which is what the test considers a success.
+#
+# However, this only happens if writes use the delayed allocation code paths.
+# If the kernel allocates small amounts of space at the time of each write()
+# call, the successive small allocations never trip the bmapi allocator's
+# rescan thresholds and will keep pushing out the expiration time, with the
+# result that the filestreams allocator succeeds in maintaining the streams.
+# The test considers this a failure.
+#
+# Make sure that a regular buffered write produces delalloc reservations.
+# This effectively disables the test for files with extent size hints or DAX
+# mode set.
+_scratch_mkfs > $seqres.full
+_scratch_mount
+$XFS_IO_PROG -f -c 'pwrite 0 64k' $SCRATCH_MNT/testy &> /dev/null
+$FILEFRAG_PROG -v $SCRATCH_MNT/testy 2>&1 | grep -q delalloc || \
+	_notrun "test requires delayed allocation buffered writes"
+_scratch_unmount
 
 _check_filestreams_support || _notrun "filestreams not available"
 
