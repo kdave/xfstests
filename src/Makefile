@@ -33,6 +33,9 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	fscrypt-crypt-util bulkstat_null_ocount splice-test chprojid_fail \
 	detached_mounts_propagation
 
+EXTRA_EXECS = dmerror fill2attr fill2fs fill2fs_check scaleread.sh \
+	      btrfs_crc32c_forged_name.py
+
 SUBDIRS = log-writes perf
 
 LLDLIBS = $(LIBHANDLE) $(LIBACL) -lpthread -lrt
@@ -100,7 +103,7 @@ LINKTEST = $(LTLINK) $@.c -o $@ $(CFLAGS) $(LDFLAGS)
 install: default $(addsuffix -install,$(SUBDIRS))
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src
 	$(LTINSTALL) -m 755 $(LDIRT) $(PKG_LIB_DIR)/src
-	$(LTINSTALL) -m 755 dmerror fill2attr fill2fs fill2fs_check scaleread.sh $(PKG_LIB_DIR)/src
+	$(LTINSTALL) -m 755 $(EXTRA_EXECS) $(PKG_LIB_DIR)/src
 	$(LTINSTALL) -m 644 dumpfile $(PKG_LIB_DIR)/src
 
 %-install:
