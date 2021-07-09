@@ -77,7 +77,9 @@ _mkfs_dev /dev/mapper/$vgname-$lvname >>$seqres.full 2>&1
 $LVM_PROG lvcreate  -k n -s $vgname/$lvname \
 		    -n $snapname >>$seqres.full 2>&1
 
-_mount /dev/mapper/$vgname-$snapname $SCRATCH_MNT
+# Catch mount failure so we don't blindly go an freeze the root filesystem
+# instead of lvm volume.
+_mount /dev/mapper/$vgname-$snapname $SCRATCH_MNT || _fail "mount failed"
 
 # Consume all space available in the volume and freeze to ensure everything
 # required to make the fs consistent is flushed to disk.
