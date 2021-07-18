@@ -4,12 +4,12 @@
 #
 # FS QA Test No. 429
 #
-# Test that encrypted dentries are revalidated after adding a key.
-# Regression test for:
+# Test that no-key dentries are revalidated after adding a key.  Regression test
+# for:
 #	28b4c263961c ("ext4 crypto: revalidate dentry after adding or removing the key")
 #
-# Furthermore, test that encrypted directories are *not* revalidated after
-# "revoking" a key.  This used to be done, but it was broken and was removed by:
+# Furthermore, test that no-key dentries are *not* revalidated after "revoking"
+# a key.  This used to be done, but it was broken and was removed by:
 #	1b53cf9815bb ("fscrypt: remove broken support for detecting keyring key revocation")
 #
 # Also test for a race condition bug in 28b4c263961c, fixed by:
@@ -43,18 +43,18 @@ _add_session_encryption_key $keydesc $raw_key
 _set_encpolicy $SCRATCH_MNT/edir $keydesc
 
 # Create two files in the directory: one whose name is valid in the base64
-# format used for encoding ciphertext filenames, and one whose name is not.  The
-# exact filenames *should* be irrelevant, but due to yet another bug, ->lookup()
-# in an encrypted directory without the key returned ERR_PTR(-ENOENT) rather
-# than NULL if the name was not valid ciphertext, causing a negative dentry to
-# not be created.  For the purpose of this test, we want at least one negative
-# dentry to be created, so just create both types of name.
+# format used in no-key filenames, and one whose name is not.  The exact
+# filenames *should* be irrelevant, but due to yet another bug, ->lookup() in an
+# encrypted directory without the key returned ERR_PTR(-ENOENT) rather than NULL
+# if the name was not a valid no-key name, causing a negative dentry to not be
+# created.  For the purpose of this test, we want at least one negative dentry
+# to be created, so just create both types of name.
 echo contents_@@@ > $SCRATCH_MNT/edir/@@@ # not valid base64
 echo contents_abcd > $SCRATCH_MNT/edir/abcd # valid base64
 
-filter_ciphertext_filenames()
+filter_nokey_filenames()
 {
-	_filter_scratch | sed 's|edir/[a-zA-Z0-9+,_]\+|edir/ENCRYPTED_NAME|g'
+	_filter_scratch | sed 's|edir/[a-zA-Z0-9+,_]\+|edir/NOKEY_NAME|g'
 }
 
 show_file_contents()
@@ -62,8 +62,8 @@ show_file_contents()
 	echo "--- Contents of files using plaintext names:"
 	cat $SCRATCH_MNT/edir/@@@ |& _filter_scratch
 	cat $SCRATCH_MNT/edir/abcd |& _filter_scratch
-	echo "--- Contents of files using ciphertext names:"
-	cat ${ciphertext_names[@]} |& filter_ciphertext_filenames
+	echo "--- Contents of files using no-key names:"
+	cat ${nokey_names[@]} |& filter_nokey_filenames
 }
 
 show_directory_with_key()
@@ -75,21 +75,21 @@ show_directory_with_key()
 
 # View the directory without the encryption key.  The plaintext names shouldn't
 # exist, but 'cat' each to verify this, which also should create negative
-# dentries.  The ciphertext names are unpredictable by design, but verify that
-# the correct number of them are listed by readdir, and save them for later.
+# dentries.  The no-key names are unpredictable by design, but verify that the
+# correct number of them are listed by readdir, and save them for later.
 echo
 echo "***** Without encryption key *****"
 _unlink_session_encryption_key $keydesc
 _scratch_cycle_mount
 echo "--- Directory listing:"
-ciphertext_names=( $(find $SCRATCH_MNT/edir -mindepth 1 | sort) )
-printf '%s\n' "${ciphertext_names[@]}" | filter_ciphertext_filenames
+nokey_names=( $(find $SCRATCH_MNT/edir -mindepth 1 | sort) )
+printf '%s\n' "${nokey_names[@]}" | filter_nokey_filenames
 show_file_contents
 
 # Without remounting or dropping caches, add the encryption key and view the
-# directory again.  Now the plaintext names should all be there, and the
-# ciphertext names should be gone.  Make sure to 'cat' all the names to test for
-# stale dentries.
+# directory again.  Now the plaintext names should all be there, and the no-key
+# names should be gone.  Make sure to 'cat' all the names to test for stale
+# dentries.
 echo
 echo "***** With encryption key *****"
 _add_session_encryption_key $keydesc $raw_key
@@ -103,7 +103,7 @@ rm -rf $SCRATCH_MNT/edir/dir
 
 # Now open the files to pin them in the inode cache (needed to make the test
 # reliable), then revoke the encryption key.  This should no longer cause the
-# files to be presented in ciphertext form immediately.
+# files to be presented in no-key form immediately.
 echo
 echo "***** After key revocation *****"
 (
