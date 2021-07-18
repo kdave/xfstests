@@ -920,3 +920,20 @@ _verify_ciphertext_for_encryption_policy()
 		"$crypt_util_contents_args" \
 		"$crypt_util_filename_args"
 }
+
+# Replace no-key filenames in the given directory with "NOKEY_NAME".
+#
+# No-key filenames are the filenames that the filesystem shows when userspace
+# lists an encrypted directory without the directory's encryption key being
+# present.  These will differ on every run of the test, even when using the same
+# encryption key, hence the need for this filtering in some cases.
+#
+# Note, this may replace "regular" names too, as technically we can only tell
+# whether a name is definitely a regular name, or either a regular or no-key
+# name.  A directory will only contain one type of name at a time, though.
+_filter_nokey_filenames()
+{
+	local dir=$1
+
+	sed "s|${dir}${dir:+/}[A-Za-z0-9+,_]\+|${dir}${dir:+/}NOKEY_NAME|g"
+}

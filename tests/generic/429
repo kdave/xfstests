@@ -52,18 +52,13 @@ _set_encpolicy $SCRATCH_MNT/edir $keydesc
 echo contents_@@@ > $SCRATCH_MNT/edir/@@@ # not valid base64
 echo contents_abcd > $SCRATCH_MNT/edir/abcd # valid base64
 
-filter_nokey_filenames()
-{
-	_filter_scratch | sed 's|edir/[a-zA-Z0-9+,_]\+|edir/NOKEY_NAME|g'
-}
-
 show_file_contents()
 {
 	echo "--- Contents of files using plaintext names:"
 	cat $SCRATCH_MNT/edir/@@@ |& _filter_scratch
 	cat $SCRATCH_MNT/edir/abcd |& _filter_scratch
 	echo "--- Contents of files using no-key names:"
-	cat ${nokey_names[@]} |& filter_nokey_filenames
+	cat ${nokey_names[@]} |& _filter_scratch | _filter_nokey_filenames edir
 }
 
 show_directory_with_key()
@@ -83,7 +78,8 @@ _unlink_session_encryption_key $keydesc
 _scratch_cycle_mount
 echo "--- Directory listing:"
 nokey_names=( $(find $SCRATCH_MNT/edir -mindepth 1 | sort) )
-printf '%s\n' "${nokey_names[@]}" | filter_nokey_filenames
+printf '%s\n' "${nokey_names[@]}" | \
+	_filter_scratch | _filter_nokey_filenames edir
 show_file_contents
 
 # Without remounting or dropping caches, add the encryption key and view the
