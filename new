@@ -20,13 +20,24 @@ _cleanup()
 SRC_GROUPS=`find tests -not -path tests -type d -printf "%f "`
 usage()
 {
-    echo "Usage $0 test_dir"
+    echo "Usage $0 test_dir|test_dir_and_name"
     echo "Available dirs are: $SRC_GROUPS"
     exit
 }
 
 [ $# -eq 0 ] && usage
-tdir=tests/$1
+
+if echo "$1" | grep -q '/'; then
+	if [ -e "tests/$1" ]; then
+		echo "$1: test already exists."
+		exit 1
+	fi
+	tdir="tests/$(echo "$1" | cut -d '/' -f 1)"
+	id="$(echo "$1" | cut -d '/' -f 2)"
+else
+	tdir=tests/$1
+	id="$(basename "$(./tools/nextid "$1")")"
+fi
 
 i=0
 line=0
@@ -36,7 +47,6 @@ eof=1
 export AWK_PROG="$(type -P awk)"
 [ "$AWK_PROG" = "" ] && { echo "awk not found"; exit; }
 
-id="$(basename "$(./tools/nextid "$1")")"
 echo "Next test id is $id"
 shift
 
