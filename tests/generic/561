@@ -62,8 +62,13 @@ dupe_run=$TEST_DIR/${seq}-running
 touch $dupe_run
 for ((i = 0; i < $((2 * LOAD_FACTOR)); i++)); do
 	while [ -e $dupe_run ]; do
-		$DUPEREMOVE_PROG -dr --dedupe-options=same $testdir \
-			>>$seqres.full 2>&1
+		# Run cmd in a subshell so that the golden output does not
+		# capture assertions that trigger when killall shoots down
+		# dupremove processes in an arbitrary order, which leaves the
+		# memory in an inconsistent state long enough for the assert
+		# to trip.
+		cmd="$DUPEREMOVE_PROG -dr --dedupe-options=same $testdir"
+		bash -c "$cmd" >> $seqres.full 2>&1
 	done 2>&1 | sed -e '/Terminated/d' &
 	dedup_pids="$! $dedup_pids"
 done
