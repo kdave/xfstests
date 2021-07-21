@@ -59,10 +59,10 @@ _acl_setup_ids()
         j=1
         for(i=1; i<1000000 && j<=3;i++){
           if (! (i in ids)) {
-	     printf "acl%d=%d;", j, i;		 
+	     printf "acl%d=%d;", j, i;
 	     j++
           }
-        }	
+        }
       }'`
 }
 
@@ -101,7 +101,7 @@ _getfacl_filter_id()
 _acl_ls()
 {
     _ls_l -n $* | awk '{ print $1, $3, $4, $NF }' | _acl_filter_id
-} 
+}
 
 # create an ACL with n ACEs in it
 #
@@ -128,7 +128,7 @@ _filter_aces()
 	BEGIN {
 	    FS=":"
 	    while ( getline <tmpfile > 0 ) {
-		idlist[$1] = $3 
+		idlist[$1] = $3
 	    }
 	}
 	/^user/ { if ($2 in idlist) sub($2, idlist[$2]); print; next}
@@ -180,17 +180,17 @@ _require_attrs()
 {
 	local args
 	local nsp
-	
+
 	if [ $# -eq 0 ]; then
 		args="user"
 	else
 	  	args="$*"
 	fi
-	
+
 	[ -n "$ATTR_PROG" ] || _notrun "attr command not found"
 	[ -n "$GETFATTR_PROG" ] || _notrun "getfattr command not found"
 	[ -n "$SETFATTR_PROG" ] || _notrun "setfattr command not found"
-	
+
 	for nsp in $args; do
 		#
 		# Test if chacl is able to write an attribute on the target
@@ -204,14 +204,14 @@ _require_attrs()
 		touch $TEST_DIR/syscalltest
 		$SETFATTR_PROG -n "$nsp.xfstests" -v "attr" $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
 		cat $TEST_DIR/syscalltest.out >> $seqres.full
-		
+
 		if grep -q 'Function not implemented' $TEST_DIR/syscalltest.out; then
 			_notrun "kernel does not support attrs"
 		fi
 		if grep -q 'Operation not supported' $TEST_DIR/syscalltest.out; then
 			_notrun "attr namespace $nsp not supported by this filesystem type: $FSTYP"
 		fi
-		
+
 		rm -f $TEST_DIR/syscalltest.out
 	done
 }
