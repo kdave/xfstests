@@ -256,6 +256,45 @@ case "$FSTYP" in
 xfs|udf|pvfs2|9p|ceph|nfs)
 	MAX_ATTRS=1000
 	;;
+ext2|ext3|ext4)
+	# For 4k blocksizes, most of the attributes have an attr_name of
+	# "attribute_NN" which is 12, and "value_NN" which is 8.
+	# But for larger block sizes, we start having extended attributes of the
+	# form "attribute_NNN" or "attribute_NNNN", and "value_NNN" and
+	# "value_NNNN", which causes the round(len(..), 4) to jump up by 4
+	# bytes.  So round_up(len(attr_name, 4)) becomes 16 instead of 12, and
+	# round_up(len(value, 4)) becomes 12 instead of 8.
+	#
+	# For 64K blocksize the calculation becomes
+	# 	max_attrs = (block_size - 32) / (16 + 12 + 16)
+	# or
+	# 	max_attrs = (block_size - 32) / 44
+	#
+	# For 4K blocksize:-
+	# 	max_attrs = (block_size - 32) / (16 + 8 + 12)
+	# or
+	# 	max_attrs = (block_size - 32) / 36
+	#
+	# Note (for 4K bs) above are exact calculations for attrs of type
+	# attribute_NN with values of type value_NN.
+	# With above calculations, for 4k blocksize max_attrs becomes 112.
+	# This means we can have few attrs of type attribute_NNN with values of
+	# type value_NNN. To avoid/handle this we need to add extra 4 bytes of
+	# headroom.
+	#
+	# So for 4K, the calculations becomes:-
+	# 	max_attrs = (block_size - 32) / (16 + 8 + 12 + 4)
+	# or
+	# 	max_attrs = (block_size - 32) / 40
+	#
+	# Assume max ~1 block of attrs
+	BLOCK_SIZE=`_get_block_size $TEST_DIR`
+	if [ $BLOCK_SIZE -le 4096 ]; then
+		let MAX_ATTRS=$((($BLOCK_SIZE - 32) / (16 + 8 + 12 + 4)))
+	else
+		let MAX_ATTRS=$((($BLOCK_SIZE - 32) / (16 + 12 + 16 )))
+	fi
+	;;
 *)
 	# Assume max ~1 block of attrs
 	BLOCK_SIZE=`_get_block_size $TEST_DIR`
