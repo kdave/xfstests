@@ -180,11 +180,11 @@ _log_writes_replay_log_range()
 	[ -z "$blkdev" ] && _fail \
 	"block dev must be specified for _log_writes_replay_log_range"
 
-	# To ensure we replay the last entry,
-	# we need to manually increase the end entry number to ensure
-	# it's played
+	# To ensure we replay the last entry, we need to manually increase the
+	# end entry number to ensure it's played. We also dump all the
+	# operations performed as this helps post-mortem analysis of failures.
 	echo "=== replay to $end ===" >> $seqres.full
-	$here/src/log-writes/replay-log --log $LOGWRITES_DEV \
+	$here/src/log-writes/replay-log -vv --log $LOGWRITES_DEV \
 		--replay $blkdev --limit $(($end + 1)) \
 		>> $seqres.full 2>&1
 	[ $? -ne 0 ] && _fail "replay failed"

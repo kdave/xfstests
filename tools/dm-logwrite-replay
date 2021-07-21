@@ -1,0 +1,113 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0 Copyright (c) 2021 Red Hat, Inc.  All Rights
+# Reserved.
+#
+# dm-logwrite-replay utility.
+#
+# This is used to replay failures that result from generic/482. Modify the
+# cleanup function in g/482 to the version that does not tear down the dm-thin
+# volume and grab the thin volume name from the the 482.full output file.  Then
+# you can replay the log writes manually with this tool so that the changes
+# between a good replay and a bad replay can be isolated. The 482.full output
+# file has all the FUA write locations recorded - these are what you pass the
+# tool as "PREV_FUA" and "END_FUA".
+#
+# The tool uses the fstests infrastructure and scripts, so it needs to be run
+# from the base fstests directory similar to the check script. RESULT_DIR is
+# pointed at the current directory, which means that debug output from the tool
+# placed in $seqres.full points ends up in ./dm-logwrite-replay.full.
+#
+# For example:
+#	- device name /dev/mapper/thin-vol
+# 	- last good replay @ write 124
+# 	- first bad replay @ write 125
+#
+# Replay from start to 124:
+#
+# cd src/fstests
+# tools/dm-logwrite-replay --dev /dev/mapper/thin-vol --end 124
+# <take image of filesystem /dev/mapper/thin-vol>
+#
+# Replay from 124 to 125:
+#
+# tools/dm-logwrite-replay --dev /dev/mapper/thin-vol --start 124 --end 125
+# <take image of filesystem from /dev/mapper/thin-vol>
+#
+# Now compare images of the filesystem to see the differences and analyse the
+# failure.
+#
+# Often with log recovery failures, you need to see the pre-recovery state of
+# the filesystem. To do this, use the --no-recovery option in conjunction with
+# the above commands.  This allows you to determine if recovery is doing the
+# wrong thing or not.
+#
+# Once finished, teardown the logwrites/thin vol with
+#
+# tools/dm-logwrite-replay --dev /dev/mapper/thin-vol --cleanup
+#
+
+DMTHIN_VOL_DEV=""
+PREV_FUA=""
+END_FUA=""
+CLEANUP=""
+DO_RECOVERY="y"
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--dev) DMTHIN_VOL_DEV="$2" ; shift ;;
+	--start) PREV_FUA="$2" ; shift ;;
+	--end) END_FUA="$2" ; shift ;;
+	--cleanup) CLEANUP=y ;;
+	--no-recovery) DO_RECOVERY="" ;;
+	esac
+	shift
+done
+
+[ -z "$DMTHIN_VOL_DEV" ] && _fail "not dmthin vol defined"
+
+RESULT_DIR=`pwd`
+
+. ./common/preamble
+_begin_fstest replay
+
+MOUNT_OPTIONS="-o dax=never"
+
+# Import common functions.
+. ./common/filter
+. ./common/dmthin
+. ./common/dmlogwrites
+
+LOGWRITES_NAME=logwrites-test
+LOGWRITES_DMDEV=/dev/mapper/$LOGWRITES_NAME
+
+if [ -n "$CLEANUP" ]; then
+	_log_writes_cleanup &> /dev/null
+	_dmthin_cleanup
+	exit;
+fi
+
+if [ -z "$PREV_FUA" ]; then
+	prev=$(_log_writes_mark_to_entry_number mkfs)
+	[ -z "$prev" ] && _fail "failed to locate entry mark 'mkfs'"
+else
+	prev="$((PREV_FUA + 1))"
+fi
+cur=$(_log_writes_find_next_fua $prev)
+[ -z "$cur" ] && _fail "failed to locate next FUA write"
+
+while [ ! -z "$cur" ]; do
+	echo "Replay writes from $prev to $cur"
+	_log_writes_replay_log_range $cur $DMTHIN_VOL_DEV
+
+	if [ -n "$DO_RECOVERY" ]; then
+		_dmthin_mount
+		_dmthin_check_fs
+	fi
+
+	[ -n "$END_FUA" -a "$END_FUA" -eq "$cur" ] && break;
+
+	prev=$cur
+	cur=$(_log_writes_find_next_fua $(($cur + 1)))
+	[ -z "$cur" ] && break
+done
+
