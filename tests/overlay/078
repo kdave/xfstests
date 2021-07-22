@@ -1,0 +1,145 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2018 Huawei.  All Rights Reserved.
+# Copyright (C) 2021 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 078
+#
+# Test copy up of lower file attributes.
+#
+# Overlayfs copies up a subset of lower file attributes since kernel commits:
+# 173ff5c9ec37 ("ovl: consistent behavior for immutable/append-only inodes")
+# 2e3f6e87c2b0 ("ovl: copy up sync/noatime fileattr flags")
+#
+# This test is similar and was derived from generic/507, but instead
+# of creating new files which are created in upper layer, prepare
+# the file with attributes in lower layer and verify that attributes
+# are not lost during copy up, (optional) shutdown and mount cycle.
+#
+. ./common/preamble
+_begin_fstest auto quick copyup perms shutdown
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	$CHATTR_PROG -ai $lowertestfile &> /dev/null
+	rm -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs overlay
+
+_require_command "$LSATTR_PROG" lasttr
+_require_command "$CHATTR_PROG" chattr
+_require_chattr ASai
+_require_xfs_io_command "syncfs"
+
+_require_scratch
+_require_scratch_shutdown
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+lowertestfile=$lowerdir/testfile
+testfile=$SCRATCH_MNT/testfile
+
+_scratch_mkfs
+mkdir -p $lowerdir
+touch $lowertestfile
+_scratch_mount
+
+# Set another flag on lowertestfile and verify all flags
+# are kept though copy up (optional shutdown) and mount cycle
+do_check()
+{
+	attr=$1
+
+	echo "Test chattr +$1 $2" >> $seqres.full
+
+	$UMOUNT_PROG $SCRATCH_MNT
+
+	# Add attribute to lower file
+	$CHATTR_PROG +$attr $lowertestfile
+
+	# Re-create upperdir/workdir
+	rm -rf $upperdir $workdir
+	mkdir -p $upperdir $workdir
+
+	if [ "$2" == "shutdown" ]; then
+		$XFS_IO_PROG -r $lowertestfile -c "fsync" | _filter_xfs_io
+	fi
+
+	_scratch_mount
+
+	before=`$LSATTR_PROG $testfile`
+
+	# Write file in append mode to test copy up of append-only attribute
+	# Expect failure on write to immutable file
+	expect=0
+	if [ "$1" == "i" ]; then
+		expect=1
+	fi
+	$XFS_IO_PROG -a -c "pwrite -S 0x61 0 10" $testfile >> $seqres.full 2>&1
+	result=$?
+	if [ $result != $expect ]; then
+		echo "Write unexpectedly returned $result for file with attribute '$attr'"
+	fi
+
+	if [ "$2" == "shutdown" ]; then
+		$XFS_IO_PROG -r $testfile -c "fsync" | _filter_xfs_io
+		_scratch_shutdown | tee -a $seqres.full
+	fi
+
+	_scratch_cycle_mount
+
+	after=`$LSATTR_PROG $testfile`
+	echo "Before copy up: $before" >> $seqres.full
+	echo "After  copy up: $after" >> $seqres.full
+
+	# Verify attributes were not lost during copy up, shutdown and mount cycle
+	if [ "$before" != "$after" ]; then
+		echo "Before copy up: $before"
+		echo "After  copy up: $after"
+	fi
+
+	echo "Test chattr -$1 $2" >> $seqres.full
+
+	# Delete attribute from overlay file
+	$CHATTR_PROG -$attr $testfile
+
+	before=`$LSATTR_PROG $testfile`
+
+	if [ "$2" == "shutdown" ]; then
+		$XFS_IO_PROG -r $testfile -c "fsync" | _filter_xfs_io
+		_scratch_shutdown | tee -a $seqres.full
+	fi
+
+	_scratch_cycle_mount
+
+	after=`$LSATTR_PROG $testfile`
+	echo "Before mount cycle: $before" >> $seqres.full
+	echo "After  mount cycle: $after" >> $seqres.full
+
+	# Verify attribute deletion was not lost during shutdown or mount cycle
+	if [ "$before" != "$after" ]; then
+		echo "Before mount cycle: $before"
+		echo "After  mount cycle: $after"
+	fi
+}
+
+echo "Silence is golden"
+
+# This is the subset of attributes copied up by overlayfs since kernel
+# commit ...
+opts="A S a i"
+for i in $opts; do
+	do_check $i
+	do_check $i shutdown
+done
+
+status=0
+exit
