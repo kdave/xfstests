@@ -54,7 +54,12 @@ _scratch_mount -o uquota
 
 # turn off quota and remove space allocated to the quota files
 # (this used to give wrong ENOSYS returns in 2.6.31)
-xfs_quota -x -c off -c remove $SCRATCH_DEV
+#
+# The sed expression below replaces a notrun to cater for kernels that have
+# removed the ability to disable quota accounting at runtime.  On those
+# kernel this test is rather useless, and in a few years we can drop it.
+xfs_quota -x -c off -c remove $SCRATCH_DEV 2>&1 | \
+	sed -e '/XFS_QUOTARM: Invalid argument/d'
 
 # and unmount again
 _scratch_unmount
