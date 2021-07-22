@@ -85,17 +85,17 @@ $FSSTRESS_PROG -z -s 47806 -m 8 -n 500 -p 4 \
 QARGS="-x -D $tmp.projects -P /dev/null $SCRATCH_MNT"
 
 echo "### initial report"
-xfs_quota -c 'quot -p' -c 'quota -ip 6' $QARGS | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'quot -p' -c 'quota -ip 6' $QARGS | filter_xfs_quota
 
 echo "### check the project, should give warnings"
-xfs_quota -c 'project -c 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'project -c 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
 
 echo "### recursively setup the project"
-xfs_quota -c 'project -s 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
-xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'project -s 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'quota -ip 6' $QARGS | filter_xfs_quota
 
 echo "### check the project, should give no warnings now"
-xfs_quota -c 'project -c 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'project -c 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
 
 echo "### deny a hard link - wrong project ID"
 rm -f $SCRATCH_MNT/outer $target/inner
@@ -107,7 +107,7 @@ if [ $? -eq 0 ]; then
 else
 	echo hard link failed
 fi
-xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'quota -ip 6' $QARGS | filter_xfs_quota
 
 echo "### allow a hard link - right project ID"
 $XFS_IO_PROG -c 'chproj 6' $SCRATCH_MNT/outer
@@ -118,12 +118,12 @@ else
 	echo hard link failed
 	ls -ld $SCRATCH_MNT/outer $target/inner
 fi
-xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'quota -ip 6' $QARGS | filter_xfs_quota
 
 echo "### recursively clear the project"
-xfs_quota -c 'project -C 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'project -C 6' $QARGS | LC_COLLATE=POSIX sort | filter_xfs_quota
 #no output...
-xfs_quota -c 'quota -ip 6' $QARGS | filter_xfs_quota
+$XFS_QUOTA_PROG -c 'quota -ip 6' $QARGS | filter_xfs_quota
 
 status=0
 exit
