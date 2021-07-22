@@ -44,6 +44,7 @@ int main(int argc, char *argv[])
 	char buf[BUF_SIZE];
 	int nread, bufsize = BUF_SIZE;
 	struct linux_dirent64 *d;
+	struct stat st = {};
 	int bpos, total, i;
 	off_t lret;
 	int retval = EXIT_SUCCESS;
@@ -81,9 +82,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (filename) {
-		exists = !faccessat(fd, filename, F_OK, AT_SYMLINK_NOFOLLOW);
+		exists = !fstatat(fd, filename, &st, AT_SYMLINK_NOFOLLOW);
 		if (!exists && errno != ENOENT) {
-			perror("faccessat");
+			perror("fstatat");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -139,9 +140,6 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		if (nread == 0)
-			break;
-
 		for (bpos = 0; bpos < nread; total++) {
 			d = (struct linux_dirent64 *) (buf + bpos);
 
@@ -165,8 +163,16 @@ int main(int argc, char *argv[])
 					printf("entry #%d: %s (d_ino=%lld, d_off=%lld)\n",
 					       i, d->d_name, (long long int)d->d_ino,
 					       (long long int)d->d_off);
-				if (!strcmp(filename, d->d_name))
+				if (!strcmp(filename, d->d_name)) {
 					found = 1;
+					if (st.st_ino && d->d_ino != st.st_ino) {
+						fprintf(stderr, "entry %s has inconsistent d_ino (%lld != %lld)\n",
+								filename,
+								(long long int)d->d_ino,
+								(long long int)st.st_ino);
+					}
+				}
+
 			}
 			bpos += d->d_reclen;
 		}
