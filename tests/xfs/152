@@ -195,8 +195,9 @@ test_enable()
 test_off()
 {
 	echo "checking off command (type=$type)"
-	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
-			-c "off -$type -v" $SCRATCH_MNT | _filter_scratch
+	_scratch_unmount
+	_qmount_option ""
+	_qmount
 }
 
 test_remove()
@@ -257,6 +258,8 @@ qmount_idmapped()
 
 test_xfs_quota()
 {
+	local quota_options="$1"
+
 	# init quota
 	echo "init quota limit and timer, and dump it"
 	if [ "$idmapped" -eq 1 ]; then
@@ -310,7 +313,10 @@ test_xfs_quota()
 	echo ; test_state
 	echo ; test_remove
 	echo ; test_report -N
-	echo "quota remount"; qmount_idmapped
+	echo "quota remount"
+	_qmount_option "$quota_options"
+	_qmount
+	qmount_idmapped
 	echo ; test_report -N
 
 	# restore test
@@ -329,7 +335,7 @@ id=$uqid
 id2=$uqid2
 idmapped=0
 qmount_idmapped
-test_xfs_quota
+test_xfs_quota "uquota,sync"
 
 echo "----------------------- uquota,sync,idmapped ---------------------------"
 wipe_scratch
@@ -339,7 +345,7 @@ id=$uqid
 id2=$uqid2
 idmapped=1
 qmount_idmapped
-test_xfs_quota
+test_xfs_quota "uquota,sync"
 
 echo "----------------------- gquota,sync,unmapped ---------------------------"
 wipe_scratch
@@ -349,7 +355,7 @@ id=$gqid
 id2=$gqid2
 idmapped=0
 qmount_idmapped
-test_xfs_quota
+test_xfs_quota "gquota,sync"
 
 echo "----------------------- gquota,sync,idmapped ---------------------------"
 wipe_scratch
@@ -359,7 +365,7 @@ id=$gqid
 id2=$gqid2
 idmapped=1
 qmount_idmapped
-test_xfs_quota
+test_xfs_quota "gquota,sync"
 
 wipe_mounts
 
