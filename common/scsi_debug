@@ -36,7 +36,7 @@ _get_scsi_debug_dev()
 	echo "scsi_debug options $opts" >> $seqres.full
 	modprobe scsi_debug $opts
 	[ $? -eq 0 ] || _fail "scsi_debug modprobe failed"
-	sleep 1
+	$UDEV_SETTLE_PROG
 	device=`grep -wl scsi_debug /sys/block/sd*/device/model | awk -F / '{print $4}'`
 	echo "/dev/$device"
 }
@@ -50,7 +50,7 @@ _put_scsi_debug_dev()
 	# modprobe is only quiet when the module is not found, not when the
 	# module is in use.
 	while [ $n -ge 0 ] && ! modprobe -nr scsi_debug >/dev/null 2>&1; do
-		sleep 1
+		$UDEV_SETTLE_PROG
 		n=$((n-1))
 	done
 	rmmod scsi_debug || _fail "Could not remove scsi_debug module"
