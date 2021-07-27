@@ -240,7 +240,14 @@ else
 	UDEV_SETTLE_PROG="$UDEV_SETTLE_PROG settle"
 fi
 # neither command is available, use sleep 1
-if [ "$UDEV_SETTLE_PROG" == "" ]; then
+#
+# Udev events are sent via netlink to userspace through
+# kobject_uevent_net_broadcast(), and udev in userspace is in charge of
+# handling the events. The command `udevadm settle` just checks if
+# /run/udev/queue is 0, however, a kernel without CONFIG_NET will have
+# kobject_uevent_net_broadcast() be a no-op, and so /run/udev/queue may not
+# exist or always be 0. We check for /proc/net to see CONFIG_NET was enabled.
+if [[ "$UDEV_SETTLE_PROG" == "" || ! -d /proc/net ]]; then
 	UDEV_SETTLE_PROG="sleep 1"
 fi
 export UDEV_SETTLE_PROG
