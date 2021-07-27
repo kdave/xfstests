@@ -1,0 +1,101 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FSQA Test No. 640
+#
+# Test that if we fsync a directory A, evict A's inode, move one file from
+# directory A to a directory B, fsync some other inode that is not directory A,
+# B or any inode inside these two directories, and then power fail, the file
+# that was moved is not lost.
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_dm_target flakey
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create two test directories, one with a file we will rename later.
+mkdir $SCRATCH_MNT/A
+mkdir $SCRATCH_MNT/B
+echo -n "hello world" > $SCRATCH_MNT/A/foo
+
+# Persist everything done so far.
+sync
+
+# Add some new file to directory A and fsync the directory.
+touch $SCRATCH_MNT/A/bar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/A
+
+# Now evict all inodes from memory. To trigger the original problem on btrfs we
+# actually only needed to trigger eviction of A's inode, but there's no simple
+# way to evict a single inode, so evict everything.
+echo 2 > /proc/sys/vm/drop_caches
+
+# Now move file foo from directory A to directory B.
+mv $SCRATCH_MNT/A/foo $SCRATCH_MNT/B/foo
+
+# Now make an fsync to anything except A, B or any file inside them, like for
+# example create a file at the root directory and fsync this new file.
+touch $SCRATCH_MNT/baz
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/baz
+
+# Simulate a power failure and then check file foo still exists.
+_flakey_drop_and_remount
+
+# Since file foo was not explicitly fsynced we can not guarantee that, for every
+# filesystem, after replaying the journal/log we have file foo inside directory A
+# or inside directory B. The file must exist however, and can only be found in
+# one of the directories, not on both.
+#
+# At the moment of this writing, on f2fs file foo exists always at A/foo,
+# regardless of the fsync-mode mount option ("-o fsync_mode=posix" or
+# "-o fsync_mode=strict"). On ext4 and xfs it exists at B/foo. It is also
+# supposed to exist at B/foo on btrfs (at the moment it doesn't exist in
+# either directory due to a bug).
+
+foo_in_a=0
+foo_in_b=0
+
+if [ -f $SCRATCH_MNT/A/foo ]; then
+	echo "File foo data: $(cat $SCRATCH_MNT/A/foo)"
+	foo_in_a=1
+fi
+
+if [ -f $SCRATCH_MNT/B/foo ]; then
+	echo "File foo data: $(cat $SCRATCH_MNT/B/foo)"
+	foo_in_b=1
+fi
+
+if [ $foo_in_a -eq 1 ] && [ $foo_in_b -eq 1 ]; then
+	echo "File foo found in A/ and B/"
+elif [ $foo_in_a -eq 0 ] && [ $foo_in_b -eq 0 ]; then
+	echo "File foo is missing"
+fi
+
+# While here, also check that files bar and baz exist.
+[ -f $SCRATCH_MNT/A/bar ] || echo "File A/bar is missing"
+[ -f $SCRATCH_MNT/baz ] || echo "File baz is missing"
+
+_unmount_flakey
+status=0
+exit
