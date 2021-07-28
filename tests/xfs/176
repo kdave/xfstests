@@ -1,0 +1,190 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 176
+#
+# Ensure that online shrink does not let us shrink the fs such that the end
+# of the filesystem is now in the middle of a sparse inode cluster.
+#
+. ./common/preamble
+_begin_fstest auto quick shrink
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_scratch
+_require_xfs_sparse_inodes
+_require_scratch_xfs_shrink
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fpunch"
+
+_scratch_mkfs "-d size=50m -m crc=1 -i sparse" |
+	_filter_mkfs > /dev/null 2> $tmp.mkfs
+. $tmp.mkfs	# for isize
+cat $tmp.mkfs >> $seqres.full
+
+daddr_to_fsblocks=$((dbsize / 512))
+
+convert_units() {
+	_scratch_xfs_db -f -c "$@" | sed -e 's/^.*(\([0-9]*\)).*$/\1/g'
+}
+
+# Figure out the next possible inode number after the log, since we can't
+# shrink or relocate the log
+logstart=$(_scratch_xfs_get_metadata_field 'logstart' 'sb')
+if [ $logstart -gt 0 ]; then
+	logblocks=$(_scratch_xfs_get_metadata_field 'logblocks' 'sb')
+	logend=$((logstart + logblocks))
+	logend_agno=$(convert_units "convert fsb $logend agno")
+	logend_agino=$(convert_units "convert fsb $logend agino")
+else
+	logend_agno=0
+	logend_agino=0
+fi
+
+_scratch_mount
+_xfs_force_bdev data $SCRATCH_MNT
+old_dblocks=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.datablocks)
+
+mkdir $SCRATCH_MNT/save/
+sino=$(stat -c '%i' $SCRATCH_MNT/save)
+
+_consume_freesp()
+{
+	file=$1
+
+	# consume nearly all available space (leave ~1MB)
+	avail=`_get_available_space $SCRATCH_MNT`
+	filesizemb=$((avail / 1024 / 1024 - 1))
+	$XFS_IO_PROG -fc "falloc 0 ${filesizemb}m" $file
+}
+
+# Allocate inodes in a directory until failure.
+_alloc_inodes()
+{
+	dir=$1
+
+	i=0
+	while [ true ]; do
+		touch $dir/$i 2>> $seqres.full || break
+		i=$((i + 1))
+	done
+}
+
+# Find a sparse inode cluster after logend_agno/logend_agino.
+find_sparse_clusters()
+{
+	for ((agno = agcount - 1; agno >= logend_agno; agno--)); do
+		_scratch_xfs_db -c "agi $agno" -c "addr root" -c "btdump" | \
+			tr ':[,]' '    ' | \
+			awk -v "agno=$agno" \
+			    -v "agino=$logend_agino" \
+'{if ($2 >= agino && and(strtonum($3), 0x8000)) {printf("%s %s %s\n", agno, $2, $3);}}' | \
+			tac
+	done
+}
+
+# Calculate the fs inode chunk size based on the inode size and fixed 64-inode
+# record. This value is used as the target level of free space fragmentation
+# induced by the test (i.e., max size of free extents). We don't need to go
+# smaller than a full chunk because the XFS block allocator tacks on alignment
+# requirements to the size of the requested allocation. In other words, a chunk
+# sized free chunk is not enough to guarantee a successful chunk sized
+# allocation.
+XFS_INODES_PER_CHUNK=64
+CHUNK_SIZE=$((isize * XFS_INODES_PER_CHUNK))
+
+_consume_freesp $SCRATCH_MNT/spc
+
+# Now that the fs is nearly full, punch holes in every other $CHUNK_SIZE range
+# of the space consumer file.  The goal here is to end up with a sparse cluster
+# at the end of the fs (and past any internal log), where the chunks at the end
+# of the cluster are sparse.
+
+offset=`_get_filesize $SCRATCH_MNT/spc`
+offset=$((offset - $CHUNK_SIZE * 2))
+nr=0
+while [ $offset -ge 0 ]; do
+	$XFS_IO_PROG -c "fpunch $offset $CHUNK_SIZE" $SCRATCH_MNT/spc \
+		2>> $seqres.full || _fail "fpunch failed"
+
+	# allocate as many inodes as possible
+	mkdir -p $SCRATCH_MNT/urk/offset.$offset > /dev/null 2>&1
+	_alloc_inodes $SCRATCH_MNT/urk/offset.$offset
+
+	offset=$((offset - $CHUNK_SIZE * 2))
+
+	# Every five times through the loop, see if we got a sparse cluster
+	nr=$((nr + 1))
+	if [ $((nr % 5)) -eq 4 ]; then
+		_scratch_unmount
+		find_sparse_clusters > $tmp.clusters
+		if [ -s $tmp.clusters ]; then
+			break;
+		fi
+		_scratch_mount
+	fi
+done
+
+test -s $tmp.clusters || _notrun "Could not create a sparse inode cluster"
+
+echo clusters >> $seqres.full
+cat $tmp.clusters >> $seqres.full
+
+# Figure out which inode numbers are in that last cluster.  We need to preserve
+# that cluster but delete everything else ahead of shrinking.
+icluster_agno=$(head -n 1 $tmp.clusters | cut -d ' ' -f 1)
+icluster_agino=$(head -n 1 $tmp.clusters | cut -d ' ' -f 2)
+icluster_ino=$(convert_units "convert agno $icluster_agno agino $icluster_agino ino")
+
+# Check that the save directory isn't going to prevent us from shrinking
+test $sino -lt $icluster_ino || \
+	echo "/save inode comes after target cluster, test may fail"
+
+# Save the inodes in the last cluster and delete everything else
+_scratch_mount
+rm -r $SCRATCH_MNT/spc
+for ((ino = icluster_ino; ino < icluster_ino + XFS_INODES_PER_CHUNK; ino++)); do
+	find $SCRATCH_MNT/urk/ -inum "$ino" -print0 | xargs -r -0 mv -t $SCRATCH_MNT/save/
+done
+rm -rf $SCRATCH_MNT/urk/ $SCRATCH_MNT/save/*/*
+sync
+$XFS_IO_PROG -c 'fsmap -vvvvv' $SCRATCH_MNT &>> $seqres.full
+
+# Propose shrinking the filesystem such that the end of the fs ends up in the
+# sparse part of our sparse cluster.  Remember, the last block of that cluster
+# ought to be free.
+target_ino=$((icluster_ino + XFS_INODES_PER_CHUNK - 1))
+for ((ino = target_ino; ino >= icluster_ino; ino--)); do
+	found=$(find $SCRATCH_MNT/save/ -inum "$ino" | wc -l)
+	test $found -gt 0 && break
+
+	ino_daddr=$(convert_units "convert ino $ino daddr")
+	new_size=$((ino_daddr / daddr_to_fsblocks))
+
+	echo "Hope to fail at shrinking to $new_size" >> $seqres.full
+	$XFS_GROWFS_PROG -D $new_size $SCRATCH_MNT &>> $seqres.full
+	res=$?
+
+	# Make sure shrink did not work
+	new_dblocks=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.datablocks)
+	if [ "$new_dblocks" != "$old_dblocks" ]; then
+		echo "should not have shrank $old_dblocks -> $new_dblocks"
+		break
+	fi
+
+	if [ $res -eq 0 ]; then
+		echo "shrink to $new_size (ino $ino) should have failed"
+		break
+	fi
+done
+
+# success, all done
+echo Silence is golden
+status=0
+exit
