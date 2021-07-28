@@ -60,9 +60,21 @@ echo "Format and mount rt volume"
 
 export USE_EXTERNAL=yes
 export SCRATCH_RTDEV=$rtdev
-_scratch_mkfs -d size=$((1024 * 1024 * 1024)) -b size=${dbsize} \
+_scratch_mkfs -d size=$((1024 * 1024 * 1024)) \
 	      -r size=${rtextsz},extsize=${rtextsz} >> $seqres.full
 _try_scratch_mount || _notrun "Couldn't mount fs with synthetic rt volume"
+
+# If we didn't get the desired realtime volume and the same blocksize as the
+# first format (which we used to compute a specific rt geometry), skip the
+# test.  This can happen if the MKFS_OPTIONS conflict with the ones we passed
+# to _scratch_mkfs or do not result in a valid rt fs geometry.  In this case,
+# _scratch_mkfs will try to "succeed" at formatting by dropping MKFS_OPTIONS,
+# giving us the wrong geometry.
+formatted_blksz="$(_get_block_size $SCRATCH_MNT)"
+test "$formatted_blksz" -ne "$dbsize" && \
+	_notrun "Tried to format with $dbsize blocksize, got $formatted_blksz."
+$XFS_INFO_PROG $SCRATCH_MNT | egrep -q 'realtime.*blocks=0' && \
+	_notrun "Filesystem should have a realtime volume"
 
 echo "Consume free space"
 fillerdir=$SCRATCH_MNT/fillerdir
