@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 175
+#
+# Regression test for xfsprogs commit d8a94546 ("xfs_quota: state command
+# should report ugp grace times"). When give "-ugp" or "-a" options to
+# xfs_quota state command, it should report grace times for all three types
+# separately.
+#
+. ./common/preamble
+_begin_fstest auto quick quota
+
+# Import common functions
+. ./common/quota
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_quota
+
+# Format filesystem and set up quota limits
+_scratch_mkfs > $seqres.full
+_qmount_option "grpquota"
+_qmount >> $seqres.full
+
+$XFS_QUOTA_PROG -x -c 'timer -g 5d' $SCRATCH_MNT
+# xfs_quota state -ugp or -a should report times for all three types separately.
+echo "* state -ugp:"
+$XFS_QUOTA_PROG -x -c 'state -ugp' $SCRATCH_MNT | grep 'grace time'
+echo "* state -a:"
+$XFS_QUOTA_PROG -x -c 'state -a' $SCRATCH_MNT | grep 'grace time'
+
+# success, all done
+status=0
+exit
