@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 244
+#
+# Make sure "btrfs device remove" won't crash when non-existing devid
+# is provided
+#
+. ./common/preamble
+_begin_fstest auto quick volume dangerous
+
+# Override the default cleanup function.
+# _cleanup()
+# {
+# 	cd /
+# 	rm -r -f $tmp.*
+# }
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Above created fs only contains one device with devid 1, device remove 3
+# should just fail with proper error message showing devid 3 can't be found.
+# Although on unpatched kernel, this will trigger a NULL pointer dereference.
+$BTRFS_UTIL_PROG device remove 3 $SCRATCH_MNT
+ret=$?
+
+if [ $ret -ne 1 ]; then
+	echo "Unexpected return value from btrfs command, has $ret expected 1"
+fi
+
+# Fstests will automatically check the filesystem to make sure metadata is not
+# corrupted.
+
+# success, all done
+status=0
+exit
