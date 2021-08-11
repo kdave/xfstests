@@ -12,6 +12,7 @@ _begin_fstest auto quick
 # Override the default cleanup function.
 _cleanup()
 {
+	local pv_ret
 	cd /
 	rm -f $tmp.*
 
@@ -34,7 +35,9 @@ _cleanup()
 		$UMOUNT_PROG $mnt >> $seqres.full 2>&1
 		$LVM_PROG vgremove -f $vgname >>$seqres.full 2>&1
 		$LVM_PROG pvremove -f $SCRATCH_DEV >>$seqres.full 2>&1
-		test $? -eq 0 && break
+		pv_ret=$?
+		$UDEV_SETTLE_PROG
+		test $pv_ret -eq 0 && break
 		sleep 2
 	done
 }
