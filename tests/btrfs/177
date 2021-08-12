@@ -16,6 +16,32 @@ _begin_fstest auto quick swap balance
 _supported_fs btrfs
 _require_scratch_swapfile
 
+# Eliminate the differences between the old and new output formats
+# Old format:
+# 	Resize 'SCRATCH_MNT' of '1073741824'
+# New format:
+# 	Resize device id 1 (SCRATCH_DEV) from 3.00GiB to 1.00GiB
+# Convert both outputs to:
+# 	Resized to 1073741824
+convert_resize_output()
+{
+        local _field
+        local _val
+        local _suffix
+        _field=`$AWK_PROG '{print $NF}' | tr -d "'"`
+        # remove trailing zeroes
+        _val=`echo $_field | $AWK_PROG '{print $1 * 1}'`
+        # get the first unit char, for example return G in case we have GiB
+        _suffix=`echo $_field | grep -o "[GMB]"`
+        if [ -z "$_suffix" ]; then
+                _suffix="B"
+        fi
+        _val=`echo "$_val$_suffix" | _filter_size_to_bytes`
+	echo "Resized to $_val"
+}
+
+
+
 swapfile="$SCRATCH_MNT/swap"
 
 _require_scratch_size $((3 * 1024 * 1024)) #kB
@@ -36,8 +62,7 @@ dd if=/dev/zero of="$SCRATCH_MNT/refill" bs=4096 >> $seqres.full 2>&1
 # Now add more space and create a swap file. We know that the first $fssize
 # of the filesystem was used, so the swap file must be in the new part of the
 # filesystem.
-$BTRFS_UTIL_PROG filesystem resize $((3 * fssize)) "$SCRATCH_MNT" | \
-							_filter_scratch
+$BTRFS_UTIL_PROG filesystem resize $((3 * fssize)) "$SCRATCH_MNT" | convert_resize_output
 _format_swapfile "$swapfile" $((32 * 1024 * 1024))
 swapon "$swapfile"
 
@@ -55,7 +80,7 @@ $BTRFS_UTIL_PROG filesystem resize 1G "$SCRATCH_MNT" 2>&1 | grep -o "Text file b
 swapoff "$swapfile"
 
 # It should work again after swapoff.
-$BTRFS_UTIL_PROG filesystem resize $fssize "$SCRATCH_MNT" | _filter_scratch
+$BTRFS_UTIL_PROG filesystem resize $fssize "$SCRATCH_MNT" | convert_resize_output
 
 status=0
 exit
