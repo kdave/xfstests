@@ -237,7 +237,11 @@ test_non_revertible_options()
 
 test_one_shot_options()
 {
-	test_mount_opt "clear_cache" ""
+	if [ "$enable_clear_cache_shown" = true ]; then
+		test_mount_opt "clear_cache" "clear_cache"
+	else
+		test_mount_opt "clear_cache" ""
+	fi
 }
 
 # All these options can be reverted (with their "no" counterpart), or can have
@@ -315,6 +319,13 @@ _try_scratch_mount "-o discard=sync" > /dev/null 2>&1 && \
 enable_rescue_nologreplay=false
 _try_scratch_mount "-o ro,rescue=nologreplay" > /dev/null 2>&1 && \
 	{ enable_rescue_nologreplay=true; _scratch_unmount; }
+
+enable_clear_cache_shown=false
+_try_scratch_mount "-o clear_cache" > /dev/null 2>&1 && \
+	{ shown_opts=$(cat /proc/self/mounts | grep $SCRATCH_MNT | \
+		       $AWK_PROG '{ print $4 }')
+	  echo $shown_opts | grep -q clear_cache && enable_clear_cache_shown=true
+	  _scratch_unmount; }
 
 # real QA test starts here
 _scratch_mkfs >/dev/null
