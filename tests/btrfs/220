@@ -209,22 +209,30 @@ test_non_revertible_options()
 {
 	test_mount_opt "degraded" "degraded"
 
-	# nologreplay should be used only with
+	# nologreplay should be used only with readonly
 	test_should_fail "nologreplay"
-	test_mount_opt "nologreplay,ro" "ro,rescue=nologreplay"
 
-	# norecovery should be used only with. This options is an alias to nologreplay
+	# norecovery should be used only with readonly.
+	# This options is an alias to nologreplay
 	test_should_fail "norecovery"
-	test_mount_opt "norecovery,ro" "ro,rescue=nologreplay"
+
+	if [ "$enable_rescue_nologreplay" = true ]; then
+		#rescue=nologreplay should be used only with readonly
+		test_should_fail "rescue=nologreplay"
+
+		test_mount_opt "nologreplay,ro" "ro,rescue=nologreplay"
+		test_mount_opt "norecovery,ro" "ro,rescue=nologreplay"
+		test_mount_opt "rescue=nologreplay,ro" "ro,rescue=nologreplay"
+	else
+		test_mount_opt "nologreplay,ro" "ro,nologreplay"
+		test_mount_opt "norecovery,ro" "ro,nologreplay"
+	fi
+
 	test_mount_opt "rescan_uuid_tree" "rescan_uuid_tree"
 	test_mount_opt "skip_balance" "skip_balance"
 	test_mount_opt "user_subvol_rm_allowed" "user_subvol_rm_allowed"
 
 	test_should_fail "rescue=invalid"
-
-	# nologreplay requires readonly
-	test_should_fail "rescue=nologreplay"
-	test_mount_opt "rescue=nologreplay,ro" "ro,rescue=nologreplay"
 }
 
 test_one_shot_options()
@@ -303,6 +311,10 @@ MOUNT_OPTIONS=
 enable_discard_sync=false
 _try_scratch_mount "-o discard=sync" > /dev/null 2>&1 && \
 	{ enable_discard_sync=true; _scratch_unmount; }
+
+enable_rescue_nologreplay=false
+_try_scratch_mount "-o ro,rescue=nologreplay" > /dev/null 2>&1 && \
+	{ enable_rescue_nologreplay=true; _scratch_unmount; }
 
 # real QA test starts here
 _scratch_mkfs >/dev/null
