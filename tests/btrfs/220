@@ -263,9 +263,14 @@ test_revertible_options()
 	test_roundtrip_mount "nodatasum" "nodatasum" "datasum" "$DEFAULT_OPTS"
 
 	test_should_fail "discard=invalid"
-	test_roundtrip_mount "discard" "discard" "discard=sync" "discard"
-	test_roundtrip_mount "discard=async" "discard=async" "discard=sync" "discard"
-	test_roundtrip_mount "discard=sync" "discard" "nodiscard" "$DEFAULT_OPTS"
+	if [ "$enable_discard_sync" = true ]; then
+		test_roundtrip_mount "discard" "discard" "discard=sync" "discard"
+		test_roundtrip_mount "discard=async" "discard=async" "discard=sync" "discard"
+		test_roundtrip_mount "discard=sync" "discard" "nodiscard" "$DEFAULT_OPTS"
+	else
+		test_roundtrip_mount "discard" "discard" "discard" "discard"
+		test_roundtrip_mount "discard" "discard" "nodiscard" "$DEFAULT_OPTS"
+	fi
 
 	test_roundtrip_mount "enospc_debug" "enospc_debug" "noenospc_debug" "$DEFAULT_OPTS"
 
@@ -291,6 +296,13 @@ test_revertible_options()
 
 	test_roundtrip_mount "notreelog" "notreelog" "treelog" "$DEFAULT_OPTS"
 }
+
+# Find out if the running kernel supports the -o discard=sync option.
+_scratch_mkfs >/dev/null
+MOUNT_OPTIONS=
+enable_discard_sync=false
+_try_scratch_mount "-o discard=sync" > /dev/null 2>&1 && \
+	{ enable_discard_sync=true; _scratch_unmount; }
 
 # real QA test starts here
 _scratch_mkfs >/dev/null
