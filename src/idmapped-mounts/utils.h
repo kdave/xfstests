@@ -77,6 +77,10 @@ struct userns_hierarchy {
 #define list_for_each(__iterator, __list) \
 	for (__iterator = (__list)->next; __iterator != __list; __iterator = __iterator->next)
 
+#define list_for_each_safe(__iterator, __list, __next)               \
+	for (__iterator = (__list)->next, __next = __iterator->next; \
+	     __iterator != __list; __iterator = __next, __next = __next->next)
+
 static inline void list_init(struct list *list)
 {
 	list->elem = NULL;
