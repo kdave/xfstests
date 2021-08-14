@@ -8717,8 +8717,11 @@ static void usage(void)
 	fprintf(stderr, "    Run idmapped mount tests\n\n");
 
 	fprintf(stderr, "Arguments:\n");
-	fprintf(stderr, "-d --device        Device used in the tests\n");
-	fprintf(stderr, "-m --mountpoint    Mountpoint of device\n");
+	fprintf(stderr, "--device        Device used in the tests\n");
+	fprintf(stderr, "--fstype        Filesystem type used in the tests\n");
+	fprintf(stderr, "--help          Print help\n");
+	fprintf(stderr, "--mountpoint    Mountpoint of device\n");
+	fprintf(stderr, "--supported     Test whether idmapped mounts are supported on this filesystem\n");
 
 	_exit(EXIT_SUCCESS);
 }
@@ -8826,7 +8829,7 @@ int main(int argc, char *argv[])
 	int index = 0;
 	bool supported = false;
 
-	while ((ret = getopt_long(argc, argv, "", longopts, &index)) != -1) {
+	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
 		switch (ret) {
 		case 'd':
 			t_device = optarg;
