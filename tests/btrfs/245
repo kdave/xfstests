@@ -1,0 +1,34 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Christian Brauner.  All Rights Reserved.
+#
+# FS QA Test 245
+#
+# Test that idmapped mounts behave correctly with btrfs specific features such
+# as subvolume and snapshot creation and deletion.
+#
+. ./common/preamble
+_begin_fstest auto quick idmapped subvolume
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_idmapped_mounts
+_require_test
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount "-o user_subvol_rm_allowed" >> $seqres.full
+
+echo "Silence is golden"
+
+$here/src/idmapped-mounts/idmapped-mounts --test-btrfs --device "$TEST_DEV" \
+	--mountpoint "$TEST_DIR" --scratch-device "$SCRATCH_DEV" \
+	--scratch-mountpoint "$SCRATCH_MNT" --fstype "$FSTYP"
+
+status=$?
+exit
