@@ -8722,6 +8722,7 @@ static void usage(void)
 	fprintf(stderr, "--help          Print help\n");
 	fprintf(stderr, "--mountpoint    Mountpoint of device\n");
 	fprintf(stderr, "--supported     Test whether idmapped mounts are supported on this filesystem\n");
+	fprintf(stderr, "--test-core     Run core idmapped mount testsuite\n");
 
 	_exit(EXIT_SUCCESS);
 }
@@ -8732,7 +8733,8 @@ static const struct option longopts[] = {
 	{"mountpoint",	required_argument,	0,	'm'},
 	{"supported",	no_argument,		0,	's'},
 	{"help",	no_argument,		0,	'h'},
-	{NULL,		0,			0,	0  },
+	{"test-core",	no_argument,		0,	'c'},
+	{NULL,		0,			0,	0},
 };
 
 struct t_idmapped_mounts {
@@ -8827,7 +8829,7 @@ int main(int argc, char *argv[])
 {
 	int fret, ret;
 	int index = 0;
-	bool supported = false;
+	bool supported = false, test_core = false;
 
 	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
 		switch (ret) {
@@ -8842,6 +8844,9 @@ int main(int argc, char *argv[])
 			break;
 		case 's':
 			supported = true;
+			break;
+		case 'c':
+			test_core = true;
 			break;
 		case 'h':
 			/* fallthrough */
@@ -8912,7 +8917,7 @@ int main(int argc, char *argv[])
 
 	fret = EXIT_FAILURE;
 
-	if (!run_test(basic_suite, ARRAY_SIZE(basic_suite)))
+	if (test_core && !run_test(basic_suite, ARRAY_SIZE(basic_suite)))
 		goto out;
 
 	fret = EXIT_SUCCESS;
