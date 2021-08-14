@@ -3199,6 +3199,121 @@ out:
 	return fret;
 }
 
+static int fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns(void)
+{
+	int fret = -1;
+	int file1_fd = -EBADF, file1_fd2 = -EBADF, open_tree_fd = -EBADF;
+	struct mount_attr attr = {
+		.attr_set = MOUNT_ATTR_IDMAP,
+	};
+	pid_t pid;
+
+	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	if (file1_fd < 0) {
+		log_stderr("failure: openat");
+		goto out;
+	}
+
+	/* Skip if vfs caps are unsupported. */
+	if (set_dummy_vfs_caps(file1_fd, 0, 1000))
+		return 0;
+
+	if (fremovexattr(file1_fd, "security.capability")) {
+		log_stderr("failure: fremovexattr");
+		goto out;
+	}
+	if (expected_dummy_vfs_caps_uid(file1_fd, -1)) {
+		log_stderr("failure: expected_dummy_vfs_caps_uid");
+		goto out;
+	}
+	if (errno != ENODATA) {
+		log_stderr("failure: errno");
+		goto out;
+	}
+
+	/* Changing mount properties on a detached mount. */
+	attr.userns_fd	= get_userns_fd(0, 10000, 10000);
+	if (attr.userns_fd < 0) {
+		log_stderr("failure: get_userns_fd");
+		goto out;
+	}
+
+	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+				     AT_EMPTY_PATH |
+				     AT_NO_AUTOMOUNT |
+				     AT_SYMLINK_NOFOLLOW |
+				     OPEN_TREE_CLOEXEC |
+				     OPEN_TREE_CLONE);
+	if (open_tree_fd < 0) {
+		log_stderr("failure: sys_open_tree");
+		goto out;
+	}
+
+	if (sys_mount_setattr(open_tree_fd, "", AT_EMPTY_PATH, &attr, sizeof(attr))) {
+		log_stderr("failure: sys_mount_setattr");
+		goto out;
+	}
+
+	file1_fd2 = openat(open_tree_fd, FILE1, O_RDWR | O_CLOEXEC, 0);
+	if (file1_fd2 < 0) {
+		log_stderr("failure: openat");
+		goto out;
+	}
+
+	/*
+	 * Verify we can set an v3 fscap for real root this was regressed at
+	 * some point. Make sure this doesn't happen again!
+	 */
+	pid = fork();
+	if (pid < 0) {
+		log_stderr("failure: fork");
+		goto out;
+	}
+	if (pid == 0) {
+		if (!switch_userns(attr.userns_fd, 0, 0, false))
+			die("failure: switch_userns");
+
+		if (expected_dummy_vfs_caps_uid(file1_fd2, -1))
+			die("failure: expected_dummy_vfs_caps_uid");
+		if (errno != ENODATA)
+			die("failure: errno");
+
+		if (set_dummy_vfs_caps(file1_fd2, 0, 0))
+			die("failure: set_dummy_vfs_caps");
+
+		if (!expected_dummy_vfs_caps_uid(file1_fd2, 0))
+			die("failure: expected_dummy_vfs_caps_uid");
+
+		if (!expected_dummy_vfs_caps_uid(file1_fd, 0) && errno != EOVERFLOW)
+			die("failure: expected_dummy_vfs_caps_uid");
+
+		exit(EXIT_SUCCESS);
+	}
+
+	if (wait_for_pid(pid))
+		goto out;
+
+	if (!expected_dummy_vfs_caps_uid(file1_fd2, 10000)) {
+		log_stderr("failure: expected_dummy_vfs_caps_uid");
+		goto out;
+	}
+
+	if (!expected_dummy_vfs_caps_uid(file1_fd, 0)) {
+		log_stderr("failure: expected_dummy_vfs_caps_uid");
+		goto out;
+	}
+
+	fret = 0;
+	log_debug("Ran test");
+out:
+	safe_close(attr.userns_fd);
+	safe_close(file1_fd);
+	safe_close(file1_fd2);
+	safe_close(open_tree_fd);
+
+	return fret;
+}
+
 static int fscaps_idmapped_mounts_in_userns_separate_userns(void)
 {
 	int fret = -1;
@@ -8717,24 +8832,26 @@ static void usage(void)
 	fprintf(stderr, "    Run idmapped mount tests\n\n");
 
 	fprintf(stderr, "Arguments:\n");
-	fprintf(stderr, "--device        Device used in the tests\n");
-	fprintf(stderr, "--fstype        Filesystem type used in the tests\n");
-	fprintf(stderr, "--help          Print help\n");
-	fprintf(stderr, "--mountpoint    Mountpoint of device\n");
-	fprintf(stderr, "--supported     Test whether idmapped mounts are supported on this filesystem\n");
-	fprintf(stderr, "--test-core     Run core idmapped mount testsuite\n");
+	fprintf(stderr, "--device                     Device used in the tests\n");
+	fprintf(stderr, "--fstype                     Filesystem type used in the tests\n");
+	fprintf(stderr, "--help                       Print help\n");
+	fprintf(stderr, "--mountpoint                 Mountpoint of device\n");
+	fprintf(stderr, "--supported                  Test whether idmapped mounts are supported on this filesystem\n");
+	fprintf(stderr, "--test-core                  Run core idmapped mount testsuite\n");
+	fprintf(stderr, "--test-fscaps-regression     Run fscap regression tests\n");
 
 	_exit(EXIT_SUCCESS);
 }
 
 static const struct option longopts[] = {
-	{"device",	required_argument,	0,	'd'},
-	{"fstype",	required_argument,	0,	'f'},
-	{"mountpoint",	required_argument,	0,	'm'},
-	{"supported",	no_argument,		0,	's'},
-	{"help",	no_argument,		0,	'h'},
-	{"test-core",	no_argument,		0,	'c'},
-	{NULL,		0,			0,	0},
+	{"device",			required_argument,	0,	'd'},
+	{"fstype",			required_argument,	0,	'f'},
+	{"mountpoint",			required_argument,	0,	'm'},
+	{"supported",			no_argument,		0,	's'},
+	{"help",			no_argument,		0,	'h'},
+	{"test-core",			no_argument,		0,	'c'},
+	{"test-fscaps-regression",	no_argument,		0,	'g'},
+	{NULL,				0,			0,	  0},
 };
 
 struct t_idmapped_mounts {
@@ -8748,7 +8865,7 @@ struct t_idmapped_mounts {
 	{ fscaps,							"fscaps on regular mounts",									},
 	{ fscaps_idmapped_mounts,					"fscaps on idmapped mounts",									},
 	{ fscaps_idmapped_mounts_in_userns,				"fscaps on idmapped mounts in user namespace",							},
-	{ fscaps_idmapped_mounts_in_userns_separate_userns,		"fscaps on idmapped mounts in user namespace with different id mappings ",			},
+	{ fscaps_idmapped_mounts_in_userns_separate_userns,		"fscaps on idmapped mounts in user namespace with different id mappings",			},
 	{ fsids_mapped,							"mapped fsids",											},
 	{ fsids_unmapped,						"unmapped fsids",										},
 	{ hardlink_crossing_mounts,					"cross mount hardlink",										},
@@ -8792,6 +8909,10 @@ struct t_idmapped_mounts {
 	{ threaded_idmapped_mount_interactions,				"threaded operations on idmapped mounts",							},
 };
 
+struct t_idmapped_mounts fscaps_in_ancestor_userns[] = {
+	{ fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns,	"fscaps on idmapped mounts in user namespace writing fscap valid in ancestor userns",		},
+};
+
 static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 {
 	int i;
@@ -8829,7 +8950,7 @@ int main(int argc, char *argv[])
 {
 	int fret, ret;
 	int index = 0;
-	bool supported = false, test_core = false;
+	bool supported = false, test_core = false, test_fscaps_regression = false;
 
 	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
 		switch (ret) {
@@ -8847,6 +8968,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			test_core = true;
+			break;
+		case 'g':
+			test_fscaps_regression = true;
 			break;
 		case 'h':
 			/* fallthrough */
@@ -8918,6 +9042,11 @@ int main(int argc, char *argv[])
 	fret = EXIT_FAILURE;
 
 	if (test_core && !run_test(basic_suite, ARRAY_SIZE(basic_suite)))
+		goto out;
+
+	if (test_fscaps_regression &&
+	    !run_test(fscaps_in_ancestor_userns,
+		      ARRAY_SIZE(fscaps_in_ancestor_userns)))
 		goto out;
 
 	fret = EXIT_SUCCESS;
