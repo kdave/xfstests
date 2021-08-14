@@ -388,20 +388,6 @@ static inline bool switch_fsids(uid_t fsuid, gid_t fsgid)
 	return true;
 }
 
-static inline bool switch_ids(uid_t uid, gid_t gid)
-{
-	if (setgroups(0, NULL))
-		return log_errno(false, "failure: setgroups");
-
-	if (setresgid(gid, gid, gid))
-		return log_errno(false, "failure: setresgid");
-
-	if (setresuid(uid, uid, uid))
-		return log_errno(false, "failure: setresuid");
-
-	return true;
-}
-
 static inline bool switch_userns(int fd, uid_t uid, gid_t gid, bool drop_caps)
 {
 	if (setns(fd, CLONE_NEWUSER))

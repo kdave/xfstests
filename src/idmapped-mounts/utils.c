@@ -3,11 +3,15 @@
 #define _GNU_SOURCE
 #endif
 #include <fcntl.h>
+#include <grp.h>
 #include <linux/limits.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sched.h>
+#include <sys/eventfd.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -137,6 +141,9 @@ static int map_ids_from_idmap(struct list *idmap, pid_t pid)
 	char mapbuf[4096] = {};
 	bool had_entry = false;
 
+	if (list_empty(idmap))
+		return 0;
+
 	for (idmap_type_t map_type = ID_TYPE_UID, u_or_g = 'u';
 	     map_type <= ID_TYPE_GID; map_type++, u_or_g = 'g') {
 		char *pos = mapbuf;
@@ -224,4 +231,155 @@ int get_userns_fd(unsigned long nsid, unsigned long hostid, unsigned long range)
 	list_add_tail(&head, &gid_mapl);
 
 	return get_userns_fd_from_idmap(&head);
+}
+
+bool switch_ids(uid_t uid, gid_t gid)
+{
+	if (setgroups(0, NULL))
+		return syserror("failure: setgroups");
+
+	if (setresgid(gid, gid, gid))
+		return syserror("failure: setresgid");
+
+	if (setresuid(uid, uid, uid))
+		return syserror("failure: setresuid");
+
+	return true;
+}
+
+static int userns_fd_cb(void *data)
+{
+	struct userns_hierarchy *h = data;
+	char c;
+	int ret;
+
+	ret = read_nointr(h->fd_event, &c, 1);
+	if (ret < 0)
+		return syserror("failure: read from socketpair");
+
+	/* Only switch ids if someone actually wrote a mapping for us. */
+	if (c == '1') {
+		if (!switch_ids(0, 0))
+			return syserror("failure: switch ids to 0");
+
+		/* Ensure we can access proc files from processes we can ptrace. */
+		ret = prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
+		if (ret < 0)
+			return syserror("failure: make dumpable");
+	}
+
+	ret = write_nointr(h->fd_event, "1", 1);
+	if (ret < 0)
+		return syserror("failure: write to socketpair");
+
+	ret = create_userns_hierarchy(++h);
+	if (ret < 0)
+		return syserror("failure: userns level %d", h->level);
+
+	return 0;
+}
+
+int create_userns_hierarchy(struct userns_hierarchy *h)
+{
+	int fret = -1;
+	char c;
+	int fd_socket[2];
+	int fd_userns = -EBADF, ret = -1;
+	ssize_t bytes;
+	pid_t pid;
+	char path[256];
+
+	if (h->level == MAX_USERNS_LEVEL)
+		return 0;
+
+	ret = socketpair(AF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC, 0, fd_socket);
+	if (ret < 0)
+		return syserror("failure: create socketpair");
+
+	/* Note the CLONE_FILES | CLONE_VM when mucking with fds and memory. */
+	h->fd_event = fd_socket[1];
+	pid = do_clone(userns_fd_cb, h, CLONE_NEWUSER | CLONE_FILES | CLONE_VM);
+	if (pid < 0) {
+		syserror("failure: userns level %d", h->level);
+		goto out_close;
+	}
+
+	ret = map_ids_from_idmap(&h->id_map, pid);
+	if (ret < 0) {
+		kill(pid, SIGKILL);
+		syserror("failure: writing id mapping for userns level %d for %d", h->level, pid);
+		goto out_wait;
+	}
+
+	if (!list_empty(&h->id_map))
+		bytes = write_nointr(fd_socket[0], "1", 1); /* Inform the child we wrote a mapping. */
+	else
+		bytes = write_nointr(fd_socket[0], "0", 1); /* Inform the child we didn't write a mapping. */
+	if (bytes < 0) {
+		kill(pid, SIGKILL);
+		syserror("failure: write to socketpair");
+		goto out_wait;
+	}
+
+	/* Wait for child to set*id() and become dumpable. */
+	bytes = read_nointr(fd_socket[0], &c, 1);
+	if (bytes < 0) {
+		kill(pid, SIGKILL);
+		syserror("failure: read from socketpair");
+		goto out_wait;
+	}
+
+	snprintf(path, sizeof(path), "/proc/%d/ns/user", pid);
+	fd_userns = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd_userns < 0) {
+		kill(pid, SIGKILL);
+		syserror("failure: open userns level %d for %d", h->level, pid);
+		goto out_wait;
+	}
+
+	fret = 0;
+
+out_wait:
+	if (!wait_for_pid(pid) && !fret) {
+		h->fd_userns = fd_userns;
+		fd_userns = -EBADF;
+	}
+
+out_close:
+	if (fd_userns >= 0)
+		close(fd_userns);
+	close(fd_socket[0]);
+	close(fd_socket[1]);
+	return fret;
+}
+
+int add_map_entry(struct list *head,
+		  __u32 id_host,
+		  __u32 id_ns,
+		  __u32 range,
+		  idmap_type_t map_type)
+{
+	struct list *new_list = NULL;
+	struct id_map *newmap = NULL;
+
+	newmap = malloc(sizeof(*newmap));
+	if (!newmap)
+		return -ENOMEM;
+
+	new_list = malloc(sizeof(struct list));
+	if (!new_list) {
+		free(newmap);
+		return -ENOMEM;
+	}
+
+	*newmap = (struct id_map){
+		.hostid		= id_host,
+		.nsid		= id_ns,
+		.range		= range,
+		.map_type	= map_type,
+	};
+
+	new_list->elem = newmap;
+	list_add_tail(head, new_list);
+	return 0;
 }

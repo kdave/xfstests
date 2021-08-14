@@ -29,36 +29,6 @@
 
 static struct list active_map;
 
-static int add_map_entry(__u32 id_host,
-			 __u32 id_ns,
-			 __u32 range,
-			 idmap_type_t map_type)
-{
-	struct list *new_list = NULL;
-	struct id_map *newmap = NULL;
-
-	newmap = malloc(sizeof(*newmap));
-	if (!newmap)
-		return -ENOMEM;
-
-	new_list = malloc(sizeof(struct list));
-	if (!new_list) {
-		free(newmap);
-		return -ENOMEM;
-	}
-
-	*newmap = (struct id_map){
-		.hostid		= id_host,
-		.nsid		= id_ns,
-		.range		= range,
-		.map_type	= map_type,
-	};
-
-	new_list->elem = newmap;
-	list_add_tail(&active_map, new_list);
-	return 0;
-}
-
 static int parse_map(char *map)
 {
 	char types[2] = {'u', 'g'};
@@ -87,7 +57,7 @@ static int parse_map(char *map)
 		else
 			map_type = ID_TYPE_GID;
 
-		ret = add_map_entry(id_host, id_ns, range, map_type);
+		ret = add_map_entry(&active_map, id_host, id_ns, range, map_type);
 		if (ret < 0)
 			return ret;
 	}

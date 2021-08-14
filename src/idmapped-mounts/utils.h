@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,9 @@
 #include <unistd.h>
 
 #include "missing.h"
+
+/* Maximum number of nested user namespaces in the kernel. */
+#define MAX_USERNS_LEVEL 32
 
 /* A few helpful macros. */
 #define STRLITERALLEN(x) (sizeof(""x"") - 1)
@@ -63,6 +67,13 @@ struct list {
 	struct list *prev;
 };
 
+struct userns_hierarchy {
+	int fd_userns;
+	int fd_event;
+	unsigned int level;
+	struct list id_map;
+};
+
 #define list_for_each(__iterator, __list) \
 	for (__iterator = (__list)->next; __iterator != __list; __iterator = __iterator->next)
 
@@ -90,6 +101,16 @@ static inline void list_add_tail(struct list *head, struct list *list)
 	__list_add(list, head->prev, head);
 }
 
+static inline void list_del(struct list *list)
+{
+	struct list *next, *prev;
+
+	next = list->next;
+	prev = list->prev;
+	next->prev = prev;
+	prev->next = next;
+}
+
 extern pid_t do_clone(int (*fn)(void *), void *arg, int flags);
 extern int get_userns_fd(unsigned long nsid, unsigned long hostid,
 			 unsigned long range);
@@ -97,5 +118,9 @@ extern int get_userns_fd_from_idmap(struct list *idmap);
 extern ssize_t read_nointr(int fd, void *buf, size_t count);
 extern int wait_for_pid(pid_t pid);
 extern ssize_t write_nointr(int fd, const void *buf, size_t count);
+extern bool switch_ids(uid_t uid, gid_t gid);
+extern int create_userns_hierarchy(struct userns_hierarchy *h);
+extern int add_map_entry(struct list *head, __u32 id_host, __u32 id_ns,
+			 __u32 range, idmap_type_t map_type);
 
 #endif /* __IDMAP_UTILS_H */
