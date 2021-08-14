@@ -8804,10 +8804,8 @@ static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 
 		if (pid == 0) {
 			ret = t->test();
-			if (ret) {
-				fprintf(stderr, "failure: %s\n", t->description);
-				exit(EXIT_FAILURE);
-			}
+			if (ret)
+				die("failure: %s", t->description);
 
 			exit(EXIT_SUCCESS);
 		}
