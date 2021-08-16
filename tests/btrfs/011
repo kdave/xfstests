@@ -226,15 +226,18 @@ btrfs_replace_test()
 }
 
 workout "-m single -d single" 1 no 64
-workout "-m single -d single -M" 1 no 64
-workout "-m dup -d single" 1 no 64
-workout "-m dup -d single" 1 cancel 1024
-workout "-m dup -d dup -M" 1 no 64
-workout "-m raid0 -d raid0" 2 no 64
-workout "-m raid1 -d raid1" 2 no 2048
-workout "-m raid5 -d raid5" 2 no 64
-workout "-m raid6 -d raid6" 3 no 64
-workout "-m raid10 -d raid10" 4 no 64
+# Mixed BG & RAID/DUP profiles are not supported on zoned btrfs
+if ! _scratch_btrfs_is_zoned; then
+	workout "-m dup -d single" 1 no 64
+	workout "-m dup -d single" 1 cancel 1024
+	workout "-m raid0 -d raid0" 2 no 64
+	workout "-m raid1 -d raid1" 2 no 2048
+	workout "-m raid10 -d raid10" 4 no 64
+	workout "-m single -d single -M" 1 no 64
+	workout "-m dup -d dup -M" 1 no 64
+	workout "-m raid5 -d raid5" 2 no 64
+	workout "-m raid6 -d raid6" 3 no 64
+fi
 
 echo "*** done"
 status=0

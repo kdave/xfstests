@@ -173,21 +173,28 @@ for ((i = 1; i <= 3; i++)); do
 	test_fsync "link_cow_$i" "link"
 done
 
+_unmount_flakey
+
 # Now lets test with nodatacow.
-_unmount_flakey
-MOUNT_OPTIONS="-o nodatacow"
-_mount_flakey
+if ! _scratch_btrfs_is_zoned; then
+	MOUNT_OPTIONS="-o nodatacow"
+	_mount_flakey
 
-echo "Testing fsync after rename with NOCOW writes"
-for ((i = 1; i <= 3; i++)); do
-	test_fsync "rename_nocow_$i" "rename"
-done
-echo "Testing fsync after link with NOCOW writes"
-for ((i = 1; i <= 3; i++)); do
-	test_fsync "link_nocow_$i" "link"
-done
+	echo "Testing fsync after rename with NOCOW writes"
+	for ((i = 1; i <= 3; i++)); do
+		test_fsync "rename_nocow_$i" "rename"
+	done
+	echo "Testing fsync after link with NOCOW writes"
+	for ((i = 1; i <= 3; i++)); do
+		test_fsync "link_nocow_$i" "link"
+	done
 
-_unmount_flakey
+	_unmount_flakey
+else
+	# Fake result. Zoned btrfs does not support NOCOW
+	echo "Testing fsync after rename with NOCOW writes"
+	echo "Testing fsync after link with NOCOW writes"
+fi
 
 status=0
 exit

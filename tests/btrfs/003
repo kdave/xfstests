@@ -173,12 +173,20 @@ _test_remove()
 	_scratch_unmount
 }
 
-_test_raid0
-_test_raid1
-_test_raid10
+# Zoned btrfs only supports SINGLE profile
+if ! _scratch_btrfs_is_zoned; then
+	_test_raid0
+	_test_raid1
+	_test_raid10
+fi
+
 _test_single
 _test_add
-_test_replace
+# _test_replace() uses raid1, but zoned btrfs only supports SINGLE
+# profile
+if ! _scratch_btrfs_is_zoned; then
+	_test_replace
+fi
 _test_remove
 
 echo "Silence is golden"

@@ -96,6 +96,11 @@ _require_btrfs_fs_feature()
 	modprobe btrfs > /dev/null 2>&1
 	[ -e /sys/fs/btrfs/features/$feat ] || \
 		_notrun "Feature $feat not supported by the available btrfs version"
+
+	if [ $feat = "raid56" ]; then
+		# Zoned btrfs only supports SINGLE profile
+		_require_non_zoned_device "${SCRATCH_DEV}"
+	fi
 }
 
 _require_btrfs_fs_sysfs()
@@ -222,6 +227,21 @@ _btrfs_get_profile_configs()
 		else
 			local unsupported=()
 		fi
+
+		if _scratch_btrfs_is_zoned; then
+			# Zoned btrfs only supports SINGLE profile
+			unsupported+=(
+				"dup"
+				"raid0"
+				"raid1"
+				"raid1c3"
+				"raid1c4"
+				"raid10"
+				"raid5"
+				"raid6"
+			)
+		fi
+
 		for unsupp in "${unsupported[@]}"; do
 			if [ "${profiles[0]}" == "$unsupp" -o "${profiles[1]}" == "$unsupp" ]; then
 			     if [ -z "$BTRFS_PROFILE_CONFIGS" ]; then
@@ -418,4 +438,10 @@ _btrfs_forget_or_module_reload()
 _btrfs_rescan_devices()
 {
 	$BTRFS_UTIL_PROG device scan &> /dev/null
+}
+
+_scratch_btrfs_is_zoned()
+{
+	[ `_zone_type ${SCRATCH_DEV}` != "none" ] && return 0
+	return 1
 }
