@@ -1837,6 +1837,9 @@ _require_loop()
     else
 	_notrun "This test requires loopback device support"
     fi
+
+    # loop device does not handle zone information
+    _require_non_zoned_device ${TEST_DEV}
 }
 
 # this test requires kernel support for a secondary filesystem
@@ -1966,6 +1969,16 @@ _require_dm_target()
 	if [ $? -ne 0 ]; then
 		_notrun "This test requires dm $target support"
 	fi
+
+	# dm-error cannot handle the zone information
+	#
+	# dm-snapshot and dm-thin-pool cannot ensure sequential writes on
+	# the backing device
+	case $target in
+	error|snapshot|thin-pool)
+		_require_non_zoned_device ${SCRATCH_DEV}
+		;;
+	esac
 }
 
 _zone_type()
