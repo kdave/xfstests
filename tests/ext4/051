@@ -1,0 +1,29 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 051
+#
+# Test that tune2fs doesn't fail after ext4 shutdown
+# Regression test for commit:
+# e905fbe3fd0f ext4: Fix tune2fs checksum failure for mounted filesystem
+#
+. ./common/preamble
+_begin_fstest auto rw quick
+
+# real QA test starts here
+_supported_fs ext4
+_require_scratch
+_require_scratch_shutdown
+_require_command "$TUNE2FS_PROG" tune2fs
+
+echo "Silence is golden"
+
+_scratch_mkfs >/dev/null 2>&1
+_scratch_mount
+echo "This is a test" > $SCRATCH_MNT/testfile
+_scratch_shutdown
+_scratch_cycle_mount
+$TUNE2FS_PROG -l $SCRATCH_DEV >> $seqres.full
+status=0
+exit
