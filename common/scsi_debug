@@ -4,11 +4,32 @@
 #
 # Functions useful for tests on unique block devices
 
+. common/module
+
 _require_scsi_debug()
 {
-	# make sure we have the module and it's not already used
+	local mod_present=0
+
+	# make sure we have the module
 	modinfo scsi_debug 2>&1 > /dev/null || _notrun "scsi_debug module not found"
-	lsmod | grep -wq scsi_debug && (rmmod scsi_debug || _notrun "scsi_debug module in use")
+
+	lsmod | grep -wq scsi_debug
+	if [[ $? -eq 0 ]]; then
+		mod_present=1
+	fi
+
+	if [[ $mod_present -eq 1 ]]; then
+		# We try to remove the module only once if MODPROBE_PATIENT_RM_TIMEOUT_SECONDS
+		# is set to forever because fstests does not leave modules
+		# lingering around. If you do have a module lingering around
+		# and its being used, it wasn't us who started it, so you
+		# likely would not want to wait forever for it really.
+		if [[ "$MODPROBE_PATIENT_RM_TIMEOUT_SECONDS" == "forever" ]]; then
+			rmmod scsi_debug || _notrun "scsi_debug module in use and MODPROBE_PATIENT_RM_TIMEOUT_SECONDS set to forever, removing once failed"
+		else
+			_patient_rmmod scsi_debug || _notrun "scsi_debug module in use"
+		fi
+	fi
 	# make sure it has the features we need
 	# logical/physical sectors plus unmap support all went in together
 	modinfo scsi_debug | grep -wq sector_size || _notrun "scsi_debug too old"
@@ -44,14 +65,6 @@ _get_scsi_debug_dev()
 _put_scsi_debug_dev()
 {
 	lsmod | grep -wq scsi_debug || return
-
-	n=2
-	# use redirection not -q option of modprobe here, because -q of old
-	# modprobe is only quiet when the module is not found, not when the
-	# module is in use.
-	while [ $n -ge 0 ] && ! modprobe -nr scsi_debug >/dev/null 2>&1; do
-		$UDEV_SETTLE_PROG
-		n=$((n-1))
-	done
-	rmmod scsi_debug || _fail "Could not remove scsi_debug module"
+	$UDEV_SETTLE_PROG
+	_patient_rmmod scsi_debug || _fail "Could not remove scsi_debug module"
 }
