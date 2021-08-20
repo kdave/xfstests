@@ -29,6 +29,8 @@ _require_scratch_reflink
 _require_cp_reflink
 _require_log_writes
 _require_dm_target thin-pool
+# $SCRATCH_DEV won't be directly created filesystem on, so fsck isn't required
+rm -f "${RESULT_DIR}/require_scratch"
 
 check_files()
 {
@@ -114,6 +116,7 @@ for j in `seq 0 $((NUM_FILES-1))`; do
 	md5=$(_md5_checksum $SCRATCH_MNT/testfile$j)
 	[ "${md5}" != "${test_md5[$j]}" ] && _fail "testfile$j end md5sum mismatched"
 done
+_dmthin_check_fs
 
 echo "Silence is golden"
 status=0
