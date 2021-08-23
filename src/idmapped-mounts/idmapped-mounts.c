@@ -23,7 +23,11 @@
 #include <unistd.h>
 
 #ifdef HAVE_LINUX_BTRFS_H
+# ifndef HAVE_STRUCT_BTRFS_IOCTL_VOL_ARGS_V2_SUBVOLID
+#  define btrfs_ioctl_vol_args_v2 override_btrfs_ioctl_vol_args_v2
+# endif
 #include <linux/btrfs.h>
+# undef btrfs_ioctl_vol_args_v2
 #endif
 
 #ifdef HAVE_LINUX_BTRFS_TREE_H
@@ -9570,7 +9574,7 @@ struct btrfs_qgroup_inherit {
 };
 #endif
 
-#ifndef HAVE_STRUCT_BTRFS_IOCTL_VOL_ARGS_V2
+#if !defined(HAVE_STRUCT_BTRFS_IOCTL_VOL_ARGS_V2) || !defined(HAVE_STRUCT_BTRFS_IOCTL_VOL_ARGS_V2_SUBVOLID)
 
 #ifndef BTRFS_SUBVOL_NAME_MAX
 #define BTRFS_SUBVOL_NAME_MAX 4039
