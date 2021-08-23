@@ -16,6 +16,7 @@ int verbose;
 int pid;
 
 int checkflag=0;
+int create_only=0;
 
 #define MKNOD_DEV 0
 
@@ -51,7 +52,7 @@ main(
 	nprocs_per_dir = 1;
 	keep = 0;
         verbose = 0;
-	while ((c = getopt(argc, argv, "d:p:f:s:n:kvc")) != EOF) {
+	while ((c = getopt(argc, argv, "d:p:f:s:n:kvcC")) != EOF) {
 		switch(c) {
 			case 'p':
 				nprocs = atoi(optarg);
@@ -80,6 +81,9 @@ main(
 			case 'c':
                                 checkflag++;
                                 break;
+			case 'C':
+				create_only++;
+				break;
 		}
 	}
 	if (errflg || (dirname == NULL)) {
@@ -170,6 +174,7 @@ dirstress(
 	if (create_entries(nfiles)) {
             printf("!! [%d] create failed\n", pid);
         } else {
+	    if (create_only) return 0;
             if (verbose) fprintf(stderr,"** [%d] scramble entries\n", pid);
 	    if (scramble_entries(nfiles)) {
                 printf("!! [%d] scramble failed\n", pid);

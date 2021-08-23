@@ -1,0 +1,71 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# FS QA Test 052
+#
+# Test ext4's large_dir feature
+#
+# Create a directory with enough entries that we can exercise the large_dir
+# code paths, and then verify that the resulting file system is valid using
+# e2fsck.
+#
+. ./common/preamble
+_begin_fstest auto quick dir
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	if [ ! -z "$loop_mnt" ]; then
+		$UMOUNT_PROG $loop_mnt
+		rm -rf $loop_mnt
+	fi
+	[ ! -z "$fs_img" ] && rm -rf $fs_img
+}
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs ext4
+_require_test
+_require_loop
+_require_test_program "dirstress"
+_require_scratch_ext4_feature "large_dir"
+
+echo "Silence is golden"
+
+loop_mnt=$TEST_DIR/$seq.mnt
+fs_img=$TEST_DIR/$seq.img
+status=0
+
+$XFS_IO_PROG -f -c "truncate 20G" $fs_img >>$seqres.full 2>&1
+
+# We need to create enough files (400,000) so that using a file system
+# with a 1k block size, the hash tree created will have three levels
+# (which is the distringuishing characteristics of a large_dir versus
+# non-large_dir).  We use no journal mode to decrease the run time of
+# the test by 25%.
+${MKFS_PROG} -t ${FSTYP} -b 1024 -N 400020 -O large_dir,^has_journal \
+	     $fs_img 20G >> $seqres.full 2>&1 || _fail "mkfs failed"
+
+mkdir -p $loop_mnt
+_mount -o loop $fs_img $loop_mnt > /dev/null  2>&1 || \
+	_fail "Couldn't do initial mount"
+
+if ! $here/src/dirstress -c -d $loop_mnt -p 1 -f 400000 -C >$tmp.out 2>&1
+then
+    echo "    dirstress failed"
+    cat $tmp.out >> $seqres.full
+    echo "    dirstress failed" >> $seqres.full
+    status=1
+fi
+
+$UMOUNT_PROG $loop_mnt || _fail "umount failed"
+loop_mnt=
+
+$E2FSCK_PROG -fn $fs_img >> $seqres.full 2>&1 || _fail "file system corrupted"
+exit
