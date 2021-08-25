@@ -1,0 +1,42 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 RedHat All Rights Reserved.
+#
+# FS QA Test No. 646
+#
+# Testcase for kernel commit:
+#   50d25484bebe xfs: sync lazy sb accounting on quiesce of read-only mounts
+#
+# After shutdown and readonly mount, a following read-write mount would
+# get wrong number of available blocks. This is caused by unmounting the log
+# on a readonly filesystem doesn't log the sb counters.
+#
+. ./common/preamble
+_begin_fstest auto quick recoveryloop shutdown
+
+# real QA test starts here
+
+_require_scratch
+_require_scratch_shutdown
+_scratch_mkfs > $seqres.full 2>&1
+
+_scratch_mount
+[ "$FSTYP" == "xfs" ] && _xfs_force_bdev data $SCRATCH_MNT
+
+echo Testing > $SCRATCH_MNT/testfile
+
+# -f is required to reproduce the original issue
+_scratch_shutdown -f
+
+_scratch_cycle_mount ro
+_scratch_cycle_mount
+
+# These two mounts should have the log fully recovered. Exit here and let the
+# fsck operation of xfstests to check the consistence of the tested filesystem.
+# On the buggy kernel, this testcase reports filesystem is inconsistent.
+# On the fixed kernel, testcase pass.
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
