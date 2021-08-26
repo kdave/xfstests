@@ -1,0 +1,49 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 246
+#
+# Make sure btrfs can create compressed inline extents
+#
+. ./common/preamble
+_begin_fstest auto quick compress
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+
+_scratch_mkfs > /dev/null
+_scratch_mount -o compress,max_inline=2048
+
+# This should create compressed inline extent
+$XFS_IO_PROG -f -c "pwrite 0 2048" $SCRATCH_MNT/foobar > /dev/null
+ino=$(stat -c %i $SCRATCH_MNT/foobar)
+echo "sha256sum before mount cycle"
+sha256sum $SCRATCH_MNT/foobar | _filter_scratch
+_scratch_cycle_mount
+echo "sha256sum after mount cycle"
+sha256sum $SCRATCH_MNT/foobar | _filter_scratch
+_scratch_unmount
+
+$BTRFS_UTIL_PROG inspect dump-tree -t 5 $SCRATCH_DEV | \
+	grep "($ino EXTENT_DATA 0" -A2 > $tmp.dump-tree
+echo "dump tree result for ino $ino:" >> $seqres.full
+cat $tmp.dump-tree >> $seqres.full
+
+grep -q "inline extent" $tmp.dump-tree || echo "no inline extent found"
+grep -q "compression 1" $tmp.dump-tree || echo "no compressed extent found"
+
+# success, all done
+status=0
+exit
