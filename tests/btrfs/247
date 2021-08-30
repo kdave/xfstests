@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 247
+#
+# Tests rename/exchange behavior when subvolumes are involved. Rename/exchanges
+# across subvolumes are forbidden. This is also a regression test for
+# 3f79f6f6247c ("btrfs: prevent rename2 from exchanging a subvol with a
+# directory from different parents").
+#
+. ./common/preamble
+_begin_fstest auto quick rename subvol
+
+# Import common functions.
+ . ./common/renameat2
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_renameat2 exchange
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Create 2 subvols to use as parents for the rename ops
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol1 1>/dev/null
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol2 1>/dev/null
+
+# Ensure cross subvol ops are forbidden
+_rename_tests_source_dest $SCRATCH_MNT/subvol1/src $SCRATCH_MNT/subvol2/dst "cross-subvol" "-x"
+
+# Prepare a subvolume and a directory whose parents are different subvolumes
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol1/sub-subvol 1>/dev/null
+mkdir $SCRATCH_MNT/subvol2/dir
+
+# Ensure exchanging a subvol with a dir when both parents are different fails
+$here/src/renameat2 -x $SCRATCH_MNT/subvol1/sub-subvol $SCRATCH_MNT/subvol2/dir
+
+echo "ordinary rename"
+# Test also ordinary renames
+_rename_tests_source_dest $SCRATCH_MNT/subvol1/src $SCRATCH_MNT/subvol2/dst "cross-subvol"
+
+echo "subvolumes rename"
+# Rename subvol1/sub-subvol -> subvol2/sub-subvol
+$here/src/renameat2  $SCRATCH_MNT/subvol1/sub-subvol $SCRATCH_MNT/subvol2/sub-subvol
+# Now create another subvol under subvol1/
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol1/sub-subvol 1>/dev/null
+# and exchange the two
+$here/src/renameat2 -x $SCRATCH_MNT/subvol2/sub-subvol $SCRATCH_MNT/subvol1/sub-subvol
+
+# simple rename of a subvolume in the same directory, should catch
+# 4871c1588f92 ("Btrfs: use right root when checking for hash collision")
+mv $SCRATCH_MNT/subvol2/ $SCRATCH_MNT/subvol2.
+
+# success, all done
+status=0
+exit
