@@ -1,0 +1,77 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 649
+#
+# Regression test for commit:
+#
+# 72a048c1056a ("xfs: only set IOMAP_F_SHARED when providing a srcmap to a write")
+#
+# If a user creates a sparse shared region in a file, convinces XFS to create a
+# copy-on-write delayed allocation reservation spanning both the shared blocks
+# and the holes, and then calls the fallocate unshare command to unshare the
+# entire sparse region, XFS incorrectly tells iomap that the delalloc blocks
+# for the holes are shared, which causes it to error out while trying to
+# unshare a hole.
+#
+. ./common/preamble
+_begin_fstest auto clone unshare
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $TEST_DIR/$seq
+}
+
+# Import common functions.
+. ./common/reflink
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_cp_reflink
+_require_test_reflink
+_require_test_program "punch-alternating"
+_require_xfs_io_command "fpunch"	# make sure punch-alt can do its job
+_require_xfs_io_command "funshare"
+test "$FSTYP" = "xfs" && _require_xfs_io_command "cowextsize"
+
+mkdir $TEST_DIR/$seq
+file1=$TEST_DIR/$seq/a
+file2=$TEST_DIR/$seq/b
+
+$XFS_IO_PROG -f -c "pwrite -S 0x58 -b 10m 0 10m" $file1 >> $seqres.full
+
+f1sum0="$(md5sum $file1 | _filter_test_dir)"
+
+_cp_reflink $file1 $file2
+$here/src/punch-alternating -o 1 $file2
+
+f2sum0="$(md5sum $file2 | _filter_test_dir)"
+
+# set cowextsize to the defaults (128k) to force delalloc cow preallocations
+test "$FSTYP" = "xfs" && $XFS_IO_PROG -c 'cowextsize 0' $file2
+$XFS_IO_PROG -c "funshare 0 10m" $file2
+
+f1sum1="$(md5sum $file1 | _filter_test_dir)"
+f2sum1="$(md5sum $file2 | _filter_test_dir)"
+
+test "${f1sum0}" = "${f1sum1}" || echo "file1 should not have changed"
+test "${f2sum0}" = "${f2sum1}" || echo "file2 should not have changed"
+
+_test_cycle_mount
+
+f1sum2="$(md5sum $file1 | _filter_test_dir)"
+f2sum2="$(md5sum $file2 | _filter_test_dir)"
+
+test "${f1sum2}" = "${f1sum1}" || echo "file1 should not have changed ondisk"
+test "${f2sum2}" = "${f2sum1}" || echo "file2 should not have changed ondisk"
+
+# success, all done
+echo Silence is golden
+status=0
+exit
