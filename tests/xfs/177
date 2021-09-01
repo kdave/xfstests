@@ -1,0 +1,207 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 177
+#
+# Functional test for commit:
+#
+# f38a032b165d ("xfs: fix I_DONTCACHE")
+#
+# Functional testing for the I_DONTCACHE inode flag, as set by the BULKSTAT
+# ioctl.  This flag neuters the inode cache's tendency to try to hang on to
+# incore inodes for a while after the last program closes the file, which
+# is helpful for filesystem scanners to avoid trashing the inode cache.
+#
+# However, the inode cache doesn't always honor the DONTCACHE behavior -- the
+# only time it really applies is to cache misses from a bulkstat scan.  If
+# any other threads accessed the inode before or immediately after the scan,
+# the DONTCACHE flag is ignored.  This includes other scans.
+#
+# Regrettably, there is no way to poke /only/ XFS inode reclamation directly,
+# so we're stuck with setting xfssyncd_centisecs to a low value and sleeping
+# while watching the internal inode cache counters.
+#
+. ./common/preamble
+_begin_fstest auto ioctl
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	test -n "$old_centisecs" && echo "$old_centisecs" > "$xfs_centisecs_file"
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_xfs_io_command "bulkstat"
+_require_scratch
+
+# We require /sys/fs/xfs/$device/stats/stats to monitor per-filesystem inode
+# cache usage.
+_require_fs_sysfs stats/stats
+
+count_xfs_inode_objs() {
+	_get_fs_sysfs_attr $SCRATCH_DEV stats/stats | awk '/vnodes/ {print $2}'
+}
+
+dump_debug_info() {
+	echo "round $1 baseline: $baseline_count high: $high_count fresh: $fresh_count post: $post_count end: $end_count" >> $seqres.full
+}
+
+# Either of these need to be available to monitor slab usage
+xfs_ino_objcount_file=/sys/kernel/slab/xfs_inode/objects
+slabinfo_file=/proc/slabinfo
+if [ ! -r "$xfs_ino_objcount_file" ] && [ ! -r "$slabinfo_file" ]; then
+	_notrun "Cannot find xfs_inode slab count?"
+fi
+
+# Background reclamation of disused xfs inodes is scheduled for ($xfssyncd / 6)
+# centiseconds after the first inode is tagged for reclamation.  It's not great
+# to encode this implementation detail in a test like this, but there isn't
+# any means to trigger *only* inode cache reclaim -- actual memory pressure
+# can trigger the VFS to drop non-DONTCACHE inodes, which is not what we want.
+xfs_centisecs_file=/proc/sys/fs/xfs/xfssyncd_centisecs
+test -w "$xfs_centisecs_file" || _notrun "Cannot find xfssyncd_centisecs?"
+
+# Set the syncd knob to the minimum value 100cs (aka 1s) so that we don't have
+# to wait forever.
+old_centisecs="$(cat "$xfs_centisecs_file")"
+echo 100 > "$xfs_centisecs_file" || _notrun "Cannot adjust xfssyncd_centisecs?"
+delay_centisecs="$(cat "$xfs_centisecs_file")"
+
+# Sleep one second more than the xfssyncd delay to give background inode
+# reclaim enough time to run.
+sleep_seconds=$(( ( (99 + (delay_centisecs / 6) ) / 100) + 1))
+echo "Will sleep $sleep_seconds seconds to expire inodes" >> $seqres.full
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+junkdir=$SCRATCH_MNT/$seq.junk
+
+# Sample the baseline count of cached inodes after a fresh remount.
+_scratch_cycle_mount
+baseline_count=$(count_xfs_inode_objs)
+
+# Create a junk directory with about a thousand files.
+nr_files=1024
+mkdir -p $junkdir
+for ((i = 0; i < nr_files; i++)); do
+	touch "$junkdir/$i"
+done
+new_files=$(find $junkdir | wc -l)
+echo "created $new_files files" >> $seqres.full
+_within_tolerance "new file count" $new_files $nr_files 5 -v
+
+# Sanity check: Make sure that all those new inodes are still in the cache.
+# We assume that memory limits are not so low that reclaim started for a bunch
+# of empty files.  We hope there will never be more than 100 metadata inodes
+# or automatic mount time scanners.
+high_count=$(count_xfs_inode_objs)
+echo "cached inodes: $high_count" >> $seqres.full
+_within_tolerance "inodes after creating files" $high_count $new_files 0 100 -v
+
+################
+# Round 1: Check DONTCACHE behavior when it is invoked once.  The inodes should
+# be reclaimed if we wait longer than the reclaim interval.
+echo "Round 1"
+
+_scratch_cycle_mount
+fresh_count=$(count_xfs_inode_objs)
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+post_count=$(count_xfs_inode_objs)
+sleep $sleep_seconds
+end_count=$(count_xfs_inode_objs)
+dump_debug_info 1
+
+# Even with our greatly reduced reclaim timeout, the inodes should still be in
+# memory immediately after the bulkstat concludes.
+_within_tolerance "inodes after bulkstat" $post_count $high_count 5 -v
+
+# After we've given inode reclaim time to run, the inodes should no longer be
+# cached in memory, which means we should have the fresh count again.
+_within_tolerance "inodes after expire" $end_count $fresh_count 5 -v
+
+################
+# Round 2: Check DONTCACHE behavior when it is invoked multiple times in rapid
+# succession.  The inodes should remain in memory even after reclaim because
+# the cache notices repeat DONTCACHE hits and ignores them.
+echo "Round 2"
+
+_scratch_cycle_mount
+fresh_count=$(count_xfs_inode_objs)
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+post_count=$(count_xfs_inode_objs)
+sleep $sleep_seconds
+end_count=$(count_xfs_inode_objs)
+dump_debug_info 2
+
+# Inodes should still be in memory immediately after the second bulkstat
+# concludes and after the reclaim interval.
+_within_tolerance "inodes after double bulkstat" $post_count $high_count 5 -v
+_within_tolerance "inodes after expire" $end_count $high_count 5 -v
+
+################
+# Round 3: Check DONTCACHE evictions when it is invoked repeatedly but with
+# enough time between scans for inode reclaim to remove the inodes.
+echo "Round 3"
+
+_scratch_cycle_mount
+fresh_count=$(count_xfs_inode_objs)
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+sleep $sleep_seconds
+post_count=$(count_xfs_inode_objs)
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+sleep $sleep_seconds
+end_count=$(count_xfs_inode_objs)
+dump_debug_info 3
+
+# Inodes should not still be cached after either scan and reclaim interval.
+_within_tolerance "inodes after slow bulkstat 1" $post_count $fresh_count 5 -v
+_within_tolerance "inodes after slow bulkstat 2" $end_count $fresh_count 5 -v
+
+################
+# Round 4: Check that DONTCACHE has no effect when all the files are read
+# immediately after a bulkstat.
+echo "Round 4"
+
+_scratch_cycle_mount
+fresh_count=$(count_xfs_inode_objs)
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+find $junkdir -type f -print0 | xargs -0 cat > /dev/null
+post_count=$(count_xfs_inode_objs)
+sleep $sleep_seconds
+end_count=$(count_xfs_inode_objs)
+dump_debug_info 4
+
+# Inodes should still be cached after the scan/read and the reclaim interval.
+_within_tolerance "inodes after bulkstat/read" $post_count $high_count 5 -v
+_within_tolerance "inodes after reclaim" $end_count $high_count 5 -v
+
+################
+# Round 5: Check that DONTCACHE has no effect if the inodes were already in
+# cache due to reader programs.
+echo "Round 5"
+
+_scratch_cycle_mount
+fresh_count=$(count_xfs_inode_objs)
+find $junkdir -type f -print0 | xargs -0 cat > /dev/null
+$XFS_IO_PROG -c 'bulkstat' $junkdir > /dev/null
+post_count=$(count_xfs_inode_objs)
+sleep $sleep_seconds
+end_count=$(count_xfs_inode_objs)
+dump_debug_info 5
+
+# Inodes should still be cached after the read/scan and the reclaim interval.
+_within_tolerance "inodes after read/bulkstat" $post_count $high_count 5 -v
+_within_tolerance "inodes after reclaim" $end_count $high_count 5 -v
+
+status=0
+exit
