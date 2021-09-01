@@ -10433,9 +10433,9 @@ static int btrfs_subvolumes_fsids_unmapped(void)
 	}
 
 	/* try to rename a subvolume */
-	if (!renameat2(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
-		       BTRFS_SUBVOLUME1_RENAME, 0)) {
-		log_stderr("failure: renameat2");
+	if (!renameat(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
+		       BTRFS_SUBVOLUME1_RENAME)) {
+		log_stderr("failure: renameat");
 		goto out;
 	}
 	if (errno != EOVERFLOW) {
@@ -10552,9 +10552,9 @@ static int btrfs_subvolumes_fsids_unmapped_userns(void)
 			die("failure: errno");
 
 		/* try to rename a subvolume */
-		if (!renameat2(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
-					BTRFS_SUBVOLUME1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
+					BTRFS_SUBVOLUME1_RENAME))
+			die("failure: renameat");
 		if (errno != EOVERFLOW)
 			die("failure: errno");
 
@@ -10993,9 +10993,9 @@ static int btrfs_snapshots_fsids_unmapped(void)
 			die("failure: errno");
 
 		/* try to rename a directory */
-		if (!renameat2(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
-			       BTRFS_SUBVOLUME1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
+			       BTRFS_SUBVOLUME1_RENAME))
+			die("failure: renameat");
 		if (errno != EOVERFLOW)
 			die("failure: errno");
 
@@ -11174,9 +11174,9 @@ static int btrfs_snapshots_fsids_unmapped_userns(void)
 			die("failure: errno");
 
 		/* try to rename a directory */
-		if (!renameat2(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
-			       BTRFS_SUBVOLUME1_RENAME, 0))
-			die("failure: renameat2");
+		if (!renameat(open_tree_fd, BTRFS_SUBVOLUME1, open_tree_fd,
+			       BTRFS_SUBVOLUME1_RENAME))
+			die("failure: renameat");
 		if (errno != EOVERFLOW)
 			die("failure: errno");
 
