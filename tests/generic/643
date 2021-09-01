@@ -4,8 +4,10 @@
 #
 # FS QA Test No. 643
 #
-# Regression test for "mm/swap: consider max pages in iomap_swapfile_add_extent"
-
+# Regression test for commit:
+#
+# 36ca7943ac18 ("mm/swap: consider max pages in iomap_swapfile_add_extent")
+#
 # Xu Yu found that the iomap swapfile activation code failed to constrain
 # itself to activating however many swap pages that the mm asked us for.  This
 # is an deviation in behavior from the classic swapfile code.  It also leads to
@@ -22,6 +24,8 @@ _cleanup()
 	test -n "$swapfile" && swapoff $swapfile &> /dev/null
 }
 
+. ./common/filter
+
 # real QA test starts here
 _supported_fs generic
 _require_scratch_swapfile
@@ -34,29 +38,36 @@ _scratch_mount >> $seqres.full
 swapfile=$SCRATCH_MNT/386spart.par
 _format_swapfile $swapfile 1m >> $seqres.full
 
-swapfile_pages() {
+page_size=$(getconf PAGE_SIZE)
+
+swapfile_blocks() {
 	local swapfile="$1"
 
 	grep "$swapfile" /proc/swaps | awk '{print $3}'
 }
 
 _swapon_file $swapfile
-before_pages=$(swapfile_pages "$swapfile")
+before_blocks=$(swapfile_blocks "$swapfile")
 swapoff $swapfile
 
 # Extend the length of the swapfile but do not rewrite the header.
-# The subsequent swapon should set up 1MB worth of pages, not 2MB.
+# The subsequent swapon should set up 1MB worth of blocks, not 2MB.
 $XFS_IO_PROG -f -c 'pwrite 1m 1m' $swapfile >> $seqres.full
 
 _swapon_file $swapfile
-after_pages=$(swapfile_pages "$swapfile")
+after_blocks=$(swapfile_blocks "$swapfile")
 swapoff $swapfile
 
-# Both swapon attempts should have found the same number of pages.
-test "$before_pages" -eq "$after_pages" || \
-	echo "swapon added $after_pages pages, expected $before_pages"
+# Both swapon attempts should have found approximately the same number of
+# blocks.  Unfortunately, mkswap and the kernel are a little odd -- the number
+# of pages that mkswap writes into the swapfile header is one page less than
+# the file size, and then the kernel itself doesn't always grab all the pages
+# advertised in the header.  Hence we let the number of swap pages increase by
+# two pages.  I'm looking at you, Mr. 64k pages on arm64...
+page_variance=$(( page_size / 512 ))
+_within_tolerance "swap blocks" $after_blocks $before_blocks 0 $page_variance -v
 
-# success, all done
-echo Silence is golden
+echo "pagesize: $page_size; before: $before_blocks; after: $after_blocks" >> $seqres.full
+
 status=0
 exit
