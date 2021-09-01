@@ -17,6 +17,7 @@ _begin_fstest quota auto quick
 _supported_fs xfs
 _require_scratch
 _require_xfs_quota
+_require_xfs_io_command "syncfs"
 
 test_files()
 {
@@ -47,6 +48,7 @@ test_accounting()
 	for file in $SCRATCH_MNT/{buffer,direct,mmap}; do
 		$here/src/lstat64 $file | head -3 | _filter_scratch
 	done
+	$XFS_IO_PROG -c syncfs $SCRATCH_MNT
 	$XFS_QUOTA_PROG -c "quota -hnb -$type $id" $QARGS | _filter_quota
 	$XFS_QUOTA_PROG -c "quota -hni -$type $id" $QARGS | _filter_quota
 	$XFS_QUOTA_PROG -c "quota -hnr -$type $id" $QARGS | _filter_quota
