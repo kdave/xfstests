@@ -68,6 +68,7 @@ AC_PACKAGE_WANT_LIBBTRFSUTIL
 
 AC_HAVE_COPY_FILE_RANGE
 AC_CHECK_FUNCS([renameat2])
+AC_CHECK_FUNCS([reallocarray])
 AC_CHECK_TYPES([struct mount_attr], [], [], [[#include <linux/mount.h>]])
 AC_CHECK_TYPES([struct btrfs_qgroup_limit], [], [], [[
 #include <stddef.h>

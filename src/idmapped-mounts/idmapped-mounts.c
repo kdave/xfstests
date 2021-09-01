@@ -9910,8 +9910,12 @@ static int append_stack(struct btrfs_iter *iter, uint64_t tree_id, size_t path_l
 	if (iter->stack_len >= iter->stack_capacity) {
 		size_t new_capacity = iter->stack_capacity * 2;
 		struct btrfs_stack *new_search_stack;
+#ifdef HAVE_REALLOCARRAY
 		new_search_stack = reallocarray(iter->search_stack, new_capacity,
 						sizeof(*iter->search_stack));
+#else
+		new_search_stack = realloc(iter->search_stack, new_capacity * sizeof(*iter->search_stack));
+#endif
 		if (!new_search_stack)
 			return -ENOMEM;
 
