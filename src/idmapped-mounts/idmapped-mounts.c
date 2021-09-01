@@ -8838,6 +8838,7 @@ static int nested_userns(void)
 	int fret = -1;
 	int ret;
 	pid_t pid;
+	unsigned int id;
 	struct list *it, *next;
 	struct userns_hierarchy hierarchy[] = {
 		{ .level = 1, .fd_userns = -EBADF, },
@@ -8979,7 +8980,7 @@ static int nested_userns(void)
 		goto out;
 	}
 
-	for (unsigned int id = 0; id <= id_file_range; id++) {
+	for (id = 0; id <= id_file_range; id++) {
 		char file[256];
 
 		snprintf(file, sizeof(file), DIR1 "/" FILE1 "_%u", id);
@@ -9067,7 +9068,7 @@ static int nested_userns(void)
 	}
 
 	/* Verify that ownership looks correct for callers in the init userns. */
-	for (unsigned int id = 0; id <= id_file_range; id++) {
+	for (id = 0; id <= id_file_range; id++) {
 		bool bret;
 		unsigned int id_level1, id_level2, id_level3;
 		char file[256];
@@ -9117,7 +9118,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level1.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			bool bret;
 			unsigned int id_level1, id_level2, id_level3;
 			char file[256];
@@ -9164,7 +9165,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level2.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			bool bret;
 			unsigned int id_level2, id_level3;
 			char file[256];
@@ -9210,7 +9211,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level3.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			bool bret;
 			unsigned int id_level2, id_level3;
 			char file[256];
@@ -9267,7 +9268,7 @@ static int nested_userns(void)
 		if (setns(attr_level4.userns_fd, CLONE_NEWUSER))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			char file[256];
 
 			snprintf(file, sizeof(file), FILE1 "_%u", id);
@@ -9300,7 +9301,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level1.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			bool bret;
 			unsigned int id_level1, id_level2, id_level3, id_new;
 			char file[256];
@@ -9355,7 +9356,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level2.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			bool bret;
 			unsigned int id_level2, id_level3, id_new;
 			char file[256];
@@ -9409,7 +9410,7 @@ static int nested_userns(void)
 		if (!switch_userns(attr_level3.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			unsigned int id_new;
 			char file[256];
 
@@ -9479,7 +9480,7 @@ static int nested_userns(void)
 		if (setns(attr_level4.userns_fd, CLONE_NEWUSER))
 			die("failure: switch_userns");
 
-		for (unsigned int id = 0; id <= id_file_range; id++) {
+		for (id = 0; id <= id_file_range; id++) {
 			char file[256];
 			unsigned long id_new;
 
@@ -9909,7 +9910,6 @@ static int append_stack(struct btrfs_iter *iter, uint64_t tree_id, size_t path_l
 	if (iter->stack_len >= iter->stack_capacity) {
 		size_t new_capacity = iter->stack_capacity * 2;
 		struct btrfs_stack *new_search_stack;
-
 		new_search_stack = reallocarray(iter->search_stack, new_capacity,
 						sizeof(*iter->search_stack));
 		if (!new_search_stack)
@@ -12932,7 +12932,7 @@ out:
  */
 static int btrfs_subvolume_lookup_user(void)
 {
-	int fret = -1;
+	int fret = -1, i;
 	int dir1_fd = -EBADF, dir2_fd = -EBADF, mnt_fd = -EBADF,
 	    open_tree_fd = -EBADF, tree_fd = -EBADF, userns_fd = -EBADF;
 	int subvolume_fds[BTRFS_SUBVOLUME_SUBVOL4_ID + 1];
@@ -12947,10 +12947,10 @@ static int btrfs_subvolume_lookup_user(void)
 	if (!caps_supported())
 		return 0;
 
-	for (int i = 0; i < ARRAY_SIZE(subvolume_fds); i++)
+	for (i = 0; i < ARRAY_SIZE(subvolume_fds); i++)
 		subvolume_fds[i] = -EBADF;
 
-	for (int i = 0; i < ARRAY_SIZE(subvolume_ids); i++)
+	for (i = 0; i < ARRAY_SIZE(subvolume_ids); i++)
 		subvolume_ids[i] = -EINVAL;
 
 	if (btrfs_create_subvolume(t_mnt_scratch_fd, BTRFS_SUBVOLUME_SUBVOL1)) {
@@ -13312,7 +13312,7 @@ out:
 	safe_close(open_tree_fd);
 	safe_close(tree_fd);
 	safe_close(userns_fd);
-	for (int i = 0; i < ARRAY_SIZE(subvolume_fds); i++)
+	for (i = 0; i < ARRAY_SIZE(subvolume_fds); i++)
 		safe_close(subvolume_fds[i]);
 	snprintf(t_buf, sizeof(t_buf), "%s/%s", t_mountpoint, BTRFS_SUBVOLUME_MNT);
 	sys_umount2(t_buf, MNT_DETACH);

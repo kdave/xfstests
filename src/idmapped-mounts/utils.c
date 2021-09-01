@@ -140,11 +140,12 @@ static int map_ids_from_idmap(struct list *idmap, pid_t pid)
 	int fill, left;
 	char mapbuf[4096] = {};
 	bool had_entry = false;
+	idmap_type_t map_type, u_or_g;
 
 	if (list_empty(idmap))
 		return 0;
 
-	for (idmap_type_t map_type = ID_TYPE_UID, u_or_g = 'u';
+	for (map_type = ID_TYPE_UID, u_or_g = 'u';
 	     map_type <= ID_TYPE_GID; map_type++, u_or_g = 'g') {
 		char *pos = mapbuf;
 		int ret;
