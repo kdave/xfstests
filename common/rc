@@ -631,6 +631,30 @@ _ext4_metadump()
 		$DUMP_COMPRESSOR -f "$dumpfile" &>> "$seqres.full"
 }
 
+# Capture the metadata of a filesystem in a dump file for offline analysis.
+# This is not supported by all filesystem types, so this function should only
+# be used after a test has already failed.
+_metadump_dev() {
+	local device="$1"
+	local dumpfile="$2"
+	local compressopt="$3"
+
+	test "$DUMP_CORRUPT_FS" = 1 || return 0
+
+	case "$FSTYP" in
+	ext*)
+		_ext4_metadump $device $dumpfile $compressopt
+		;;
+	xfs)
+		_xfs_metadump $dumpfile $device none $compressopt
+		;;
+	*)
+		echo "Don't know how to metadump $FSTYP"
+		return 1
+		;;
+	esac
+}
+
 _test_mkfs()
 {
     case $FSTYP in
