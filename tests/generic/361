@@ -30,6 +30,7 @@ _supported_fs generic
 _require_scratch
 _require_block_device $SCRATCH_DEV
 _require_loop
+_require_sparse_files
 
 # create a small filesystem to hold another filesystem image
 _scratch_mkfs_sized $((512 * 1024 * 1024)) >>$seqres.full 2>&1
@@ -44,7 +45,7 @@ mkdir -p $fs_mnt
 # mount loop device and create a larger file to hit I/O errors on loop device
 loop_dev=$(_create_loop_device $fs_img)
 _mkfs_dev $loop_dev
-_mount $loop_dev $fs_mnt
+_mount -t $FSTYP $loop_dev $fs_mnt
 if [ "$FSTYP" = "xfs" ]; then
 	# Turn off all XFS metadata IO error retries
 	dname=$(_short_dev $loop_dev)
