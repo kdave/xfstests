@@ -1,0 +1,81 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 419
+#
+# Regression test for kernel commits:
+#
+# 6b69e485894b ("xfs: standardize extent size hint validation")
+# 603f000b15f2 ("xfs: validate extsz hints against rt extent size when rtinherit is set")
+#
+# Regression test for xfsprogs commit:
+#
+# 1e8afffb ("mkfs: validate rt extent size hint when rtinherit is set")
+#
+# Collectively, these patches ensure that we cannot set the extent size hint on
+# a directory when the directory is configured to propagate its realtime and
+# extent size hint to newly created files when the hint size isn't aligned to
+# the size of a realtime extent.  If the patches aren't applied, the write will
+# fail and xfs_repair will say that the fs is corrupt.
+#
+. ./common/preamble
+_begin_fstest auto quick realtime mkfs
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_realtime
+_require_scratch
+
+# Check mkfs.xfs option parsing with regards to rtinherit.  XFS doesn't require
+# the realtime volume to be present to set rtinherit, so it's safe to call the
+# mkfs binary directly, in dry run mode, with exactly the parameters we want to
+# check.
+mkfs_args=(-f -N -r extsize=7b -d extszinherit=15 $SCRATCH_DEV)
+$MKFS_XFS_PROG -d rtinherit=1 "${mkfs_args[@]}" &>> $seqres.full && \
+	echo "mkfs should not succeed with heritable rtext-unaligned extent hint"
+$MKFS_XFS_PROG -d rtinherit=0 "${mkfs_args[@]}" &>> $seqres.full || \
+	echo "mkfs should succeed with uninheritable rtext-unaligned extent hint"
+
+# Move on to checking the kernel's behavior
+_scratch_mkfs -r extsize=7b | _filter_mkfs >> $seqres.full 2> $tmp.mkfs
+cat $tmp.mkfs >> $seqres.full
+. $tmp.mkfs
+_scratch_mount
+
+test $rtextsz -ne $dbsize || \
+	_notrun "cannot set rt extent size ($rtextsz) larger than fs block size ($dbsize)"
+
+# Ensure there's no extent size hint set on the directory, then set the
+# rtinherit bit on the directory to test propagation.
+$XFS_IO_PROG -c 'extsize 0' -c 'chattr +t' $SCRATCH_MNT
+
+# Now try to set an extent size hint on the directory that isn't aligned to
+# the rt extent size.
+$XFS_IO_PROG -c "extsize $((rtextsz + dbsize))" $SCRATCH_MNT 2>&1 | _filter_scratch
+$XFS_IO_PROG -c 'stat -v' $SCRATCH_MNT > $tmp.stat
+cat $tmp.stat >> $seqres.full
+grep -q 'fsxattr.xflags.*rt-inherit' $tmp.stat || \
+	echo "rtinherit didn't get set on the directory?"
+grep 'fsxattr.extsize' $tmp.stat
+
+# Propagate the hint from directory to file
+echo moo > $SCRATCH_MNT/dummy
+$XFS_IO_PROG -c 'stat -v' $SCRATCH_MNT/dummy > $tmp.stat
+cat $tmp.stat >> $seqres.full
+grep -q 'fsxattr.xflags.*realtime' $tmp.stat || \
+	echo "realtime didnt' get set on the file?"
+grep 'fsxattr.extsize' $tmp.stat
+
+# Cycle the mount to force the inode verifier to run.
+_scratch_cycle_mount
+
+# Can we still access the dummy file?
+cat $SCRATCH_MNT/dummy
+
+# success, all done
+status=0
+exit

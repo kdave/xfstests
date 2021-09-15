@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021, Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 540
+#
+# Functional test for xfsprogs commit:
+#
+# 5f062427 ("xfs_repair: validate alignment of inherited rt extent hints")
+#
+# This xfs_repair patch detects directories that are configured to propagate
+# their realtime and extent size hints to newly created realtime files when the
+# hint size isn't aligned to the size of a realtime extent.
+#
+# Since this is a test of userspace tool functionality, we don't need kernel
+# support, which in turn means that we omit _require_realtime.  Note that XFS
+# allows users to configure realtime extent size geometry and set RTINHERIT
+# flags even if the filesystem itself does not have a realtime volume attached.
+#
+. ./common/preamble
+_begin_fstest auto repair fuzzers
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+
+echo "Format and mount"
+_scratch_mkfs -r extsize=7b | _filter_mkfs > $seqres.full 2>$tmp.mkfs
+cat $tmp.mkfs >> $seqres.full
+. $tmp.mkfs
+
+test $rtextsz -ne $dbsize || \
+	_notrun "cannot set rt extent size ($rtextsz) larger than fs block size ($dbsize)"
+
+_scratch_mount >> $seqres.full 2>&1
+rootino=$(stat -c '%i' $SCRATCH_MNT)
+_scratch_unmount
+
+echo "Misconfigure the root directory"
+rtextsz_blks=$((rtextsz / dbsize))
+_scratch_xfs_db -x -c "inode $rootino" \
+	-c "write -d core.extsize $((rtextsz_blks + 1))" \
+	-c 'write -d core.rtinherit 1' \
+	-c 'write -d core.extszinherit 1' \
+	-c 'print' >> $seqres.full
+
+echo "Detect misconfigured directory"
+_scratch_xfs_repair -n >> $seqres.full 2>&1 && \
+	echo "repair did not catch error?"
+
+echo "Repair misconfigured directory"
+_scratch_xfs_repair >> $seqres.full 2>&1 || \
+	echo "repair did not fix error?"
+
+status=0
+exit
