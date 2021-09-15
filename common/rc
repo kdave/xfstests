@@ -1964,6 +1964,20 @@ _require_sane_bdev_flush()
 	fi
 }
 
+# Decide if the scratch filesystem is likely to be mounted in fsdax mode.
+# If there's a dax clause in the mount options we assume the test runner
+# wants us to test DAX; or if the scratch device itself advertises dax mode
+# in sysfs.
+__detect_scratch_fsdax()
+{
+	_normalize_mount_options | egrep -q "dax(=always| |$)" && return 0
+
+	local sysfs="/sys/block/$(_short_dev $SCRATCH_DEV)"
+	test -e "${sysfs}/dax" && return 0
+	test "$(cat "${sysfs}/queue/dax" 2>/dev/null)" = "1" && return 0
+	return 1
+}
+
 # this test requires a specific device mapper target
 _require_dm_target()
 {
@@ -1975,9 +1989,7 @@ _require_dm_target()
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
-	_normalize_mount_options | egrep -q "dax(=always| |$)" || \
-			test -e "/sys/block/$(_short_dev $SCRATCH_DEV)/dax"
-	if [ $? -eq 0 ]; then
+	if __detect_scratch_fsdax; then
 		case $target in
 		stripe|linear|log-writes)
 			;;
