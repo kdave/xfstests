@@ -1,0 +1,74 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 650
+#
+# Run an all-writes fsstress run with multiple threads while exercising CPU
+# hotplugging to shake out bugs in the write path.
+#
+. ./common/preamble
+_begin_fstest auto rw stress
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
+	wait	# for exercise_cpu_hotplug subprocess
+	for i in "$sysfs_cpu_dir/"cpu*/online; do
+		echo 1 > "$i" 2>/dev/null
+	done
+	test -n "$stress_dir" && rm -r -f "$stress_dir"
+}
+
+exercise_cpu_hotplug()
+{
+	while [ -e $sentinel_file ]; do
+		local idx=$(( RANDOM % nr_hotplug_cpus ))
+		local cpu="${hotplug_cpus[idx]}"
+		local action=$(( RANDOM % 2 ))
+
+		echo "$action" > "$sysfs_cpu_dir/cpu$cpu/online" 2>/dev/null
+		sleep 0.5
+	done
+}
+
+_supported_fs generic
+_require_test
+_require_command "$KILLALL_PROG" "killall"
+
+sysfs_cpu_dir="/sys/devices/system/cpu"
+
+# Figure out which CPU(s) support hotplug.
+nrcpus=$(getconf _NPROCESSORS_CONF)
+hotplug_cpus=()
+for ((i = 0; i < nrcpus; i++ )); do
+	test -e "$sysfs_cpu_dir/cpu$i/online" && hotplug_cpus+=("$i")
+done
+nr_hotplug_cpus="${#hotplug_cpus[@]}"
+test "$nr_hotplug_cpus" -gt 0 || _notrun "CPU hotplugging not supported"
+
+stress_dir="$TEST_DIR/$seq"
+rm -r -f "$stress_dir"
+mkdir -p "$stress_dir"
+
+echo "Silence is golden."
+
+sentinel_file=$tmp.hotplug
+touch $sentinel_file
+exercise_cpu_hotplug &
+
+# Cap the number of fsstress threads at one per hotpluggable CPU if we exceed
+# 1024 IO threads, per maintainer request.
+nr_cpus=$((LOAD_FACTOR * nr_hotplug_cpus))
+test "$nr_cpus" -gt 1024 && nr_cpus="$nr_hotplug_cpus"
+
+nr_ops=$((25000 * TIME_FACTOR))
+$FSSTRESS_PROG $FSSTRESS_AVOID -w -d $stress_dir -n $nr_ops -p $nr_cpus >> $seqres.full
+rm -f $sentinel_file
+
+# success, all done
+status=0
+exit
