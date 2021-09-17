@@ -3849,6 +3849,14 @@ _create_loop_device()
 {
 	local file=$1 dev
 	dev=`losetup -f --show $file` || _fail "Cannot assign $file to a loop device"
+
+	# Try to enable asynchronous directio mode on the loopback device so
+	# that writeback started by a filesystem mounted on the loop device
+	# won't be throttled by buffered writes to the lower filesystem.  This
+	# is a performance optimization for tests that want to write a lot of
+	# data, so it isn't required to work.
+	test -b "$dev" && losetup --direct-io=on $dev 2> /dev/null
+
 	echo $dev
 }
 
