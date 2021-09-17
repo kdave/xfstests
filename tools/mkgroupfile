@@ -9,11 +9,27 @@ fi
 
 test_dir="$PWD"
 groupfile="$1"
+GROUPNAME_DOC_FILE="$(readlink -m ../../doc/group-names.txt)"
+export GROUPNAME_DOC_FILE
 
 if [ ! -x ../../check ]; then
 	echo "$0: Run this from tests/XXX/."
 	exit 1
 fi
+
+cleanup() {
+	test -z "$groupfile" && return
+	test -z "$ngroupfile" && return
+
+	if [ $ret -eq 0 ]; then
+		mv "$ngroupfile" "$groupfile"
+	else
+		rm -f "$ngroupfile"
+	fi
+}
+
+ret=1	# trigger cleanup of temporary files unless we succeed
+trap 'cleanup; exit $ret' EXIT INT TERM QUIT
 
 generate_groupfile() {
 	cat << ENDL
@@ -24,19 +40,20 @@ ENDL
 	cd ../../
 	export GENERATE_GROUPS=yes
 	grep -R -l "^_begin_fstest" "$test_dir/" 2>/dev/null | while read testfile; do
-		test -x "$testfile" && "$testfile"
+		test -x "$testfile" && "$testfile" || return 1
 	done | sort -g
+	ret="${PIPESTATUS[1]}"
 	cd "$test_dir"
 }
 
 if [ -z "$groupfile" ] || [ "$groupfile" = "-" ]; then
 	# Dump the group file to stdout and exit
+	unset groupfile
 	generate_groupfile
-	exit 0
+else
+	# Otherwise, write the group file to disk somewhere.
+	ngroupfile="${groupfile}.new"
+	rm -f "$ngroupfile"
+	generate_groupfile >> "$ngroupfile"
+	# let cleanup rename or delete ngroupfile
 fi
-
-# Otherwise, write the group file to disk somewhere.
-ngroupfile="${groupfile}.new"
-rm -f "$ngroupfile"
-generate_groupfile >> "$ngroupfile"
-mv "$ngroupfile" "$groupfile"

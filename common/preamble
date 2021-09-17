@@ -23,6 +23,26 @@ _register_cleanup()
 	trap "${cleanup}exit \$status" EXIT HUP INT QUIT TERM $*
 }
 
+# Make sure each group is in the documentation file.
+_check_groups() {
+	test -n "$GROUPNAME_DOC_FILE" || return 0
+
+	local testname="$(echo "$0" | sed -e 's/^.*tests\///g')"
+	declare -a missing=()
+
+	for group in "$@"; do
+		if ! grep -q "^${group}[[:space:]]" "$GROUPNAME_DOC_FILE"; then
+			missing+=("\"${group}\"")
+		fi
+	done
+	test "${#missing}" -eq 0 && return 0
+
+	local suffix=
+	test "${#missing}" -gt 1 && suffix="s"
+	echo "$testname: group$suffix ${missing[@]} not mentioned in documentation." 1>&2
+	return 1
+}
+
 # Prepare to run a fstest by initializing the required global variables to
 # their defaults, sourcing common functions, registering a cleanup function,
 # and removing the $seqres.full file.
@@ -42,6 +62,7 @@ _begin_fstest()
 	# If we're only running the test to generate a group.list file,
 	# spit out the group data and exit.
 	if [ -n "$GENERATE_GROUPS" ]; then
+		_check_groups "$@" || exit 1
 		echo "$seq $@"
 		exit 0
 	fi
