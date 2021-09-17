@@ -100,6 +100,9 @@ check_groups() {
 			echo "Invalid characters in group(s): ${inval}"
 			echo "Only lower cases, digits and underscore are allowed in groups, separated by space"
 			return 1
+		elif [ "${g}" = "other" ]; then
+			echo "Do not add more tests to group \"other\""
+			return 1
 		elif ! group_names | grep -q -w "${g}"; then
 			echo "Warning: group \"${g}\" not defined in documentation"
 			return 1
@@ -111,16 +114,16 @@ check_groups() {
 
 if [ $# -eq 0 ]; then
 	# interactive mode
-	prompt="Add to group(s) [other] (separate by space, ? for list): "
+	prompt="Add to group(s) [auto] (separate by space, ? for list): "
 	while true; do
 		read -p "${prompt}" -a new_groups || exit 1
 		case "${#new_groups[@]}" in
 		0)
-			new_groups=("other")
+			new_groups=("auto")
 			;;
 		1)
 			if [ "${new_groups[0]}" = "?" ]; then
-				echo $(group_names)
+				echo $(group_names | grep -v -w 'other')
 				continue
 			fi
 			;;
