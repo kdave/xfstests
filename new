@@ -91,38 +91,46 @@ group_names() {
 	}' doc/group-names.txt
 }
 
+# Make sure that the new test's groups fit the correct format and are listed
+# in the group documentation file.
+check_groups() {
+	for g in "$@"; do
+		local inval="$(echo "${g}" | tr -d '[:lower:][:space:][:digit:]_')"
+		if [ -n "${inval}" ]; then
+			echo "Invalid characters in group(s): ${inval}"
+			echo "Only lower cases, digits and underscore are allowed in groups, separated by space"
+			return 1
+		elif ! group_names | grep -q -w "${g}"; then
+			echo "Warning: group \"${g}\" not defined in documentation"
+			return 1
+		fi
+	done
+
+	return 0
+}
+
 if [ $# -eq 0 ]; then
+	# interactive mode
 	prompt="Add to group(s) [other] (separate by space, ? for list): "
-    while true
-    do
-	read -p "${prompt}" ans || exit 1
-	test -z "${ans}" && ans=other
-	if [ "${ans}" = "?" ]; then
-	    echo $(group_names)
-	else
-	    # only allow lower cases, spaces, digits and underscore in group
-	    inval=`echo $ans | tr -d '[:lower:][:space:][:digit:]_'`
-	    if [ "$inval" != "" ]; then
-		echo "Invalid characters in group(s): $inval"
-		echo "Only lower cases, digits and underscore are allowed in groups, separated by space"
-		continue
-	    else
-		# remove redundant spaces/tabs
-		ans=`echo "$ans" | sed 's/\s\+/ /g'`
-		break
-	    fi
-	fi
-    done
+	while true; do
+		read -p "${prompt}" -a new_groups || exit 1
+		case "${#new_groups[@]}" in
+		0)
+			new_groups=("other")
+			;;
+		1)
+			if [ "${new_groups[0]}" = "?" ]; then
+				echo $(group_names)
+				continue
+			fi
+			;;
+		esac
+		check_groups "${new_groups[@]}" && break
+	done
 else
-    # expert mode, groups are on the command line
-    #
-    for g in $*
-    do
-	if ! grep -q "^$g" doc/group-names.txt; then
-	    echo "Warning: group \"$g\" not defined in documentation"
-	fi
-    done
-    ans="$*"
+	# expert mode, groups are on the command line
+	new_groups=("$@")
+	check_groups "${new_groups[@]}" || exit 1
 fi
 
 echo -n "Creating skeletal script for you to edit ..."
@@ -139,7 +147,7 @@ cat <<End-of-File >$tdir/$id
 # what am I here for?
 #
 . ./common/preamble
-_begin_fstest $ans
+_begin_fstest ${new_groups[@]}
 
 # Override the default cleanup function.
 # _cleanup()
