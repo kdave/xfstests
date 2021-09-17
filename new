@@ -83,6 +83,14 @@ then
     exit 1
 fi
 
+# Extract group names from the documentation.
+group_names() {
+	awk '/^[[:lower:][:digit:]_]/ {
+		if ($1 != "" && $1 != "Group" && $2 != "Name:" && $1 != "all")
+			printf("%s\n", $1);
+	}' doc/group-names.txt
+}
+
 if [ $# -eq 0 ]
 then
 
@@ -93,16 +101,7 @@ then
 	[ -z "$ans" ] && ans=other
 	if [ "X$ans" = "X?" ]
 	then
-	    for d in $SRC_GROUPS; do
-		(cd "tests/$d/" ; ../../tools/mkgroupfile "$tmpfile")
-		l=$(sed -n < "$tmpfile" \
-		    -e 's/#.*//' \
-		    -e 's/$/ /' \
-		    -e 's;\(^[0-9][0-9][0-9]\)\(.*$\);\2;p')
-		grpl="$grpl $l"
-	    done
-	    lst=`for word in $grpl; do echo $word; done | sort| uniq `
-	    echo $lst
+	    echo $(group_names)
 	else
 	    # only allow lower cases, spaces, digits and underscore in group
 	    inval=`echo $ans | tr -d '[:lower:][:space:][:digit:]_'`
@@ -120,11 +119,10 @@ then
 else
     # expert mode, groups are on the command line
     #
-    (cd "$tdir" ; ../../tools/mkgroupfile "$tmpfile")
     for g in $*
     do
-	if ! grep -q "[[:space:]]$g" "$tmpfile"; then
-	    echo "Warning: group \"$g\" not defined in $tdir tests"
+	if ! grep -q "^$g" doc/group-names.txt; then
+	    echo "Warning: group \"$g\" not defined in documentation"
 	fi
     done
     ans="$*"
