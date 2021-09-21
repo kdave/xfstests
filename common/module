@@ -16,7 +16,7 @@ _reload_module()
 {
 	local module="$1"
 
-	modprobe -r "${module}" || _fail "${module} unload failed"
+	_patient_rmmod "${module}" || _fail "${module} unload failed"
 	modprobe "${module}" || _fail "${module} load failed"
 }
 
@@ -44,7 +44,7 @@ _require_loadable_module()
 	local module="$1"
 
 	modinfo "${module}" > /dev/null 2>&1 || _notrun "${module}: must be a module."
-	modprobe -r "${module}" || _notrun "Require ${module} to be unloadable"
+	_patient_rmmod "${module}" || _notrun "Require ${module} to be unloadable"
 	modprobe "${module}" || _notrun "${module} load failed"
 }
 
@@ -64,7 +64,7 @@ _require_loadable_fs_module()
 	test -n "${had_scratchfs}" && _scratch_unmount
 	local unload_ok=""
 	local load_ok=""
-	modprobe -r "${module}" || unload_ok=0
+	_patient_rmmod "${module}" || unload_ok=0
 	modprobe "${module}" || load_ok=0
 	test -n "${had_scratchfs}" && _scratch_mount 2> /dev/null
 	test -n "${had_testfs}" && _test_mount 2> /dev/null
