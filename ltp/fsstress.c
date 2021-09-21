@@ -4504,9 +4504,9 @@ do_renameat2(int opno, long r, int mode)
 	flist_t		*flp;
 	int		id;
 	pathname_t	newf;
-	int		oldid;
+	int		oldid = 0;
 	int		parid;
-	int		oldparid;
+	int		oldparid = 0;
 	int		which;
 	int		v;
 	int		v1;
