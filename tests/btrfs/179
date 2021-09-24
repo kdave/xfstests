@@ -70,6 +70,10 @@ delete_workload()
 	while true; do
 		sleep $((sleep_time * 2))
 		victim=$(ls "$SCRATCH_MNT/snapshots" | sort -R | head -n1)
+		if [ -z "$victim" ]; then
+			# No snapshots available, sleep and retry later.
+			continue
+		fi
 		$BTRFS_UTIL_PROG subvolume delete \
 			"$SCRATCH_MNT/snapshots/$victim" > /dev/null
 	done
