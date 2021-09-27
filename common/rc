@@ -2301,18 +2301,27 @@ _cat_group()
 	cat /etc/group
 }
 
-# check for a user on the machine, fsgqa as default
+# check if a user exists in the system
+#
+_require_user_exists()
+{
+	local user=$1
+	_cat_passwd | grep -q "^$user:"
+	[ "$?" == "0" ] || _notrun "$user user not defined."
+}
+
+# check if a user exists and is able to execute commands.
+# Uses 'fsgqa' user as default.
 #
 _require_user()
 {
-    qa_user=fsgqa
-    if [ -n "$1" ];then
-        qa_user=$1
-    fi
-    _cat_passwd | grep -q $qa_user
-    [ "$?" == "0" ] || _notrun "$qa_user user not defined."
-    echo /bin/true | su $qa_user
-    [ "$?" == "0" ] || _notrun "$qa_user cannot execute commands."
+	qa_user=fsgqa
+	if [ -n "$1" ];then
+		qa_user=$1
+	fi
+	_require_user_exists $qa_user
+	echo /bin/true | su $qa_user
+	[ "$?" == "0" ] || _notrun "$qa_user cannot execute commands."
 }
 
 # check for a chown support
