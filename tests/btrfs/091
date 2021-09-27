@@ -23,21 +23,12 @@ _require_cp_reflink
 # use largest node/leaf size (64K) to allow the test to be run on arch with
 # page size > 4k.
 NODESIZE=65536
-SUPPORT_NOINODE_CACHE="yes"
 
 run_check _scratch_mkfs "--nodesize $NODESIZE"
 
-# inode cache will also take space in fs tree, disable them to get consistent
-# result.
 # discard error output since we will check return value manually.
 # also disable all compression, or output will mismatch with golden output
-_try_scratch_mount "-o noinode_cache,compress=no,compress-force=no" 2> /dev/null
-
-# Check for old kernel which doesn't support 'noinode_cache' mount option
-if [ $? -ne 0 ]; then
-	support_noinode_cache="no"
-	_scratch_mount
-fi
+_try_scratch_mount "-o compress=no,compress-force=no" 2> /dev/null
 
 _run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv1
 _run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv2
@@ -45,16 +36,6 @@ _run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv3
 
 _run_btrfs_util_prog quota enable $SCRATCH_MNT
 _run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
-
-# if we don't support noinode_cache mount option, then we should double check
-# whether inode cache is enabled before executing the real test payload.
-if [ $SUPPORT_NOINODE_CACHE == "no" ]; then
-	EMPTY_SIZE=`$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | \
-		$SED_PROG -n '/[0-9]/p' | $AWK_PROG '{print $2}' | head -n1`
-	if [ $EMPTY_SIZE != $NODESIZE ]; then
-		_notrun "Kernel doesn't support to disable inode cache"
-	fi
-fi
 
 $XFS_IO_PROG -f -c "pwrite 0 256K" $SCRATCH_MNT/subv1/file1 | _filter_xfs_io
 cp --reflink $SCRATCH_MNT/subv1/file1 $SCRATCH_MNT/subv2/file1
