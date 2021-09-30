@@ -41,11 +41,11 @@ _scratch_unmount
 
 echo "Misconfigure the root directory"
 rtextsz_blks=$((rtextsz / dbsize))
-_scratch_xfs_db -x -c "inode $rootino" \
-	-c "write -d core.extsize $((rtextsz_blks + 1))" \
-	-c 'write -d core.rtinherit 1' \
-	-c 'write -d core.extszinherit 1' \
-	-c 'print' >> $seqres.full
+
+_scratch_xfs_set_metadata_field core.extsize $((rtextsz_blks + 1)) "inode $rootino" >> $seqres.full
+_scratch_xfs_set_metadata_field core.rtinherit 1 "inode $rootino" >> $seqres.full
+_scratch_xfs_set_metadata_field core.extszinherit 1 "inode $rootino" >> $seqres.full
+_scratch_xfs_db -x -c "inode $rootino" -c 'print' >> $seqres.full
 
 echo "Detect misconfigured directory"
 _scratch_xfs_repair -n >> $seqres.full 2>&1 && \
