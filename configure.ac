@@ -1,12 +1,11 @@
-AC_INIT([xfstests], [1.1.1])
+AC_INIT([xfstests],[1.1.2])
 AC_CONFIG_MACRO_DIR([m4])
 LT_INIT
 AC_CONFIG_SRCDIR([src/xfsctl.c])
 AC_PACKAGE_GLOBALS(xfstests)
 AC_PACKAGE_UTILITIES(xfstests)
 
-AC_HEADER_STDC
-    AC_CHECK_HEADERS([	assert.h		\
+AC_CHECK_HEADERS([	assert.h		\
 			bstring.h		\
 			libgen.h		\
 			dirent.h		\
@@ -34,7 +33,7 @@ AC_HEADER_STDC
 			btrfs/ioctl.h		\
 			cifs/ioctl.h		\
 			sys/mman.h		\
-    ])
+])
 
 AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[
 #define _GNU_SOURCE
@@ -104,6 +103,6 @@ AC_CHECK_MEMBERS([struct btrfs_ioctl_vol_args_v2.subvolid], [], [], [[
 #include <linux/btrfs.h>
 ]])
 
-AC_CONFIG_HEADER(include/config.h)
+AC_CONFIG_HEADERS([include/config.h])
 AC_CONFIG_FILES([include/builddefs])
 AC_OUTPUT

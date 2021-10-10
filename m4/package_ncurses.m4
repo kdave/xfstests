@@ -19,12 +19,9 @@ AC_DEFUN([AC_PACKAGE_WANT_WORKING_LIBNCURSES],
     libcurses="-lncurses"
     LIBS="$LIBS $libcurses"
     CFLAGS="$CFLAGS -D_GNU_SOURCE"
-    AC_TRY_LINK([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <ncurses.h>
-#include <signal.h>],
-        [wgetch(stdscr);],
-        [enable_curses=yes; AC_MSG_RESULT([ok])],
-        [enable_curses=no; libcurses=""; AC_MSG_RESULT([disabling curses])])
+#include <signal.h>]], [[wgetch(stdscr);]])],[enable_curses=yes; AC_MSG_RESULT([ok])],[enable_curses=no; libcurses=""; AC_MSG_RESULT([disabling curses])])
     AC_SUBST(enable_curses)
     AC_SUBST(libcurses)
   ])

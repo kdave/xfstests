@@ -18,28 +18,22 @@ AC_DEFUN([AC_PACKAGE_WANT_LINUX_FS_H],
 
 AC_DEFUN([AC_PACKAGE_WANT_FALLOCATE],
   [ AC_MSG_CHECKING([for fallocate])
-    AC_TRY_LINK([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 #include <fcntl.h>
-#include <linux/falloc.h> ],
-      [ fallocate(0, 0, 0, 0); ],
-      [ have_fallocate=true; AC_MSG_RESULT(yes) ],
-      [ have_fallocate=false; AC_MSG_RESULT(no) ])
+#include <linux/falloc.h> ]], [[ fallocate(0, 0, 0, 0); ]])],[ have_fallocate=true; AC_MSG_RESULT(yes) ],[ have_fallocate=false; AC_MSG_RESULT(no) ])
     AC_SUBST(have_fallocate)
   ])
 
 AC_DEFUN([AC_PACKAGE_WANT_OPEN_BY_HANDLE_AT],
   [ AC_MSG_CHECKING([for open_by_handle_at])
-    AC_TRY_LINK([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #include <fcntl.h>
-      ],
-      [
+      ]], [[
           struct file_handle fh;
           open_by_handle_at(0, &fh, 0);
-      ],
-      [ have_open_by_handle_at=true; AC_MSG_RESULT(yes) ],
-      [ have_open_by_handle_at=false; AC_MSG_RESULT(no) ])
+      ]])],[ have_open_by_handle_at=true; AC_MSG_RESULT(yes) ],[ have_open_by_handle_at=false; AC_MSG_RESULT(no) ])
     AC_SUBST(have_open_by_handle_at)
   ])

@@ -94,13 +94,10 @@ AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
 
 AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
   [ AC_MSG_CHECKING([xfsctl from xfs/xfs.h])
-    AC_TRY_LINK([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
-#include <xfs/xfs.h> ],
-      [ int x = xfsctl(0, 0, 0, 0); ],
-      [ echo ok ],
-      [ echo
+#include <xfs/xfs.h> ]], [[ int x = xfsctl(0, 0, 0, 0); ]])],[ echo ok ],[ echo
         echo 'FATAL ERROR: cannot find required macros in the XFS headers.'
         echo 'Upgrade your XFS programs (xfsprogs) development package.'
         echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
