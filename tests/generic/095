@@ -23,6 +23,7 @@ iodepth_batch=$((8 * LOAD_FACTOR))
 numjobs=$((5 * LOAD_FACTOR))
 fio_config=$tmp.fio
 fio_out=$tmp.fio.out
+blksz=$(_min_dio_alignment $SCRATCH_DEV)
 cat >$fio_config <<EOF
 [global]
 bs=8k
@@ -34,7 +35,7 @@ directory=$SCRATCH_MNT
 numjobs=$numjobs
 [job1]
 ioengine=sync
-bs=1k
+bs=$blksz
 direct=1
 rw=randread
 filename=file1:file2
@@ -44,7 +45,7 @@ rw=randwrite
 direct=1
 filename=file1:file2
 [job3]
-bs=1k
+bs=$blksz
 ioengine=posixaio
 rw=randwrite
 direct=1
