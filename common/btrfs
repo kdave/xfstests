@@ -445,3 +445,17 @@ _scratch_btrfs_is_zoned()
 	[ `_zone_type ${SCRATCH_DEV}` != "none" ] && return 0
 	return 1
 }
+
+_require_btrfs_sysfs_fsid()
+{
+	local fsid
+
+	fsid=$($BTRFS_UTIL_PROG filesystem show $TEST_DIR |grep uuid: |\
+	       awk '{print $NF}')
+
+	# Check if the kernel has sysfs fsid support.
+	# Following kernel patch adds it:
+	#   btrfs: sysfs add devinfo/fsid to retrieve fsid from the device
+	test -f /sys/fs/btrfs/$fsid/devinfo/1/fsid ||\
+		_notrun "Need btrfs sysfs fsid support"
+}
