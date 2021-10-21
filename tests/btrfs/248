@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Anand Jain.  All Rights Reserved.
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test 248
+#
+# Validate if the sysfs devinfo/<devid>/fsid behaves properly
+# Steps:
+#  Create a sprout filesystem (an rw device on top of a seed device)
+#  Read the seed and sprout devices fsid from the superblock
+#  Validate with the sysfs fsid
+
+. ./common/preamble
+_begin_fstest auto quick seed volume
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_test
+_require_scratch_dev_pool 2
+_require_btrfs_forget_or_module_loadable
+_require_command "$BTRFS_TUNE_PROG" btrfstune
+_require_btrfs_command inspect-internal dump-super
+_require_btrfs_sysfs_fsid
+
+_scratch_dev_pool_get 1
+# use the scratch device as a seed device
+seed_dev=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $1 }')
+
+# use the spare device as a sprout device
+_spare_dev_get
+
+# create seed device
+_scratch_pool_mkfs >> $seqres.full 2>&1
+$BTRFS_TUNE_PROG -S 1 $seed_dev
+_scratch_mount >> $seqres.full 2>&1
+
+# create a sprout device
+$BTRFS_UTIL_PROG device add -f $SPARE_DEV $SCRATCH_MNT >> $seqres.full 2>&1
+_scratch_unmount
+
+# record the fsid of both seed and sprout devices
+seedfsid=$($BTRFS_UTIL_PROG inspect-internal dump-super $seed_dev |grep ^fsid |\
+	   $AWK_PROG '{print $2}')
+sproutfsid=$($BTRFS_UTIL_PROG inspect-internal dump-super $SPARE_DEV |\
+	     grep ^fsid |$AWK_PROG '{print $2}')
+
+# validate it with the fsid as shown in the sysfs
+_mount -o device=$seed_dev $SPARE_DEV $SCRATCH_MNT
+
+cat /sys/fs/btrfs/$sproutfsid/devinfo/2/fsid | grep -v $sproutfsid
+cat /sys/fs/btrfs/$sproutfsid/devinfo/1/fsid | grep -v $seedfsid
+
+_scratch_unmount
+_spare_dev_put
+_scratch_dev_pool_put
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
