@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Anand Jain.  All Rights Reserved.
+# Copyright (c) 2021 Oracle.  All Rights Reserved.
+#
+# FS QA Test 249
+#
+# Validate if the command 'btrfs filesystem usage' works with missing seed
+# device
+# Steps:
+#  Create a degraded raid1 seed device
+#  Create a sprout filesystem (an rw device on top of a seed device)
+#  Dump 'btrfs filesystem usage', check it didn't fail
+#
+# Tests btrfs-progs bug fixed by the kernel patch and a btrfs-prog patch
+#   btrfs: sysfs add devinfo/fsid to retrieve fsid from the device
+#   btrfs-progs: read fsid from the sysfs in device_is_seed
+
+. ./common/preamble
+_begin_fstest auto quick seed volume
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch_dev_pool 3
+_require_command "$WIPEFS_PROG" wipefs
+_require_btrfs_forget_or_module_loadable
+
+_scratch_dev_pool_get 2
+# use the scratch devices as seed devices
+seed_dev1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $1 }')
+seed_dev2=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{ print $2 }')
+
+# use the spare device as a sprout device
+_spare_dev_get
+sprout_dev=$SPARE_DEV
+
+# create raid1 seed filesystem
+_scratch_pool_mkfs "-draid1 -mraid1" >> $seqres.full 2>&1
+$BTRFS_TUNE_PROG -S 1 $seed_dev1
+$WIPEFS_PROG -a $seed_dev1 >> $seqres.full 2>&1
+_btrfs_forget_or_module_reload
+_mount -o degraded $seed_dev2 $SCRATCH_MNT >> $seqres.full 2>&1
+
+# create a sprout device
+$BTRFS_UTIL_PROG device add -f $SPARE_DEV $SCRATCH_MNT >> $seqres.full 2>&1
+
+# dump filesystem usage if it fails error goes to the bad.out file
+$BTRFS_UTIL_PROG filesystem usage $SCRATCH_MNT >> $seqres.full
+# also check for the error code
+ret=$?
+if [ $ret != 0 ]; then
+_fail "FAILED: btrfs filesystem usage, ret $ret. Check btrfs.ko and btrfs-progs version."
+fi
+
+_scratch_unmount
+_spare_dev_put
+_scratch_dev_pool_put
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
