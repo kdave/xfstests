@@ -104,7 +104,7 @@ for i in $(seq 1 $((25 * TIME_FACTOR)) ); do
 		wait > /dev/null 2>&1
 		ps -e | grep fsstress > /dev/null 2>&1
 	done
-	for ((i = 0; i < 10; i++)); do
+	for ((j = 0; j < 10; j++)); do
 		test -e "$snap_aliveflag" || break
 		sleep 1
 	done
@@ -112,7 +112,21 @@ for i in $(seq 1 $((25 * TIME_FACTOR)) ); do
 	# Mount again to replay log after loading working table, so we have a
 	# consistent fs after test.
 	$UMOUNT_PROG $loopmnt
-	_dmerror_unmount || _fail "iteration $i scratch unmount failed"
+	is_unmounted=1
+	# We must unmount dmerror at here, or whole later testing will crash.
+	# So try to umount enough times, before we have no choice.
+	for ((j = 0; j < 100; j++)); do
+		sleep 1
+		_dmerror_unmount > $tmp.unmount.err 2>&1
+		if [ $? -eq 0 ];then
+			is_unmounted=0
+			break
+		fi
+	done
+	if [ $is_unmounted -ne 0 ];then
+		cat $tmp.unmount.err
+		_fail "iteration $i scratch unmount failed"
+	fi
 	_dmerror_load_working_table
 	if ! _dmerror_mount; then
 		_metadump_dev $DMERROR_DEV $seqres.scratch.$i.md
