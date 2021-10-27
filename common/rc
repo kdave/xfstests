@@ -1965,12 +1965,19 @@ _require_sane_bdev_flush()
 }
 
 # Decide if the scratch filesystem is likely to be mounted in fsdax mode.
-# If there's a dax clause in the mount options we assume the test runner
-# wants us to test DAX; or if the scratch device itself advertises dax mode
-# in sysfs.
-__detect_scratch_fsdax()
+# It goes 3 ways based on mount options::
+#	1. "dax" or "dax=always" means always test using DAX
+#	2. "dax=never" means we'll never use DAX
+#	3. "dax=inode" or nothing means "use scratch dev capability" to
+#	    determine whether DAX is going to be used.
+#
+# Returns 0 if DAX will be used, 1 if DAX is not going to be used.
+__scratch_uses_fsdax()
 {
-	_normalize_mount_options | egrep -q "dax(=always| |$)" && return 0
+	local ops=$(_normalize_mount_options)
+
+	echo $ops | egrep -qw "dax(=always| |$)" && return 0
+	echo $ops | grep -qw "dax=never" && return 1
 
 	local sysfs="/sys/block/$(_short_dev $SCRATCH_DEV)"
 	test -e "${sysfs}/dax" && return 0
@@ -1982,6 +1989,8 @@ __detect_scratch_fsdax()
 _require_dm_target()
 {
 	local target=$1
+	local fsdax
+	local bdevdax
 
 	# require SCRATCH_DEV to be a valid block device with sane BLKFLSBUF
 	# behaviour
@@ -1989,7 +1998,7 @@ _require_dm_target()
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
-	if __detect_scratch_fsdax; then
+	if __scratch_uses_fsdax; then
 		case $target in
 		stripe|linear|log-writes)
 			;;
