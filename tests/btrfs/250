@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 250
+#
+# Test that if we write to a range of a NOCOW file that has allocated extents
+# and there is not enough available free space for allocating new data extents,
+# the write succeeds. Test for direct IO and buffered IO writes.
+# The patch that fixes the direct IO case has the following subject:
+#
+# "btrfs: fix ENOSPC failure when attempting direct IO write into NOCOW range"
+#
+. ./common/preamble
+_begin_fstest auto quick enospc
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_chattr C
+_require_odirect
+
+# Use a small fixed size filesystem so that it's quick to fill it up.
+# Make sure the fs size is > 256M, so that the mixed block groups feature is
+# not enabled by _scatch_mkfs_sized(), because we later want to not have more
+# space available for allocating data extents but still have enough metadata
+# space free for the file writes.
+fs_size=$((1024 * 1024 * 1024)) # 1G
+_scratch_mkfs_sized $fs_size >>$seqres.full 2>&1
+_scratch_mount
+
+# Create our test file with the NOCOW attribute set.
+touch $SCRATCH_MNT/foobar
+$CHATTR_PROG +C $SCRATCH_MNT/foobar
+
+# Now fill in all unallocated space with data for our test file.
+# This will allocate a data block group that will be full and leave no (or a
+# very small amount of) unallocated space in the device, so that it will not be
+# possible to allocate a new block group later.
+echo "Creating test file with initial data..."
+$XFS_IO_PROG -c "pwrite -S 0xab -b 1M 0 900M" $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Now try a direct IO write against file range [0, 10M[.
+# This should succeed since this is a NOCOW file and an extent for the range was
+# previously allocated.
+echo "Trying direct IO write over allocated space..."
+$XFS_IO_PROG -d -c "pwrite -S 0xcd -b 10M 0 10M" $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Now try a buffered IO write against file range [10M, 20M[.
+# This should also succeed since this is a NOCOW file and an extent for the range
+# was previously allocated.
+echo "Trying buffered IO write over allocated space..."
+$XFS_IO_PROG -c "pwrite -S 0xef -b 10M 10M 10M" $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Unmount and mount again the filesystem to clear any data from our file from the
+# page cache.
+_scratch_cycle_mount
+
+# Now read the file and verify that all the writes we did before were durably
+# persisted.
+echo "File data after mounting again the filesystem:"
+od -A d -t x1 $SCRATCH_MNT/foobar
+
+# success, all done
+status=0
+exit
