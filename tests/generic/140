@@ -35,37 +35,37 @@ echo "Create the original files"
 blksz=65536
 _pwrite_byte 0x61 0 $((blksz * 48 - 3)) $testdir/file1 >> $seqres.full
 _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
-_pwrite_byte 0x61 0 $((blksz * 48 - 3)) $testdir/file3 >> $seqres.full
+_pwrite_byte 0x61 0 $((blksz * 48 - 3)) $testdir/file2.chk >> $seqres.full
 _test_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_test_dir
 md5sum $testdir/file2 | _filter_test_dir
-md5sum $testdir/file3 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
 
-cmp -s $testdir/file1 $testdir/file2 || echo "Files 1-2 do not match"
-cmp -s $testdir/file1 $testdir/file3 || echo "Files 1-3 do not match"
-cmp -s $testdir/file2 $testdir/file3 || echo "Files 2-3 do not match"
+cmp -s $testdir/file1 $testdir/file2 || echo "file1 and file2 do not match"
+cmp -s $testdir/file1 $testdir/file2.chk || echo "file1 and file2.chk do not match"
+cmp -s $testdir/file2 $testdir/file2.chk || echo "file2 and file2.chk do not match"
 
 echo "mmap CoW the second file"
 _mwrite_byte 0x62 0 17 $((blksz * 48 - 3)) $testdir/file2 >> $seqres.full
-_mwrite_byte 0x62 0 17 $((blksz * 48 - 3)) $testdir/file3 >> $seqres.full
+_mwrite_byte 0x62 0 17 $((blksz * 48 - 3)) $testdir/file2.chk >> $seqres.full
 
 _mwrite_byte 0x62 $((blksz * 16 - 34)) 17 $((blksz * 48 - 3)) $testdir/file2 >> $seqres.full
-_mwrite_byte 0x62 $((blksz * 16 - 34)) 17 $((blksz * 48 - 3)) $testdir/file3 >> $seqres.full
+_mwrite_byte 0x62 $((blksz * 16 - 34)) 17 $((blksz * 48 - 3)) $testdir/file2.chk >> $seqres.full
 
 _mwrite_byte 0x62 $((blksz * 48 - 20)) 17 $((blksz * 48 - 3)) $testdir/file2 >> $seqres.full
-_mwrite_byte 0x62 $((blksz * 48 - 20)) 17 $((blksz * 48 - 3)) $testdir/file3 >> $seqres.full
+_mwrite_byte 0x62 $((blksz * 48 - 20)) 17 $((blksz * 48 - 3)) $testdir/file2.chk >> $seqres.full
 _test_cycle_mount
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_test_dir
 md5sum $testdir/file2 | _filter_test_dir
-md5sum $testdir/file3 | _filter_test_dir
+md5sum $testdir/file2.chk | _filter_test_dir
 
-cmp -s $testdir/file1 $testdir/file2 || echo "Files 1-2 do not match (intentional)"
-cmp -s $testdir/file1 $testdir/file3 || echo "Files 1-3 do not match (intentional)"
-cmp -s $testdir/file2 $testdir/file3 || echo "Files 2-3 do not match"
+cmp -s $testdir/file1 $testdir/file2 || echo "file1 and file2 do not match (intentional)"
+cmp -s $testdir/file1 $testdir/file2.chk || echo "file1 and file2.chk do not match (intentional)"
+cmp -s $testdir/file2 $testdir/file2.chk || echo "file2 and file2.chk do not match"
 
 echo "Compare the CoW'd section to the before file"
 _compare_range $testdir/file1 0 $testdir/file2 0 17 \
@@ -80,47 +80,47 @@ _compare_range  $testdir/file1 $((blksz * 48 - 20)) \
        || echo "End sections do not match (intentional)"
 
 echo "Compare the CoW'd section to the after file"
-_compare_range $testdir/file2 0 $testdir/file3 0 17 \
+_compare_range $testdir/file2 0 $testdir/file2.chk 0 17 \
        || echo "Start sections do not match"
 
 _compare_range  $testdir/file2 $((blksz * 16 - 34)) \
-		$testdir/file3 $((blksz * 16 - 34)) 17 \
+		$testdir/file2.chk $((blksz * 16 - 34)) 17 \
        || echo "Middle sections do not match"
 
 _compare_range  $testdir/file2 $((blksz * 48 - 20)) \
-		$testdir/file3 $((blksz * 48 - 20)) 17 \
+		$testdir/file2.chk $((blksz * 48 - 20)) 17 \
        || echo "End sections do not match"
 
 echo "Compare the not CoW'd sections"
 _compare_range $testdir/file1 18 $testdir/file2 18 17 \
-       || echo "Start sections of 1-2 do not match"
+       || echo "Start sections of file1 and file2 do not match"
 
-_compare_range $testdir/file2 18 $testdir/file3 18 17 \
-       || echo "Start sections of 2-3 do not match"
+_compare_range $testdir/file2 18 $testdir/file2.chk 18 17 \
+       || echo "Start sections of file2 and file2.chk do not match"
 
 _compare_range  $testdir/file1 $((blksz * 16 - 17)) \
 		$testdir/file2 $((blksz * 16 - 17)) 82 \
-       || echo "Middle sections of 1-2 do not match"
+       || echo "Middle sections of file1 and file2 do not match"
 
 _compare_range  $testdir/file2 $((blksz * 16 - 17)) \
-		$testdir/file3 $((blksz * 16 - 17)) 82 \
-       || echo "Middle sections of 2-3 do not match"
+		$testdir/file2.chk $((blksz * 16 - 17)) 82 \
+       || echo "Middle sections of file2 and file2.chk do not match"
 
 _compare_range  $testdir/file1 $((blksz * 48 - 120)) \
 		$testdir/file2 $((blksz * 48 - 120)) 100 \
-       || echo "End sections of 1-2 do not match"
+       || echo "End sections of file1 and file2 do not match"
 
 _compare_range  $testdir/file2 $((blksz * 48 - 120)) \
-		$testdir/file3 $((blksz * 48 - 120)) 100 \
-       || echo "End sections of 2-3 do not match"
+		$testdir/file2.chk $((blksz * 48 - 120)) 100 \
+       || echo "End sections of file2 and file2.chk do not match"
 
 _compare_range  $testdir/file1 $((blksz * 14)) \
 		$testdir/file2 $((blksz * 14)) $blksz \
-       || echo "Untouched sections of 1-2 do not match"
+       || echo "Untouched sections of file1 and file2 do not match"
 
 _compare_range  $testdir/file2 $((blksz * 14)) \
-		$testdir/file3 $((blksz * 14)) $blksz \
-       || echo "Untouched sections of 2-3 do not match"
+		$testdir/file2.chk $((blksz * 14)) $blksz \
+       || echo "Untouched sections of file2 and file2.chk do not match"
 
 # success, all done
 status=0
