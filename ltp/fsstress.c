@@ -9,6 +9,7 @@
 #include <sys/uio.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
 #include "global.h"
 
 #ifdef HAVE_BTRFSUTIL_H
@@ -950,9 +951,22 @@ check_cwd(void)
 {
 #ifdef DEBUG
 	struct stat64	statbuf;
+	int ret;
 
-	if (stat64(".", &statbuf) == 0 && statbuf.st_ino == top_ino)
+	ret = stat64(".", &statbuf);
+	if (ret != 0) {
+		fprintf(stderr, "fsstress: check_cwd stat64() returned %d with errno: %d (%s)\n",
+			ret, errno, strerror(errno));
+		goto out;
+	}
+
+	if (statbuf.st_ino == top_ino)
 		return;
+
+	fprintf(stderr, "fsstress: check_cwd statbuf.st_ino (%llu) != top_ino (%llu)\n",
+		(unsigned long long) statbuf.st_ino,
+		(unsigned long long) top_ino);
+out:
 	assert(chdir(homedir) == 0);
 	fprintf(stderr, "fsstress: check_cwd failure\n");
 	abort();
