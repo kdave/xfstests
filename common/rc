@@ -4703,6 +4703,35 @@ _require_names_are_bytes() {
         esac
 }
 
+_has_kernel_config()
+{
+	local option=$1
+	local uname=$(uname -r)
+	local config_list="$KCONFIG_PATH
+		     /proc/config.gz
+		     /lib/modules/$uname/build/.config
+		     /boot/config-$uname
+		     /lib/kernel/config-$uname"
+
+	for config in $config_list; do
+		[ ! -f $config ] && continue
+		[ $config = "/proc/config.gz" ] && break
+		grep -qE "^${option}=[my]" $config
+		return
+	done
+
+	[ ! -f $config ] && _notrun "Could not locate kernel config file"
+
+	# We can only get here with /proc/config.gz
+	_require_command "$GZIP_PROG" gzip
+	$GZIP_PROG -cd $config | grep -qE "^${option}=[my]"
+}
+
+_require_kernel_config()
+{
+	_has_kernel_config $1 || _notrun "Installed kernel not built with $1"
+}
+
 init_rc
 
 ################################################################################
