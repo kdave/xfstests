@@ -2593,9 +2593,11 @@ _require_odirect()
 	rm -f $testfile 2>&1 > /dev/null
 }
 
+# Format a swapfile and return its size in bytes
 _format_swapfile() {
 	local fname="$1"
 	local sz="$2"
+	local swap_log=""
 
 	rm -f "$fname"
 	touch "$fname"
@@ -2604,8 +2606,10 @@ _format_swapfile() {
 	$CHATTR_PROG +C "$fname" > /dev/null 2>&1
 	_pwrite_byte 0x61 0 "$sz" "$fname" >> $seqres.full
 	# Ignore permission complaints on filesystems that don't support perms
-	$MKSWAP_PROG "$fname" 2>&1 >> $seqres.full | \
-		grep -v "insecure permission"
+	swap_log=$($MKSWAP_PROG "$fname" 2>&1 | grep -v "insecure permission")
+	echo $swap_log >> $seqres.full
+
+	echo $swap_log | grep -oP '\w+(?= bytes)'
 }
 
 _swapon_file() {
@@ -2637,7 +2641,7 @@ _require_scratch_swapfile()
 	_scratch_mount
 
 	# Minimum size for mkswap is 10 pages
-	_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
+	_format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10)) > /dev/null
 
 	# ext* has supported all variants of swap files since their
 	# introduction, so swapon should not fail.
