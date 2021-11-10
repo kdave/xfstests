@@ -36,34 +36,25 @@ _scratch_mount >> $seqres.full
 # Assuming we're not borrowing a FAT16 partition from Windows 3.1, we need an
 # unlikely enough name that we can grep /proc/swaps for this.
 swapfile=$SCRATCH_MNT/386spart.par
-_format_swapfile $swapfile 1m >> $seqres.full
+before_blocks=$(_format_swapfile $swapfile 1m)
 
 page_size=$(getconf PAGE_SIZE)
-
-swapfile_blocks() {
-	local swapfile="$1"
-
-	grep "$swapfile" /proc/swaps | awk '{print $3}'
-}
-
-_swapon_file $swapfile
-before_blocks=$(swapfile_blocks "$swapfile")
-swapoff $swapfile
 
 # Extend the length of the swapfile but do not rewrite the header.
 # The subsequent swapon should set up 1MB worth of blocks, not 2MB.
 $XFS_IO_PROG -f -c 'pwrite 1m 1m' $swapfile >> $seqres.full
 
 _swapon_file $swapfile
-after_blocks=$(swapfile_blocks "$swapfile")
+after_blocks=$(swapon --show --bytes |grep $swapfile | awk '{print $3}')
 swapoff $swapfile
 
-# Both swapon attempts should have found approximately the same number of
-# blocks.  Unfortunately, mkswap and the kernel are a little odd -- the number
-# of pages that mkswap writes into the swapfile header is one page less than
-# the file size, and then the kernel itself doesn't always grab all the pages
-# advertised in the header.  Hence we let the number of swap pages increase by
-# two pages.  I'm looking at you, Mr. 64k pages on arm64...
+# The swapon attempt should have found approximately the same number of blocks
+# originally created by the mkswap.
+# Unfortunately, mkswap and the kernel are a little odd -- the number of pages
+# that mkswap writes into the swapfile header is one page less than the file
+# size, and then the kernel itself doesn't always grab all the pages advertised
+# in the header. Such cases include ext2 and ext3 with 1k block size and arm64
+# with its 64k pages. Hence we let the number of swap pages increase by two pages.
 page_variance=$(( page_size / 512 ))
 _within_tolerance "swap blocks" $after_blocks $before_blocks 0 $page_variance -v
 
