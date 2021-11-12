@@ -1676,6 +1676,17 @@ _require_scratch_nocheck()
     rm -f ${RESULT_DIR}/require_scratch
 }
 
+# we need the scratch device and it needs to not be an lvm device
+_require_scratch_nolvm()
+{
+	_require_scratch_nocheck
+
+	# This works if we don't have LVM, all we want is to skip if the scratch
+	# device is an lvm device.
+	$LVM_PROG lvdisplay $SCRATCH_DEV > /dev/null 2>&1
+	[ $? -eq 0 ] && _notrun "test requires a non-lvm scratch device"
+}
+
 # we need the scratch device and it should be checked post test.
 _require_scratch()
 {
