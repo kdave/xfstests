@@ -44,8 +44,9 @@ inum() {
 # Create two test files, make $low_file the file with the lower inode
 # number, and make $high_file the file with the higher inode number.
 create_files() {
-	_pwrite_byte 0x60 0 $filesize $testdir/file1 >> $seqres.full
-	_pwrite_byte 0x61 0 $filesize $testdir/file2 >> $seqres.full
+	touch $testdir/file1
+	touch $testdir/file2
+
 	if [ "$(inum $testdir/file1)" -lt "$(inum $testdir/file2)" ]; then
 		mv $testdir/file1 $low_file
 		mv $testdir/file2 $high_file
@@ -53,6 +54,9 @@ create_files() {
 		mv $testdir/file2 $low_file
 		mv $testdir/file1 $high_file
 	fi
+
+	_pwrite_byte 0x60 0 $filesize $low_file >> $seqres.full
+	_pwrite_byte 0x61 0 $filesize $high_file >> $seqres.full
 }
 
 # Check md5sum of both files, but keep results sorted by inode order
