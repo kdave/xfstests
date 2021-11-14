@@ -56,9 +56,8 @@ _check_minimal_fs_size $(( 1024 * 1024 * 1024 ))
 mkfs_opts="-d raid6 -b 1G"
 _scratch_pool_mkfs $mkfs_opts >>$seqres.full 2>&1
 
-# -o nospace_cache makes sure data is written to the start position of the data
-# chunk
-_scratch_mount -o nospace_cache
+# make sure data is written to the start position of the data chunk
+_scratch_mount $(_btrfs_no_v1_cache_opt)
 
 # [0,64K) is written to stripe 0 and [64K, 128K) is written to stripe 1
 $XFS_IO_PROG -f -d -c "pwrite -S 0xaa 0 128K" -c "fsync" \
@@ -85,7 +84,7 @@ $XFS_IO_PROG -f -d -c "pwrite -S 0xbb $phy1 64K" $devpath1 > /dev/null
 
 # step 3: scrub filesystem to repair the bitrot
 echo "step 3......repair the bitrot" >> $seqres.full
-_scratch_mount -o nospace_cache
+_scratch_mount $(_btrfs_no_v1_cache_opt)
 
 $BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full 2>&1
 

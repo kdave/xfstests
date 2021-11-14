@@ -461,3 +461,15 @@ _require_btrfs_sysfs_fsid()
 	test -f /sys/fs/btrfs/$fsid/devinfo/1/fsid ||\
 		_notrun "Need btrfs sysfs fsid support"
 }
+
+# If test doesn't want v1 cache to take up data space, there's no longer need
+# the "nospace_cache" mount option if the filesystem is already using v2 cache.
+# Since v2 cache is using metadata space, it will no longer take up data space.
+_btrfs_no_v1_cache_opt()
+{
+	if $BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV |\
+	   grep -q "FREE_SPACE_TREE"; then
+		return
+	fi
+	echo -n "-onospace_cache"
+}
