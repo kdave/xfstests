@@ -30,14 +30,14 @@ echo "Remove device"
 _scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount
 _format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10)) > /dev/null
-$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT" >> $seqres.full
 swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
 # We know the swap file is on device 1 because we added device 2 after it was
 # already created.
 $BTRFS_UTIL_PROG device delete "$scratch_dev1" "$SCRATCH_MNT" 2>&1 | grep -o "Text file busy"
 # Deleting/readding device 2 should still work.
 $BTRFS_UTIL_PROG device delete "$scratch_dev2" "$SCRATCH_MNT"
-$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT" >> $seqres.full
 swapoff "$SCRATCH_MNT/swap" > /dev/null 2>&1
 # Deleting device 1 should work again after swapoff.
 $BTRFS_UTIL_PROG device delete "$scratch_dev1" "$SCRATCH_MNT"
@@ -48,7 +48,7 @@ echo "Replace device"
 _scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount
 _format_swapfile "$SCRATCH_MNT/swap" $(($(get_page_size) * 10))
-$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT"
+$BTRFS_UTIL_PROG device add -f "$scratch_dev2" "$SCRATCH_MNT" >> $seqres.full
 swapon "$SCRATCH_MNT/swap" 2>&1 | _filter_scratch
 # Again, we know the swap file is on device 1.
 $BTRFS_UTIL_PROG replace start -fB "$scratch_dev1" "$scratch_dev3" "$SCRATCH_MNT" 2>&1 | grep -o "Text file busy"
