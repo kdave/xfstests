@@ -183,6 +183,43 @@ static int map_ids_from_idmap(struct list *idmap, pid_t pid)
 	return 0;
 }
 
+#ifdef DEBUG_TRACE
+static void __print_idmaps(pid_t pid, bool gid)
+{
+	char path_mapping[STRLITERALLEN("/proc/") + INTTYPE_TO_STRLEN(pid_t) +
+			  STRLITERALLEN("/_id_map") + 1];
+	char *line = NULL;
+	size_t len = 0;
+	int ret;
+	FILE *f;
+
+	ret = snprintf(path_mapping, sizeof(path_mapping), "/proc/%d/%cid_map",
+		       pid, gid ? 'g' : 'u');
+	if (ret < 0 || (size_t)ret >= sizeof(path_mapping))
+		return;
+
+	f = fopen(path_mapping, "r");
+	if (!f)
+		return;
+
+	while ((ret = getline(&line, &len, f)) > 0)
+		fprintf(stderr, "%s", line);
+
+	fclose(f);
+	free(line);
+}
+
+static void print_idmaps(pid_t pid)
+{
+	__print_idmaps(pid, false);
+	__print_idmaps(pid, true);
+}
+#else
+static void print_idmaps(pid_t pid)
+{
+}
+#endif
+
 int get_userns_fd_from_idmap(struct list *idmap)
 {
 	int ret;
@@ -199,10 +236,12 @@ int get_userns_fd_from_idmap(struct list *idmap)
 		return ret;
 
 	ret = snprintf(path_ns, sizeof(path_ns), "/proc/%d/ns/user", pid);
-	if (ret < 0 || (size_t)ret >= sizeof(path_ns))
+	if (ret < 0 || (size_t)ret >= sizeof(path_ns)) {
 		ret = -EIO;
-	else
+	} else {
 		ret = open(path_ns, O_RDONLY | O_CLOEXEC | O_NOCTTY);
+		print_idmaps(pid);
+	}
 
 	(void)kill(pid, SIGKILL);
 	(void)wait_for_pid(pid);

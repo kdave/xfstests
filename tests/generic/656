@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Christian Brauner.  All Rights Reserved.
+#
+# FS QA Test 656
+#
+# This is a test for the fix
+# commit 968219708108 ("fs: handle circular mappings correctly")
+# in Linux. It verifies that setattr for {g,u}id work correctly.
+#
+. ./common/preamble
+_begin_fstest auto attr cap idmapped mount perms
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs generic
+_require_idmapped_mounts
+_require_test
+_require_user fsgqa
+_require_user fsgqa2
+_require_group fsgqa
+_require_group fsgqa2
+
+echo "Silence is golden"
+
+$here/src/idmapped-mounts/idmapped-mounts --test-setattr-fix-968219708108 \
+	--device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP"
+
+status=$?
+exit
