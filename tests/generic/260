@@ -31,6 +31,7 @@ fssize=$($DF_PROG -k | grep "$SCRATCH_MNT" | grep "$SCRATCH_DEV"  | awk '{print 
 
 beyond_eofs=$(_math "$fssize*2048")
 max_64bit=$(_math "2^64 - 1")
+[ $FSTYP == "btrfs" ] && beyond_eofs=$max_64bit
 
 # All these tests should return EINVAL
 # since the start is beyond the end of
@@ -127,6 +128,12 @@ case $FSTYP in
 		start=$(_math "$base*$agsize*$bsize")
 		len=$start
 		export MKFS_OPTIONS="-f -d agsize=$(_math "$agsize*$bsize") -b size=$bsize"
+		;;
+	btrfs)
+		# Btrfs doesn't care about any of this, just test max_64bit
+		# since it'll fail
+		start=$max_64bit
+		len=$(_math "$start / 2")
 		;;
 	*)
 		# (2^32-1) * 4096 * 65536 == 32bit max size * block size * ag size
