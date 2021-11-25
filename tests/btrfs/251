@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2021 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 251
+#
+# Test if btrfs will crash when using compress-force mount option against
+# incompressible data
+#
+. ./common/preamble
+_begin_fstest auto quick compress dangerous
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+pagesize=$(get_page_size)
+
+# Read the content from urandom to a known safe location
+$XFS_IO_PROG -f -c "pwrite -i /dev/urandom 0 $pagesize" "$tmp.good" > /dev/null
+
+# Make sure we didn't get short write
+if [ $(_get_filesize "$tmp.good") != "$pagesize" ]; then
+	_fail "Got a short read from /dev/urandom"
+fi
+
+workload()
+{
+	local compression=$1
+
+	echo "=== Testing compress-force=$compression ==="
+	_scratch_mkfs -s "$pagesize">> $seqres.full
+	_scratch_mount -o compress-force="$compression"
+	cp "$tmp.good" "$SCRATCH_MNT/$compression"
+
+	# When unpatched, compress-force=lzo would crash at data writeback
+	_scratch_cycle_mount
+
+	# Make sure the content matches
+	if [ "$(_md5_checksum $tmp.good)" != \
+	     "$(_md5_checksum $SCRATCH_MNT/$compression)" ]; then
+		echo "Content of '$SCRATCH_MNT/file' mismatch with known good copy"
+	else
+		echo "OK"
+	fi
+	_scratch_unmount
+}
+
+workload lzo
+workload zstd
+workload zlib
+
+# success, all done
+status=0
+exit
