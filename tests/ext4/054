@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Huawei.  All Rights Reserved.
+#
+# FS QA Test 054
+#
+# Regression test for kernel commit:
+# 1. 0f2f87d51aebc (ext4: prevent partial update of the extent blocks)
+# 2. 9c6e071913792 (ext4: check for inconsistent extents between index \
+#    and leaf block)
+# 3. 8dd27fecede55 (ext4: check for out-of-order index extents in \
+#    ext4_valid_extent_entries())
+
+. ./common/preamble
+_begin_fstest auto quick dangerous_fuzzers
+
+# Import common functions
+. ./common/filter
+
+# real QA test starts here
+_supported_fs ext4
+_require_test
+_require_scratch_nocheck
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "pwrite"
+_require_xfs_io_command "fsync"
+_require_xfs_io_command "fpunch"
+_require_command "$DEBUGFS_PROG" debugfs
+
+# In order to accurately construct the damaged extent in the following
+# test steps, the blocksize is set to 1024 here
+_scratch_mkfs "-b 1024" > $seqres.full 2>&1
+_scratch_mount
+
+TEST_FILE="${SCRATCH_MNT}/testfile"
+touch $TEST_FILE
+
+# The following steps create an abnormal file system image and
+# create a file(testfile). The starting logic block of its second leaf
+# extent block is inconsistent with the starting logic block of the
+# second idx extent entry in the inode.
+# Level Entries       Logical      Physical Length Flags
+# 0/ 1   2/  2  5632 -  6527  2020            896
+#               ^^^^ point to leaf block
+# 1/ 1   1/ 15  5376 -  5439  7041 -  7104     64 Uninit
+# 1/ 1   2/ 15  5632 -  5695  7297 -  7360     64 Uninit
+for i in {0..50}; do
+    offset=$((1024 * 128 * i))
+    $XFS_IO_PROG -c "falloc $offset $((1024 * 64))" $TEST_FILE >> $seqres.full
+    offset=$((offset + 1024 * 64))
+    $XFS_IO_PROG -c "pwrite $offset $((1024 * 64))" $TEST_FILE >> $seqres.full
+    $XFS_IO_PROG -c "fsync" $TEST_FILE >> $seqres.full
+done
+
+$XFS_IO_PROG -c "fpunch $((1024 * 5376)) $((1024 * 256))" $TEST_FILE \
+        >> $seqres.full
+$XFS_IO_PROG -c "fsync" $TEST_FILE >> $seqres.full
+$XFS_IO_PROG -c "falloc $((1024 * 5376)) $((1024 * 64))" $TEST_FILE \
+        >> $seqres.full
+$XFS_IO_PROG -c "fsync" $TEST_FILE >> $seqres.full
+
+_scratch_unmount >> $seqres.full 2>&1
+
+$DEBUGFS_PROG -w -R "set_inode_field testfile block[6] 0x1600" $SCRATCH_DEV \
+        2>> $seqres.full >> $seqres.full
+
+# Mount the file system and create a block at a location in the middle
+# of 5440-5632
+
+# When the delalloc option is enabled when mounting, the block allocation
+# will not be triggered when writing (the maximum waiting time is about 30s).
+# If nodellalloc is used, the block will be allocated when writing. The
+# expected BUG_ON in this use case can be triggered immediately, and the test
+# results can be quickly obtained.
+_scratch_mount "-o nodelalloc"
+$XFS_IO_PROG -c "pwrite $((1024 * 5568)) $((1024 * 64))" $TEST_FILE \
+        2>> $seqres.full >> $seqres.full
+
+# If this BUG is not fixed, when the testcase is executed to this position,
+# the kernel will be BUG_ON immediately.
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
