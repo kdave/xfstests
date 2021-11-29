@@ -3982,7 +3982,10 @@ _require_test_fcntl_setlease()
 	_require_test_program "locktest"
 	touch $TEST_DIR/setlease_testfile
 	$here/src/locktest -t $TEST_DIR/setlease_testfile >/dev/null 2>&1
-	[ $? -eq 22 ] && _notrun "Require fcntl setlease support"
+	local ret=$?
+	[ $ret -eq 22 ] && _notrun "Require fcntl setlease support"
+	[ "$FSTYP" == "nfs" -a $ret -eq 11 ] && \
+		_notrun "NFS requires delegation before setlease"
 }
 
 _require_ofd_locks()
