@@ -958,6 +958,12 @@ _scratch_pool_mkfs()
 {
     case $FSTYP in
     btrfs)
+	# For multi-disk file systems udev can queue up events on the device
+	# when we mkfs the device, and thus tie up the device after we've
+	# unmounted.  Tests that _scratch_pool_mkfs() in a loop can sometimes
+	# trip over udev trying to do the updates after the umount, so make sure
+	# we settle before we try mkfs'ing so we don't get an EBUSY
+	$UDEV_SETTLE_PROG >/dev/null 2>&1
         $MKFS_BTRFS_PROG $MKFS_OPTIONS $* $SCRATCH_DEV_POOL > /dev/null
         ;;
     *)
