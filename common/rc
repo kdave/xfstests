@@ -4415,7 +4415,14 @@ run_fsx()
 _require_fs_sysfs()
 {
 	local attr=$1
-	local dname=$(_short_dev $TEST_DEV)
+	local dname
+
+	case "$FSTYP" in
+	btrfs)
+		dname=$(findmnt -n -o UUID $TEST_DEV) ;;
+	*)
+		dname=$(_short_dev $TEST_DEV) ;;
+	esac
 
 	if [ -z "$attr" -o -z "$dname" ];then
 		_fail "Usage: _require_fs_sysfs <sysfs_attr_path>"
@@ -4453,7 +4460,14 @@ _set_fs_sysfs_attr()
 		_fail "Usage: _set_fs_sysfs_attr <mounted_device> <attr> <content>"
 	fi
 
-	local dname=$(_short_dev $dev)
+	local dname
+	case "$FSTYP" in
+	btrfs)
+		dname=$(findmnt -n -o UUID ${dev}) ;;
+	*)
+		dname=$(_short_dev $dev) ;;
+	esac
+
 	echo "$content" > /sys/fs/${FSTYP}/${dname}/${attr}
 }
 
@@ -4474,7 +4488,14 @@ _get_fs_sysfs_attr()
 		_fail "Usage: _get_fs_sysfs_attr <mounted_device> <attr>"
 	fi
 
-	local dname=$(_short_dev $dev)
+	local dname
+	case "$FSTYP" in
+	btrfs)
+		dname=$(findmnt -n -o UUID ${dev}) ;;
+	*)
+		dname=$(_short_dev $dev) ;;
+	esac
+
 	cat /sys/fs/${FSTYP}/${dname}/${attr}
 }
 
