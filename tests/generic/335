@@ -51,6 +51,15 @@ mv $SCRATCH_MNT/a/b/foo $SCRATCH_MNT/c/
 touch $SCRATCH_MNT/a/bar
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/a
 
+# btrfs can not guarantee that when we fsync a directory all its subdirectories
+# created on past transactions are fsynced as well. It may do it sometimes, but
+# it's not guaranteed, giving such guarantees would be too expensive for large
+# directories and posix does not require that recursive behaviour. So if we want
+# the rename of "foo" to be persisted, explicitly fsync "foo".
+if [ $FSTYP == "btrfs" ]; then
+	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/c/foo
+fi
+
 echo "Filesystem content before power failure:"
 ls -R $SCRATCH_MNT/a $SCRATCH_MNT/c | _filter_scratch
 
