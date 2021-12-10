@@ -1,0 +1,113 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Anand Jain. All Rights Reserved.
+# Copyright (c) 2021 Oracle. All Rights Reserved.
+#
+# FS QA Test No. 254
+#
+# Test if the kernel can free the stale device entries.
+#
+# Tests bug fixed by the kernel patch:
+#	btrfs: harden identification of the stale device
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Override the default cleanup function.
+node=$seq-test
+cleanup_dmdev()
+{
+	_dmsetup_remove $node
+}
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -rf $seq_mnt > /dev/null 2>&1
+	cleanup_dmdev
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/filter.btrfs
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch_dev_pool 3
+_require_block_device $SCRATCH_DEV
+_require_dm_target linear
+_require_btrfs_forget_or_module_loadable
+_require_scratch_nocheck
+_require_command "$WIPEFS_PROG" wipefs
+
+_scratch_dev_pool_get 3
+
+setup_dmdev()
+{
+	# Some small size.
+	size=$((1024 * 1024 * 1024))
+	size_in_sector=$((size / 512))
+
+	table="0 $size_in_sector linear $SCRATCH_DEV 0"
+	_dmsetup_create $node --table "$table" || \
+		_fail "setup dm device failed"
+}
+
+# Use a known it is much easier to debug.
+uuid="--uuid 12345678-1234-1234-1234-123456789abc"
+lvdev=/dev/mapper/$node
+
+seq_mnt=$TEST_DIR/$seq.mnt
+mkdir -p $seq_mnt
+
+test_forget()
+{
+	setup_dmdev
+	dmdev=$(realpath $lvdev)
+
+	_mkfs_dev $uuid $dmdev
+
+	# Check if we can un-scan using the mapper device path.
+	$BTRFS_UTIL_PROG device scan --forget $lvdev
+
+	# Cleanup
+	$WIPEFS_PROG -a $lvdev > /dev/null 2>&1
+	$BTRFS_UTIL_PROG device scan --forget
+
+	cleanup_dmdev
+}
+
+test_add_device()
+{
+	setup_dmdev
+	dmdev=$(realpath $lvdev)
+	scratch_dev2=$(echo $SCRATCH_DEV_POOL | awk '{print $2}')
+	scratch_dev3=$(echo $SCRATCH_DEV_POOL | awk '{print $3}')
+
+	_mkfs_dev $scratch_dev3
+	_mount $scratch_dev3 $seq_mnt
+
+	_mkfs_dev $uuid -draid1 -mraid1 $lvdev $scratch_dev2
+
+	# Add device should free the device under $uuid in the kernel.
+	$BTRFS_UTIL_PROG device add -f $dmdev $seq_mnt > /dev/null 2>&1
+
+	_mount -o degraded $scratch_dev2 $SCRATCH_MNT
+
+	# Check if the missing device is shown.
+	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
+					_filter_btrfs_filesystem_show
+
+	$UMOUNT_PROG $seq_mnt
+	_scratch_unmount
+	cleanup_dmdev
+}
+
+test_forget
+test_add_device
+
+_scratch_dev_pool_put
+
+status=0
+exit
