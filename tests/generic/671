@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# FS QA Test No. 671
+#
+# Test for races or FS corruption when mmap writing to a file that's also
+# the source of a reflink operation. (MMAP version of generic/167,166)
+#
+. ./common/preamble
+_begin_fstest auto clone
+
+_register_cleanup "_cleanup" BUS
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_scratch_reflink
+_require_cp_reflink
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+finished_file=/tmp/finished
+rm -rf $finished_file
+mkdir $testdir
+
+loops=1024
+nr_loops=$((loops - 1))
+blksz=65536
+
+echo "Initialize file"
+echo >> $seqres.full
+_pwrite_byte 0x61 0 $((loops * blksz)) $testdir/file1 >> $seqres.full
+_scratch_cycle_mount
+
+# Snapshot creator...
+snappy() {
+	n=0
+	while [ ! -e $finished_file ]; do
+		out="$(_cp_reflink $testdir/file1 $testdir/snap_$n 2>&1)"
+		res=$?
+		echo "$out" | grep -q "No space left" && break
+		test -n "$out" && echo "$out"
+		test $res -ne 0 && break
+		n=$((n + 1))
+	done
+}
+
+echo "Snapshot a file undergoing mmap rewrite"
+snappy &
+seq $nr_loops -1 0 | while read i; do
+	$XFS_IO_PROG -f -c "mmap -rw $((i * blksz)) $blksz" \
+		-c "mwrite -S 0x63 $((i * blksz)) $blksz" $testdir/file1 >> $seqres.full
+done
+touch $finished_file
+wait
+
+# success, all done
+status=0
+exit
