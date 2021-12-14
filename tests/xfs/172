@@ -16,7 +16,6 @@ _begin_fstest rw filestreams
 
 # real QA test starts here
 _supported_fs xfs
-_require_command "$FILEFRAG_PROG" filefrag
 _require_scratch
 
 # The first _test_streams call sets up the filestreams allocator to fail and
@@ -36,16 +35,7 @@ _require_scratch
 # rescan thresholds and will keep pushing out the expiration time, with the
 # result that the filestreams allocator succeeds in maintaining the streams.
 # The test considers this a failure.
-#
-# Make sure that a regular buffered write produces delalloc reservations.
-# This effectively disables the test for files with extent size hints or DAX
-# mode set.
-_scratch_mkfs > $seqres.full
-_scratch_mount
-$XFS_IO_PROG -f -c 'pwrite 0 64k' $SCRATCH_MNT/testy &> /dev/null
-$FILEFRAG_PROG -v $SCRATCH_MNT/testy 2>&1 | grep -q delalloc || \
-	_notrun "test requires delayed allocation buffered writes"
-_scratch_unmount
+_require_scratch_delalloc
 
 _check_filestreams_support || _notrun "filestreams not available"
 

@@ -1748,6 +1748,19 @@ _require_scratch_16T_support()
 	esac
 }
 
+# Require scratch fs supports delay allocation.
+_require_scratch_delalloc()
+{
+	_require_command "$FILEFRAG_PROG" filefrag
+
+	_scratch_mkfs > $seqres.full
+	_scratch_mount
+	$XFS_IO_PROG -f -c 'pwrite 0 64k' $SCRATCH_MNT/testy &> /dev/null
+	$FILEFRAG_PROG -v $SCRATCH_MNT/testy 2>&1 | grep -q delalloc || \
+		_notrun "test requires delayed allocation buffered writes"
+	_scratch_unmount
+}
+
 # this test needs a test partition - check we're ok & mount it
 #
 _require_test()
