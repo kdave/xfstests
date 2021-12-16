@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Huawei.  All Rights Reserved.
+#
+# FS QA Test 055
+#
+# The preceding illegal memory access problem occurs due to tampering with the
+# quota index information in the image.
+#
+# Regression test for kernel
+# commit 9bf3d2033129 quota: check block number when reading the block in quota file
+# commit d0e36a62bd4c quota: correct error number in free_dqentry()
+#
+# The test is based on a testcase from Zhang Yi <yi.zhang@huawei.com>.
+#
+. ./common/preamble
+_begin_fstest auto quota
+
+# real QA test starts here
+_require_scratch_nocheck
+_supported_fs ext4
+_require_user fsgqa
+_require_user fsgqa2
+_require_command "$DEBUGFS_PROG" debugfs
+
+echo "Silence is golden"
+
+# The 1K blocksize is designed for debugfs.
+_scratch_mkfs "-F -O quota -b 1024" > $seqres.full 2>&1
+
+# Start from 0, fill block 1 with 6，replace the original 2.
+# The purpose is change the normal index order from 1->2->3->4->5 to 1->6->0.
+$DEBUGFS_PROG -w -R "zap_block -o 0 -l 1 -p 6 -f <3> 1" $SCRATCH_DEV >> $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+# Quota with user id 0 switch to quota with user id fsgqa, quota with user id 0 should
+# be release, but it can not be released because of block 6 is used by other quota.
+chown fsgqa:fsgqa $SCRATCH_MNT >> $seqres.full 2>&1
+touch $SCRATCH_MNT/foo >> $seqres.full 2>&1
+
+# In the process of deleting foo, will get the next block is 0 from block 6.
+# Block 0 is illegitimate, because it is the superblock of quota file.
+# It will take magic number from  block 0 as block number, and assign block number to
+# info->dqi_free_blk
+rm -f $SCRATCH_MNT/foo
+
+# Switch the quota, the wrong block number will be larger then INX_MAX, and it will be
+# return as a error code. Since the error code is not available, dqget() will change it
+# to a invalid address, use this address will trigger problem.
+chown fsgqa2:fsgqa2 $SCRATCH_MNT >> $seqres.full 2>&1
+
+# success, all done
+status=0
+exit
