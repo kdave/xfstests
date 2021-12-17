@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2021 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 542
+#
+# Test that COW writeback that overlaps non-shared delalloc blocks does not
+# leave around stale delalloc blocks on I/O failure. This triggers assert
+# failures and free space accounting corruption on XFS. Fixed by upstream kernel
+# commit 5ca5916b6bc9 ("xfs: punch out data fork delalloc blocks on COW
+# writeback failure").
+#
+. ./common/preamble
+_begin_fstest auto quick clone
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/reflink
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_xfs_io_command "cowextsize"
+_require_flakey_with_error_writes
+
+_scratch_mkfs >> $seqres.full
+_init_flakey
+_mount_flakey
+
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+# Set the COW extent size hint to guarantee COW fork preallocation occurs over a
+# bordering block offset.
+$XFS_IO_PROG -c "cowextsize $((blksz * 2))" $SCRATCH_MNT >> $seqres.full
+
+# create two files that share a single block
+$XFS_IO_PROG -fc "pwrite $blksz $blksz" $SCRATCH_MNT/file1 >> $seqres.full
+$XFS_IO_PROG -fc "reflink $SCRATCH_MNT/file1" \
+	-c fsync $SCRATCH_MNT/file2 >> $seqres.full
+
+# Perform a buffered write across the shared and non-shared blocks. On XFS, this
+# creates a COW fork extent that covers the shared block as well as the just
+# created non-shared delalloc block. Fail the writeback to verify that all
+# delayed allocation is cleaned up properly.
+_load_flakey_table $FLAKEY_ERROR_WRITES
+len=$((blksz * 2))
+$XFS_IO_PROG -c "pwrite 0 $len" \
+	-c "sync_range -w 0 $len" \
+	-c "sync_range -a 0 $len" $SCRATCH_MNT/file2 >> $seqres.full
+_load_flakey_table $FLAKEY_ALLOW_WRITES
+
+# Try a post-fail reflink and then unmount. Both of these are known to produce
+# errors and/or assert failures on XFS if we trip over a stale delalloc block.
+_cp_reflink $SCRATCH_MNT/file2 $SCRATCH_MNT/file3
+_unmount_flakey
+
+# success, all done
+status=0
+exit
