@@ -36,6 +36,11 @@ _scratch_mount
 fsv_orig_file=$SCRATCH_MNT/file
 fsv_file=$SCRATCH_MNT/file.fsv
 
+filter_output()
+{
+    _filter_bash | _filter_scratch
+}
+
 verify_data_readable()
 {
 	local file=$1
@@ -48,41 +53,41 @@ verify_data_unreadable()
 	local file=$1
 
 	# try both reading just the first data block, and reading until EOF
-	head -c $FSV_BLOCK_SIZE $file 2>&1 >/dev/null | _filter_scratch
-	md5sum $file |& _filter_scratch
+	head -c $FSV_BLOCK_SIZE $file 2>&1 >/dev/null | filter_output
+	md5sum $file |& filter_output
 }
 
 _fsv_scratch_begin_subtest "Enabling verity on file with verity already enabled fails with EEXIST"
 _fsv_create_enable_file $fsv_file
 echo "(trying again)"
-_fsv_enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& filter_output
 
 _fsv_scratch_begin_subtest "Enabling verity with invalid hash algorithm fails with EINVAL"
-_fsv_create_enable_file $fsv_file --hash-alg=257 |& _filter_scratch
+_fsv_create_enable_file $fsv_file --hash-alg=257 |& filter_output
 verify_data_readable $fsv_file
 
 _fsv_scratch_begin_subtest "Enabling verity with invalid block size fails with EINVAL"
-_fsv_create_enable_file $fsv_file --block-size=1 |& _filter_scratch
+_fsv_create_enable_file $fsv_file --block-size=1 |& filter_output
 verify_data_readable $fsv_file
 
 _fsv_scratch_begin_subtest "Enabling verity on directory fails with EISDIR"
 mkdir $SCRATCH_MNT/dir
-_fsv_enable $SCRATCH_MNT/dir |& _filter_scratch
+_fsv_enable $SCRATCH_MNT/dir |& filter_output
 
 _fsv_scratch_begin_subtest "Enabling verity with too-long salt fails with EMSGSIZE"
-_fsv_create_enable_file $fsv_file --salt=$(perl -e 'print "A" x 1000') |& _filter_scratch
+_fsv_create_enable_file $fsv_file --salt=$(perl -e 'print "A" x 1000') |& filter_output
 verify_data_readable $fsv_file
 
 _fsv_scratch_begin_subtest "Enabling verity on file on read-only filesystem fails with EROFS"
 echo foo > $fsv_file
 _scratch_remount ro
-_fsv_enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& filter_output
 _scratch_remount rw
 
 _fsv_scratch_begin_subtest "Enabling verity on file open for writing fails with ETXTBSY"
 echo foo > $fsv_file
 exec 3<> $fsv_file
-_fsv_enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& filter_output
 exec 3<&-
 verify_data_readable $fsv_file
 
@@ -103,7 +108,7 @@ dd if=/dev/zero of=$fsv_file bs=1 count=0 seek=$((1 << 34)) status=none
 start_time=$(date +%s)
 $FSVERITY_PROG enable $fsv_file &
 sleep 0.5
-_fsv_enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& filter_output
 kill %1
 wait
 
@@ -112,11 +117,11 @@ _fsv_create_enable_file $fsv_file >> $seqres.full
 echo "* reading"
 $XFS_IO_PROG -r $fsv_file -c ''
 echo "* xfs_io writing, should be O_RDWR"
-$XFS_IO_PROG $fsv_file -c '' |& _filter_scratch
+$XFS_IO_PROG $fsv_file -c '' |& filter_output
 echo "* bash >>, should be O_APPEND"
-bash -c "echo >> $fsv_file" |& _filter_scratch
+bash -c "echo >> $fsv_file" |& filter_output
 echo "* bash >, should be O_WRONLY|O_CREAT|O_TRUNC"
-bash -c "echo > $fsv_file" |& _filter_scratch
+bash -c "echo > $fsv_file" |& filter_output
 
 _fsv_scratch_begin_subtest "verity file can be read"
 _fsv_create_enable_file $fsv_file >> $seqres.full
@@ -160,7 +165,7 @@ _get_filesize $fsv_file
 
 _fsv_scratch_begin_subtest "Trying to measure non-verity file fails with ENODATA"
 echo foo > $fsv_file
-_fsv_measure $fsv_file |& _filter_scratch
+_fsv_measure $fsv_file |& filter_output
 verify_data_readable $fsv_file
 
 # Test files <= 1 block in size.  These are a bit of a special case since there
