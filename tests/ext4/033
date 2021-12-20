@@ -5,7 +5,8 @@
 # FS QA Test 033
 #
 # Test s_inodes_count overflow for huge filesystems. This bug was fixed
-# by commit "ext4: Forbid overflowing inode count when resizing".
+# by commit 4f2f76f75143 ("ext4: Forbid overflowing inode count when
+# resizing".)
 #
 . ./common/preamble
 _begin_fstest auto ioctl resize
@@ -28,7 +29,9 @@ _supported_fs ext4
 _require_scratch_nocheck
 _require_dmhugedisk
 _require_dumpe2fs
-_require_command "$RESIZE2FS_PROG" resize2fs
+_require_test_program ext4_resize
+
+EXT4_RESIZE=$here/src/ext4_resize
 
 # Figure out whether device is large enough
 devsize=$(blockdev --getsize64 $SCRATCH_DEV)
@@ -68,7 +71,8 @@ $DUMPE2FS_PROG -h $DMHUGEDISK_DEV >> $seqres.full 2>&1
 
 # This should fail, s_inodes_count would just overflow!
 echo "Resizing to inode limit + 1..."
-$RESIZE2FS_PROG $DMHUGEDISK_DEV $((limit_groups*group_blocks)) >> $seqres.full 2>&1
+echo $EXT4_RESIZE $SCRATCH_MNT $((limit_groups*group_blocks)) >> $seqres.full 2>&1
+$EXT4_RESIZE $SCRATCH_MNT $((limit_groups*group_blocks)) >> $seqres.full 2>&1
 if [ $? -eq 0 ]; then
 	echo "Resizing succeeded but it should fail!"
 	exit
@@ -76,7 +80,8 @@ fi
 
 # This should succeed, we are maxing out inodes
 echo "Resizing to max group count..."
-$RESIZE2FS_PROG $DMHUGEDISK_DEV $(((limit_groups-1)*group_blocks)) >> $seqres.full 2>&1
+echo $EXT4_RESIZE $SCRATCH_MNT $(((limit_groups-1)*group_blocks)) >> $seqres.full 2>&1
+$EXT4_RESIZE $SCRATCH_MNT $(((limit_groups-1)*group_blocks)) >> $seqres.full 2>&1
 if [ $? -ne 0 ]; then
 	echo "Resizing failed!"
 	exit
@@ -87,7 +92,8 @@ $DUMPE2FS_PROG -h $DMHUGEDISK_DEV >> $seqres.full 2>&1
 
 # This should fail, s_inodes_count would overflow by quite a bit!
 echo "Resizing to device size..."
-$RESIZE2FS_PROG $DMHUGEDISK_DEV >> $seqres.full 2>&1
+echo $EXT4_RESIZE $SCRATCH_MNT $(((limit_groups + 16)*group_blocks)) >> $seqres.full 2>&1
+$EXT4_RESIZE $SCRATCH_MNT $(((limit_groups + 16)*group_blocks)) >> $seqres.full 2>&1
 if [ $? -eq 0 ]; then
 	echo "Resizing succeeded but it should fail!"
 	exit
