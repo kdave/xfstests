@@ -33,27 +33,36 @@ _cleanup()
 # failure.
 _spec_prealloc_file()
 {
-	file=$1
+	local file=$1
+	local prealloc_size=0
+	local i=0
 
-	rm -f $file
+	# Now that we have background garbage collection processes that can be
+	# triggered by low space/quota conditions, it's possible that we won't
+	# succeed in creating a speculative preallocation on the first try.
+	for ((tries = 0; tries < 5 && prealloc_size == 0; tries++)); do
+		rm -f $file
 
-	# a few file extending open-write-close cycles should be enough to
-	# trigger the fs to retain preallocation. write 256k in 32k intervals to
-	# be sure
-	for i in $(seq 0 32768 262144); do
-		$XFS_IO_PROG -f -c "pwrite $i 32k" $file >> $seqres.full
+		# a few file extending open-write-close cycles should be enough
+		# to trigger the fs to retain preallocation. write 256k in 32k
+		# intervals to be sure
+		for i in $(seq 0 32768 262144); do
+			$XFS_IO_PROG -f -c "pwrite $i 32k" $file >> $seqres.full
+		done
+
+		# write a 4k aligned amount of data to keep the calculations
+		# simple
+		$XFS_IO_PROG -c "pwrite 0 128m" $file >> $seqres.full
+
+		size=`_get_filesize $file`
+		blocks=`stat -c "%b" $file`
+		blocksize=`stat -c "%B" $file`
+
+		prealloc_size=$((blocks * blocksize - size))
 	done
 
-	# write a 4k aligned amount of data to keep the calculations simple
-	$XFS_IO_PROG -c "pwrite 0 128m" $file >> $seqres.full
-
-	size=`_get_filesize $file`
-	blocks=`stat -c "%b" $file`
-	blocksize=`stat -c "%B" $file`
-
-	prealloc_size=$((blocks * blocksize - size))
 	if [ $prealloc_size -eq 0 ]; then
-		echo "Warning: No speculative preallocation for $file." \
+		echo "Warning: No speculative preallocation for $file after $tries iterations." \
 			"Check use of the allocsize= mount option."
 	fi
 
