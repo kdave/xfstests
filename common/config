@@ -537,6 +537,14 @@ _check_device()
 		# 9p and virtiofs mount tags are just plain strings, so anything is allowed
 		# tmpfs doesn't use mount source, ignore
 		;;
+	ceph)
+		# ceph has two different possible syntaxes for mount devices. The
+		# network URL check above catches the legacy syntax. Check for the
+		# new-style syntax here.
+		if ( echo $dev | grep -qEv "=/" ); then
+			_fatal "common/config: $name ($dev) is not a valid ceph mount string"
+		fi
+		;;
 	overlay)
 		if [ ! -d "$dev" ]; then
 			_fatal "common/config: $name ($dev) is not a directory for overlay"
