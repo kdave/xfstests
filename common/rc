@@ -2027,7 +2027,7 @@ _require_sane_bdev_flush()
 # Returns 0 if DAX will be used, 1 if DAX is not going to be used.
 __scratch_uses_fsdax()
 {
-	local ops=$(_normalize_mount_options)
+	local ops=$(_normalize_mount_options "$MOUNT_OPTIONS")
 
 	echo $ops | egrep -qw "dax(=always| |$)" && return 0
 	echo $ops | grep -qw "dax=never" && return 1
@@ -3706,7 +3706,7 @@ _has_metadata_journaling()
 			return 1
 		}
 		# ext4 might not load a journal
-		if _normalize_mount_options | grep -qw "noload"; then
+		if _normalize_mount_options "$MOUNT_OPTIONS" | grep -qw "noload"; then
 			echo "mount option \"noload\" not allowed in this test"
 			return 1
 		fi
@@ -3870,20 +3870,20 @@ _require_cloner()
 		_notrun "cloner binary not present at $CLONER_PROG"
 }
 
-# Normalize mount options from global $MOUNT_OPTIONS
-# Convert options like "-o opt1,opt2 -oopt3" to
-# "opt1 opt2 opt3"
+# Normalize mount options from the option string in $1
+# Convert options like "-o opt1,opt2 -oopt3" to "opt1 opt2 opt3"
 _normalize_mount_options()
 {
-	echo $MOUNT_OPTIONS | sed -n 's/-o\s*\(\S*\)/\1/gp'| sed 's/,/ /g'
+	echo "$1" | sed -n 's/-o\s*\(\S*\)/\1/gp'| sed 's/,/ /g'
 }
 
-# skip test if MOUNT_OPTIONS contains the given strings
+# skip test if $1 contains the given strings in trailing arguments
 # Both dax and dax=always are excluded if dax or dax=always is passed
-_exclude_scratch_mount_option()
+_exclude_mount_option()
 {
-	local mnt_opts=$(_normalize_mount_options)
+	local mnt_opts=$(_normalize_mount_options "$1")
 
+	shift
 	while [ $# -gt 0 ]; do
 		local pattern=$1
 		echo "$pattern" | egrep -q "dax(=always|$)" && \
@@ -3893,6 +3893,16 @@ _exclude_scratch_mount_option()
 		fi
 		shift
 	done
+}
+
+_exclude_scratch_mount_option()
+{
+	_exclude_mount_option "$MOUNT_OPTIONS" $@
+}
+
+_exclude_test_mount_option()
+{
+	_exclude_mount_option "$TEST_FS_MOUNT_OPTS" $@
 }
 
 _require_atime()
