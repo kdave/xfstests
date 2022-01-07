@@ -7863,6 +7863,12 @@ static int setgid_create(void)
 		if (!is_setgid(t_dir1_fd, DIR1, 0))
 			die("failure: is_setgid");
 
+		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0))
+			die("failure: check ownership");
+
+		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0))
+			die("failure: check ownership");
+
 		if (unlinkat(t_dir1_fd, FILE1, 0))
 			die("failure: delete");
 
@@ -7910,6 +7916,22 @@ static int setgid_create(void)
 			if (!is_setgid(t_dir1_fd, DIR1, 0))
 				die("failure: is_setgid");
 		}
+
+		/*
+		 * In setgid directories newly created files always inherit the
+		 * gid from the parent directory. Verify that the file is owned
+		 * by gid 0, not by gid 10000.
+		 */
+		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0))
+			die("failure: check ownership");
+
+		/*
+		 * In setgid directories newly created directories always
+		 * inherit the gid from the parent directory. Verify that the
+		 * directory is owned by gid 0, not by gid 10000.
+		 */
+		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0))
+			die("failure: check ownership");
 
 		exit(EXIT_SUCCESS);
 	}
@@ -8012,6 +8034,22 @@ static int setgid_create_idmapped(void)
 			if (!is_setgid(open_tree_fd, DIR1, 0))
 				die("failure: is_setgid");
 		}
+
+		/*
+		 * In setgid directories newly created files always inherit the
+		 * gid from the parent directory. Verify that the file is owned
+		 * by gid 10000, not by gid 11000.
+		 */
+		if (!expected_uid_gid(open_tree_fd, FILE1, 0, 10000, 10000))
+			die("failure: check ownership");
+
+		/*
+		 * In setgid directories newly created directories always
+		 * inherit the gid from the parent directory. Verify that the
+		 * directory is owned by gid 10000, not by gid 11000.
+		 */
+		if (!expected_uid_gid(open_tree_fd, DIR1, 0, 10000, 10000))
+			die("failure: check ownership");
 
 		exit(EXIT_SUCCESS);
 	}
