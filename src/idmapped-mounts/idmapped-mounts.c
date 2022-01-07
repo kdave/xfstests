@@ -8133,11 +8133,6 @@ static int setgid_create_idmapped_in_userns(void)
 		goto out;
 	}
 
-	if (fchownat(t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
-		log_stderr("failure: fchownat");
-		goto out;
-	}
-
 	pid = fork();
 	if (pid < 0) {
 		log_stderr("failure: fork");
