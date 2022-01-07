@@ -8128,6 +8128,14 @@ static int setgid_create_idmapped_in_userns(void)
 	if (wait_for_pid(pid))
 		goto out;
 
+	/*
+	 * Below we verify that setgid inheritance for a newly created file or
+	 * directory works correctly. As part of this we need to verify that
+	 * newly created files or directories inherit their gid from their
+	 * parent directory. So we change the parent directorie's gid to 1000
+	 * and create a file with fs{g,u}id 0 and verify that the newly created
+	 * file and directory inherit gid 1000, not 0.
+	 */
 	if (fchownat(t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
@@ -8172,12 +8180,19 @@ static int setgid_create_idmapped_in_userns(void)
 				die("failure: is_setgid");
 		}
 
-		/* Files and directories created in setgid directories inherit
-		 * the i_gid of the parent directory.
+		/*
+		 * In setgid directories newly created files always inherit the
+		 * gid from the parent directory. Verify that the file is owned
+		 * by gid 1000, not by gid 0.
 		 */
 		if (!expected_uid_gid(open_tree_fd, FILE1, 0, 0, 1000))
 			die("failure: check ownership");
 
+		/*
+		 * In setgid directories newly created directories always
+		 * inherit the gid from the parent directory. Verify that the
+		 * directory is owned by gid 1000, not by gid 0.
+		 */
 		if (!expected_uid_gid(open_tree_fd, DIR1, 0, 0, 1000))
 			die("failure: check ownership");
 
