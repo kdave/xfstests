@@ -1,0 +1,57 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 107
+#
+# Regression test for commit:
+#
+# 983d8e60f508 ("xfs: map unwritten blocks in XFS_IOC_{ALLOC,FREE}SP just like fallocate")
+#
+. ./common/preamble
+_begin_fstest auto quick prealloc
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_test
+_require_scratch
+_require_test_program allocstale
+
+size_mb=32
+# Write a known pattern to the disk so that we can detect stale disk blocks
+# being mapped into the file.  In the test author's experience, the bug will
+# reproduce within the first 500KB's worth of ALLOCSP calls, so running up
+# to 16MB should suffice.
+$XFS_IO_PROG -d -c "pwrite -S 0x58 -b 8m 0 ${size_mb}m" $SCRATCH_DEV > $seqres.full
+MKFS_OPTIONS="-K $MKFS_OPTIONS" _scratch_mkfs_sized $((size_mb * 1048576)) >> $seqres.full
+
+_scratch_mount
+
+# Force the file to be created on the data device, which we pre-initialized
+# with a known pattern.  The bug exists in the generic bmap code, so the choice
+# of backing device does not matter, and ignoring the rt device gets us out of
+# needing to detect things like rt extent size.
+_xfs_force_bdev data $SCRATCH_MNT
+testfile=$SCRATCH_MNT/a
+
+# Allow the test program to expand the file to consume half the free space.
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+iterations=$(( (size_mb / 2) * 1048576 / blksz))
+echo "Setting up $iterations runs for block size $blksz" >> $seqres.full
+
+# Run reproducer program and dump file contents if we see stale data.  Full
+# details are in the source for the C program, but in a nutshell we run ALLOCSP
+# one block at a time to see if it'll give us blocks full of 'X'es.
+$here/src/allocstale $testfile $iterations
+res=$?
+test $res -eq 2 && od -tx1 -Ad -c $testfile
+
+# success, all done
+echo Silence is golden
+status=0
+exit
