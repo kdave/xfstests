@@ -4726,13 +4726,22 @@ _check_xfs_scrub_does_unicode() {
 
 	_supports_xfs_scrub "${mount}" "${dev}" || return 1
 
-	# We only care if xfs_scrub has unicode string support...
-	if ! type ldd > /dev/null 2>&1 || \
-	   ! ldd "${XFS_SCRUB_PROG}" 2> /dev/null | grep -q libicui18n; then
-		return 1
+	# If the xfs_scrub binary contains the string "Unicode name.*%s", then
+	# we know that it has the ability to complain about improper Unicode
+	# names.
+	if strings "${XFS_SCRUB_PROG}" | grep -q 'Unicode name.*%s'; then
+		return 0
 	fi
 
-	return 0
+	# If the xfs_scrub binary is linked against the libicui18n Unicode
+	# library, then we surmise that it contains the Unicode name checker.
+	if type ldd > /dev/null 2>&1 && \
+	   ldd "${XFS_SCRUB_PROG}" 2> /dev/null | grep -q libicui18n; then
+		return 0
+	fi
+
+	# We could not establish that xfs_scrub supports unicode names.
+	return 1
 }
 
 # exfat timestamps start at 1980 and cannot be prior to epoch
