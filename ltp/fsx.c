@@ -111,6 +111,7 @@ enum {
 	OP_CLONE_RANGE,
 	OP_DEDUPE_RANGE,
 	OP_COPY_RANGE,
+	OP_ALLOCSP,
 	OP_MAX_FULL,
 
 	/* integrity operations */
@@ -165,6 +166,7 @@ int	randomoplen = 1;		/* -O flag disables it */
 int	seed = 1;			/* -S flag */
 int     mapped_writes = 1;              /* -W flag disables */
 int     fallocate_calls = 1;            /* -F flag disables */
+int     allocsp_calls = 1;		/* -F flag disables */
 int     keep_size_calls = 1;            /* -K flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int     zero_range_calls = 1;           /* -z flag disables */
@@ -268,6 +270,7 @@ static const char *op_names[] = {
 	[OP_DEDUPE_RANGE] = "dedupe_range",
 	[OP_COPY_RANGE] = "copy_range",
 	[OP_FSYNC] = "fsync",
+	[OP_ALLOCSP] = "allocsp",
 };
 
 static const char *op_name(int operation)
@@ -409,6 +412,15 @@ logdump(void)
 				  badoff < lp->args[1 + !!down];
 			if (overlap)
 				prt("\t******WWWW");
+			break;
+		case OP_ALLOCSP:
+			down = lp->args[1] < lp->args[2];
+			prt("ALLOCSP  %s\tfrom 0x%x to 0x%x",
+			    down ? "DOWN" : "UP", lp->args[2], lp->args[1]);
+			overlap = badoff >= lp->args[1 + !down] &&
+				  badoff < lp->args[1 + !!down];
+			if (overlap)
+				prt("\t******NNNN");
 			break;
 		case OP_FALLOCATE:
 			/* 0: offset 1: length 2: where alloced */
@@ -1695,6 +1707,51 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 }
 #endif
 
+#ifdef XFS_IOC_ALLOCSP
+/* allocsp is an old Irix ioctl that either truncates or does extending preallocaiton */
+void
+do_allocsp(unsigned new_size)
+{
+	struct xfs_flock64	fl;
+
+	if (new_size > biggest) {
+		biggest = new_size;
+		if (!quiet && testcalls > simulatedopcount)
+			prt("allocsping to largest ever: 0x%x\n", new_size);
+	}
+
+	log4(OP_ALLOCSP, 0, new_size, FL_NONE);
+
+	if (new_size > file_size)
+		memset(good_buf + file_size, '\0', new_size - file_size);
+	file_size = new_size;
+
+	if (testcalls <= simulatedopcount)
+		return;
+
+	if ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug && (monitorstart == -1 || monitorend == -1 ||
+		      new_size <= monitorend)))
+		prt("%lld allocsp\tat 0x%x\n", testcalls, new_size);
+
+	fl.l_whence = SEEK_SET;
+	fl.l_start = new_size;
+	fl.l_len = 0;
+
+	if (ioctl(fd, XFS_IOC_ALLOCSP, &fl) == -1) {
+	        prt("allocsp: 0x%x\n", new_size);
+		prterr("do_allocsp: allocsp");
+		report_failure(161);
+	}
+}
+#else
+void
+do_allocsp(unsigned new_isize)
+{
+	return;
+}
+#endif
+
 #ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
@@ -2040,6 +2097,8 @@ test(void)
 		if (fallocate_calls && size && keep_size_calls)
 			keep_size = random() % 2;
 		break;
+	case OP_ALLOCSP:
+		break;
 	case OP_ZERO_RANGE:
 		if (zero_range_calls && size && keep_size_calls)
 			keep_size = random() % 2;
@@ -2065,6 +2124,12 @@ have_op:
 	case OP_MAPWRITE:
 		if (!mapped_writes)
 			op = OP_WRITE;
+		break;
+	case OP_ALLOCSP:
+		if (!allocsp_calls) {
+			log4(OP_FALLOCATE, 0, size, FL_SKIPPED);
+			goto out;
+		}
 		break;
 	case OP_FALLOCATE:
 		if (!fallocate_calls) {
@@ -2139,6 +2204,10 @@ have_op:
 
 	case OP_TRUNCATE:
 		dotruncate(size);
+		break;
+
+	case OP_ALLOCSP:
+		do_allocsp(size);
 		break;
 
 	case OP_FALLOCATE:
@@ -2270,8 +2339,8 @@ usage(void)
 "	-U: Use the IO_URING system calls, -U excludes -A\n"
  #endif
 "	-D startingop: debug output starting at specified operation\n"
-#ifdef HAVE_LINUX_FALLOC_H
-"	-F: Do not use fallocate (preallocation) calls\n"
+#if defined(HAVE_LINUX_FALLOC_H) || defined(XFS_IOC_ALLOCSP)
+"	-F: Do not use fallocate (preallocation) or XFS_IOC_ALLOCSP calls\n"
 #endif
 #ifdef FALLOC_FL_PUNCH_HOLE
 "	-H: Do not use punch hole calls\n"
@@ -2584,6 +2653,41 @@ __test_fallocate(int mode, const char *mode_str)
 		}
 	}
 	return ret;
+#endif
+}
+
+int
+test_allocsp()
+{
+#ifdef XFS_IOC_ALLOCSP
+	struct xfs_flock64	fl;
+	int			ret = 0;
+
+	if (lite)
+		return 0;
+
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 1;
+	fl.l_len = 0;
+
+	ret = ioctl(fd, XFS_IOC_ALLOCSP, &fl);
+	if (ret == -1 && (errno == ENOTTY || errno == EOPNOTSUPP)) {
+		if (!quiet)
+			fprintf(stderr,
+				"main: filesystem does not support "
+				"XFS_IOC_ALLOCSP, disabling!\n");
+		return 0;
+	}
+
+	ret = ftruncate(fd, file_size);
+	if (ret) {
+		warn("main: ftruncate");
+		exit(132);
+	}
+
+	return 1;
+#else
+	return 0;
 #endif
 }
 
@@ -2972,6 +3076,8 @@ main(int argc, char **argv)
 
 	if (fallocate_calls)
 		fallocate_calls = test_fallocate(0);
+	if (allocsp_calls)
+		allocsp_calls = test_allocsp(0);
 	if (keep_size_calls)
 		keep_size_calls = test_fallocate(FALLOC_FL_KEEP_SIZE);
 	if (punch_hole_calls)
