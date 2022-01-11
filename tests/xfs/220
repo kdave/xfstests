@@ -52,14 +52,30 @@ _scratch_mkfs_xfs >/dev/null 2>&1
 # mount  with quotas enabled
 _scratch_mount -o uquota
 
-# turn off quota and remove space allocated to the quota files
+# turn off quota accounting...
+$XFS_QUOTA_PROG -x -c off $SCRATCH_DEV
+
+# ...but if the kernel doesn't support turning off accounting, remount with
+# noquota option to turn it off...
+if $XFS_QUOTA_PROG -x -c 'state -u' $SCRATCH_DEV | grep -q 'Accounting: ON'; then
+	_scratch_unmount
+	_scratch_mount -o noquota
+fi
+
+before_freesp=$(_get_available_space $SCRATCH_MNT)
+
+# ...and remove space allocated to the quota files
 # (this used to give wrong ENOSYS returns in 2.6.31)
-#
-# The sed expression below replaces a notrun to cater for kernels that have
-# removed the ability to disable quota accounting at runtime.  On those
-# kernel this test is rather useless, and in a few years we can drop it.
-$XFS_QUOTA_PROG -x -c off -c remove $SCRATCH_DEV 2>&1 | \
-	sed -e '/XFS_QUOTARM: Invalid argument/d'
+$XFS_QUOTA_PROG -x -c remove $SCRATCH_DEV
+
+# Make sure we actually freed the space used by dquot 0
+after_freesp=$(_get_available_space $SCRATCH_MNT)
+delta=$((after_freesp - before_freesp))
+
+echo "freesp $before_freesp -> $after_freesp ($delta)" >> $seqres.full
+if [ $before_freesp -ge $after_freesp ]; then
+	echo "expected Q_XQUOTARM to free space"
+fi
 
 # and unmount again
 _scratch_unmount
