@@ -171,13 +171,25 @@ btrfs_replace_test()
 		# background the replace operation (no '-B' option given)
 		_run_btrfs_util_prog replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT
 		sleep $wait_time
-		_run_btrfs_util_prog replace cancel $SCRATCH_MNT
+		$BTRFS_UTIL_PROG replace cancel $SCRATCH_MNT 2>&1 >> $seqres.full
 
 		# 'replace status' waits for the replace operation to finish
 		# before the status is printed
 		$BTRFS_UTIL_PROG replace status $SCRATCH_MNT > $tmp.tmp 2>&1
 		cat $tmp.tmp >> $seqres.full
-		grep -q canceled $tmp.tmp || _fail "btrfs replace status (canceled) failed"
+
+		# If the replace is finished, we need to replace $source_dev
+		# back with $target_dev, or later fsck will fail and abort
+		# the test, reducing the coverage.
+		if grep -q finished $tmp.tmp ; then
+			$BTRFS_UTIL_PROG replace start -Bf $target_dev \
+				$source_dev $SCRATCH_MNT > /dev/null
+		fi
+
+		# For above finished case, we still output the error message
+		# but continue the test, or later profiles won't get tested
+		# at all.
+		grep -q canceled $tmp.tmp || echo "btrfs replace status (canceled) failed"
 	else
 		if [ "${quick}Q" = "thoroughQ" ]; then
 			# The thorough test runs around 2 * $wait_time seconds.
