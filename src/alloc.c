@@ -118,6 +118,50 @@ bozo!
     }
 }
 
+#ifdef HAVE_FALLOCATE
+# define USE_LINUX_PREALLOCATE
+enum linux_opno {
+	FREESP = 0,
+	ALLOCSP,
+	UNRESVSP,
+	RESVSP,
+};
+
+/* emulate the irix preallocation functions with linux vfs calls */
+static int
+linux_preallocate(
+	int			fd,
+	enum linux_opno		opno,
+	const struct flock64	*f)
+{
+	struct stat		sbuf;
+	int			ret;
+
+	assert(f->l_whence == SEEK_SET);
+
+	switch (opno) {
+	case FREESP:
+		return ftruncate(fd, f->l_start);
+	case ALLOCSP:
+		ret = fstat(fd, &sbuf);
+		if (ret)
+			return ret;
+
+		return fallocate(fd, 0, sbuf.st_size,
+				f->l_start - sbuf.st_size);
+	case UNRESVSP:
+		return fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+				f->l_start, f->l_len);
+	case RESVSP:
+		return fallocate(fd, FALLOC_FL_KEEP_SIZE, f->l_start, f->l_len);
+	}
+
+	/* should never get here */
+	errno = EINVAL;
+	return -1;
+}
+#endif
+
 int
 main(int argc, char **argv)
 {
@@ -136,23 +180,23 @@ main(int argc, char **argv)
 				       "resvsp" };
 	int		opno;
 
-	/* Assume that if we have FREESP64 then we have the rest */
-#ifdef XFS_IOC_FREESP64
+#if defined(HAVE_FALLOCATE)
+	/* see static function above */
+#elif defined(XFS_IOC_FREESP64)
 #define USE_XFSCTL
+	/* Assume that if we have FREESP64 then we have the rest */
 	static int	optab[] = { XFS_IOC_FREESP64,
 				    XFS_IOC_ALLOCSP64,
 				    XFS_IOC_UNRESVSP64,
 				    XFS_IOC_RESVSP64 };
-#else
-#ifdef F_FREESP64
+#elif defined(F_FREESP64)
 #define USE_FCNTL
 	static int	optab[] = { F_FREESP64,
 				    F_ALLOCSP64,
 				    F_UNRESVSP64,
 				    F_RESVSP64 };
 #else
-bozo!
-#endif
+# error Dont know how to preallocate space!
 #endif
 	int		rflag = 0;
 	struct statvfs64	svfs;
@@ -311,14 +355,14 @@ bozo!
                                 opnames[opno], (long long)off, (long long)len);
                         
 			f.l_len = len;
-#ifdef USE_XFSCTL
+#if defined(USE_LINUX_PREALLOCATE)
+			c = linux_preallocate(fd, opno, &f);
+#elif defined(USE_XFSCTL)
 			c = xfsctl(filename, fd, optab[opno], &f);
-#else
-#ifdef USE_FCNTL
+#elif defined(USE_FCNTL)
 			c = fcntl(fd, optab[opno], &f);
 #else
-bozo!
-#endif
+# error Dont know how to preallocate space!
 #endif
 			if (c < 0) {
 				perror(opnames[opno]);
