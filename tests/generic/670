@@ -40,7 +40,10 @@ _cp_reflink $testdir/file1 $testdir/file3
 _scratch_cycle_mount
 
 fbytes() {
-	egrep -v '(61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61|62 62 62 62 62 62 62 62 62 62 62 62 62 62 62 62)'
+	# Different with generic/164,165, mread copies data from mmapped area
+	# one-byte-at-a-time, which may cause races during reflink_range().
+	# So the result of _mread_range() may be a mix of 61 and 62.
+	egrep -v '((61|62) ){15}(61|62)'
 }
 
 reader() {
