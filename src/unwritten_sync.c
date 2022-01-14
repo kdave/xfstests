@@ -92,10 +92,11 @@ main(int argc, char *argv[])
 
 		print_getbmapx(file, fd, 0, 0);
 
-		flock.l_whence = 0;
-		flock.l_start= 0;
-		flock.l_len = 0;
-		xfsctl(file, fd, XFS_IOC_FREESP64, &flock);
+		if (ftruncate(fd, 0)) {
+			perror("ftruncate");
+			exit(1);
+		}
+
 		print_getbmapx(file, fd, 0, 0);
 		close(fd);
 	}
