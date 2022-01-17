@@ -35,6 +35,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	errno = 0;
 	new_size = strtoull(argv[2], &tmp, 10);
 	if ((errno) || (*tmp != '\0')) {
 		fprintf(stderr, "%s: invalid new size\n", argv[0]);
