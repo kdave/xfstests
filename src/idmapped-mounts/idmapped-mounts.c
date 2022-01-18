@@ -13955,6 +13955,35 @@ static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 	return true;
 }
 
+static bool fs_allow_idmap(void)
+{
+	int ret;
+	int open_tree_fd = -EBADF;
+	struct mount_attr attr = {
+		.attr_set	= MOUNT_ATTR_IDMAP,
+		.userns_fd	= -EBADF,
+	};
+
+	/* Changing mount properties on a detached mount. */
+	attr.userns_fd = get_userns_fd(0, 1000, 1);
+	if (attr.userns_fd < 0)
+		return false;
+
+	open_tree_fd = sys_open_tree(t_mnt_fd, "",
+				     AT_EMPTY_PATH | AT_NO_AUTOMOUNT |
+				     AT_SYMLINK_NOFOLLOW | OPEN_TREE_CLOEXEC |
+				     OPEN_TREE_CLONE);
+	if (open_tree_fd < 0)
+		ret = -1;
+	else
+		ret = sys_mount_setattr(open_tree_fd, "", AT_EMPTY_PATH, &attr,
+					sizeof(attr));
+	close(open_tree_fd);
+	close(attr.userns_fd);
+
+	return ret == 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int fret, ret;
@@ -14035,34 +14064,8 @@ int main(int argc, char *argv[])
 	 * idmapped mounts.
 	 */
 	if (supported) {
-		int open_tree_fd = -EBADF;
-		struct mount_attr attr = {
-			.attr_set	= MOUNT_ATTR_IDMAP,
-			.userns_fd	= -EBADF,
-		};
-
-		/* Changing mount properties on a detached mount. */
-		attr.userns_fd	= get_userns_fd(0, 1000, 1);
-		if (attr.userns_fd < 0)
+		if (!fs_allow_idmap())
 			exit(EXIT_FAILURE);
-
-		open_tree_fd = sys_open_tree(t_mnt_fd, "",
-					     AT_EMPTY_PATH |
-					     AT_NO_AUTOMOUNT |
-					     AT_SYMLINK_NOFOLLOW |
-					     OPEN_TREE_CLOEXEC |
-					     OPEN_TREE_CLONE);
-		if (open_tree_fd < 0)
-			ret = -1;
-		else
-			ret = sys_mount_setattr(open_tree_fd, "", AT_EMPTY_PATH, &attr, sizeof(attr));
-
-		close(open_tree_fd);
-		close(attr.userns_fd);
-
-		if (ret)
-			exit(EXIT_FAILURE);
-
 		exit(EXIT_SUCCESS);
 	}
 
