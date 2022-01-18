@@ -1,0 +1,68 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 256
+#
+# Test that defragging files with very small sizes works and does not result in
+# any crash, hang or corruption.
+#
+# The regression is fixed by a patch with the following subject:
+#
+#   "btrfs: fix too long loop when defragging a 1 byte file"
+#
+. ./common/preamble
+_begin_fstest auto quick defrag
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_fssum
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+checksums_file="$TEST_DIR/btrfs-test-$seq-checksums"
+block_size=$(_get_block_size "$SCRATCH_MNT")
+
+# Test file sizes of 0, 1, 512, 1K, 2K, 4K, 8K, 16K, 32K and 64K bytes.
+file_sizes=( 0 1 512 1024 2048 4096 8192 16384 32768 65536 )
+
+# Create the files and compute their checksums.
+for sz in ${file_sizes[@]}; do
+	byte=$(printf "0x%x" $((RANDOM % 255)))
+	$XFS_IO_PROG -f -c "pwrite -S $byte 0 $sz" "$SCRATCH_MNT/f_$sz" >> $seqres.full
+done
+
+# Compute the checksums.
+$FSSUM_PROG -A -f -w "$checksums_file" "$SCRATCH_MNT"
+
+# Now defrag each file.
+for sz in ${file_sizes[@]}; do
+	echo "Defragging file with $sz bytes..." >> $seqres.full
+	$BTRFS_UTIL_PROG filesystem defragment "$SCRATCH_MNT/f_$sz"
+done
+
+# Verify the checksums after the defrag operations.
+$FSSUM_PROG -r "$checksums_file" "$SCRATCH_MNT"
+
+# Unmount and mount again, this clears the page cache and we want to see that
+# no corruptions were persisted.
+_scratch_cycle_mount
+
+# Verify the checksums again.
+$FSSUM_PROG -r "$checksums_file" "$SCRATCH_MNT"
+
+# success, all done
+status=0
+exit
