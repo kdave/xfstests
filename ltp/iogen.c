@@ -922,13 +922,21 @@ bozo!
 	    f.l_whence = SEEK_SET;
 	    f.l_start = 0;
 	    f.l_len = nbytes;
-	    
+
 	    /*fprintf(stderr,
 		    "create_file: xfsctl(%d, RESVSP, { %d, %lld, %lld })\n",
 		   fd, f.l_whence, (long long)f.l_start, (long long)f.l_len);*/
 
 	    /* non-zeroing reservation */
-#ifdef XFS_IOC_RESVSP
+#if defined(FALLOCATE)
+	    if (fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, f.l_len) == -1) {
+		fprintf(stderr,
+			"iogen%s:  Could not fallocate %d bytes in file %s: %s (%d)\n",
+			TagName, nbytes, path, SYSERR, errno);
+		close(fd);
+		return -1;
+	    }
+#elif defined(XFS_IOC_RESVSP)
 	    if( xfsctl( path, fd, XFS_IOC_RESVSP, &f ) == -1) {
 		fprintf(stderr,
 			"iogen%s:  Could not xfsctl(XFS_IOC_RESVSP) %d bytes in file %s: %s (%d)\n",
@@ -936,8 +944,7 @@ bozo!
 		close(fd);
 		return -1;
 	    }
-#else
-#ifdef F_RESVSP
+#elif defined(F_RESVSP)
 	    if( fcntl( fd, F_RESVSP, &f ) == -1) {
 		fprintf(stderr,
 			"iogen%s:  Could not fcntl(F_RESVSP) %d bytes in file %s: %s (%d)\n",
@@ -946,8 +953,7 @@ bozo!
 		return -1;
 	    }
 #else
-bozo!
-#endif
+# error Dont know how to reserve space!
 #endif
 	}
 
@@ -962,7 +968,15 @@ bozo!
 		    (long long)f.l_len);*/
 
 	    /* zeroing reservation */
-#ifdef XFS_IOC_ALLOCSP
+#if defined(FALLOCATE)
+	    if (fallocate(fd, 0, sbuf.st_size, nbytes - sbuf.st_size) == -1) {
+		fprintf(stderr,
+			"iogen%s:  Could not fallocate %d bytes in file %s: %s (%d)\n",
+			TagName, nbytes, path, SYSERR, errno);
+		close(fd);
+		return -1;
+	    }
+#elif defined(XFS_IOC_ALLOCSP)
 	    if( xfsctl( path, fd, XFS_IOC_ALLOCSP, &f ) == -1) {
 		fprintf(stderr,
 			"iogen%s:  Could not xfsctl(XFS_IOC_ALLOCSP) %d bytes in file %s: %s (%d)\n",
@@ -970,8 +984,7 @@ bozo!
 		close(fd);
 		return -1;
 	    }
-#else
-#ifdef F_ALLOCSP
+#elif defined(F_ALLOCSP)
 	    if ( fcntl(fd, F_ALLOCSP, &f) < 0) {
 		fprintf(stderr,
 			"iogen%s:  Could not fcntl(F_ALLOCSP) %d bytes in file %s: %s (%d)\n",
@@ -980,8 +993,7 @@ bozo!
 		return -1;
 	    }
 #else
-bozo!
-#endif
+# error Dont know how to (pre)allocate space!
 #endif
 	}
 #endif
