@@ -1,0 +1,53 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Western Digital Corporation or its affiliates.
+#
+# FS QA Test No. btrfs/255
+#
+# Confirm that disabling quota during balance does not hang.
+#
+# The deadlock is fixed by kernel patch titled:
+# btrfs: fix deadlock between quota disable and qgroup rescan worker
+#
+. ./common/preamble
+_begin_fstest auto qgroup balance
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Fill 40% of the device or 2GB
+fill_percent=40
+max_fillsize=$((2 * 1024 * 1024 * 1024))
+
+devsize=$(($(_get_device_size $SCRATCH_DEV) * 512))
+fillsize=$((devsize * fill_percent / 100))
+((fillsize > max_fillsize)) && fillsize=$max_fillsize
+
+fs=$((4096 * 1024))
+for ((i = 0; i * fs < fillsize; i++)); do
+	dd if=/dev/zero of=$SCRATCH_MNT/file.$i bs=$fs count=1 \
+	   >> $seqres.full 2>&1
+done
+
+# Run btrfs balance and quota enable/disable in parallel
+_btrfs_stress_balance $SCRATCH_MNT >> $seqres.full &
+balance_pid=$!
+echo $balance_pid >> $seqres.full
+for ((i = 0; i < 20; i++)); do
+	$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT
+	$BTRFS_UTIL_PROG quota disable $SCRATCH_MNT
+done
+kill $balance_pid &> /dev/null
+wait
+# wait for the balance operation to finish
+while ps aux | grep "balance start" | grep -qv grep; do
+	sleep 1
+done
+
+echo "Silence is golden"
+status=0
+exit
