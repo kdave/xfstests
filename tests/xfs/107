@@ -22,7 +22,10 @@ _require_test
 _require_scratch
 _require_test_program allocstale
 
-size_mb=32
+# Create a 256MB filesystem to avoid running into mkfs problems with too-small
+# filesystems.
+size_mb=256
+
 # Write a known pattern to the disk so that we can detect stale disk blocks
 # being mapped into the file.  In the test author's experience, the bug will
 # reproduce within the first 500KB's worth of ALLOCSP calls, so running up
@@ -39,9 +42,10 @@ _scratch_mount
 _xfs_force_bdev data $SCRATCH_MNT
 testfile=$SCRATCH_MNT/a
 
-# Allow the test program to expand the file to consume half the free space.
+# Allow the test program to expand the file to 32MB.  If we can't find any
+# stale blocks at that point, the kernel has probably been patched.
 blksz=$(_get_file_block_size $SCRATCH_MNT)
-iterations=$(( (size_mb / 2) * 1048576 / blksz))
+iterations=$(( (size_mb / 16) * 1048576 / blksz))
 echo "Setting up $iterations runs for block size $blksz" >> $seqres.full
 
 # Run reproducer program and dump file contents if we see stale data.  Full
