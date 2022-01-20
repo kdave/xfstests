@@ -77,6 +77,10 @@ kernel_gte 5.12 || _notrun "This test is only relevant for kernel versions 5.12 
 
 IGNORED="remount,defaults,ignored,removed"
 CHECK_MINFO="lazytime,noatime,nodiratime,noexec,nosuid,ro"
+
+# List of options that can't be used for remount even if the argument
+# is not changed
+CANT_REMOUNT="defaults,remount,abort,journal_path,journal_dev,usrjquota,grpjquota,jqfmt"
 ERR=0
 
 test_mnt() {
@@ -168,6 +172,54 @@ do_mnt() {
 		[ $ret -ne 0 ] && print_log "(not found)"
 	else
 		print_log "(failed mount)"
+	fi
+
+	if [ $ret -ne 0 ] || [ -z "$1" ]; then
+		return $ret
+	fi
+
+	# Skip options that can't be remounted even if the argument
+	# is not changed
+	(
+	IFS=','
+	for option in $1; do
+		opt=${option%=*}
+		if echo $CANT_REMOUNT | grep -w $opt; then
+			exit 1
+		fi
+		# Skip the remount if we have data=journal on ext3 because
+		# it will set nodioread_nolock which is not supported on ext3
+		# hence remount will fail. Yes it is broken.
+		if [[ $fstype == "ext3" ]] && [[ $option == "data=journal" ]]; then
+			exit 1
+		fi
+	done
+	) > /dev/null 2>&1
+	[ $? -eq 1 ] && return 0
+	print_log "(going to remount options $1)"
+
+	# Just remount with original mnt options, don't add anything at all
+	simple_mount -o remount,$1 $SCRATCH_MNT
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		test_mnt $1 $2
+		ret=$?
+		[ $ret -ne 0 ] && print_log "(not found after remount)"
+	else
+		print_log "(failed remount)"
+	fi
+
+	[ $ret -ne 0 ] && return $ret
+
+	# Plain remount without specifying any mount options
+	simple_mount -o remount $SCRATCH_MNT
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		test_mnt $1 $2
+		ret=$?
+		[ $ret -ne 0 ] && print_log "(not found after plain remount)"
+	else
+		print_log "(failed plain remount)"
 	fi
 
 	return $ret
@@ -556,8 +608,11 @@ for fstype in ext2 ext3 ext4; do
 
 	if [[ $fstype != "ext2" ]]; then
 		remount noload data=journal norecovery
-		not_remount data=ordered data=journal
+		not_remount data=journal data=ordered
 		not_remount data=journal data=writeback
+		not_remount data=ordered data=journal
+		not_remount data=ordered data=writeback
+		not_remount data=writeback data=journal
 		not_remount data=writeback data=ordered
 	fi
 
