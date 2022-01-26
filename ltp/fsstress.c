@@ -2045,6 +2045,7 @@ afsync_f(opnum_t opno, long r)
 void
 allocsp_f(opnum_t opno, long r)
 {
+#ifdef XFS_IOC_ALLOCSP64
 	int		e;
 	pathname_t	f;
 	int		fd;
@@ -2094,6 +2095,7 @@ allocsp_f(opnum_t opno, long r)
 	}
 	free_pathname(&f);
 	close(fd);
+#endif
 }
 
 #ifdef AIO
@@ -3733,6 +3735,7 @@ fiemap_f(opnum_t opno, long r)
 void
 freesp_f(opnum_t opno, long r)
 {
+#ifdef XFS_IOC_FREESP64
 	int		e;
 	pathname_t	f;
 	int		fd;
@@ -3781,6 +3784,7 @@ freesp_f(opnum_t opno, long r)
 		       procid, opno, f.path, st, (long long)off, e);
 	free_pathname(&f);
 	close(fd);
+#endif
 }
 
 void
