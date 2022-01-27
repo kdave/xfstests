@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 675
+#
+# Functional test for dropping suid and sgid capabilities as part of a reflink.
+#
+. ./common/preamble
+_begin_fstest auto clone quick
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_user
+_require_command "$GETCAP_PROG" getcap
+_require_command "$SETCAP_PROG" setcap
+_require_scratch_reflink
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+chmod a+rw $SCRATCH_MNT/
+
+setup_testfile() {
+	rm -f $SCRATCH_MNT/a $SCRATCH_MNT/b
+	_pwrite_byte 0x58 0 1m $SCRATCH_MNT/a >> $seqres.full
+	_pwrite_byte 0x57 0 1m $SCRATCH_MNT/b >> $seqres.full
+	chmod a+rwx $SCRATCH_MNT/a $SCRATCH_MNT/b
+	$SETCAP_PROG cap_setgid,cap_setuid+ep $SCRATCH_MNT/a
+	sync
+}
+
+commit_and_check() {
+	local user="$1"
+
+	stat -c '%a %A %n' $SCRATCH_MNT/a | _filter_scratch
+	_getcap -v $SCRATCH_MNT/a | _filter_scratch
+
+	local cmd="$XFS_IO_PROG -c 'reflink $SCRATCH_MNT/b 0 0 1m' $SCRATCH_MNT/a"
+	if [ -n "$user" ]; then
+		su - "$user" -c "$cmd" >> $seqres.full
+	else
+		$SHELL -c "$cmd" >> $seqres.full
+	fi
+
+	stat -c '%a %A %n' $SCRATCH_MNT/a | _filter_scratch
+	_getcap -v $SCRATCH_MNT/a | _filter_scratch
+
+	# Blank line in output
+	echo
+}
+
+# Commit by an unprivileged user clears capability bits.
+echo "Test 1 - qa_user"
+setup_testfile
+commit_and_check "$qa_user"
+
+# Commit by root leaves capability bits.
+echo "Test 2 - root"
+setup_testfile
+commit_and_check
+
+# success, all done
+status=0
+exit

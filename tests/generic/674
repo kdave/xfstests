@@ -1,0 +1,117 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 674
+#
+# Functional test for dropping suid and sgid bits as part of a deduplication.
+#
+. ./common/preamble
+_begin_fstest auto clone quick
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_user
+_require_scratch_reflink
+_require_xfs_io_command dedupe
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+chmod a+rw $SCRATCH_MNT/
+
+setup_testfile() {
+	rm -f $SCRATCH_MNT/a $SCRATCH_MNT/b
+	_pwrite_byte 0x58 0 1m $SCRATCH_MNT/a >> $seqres.full
+	_pwrite_byte 0x58 0 1m $SCRATCH_MNT/b >> $seqres.full
+	chmod a+r $SCRATCH_MNT/b
+	sync
+}
+
+commit_and_check() {
+	local user="$1"
+
+	md5sum $SCRATCH_MNT/a | _filter_scratch
+	stat -c '%a %A %n' $SCRATCH_MNT/a | _filter_scratch
+
+	local before_freesp=$(_get_available_space $SCRATCH_MNT)
+
+	local cmd="$XFS_IO_PROG -c 'dedupe $SCRATCH_MNT/b 0 0 1m' $SCRATCH_MNT/a"
+	if [ -n "$user" ]; then
+		su - "$user" -c "$cmd" >> $seqres.full
+	else
+		$SHELL -c "$cmd" >> $seqres.full
+	fi
+
+	_scratch_cycle_mount
+	md5sum $SCRATCH_MNT/a | _filter_scratch
+	stat -c '%a %A %n' $SCRATCH_MNT/a | _filter_scratch
+
+	local after_freesp=$(_get_available_space $SCRATCH_MNT)
+
+	echo "before: $before_freesp; after: $after_freesp" >> $seqres.full
+	if [ $after_freesp -le $before_freesp ]; then
+		echo "expected more free space after dedupe"
+	fi
+
+	# Blank line in output
+	echo
+}
+
+# Commit to a non-exec file by an unprivileged user clears suid but leaves
+# sgid.
+echo "Test 1 - qa_user, non-exec file"
+setup_testfile
+chmod a+rws $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+# Commit to a group-exec file by an unprivileged user clears suid and sgid.
+echo "Test 2 - qa_user, group-exec file"
+setup_testfile
+chmod g+x,a+rws $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+# Commit to a user-exec file by an unprivileged user clears suid but not sgid.
+echo "Test 3 - qa_user, user-exec file"
+setup_testfile
+chmod u+x,a+rws,g-x $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+# Commit to a all-exec file by an unprivileged user clears suid and sgid.
+echo "Test 4 - qa_user, all-exec file"
+setup_testfile
+chmod a+rwxs $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+# Commit to a non-exec file by root clears suid but leaves sgid.
+echo "Test 5 - root, non-exec file"
+setup_testfile
+chmod a+rws $SCRATCH_MNT/a
+commit_and_check
+
+# Commit to a group-exec file by root clears suid and sgid.
+echo "Test 6 - root, group-exec file"
+setup_testfile
+chmod g+x,a+rws $SCRATCH_MNT/a
+commit_and_check
+
+# Commit to a user-exec file by root clears suid but not sgid.
+echo "Test 7 - root, user-exec file"
+setup_testfile
+chmod u+x,a+rws,g-x $SCRATCH_MNT/a
+commit_and_check
+
+# Commit to a all-exec file by root clears suid and sgid.
+echo "Test 8 - root, all-exec file"
+setup_testfile
+chmod a+rwxs $SCRATCH_MNT/a
+commit_and_check
+
+# success, all done
+status=0
+exit
