@@ -3767,6 +3767,24 @@ _count_attr_extents()
 	$XFS_IO_PROG -c "fiemap -a" $1 | tail -n +2 | grep -v hole | wc -l
 }
 
+# Get the sector number of the extent at @offset of @file
+_get_file_extent_sector()
+{
+	local file=$1
+	local offset=$2
+	local result
+
+	result=$($XFS_IO_PROG -c "fiemap $offset" "$file" | \
+		 _filter_xfs_io_fiemap | head -n1 | $AWK_PROG '{print $3}')
+
+	# xfs_io fiemap will output nothing if there is only hole, so here
+	# to replace the empty string with "hole" instead
+	if [ -z "$result" ]; then
+		result="hole"
+	fi
+	echo "$result"
+}
+
 # arg 1 is dev to remove and is output of the below eg.
 # ls -l /sys/class/block/sdd | rev | cut -d "/" -f 3 | rev
 _devmgt_remove()

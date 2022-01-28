@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 257
+#
+# Make sure btrfs doesn't defrag preallocated extents, nor lone extents
+# before preallocated extents.
+#
+
+. ./common/preamble
+_begin_fstest auto quick defrag prealloc
+
+# Override the default cleanup function.
+# _cleanup()
+# {
+# 	cd /
+# 	rm -r -f $tmp.*
+# }
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+# Needs 4K sectorsize
+_require_btrfs_support_sectorsize 4096
+_require_xfs_io_command "falloc"
+
+_scratch_mkfs -s 4k >> $seqres.full 2>&1
+
+# Need datacow to make the defragged extents to have different bytenr
+_scratch_mount -o datacow
+
+# Create a file with the following layout:
+# 0       4K        8K        16K
+# |<- R ->|<-- Preallocated ->|
+# R is regular extents.
+#
+# In this case it makes no sense to defrag any extent.
+$XFS_IO_PROG -f -c "pwrite 0 4k" -c sync -c "falloc 4k 12k" \
+	"$SCRATCH_MNT/foobar" >> $seqres.full
+
+echo "=== Initial file extent layout ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+
+# Save the bytenr of both extents
+old_regular=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+old_prealloc=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 4096)
+
+# Now defrag and write the defragged range back to disk
+$BTRFS_UTIL_PROG filesystem defrag "$SCRATCH_MNT/foobar" >> $seqres.full
+sync
+
+echo "=== File extent layout after defrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+
+new_regular=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+new_prealloc=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 4096)
+
+if [ "$old_regular" -ne "$new_regular" ]; then
+	echo "the single lone sector got defragged"
+fi
+if [ "$old_prealloc" -ne "$new_prealloc" ]; then
+	echo "the preallocated extent got defragged"
+fi
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit

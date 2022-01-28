@@ -480,3 +480,19 @@ _btrfs_no_v1_cache_opt()
 	fi
 	echo -n "-onospace_cache"
 }
+
+# Require certain sectorsize support
+_require_btrfs_support_sectorsize()
+{
+	local sectorsize=$1
+
+	# PAGE_SIZE as sectorsize is always supported
+	if [ $sectorsize -eq $(get_page_size) ]; then
+		return
+	fi
+
+	test -f /sys/fs/btrfs/features/supported_sectorsizes || \
+		_notrun "no subpage support found"
+	grep -wq $sectorsize /sys/fs/btrfs/features/supported_sectorsizes || \
+		_notrun "sectorsize $sectorsize is not supported"
+}
