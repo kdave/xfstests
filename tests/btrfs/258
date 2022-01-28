@@ -1,0 +1,80 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 258
+#
+# Make sure btrfs auto defrag can properly defrag clusters which has hole
+# in the middle
+#
+. ./common/preamble
+_begin_fstest auto defrag quick
+
+. ./common/btrfs
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_scratch
+
+# Needs 4K sectorsize, as larger sectorsize can change the file layout.
+_require_btrfs_support_sectorsize 4096
+
+_scratch_mkfs >> $seqres.full
+
+# Need datacow to show which range is defragged, and we're testing
+# autodefrag
+_scratch_mount -o datacow,autodefrag
+
+# Create a layout where we have fragmented extents at [0, 64k) (sync write in
+# reserve order), then a hole at [64k, 128k)
+$XFS_IO_PROG -f -s -c "pwrite 48k 16k" -c "pwrite 32k 16k" \
+		-c "pwrite 16k 16k" -c "pwrite 0 16k" \
+		$SCRATCH_MNT/foobar >> $seqres.full
+truncate -s 128k $SCRATCH_MNT/foobar
+
+old_csum=$(_md5_checksum $SCRATCH_MNT/foobar)
+echo "=== File extent layout before autodefrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+echo "old md5=$old_csum" >> $seqres.full
+
+old_regular=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+old_hole=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 64k)
+
+# Now trigger autodefrag, autodefrag is triggered in the cleaner thread,
+# which will be woken up by commit thread
+_scratch_remount commit=1
+sleep 3
+sync
+
+new_csum=$(_md5_checksum $SCRATCH_MNT/foobar)
+new_regular=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+new_hole=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 64k)
+
+echo "=== File extent layout after autodefrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+echo "new md5=$new_csum" >> $seqres.full
+
+# In v5.11~v5.15 kernels, regular extents won't get defragged, and would trigger
+# the following output
+if [ $new_regular == $old_regular ]; then
+	echo "regular extents didn't get defragged"
+fi
+
+# In v5.10 and earlier kernel, autodefrag may choose to defrag holes,
+# which should be avoided.
+if [ "$new_hole" != "$old_hole" ]; then
+	echo "hole extents got defragged"
+fi
+
+# Defrag should not change file content
+if [ "$new_csum" != "$old_csum" ]; then
+	echo "file content changed"
+fi
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
