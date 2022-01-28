@@ -1,0 +1,57 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 259
+#
+# Make sure btrfs defrag ioctl won't defrag compressed extents which are already
+# at their max capacity.
+#
+. ./common/preamble
+_begin_fstest auto quick defrag
+
+# Import common functions.
+. ./common/filter
+. ./common/btrfs
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+
+_scratch_mount -o compress
+
+# Btrfs uses 128K as max extent size for compressed extents, this would result
+# several compressed extents all at their max size
+$XFS_IO_PROG -f -c "pwrite -S 0xee 0 16m" -c sync \
+	$SCRATCH_MNT/foobar >> $seqres.full
+
+old_csum=$(_md5_checksum $SCRATCH_MNT/foobar)
+
+echo "=== File extent layout before defrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" > $tmp.before
+
+$BTRFS_UTIL_PROG filesystem defrag "$SCRATCH_MNT/foobar" >> $seqres.full
+sync
+
+new_csum=$(_md5_checksum $SCRATCH_MNT/foobar)
+
+echo "=== File extent layout before defrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" > $tmp.after
+
+if [ $new_csum != $old_csum ]; then
+	echo "file content changed"
+fi
+
+diff -q $tmp.before $tmp.after || echo "compressed extents get defragged"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
