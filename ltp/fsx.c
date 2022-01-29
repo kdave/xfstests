@@ -2835,6 +2835,7 @@ main(int argc, char **argv)
 			break;
 		case 'F':
 			fallocate_calls = 0;
+			allocsp_calls = 0;
 			break;
 		case 'K':
 			keep_size_calls = 0;
