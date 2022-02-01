@@ -3598,7 +3598,7 @@ static int setid_binaries(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 5000, 5000))
@@ -3726,7 +3726,7 @@ static int setid_binaries_idmapped_mounts(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		if (!expected_uid_gid(open_tree_fd, FILE1, 0, 15000, 15000))
@@ -3865,7 +3865,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		if (!switch_userns(attr.userns_fd, 0, 0, false))
@@ -3924,7 +3924,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		if (!caps_supported()) {
@@ -3992,7 +3992,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		if (!switch_userns(attr.userns_fd, 0, 0, false))
@@ -4150,7 +4150,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		userns_fd = get_userns_fd(0, 10000, 10000);
@@ -4214,7 +4214,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		userns_fd = get_userns_fd(0, 10000, 10000);
@@ -4286,7 +4286,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 			NULL,
 		};
 		static char *argv[] = {
-			NULL,
+			"", NULL,
 		};
 
 		userns_fd = get_userns_fd(0, 10000, 10000);
