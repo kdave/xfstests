@@ -1,0 +1,158 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 260
+#
+# Make sure "btrfs filesystem defragment" can still convert the compression
+# algorithm of all regular extents.
+#
+. ./common/preamble
+_begin_fstest auto quick defrag compress prealloc
+
+# Override the default cleanup function.
+# _cleanup()
+# {
+# 	cd /
+# 	rm -r -f $tmp.*
+# }
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+_require_xfs_io_command "fiemap" "ranged"
+_require_xfs_io_command "falloc"
+_require_btrfs_command inspect-internal dump-tree
+
+get_inode_number()
+{
+	local file="$1"
+
+	stat -c "%i" "$file"
+}
+
+get_file_extent()
+{
+	local file="$1"
+	local offset="$2"
+	local ino=$(get_inode_number "$file")
+	local file_extent_key="($ino EXTENT_DATA $offset)"
+
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 5 $SCRATCH_DEV |\
+		grep -A4 "$file_extent_key"
+}
+
+check_file_extent()
+{
+	local file="$1"
+	local offset="$2"
+	local expected="$3"
+
+	echo "=== file extent at file '$file' offset $offset ===" >> $seqres.full
+	get_file_extent "$file" "$offset" > $tmp.output
+	cat $tmp.output >> $seqres.full
+	grep -q "$expected" $tmp.output ||\
+		echo "file \"$file\" offset $offset doesn't have expected string \"$expected\""
+}
+
+# Unlike file extents whose btrfs specific attributes need to be grabbed from
+# dump-tree, we can check holes by fiemap. And mkfs enables no-holes feature by
+# default in recent versions of btrfs-progs, preventing us from grabbing holes
+# from dump-tree.
+check_hole()
+{
+	local file="$1"
+	local offset="$2"
+	local len="$3"
+
+	output=$($XFS_IO_PROG -c "fiemap $offset $len" "$file" |\
+		 _filter_xfs_io_fiemap | head -n1)
+	if [ -z $output ]; then
+		echo "=== file extent at file '$file' offset $offset is a hole ===" \
+			>> $seqres.full
+	else
+		echo "=== file extent at file '$file' offset $offset is not a hole ==="
+	fi
+}
+
+# Needs 4K sectorsize as the test is crafted using that sectorsize
+_require_btrfs_support_sectorsize 4096
+
+_scratch_mkfs -s 4k >> $seqres.full 2>&1
+
+# Initial data is compressed using lzo
+_scratch_mount -o compress=lzo
+
+# file 'large' has all of its compressed extents at their maximum size
+$XFS_IO_PROG -f -c "pwrite 0 1m" "$SCRATCH_MNT/large" >> $seqres.full
+
+# file 'fragment' has all of its compressed extents adjacent to
+# preallocated/hole ranges, which should not be defragged with regular
+# defrag ioctl, but should still be defragged by
+# "btrfs filesystem defragment -c"
+$XFS_IO_PROG -f -c "pwrite 0 16k" \
+		-c "pwrite 32k 16k" -c "pwrite 64k 16k" \
+		"$SCRATCH_MNT/fragment" >> $seqres.full
+sync
+# We only do the falloc after the compressed data reached disk.
+# Or the inode could have PREALLOC flag, and prevent the
+# data from being compressed.
+$XFS_IO_PROG -c "falloc 16k 16k" "$SCRATCH_MNT/fragment"
+sync
+
+echo "====== Before the defrag ======" >> $seqres.full
+
+# Should be lzo compressed
+check_file_extent "$SCRATCH_MNT/large" 0 "compression 2"
+
+# Should be lzo compressed
+check_file_extent "$SCRATCH_MNT/fragment" 0 "compression 2"
+
+# Should be preallocated
+check_file_extent "$SCRATCH_MNT/fragment" 16384 "type 2"
+
+# Should be lzo compressed
+check_file_extent "$SCRATCH_MNT/fragment" 32768 "compression 2"
+
+# Should be hole
+check_hole "$SCRATCH_MNT/fragment" 49152 16384
+
+# Should be lzo compressed
+check_file_extent "$SCRATCH_MNT/fragment" 65536 "compression 2"
+
+$BTRFS_UTIL_PROG filesystem defragment "$SCRATCH_MNT/large" -czstd \
+	"$SCRATCH_MNT/fragment" >> $seqres.full
+# Need to commit the transaction or dump-tree won't grab the new
+# metadata on-disk.
+sync
+
+echo "====== After the defrag ======" >> $seqres.full
+
+# Should be zstd compressed
+check_file_extent "$SCRATCH_MNT/large" 0 "compression 3"
+
+# Should be zstd compressed
+check_file_extent "$SCRATCH_MNT/fragment" 0 "compression 3"
+
+# Should be preallocated
+check_file_extent "$SCRATCH_MNT/fragment" 16384 "type 2"
+
+# Should be zstd compressed
+check_file_extent "$SCRATCH_MNT/fragment" 32768 "compression 3"
+
+# Should be hole
+check_hole "$SCRATCH_MNT/fragment" 49152 16384
+
+# Should be zstd compressed
+check_file_extent "$SCRATCH_MNT/fragment" 65536 "compression 3"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
