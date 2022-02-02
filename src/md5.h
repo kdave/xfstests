@@ -24,7 +24,7 @@
  */
 
 #ifdef HAVE_OPENSSL
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 #elif !defined(_MD5_H)
 #define _MD5_H
 

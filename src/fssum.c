@@ -48,7 +48,11 @@ struct excludes {
 };
 
 typedef struct _sum {
+#ifdef HAVE_OPENSSL
+	EVP_MD_CTX	*ctx;
+#else
 	MD5_CTX 	md5;
+#endif
 	unsigned char	out[16];
 } sum_t;
 
@@ -175,19 +179,38 @@ alloc(size_t sz)
 void
 sum_init(sum_t *cs)
 {
+#ifdef HAVE_OPENSSL
+	cs->ctx = EVP_MD_CTX_new();
+	if (!cs->ctx) {
+		fprintf(stderr, "evp md ctx allocation failed\n");
+		exit(-1);
+	}
+	EVP_DigestInit(cs->ctx, EVP_md5());
+#else
 	MD5_Init(&cs->md5);
+#endif
 }
 
 void
 sum_fini(sum_t *cs)
 {
+#ifdef HAVE_OPENSSL
+	EVP_DigestFinal(cs->ctx, cs->out, NULL);
+	EVP_MD_CTX_free(cs->ctx);
+	cs->ctx = NULL;
+#else
 	MD5_Final(cs->out, &cs->md5);
+#endif
 }
 
 void
 sum_add(sum_t *cs, void *buf, int size)
 {
+#ifdef HAVE_OPENSSL
+	EVP_DigestUpdate(cs->ctx, buf, size);
+#else
 	MD5_Update(&cs->md5, buf, size);
+#endif
 }
 
 void
