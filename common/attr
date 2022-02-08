@@ -26,11 +26,24 @@ _acl_get_max()
 		echo 8191
 		;;
 	f2fs)
-		_fs_options $TEST_DEV | grep "inline_xattr" >/dev/null 2>&1
+		# If noinline_xattr is enabled, max xattr size should be:
+		# (4096 - 24) - (24 + 4) = 4044
+		# then ACL_MAX_ENTRIES should be:
+		# (4044 - (4 + 4 * 4)) / 8 + 4 = 507
+		_fs_options $TEST_DEV | grep "noinline_xattr" >/dev/null 2>&1
 		if [ $? -eq 0 ]; then
-			echo 531
+			echo 507
 		else
-			echo 506
+			# If inline_xattr is enabled, max xattr size should be:
+			# (4096 - 24 + 200) - (24 + 4) = 4244
+			# then ACL_MAX_ENTRIES should be:
+			# (4244 - (4 + 4 * 4)) / 8 + 4 = 532
+			_fs_options $TEST_DEV | grep "inline_xattr" >/dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				echo 532
+			else
+				echo 507
+			fi
 		fi
 		;;
 	bcachefs)
