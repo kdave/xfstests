@@ -41,7 +41,14 @@ zonesize=$((zonesize << 9))
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount -o commit=1 # 1s commit time to speed up test
 
-uuid=$(findmnt -n -o UUID "$SCRATCH_MNT")
+uuid=$($BTRFS_UTIL_PROG filesystem show $SCRATCH_DEV |grep uuid: |\
+        $AWK_PROG '{print $NF}')
+
+if [[ "$uuid" == "" ]]; then
+	echo "UUID for $SCRATCH_DEV is empty, this is not expected"
+	exit 1
+fi
+
 reclaim_threshold=75
 echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold
 fill_percent=$((reclaim_threshold + 2))
