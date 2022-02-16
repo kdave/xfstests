@@ -155,6 +155,11 @@ _check_btrfs_filesystem()
 	fi
 	rm -f $tmp.fsck
 
+	if [ $ok -eq 0 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
+		local flatdev="$(basename "$device")"
+		_btrfs_metadump "$device" "$seqres.$flatdev.check.md" >>$seqres.full
+	fi
+
 	if [ $ok -eq 0 ]; then
 		echo "*** mount output ***"		>>$seqres.full
 		_mount					>>$seqres.full
@@ -495,4 +500,14 @@ _require_btrfs_support_sectorsize()
 		_notrun "no subpage support found"
 	grep -wq $sectorsize /sys/fs/btrfs/features/supported_sectorsizes || \
 		_notrun "sectorsize $sectorsize is not supported"
+}
+
+_btrfs_metadump()
+{
+	local device="$1"
+	local dumpfile="$2"
+
+	test -n "$BTRFS_IMAGE_PROG" || _fail "btrfs-image not installed"
+	$BTRFS_IMAGE_PROG "$device" "$dumpfile"
+	[ -n "$DUMP_COMPRESSOR" ] && $DUMP_COMPRESSOR -f "$dumpfile" &> /dev/null
 }
