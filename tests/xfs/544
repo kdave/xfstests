@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Fujitsu Limited. All Rights Reserved.
+#
+# FS QA Test 544
+#
+# Regression test for commit:
+# 0717c1c ("xfsdump: intercept bind mount targets")
+
+. ./common/preamble
+_begin_fstest auto quick dump
+
+_cleanup()
+{
+	_cleanup_dump
+	cd /
+	rm -r -f $tmp.*
+	$UMOUNT_PROG $TEST_DIR/dest.$seq 2> /dev/null
+	rmdir $TEST_DIR/src.$seq 2> /dev/null
+	rmdir $TEST_DIR/dest.$seq 2> /dev/null
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/dump
+
+# real QA test starts here
+
+_supported_fs xfs
+
+# Setup
+rm -rf $TEST_DIR/src.$seq
+rm -rf $TEST_DIR/dest.$seq
+mkdir $TEST_DIR/src.$seq
+mkdir $TEST_DIR/dest.$seq
+
+# Test
+echo "*** dump with bind-mounted test ***" >> $seqres.full
+
+$MOUNT_PROG --bind $TEST_DIR/src.$seq $TEST_DIR/dest.$seq || _fail "Bind mount failed"
+
+$XFSDUMP_PROG -L session -M test -f $tmp.dump $TEST_DIR/dest.$seq \
+	>> $seqres.full 2>&1 && echo "dump with bind-mounted should be failed, but passed."
+
+echo "Silence is golden"
+status=0
+exit
