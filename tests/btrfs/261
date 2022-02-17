@@ -1,0 +1,79 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 261
+#
+# Test that after a full fsync of a file with preallocated extents beyond the
+# file's size, if a power failure happens, the preallocated extents still exist
+# after we mount the filesystem.
+#
+. ./common/preamble
+_begin_fstest auto quick log prealloc
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+. ./common/punch
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_dm_target flakey
+_require_xfs_io_command "falloc" "-k"
+_require_xfs_io_command "fiemap"
+_require_odirect
+
+rm -f $seqres.full
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test file with many file extent items, so that they span several
+# leaves of metadata, even if the node/page size is 64K. We use direct IO and
+# not fsync/O_SYNC because it's both faster and it avoids clearing the full sync
+# flag from the inode - we want the fsync below to trigger the slow full sync
+# code path.
+$XFS_IO_PROG -f -d -c "pwrite -b 4K 0 16M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now add two preallocated extents to our file without extending the file's size.
+# One right at i_size, and another further beyond, leaving a gap between the two
+# prealloc extents.
+$XFS_IO_PROG -c "falloc -k 16M 1M" $SCRATCH_MNT/foo
+$XFS_IO_PROG -c "falloc -k 20M 1M" $SCRATCH_MNT/foo
+
+# Make sure everything is durably persisted and the transaction is committed.
+# This makes all created extents to have a generation lower than the generation
+# of the transaction used by the next write and fsync.
+sync
+
+# Now overwrite only the first extent, which will result in modifying only the
+# first leaf of metadata for our inode. Then fsync it. This fsync will use the
+# slow code path (inode full sync bit is set) because it's the first fsync since
+# the inode was created/loaded.
+$XFS_IO_PROG -c "pwrite 0 4K" -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Simulate a power failure and then mount again the filesystem to replay the log
+# tree.
+_flakey_drop_and_remount
+
+# After the power failure we expect that the preallocated extents, beyond the
+# inode's i_size, still exist.
+echo "List of extents after power failure:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_fiemap
+
+_unmount_flakey
+
+# success, all done
+status=0
+exit
