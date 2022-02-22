@@ -1,0 +1,41 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# FS QA Test 676
+#
+# Test that filesystem properly handles seeking in directory both to valid
+# and invalid positions.
+#
+# This is a regression test for a48fc69fe658 ("udf: Fix crash after seekdir")
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+dir=$TEST_DIR/$seq-dir
+
+# Override the default cleanup function.
+_cleanup()
+{
+	rm -rf $dir
+}
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_test
+_require_test_program "t_readdir_3"
+
+files=4000
+seed=$RANDOM
+
+mkdir $dir
+echo "Using seed $seed" >> $seqres.full
+$here/src/t_readdir_3 $dir $files $seed >> $seqres.full
+
+# success, all done
+status=0
+exit
