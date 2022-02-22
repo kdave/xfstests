@@ -1,0 +1,100 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 IBM. All Rights Reserved.
+#
+# We don't currently support resize of EXT4 filesystems mounted
+# with sparse_super2 option enabled. Earlier, kernel used to leave the resize
+# incomplete and the fs would be left into an incomplete state, however commit
+# b1489186cc83[1] fixed this to avoid the fs corruption by clearly returning
+# -ENOTSUPP.
+#
+# This test ensures that kernel handles resizing with sparse_super2 correctly
+#
+# Related commit in mainline:
+#
+# [1] commit b1489186cc8391e0c1e342f9fbc3eedf6b944c61
+# 	ext4: add check to prevent attempting to resize an fs with sparse_super2
+#
+
+. ./common/preamble
+_begin_fstest auto ioctl resize quick
+
+# real QA test starts here
+
+INITIAL_FS_SIZE=1G
+RESIZED_FS_SIZE=$((2*1024*1024*1024))  # 2G
+ONLINE_RESIZE_BLOCK_LIMIT=$((256*1024*1024))
+
+STOP_ITER=255   # Arbitrary return code
+
+_supported_fs ext4
+_require_scratch_size $(($RESIZED_FS_SIZE/1024))
+_require_test_program "ext4_resize"
+
+log()
+{
+	echo "$seq: $*" >> $seqres.full 2>&1
+}
+
+do_resize()
+{
+	_mkfs_dev -E resize=$ONLINE_RESIZE_BLOCK_LIMIT -O sparse_super2 \
+		$SCRATCH_DEV $INITIAL_FS_SIZE >> $seqres.full 2>&1 \
+		|| _fail "$MKFS_PROG failed. Exiting"
+
+	_scratch_mount || _fail "Failed to mount scratch partition. Exiting"
+
+	local BS=$(_get_block_size $SCRATCH_MNT)
+	local REQUIRED_BLOCKS=$(($RESIZED_FS_SIZE/$BS))
+
+	local RESIZE_RET
+	local EOPNOTSUPP=95
+
+	log "Resizing FS"
+	$here/src/ext4_resize $SCRATCH_MNT $REQUIRED_BLOCKS >> $seqres.full 2>&1
+	RESIZE_RET=$?
+
+	# Test appears to be successful. Stop iterating and confirm if FS is
+	# consistent.
+	if [ $RESIZE_RET = $EOPNOTSUPP ]; then
+		log "Resize operation not supported with sparse_super2"
+		log "Threw expected error $RESIZE_RET (EOPNOTSUPP)"
+		return $STOP_ITER
+	fi
+
+	# Test appears to be unsuccessful. Most probably, the fs is corrupt,
+	# iterate a few more times to further stress test this.
+	log "Something is wrong. Output of resize = $RESIZE_RET. \
+		Expected $EOPNOTSUPP (EOPNOTSUPP)"
+
+	# unmount after ioctl sometimes fails with "device busy" so add a small
+	# delay
+	sleep 0.2
+	_scratch_unmount >> $seqres.full 2>&1 \
+		|| _fail "$UMOUNT_PROG failed. Exiting"
+}
+
+run_test()
+{
+	local FSCK_RET
+	local ITERS=8
+	local RET=0
+
+	for i in $(seq 1 $ITERS); do
+		log "----------- Iteration: $i ------------"
+		do_resize
+		RET=$?
+
+		[ "$RET" = "$STOP_ITER" ] && break
+	done
+
+	log "-------- Iterations Complete ---------"
+	log "Checking if FS is in consistent state"
+	_check_scratch_fs
+}
+
+echo "Silence is golden"
+run_test
+
+status=0
+exit
