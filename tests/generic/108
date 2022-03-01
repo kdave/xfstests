@@ -42,8 +42,11 @@ _require_non_zoned_device $SCRATCH_DEV
 lvname=lv_$seq
 vgname=vg_$seq
 
+physical=$(cat /sys/block/$(_short_dev $SCRATCH_DEV)/queue/physical_block_size)
+logical=$(cat /sys/block/$(_short_dev $SCRATCH_DEV)/queue/logical_block_size)
+
 # _get_scsi_debug_dev returns a scsi debug device with 128M in size by default
-SCSI_DEBUG_DEV=`_get_scsi_debug_dev 512 512 0 300`
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev ${physical:-512} ${logical:-512} 0 300`
 test -b "$SCSI_DEBUG_DEV" || _notrun "Failed to initialize scsi debug device"
 echo "SCSI debug device $SCSI_DEBUG_DEV" >>$seqres.full
 
