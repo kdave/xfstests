@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Sidong Yang.  All Rights Reserved.
+#
+# FS QA Test 262
+#
+# Test that running qgroup enable, create, destroy, and disable commands in
+# parallel doesn't result in a deadlock, a crash or any filesystem
+# inconsistency.
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs btrfs
+
+_require_scratch
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+for ((i = 0; i < 200; i++)); do
+	$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT 2>> $seqres.full &
+	$BTRFS_UTIL_PROG qgroup create 1/0 $SCRATCH_MNT 2>> $seqres.full &
+	$BTRFS_UTIL_PROG qgroup destroy 1/0 $SCRATCH_MNT 2>> $seqres.full &
+	$BTRFS_UTIL_PROG quota disable $SCRATCH_MNT 2>> $seqres.full &
+done
+
+wait
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
