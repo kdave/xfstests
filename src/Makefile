@@ -72,6 +72,7 @@ LLDLIBS += -laio
 endif
 
 ifeq ($(HAVE_URING), true)
+TARGETS += uring_read_fault
 LLDLIBS += -luring
 endif
 

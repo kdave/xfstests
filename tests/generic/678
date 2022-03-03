@@ -1,0 +1,40 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 678
+#
+# Test doing a read, with io_uring, over a file range that includes multiple
+# extents. The read operation triggers page faults when accessing all pages of
+# the read buffer except for the pages corresponding to the first extent.
+# Then verify that the operation results in reading all the extents and returns
+# the correct data.
+#
+. ./common/preamble
+_begin_fstest auto quick io_uring
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $TEST_DIR/uring_read_fault.tmp
+}
+
+# get standard environment, filters and checks
+. ./common/rc
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs generic
+_require_test
+_require_odirect
+_require_io_uring
+_require_test_program uring_read_fault
+
+$here/src/uring_read_fault $TEST_DIR/uring_read_fault.tmp
+status=$?
+
+echo "Silence is golden"
+exit
