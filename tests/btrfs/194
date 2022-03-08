@@ -25,9 +25,7 @@ _scratch_dev_pool_get 2
 
 # Here we use 4k node size to reduce runtime (explained near _scratch_mkfs call)
 # To use the minimal node size (4k) we need 4K page size.
-if [ $(get_page_size) != 4096 ]; then
-	_notrun "This test need 4k page size"
-fi
+_require_btrfs_support_sectorsize 4096
 
 device_1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $1}')
 device_2=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}')
@@ -37,7 +35,7 @@ echo device_1=$device_1 device_2=$device_2 >> $seqres.full
 # The wrong check limit is based on the max item size (BTRFS_MAX_DEVS() macro),
 # and max item size is based on node size, so smaller node size will result
 # much shorter runtime. So here we use minimal node size (4K) to reduce runtime.
-_scratch_mkfs -n 4k >> $seqres.full
+_scratch_mkfs -n 4k -s 4k >> $seqres.full
 _scratch_mount
 
 # For 4k nodesize, the wrong limit is calculated by:
