@@ -46,7 +46,7 @@
 static void usage(FILE *fp)
 {
 	fputs(
-"Usage: " PROGRAM_NAME " [OPTION]... CIPHER MASTER_KEY\n"
+"Usage: " PROGRAM_NAME " [OPTION]... [CIPHER | --dump-key-identifier] MASTER_KEY\n"
 "\n"
 "Utility for verifying fscrypt-encrypted data.  This program encrypts\n"
 "(or decrypts) the data on stdin using the given CIPHER with the given\n"
@@ -66,6 +66,8 @@ static void usage(FILE *fp)
 "  --decrypt                   Decrypt instead of encrypt\n"
 "  --direct-key                Use the format where the IVs include the file\n"
 "                                nonce and the same key is shared across files.\n"
+"  --dump-key-identifier       Instead of encrypting/decrypting data, just\n"
+"                                compute and dump the key identifier.\n"
 "  --file-nonce=NONCE          File's nonce as a 32-character hex string\n"
 "  --fs-uuid=UUID              The filesystem UUID as a 32-character hex string.\n"
 "                                Required for --iv-ino-lblk-32 and\n"
@@ -1949,11 +1951,38 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 	generate_iv(params, iv);
 }
 
+static void do_dump_key_identifier(const struct key_and_iv_params *params)
+{
+	u8 info[9] = "fscrypt";
+	u8 key_identifier[16];
+	int i;
+
+	info[8] = HKDF_CONTEXT_KEY_IDENTIFIER;
+
+	if (params->kdf != KDF_HKDF_SHA512)
+		die("--dump-key-identifier requires --kdf=HKDF-SHA512");
+	hkdf_sha512(params->master_key, params->master_key_size,
+		    NULL, 0, info, sizeof(info),
+		    key_identifier, sizeof(key_identifier));
+
+	for (i = 0; i < sizeof(key_identifier); i++)
+		printf("%02x", key_identifier[i]);
+}
+
+static void parse_master_key(const char *arg, struct key_and_iv_params *params)
+{
+	params->master_key_size = hex2bin(arg, params->master_key,
+					  MAX_KEY_SIZE);
+	if (params->master_key_size < 0)
+		die("Invalid master_key: %s", arg);
+}
+
 enum {
 	OPT_BLOCK_NUMBER,
 	OPT_BLOCK_SIZE,
 	OPT_DECRYPT,
 	OPT_DIRECT_KEY,
+	OPT_DUMP_KEY_IDENTIFIER,
 	OPT_FILE_NONCE,
 	OPT_FS_UUID,
 	OPT_HELP,
@@ -1970,6 +1999,7 @@ static const struct option longopts[] = {
 	{ "block-size",      required_argument, NULL, OPT_BLOCK_SIZE },
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
 	{ "direct-key",      no_argument,       NULL, OPT_DIRECT_KEY },
+	{ "dump-key-identifier", no_argument,   NULL, OPT_DUMP_KEY_IDENTIFIER },
 	{ "file-nonce",      required_argument, NULL, OPT_FILE_NONCE },
 	{ "fs-uuid",         required_argument, NULL, OPT_FS_UUID },
 	{ "help",            no_argument,       NULL, OPT_HELP },
@@ -1986,6 +2016,7 @@ int main(int argc, char *argv[])
 {
 	size_t block_size = 4096;
 	bool decrypting = false;
+	bool dump_key_identifier = false;
 	struct key_and_iv_params params;
 	size_t padding = 0;
 	const struct fscrypt_cipher *cipher;
@@ -2026,6 +2057,9 @@ int main(int argc, char *argv[])
 			break;
 		case OPT_DIRECT_KEY:
 			params.direct_key = true;
+			break;
+		case OPT_DUMP_KEY_IDENTIFIER:
+			dump_key_identifier = true;
 			break;
 		case OPT_FILE_NONCE:
 			if (hex2bin(optarg, params.file_nonce, FILE_NONCE_SIZE)
@@ -2074,6 +2108,15 @@ int main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (dump_key_identifier) {
+		if (argc != 1) {
+			usage(stderr);
+			return 2;
+		}
+		parse_master_key(argv[0], &params);
+		do_dump_key_identifier(&params);
+		return 0;
+	}
 	if (argc != 2) {
 		usage(stderr);
 		return 2;
@@ -2087,10 +2130,8 @@ int main(int argc, char *argv[])
 		die("Block size of %zu bytes is too small for cipher %s",
 		    block_size, cipher->name);
 
-	params.master_key_size = hex2bin(argv[1], params.master_key,
-					 MAX_KEY_SIZE);
-	if (params.master_key_size < 0)
-		die("Invalid master_key: %s", argv[1]);
+	parse_master_key(argv[1], &params);
+
 	if (params.master_key_size < cipher->keysize)
 		die("Master key is too short for cipher %s", cipher->name);
 
