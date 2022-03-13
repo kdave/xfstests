@@ -64,6 +64,8 @@ static void usage(FILE *fp)
 "  --block-size=BLOCK_SIZE     Encrypt each BLOCK_SIZE bytes independently.\n"
 "                                Default: 4096 bytes\n"
 "  --decrypt                   Decrypt instead of encrypt\n"
+"  --direct-key                Use the format where the IVs include the file\n"
+"                                nonce and the same key is shared across files.\n"
 "  --file-nonce=NONCE          File's nonce as a 32-character hex string\n"
 "  --fs-uuid=UUID              The filesystem UUID as a 32-character hex string.\n"
 "                                Required for --iv-ino-lblk-32 and\n"
@@ -76,11 +78,10 @@ static void usage(FILE *fp)
 "                                32-bit variant.\n"
 "  --iv-ino-lblk-64            Use the format where the IVs include the inode\n"
 "                                number and the same key is shared across files.\n"
-"                                Requires --kdf=HKDF-SHA512, --fs-uuid,\n"
-"                                --inode-number, and --mode-num.\n"
 "  --kdf=KDF                   Key derivation function to use: AES-128-ECB,\n"
 "                                HKDF-SHA512, or none.  Default: none\n"
-"  --mode-num=NUM              Derive per-mode key using mode number NUM\n"
+"  --mode-num=NUM              The encryption mode number.  This may be required\n"
+"                                for key derivation, depending on other options.\n"
 "  --padding=PADDING           If last block is partial, zero-pad it to next\n"
 "                                PADDING-byte boundary.  Default: BLOCK_SIZE\n"
 	, fp);
@@ -1790,6 +1791,7 @@ struct key_and_iv_params {
 	u8 mode_num;
 	u8 file_nonce[FILE_NONCE_SIZE];
 	bool file_nonce_specified;
+	bool direct_key;
 	bool iv_ino_lblk_64;
 	bool iv_ino_lblk_32;
 	u64 block_number;
@@ -1835,7 +1837,7 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 			   u8 *real_key, size_t real_key_size,
 			   union fscrypt_iv *iv)
 {
-	bool file_nonce_in_iv = false;
+	int iv_methods = 0;
 	struct aes_key aes_key;
 	u8 info[8 + 1 + 1 + UUID_SIZE] = "fscrypt";
 	size_t infolen = 8;
@@ -1848,11 +1850,22 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 	/* Overridden later for iv_ino_lblk_{64,32} */
 	iv->block_number = cpu_to_le64(params->block_number);
 
-	if (params->iv_ino_lblk_64 || params->iv_ino_lblk_32) {
+	iv_methods += params->direct_key;
+	iv_methods += params->iv_ino_lblk_64;
+	iv_methods += params->iv_ino_lblk_32;
+	if (iv_methods > 1)
+		die("Conflicting IV methods specified");
+	if (iv_methods > 0 && params->kdf == KDF_AES_128_ECB)
+		die("--kdf=AES-128-ECB is incompatible with IV method options");
+
+	if (params->direct_key) {
+		if (!params->file_nonce_specified)
+			die("--direct-key requires --file-nonce");
+		if (params->kdf != KDF_NONE && params->mode_num == 0)
+			die("--direct-key with KDF requires --mode-num");
+	} else if (params->iv_ino_lblk_64 || params->iv_ino_lblk_32) {
 		const char *opt = params->iv_ino_lblk_64 ? "--iv-ino-lblk-64" :
 							   "--iv-ino-lblk-32";
-		if (params->iv_ino_lblk_64 && params->iv_ino_lblk_32)
-			die("--iv-ino-lblk-64 and --iv-ino-lblk-32 are mutually exclusive");
 		if (params->kdf != KDF_HKDF_SHA512)
 			die("%s requires --kdf=HKDF-SHA512", opt);
 		if (!params->fs_uuid_specified)
@@ -1869,16 +1882,11 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 
 	switch (params->kdf) {
 	case KDF_NONE:
-		if (params->mode_num != 0)
-			die("--mode-num isn't supported with --kdf=none");
 		memcpy(real_key, params->master_key, real_key_size);
-		file_nonce_in_iv = true;
 		break;
 	case KDF_AES_128_ECB:
 		if (!params->file_nonce_specified)
-			die("--file-nonce is required with --kdf=AES-128-ECB");
-		if (params->mode_num != 0)
-			die("--mode-num isn't supported with --kdf=AES-128-ECB");
+			die("--kdf=AES-128-ECB requires --file-nonce");
 		STATIC_ASSERT(FILE_NONCE_SIZE == AES_128_KEY_SIZE);
 		ASSERT(real_key_size % AES_BLOCK_SIZE == 0);
 		aes_setkey(&aes_key, params->file_nonce, AES_128_KEY_SIZE);
@@ -1887,7 +1895,10 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 				    &real_key[i]);
 		break;
 	case KDF_HKDF_SHA512:
-		if (params->iv_ino_lblk_64) {
+		if (params->direct_key) {
+			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
+			info[infolen++] = params->mode_num;
+		} else if (params->iv_ino_lblk_64) {
 			info[infolen++] = HKDF_CONTEXT_IV_INO_LBLK_64_KEY;
 			info[infolen++] = params->mode_num;
 			memcpy(&info[infolen], params->fs_uuid, UUID_SIZE);
@@ -1903,17 +1914,13 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 				cpu_to_le32(hash_inode_number(params) +
 					    params->block_number);
 			iv->inode_number = 0;
-		} else if (params->mode_num != 0) {
-			info[infolen++] = HKDF_CONTEXT_DIRECT_KEY;
-			info[infolen++] = params->mode_num;
-			file_nonce_in_iv = true;
 		} else if (params->file_nonce_specified) {
 			info[infolen++] = HKDF_CONTEXT_PER_FILE_ENC_KEY;
 			memcpy(&info[infolen], params->file_nonce,
 			       FILE_NONCE_SIZE);
 			infolen += FILE_NONCE_SIZE;
 		} else {
-			die("With --kdf=HKDF-SHA512, at least one of --file-nonce and --mode-num must be specified");
+			die("--kdf=HKDF-SHA512 requires --file-nonce or --iv-ino-lblk-{64,32}");
 		}
 		hkdf_sha512(params->master_key, params->master_key_size,
 			    NULL, 0, info, infolen, real_key, real_key_size);
@@ -1922,7 +1929,7 @@ static void get_key_and_iv(const struct key_and_iv_params *params,
 		ASSERT(0);
 	}
 
-	if (file_nonce_in_iv && params->file_nonce_specified)
+	if (params->direct_key)
 		memcpy(iv->nonce, params->file_nonce, FILE_NONCE_SIZE);
 }
 
@@ -1930,6 +1937,7 @@ enum {
 	OPT_BLOCK_NUMBER,
 	OPT_BLOCK_SIZE,
 	OPT_DECRYPT,
+	OPT_DIRECT_KEY,
 	OPT_FILE_NONCE,
 	OPT_FS_UUID,
 	OPT_HELP,
@@ -1945,6 +1953,7 @@ static const struct option longopts[] = {
 	{ "block-number",    required_argument, NULL, OPT_BLOCK_NUMBER },
 	{ "block-size",      required_argument, NULL, OPT_BLOCK_SIZE },
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
+	{ "direct-key",      no_argument,       NULL, OPT_DIRECT_KEY },
 	{ "file-nonce",      required_argument, NULL, OPT_FILE_NONCE },
 	{ "fs-uuid",         required_argument, NULL, OPT_FS_UUID },
 	{ "help",            no_argument,       NULL, OPT_HELP },
@@ -1998,6 +2007,9 @@ int main(int argc, char *argv[])
 			break;
 		case OPT_DECRYPT:
 			decrypting = true;
+			break;
+		case OPT_DIRECT_KEY:
+			params.direct_key = true;
 			break;
 		case OPT_FILE_NONCE:
 			if (hex2bin(optarg, params.file_nonce, FILE_NONCE_SIZE)

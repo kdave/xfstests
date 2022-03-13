@@ -842,27 +842,25 @@ _verify_ciphertext_for_encryption_policy()
 
 	set_encpolicy_args+=" -c $contents_mode_num"
 	set_encpolicy_args+=" -n $filenames_mode_num"
+	crypt_util_contents_args+=" --mode-num=$contents_mode_num"
+	crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
 
 	if (( policy_version > 1 )); then
 		set_encpolicy_args+=" -v 2"
 		crypt_util_args+=" --kdf=HKDF-SHA512"
 		if (( policy_flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
-			crypt_util_args+=" --mode-num=$contents_mode_num"
+			crypt_util_args+=" --direct-key"
 		elif (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 )); then
 			crypt_util_args+=" --iv-ino-lblk-64"
-			crypt_util_contents_args+=" --mode-num=$contents_mode_num"
-			crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
 		elif (( policy_flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32 )); then
 			crypt_util_args+=" --iv-ino-lblk-32"
-			crypt_util_contents_args+=" --mode-num=$contents_mode_num"
-			crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
 		fi
 	else
 		if (( policy_flags & ~FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
 			_fail "unsupported flags for v1 policy: $policy_flags"
 		fi
 		if (( policy_flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY )); then
-			crypt_util_args+=" --kdf=none"
+			crypt_util_args+=" --direct-key --kdf=none"
 		else
 			crypt_util_args+=" --kdf=AES-128-ECB"
 		fi
