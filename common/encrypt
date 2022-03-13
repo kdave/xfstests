@@ -812,6 +812,7 @@ _verify_ciphertext_for_encryption_policy()
 	local crypt_util_args=""
 	local crypt_util_contents_args=""
 	local crypt_util_filename_args=""
+	local expected_identifier
 
 	shift 2
 	for opt; do
@@ -901,6 +902,18 @@ _verify_ciphertext_for_encryption_policy()
 		_add_session_encryption_key $keyspec $raw_key
 	fi
 	local raw_key_hex=$(echo "$raw_key" | tr -d '\\x')
+
+	if (( policy_version > 1 )); then
+		echo "Verifying key identifier" >> $seqres.full
+		expected_identifier=$($here/src/fscrypt-crypt-util  \
+				      --dump-key-identifier "$raw_key_hex" \
+				      $crypt_util_args)
+		if [ "$expected_identifier" != "$keyspec" ]; then
+			echo "KEY IDENTIFIER MISMATCH!"
+			echo "    Expected: $expected_identifier"
+			echo "    Actual: $keyspec"
+		fi
+	fi
 
 	echo
 	echo -e "Verifying ciphertext with parameters:"
