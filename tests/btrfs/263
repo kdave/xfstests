@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 263
+#
+# Make sure btrfs autodefrag will not defrag ranges which won't reduce
+# defragmentation.
+#
+. ./common/preamble
+_begin_fstest auto quick defrag
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+_require_xfs_io_command "fiemap" "ranged"
+
+# Needs fixed 4K sector size, or the file layout will not match the expected
+# result.
+_require_btrfs_support_sectorsize 4096
+
+_scratch_mkfs >> $seqres.full
+
+_scratch_mount -o noautodefrag
+
+# Create the initial layout, with a large 64K extent for later fragments.
+$XFS_IO_PROG -f -c "pwrite 0 64K" -c sync "$SCRATCH_MNT/foobar" >> $seqres.full
+
+# Need to bump the generation by one, as autodefrag uses the last modified
+# generation of a subvolume. Without this generation bump, autodefrag will
+# defrag the whole file, not only the new write.
+touch "$SCRATCH_MNT/trash"
+sync
+
+# Remount to autodefrag.
+_scratch_remount autodefrag
+
+# Write a new sector, which should trigger autodefrag.
+$XFS_IO_PROG -c "pwrite 16K 4K" -c sync "$SCRATCH_MNT/foobar" >> $seqres.full
+
+echo "=== File extent layout before autodefrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+
+old_csum=$(_md5_checksum "$SCRATCH_MNT/foobar")
+old_ext_0=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+old_ext_16k=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 16384)
+old_ext_20k=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 20480)
+
+# Trigger autodefrag.
+_scratch_remount commit=1
+sleep 3
+# Make sure the defragged range reach disk.
+sync
+
+echo "=== File extent layout after autodefrag ===" >> $seqres.full
+$XFS_IO_PROG -c "fiemap -v" "$SCRATCH_MNT/foobar" >> $seqres.full
+
+new_csum=$(_md5_checksum "$SCRATCH_MNT/foobar")
+new_ext_0=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 0)
+new_ext_16k=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 16384)
+new_ext_20k=$(_get_file_extent_sector "$SCRATCH_MNT/foobar" 20480)
+
+# For extent at offset 0 and 20K, they are older than the target generation,
+# thus they should not be defragged.
+if [ "$new_ext_0" != "$old_ext_0" ]; then
+	echo "extent at offset 0 got defragged"
+fi
+if [ "$new_ext_20k" != "$old_ext_20k" ]; then
+	echo "extent at offset 20K got defragged"
+fi
+
+# For extent at offset 4K, it's a single sector, and its adjacent extents
+# are not targets, thus it should not be defragged.
+if [ "$new_ext_16k" != "$old_ext_16k" ]; then
+	echo "extent at offset 16K got defragged"
+fi
+
+# Defrag should not change file content.
+if [ "$new_csum" != "$old_csum" ]; then
+	echo "file content changed"
+fi
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
