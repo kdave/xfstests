@@ -50,6 +50,24 @@ _scratch_mount >> $seqres.full 2>&1
 testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
+# pagecache readahead can sometimes cause extra pages to be inserted into the
+# file mapping where we have an unwritten extent in the COW fork.  Call lseek
+# on each $blksz offset that interests us (as opposed to the whole file) so
+# that these extra pages are not disclosed.
+#
+# The important thing we're testing is that SEEK_DATA reports block 3 as data
+# when the COW fork has an unwritten mapping and the data fork has a hole.
+exercise_lseek() {
+	echo "Seek holes and data in file1"
+	$XFS_IO_PROG -c "seek -d 0" $testdir/file1
+	$XFS_IO_PROG -c "seek -h $((2 * blksz))" $testdir/file1 | sed -e '/Whence/d'
+	echo "Seek holes and data in file2"
+	$XFS_IO_PROG -c "seek -d 0" $testdir/file2
+	$XFS_IO_PROG -c "seek -h $((2 * blksz))" $testdir/file2 | sed -e '/Whence/d'
+	$XFS_IO_PROG -c "seek -d $((3 * blksz))" $testdir/file2 | sed -e '/Whence/d'
+	$XFS_IO_PROG -c "seek -h $((4 * blksz))" $testdir/file2 | sed -e '/Whence/d'
+}
+
 blksz=65536
 nr=8
 filesize=$((blksz * nr))
@@ -83,10 +101,7 @@ $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file1 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file2 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file3 >> $seqres.full 2>&1
 
-echo "Seek holes and data in file1"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file1
-echo "Seek holes and data in file2"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file2
+exercise_lseek
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
@@ -102,10 +117,7 @@ $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file1 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file2 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file3 >> $seqres.full 2>&1
 
-echo "Seek holes and data in file1"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file1
-echo "Seek holes and data in file2"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file2
+exercise_lseek
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
@@ -121,10 +133,7 @@ $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file1 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file2 >> $seqres.full 2>&1
 $XFS_IO_PROG -c "bmap -ev" -c "bmap -cv" $testdir/file3 >> $seqres.full 2>&1
 
-echo "Seek holes and data in file1"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file1
-echo "Seek holes and data in file2"
-$XFS_IO_PROG -c "seek -a -r 0" $testdir/file2
+exercise_lseek
 
 echo "Compare files"
 md5sum $testdir/file1 | _filter_scratch
