@@ -26,10 +26,18 @@ _check_filestreams_support || _notrun "filestreams not available"
 # be less than or equal to half the AG count so we don't run out of AGs.
 _set_stream_timeout_centisecs 12000
 
-_test_streams 64 16 33 8 2 1 1 fail
-_test_streams 64 16 32 8 2 0 1
-_test_streams 64 16 33 8 2 0 0 fail
-_test_streams 64 16 32 8 2 1 0
+# This test checks the exact point at which the filestreams allocator will
+# start to allocate space from some AG into more than one stream.  Newer
+# feature sets (e.g. reflink) have increased the size of the log for small
+# filesystems, so we make sure there's one more AG than filestreams to
+# encourage the allocator to skip whichever AG owns the log.
+#
+# Exercise 65x 16MB AGs, 32/33 filestreams, 8 files per stream, and 2MB per
+# file.
+_test_streams 65 16 34 8 2 1 1 fail
+_test_streams 65 16 32 8 2 0 1
+_test_streams 65 16 34 8 2 0 0 fail
+_test_streams 65 16 32 8 2 1 0
 
 status=0
 exit

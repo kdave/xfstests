@@ -25,11 +25,17 @@ _check_filestreams_support || _notrun "filestreams not available"
 # test small stream, multiple I/O per file, 30s timeout
 _set_stream_timeout_centisecs 3000
 
-# test streams does a mkfs and mount
-_test_streams 8 22 4 8 3 0 0
-_test_streams 8 22 4 8 3 1 0
-_test_streams 8 22 4 8 3 0 1
-_test_streams 8 22 4 8 3 1 1
+# This test checks that the filestreams allocator never allocates space in any
+# given AG into more than one stream when there's plenty of space on the
+# filesystem.  Newer feature sets (e.g. reflink) have increased the size of
+# the log for small filesystems, so we make sure there's one more AG than
+# filestreams to encourage the allocator to skip whichever AG owns the log.
+#
+# Exercise 9x 22MB AGs, 4 filestreams, 8 files per stream, and 3MB per file.
+_test_streams 9 22 4 8 3 0 0
+_test_streams 9 22 4 8 3 1 0
+_test_streams 9 22 4 8 3 0 1
+_test_streams 9 22 4 8 3 1 1
 
 status=0
 exit
