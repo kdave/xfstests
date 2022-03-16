@@ -55,12 +55,21 @@ _alloc_inodes()
 
 # real QA test starts here
 
-_require_scratch
+if [ -n "$SCRATCH_RTDEV" ]; then
+	# ./check won't know we unset SCRATCH_RTDEV
+	_require_scratch_nocheck
+else
+	_require_scratch
+fi
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
 _require_xfs_sparse_inodes
 
-_scratch_mkfs "-d size=50m -m crc=1 -i sparse" |
+# Disable the scratch rt device to avoid test failures relating to the rt
+# bitmap consuming all the free space in our small data device.
+unset SCRATCH_RTDEV
+
+_scratch_mkfs "-d size=50m -m crc=1 -i sparse" | tee -a $seqres.full |
 	_filter_mkfs > /dev/null 2> $tmp.mkfs
 . $tmp.mkfs	# for isize
 
