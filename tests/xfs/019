@@ -73,6 +73,10 @@ $
 setuid -u-666 0 0 $tempfile
 setgid --g666 0 0 $tempfile
 setugid -ug666 0 0 $tempfile
+directory_setgid d-g755 3 2
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_5 ---755 3 1 $tempfile
+$
+: back in the root
 block_device b--012 3 1 161 162 
 char_device c--345 3 1 177 178
 pipe p--670 0 0
@@ -114,6 +118,8 @@ _verify_fs()
 		| xargs $here/src/lstat64 | _filter_stat)
 	diff -q $SCRATCH_MNT/bigfile $tempfile.2 \
 		|| _fail "bigfile corrupted"
+	diff -q $SCRATCH_MNT/symlink $tempfile.2 \
+		|| _fail "symlink broken"
 
 	echo "*** unmount FS"
 	_full "umount"
