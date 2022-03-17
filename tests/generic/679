@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 679
+#
+# Test that if we call fallocate against a file range that has a mix of holes
+# and written extents, the fallocate succeeds if the filesystem has enough free
+# space to allocate extents for the holes.
+#
+. ./common/preamble
+_begin_fstest auto quick prealloc
+
+. ./common/rc
+. ./common/filter
+. ./common/punch
+
+# real QA test starts here
+
+_supported_fs generic
+_require_scratch
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fiemap"
+
+# This test is currently not valid for xfs, see the following thread for details:
+#
+#   https://lore.kernel.org/linux-btrfs/20220315164011.GF8241@magnolia/
+#
+[ $FSTYP == "xfs" ] && _notrun "test not valid for xfs"
+
+rm -f $seqres.full
+
+# Create a 1G filesystem.
+_scratch_mkfs_sized $((1024 * 1024 * 1024)) >>$seqres.full 2>&1
+_scratch_mount
+
+# Create a file with a size of 600M and two holes, each with a size of 1M and
+# at file ranges [200, 201M[ and [401M, 402M[.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 200M" \
+                -c "pwrite -S 0xcd 201M 200M" \
+                -c "pwrite -S 0xef 402M 198M" \
+		$SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Now call fallocate against the whole file range.
+# It should succeed, because only 2M of data space needs to be allocated,
+# and not 600M (which isn't available since our fs has a size of 1G).
+$XFS_IO_PROG -c "falloc 0 600M" $SCRATCH_MNT/foobar
+
+# Unmount and mount again the filesystem. We want to verify that the fallocate
+# results were persisted and that all the file data on disk are also correct.
+_scratch_cycle_mount
+
+echo -n "Number of unwritten extents in the file: "
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap | \
+    grep "unwritten" | wc -l
+
+# Verify we don't have any corruption caused by the fallocate.
+echo "File content after fallocate:"
+od -A d -t x1 $SCRATCH_MNT/foobar
+
+# success, all done
+status=0
+exit
