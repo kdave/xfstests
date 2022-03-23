@@ -30,6 +30,10 @@ workdir=$TEST_DIR/test-$seq
 rm -rf $workdir
 mkdir $workdir
 
+cluster_fsid=$(_ceph_get_cluster_fsid)
+client_id=$(_ceph_get_client_id)
+metrics_dir="$DEBUGFS_MNT/ceph/$cluster_fsid.$client_id/metrics"
+
 check_range()
 {
 	local file=$1
@@ -40,8 +44,68 @@ check_range()
 	[ $? -eq 0 ] && echo "file $file is not '$val' in [ $off0 $off1 ]"
 }
 
+#
+# The metrics file has the following fields:
+#   1. item
+#   2. total
+#   3. avg_sz(bytes)
+#   4. min_sz(bytes)
+#   5. max_sz(bytes)
+#   6. total_sz(bytes)
+get_copyfrom_total_copies()
+{
+	local total=0
+
+	if [ -d $metrics_dir ]; then
+		total=$(grep copyfrom $metrics_dir/size | tr -s '[:space:]' | cut -d ' ' -f 2)
+	fi
+	echo $total
+}
+get_copyfrom_total_size()
+{
+	local total=0
+
+	if [ -d $metrics_dir ]; then
+		total=$(grep copyfrom $metrics_dir/size | tr -s '[:space:]' | cut -d ' ' -f 6)
+	fi
+	echo $total
+}
+
+# This function checks that the metrics file has the expected values for number
+# of remote object copies and the total size of the copies.  For this, it
+# expects a input:
+#   $1 - initial number copies in metrics file (field 'total')
+#   $2 - initial total size in bytes in metrics file (field 'total_sz')
+#   $3 - object size used for copies
+#   $4 - number of remote objects copied
+check_copyfrom_metrics()
+{
+	local c0=$1
+	local s0=$2
+	local objsz=$3
+	local copies=$4
+	local c1=$(get_copyfrom_total_copies)
+	local s1=$(get_copyfrom_total_size)
+	local sum
+
+	if [ ! -d $metrics_dir ]; then
+		return # skip metrics check if debugfs isn't mounted
+	fi
+
+	sum=$(($c0+$copies))
+	if [ $sum -ne $c1 ]; then
+		echo "Wrong number of remote copies.  Expected $sum, got $c1"
+	fi
+	sum=$(($s0+$copies*$objsz))
+	if [ $sum -ne $s1 ]; then
+		echo "Wrong size of remote copies.  Expected $sum, got $s1"
+	fi
+}
+
 run_copy_range_tests()
 {
+	total_copies=$(get_copyfrom_total_copies)
+	total_size=$(get_copyfrom_total_size)
 	objsz=$1
 	halfobj=$(($objsz / 2))
 	file="$workdir/file-$objsz"
@@ -203,6 +267,8 @@ run_copy_range_tests()
 	check_range $dest $(($objsz * 2 + $halfobj)) $objsz 63
 	check_range $dest $(($objsz * 3 + $halfobj)) $halfobj 64
 
+	# Confirm that we've done a total of 24 object copies
+	check_copyfrom_metrics $total_copies $total_size $objsz 24
 }
 
 echo "Object size: 65536" # CEPH_MIN_STRIPE_UNIT
