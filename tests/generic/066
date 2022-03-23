@@ -56,6 +56,14 @@ sync
 $SETFATTR_PROG -x user.attr2 $SCRATCH_MNT/foobar
 $XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foobar
 
+# f2fs doesn't support fs-op level transaction functionality. so it have no way
+# to persist all metadata updates in one transaction.  We can use "fastboot"
+# mountoption for this case, so during last fsync on qwerty, f2fs can trigger a
+# checkpoint which will persist all metadata updates before fsync().
+if [ $FSTYP = "f2fs" ]; then
+	export MOUNT_OPTIONS="-o fastboot $MOUNT_OPTIONS"
+fi
+
 _flakey_drop_and_remount
 
 # After the fsync log is replayed, the file should have only 2 xattrs, the ones
