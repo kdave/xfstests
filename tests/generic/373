@@ -4,7 +4,7 @@
 #
 # FS QA Test No. 373
 #
-# Check that cross-mountpoint reflink doesn't work.
+# Check that cross-mountpoint reflink works.
 #
 . ./common/preamble
 _begin_fstest auto quick clone
@@ -49,17 +49,17 @@ $MOUNT_PROG --bind $SCRATCH_MNT $otherdir
 echo "Create file"
 _pwrite_byte 0x61 0 $sz $testdir/file >> $seqres.full
 
-filter_md5()
+filter_otherdir()
 {
 	_filter_scratch | sed -e "s,$otherdir,OTHER_DIR,g"
 }
 
 echo "Reflink one file to another"
-_cp_reflink $testdir/file $othertestdir/otherfiles 2>&1 | filter_md5
+_cp_reflink $testdir/file $othertestdir/otherfile 2>&1 | filter_otherdir
 
 echo "Check output"
 md5sum $testdir/file | _filter_scratch
-test -e $othertestdir/otherfile && echo "otherfile should not exist"
+md5sum $othertestdir/otherfile | filter_otherdir
 
 echo "Unmount otherdir"
 $UMOUNT_PROG $otherdir
