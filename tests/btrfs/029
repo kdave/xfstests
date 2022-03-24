@@ -5,14 +5,15 @@
 # FS QA Test No. 029
 #
 # Check if creating a sparse copy ("reflink") of a file on btrfs
-# expectedly fails when it's done between different filesystems or
-# different mount points of the same filesystem.
+# expectedly fails when it's done between different filesystems but
+# not for different mount points of the same filesystem.
 #
 # For both situations, these actions are executed:
 #    - Copy a file with the reflink=auto option.
 #      A normal copy should be created.
 #    - Copy a file with the reflink=always option. Should result in
-#      error.
+#      error for different file systems, but succeed for the same fs
+#      but different mount points.
 #
 . ./common/preamble
 _begin_fstest auto quick clone
@@ -31,38 +32,47 @@ _require_cp_reflink
 reflink_test_dir=$TEST_DIR/test-$seq
 rm -rf $reflink_test_dir
 mkdir $reflink_test_dir
+orig_file=$SCRATCH_MNT/original
+copy_file=$reflink_test_dir/copy
 
 _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
-$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/original >> $seqres.full
-
-_create_reflinks()
-{
-    # auto reflink, should fall back to non-reflink
-    rm -rf $2
-    echo "reflink=auto:"
-    cp --reflink=auto $1 $2
-    md5sum $1 | _filter_testdir_and_scratch
-    md5sum $2 | _filter_testdir_and_scratch
-
-    # always reflink, should fail outright
-    rm -rf $2
-    echo "reflink=always:"
-    cp --reflink=always $1 $2 >> $seqres.full 2>&1 || echo "cp reflink failed"
-
-    # The failed target gets created with zero sizes by cp(1) version 8.32. But
-    # in older cp(1) version 8.30 target file is not created when the
-    # cp --reflink=always fails.
-    ls $2 >> $seqres.full 2>&1
-}
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 9000' $orig_file >> $seqres.full
 
 echo "test reflinks across different devices"
-_create_reflinks $SCRATCH_MNT/original $reflink_test_dir/copy
+# auto reflink, should fall back to non-reflink
+rm -rf $copy_file
+echo "reflink=auto:"
+cp --reflink=auto $orig_file $copy_file
+md5sum $orig_file | _filter_testdir_and_scratch
+md5sum $copy_file | _filter_testdir_and_scratch
+
+# always reflink, should fail outright
+rm -rf $copy_file
+echo "reflink=always:"
+cp --reflink=always $orig_file $copy_file >> $seqres.full 2>&1 || echo "cp reflink failed"
+
+# The failed target gets created with zero sizes by cp(1) version 8.32. But in
+# older cp(1) version 8.30 target file is not created when the cp
+# --reflink=always fails.
+ls $copy_file >> $seqres.full 2>&1
 
 echo "test reflinks across different mountpoints of same device"
 rm -rf $reflink_test_dir/*
 _mount $SCRATCH_DEV $reflink_test_dir
-_create_reflinks $SCRATCH_MNT/original $reflink_test_dir/copy
+
+echo "reflink=auto:"
+cp --reflink=auto $orig_file $copy_file
+md5sum $orig_file | _filter_testdir_and_scratch
+md5sum $copy_file | _filter_testdir_and_scratch
+
+# always reflink, should fail outright
+rm -rf $copy_file
+echo "reflink=always:"
+cp --reflink=always $orig_file $copy_file >> $seqres.full 2>&1 || echo "cp reflink failed"
+md5sum $orig_file | _filter_testdir_and_scratch
+md5sum $copy_file | _filter_testdir_and_scratch
+
 $UMOUNT_PROG $reflink_test_dir
 
 # success, all done
