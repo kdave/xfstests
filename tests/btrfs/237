@@ -35,8 +35,13 @@ get_data_bg()
 		grep -Eo "CHUNK_ITEM [[:digit:]]+" | cut -d ' ' -f 2
 }
 
-zonesize=$(cat /sys/block/$(_short_dev $SCRATCH_DEV)/queue/chunk_sectors)
-zonesize=$((zonesize << 9))
+get_data_bg_physical()
+{
+	# Assumes SINGLE data profile
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t CHUNK $SCRATCH_DEV |\
+		grep -A 4 CHUNK_ITEM | grep -A 3 'type DATA\|SINGLE' |\
+	        grep -Eo 'offset [[:digit:]]+'| cut -d ' ' -f 2
+}
 
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount -o commit=1 # 1s commit time to speed up test
@@ -49,12 +54,20 @@ if [[ "$uuid" == "" ]]; then
 	exit 1
 fi
 
+start_data_bg_phy=$(get_data_bg_physical)
+start_data_bg_phy=$((start_data_bg_phy >> 9))
+
+size=$($BLKZONE_PROG report -o $start_data_bg_phy -l 1 $SCRATCH_DEV |\
+	_filter_blkzone_report |\
+	grep -Po "cap 0x[[:xdigit:]]+" | cut -d ' ' -f 2)
+size=$((size << 9))
+
 reclaim_threshold=75
 echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold
 fill_percent=$((reclaim_threshold + 2))
 rest_percent=$((90 - fill_percent)) # make sure we're not creating a new BG
-fill_size=$((zonesize * fill_percent / 100))
-rest=$((zonesize * rest_percent / 100))
+fill_size=$((size * fill_percent / 100))
+rest=$((size * rest_percent / 100))
 
 # step 1, fill FS over $fillsize
 $XFS_IO_PROG -fc "pwrite 0 $fill_size" $SCRATCH_MNT/$seq.test1 >> $seqres.full
