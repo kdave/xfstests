@@ -127,6 +127,8 @@ char t_buf[PATH_MAX];
 
 /* whether the underlying filesystem supports idmapped mounts */
 bool t_fs_allow_idmap;
+/* whether the system supports user namespaces */
+bool t_has_userns;
 
 static void stash_overflowuid(void)
 {
@@ -13831,6 +13833,7 @@ static const struct option longopts[] = {
 
 /* Flags for which functionality is required by the test */
 #define T_REQUIRE_IDMAPPED_MOUNTS (1U << 0)
+#define T_REQUIRE_USERNS (1U << 1)
 
 struct t_idmapped_mounts {
 	int (*test)(void);
@@ -13841,7 +13844,7 @@ struct t_idmapped_mounts {
 	{ create_in_userns,						T_REQUIRE_IDMAPPED_MOUNTS,	"create operations in user namespace",								},
 	{ device_node_in_userns,					T_REQUIRE_IDMAPPED_MOUNTS,	"device node in user namespace",								},
 	{ expected_uid_gid_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"expected ownership on idmapped mounts",							},
-	{ fscaps,							0,				"fscaps on regular mounts",									},
+	{ fscaps,							T_REQUIRE_USERNS,		"fscaps on regular mounts",									},
 	{ fscaps_idmapped_mounts,					T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts",									},
 	{ fscaps_idmapped_mounts_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace",							},
 	{ fscaps_idmapped_mounts_in_userns_separate_userns,		T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace with different id mappings",			},
@@ -13853,7 +13856,7 @@ struct t_idmapped_mounts {
 	{ hardlink_from_idmapped_mount_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"hardlinks from idmapped mounts in user namespace",						},
 #ifdef HAVE_LIBURING_H
 	{ io_uring,							0,				"io_uring",											},
-	{ io_uring_userns,						0,				"io_uring in user namespace",									},
+	{ io_uring_userns,						T_REQUIRE_USERNS,		"io_uring in user namespace",									},
 	{ io_uring_idmapped,						T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts",								},
 	{ io_uring_idmapped_userns,					T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts in user namespace",						},
 	{ io_uring_idmapped_unmapped,					T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts with unmapped ids",						},
@@ -13939,8 +13942,9 @@ static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 		 * If the underlying filesystems does not support idmapped
 		 * mounts only run vfs generic tests.
 		 */
-		if (t->support_flags & T_REQUIRE_IDMAPPED_MOUNTS &&
-		    !t_fs_allow_idmap) {
+		if ((t->support_flags & T_REQUIRE_IDMAPPED_MOUNTS &&
+		    !t_fs_allow_idmap) ||
+		    (t->support_flags & T_REQUIRE_USERNS && !t_has_userns)) {
 			log_debug("Skipping test %s", t->description);
 			continue;
 		}
@@ -13996,6 +14000,16 @@ static bool fs_allow_idmap(void)
 	close(attr.userns_fd);
 
 	return ret == 0;
+}
+
+static bool sys_has_userns(void)
+{
+	int fd = get_userns_fd(0, 1000, 1);
+
+	if (fd < 0)
+		return false;
+	close(fd);
+	return true;
 }
 
 int main(int argc, char *argv[])
@@ -14084,6 +14098,7 @@ int main(int argc, char *argv[])
 
 		exit(EXIT_SUCCESS);
 	}
+	t_has_userns = sys_has_userns();
 
 	stash_overflowuid();
 	stash_overflowgid();
