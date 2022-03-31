@@ -13829,60 +13829,63 @@ static const struct option longopts[] = {
 	{NULL,					0,			0,	  0},
 };
 
+/* Flags for which functionality is required by the test */
+#define T_REQUIRE_IDMAPPED_MOUNTS (1U << 0)
+
 struct t_idmapped_mounts {
 	int (*test)(void);
-	bool require_fs_allow_idmap;
+	unsigned int support_flags;
 	const char *description;
 } basic_suite[] = {
-	{ acls,								true,	"posix acls on regular mounts",									},
-	{ create_in_userns,						true,	"create operations in user namespace",								},
-	{ device_node_in_userns,					true,	"device node in user namespace",								},
-	{ expected_uid_gid_idmapped_mounts,				true,	"expected ownership on idmapped mounts",							},
-	{ fscaps,							false,	"fscaps on regular mounts",									},
-	{ fscaps_idmapped_mounts,					true,	"fscaps on idmapped mounts",									},
-	{ fscaps_idmapped_mounts_in_userns,				true,	"fscaps on idmapped mounts in user namespace",							},
-	{ fscaps_idmapped_mounts_in_userns_separate_userns,		true,	"fscaps on idmapped mounts in user namespace with different id mappings",			},
-	{ fsids_mapped,							true,	"mapped fsids",											},
-	{ fsids_unmapped,						true,	"unmapped fsids",										},
-	{ hardlink_crossing_mounts,					false,	"cross mount hardlink",										},
-	{ hardlink_crossing_idmapped_mounts,				true,	"cross idmapped mount hardlink",								},
-	{ hardlink_from_idmapped_mount,					true,	"hardlinks from idmapped mounts",								},
-	{ hardlink_from_idmapped_mount_in_userns,			true,	"hardlinks from idmapped mounts in user namespace",						},
+	{ acls,								T_REQUIRE_IDMAPPED_MOUNTS,	"posix acls on regular mounts",									},
+	{ create_in_userns,						T_REQUIRE_IDMAPPED_MOUNTS,	"create operations in user namespace",								},
+	{ device_node_in_userns,					T_REQUIRE_IDMAPPED_MOUNTS,	"device node in user namespace",								},
+	{ expected_uid_gid_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"expected ownership on idmapped mounts",							},
+	{ fscaps,							0,				"fscaps on regular mounts",									},
+	{ fscaps_idmapped_mounts,					T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts",									},
+	{ fscaps_idmapped_mounts_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace",							},
+	{ fscaps_idmapped_mounts_in_userns_separate_userns,		T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace with different id mappings",			},
+	{ fsids_mapped,							T_REQUIRE_IDMAPPED_MOUNTS,	"mapped fsids",											},
+	{ fsids_unmapped,						T_REQUIRE_IDMAPPED_MOUNTS,	"unmapped fsids",										},
+	{ hardlink_crossing_mounts,					0,				"cross mount hardlink",										},
+	{ hardlink_crossing_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"cross idmapped mount hardlink",								},
+	{ hardlink_from_idmapped_mount,					T_REQUIRE_IDMAPPED_MOUNTS,	"hardlinks from idmapped mounts",								},
+	{ hardlink_from_idmapped_mount_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"hardlinks from idmapped mounts in user namespace",						},
 #ifdef HAVE_LIBURING_H
-	{ io_uring,							false,	"io_uring",											},
-	{ io_uring_userns,						false,	"io_uring in user namespace",									},
-	{ io_uring_idmapped,						true,	"io_uring from idmapped mounts",								},
-	{ io_uring_idmapped_userns,					true,	"io_uring from idmapped mounts in user namespace",						},
-	{ io_uring_idmapped_unmapped,					true,	"io_uring from idmapped mounts with unmapped ids",						},
-	{ io_uring_idmapped_unmapped_userns,				true,	"io_uring from idmapped mounts with unmapped ids in user namespace",				},
+	{ io_uring,							0,				"io_uring",											},
+	{ io_uring_userns,						0,				"io_uring in user namespace",									},
+	{ io_uring_idmapped,						T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts",								},
+	{ io_uring_idmapped_userns,					T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts in user namespace",						},
+	{ io_uring_idmapped_unmapped,					T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts with unmapped ids",						},
+	{ io_uring_idmapped_unmapped_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"io_uring from idmapped mounts with unmapped ids in user namespace",				},
 #endif
-	{ protected_symlinks,						false,	"following protected symlinks on regular mounts",						},
-	{ protected_symlinks_idmapped_mounts,				true,	"following protected symlinks on idmapped mounts",						},
-	{ protected_symlinks_idmapped_mounts_in_userns,			true,	"following protected symlinks on idmapped mounts in user namespace",				},
-	{ rename_crossing_mounts,					false,	"cross mount rename",										},
-	{ rename_crossing_idmapped_mounts,				true,	"cross idmapped mount rename",									},
-	{ rename_from_idmapped_mount,					true,	"rename from idmapped mounts",									},
-	{ rename_from_idmapped_mount_in_userns,				true,	"rename from idmapped mounts in user namespace",						},
-	{ setattr_truncate,						false,	"setattr truncate",										},
-	{ setattr_truncate_idmapped,					true,	"setattr truncate on idmapped mounts",								},
-	{ setattr_truncate_idmapped_in_userns,				true,	"setattr truncate on idmapped mounts in user namespace",					},
-	{ setgid_create,						false,	"create operations in directories with setgid bit set",						},
-	{ setgid_create_idmapped,					true,	"create operations in directories with setgid bit set on idmapped mounts",			},
-	{ setgid_create_idmapped_in_userns,				true,	"create operations in directories with setgid bit set on idmapped mounts in user namespace",	},
-	{ setid_binaries,						false,	"setid binaries on regular mounts",								},
-	{ setid_binaries_idmapped_mounts,				true,	"setid binaries on idmapped mounts",								},
-	{ setid_binaries_idmapped_mounts_in_userns,			true,	"setid binaries on idmapped mounts in user namespace",						},
-	{ setid_binaries_idmapped_mounts_in_userns_separate_userns,	true,	"setid binaries on idmapped mounts in user namespace with different id mappings",		},
-	{ sticky_bit_unlink,						false,	"sticky bit unlink operations on regular mounts",						},
-	{ sticky_bit_unlink_idmapped_mounts,				true,	"sticky bit unlink operations on idmapped mounts",						},
-	{ sticky_bit_unlink_idmapped_mounts_in_userns,			true,	"sticky bit unlink operations on idmapped mounts in user namespace",				},
-	{ sticky_bit_rename,						false,	"sticky bit rename operations on regular mounts",						},
-	{ sticky_bit_rename_idmapped_mounts,				true,	"sticky bit rename operations on idmapped mounts",						},
-	{ sticky_bit_rename_idmapped_mounts_in_userns,			true,	"sticky bit rename operations on idmapped mounts in user namespace",				},
-	{ symlink_regular_mounts,					false,	"symlink from regular mounts",									},
-	{ symlink_idmapped_mounts,					true,	"symlink from idmapped mounts",									},
-	{ symlink_idmapped_mounts_in_userns,				true,	"symlink from idmapped mounts in user namespace",						},
-	{ threaded_idmapped_mount_interactions,				true,	"threaded operations on idmapped mounts",							},
+	{ protected_symlinks,						0,				"following protected symlinks on regular mounts",						},
+	{ protected_symlinks_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"following protected symlinks on idmapped mounts",						},
+	{ protected_symlinks_idmapped_mounts_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"following protected symlinks on idmapped mounts in user namespace",				},
+	{ rename_crossing_mounts,					0,				"cross mount rename",										},
+	{ rename_crossing_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"cross idmapped mount rename",									},
+	{ rename_from_idmapped_mount,					T_REQUIRE_IDMAPPED_MOUNTS,	"rename from idmapped mounts",									},
+	{ rename_from_idmapped_mount_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"rename from idmapped mounts in user namespace",						},
+	{ setattr_truncate,						0,				"setattr truncate",										},
+	{ setattr_truncate_idmapped,					T_REQUIRE_IDMAPPED_MOUNTS,	"setattr truncate on idmapped mounts",								},
+	{ setattr_truncate_idmapped_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"setattr truncate on idmapped mounts in user namespace",					},
+	{ setgid_create,						0,				"create operations in directories with setgid bit set",						},
+	{ setgid_create_idmapped,					T_REQUIRE_IDMAPPED_MOUNTS,	"create operations in directories with setgid bit set on idmapped mounts",			},
+	{ setgid_create_idmapped_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"create operations in directories with setgid bit set on idmapped mounts in user namespace",	},
+	{ setid_binaries,						0,				"setid binaries on regular mounts",								},
+	{ setid_binaries_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"setid binaries on idmapped mounts",								},
+	{ setid_binaries_idmapped_mounts_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"setid binaries on idmapped mounts in user namespace",						},
+	{ setid_binaries_idmapped_mounts_in_userns_separate_userns,	T_REQUIRE_IDMAPPED_MOUNTS,	"setid binaries on idmapped mounts in user namespace with different id mappings",		},
+	{ sticky_bit_unlink,						0,				"sticky bit unlink operations on regular mounts",						},
+	{ sticky_bit_unlink_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"sticky bit unlink operations on idmapped mounts",						},
+	{ sticky_bit_unlink_idmapped_mounts_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"sticky bit unlink operations on idmapped mounts in user namespace",				},
+	{ sticky_bit_rename,						0,				"sticky bit rename operations on regular mounts",						},
+	{ sticky_bit_rename_idmapped_mounts,				T_REQUIRE_IDMAPPED_MOUNTS,	"sticky bit rename operations on idmapped mounts",						},
+	{ sticky_bit_rename_idmapped_mounts_in_userns,			T_REQUIRE_IDMAPPED_MOUNTS,	"sticky bit rename operations on idmapped mounts in user namespace",				},
+	{ symlink_regular_mounts,					0,				"symlink from regular mounts",									},
+	{ symlink_idmapped_mounts,					T_REQUIRE_IDMAPPED_MOUNTS,	"symlink from idmapped mounts",									},
+	{ symlink_idmapped_mounts_in_userns,				T_REQUIRE_IDMAPPED_MOUNTS,	"symlink from idmapped mounts in user namespace",						},
+	{ threaded_idmapped_mount_interactions,				T_REQUIRE_IDMAPPED_MOUNTS,	"threaded operations on idmapped mounts",							},
 };
 
 struct t_idmapped_mounts fscaps_in_ancestor_userns[] = {
@@ -13936,7 +13939,8 @@ static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 		 * If the underlying filesystems does not support idmapped
 		 * mounts only run vfs generic tests.
 		 */
-		if (t->require_fs_allow_idmap && !t_fs_allow_idmap) {
+		if (t->support_flags & T_REQUIRE_IDMAPPED_MOUNTS &&
+		    !t_fs_allow_idmap) {
 			log_debug("Skipping test %s", t->description);
 			continue;
 		}
