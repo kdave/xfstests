@@ -250,6 +250,25 @@ _num_to_hex()
 	fi
 }
 
+# When fscrypt keys are added using the legacy mechanism (process-subscribed
+# keyrings rather than filesystem keyrings), they are normally named
+# "fscrypt:KEYDESC" where KEYDESC is the 16-character key descriptor hex string.
+# However, ext4 and f2fs didn't add support for the "fscrypt" prefix until
+# kernel v4.8 and v4.6, respectively.  Before that, they used "ext4" and "f2fs",
+# respectively.  To allow testing ext4 and f2fs encryption on kernels older than
+# this, we use these filesystem-specific prefixes for ext4 and f2fs.
+_get_fs_keyprefix()
+{
+	case $FSTYP in
+	ext4|f2fs)
+		echo $FSTYP
+		;;
+	*)
+		echo fscrypt
+		;;
+	esac
+}
+
 # Add the specified raw encryption key to the session keyring, using the
 # specified key descriptor.
 _add_session_encryption_key()
@@ -268,18 +287,11 @@ _add_session_encryption_key()
 	#	};
 	#
 	# The kernel ignores 'mode' but requires that 'size' be 64.
-	#
-	# Keys are named $FSTYP:KEYDESC where KEYDESC is the 16-character key
-	# descriptor hex string.  Newer kernels (ext4 4.8 and later, f2fs 4.6
-	# and later) also allow the common key prefix "fscrypt:" in addition to
-	# their filesystem-specific key prefix ("ext4:", "f2fs:").  It would be
-	# nice to use the common key prefix, but for now use the filesystem-
-	# specific prefix to make it possible to test older kernels...
-	#
 	local mode=$(_num_to_hex 0 4)
 	local size=$(_num_to_hex 64 4)
+	local prefix=$(_get_fs_keyprefix)
 	echo -n -e "${mode}${raw}${size}" |
-		$KEYCTL_PROG padd logon $FSTYP:$keydesc @s >>$seqres.full
+		$KEYCTL_PROG padd logon $prefix:$keydesc @s >>$seqres.full
 }
 
 #
@@ -302,7 +314,8 @@ _generate_session_encryption_key()
 _unlink_session_encryption_key()
 {
 	local keydesc=$1
-	local keyid=$($KEYCTL_PROG search @s logon $FSTYP:$keydesc)
+	local prefix=$(_get_fs_keyprefix)
+	local keyid=$($KEYCTL_PROG search @s logon $prefix:$keydesc)
 	$KEYCTL_PROG unlink $keyid >>$seqres.full
 }
 
@@ -310,7 +323,8 @@ _unlink_session_encryption_key()
 _revoke_session_encryption_key()
 {
 	local keydesc=$1
-	local keyid=$($KEYCTL_PROG search @s logon $FSTYP:$keydesc)
+	local prefix=$(_get_fs_keyprefix)
+	local keyid=$($KEYCTL_PROG search @s logon $prefix:$keydesc)
 	$KEYCTL_PROG revoke $keyid >>$seqres.full
 }
 
