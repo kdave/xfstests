@@ -1,0 +1,48 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 680
+#
+# Test for the Dirty Pipe vulnerability (CVE-2022-0847) caused by an
+# uninitialized  "pipe_buffer.flags" variable, which fixed by:
+#   9d2231c5d74e ("lib/iov_iter: initialize "flags" in new pipe_buffer")
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_user
+_require_chmod
+_require_test_program "splice2pipe"
+
+localfile=$TEST_DIR/testfile.$seq
+rm -f $localfile
+
+# Create a file with 4k 0xff data, then make sure unprivileged user has readonly
+# permission on it
+$XFS_IO_PROG -f -t -c "pwrite 0 4k -S 0xff" $localfile >> $seqres.full 2>&1
+chmod 0644 $localfile
+# Test privileged user (xfstests generally run with root)
+echo "Test privileged user:"
+$here/src/splice2pipe $localfile 1 "AAAAAAAABBBBBBBB"
+# Part of 0xff will be overwritten if there's CVE-2022-0847 bug
+_hexdump $localfile
+
+# Create a file with 4k 0xff data, then make sure unprivileged user has readonly
+# permission on it
+$XFS_IO_PROG -f -t -c "pwrite 0 4k -S 0xff" $localfile >> $seqres.full 2>&1
+chmod 0644 $localfile
+# Copy splice2pipe to a place which can be run by an unprivileged user (avoid
+# something likes /root/xfstests/src/splice2pipe)
+cp $here/src/splice2pipe $tmp.splice2pipe
+# Test unprivileged user's privilege escalation
+echo "Test unprivileged user:"
+su ${qa_user} -c "$tmp.splice2pipe $localfile 1 AAAAAAAABBBBBBBB"
+_hexdump $localfile
+
+# success, all done
+status=0
+exit
