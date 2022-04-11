@@ -1,0 +1,68 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 543
+#
+# Regression test for xfsprogs commit:
+#
+# 99c78777 ("mkfs: prevent corruption of passed-in suboption string values")
+#
+. ./common/preamble
+_begin_fstest auto quick mkfs
+
+_cleanup()
+{
+	rm -f $TEST_DIR/fubar.img
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_test
+_require_xfs_mkfs_cfgfile
+
+# Set up a configuration file with an exact block size and log stripe unit
+# so that mkfs won't complain about having to correct the log stripe unit
+# size that is implied by the provided data device stripe unit.
+cfgfile=$tmp.cfg
+cat << EOF >> $tmp.cfg
+[block]
+size=4096
+
+[data]
+su=2097152
+sw=1
+EOF
+
+# Some mkfs options store the user's value string for processing after certain
+# geometry parameters (e.g. the fs block size) have been settled.  This is how
+# the su= option can accept arguments such as "8b" to mean eight filesystem
+# blocks.
+#
+# Unfortunately, on Ubuntu 20.04, the libini parser uses an onstack char[]
+# array to store value that it parse, and it passes the address of this array
+# to the parse_cfgopt.  The getstr function returns its argument, which is
+# stored in the cli_params structure by the D_SU parsing code.  By the time we
+# get around to interpreting this string, of course, the stack array has long
+# since lost scope and is now full of garbage.  If we're lucky, the value will
+# cause a number interpretation failure.  If not, the fs is configured with
+# garbage geometry.
+#
+# Either way, set up a config file to exploit this vulnerability so that we
+# can prove that current mkfs works correctly.
+$XFS_IO_PROG -f -c "truncate 1g" $TEST_DIR/fubar.img
+options=(-c options=$cfgfile -l sunit=8 -f -N $TEST_DIR/fubar.img)
+$MKFS_XFS_PROG "${options[@]}" >> $seqres.full ||
+	echo "mkfs failed"
+
+# success, all done
+echo Silence is golden
+status=0
+exit
