@@ -53,8 +53,10 @@ stop_fail_scratch_dev()
 # Override the default cleanup function.
 _cleanup()
 {
-    disallow_fail_make_request
-    rm -f $tmp.*
+	kill $fs_pid $fio_pid &> /dev/null
+	disallow_fail_make_request
+	cd /
+	rm -r -f $tmp.*
 }
 
 RUN_TIME=$((20+10*$TIME_FACTOR))
@@ -138,6 +140,8 @@ _workout()
 	kill $fs_pid &> /dev/null
 	wait $fs_pid
 	wait $fio_pid
+	unset $fs_pid
+	unset $fio_pid
 
 	# We expect that broken FS still can be umounted
 	run_check _scratch_unmount
