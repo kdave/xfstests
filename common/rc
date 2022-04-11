@@ -329,11 +329,15 @@ _supports_filetype()
 # mount scratch device with given options but don't check mount status
 _try_scratch_mount()
 {
+	local mount_ret
+
 	if [ "$FSTYP" == "overlay" ]; then
 		_overlay_scratch_mount $*
 		return $?
 	fi
 	_mount -t $FSTYP `_scratch_mount_options $*`
+	mount_ret=$?
+	[ $mount_ret -ne 0 ] && return $mount_ret
 	_idmapped_mount $SCRATCH_DEV $SCRATCH_MNT
 }
 
@@ -494,12 +498,16 @@ _idmapped_mount()
 
 _test_mount()
 {
+    local mount_ret
+
     if [ "$FSTYP" == "overlay" ]; then
         _overlay_test_mount $*
         return $?
     fi
     _test_options mount
     _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
+    mount_ret=$?
+    [ $mount_ret -ne 0 ] && return $mount_ret
     _idmapped_mount $TEST_DEV $TEST_DIR
 }
 
