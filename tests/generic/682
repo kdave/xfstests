@@ -1,0 +1,71 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 682
+#
+# Ensure that unprivileged userspace hits EDQUOT while moving files into a
+# directory when the directory's quota limits have been exceeded.
+#
+# Regression test for commit:
+#
+# 41667260bc84 ("xfs: reserve quota for target dir expansion when renaming files")
+#
+. ./common/preamble
+_begin_fstest auto quick quota
+
+# Import common functions.
+. ./common/filter
+. ./common/quota
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_quota
+_require_user
+_require_scratch
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_qmount_option usrquota
+_qmount
+
+blocksize=$(_get_block_size $SCRATCH_MNT)
+scratchdir=$SCRATCH_MNT/dir
+scratchfile=$SCRATCH_MNT/file
+stagedir=$SCRATCH_MNT/staging
+mkdir $scratchdir $stagedir
+touch $scratchfile
+
+# Create a 2-block directory for our 1-block quota limit
+total_size=$((blocksize * 2))
+dirents=$((total_size / 255))
+
+for ((i = 0; i < dirents; i++)); do
+	name=$(printf "x%0254d" $i)
+	ln $scratchfile $scratchdir/$name
+done
+
+# Set a low quota hardlimit for an unprivileged uid and chown the files to it
+echo "set up quota" >> $seqres.full
+setquota -u $qa_user 0 "$((blocksize / 1024))" 0 0 $SCRATCH_MNT
+chown $qa_user $scratchdir $scratchfile
+repquota -upn $SCRATCH_MNT >> $seqres.full
+
+# Fail at renaming into the directory as qa_user to ensure quota enforcement
+# works
+chmod a+rwx $stagedir
+echo "fail quota" >> $seqres.full
+for ((i = 0; i < dirents; i++)); do
+	name=$(printf "y%0254d" $i)
+	ln $scratchfile $stagedir/$name
+	su - "$qa_user" -c "mv $stagedir/$name $scratchdir/$name" 2>&1 | \
+		_filter_scratch | sed -e 's/y[0-9]*/yXXX/g'
+	test "${PIPESTATUS[0]}" -ne 0 && break
+done
+repquota -upn $SCRATCH_MNT >> $seqres.full
+
+# success, all done
+echo Silence is golden
+status=0
+exit
