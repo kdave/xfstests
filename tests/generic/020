@@ -113,18 +113,30 @@ _attr_get_max()
 		let max_attrs=$BLOCK_SIZE/40
 	esac
 
-	# Set max attr value size based on fs type
+	# Set max attr value size in bytes based on fs type
 	case "$FSTYP" in
-	xfs|udf|btrfs)
-		max_attrval_size=64
+	btrfs)
+		_require_btrfs_command inspect-internal dump-super
+		local ns=$($BTRFS_UTIL_PROG inspect-internal dump-super \
+				$TEST_DEV | sed -n 's/nodesize\s*\(.*\)/\1/p')
+		[ -n "$ns" ] || _fail "failed to obtain nodesize"
+		# max == nodesize - sizeof(struct btrfs_header)
+		#		- sizeof(struct btrfs_item)
+		#		- sizeof(struct btrfs_dir_item) - name_len
+		max_attrval_size=$(( $ns - 156 - $max_attrval_namelen ))
 		;;
 	pvfs2)
 		max_attrval_size=8192
 		;;
-	9p|ceph|nfs)
+	xfs|udf|9p|ceph)
 		max_attrval_size=65536
 		;;
 	bcachefs)
+		max_attrval_size=1024
+		;;
+	nfs)
+		# NFS doesn't provide a way to find out the max_attrval_size for
+		# the underlying filesystem, so just use the lowest value above.
 		max_attrval_size=1024
 		;;
 	*)
