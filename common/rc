@@ -3595,6 +3595,14 @@ _require_freeze()
 _require_exportfs()
 {
 	_require_test_program "open_by_handle"
+
+	# virtiofs doesn't support open_by_handle_at(2) yet, though the syscall
+	# doesn't return error. It requires stable FUSE nodeids.
+	# This feature is expected to be implemented in the future in virtiofs,
+	# and this check should be removed by then.
+	[ $FSTYP == "virtiofs" ] && \
+		_notrun "$FSTYP doesn't support open_by_handle_at(2)"
+
 	mkdir -p "$TEST_DIR"/exportfs_test
 	$here/src/open_by_handle -c "$TEST_DIR"/exportfs_test 2>&1 \
 		|| _notrun "$FSTYP does not support NFS export"
