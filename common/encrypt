@@ -121,7 +121,7 @@ _require_encryption_policy_support()
 		local keyspec=$(_add_enckey $mnt "$raw_key" | awk '{print $NF}')
 	else
 		_require_command "$KEYCTL_PROG" keyctl
-		_new_session_keyring
+		_init_session_keyring
 		local keyspec=$(_generate_session_encryption_key)
 	fi
 	if _set_encpolicy $dir $keyspec $set_encpolicy_args \
@@ -138,7 +138,7 @@ _require_encryption_policy_support()
 		_notrun "encryption policy '$set_encpolicy_args' is unusable; probably missing kernel crypto API support"
 	fi
 	if (( policy_version <= 1 )); then
-		$KEYCTL_PROG clear @s
+		$KEYCTL_PROG clear $TEST_KEYRING_ID
 	fi
 	rm -r $dir
 }
@@ -199,11 +199,30 @@ TEST_KEY_DESCRIPTOR="0000111122223333"
 # Key identifier: HKDF-SHA512(key=$TEST_RAW_KEY, salt="", info="fscrypt\0\x01")
 TEST_KEY_IDENTIFIER="69b2f6edeee720cce0577937eb8a6751"
 
-# Give the invoking shell a new session keyring.  This makes any keys we add to
-# the session keyring scoped to the lifetime of the test script.
-_new_session_keyring()
+# This is the ID of the keyring that was created by _init_session_keyring().
+# You must call _init_session_keyring() before using this.
+TEST_KEYRING_ID=
+
+# Create a test keyring within the session keyring.  Keys added to this keyring
+# will be available within the test script and all its subprocesses.  If the
+# test keyring already exists, then it is replaced.
+#
+# This used to use 'keyctl new_session' to replace the session keyring itself.
+# However, that doesn't work if a non-root user owns the session keyring.
+_init_session_keyring()
 {
-	$KEYCTL_PROG new_session >>$seqres.full
+	TEST_KEYRING_ID=$($KEYCTL_PROG newring xfstests @s)
+	if [ -z "$TEST_KEYRING_ID" ]; then
+		_fail "Failed to create test keyring in session keyring"
+	fi
+}
+
+# Check that _init_session_keyring() has been called.
+_check_session_keyring()
+{
+	if [ -z "$TEST_KEYRING_ID" ]; then
+		_fail "_init_session_keyring() must be called before using the test keyring"
+	fi
 }
 
 # Generate a key descriptor (16 character hex string)
@@ -276,6 +295,8 @@ _add_session_encryption_key()
 	local keydesc=$1
 	local raw=$2
 
+	_check_session_keyring
+
 	#
 	# Add the key to the session keyring.  The required structure is:
 	#
@@ -291,14 +312,14 @@ _add_session_encryption_key()
 	local size=$(_num_to_hex 64 4)
 	local prefix=$(_get_fs_keyprefix)
 	echo -n -e "${mode}${raw}${size}" |
-		$KEYCTL_PROG padd logon $prefix:$keydesc @s >>$seqres.full
+		$KEYCTL_PROG padd logon $prefix:$keydesc $TEST_KEYRING_ID \
+			>>$seqres.full
 }
 
 #
 # Generate a random encryption key, add it to the session keyring, and print out
 # the resulting key descriptor (example: "8bf798e1a494e1ec").  Requires the
-# keyctl program.  It's assumed the caller has already set up a test-scoped
-# session keyring using _new_session_keyring.
+# keyctl program and that _init_session_keyring() has been called.
 #
 _generate_session_encryption_key()
 {
@@ -313,18 +334,20 @@ _generate_session_encryption_key()
 # Unlink an encryption key from the session keyring, given its key descriptor.
 _unlink_session_encryption_key()
 {
+	_check_session_keyring
 	local keydesc=$1
 	local prefix=$(_get_fs_keyprefix)
-	local keyid=$($KEYCTL_PROG search @s logon $prefix:$keydesc)
+	local keyid=$($KEYCTL_PROG search $TEST_KEYRING_ID logon $prefix:$keydesc)
 	$KEYCTL_PROG unlink $keyid >>$seqres.full
 }
 
 # Revoke an encryption key from the session keyring, given its key descriptor.
 _revoke_session_encryption_key()
 {
+	_check_session_keyring
 	local keydesc=$1
 	local prefix=$(_get_fs_keyprefix)
-	local keyid=$($KEYCTL_PROG search @s logon $prefix:$keydesc)
+	local keyid=$($KEYCTL_PROG search $TEST_KEYRING_ID logon $prefix:$keydesc)
 	$KEYCTL_PROG revoke $keyid >>$seqres.full
 }
 
@@ -443,6 +466,8 @@ _add_fscrypt_provisioning_key()
 	local type=$2
 	local raw=$3
 
+	_check_session_keyring
+
 	# The format of the key payload must be:
 	#
 	#	struct fscrypt_provisioning_key_payload {
@@ -454,7 +479,7 @@ _add_fscrypt_provisioning_key()
 	local type_hex=$(_num_to_hex $type 4)
 	local reserved=$(_num_to_hex 0 4)
 	echo -n -e "${type_hex}${reserved}${raw}" |
-		$KEYCTL_PROG padd fscrypt-provisioning "$desc" @s
+		$KEYCTL_PROG padd fscrypt-provisioning "$desc" $TEST_KEYRING_ID
 }
 
 # Retrieve the encryption nonce of the given inode as a hex string.  The nonce
@@ -618,7 +643,7 @@ _require_get_ciphertext_filename_support()
 		_require_command "$DUMP_F2FS_PROG" dump.f2fs
 		_require_command "$KEYCTL_PROG" keyctl
 		_scratch_mount
-		_new_session_keyring
+		_init_session_keyring
 
 		local keydesc=$(_generate_session_encryption_key)
 		local dir=$SCRATCH_MNT/test.${FUNCNAME[0]}
@@ -629,7 +654,7 @@ _require_get_ciphertext_filename_support()
 		local inode=$(stat -c %i $file)
 
 		_scratch_unmount
-		$KEYCTL_PROG clear @s
+		$KEYCTL_PROG clear $TEST_KEYRING_ID
 
 		# 255-character filename should result in 340 base64 characters.
 		if ! $DUMP_F2FS_PROG -i $inode $SCRATCH_DEV \
@@ -912,7 +937,7 @@ _verify_ciphertext_for_encryption_policy()
 				| awk '{print $NF}')
 	else
 		local keyspec=$(_generate_key_descriptor)
-		_new_session_keyring
+		_init_session_keyring
 		_add_session_encryption_key $keyspec $raw_key
 	fi
 	local raw_key_hex=$(echo "$raw_key" | tr -d '\\x')
