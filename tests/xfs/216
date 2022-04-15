@@ -29,6 +29,23 @@ $MKFS_XFS_PROG 2>&1 | grep -q rmapbt && \
 $MKFS_XFS_PROG 2>&1 | grep -q reflink && \
 	loop_mkfs_opts="$loop_mkfs_opts -m reflink=0"
 
+# Decide which golden output file we're using.  Starting with mkfs.xfs 5.15,
+# the default minimum log size was raised to 64MB for all cases, so we detect
+# that by test-formatting with a 512M filesystem.  This is a little handwavy,
+# but it's the best we can do.
+choose_golden_output() {
+	local seqfull=$1
+	local file=$2
+
+	if $MKFS_XFS_PROG -f -b size=4096 -l version=2 \
+			-d name=$file,size=512m $loop_mkfs_opts | \
+			grep -q 'log.*blocks=16384'; then
+		_link_out_file_named $seqfull.out "64mblog"
+	else
+		_link_out_file_named $seqfull.out "classic"
+	fi
+}
+
 _do_mkfs()
 {
 	for i in $*; do
@@ -42,6 +59,8 @@ _do_mkfs()
 }
 # make large holey file
 $XFS_IO_PROG -f -c "truncate 256g" $LOOP_DEV
+
+choose_golden_output $0 $LOOP_DEV
 
 #make loopback mount dir
 mkdir $LOOP_MNT
