@@ -1,0 +1,43 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 546
+#
+# Regression test for kernel commits:
+#
+# 5679897eb104 ("vfs: make sync_filesystem return errors from ->sync_fs")
+# 2d86293c7075 ("xfs: return errors in xfs_fs_sync_fs")
+#
+# During a code inspection, I noticed that sync_filesystem ignores the return
+# value of the ->sync_fs calls that it makes.  sync_filesystem, in turn is used
+# by the syncfs(2) syscall to persist filesystem changes to disk.  This means
+# that syncfs(2) does not capture internal filesystem errors that are neither
+# visible from the block device (e.g. media error) nor recorded in s_wb_err.
+# XFS historically returned 0 from ->sync_fs even if there were log failures,
+# so that had to be corrected as well.
+#
+# The kernel commits above fix this problem, so this test tries to trigger the
+# bug by using the shutdown ioctl on a clean, freshly mounted filesystem in the
+# hope that the EIO generated as a result of the filesystem being shut down is
+# only visible via ->sync_fs.
+#
+. ./common/preamble
+_begin_fstest auto quick shutdown
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_xfs_io_command syncfs
+_require_scratch_nocheck
+_require_scratch_shutdown
+
+# Reuse the fs formatted when we checked for the shutdown ioctl, and don't
+# bother checking the filesystem afterwards since we never wrote anything.
+_scratch_mount
+$XFS_IO_PROG -x -c 'shutdown -f ' -c syncfs $SCRATCH_MNT
+
+# success, all done
+status=0
+exit
