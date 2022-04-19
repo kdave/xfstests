@@ -500,10 +500,14 @@ _test_mount()
 {
     local mount_ret
 
-    if [ "$FSTYP" == "overlay" ]; then
+    if [ "$FSTYP" == "ceph-fuse" ]; then
+        $CEPH_FUSE_BIN_PATH $TEST_FS_MOUNT_OPTS $TEST_DIR 2> /dev/null
+        return $?
+    elif [ "$FSTYP" == "overlay" ]; then
         _overlay_test_mount $*
         return $?
     fi
+
     _test_options mount
     _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
     mount_ret=$?
@@ -1446,7 +1450,8 @@ _fs_type()
     # have to bother with this quirk.
     #
     _df_device $1 | $AWK_PROG '{ print $2 }' | \
-        sed -e 's/nfs4/nfs/' -e 's/fuse.glusterfs/glusterfs/'
+        sed -e 's/nfs4/nfs/' -e 's/fuse.glusterfs/glusterfs/' \
+            -e 's/fuse.ceph-fuse/ceph-fuse/'
 }
 
 # return the FS mount options of a mounted device
@@ -1595,6 +1600,24 @@ _supported_fs()
     _notrun "not suitable for this filesystem type: $FSTYP"
 }
 
+_check_if_dev_already_mounted()
+{
+	local dev=$1
+	local mnt=$2
+
+	# find $dev as the source, and print result in "$dev $mnt" format
+	local mount_rec=`findmnt -rncv -S $dev -o SOURCE,TARGET`
+	[ -n "$mount_rec" ] || return 1 # 1 = not mounted
+
+	# if it's mounted, make sure its on $mnt
+	if [ "$mount_rec" != "$dev $mnt" ]; then
+		echo "$devname=$dev is mounted but not on $mntname=$mnt - aborting"
+		echo "Already mounted result:"
+		echo $mount_rec
+		return 2 # 2 = mounted on wrong mnt
+	fi
+}
+
 # check if a FS on a device is mounted
 # if so, verify that it is mounted on mount point
 # if fstype is given as argument, verify that it is also
@@ -1608,16 +1631,14 @@ _check_mounted_on()
 	local mnt=$4
 	local type=$5
 
-	# find $dev as the source, and print result in "$dev $mnt" format
-	local mount_rec=`findmnt -rncv -S $dev -o SOURCE,TARGET`
-	[ -n "$mount_rec" ] || return 1 # 1 = not mounted
+	# this check doesn't work on ceph-fuse
+	if [ "$dev" != "ceph-fuse" ]; then
+		_check_if_dev_already_mounted $dev $mnt
+		dev_already_mounted=$?
 
-	# if it's mounted, make sure its on $mnt
-	if [ "$mount_rec" != "$dev $mnt" ]; then
-		echo "$devname=$dev is mounted but not on $mntname=$mnt - aborting"
-		echo "Already mounted result:"
-		echo $mount_rec
-		return 2 # 2 = mounted on wrong mnt
+		if [ $dev_already_mounted -ne 0 ]; then
+			return $dev_already_mounted
+		fi
 	fi
 
 	if [ -n "$type" -a "`_fs_type $dev`" != "$type" ]; then
@@ -1869,6 +1890,8 @@ _require_test()
 		if [ ! -d "$TEST_DIR" ]; then
 			_notrun "this test requires a valid \$TEST_DIR"
 		fi
+		;;
+	ceph-fuse)
 		;;
 	cifs)
 		echo $TEST_DEV | grep -q "//" > /dev/null 2>&1
@@ -3204,7 +3227,7 @@ _check_test_fs()
     virtiofs)
 	# no way to check consistency for virtiofs
 	;;
-    ceph)
+    ceph|ceph-fuse)
 	# no way to check consistency for CephFS
 	;;
     glusterfs)
