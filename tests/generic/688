@@ -1,0 +1,77 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 688
+#
+# Functional test for dropping capability bits as part of an fallocate.
+#
+. ./common/preamble
+_begin_fstest auto prealloc quick
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $junk_dir
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_user
+_require_command "$GETCAP_PROG" getcap
+_require_command "$SETCAP_PROG" setcap
+_require_xfs_io_command falloc
+_require_test
+
+junk_dir=$TEST_DIR/$seq
+junk_file=$junk_dir/a
+mkdir -p $junk_dir/
+chmod a+rw $junk_dir/
+
+setup_testfile() {
+	rm -f $junk_file
+	touch $junk_file
+	chmod a+rwx $junk_file
+	$SETCAP_PROG cap_setgid,cap_setuid+ep $junk_file
+	sync
+}
+
+commit_and_check() {
+	local user="$1"
+
+	stat -c '%a %A %n' $junk_file | _filter_test_dir
+	_getcap -v $junk_file | _filter_test_dir
+
+	local cmd="$XFS_IO_PROG -c 'falloc 0 64k' $junk_file"
+	if [ -n "$user" ]; then
+		su - "$user" -c "$cmd" >> $seqres.full
+	else
+		$SHELL -c "$cmd" >> $seqres.full
+	fi
+
+	stat -c '%a %A %n' $junk_file | _filter_test_dir
+	_getcap -v $junk_file | _filter_test_dir
+
+	# Blank line in output
+	echo
+}
+
+# Commit by an unprivileged user clears capability bits.
+echo "Test 1 - qa_user"
+setup_testfile
+commit_and_check "$qa_user"
+
+# Commit by root leaves capability bits.
+echo "Test 2 - root"
+setup_testfile
+commit_and_check
+
+# success, all done
+status=0
+exit

@@ -1,0 +1,127 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 685
+#
+# Functional test for dropping suid and sgid bits as part of a fzero.
+#
+. ./common/preamble
+_begin_fstest auto clone quick
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $junk_dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_user
+_require_test
+verb=fzero
+_require_xfs_io_command $verb
+
+junk_dir=$TEST_DIR/$seq
+junk_file=$junk_dir/a
+mkdir -p $junk_dir/
+chmod a+rw $junk_dir/
+
+setup_testfile() {
+	rm -f $junk_file
+	_pwrite_byte 0x58 0 192k $junk_file >> $seqres.full
+	sync
+}
+
+commit_and_check() {
+	local user="$1"
+	local command="$2"
+	local start="$3"
+	local end="$4"
+
+	stat -c '%a %A %n' $junk_file | _filter_test_dir
+
+	local cmd="$XFS_IO_PROG -c '$command $start $end' $junk_file"
+	if [ -n "$user" ]; then
+		su - "$user" -c "$cmd" >> $seqres.full
+	else
+		$SHELL -c "$cmd" >> $seqres.full
+	fi
+
+	stat -c '%a %A %n' $junk_file | _filter_test_dir
+
+	# Blank line in output
+	echo
+}
+
+nr=0
+# Commit to a non-exec file by an unprivileged user clears suid but
+# leaves sgid.
+nr=$((nr + 1))
+echo "Test $nr - qa_user, non-exec file $verb"
+setup_testfile
+chmod a+rws $junk_file
+commit_and_check "$qa_user" "$verb" 64k 64k
+
+# Commit to a group-exec file by an unprivileged user clears suid and
+# sgid.
+nr=$((nr + 1))
+echo "Test $nr - qa_user, group-exec file $verb"
+setup_testfile
+chmod g+x,a+rws $junk_file
+commit_and_check "$qa_user" "$verb" 64k 64k
+
+# Commit to a user-exec file by an unprivileged user clears suid but
+# not sgid.
+nr=$((nr + 1))
+echo "Test $nr - qa_user, user-exec file $verb"
+setup_testfile
+chmod u+x,a+rws,g-x $junk_file
+commit_and_check "$qa_user" "$verb" 64k 64k
+
+# Commit to a all-exec file by an unprivileged user clears suid and
+# sgid.
+nr=$((nr + 1))
+echo "Test $nr - qa_user, all-exec file $verb"
+setup_testfile
+chmod a+rwxs $junk_file
+commit_and_check "$qa_user" "$verb" 64k 64k
+
+# Commit to a non-exec file by root clears suid but leaves sgid.
+nr=$((nr + 1))
+echo "Test $nr - root, non-exec file $verb"
+setup_testfile
+chmod a+rws $junk_file
+commit_and_check "" "$verb" 64k 64k
+
+# Commit to a group-exec file by root clears suid and sgid.
+nr=$((nr + 1))
+echo "Test $nr - root, group-exec file $verb"
+setup_testfile
+chmod g+x,a+rws $junk_file
+commit_and_check "" "$verb" 64k 64k
+
+# Commit to a user-exec file by root clears suid but not sgid.
+nr=$((nr + 1))
+echo "Test $nr - root, user-exec file $verb"
+setup_testfile
+chmod u+x,a+rws,g-x $junk_file
+commit_and_check "" "$verb" 64k 64k
+
+# Commit to a all-exec file by root clears suid and sgid.
+nr=$((nr + 1))
+echo "Test $nr - root, all-exec file $verb"
+setup_testfile
+chmod a+rwxs $junk_file
+commit_and_check "" "$verb" 64k 64k
+
+# success, all done
+status=0
+exit
