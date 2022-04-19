@@ -1585,19 +1585,29 @@ _fail()
 
 # tests whether $FSTYP is one of the supported filesystems for a test
 #
+_check_supported_fs()
+{
+	local res=1
+	local f
+
+	for f; do
+		# ^FS means black listed fs
+		if [ "$f" = "^$FSTYP" ]; then
+			return 1
+		elif [ "$f" = "generic" ] || [[ "$f" == "^"* ]]; then
+			# ^FS implies "generic ^FS"
+			res=0
+		elif [ "$f" = "$FSTYP" ]; then
+			return 0
+		fi
+	done
+	return $res
+}
+
 _supported_fs()
 {
-    local f
-
-    for f
-    do
-	if [ "$f" = "$FSTYP" -o "$f" = "generic" ]
-	then
-	    return
-	fi
-    done
-
-    _notrun "not suitable for this filesystem type: $FSTYP"
+	_check_supported_fs $* || \
+		_notrun "not suitable for this filesystem type: $FSTYP"
 }
 
 _check_if_dev_already_mounted()
