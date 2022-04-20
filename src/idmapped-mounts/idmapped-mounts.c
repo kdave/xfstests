@@ -13793,6 +13793,128 @@ out:
 	return fret;
 }
 
+/**
+ * setxattr_fix_705191b03d50 - test for commit 705191b03d50 ("fs: fix acl translation").
+ */
+static int setxattr_fix_705191b03d50(void)
+{
+	int fret = -1;
+	int fd_userns = -EBADF;
+	int ret;
+	uid_t user1_uid;
+	gid_t user1_gid;
+	pid_t pid;
+	struct list idmap;
+	struct list *it_cur, *it_next;
+
+	list_init(&idmap);
+
+	if (!lookup_ids(USER1, &user1_uid, &user1_gid)) {
+		log_stderr("failure: lookup_user");
+		goto out;
+	}
+
+	log_debug("Found " USER1 " with uid(%d) and gid(%d)", user1_uid, user1_gid);
+
+	if (mkdirat(t_dir1_fd, DIR1, 0777)) {
+		log_stderr("failure: mkdirat");
+		goto out;
+	}
+
+	if (chown_r(t_mnt_fd, T_DIR1, user1_uid, user1_gid)) {
+		log_stderr("failure: chown_r");
+		goto out;
+	}
+
+	print_r(t_mnt_fd, T_DIR1);
+
+	/* u:0:user1_uid:1 */
+	ret = add_map_entry(&idmap, user1_uid, 0, 1, ID_TYPE_UID);
+	if (ret) {
+		log_stderr("failure: add_map_entry");
+		goto out;
+	}
+
+	/* g:0:user1_gid:1 */
+	ret = add_map_entry(&idmap, user1_gid, 0, 1, ID_TYPE_GID);
+	if (ret) {
+		log_stderr("failure: add_map_entry");
+		goto out;
+	}
+
+	/* u:100:10000:100 */
+	ret = add_map_entry(&idmap, 10000, 100, 100, ID_TYPE_UID);
+	if (ret) {
+		log_stderr("failure: add_map_entry");
+		goto out;
+	}
+
+	/* g:100:10000:100 */
+	ret = add_map_entry(&idmap, 10000, 100, 100, ID_TYPE_GID);
+	if (ret) {
+		log_stderr("failure: add_map_entry");
+		goto out;
+	}
+
+	fd_userns = get_userns_fd_from_idmap(&idmap);
+	if (fd_userns < 0) {
+		log_stderr("failure: get_userns_fd");
+		goto out;
+	}
+
+	pid = fork();
+	if (pid < 0) {
+		log_stderr("failure: fork");
+		goto out;
+	}
+	if (pid == 0) {
+		if (!switch_userns(fd_userns, 0, 0, false))
+			die("failure: switch_userns");
+
+		/* create separate mount namespace */
+		if (unshare(CLONE_NEWNS))
+			die("failure: create new mount namespace");
+
+		/* turn off mount propagation */
+		if (sys_mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, 0))
+			die("failure: turn mount propagation off");
+
+		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s", t_mountpoint, T_DIR1, DIR1);
+
+		if (sys_mount("none", t_buf, "tmpfs", 0, "mode=0755"))
+			die("failure: mount");
+
+		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+		if (mkdir(t_buf, 0700))
+			die("failure: mkdir");
+
+		snprintf(t_buf, sizeof(t_buf), "setfacl -m u:100:rwx %s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+		if (system(t_buf))
+			die("failure: system");
+
+		snprintf(t_buf, sizeof(t_buf), "getfacl -n -p %s/%s/%s/%s | grep -q user:100:rwx", t_mountpoint, T_DIR1, DIR1, DIR3);
+		if (system(t_buf))
+			die("failure: system");
+
+		exit(EXIT_SUCCESS);
+	}
+	if (wait_for_pid(pid))
+		goto out;
+
+	fret = 0;
+	log_debug("Ran test");
+out:
+	safe_close(fd_userns);
+
+	list_for_each_safe(it_cur, &idmap, it_next) {
+		list_del(it_cur);
+		free(it_cur->elem);
+		free(it_cur);
+	}
+
+	return fret;
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "Description:\n");
@@ -13811,6 +13933,7 @@ static void usage(void)
 	fprintf(stderr, "--test-nested-userns                Run nested userns idmapped mount testsuite\n");
 	fprintf(stderr, "--test-btrfs                        Run btrfs specific idmapped mount testsuite\n");
 	fprintf(stderr, "--test-setattr-fix-968219708108     Run setattr regression tests\n");
+	fprintf(stderr, "--test-setxattr-fix-705191b03d50    Run setxattr regression tests\n");
 
 	_exit(EXIT_SUCCESS);
 }
@@ -13828,6 +13951,7 @@ static const struct option longopts[] = {
 	{"test-nested-userns",			no_argument,		0,	'n'},
 	{"test-btrfs",				no_argument,		0,	'b'},
 	{"test-setattr-fix-968219708108",	no_argument,		0,	'i'},
+	{"test-setxattr-fix-705191b03d50",	no_argument,		0,	'j'},
 	{NULL,					0,			0,	  0},
 };
 
@@ -13929,6 +14053,11 @@ struct t_idmapped_mounts t_setattr_fix_968219708108[] = {
 	{ setattr_fix_968219708108,					true,	"test that setattr works correctly",								},
 };
 
+/* Test for commit 705191b03d50 ("fs: fix acl translation"). */
+struct t_idmapped_mounts t_setxattr_fix_705191b03d50[] = {
+	{ setxattr_fix_705191b03d50,					false,	"test that setxattr works correctly for userns mountable filesystems",				},
+};
+
 static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)
 {
 	int i;
@@ -14018,7 +14147,8 @@ int main(int argc, char *argv[])
 	int index = 0;
 	bool supported = false, test_btrfs = false, test_core = false,
 	     test_fscaps_regression = false, test_nested_userns = false,
-	     test_setattr_fix_968219708108 = false;
+	     test_setattr_fix_968219708108 = false,
+	     test_setxattr_fix_705191b03d50 = false;
 
 	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
 		switch (ret) {
@@ -14054,6 +14184,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'i':
 			test_setattr_fix_968219708108 = true;
+			break;
+		case 'j':
+			test_setxattr_fix_705191b03d50 = true;
 			break;
 		case 'h':
 			/* fallthrough */
@@ -14123,6 +14256,11 @@ int main(int argc, char *argv[])
 	if (test_setattr_fix_968219708108 &&
 	    !run_test(t_setattr_fix_968219708108,
 		      ARRAY_SIZE(t_setattr_fix_968219708108)))
+		goto out;
+
+	if (test_setxattr_fix_705191b03d50 &&
+	    !run_test(t_setxattr_fix_705191b03d50,
+		      ARRAY_SIZE(t_setxattr_fix_705191b03d50)))
 		goto out;
 
 	fret = EXIT_SUCCESS;

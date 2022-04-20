@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Christian Brauner (Microsoft).  All Rights Reserved.
+#
+# FS QA Test No. 689
+#
+# Test that setting POSIX ACLs in userns-mountable filesystems works.
+#
+# Regression test for commit:
+#
+# 705191b03d50 ("fs: fix acl translation")
+#
+. ./common/preamble
+_begin_fstest auto quick perms
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs generic
+_require_test
+_require_idmapped_mounts
+_require_user fsgqa
+_require_group fsgqa
+
+echo "Silence is golden"
+
+$here/src/idmapped-mounts/idmapped-mounts --test-setxattr-fix-705191b03d50 \
+	--device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP"
+
+status=$?
+exit
