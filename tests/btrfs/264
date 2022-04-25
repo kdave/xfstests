@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 Synology Inc. All Rights Reserved.
+#
+# FS QA Test No. 264
+#
+# Compression and nodatacow are mutually exclusive. Besides ioctl, there
+# is another way to setting compression via xattrs, and shouldn't produce
+# invalid combinations.
+#
+# To prevent mix any compression-related options with nodatacow, FS_NOCOMP_FL
+# is also rejected by ioctl as well as FS_COMPR_FL on nodatacow files. To
+# align with it, no and none are also unacceptable in this test.
+#
+# The regression is fixed by a patch with the following subject:
+#   btrfs: do not allow compression on nodatacow files
+#
+. ./common/preamble
+_begin_fstest auto quick compress attr
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+
+_supported_fs btrfs
+_require_scratch
+_require_attrs
+_require_chattr C
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+set_compression() # $1: filename, $2: alg
+{
+	[ -f "$1" ] || return
+	$SETFATTR_PROG -n "btrfs.compression" -v "$2" "$1" |& _filter_scratch
+}
+
+# FS_NOCOMP_FL bit isn't recognized by chattr/lsattr before e2fsprogs 1.46.2
+# In order to make this test available with an older version, we wrap the output
+# of lsattr to distinguish FS_COMP_FL and FS_NOCOMP_FL
+check_compression() # $1: filename
+{
+	$LSATTR_PROG -l "$1" | grep -q "Compression_Requested"
+
+	if [ $? -eq 0 ]; then
+		echo "$1: Compression is set" | _filter_scratch
+	else
+		echo "$1: Compression is not set" | _filter_scratch
+	fi
+}
+
+#
+# DATACOW
+#
+test_file="$SCRATCH_MNT/foo"
+touch "$test_file"
+$CHATTR_PROG -C "$test_file"
+
+set_compression "$test_file" zlib
+check_compression "$test_file"
+set_compression "$test_file" no
+check_compression "$test_file"
+set_compression "$test_file" lzo
+check_compression "$test_file"
+set_compression "$test_file" none
+check_compression "$test_file"
+set_compression "$test_file" zstd
+check_compression "$test_file"
+
+#
+# NODATACOW
+#
+test_file="$SCRATCH_MNT/bar"
+touch "$test_file"
+$CHATTR_PROG +C "$test_file"
+
+# all valid compression type are not allowed on nodatacow files
+set_compression "$test_file" zlib
+set_compression "$test_file" lzo
+set_compression "$test_file" zstd
+
+# no/none are also not allowed on nodatacow files
+set_compression "$test_file" no
+set_compression "$test_file" none
+
+# success, all done
+status=0
+exit
