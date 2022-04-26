@@ -86,7 +86,6 @@ static int renameat2(int dfd1, const char *path1,
 
 typedef enum {
 	OP_AFSYNC,
-	OP_ALLOCSP,
 	OP_AREAD,
 	OP_ATTR_REMOVE,
 	OP_ATTR_SET,
@@ -103,7 +102,6 @@ typedef enum {
 	OP_FALLOCATE,
 	OP_FDATASYNC,
 	OP_FIEMAP,
-	OP_FREESP,
 	OP_FSYNC,
 	OP_GETATTR,
 	OP_GETDENTS,
@@ -216,7 +214,6 @@ struct print_string {
 #define XATTR_NAME_BUF_SIZE 18
 
 void	afsync_f(opnum_t, long);
-void	allocsp_f(opnum_t, long);
 void	aread_f(opnum_t, long);
 void	attr_remove_f(opnum_t, long);
 void	attr_set_f(opnum_t, long);
@@ -233,7 +230,6 @@ void	dwrite_f(opnum_t, long);
 void	fallocate_f(opnum_t, long);
 void	fdatasync_f(opnum_t, long);
 void	fiemap_f(opnum_t, long);
-void	freesp_f(opnum_t, long);
 void	fsync_f(opnum_t, long);
 char	*gen_random_string(int);
 void	getattr_f(opnum_t, long);
@@ -281,7 +277,6 @@ char	*xattr_flag_to_string(int);
 struct opdesc	ops[OP_LAST]	= {
      /* [OP_ENUM]	   = {"name",	       function,	freq, iswrite }, */
 	[OP_AFSYNC]	   = {"afsync",	       afsync_f,	0, 1 },
-	[OP_ALLOCSP]	   = {"allocsp",       allocsp_f,	1, 1 },
 	[OP_AREAD]	   = {"aread",	       aread_f,		1, 0 },
 	[OP_ATTR_REMOVE]   = {"attr_remove",   attr_remove_f,	0, 1 },
 	[OP_ATTR_SET]	   = {"attr_set",      attr_set_f,	0, 1 },
@@ -298,7 +293,6 @@ struct opdesc	ops[OP_LAST]	= {
 	[OP_FALLOCATE]	   = {"fallocate",     fallocate_f,	1, 1 },
 	[OP_FDATASYNC]	   = {"fdatasync",     fdatasync_f,	1, 1 },
 	[OP_FIEMAP]	   = {"fiemap",	       fiemap_f,	1, 1 },
-	[OP_FREESP]	   = {"freesp",	       freesp_f,	1, 1 },
 	[OP_FSYNC]	   = {"fsync",	       fsync_f,		1, 1 },
 	[OP_GETATTR]	   = {"getattr",       getattr_f,	1, 0 },
 	[OP_GETDENTS]	   = {"getdents",      getdents_f,	1, 0 },
@@ -2042,62 +2036,6 @@ afsync_f(opnum_t opno, long r)
 #endif
 }
 
-void
-allocsp_f(opnum_t opno, long r)
-{
-#ifdef XFS_IOC_ALLOCSP64
-	int		e;
-	pathname_t	f;
-	int		fd;
-	struct xfs_flock64	fl;
-	int64_t		lr;
-	off64_t		off;
-	struct stat64	stb;
-	int		v;
-	char		st[1024];
-
-	init_pathname(&f);
-	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
-		if (v)
-			printf("%d/%lld: allocsp - no filename\n", procid, opno);
-		free_pathname(&f);
-		return;
-	}
-	fd = open_path(&f, O_RDWR);
-	e = fd < 0 ? errno : 0;
-	check_cwd();
-	if (fd < 0) {
-		if (v)
-			printf("%d/%lld: allocsp - open %s failed %d\n",
-				procid, opno, f.path, e);
-		free_pathname(&f);
-		return;
-	}
-	if (fstat64(fd, &stb) < 0) {
-		if (v)
-			printf("%d/%lld: allocsp - fstat64 %s failed %d\n",
-				procid, opno, f.path, errno);
-		free_pathname(&f);
-		close(fd);
-		return;
-	}
-	inode_info(st, sizeof(st), &stb, v);
-	lr = ((int64_t)random() << 32) + random();
-	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
-	off %= maxfsize;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = off;
-	fl.l_len = 0;
-	e = xfsctl(f.path, fd, XFS_IOC_ALLOCSP64, &fl) < 0 ? errno : 0;
-	if (v) {
-		printf("%d/%lld: xfsctl(XFS_IOC_ALLOCSP64) %s%s %lld 0 %d\n",
-		       procid, opno, f.path, st, (long long)off, e);
-	}
-	free_pathname(&f);
-	close(fd);
-#endif
-}
-
 #ifdef AIO
 void
 do_aio_rw(opnum_t opno, long r, int flags)
@@ -3727,61 +3665,6 @@ fiemap_f(opnum_t opno, long r)
 		       (long long) fiemap->fm_length,
 		       translate_fiemap_flags(fiemap->fm_flags), e);
 	free(fiemap);
-	free_pathname(&f);
-	close(fd);
-#endif
-}
-
-void
-freesp_f(opnum_t opno, long r)
-{
-#ifdef XFS_IOC_FREESP64
-	int		e;
-	pathname_t	f;
-	int		fd;
-	struct xfs_flock64	fl;
-	int64_t		lr;
-	off64_t		off;
-	struct stat64	stb;
-	int		v;
-	char		st[1024];
-
-	init_pathname(&f);
-	if (!get_fname(FT_REGFILE, r, &f, NULL, NULL, &v)) {
-		if (v)
-			printf("%d/%lld: freesp - no filename\n", procid, opno);
-		free_pathname(&f);
-		return;
-	}
-	fd = open_path(&f, O_RDWR);
-	e = fd < 0 ? errno : 0;
-	check_cwd();
-	if (fd < 0) {
-		if (v)
-			printf("%d/%lld: freesp - open %s failed %d\n",
-				procid, opno, f.path, e);
-		free_pathname(&f);
-		return;
-	}
-	if (fstat64(fd, &stb) < 0) {
-		if (v)
-			printf("%d/%lld: freesp - fstat64 %s failed %d\n",
-				procid, opno, f.path, errno);
-		free_pathname(&f);
-		close(fd);
-		return;
-	}
-	inode_info(st, sizeof(st), &stb, v);
-	lr = ((int64_t)random() << 32) + random();
-	off = (off64_t)(lr % MIN(stb.st_size + (1024 * 1024), MAXFSIZE));
-	off %= maxfsize;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = off;
-	fl.l_len = 0;
-	e = xfsctl(f.path, fd, XFS_IOC_FREESP64, &fl) < 0 ? errno : 0;
-	if (v)
-		printf("%d/%lld: xfsctl(XFS_IOC_FREESP64) %s%s %lld 0 %d\n",
-		       procid, opno, f.path, st, (long long)off, e);
 	free_pathname(&f);
 	close(fd);
 #endif
