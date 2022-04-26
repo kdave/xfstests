@@ -53,8 +53,7 @@ commit_and_check() {
 	echo
 }
 
-# Commit to a non-exec file by an unprivileged user clears suid but leaves
-# sgid.
+# Commit to a non-exec file by an unprivileged user clears suid and sgid
 echo "Test 1 - qa_user, non-exec file"
 setup_testfile
 chmod a+rws $SCRATCH_MNT/a
@@ -66,7 +65,7 @@ setup_testfile
 chmod g+x,a+rws $SCRATCH_MNT/a
 commit_and_check "$qa_user"
 
-# Commit to a user-exec file by an unprivileged user clears suid but not sgid.
+# Commit to a user-exec file by an unprivileged user clears suid and sgid.
 echo "Test 3 - qa_user, user-exec file"
 setup_testfile
 chmod u+x,a+rws,g-x $SCRATCH_MNT/a
@@ -78,29 +77,53 @@ setup_testfile
 chmod a+rwxs $SCRATCH_MNT/a
 commit_and_check "$qa_user"
 
-# Commit to a non-exec file by root clears suid but leaves sgid.
+# Commit to a non-exec file by root leaves suid and sgid.
 echo "Test 5 - root, non-exec file"
 setup_testfile
 chmod a+rws $SCRATCH_MNT/a
 commit_and_check
 
-# Commit to a group-exec file by root clears suid and sgid.
+# Commit to a group-exec file by root leaves suid and sgid.
 echo "Test 6 - root, group-exec file"
 setup_testfile
 chmod g+x,a+rws $SCRATCH_MNT/a
 commit_and_check
 
-# Commit to a user-exec file by root clears suid but not sgid.
+# Commit to a user-exec file by root leaves suid and sgid.
 echo "Test 7 - root, user-exec file"
 setup_testfile
 chmod u+x,a+rws,g-x $SCRATCH_MNT/a
 commit_and_check
 
-# Commit to a all-exec file by root clears suid and sgid.
+# Commit to a all-exec file by root leaves suid and sgid.
 echo "Test 8 - root, all-exec file"
 setup_testfile
 chmod a+rwxs $SCRATCH_MNT/a
 commit_and_check
+
+#Commit to a non-exec file by an unprivileged user leaves sgid.
+echo "Test 9 - qa_user, non-exec file, only sgid"
+setup_testfile
+chmod a+rw,g+rws $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+#Commit to a group-exec file by an unprivileged user clears sgid
+echo "Test 10 - qa_user, group-exec file, only sgid"
+setup_testfile
+chmod a+rw,g+rwxs $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+#Commit to a user-exec file by an unprivileged user clears sgid
+echo "Test 11 - qa_user, user-exec file, only sgid"
+setup_testfile
+chmod a+rw,u+x,g+rws $SCRATCH_MNT/a
+commit_and_check "$qa_user"
+
+#Commit to a all-exec file by an unprivileged user clears sgid.
+echo "Test 12 - qa_user, all-exec file, only sgid"
+setup_testfile
+chmod a+rwx,g+rwxs $SCRATCH_MNT/a
+commit_and_check "$qa_user"
 
 # success, all done
 status=0
