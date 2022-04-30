@@ -225,6 +225,9 @@ do_mnt() {
 	return $ret
 }
 
+# Test that mounting or remounting with the specified mount option(s) fails
+# (meaning that the mount or remount fails, as opposed to the mount option(s)
+# just being ignored).
 not_mnt() {
 	# We don't need -t not not_ variant
 	if [ "$1" == "-t" ]; then
@@ -232,13 +235,21 @@ not_mnt() {
 	fi
 
 	print_log "SHOULD FAIL mounting $fstype \"$1\" "
-	do_mnt $@
-	if [ $? -eq 0 ]; then
+	if simple_mount -o $1 $SCRATCH_DEV $SCRATCH_MNT; then
+		print_log "(mount unexpectedly succeeded)"
 		fail
-	else
-		ok
+		$UMOUNT_PROG $SCRATCH_MNT
+		return
 	fi
-	$UMOUNT_PROG $SCRATCH_MNT 2> /dev/null
+	ok
+
+	if ! simple_mount $SCRATCH_DEV $SCRATCH_MNT; then
+		print_log "(normal mount unexpectedly failed)"
+		fail
+		return
+	fi
+	not_remount $1
+	$UMOUNT_PROG $SCRATCH_MNT
 }
 
 mnt_only() {
@@ -321,43 +332,40 @@ remount() {
 	$UMOUNT_PROG $SCRATCH_MNT 2> /dev/null
 }
 
-# $1 - options to mount with, or -r argument
-# $2 - options to remount with
-not_remount_noumount() {
-	remount_only=0
-	# If -r is specified we're going to do remount only
-	if [ "$1" == "-r" ]; then
-		remount_only=1
-		# Dont need shift since first argument would
-		# have been consumed by mount anyway
-	fi
-
-	if [ $remount_only -eq 0 ]; then
-		print_log "mounting $fstype \"$1\" "
-		do_mnt $1
-		[ $? -ne 0 ] && fail && return
-	fi
-	print_log "SHOULD FAIL remounting $fstype \"$2\" "
-	do_mnt remount,$2 $3
-	if [ $? -eq 0 ]; then
+# Test that the filesystem cannot be remounted with option(s) $1 (meaning that
+# the remount fails, as opposed to the mount option(s) just being ignored).  The
+# filesystem must already be mounted, and it is not unmounted afterwards.
+not_remount() {
+	print_log "SHOULD FAIL remounting $fstype \"$1\" "
+	# Try specifying both dev and mnt.
+	if simple_mount -o remount,$1 $SCRATCH_DEV $SCRATCH_MNT; then
+		print_log "(remount unexpectedly succeeded)"
 		fail
-	else
-		ok
+		return
 	fi
+	ok
 
-	# Now just specify mnt
-	print_log "SHOULD FAIL remounting $fstype (MNT ONLY) \"$2\" "
-	do_mnt -n remount,$2 $3
-	if [ $? -eq 0 ]; then
+	# Try specifying mnt only.
+	print_log "SHOULD FAIL remounting $fstype (MNT ONLY) \"$1\" "
+	if simple_mount -o remount,$1 $SCRATCH_MNT; then
+		print_log "(remount unexpectedly succeeded)"
 		fail
-	else
-		ok
+		return
 	fi
+	ok
 }
 
-not_remount() {
-	not_remount_noumount $*
-	$UMOUNT_PROG $SCRATCH_MNT 2> /dev/null
+# Mount the filesystem with option(s) $1, then test that it cannot be remounted
+# with option(s) $2 (meaning that the remount fails, as opposed to the mount
+# option(s) just being ignored).
+mnt_then_not_remount() {
+	print_log "mounting $fstype \"$1\" "
+	if ! do_mnt $1; then
+		fail
+		return
+	fi
+	not_remount $2
+	$UMOUNT_PROG $SCRATCH_MNT
 }
 
 
@@ -514,7 +522,7 @@ for fstype in ext2 ext3 ext4; do
 		mnt test_dummy_encryption ^test_dummy_encryption
 		mnt test_dummy_encryption=v1 ^test_dummy_encryption=v1
 		mnt test_dummy_encryption=v2 ^test_dummy_encryption=v2
-		not_mnt test_dummy_encryption=v3
+		mnt test_dummy_encryption=v3 ^test_dummy_encryption=v3
 		not_mnt test_dummy_encryption=
 	fi
 
@@ -567,14 +575,14 @@ for fstype in ext2 ext3 ext4; do
 		mnt dax=never
 		mnt dax=inode
 
-		not_remount lazytime dax
-		not_remount dax=always dax=never
+		mnt_then_not_remount lazytime dax
+		mnt_then_not_remount dax=always dax=never
 
 		if [[ $fstype != "ext2" ]]; then
-			not_remount data=journal dax
-			not_remount data=journal dax=always
-			not_remount data=journal dax=never
-			not_remount data=journal dax=inode
+			mnt_then_not_remount data=journal dax
+			mnt_then_not_remount data=journal dax=always
+			mnt_then_not_remount data=journal dax=never
+			mnt_then_not_remount data=journal dax=inode
 		fi
 	fi
 
@@ -584,20 +592,20 @@ for fstype in ext2 ext3 ext4; do
 	remount usrquota usrjquota=q.u,jqfmt=vfsv0
 	remount grpquota grpjquota=q.g,jqfmt=vfsv0
 
-	not_remount usrquota grpjquota=q.g,jqfmt=vfsv0
-	not_remount grpquota usrjquota=q.u,jqfmt=vfsv0
+	mnt_then_not_remount usrquota grpjquota=q.g,jqfmt=vfsv0
+	mnt_then_not_remount grpquota usrjquota=q.u,jqfmt=vfsv0
 
 	remount quota usrjquota=q.u,jqfmt=vfsv0
-	not_remount quota grpjquota=q.g,jqfmt=vfsv0
+	mnt_then_not_remount quota grpjquota=q.g,jqfmt=vfsv0
 
 	remount usrjquota=q.u,jqfmt=vfsv0 grpjquota=q.g
-	not_remount usrjquota=q.u,jqfmt=vfsv0 usrjquota=q.ua
-	not_remount grpjquota=q.g,jqfmt=vfsv0 grpjquota=q.ga
+	mnt_then_not_remount usrjquota=q.u,jqfmt=vfsv0 usrjquota=q.ua
+	mnt_then_not_remount grpjquota=q.g,jqfmt=vfsv0 grpjquota=q.ga
 
 	remount usrjquota=q.u,jqfmt=vfsv0 usrquota usrjquota=q.u,jqfmt=vfsv0
 	remount grpjquota=q.g,jqfmt=vfsv0 grpquota grpjquota=q.g,jqfmt=vfsv0
-	not_remount usrjquota=q.u,jqfmt=vfsv0 grpquota
-	not_remount grpjquota=q.g,jqfmt=vfsv0 usrquota
+	mnt_then_not_remount usrjquota=q.u,jqfmt=vfsv0 grpquota
+	mnt_then_not_remount grpjquota=q.g,jqfmt=vfsv0 usrquota
 
 	remount grpjquota=q.g,jqfmt=vfsv0 grpjquota= ^grpjquota=
 	remount usrjquota=q.u,jqfmt=vfsv0 usrjquota= ^usrjquota=
@@ -608,12 +616,12 @@ for fstype in ext2 ext3 ext4; do
 
 	if [[ $fstype != "ext2" ]]; then
 		remount noload data=journal norecovery
-		not_remount data=journal data=ordered
-		not_remount data=journal data=writeback
-		not_remount data=ordered data=journal
-		not_remount data=ordered data=writeback
-		not_remount data=writeback data=journal
-		not_remount data=writeback data=ordered
+		mnt_then_not_remount data=journal data=ordered
+		mnt_then_not_remount data=journal data=writeback
+		mnt_then_not_remount data=ordered data=journal
+		mnt_then_not_remount data=ordered data=writeback
+		mnt_then_not_remount data=writeback data=journal
+		mnt_then_not_remount data=writeback data=ordered
 	fi
 
 	do_mkfs -O journal_dev $LOOP_LOGDEV ${LOGSIZE}k
@@ -621,9 +629,9 @@ for fstype in ext2 ext3 ext4; do
 	mnt defaults
 	mnt journal_path=$LOOP_LOGDEV ignored
 	mnt journal_dev=$LOGDEV_DEVNUM ignored
-	not_mnt journal_path=${LOOP_LOGDEV}_nonexistent ignored
-	not_mnt journal_dev=123456 ignored
-	not_mnt journal_dev=999999999999999 ignored
+	not_mnt journal_path=${LOOP_LOGDEV}_nonexistent
+	not_mnt journal_dev=123456
+	not_mnt journal_dev=999999999999999
 
 	do_mkfs -E quotatype=prjquota $SCRATCH_DEV ${SIZE}k
 	mnt prjquota
@@ -636,11 +644,11 @@ for fstype in ext2 ext3 ext4; do
 	quotacheck -vugm $SCRATCH_MNT >> $seqres.full 2>&1
 	quotaon -vug $SCRATCH_MNT >> $seqres.full 2>&1
 
-	not_remount_noumount -r grpjquota=
-	not_remount_noumount -r usrjquota=aaquota.user
-	not_remount_noumount -r grpjquota=aaquota.group
-	not_remount_noumount -r jqfmt=vfsv1
-	not_remount_noumount -r noquota
+	not_remount grpjquota=
+	not_remount usrjquota=aaquota.user
+	not_remount grpjquota=aaquota.group
+	not_remount jqfmt=vfsv1
+	not_remount noquota
 	mnt_only remount,usrquota,grpquota ^usrquota,^grpquota
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
 
@@ -654,10 +662,10 @@ for fstype in ext2 ext3 ext4; do
 	quotacheck -vugm $SCRATCH_MNT >> $seqres.full 2>&1
 	quotaon -vug $SCRATCH_MNT >> $seqres.full 2>&1
 
-	not_remount_noumount -r noquota
-	not_remount_noumount -r usrjquota=aquota.user
-	not_remount_noumount -r grpjquota=aquota.group
-	not_remount_noumount -r jqfmt=vfsv1
+	not_remount noquota
+	not_remount usrjquota=aquota.user
+	not_remount grpjquota=aquota.group
+	not_remount jqfmt=vfsv1
 	mnt_only remount,grpjquota= grpquota,^grpjquota
 	mnt_only remount,usrjquota= usrquota,^usrjquota
 	mnt_only remount,usrquota,grpquota usrquota,grpquota
@@ -674,9 +682,9 @@ for fstype in ext2 ext3 ext4; do
 	mnt prjquota
 	mnt usrquota
 	mnt grpquota
-	not_remount defaults usrjquota=aquota.user
-	not_remount defaults grpjquota=aquota.user
-	not_remount defaults jqfmt=vfsv1
+	mnt_then_not_remount defaults usrjquota=aquota.user
+	mnt_then_not_remount defaults grpjquota=aquota.user
+	mnt_then_not_remount defaults jqfmt=vfsv1
 	remount defaults grpjquota=,usrjquota= ignored
 
 done #for fstype in ext2 ext3 ext4; do
