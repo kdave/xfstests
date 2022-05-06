@@ -11,40 +11,64 @@ fi
 
 test_dir="$PWD"
 groupfile="$1"
+new_groups="/tmp/groups.$$"
 GROUPNAME_DOC_FILE="$(readlink -m ../../doc/group-names.txt)"
-export GROUPNAME_DOC_FILE
 
 if [ ! -x ../../check ]; then
 	echo "$0: Run this from tests/XXX/."
 	exit 1
 fi
 
-cleanup() {
-	test -z "$groupfile" && return
-	test -z "$ngroupfile" && return
-
-	if [ $ret -eq 0 ]; then
-		mv -f "$ngroupfile" "$groupfile"
-	else
-		rm -f "$ngroupfile"
-	fi
+cleanup()
+{
+	rm -f $new_groups.check
+	rm -f $new_groups
 }
 
 ret=1	# trigger cleanup of temporary files unless we succeed
 trap 'cleanup; exit $ret' EXIT INT TERM QUIT
 
+# Make sure each group is in the documentation file.
+_check_groups() {
+	test -n "$GROUPNAME_DOC_FILE" || return 0
+
+	local groups="$1"
+	declare -a missing=()
+
+	for group in `grep -v '#' $groups`; do
+		if ! grep -q "^${group}[[:space:]]" "$GROUPNAME_DOC_FILE"; then
+			missing+=("\"${group}\"")
+		fi
+	done
+	test "${#missing}" -eq 0 && return 0
+
+	local suffix=
+	test "${#missing}" -gt 1 && suffix="s"
+	echo "group$suffix ${missing[@]} not mentioned in documentation." 1>&2
+	ret=1
+	exit 1
+}
+
 generate_groupfile() {
-	cat << ENDL
+	cat << ENDL > $new_groups
 # QA groups control file, automatically generated.
 # See _begin_fstest in each test for details.
 
 ENDL
+
 	cd ../../
-	export GENERATE_GROUPS=yes
-	grep -R -l "^_begin_fstest" "$test_dir/" 2>/dev/null | while read testfile; do
-		test -x "$testfile" && "$testfile" || return 1
-	done | sort -g
-	ret="${PIPESTATUS[1]}"
+
+	# Aggregate the groups each test belongs to for the group file
+	grep -I -R "^_begin_fstest" $test_dir/ | \
+		sed -e 's/^.*\/\([0-9]*\):_begin_fstest/\1/' >> $new_groups
+
+	# Create the list of unique groups for existence checking
+	grep -I -R "^_begin_fstest" $test_dir/ | \
+		sed -e 's/^.*_begin_fstest //' -e 's/ /\n/g' | \
+		sort -u > $new_groups.check
+
+	_check_groups $new_groups.check
+
 	cd "$test_dir"
 }
 
@@ -52,10 +76,12 @@ if [ -z "$groupfile" ] || [ "$groupfile" = "-" ]; then
 	# Dump the group file to stdout and exit
 	unset groupfile
 	generate_groupfile
+	cat $new_groups
 else
 	# Otherwise, write the group file to disk somewhere.
-	ngroupfile="${groupfile}.new"
-	rm -f "$ngroupfile"
-	generate_groupfile >> "$ngroupfile"
-	# let cleanup rename or delete ngroupfile
+	generate_groupfile
+	mv -f "$new_groups" "$groupfile"
 fi
+
+# Success!
+ret=0
