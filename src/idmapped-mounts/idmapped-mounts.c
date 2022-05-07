@@ -14232,6 +14232,8 @@ int main(int argc, char *argv[])
 		exit(EXIT_SUCCESS);
 	}
 	t_has_userns = sys_has_userns();
+	/* don't copy ENOSYS errno to child process on older kernel */
+	errno = 0;
 
 	stash_overflowuid();
 	stash_overflowgid();
