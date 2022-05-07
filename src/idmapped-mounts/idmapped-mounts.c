@@ -51,6 +51,7 @@
 #define FILE1_RENAME "file1_rename"
 #define FILE2 "file2"
 #define FILE2_RENAME "file2_rename"
+#define FILE3 "file3"
 #define DIR1 "dir1"
 #define DIR2 "dir2"
 #define DIR3 "dir3"
@@ -338,6 +339,24 @@ out:
 	cap_free(caps);
 #endif
 	return fret;
+}
+
+static bool openat_tmpfile_supported(int dirfd)
+{
+	int fd = -1;
+
+	fd = openat(dirfd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+	if (fd == -1) {
+		if (errno == ENOTSUP)
+			return false;
+		else
+			return log_errno(false, "failure: create");
+	}
+
+	if (close(fd))
+		log_stderr("failure: close");
+
+	return true;
 }
 
 /* __expected_uid_gid - check whether file is owned by the provided uid and gid */
@@ -7844,7 +7863,9 @@ static int setgid_create(void)
 {
 	int fret = -1;
 	int file1_fd = -EBADF;
+	int tmpfile_fd = -EBADF;
 	pid_t pid;
+	bool supported = false;
 
 	if (!caps_supported())
 		return 0;
@@ -7868,6 +7889,8 @@ static int setgid_create(void)
 		log_stderr("failure: is_setgid");
 		goto out;
 	}
+
+	supported = openat_tmpfile_supported(t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -7931,6 +7954,24 @@ static int setgid_create(void)
 
 		if (unlinkat(t_dir1_fd, CHRDEV1, 0))
 			die("failure: delete");
+
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			if (linkat(tmpfile_fd, "", t_dir1_fd, FILE3, AT_EMPTY_PATH))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (!is_setgid(t_dir1_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(t_dir1_fd, FILE3, 0, 0, 0))
+				die("failure: check ownership");
+			if (unlinkat(t_dir1_fd, FILE3, 0))
+				die("failure: delete");
+		}
 
 		exit(EXIT_SUCCESS);
 	}
@@ -8021,6 +8062,24 @@ static int setgid_create(void)
 		if (unlinkat(t_dir1_fd, CHRDEV1, 0))
 			die("failure: delete");
 
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			if (linkat(tmpfile_fd, "", t_dir1_fd, FILE3, AT_EMPTY_PATH))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (is_setgid(t_dir1_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(t_dir1_fd, FILE3, 0, 0, 0))
+				die("failure: check ownership");
+			if (unlinkat(t_dir1_fd, FILE3, 0))
+				die("failure: delete");
+		}
+
 		exit(EXIT_SUCCESS);
 	}
 	if (wait_for_pid(pid))
@@ -8042,6 +8101,9 @@ static int setgid_create_idmapped(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 	pid_t pid;
+	int tmpfile_fd = -EBADF;
+	bool supported = false;
+	char path[PATH_MAX];
 
 	if (!caps_supported())
 		return 0;
@@ -8088,6 +8150,8 @@ static int setgid_create_idmapped(void)
 		log_stderr("failure: sys_mount_setattr");
 		goto out;
 	}
+
+	supported = openat_tmpfile_supported(open_tree_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -8171,6 +8235,25 @@ static int setgid_create_idmapped(void)
 		if (unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(open_tree_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			snprintf(path, PATH_MAX,  "/proc/self/fd/%d", tmpfile_fd);
+			if (linkat(AT_FDCWD, path, open_tree_fd, FILE3, AT_SYMLINK_FOLLOW))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (is_setgid(open_tree_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(open_tree_fd, FILE3, 0, 10000, 10000))
+				die("failure: check ownership");
+			if (unlinkat(open_tree_fd, FILE3, 0))
+				die("failure: delete");
+		}
+
 		exit(EXIT_SUCCESS);
 	}
 	if (wait_for_pid(pid))
@@ -8194,6 +8277,9 @@ static int setgid_create_idmapped_in_userns(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 	pid_t pid;
+	int tmpfile_fd = -EBADF;
+	bool supported = false;
+	char path[PATH_MAX];
 
 	if (!caps_supported())
 		return 0;
@@ -8240,6 +8326,8 @@ static int setgid_create_idmapped_in_userns(void)
 		log_stderr("failure: sys_mount_setattr");
 		goto out;
 	}
+
+	supported = openat_tmpfile_supported(open_tree_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -8306,6 +8394,25 @@ static int setgid_create_idmapped_in_userns(void)
 
 		if (unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
+
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(open_tree_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			snprintf(path, PATH_MAX,  "/proc/self/fd/%d", tmpfile_fd);
+			if (linkat(AT_FDCWD, path, open_tree_fd, FILE3, AT_SYMLINK_FOLLOW))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (!is_setgid(open_tree_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(open_tree_fd, FILE3, 0, 0, 0))
+				die("failure: check ownership");
+			if (unlinkat(open_tree_fd, FILE3, 0))
+				die("failure: delete");
+		}
 
 		exit(EXIT_SUCCESS);
 	}
@@ -8415,6 +8522,25 @@ static int setgid_create_idmapped_in_userns(void)
 		if (unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(open_tree_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			snprintf(path, PATH_MAX,  "/proc/self/fd/%d", tmpfile_fd);
+			if (linkat(AT_FDCWD, path, open_tree_fd, FILE3, AT_SYMLINK_FOLLOW))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (is_setgid(open_tree_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(open_tree_fd, FILE3, 0, 0, 1000))
+				die("failure: check ownership");
+			if (unlinkat(open_tree_fd, FILE3, 0))
+				die("failure: delete");
+		}
+
 		exit(EXIT_SUCCESS);
 	}
 	if (wait_for_pid(pid))
@@ -8510,6 +8636,25 @@ static int setgid_create_idmapped_in_userns(void)
 
 		if (unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
+
+		/* create tmpfile via filesystem tmpfile api */
+		if (supported) {
+			tmpfile_fd = openat(open_tree_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			if (tmpfile_fd < 0)
+				die("failure: create");
+			/* link the temporary file into the filesystem, making it permanent */
+			snprintf(path, PATH_MAX,  "/proc/self/fd/%d", tmpfile_fd);
+			if (linkat(AT_FDCWD, path, open_tree_fd, FILE3, AT_SYMLINK_FOLLOW))
+				die("failure: linkat");
+			if (close(tmpfile_fd))
+				die("failure: close");
+			if (is_setgid(open_tree_fd, FILE3, 0))
+				die("failure: is_setgid");
+			if (!expected_uid_gid(open_tree_fd, FILE3, 0, 0, 0))
+				die("failure: check ownership");
+			if (unlinkat(open_tree_fd, FILE3, 0))
+				die("failure: delete");
+		}
 
 		exit(EXIT_SUCCESS);
 	}
