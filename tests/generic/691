@@ -1,0 +1,107 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 691
+#
+# Make sure filesystem quota works well, after soft limits are exceeded. The
+# fs quota should allow more space allocation before exceeding hard limits
+# and with in grace time.
+#
+# But different with other similar testing, this case tries to write many small
+# files, to cover bc37e4fb5cac (xfs: revert "xfs: actually bump warning counts
+# when we send warnings"). If there's a behavior change some day, this case
+# might help to detect that too.
+#
+. ./common/preamble
+_begin_fstest auto quota
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_restore_project_quota
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/quota
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_quota
+_require_user
+_require_group
+
+# Make sure the kernel supports project quota
+_scratch_mkfs >$seqres.full 2>&1
+_scratch_enable_pquota
+_qmount_option "prjquota"
+_qmount
+_require_prjquota $SCRATCH_DEV
+
+filter_quota()
+{
+	# Different filesystems might returns EDQUOT or ENOSPC if project
+	# quota is exceeded
+	if [ "$1" = "P" ];then
+		sed -e "s/.*: \(.*\)/Error: \1/g" \
+		    -e "s,Disk quota exceeded,EDQUOT|ENOSPC,g" \
+		    -e "s,No space left on device,EDQUOT|ENOSPC,g"
+	else
+		sed -e "s/.*: \(.*\)/Error: \1/g"
+	fi
+}
+
+exercise()
+{
+	local type=$1
+	local file=$SCRATCH_MNT/testfile
+
+	echo "= Test type=$type quota =" >>$seqres.full
+	_scratch_unmount
+	_scratch_mkfs >>$seqres.full 2>&1
+	if [ "$type" = "P" ];then
+		_scratch_enable_pquota
+	fi
+	_qmount
+	if [ "$type" = "P" ];then
+		_create_project_quota $SCRATCH_MNT/t 100 $qa_user
+		file=$SCRATCH_MNT/t/testfile
+	fi
+
+	setquota -${type} $qa_user 1M 200M 0 0 $SCRATCH_MNT
+	setquota -${type} -t 86400 86400 $SCRATCH_MNT
+	repquota -v -${type} $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
+	# Exceed the soft quota limit a bit at first
+	su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 2m' -c fsync ${file}.0" >>$seqres.full
+	# Write more data more times under soft quota limit exhausted condition,
+	# but not reach hard limit. To make sure each write won't trigger EDQUOT.
+	for ((i=1; i<=100; i++));do
+		su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.$i" >>$seqres.full
+		if [ $? -ne 0 ];then
+			echo "Unexpected error (type=$type)!"
+			break
+		fi
+	done
+	repquota -v -${type} $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
+
+	# As we've tested soft limit, now exceed the hard limit and give it a
+	# test in passing.
+	su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 100m' -c fsync ${file}.hard.0" 2>&1 >/dev/null | filter_quota $type
+	for ((i=1; i<=10; i++));do
+		su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.hard.$i" 2>&1 | filter_quota $type
+	done
+}
+
+_qmount_option "usrquota"
+exercise u
+_qmount_option "grpquota"
+exercise g
+_qmount_option "prjquota"
+exercise P
+
+# success, all done
+status=0
+exit
