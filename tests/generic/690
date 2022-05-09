@@ -1,0 +1,90 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 690
+#
+# Test that if we fsync a directory, create a symlink inside it, rename the
+# symlink, fsync again the directory and then power fail, after the filesystem
+# is mounted again, the symlink exists with the new name and it has the correct
+# content.
+#
+# On btrfs this used to result in the symlink being empty (i_size 0), and it was
+# fixed by kernel commit:
+#
+#    d0e64a981fd841 ("btrfs: always log symlinks in full mode")
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/rc
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+
+_supported_fs generic
+_require_scratch
+_require_symlinks
+_require_dm_target flakey
+
+rm -f $seqres.full
+
+# f2fs doesn't support fs-op level transaction functionality, so it has no way
+# to persist all metadata updates in one transaction. We have to use its mount
+# option "fastboot" so that it triggers a metadata checkpoint to persist all
+# metadata updates that happen before a fsync call. Without this, after the
+# last fsync in the test, the symlink named "baz" will not exist.
+if [ $FSTYP = "f2fs" ]; then
+	export MOUNT_OPTIONS="-o fastboot $MOUNT_OPTIONS"
+fi
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test directory.
+mkdir "$SCRATCH_MNT"/testdir
+
+# Commit the current transaction and persist the directory.
+sync
+
+# Create a file in the test directory, so that the next fsync on the directory
+# actually does something (it logs the directory).
+echo -n > "$SCRATCH_MNT"/testdir/foo
+
+# Fsync the directory.
+$XFS_IO_PROG -c "fsync" "$SCRATCH_MNT"/testdir
+
+# Now create a symlink inside the test directory.
+ln -s "$SCRATCH_MNT"/testdir/foo "$SCRATCH_MNT"/testdir/bar
+
+# Rename the symlink.
+mv "$SCRATCH_MNT"/testdir/bar "$SCRATCH_MNT"/testdir/baz
+
+# Fsync again the directory.
+$XFS_IO_PROG -c "fsync" "$SCRATCH_MNT"/testdir
+
+# Simulate a power failure and then mount again the filesystem to replay the
+# journal/log.
+_flakey_drop_and_remount
+
+# The symlink should exist, with the name "baz" and its content must be
+# "$SCRATCH_MNT/testdir/foo".
+[ -L "$SCRATCH_MNT"/testdir/baz ] || echo "symlink 'baz' is missing"
+symlink_content=$(readlink "$SCRATCH_MNT"/testdir/baz | _filter_scratch)
+echo "symlink content: ${symlink_content}"
+
+_unmount_flakey
+
+# success, all done
+status=0
+exit
