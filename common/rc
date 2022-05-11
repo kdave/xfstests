@@ -409,15 +409,25 @@ _scratch_remount()
 _scratch_cycle_mount()
 {
     local opts="$1"
+    local unmounted
 
-    if [ "$FSTYP" = tmpfs ]; then
-	_scratch_remount "$opts"
-	return
-    fi
+    case "$FSTYP" in
+    tmpfs)
+        _scratch_remount "$opts"
+        return
+        ;;
+    overlay)
+        if [ "$OVL_BASE_FSTYP" = tmpfs ]; then
+            $UMOUNT_PROG $SCRATCH_MNT
+            unmounted=true
+        fi
+        ;;
+    esac
+
     if test -n "$opts"; then
 	opts="-o $opts"
     fi
-    _scratch_unmount
+    [ "$unmounted" = true ] || _scratch_unmount
     _try_scratch_mount "$opts" || _fail "cycle mount failed"
 }
 
@@ -526,10 +536,21 @@ _test_unmount()
 
 _test_cycle_mount()
 {
-    if [ "$FSTYP" = tmpfs ]; then
-	return
-    fi
-    _test_unmount
+    local unmounted
+
+    case "$FSTYP" in
+    tmpfs)
+        return
+        ;;
+    overlay)
+        if [ "$OVL_BASE_FSTYP" = tmpfs ]; then
+            $UMOUNT_PROG $TEST_DIR
+            unmounted=true
+        fi
+        ;;
+    esac
+
+    [ "$unmounted" = true ] || _test_unmount
     _test_mount
 }
 
