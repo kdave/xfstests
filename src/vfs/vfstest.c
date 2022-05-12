@@ -226,17 +226,6 @@ __attribute__((unused)) static int print_r(int fd, const char *path)
 }
 #endif
 
-static int sys_execveat(int fd, const char *path, char **argv, char **envp,
-			int flags)
-{
-#ifdef __NR_execveat
-	return syscall(__NR_execveat, fd, path, argv, envp, flags);
-#else
-	errno = ENOSYS;
-	return -1;
-#endif
-}
-
 static void test_setup(struct vfstest_info *info)
 {
 	if (mkdirat(info->t_mnt_fd, T_DIR1, 0777))

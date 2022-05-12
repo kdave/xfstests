@@ -148,4 +148,15 @@ static inline int sys_umount2(const char *path, int flags)
 	return syscall(__NR_umount2, path, flags);
 }
 
+static inline int sys_execveat(int fd, const char *path, char **argv,
+			       char **envp, int flags)
+{
+#ifdef __NR_execveat
+	return syscall(__NR_execveat, fd, path, argv, envp, flags);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+
 #endif /* __IDMAP_MISSING_H */
