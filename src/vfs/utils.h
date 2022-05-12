@@ -3,6 +3,8 @@
 #ifndef __IDMAP_UTILS_H
 #define __IDMAP_UTILS_H
 
+#include "../global.h"
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
