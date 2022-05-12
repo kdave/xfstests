@@ -55,8 +55,33 @@
 		__internal_ret__;                             \
 	})
 
+struct vfstest_info {
+	uid_t t_overflowuid;
+	gid_t t_overflowgid;
+	/* path of the test device */
+	const char *t_fstype;
+	/* path of the test device */
+	const char *t_device;
+	/* path of the test scratch device */
+	const char *t_device_scratch;
+	/* mountpoint of the test device */
+	const char *t_mountpoint;
+	/* mountpoint of the test device */
+	const char *t_mountpoint_scratch;
+	/* fd for @t_mountpoint */
+	int t_mnt_fd;
+	/* fd for @t_mountpoint_scratch */
+	int t_mnt_scratch_fd;
+	/* fd for @T_DIR1 */
+	int t_dir1_fd;
+	/* whether the underlying filesystem supports idmapped mounts */
+	bool t_fs_allow_idmap;
+	/* whether user namespaces are supported */
+	bool t_has_userns;
+};
+
 struct test_struct {
-	int (*test)(void);
+	int (*test)(const struct vfstest_info *info);
 	unsigned int support_flags;
 	const char *description;
 };

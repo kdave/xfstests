@@ -96,42 +96,24 @@
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
-uid_t t_overflowuid = 65534;
-gid_t t_overflowgid = 65534;
+static char t_buf[PATH_MAX];
 
-/* path of the test device */
-const char *t_fstype;
+static void init_vfstest_info(struct vfstest_info *info)
+{
+	info->t_overflowuid		= 65534;
+	info->t_overflowgid		= 65534;
+	info->t_fstype			= NULL;
+	info->t_device			= NULL;
+	info->t_device_scratch		= NULL;
+	info->t_mountpoint		= NULL;
+	info->t_mountpoint_scratch	= NULL;
+	info->t_mnt_fd			= -EBADF;
+	info->t_mnt_scratch_fd		= -EBADF;
+	info->t_dir1_fd			= -EBADF;
+	info->t_fs_allow_idmap		= false;
+}
 
-/* path of the test device */
-const char *t_device;
-
-/* path of the test scratch device */
-const char *t_device_scratch;
-
-/* mountpoint of the test device */
-const char *t_mountpoint;
-
-/* mountpoint of the test device */
-const char *t_mountpoint_scratch;
-
-/* fd for @t_mountpoint */
-int t_mnt_fd;
-
-/* fd for @t_mountpoint_scratch */
-int t_mnt_scratch_fd;
-
-/* fd for @T_DIR1 */
-int t_dir1_fd;
-
-/* temporary buffer */
-char t_buf[PATH_MAX];
-
-/* whether the underlying filesystem supports idmapped mounts */
-bool t_fs_allow_idmap;
-/* whether the system supports user namespaces */
-bool t_has_userns;
-
-static void stash_overflowuid(void)
+static void stash_overflowuid(struct vfstest_info *info)
 {
 	int fd;
 	ssize_t ret;
@@ -146,10 +128,10 @@ static void stash_overflowuid(void)
 	if (ret < 0)
 		return;
 
-	t_overflowuid = atoi(buf);
+	info->t_overflowuid = atoi(buf);
 }
 
-static void stash_overflowgid(void)
+static void stash_overflowgid(struct vfstest_info *info)
 {
 	int fd;
 	ssize_t ret;
@@ -164,15 +146,15 @@ static void stash_overflowgid(void)
 	if (ret < 0)
 		return;
 
-	t_overflowgid = atoi(buf);
+	info->t_overflowgid = atoi(buf);
 }
 
-static bool is_xfs(void)
+static bool is_xfs(const char *fstype)
 {
 	static int enabled = -1;
 
 	if (enabled == -1)
-		enabled = !strcmp(t_fstype, "xfs");
+		enabled = !strcmp(fstype, "xfs");
 
 	return enabled;
 }
@@ -204,7 +186,7 @@ static bool protected_symlinks_enabled(void)
 	return enabled == 1;
 }
 
-static bool xfs_irix_sgid_inherit_enabled(void)
+static bool xfs_irix_sgid_inherit_enabled(const char *fstype)
 {
 	static int enabled = -1;
 
@@ -215,7 +197,7 @@ static bool xfs_irix_sgid_inherit_enabled(void)
 
 		enabled = 0;
 
-		if (is_xfs()) {
+		if (is_xfs(fstype)) {
 			fd = open("/proc/sys/fs/xfs/irix_sgid_inherit", O_RDONLY | O_CLOEXEC);
 			if (fd < 0)
 				return false;
@@ -861,28 +843,28 @@ static int set_dummy_vfs_caps(int fd, int flags, int rootuid)
 		fd = -EBADF;     \
 	}
 
-static void test_setup(void)
+static void test_setup(struct vfstest_info *info)
 {
-	if (mkdirat(t_mnt_fd, T_DIR1, 0777))
+	if (mkdirat(info->t_mnt_fd, T_DIR1, 0777))
 		die("failure: mkdirat");
 
-	t_dir1_fd = openat(t_mnt_fd, T_DIR1, O_CLOEXEC | O_DIRECTORY);
-	if (t_dir1_fd < 0)
+	info->t_dir1_fd = openat(info->t_mnt_fd, T_DIR1, O_CLOEXEC | O_DIRECTORY);
+	if (info->t_dir1_fd < 0)
 		die("failure: openat");
 
-	if (fchmod(t_dir1_fd, 0777))
+	if (fchmod(info->t_dir1_fd, 0777))
 		die("failure: fchmod");
 }
 
-static void test_cleanup(void)
+static void test_cleanup(struct vfstest_info *info)
 {
-	safe_close(t_dir1_fd);
-	if (rm_r(t_mnt_fd, T_DIR1))
+	safe_close(info->t_dir1_fd);
+	if (rm_r(info->t_mnt_fd, T_DIR1))
 		die("failure: rm_r");
 }
 
 /* Validate that basic file operations on idmapped mounts. */
-static int fsids_unmapped(void)
+static int fsids_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, hardlink_target_fd = -EBADF, open_tree_fd = -EBADF;
@@ -891,20 +873,20 @@ static int fsids_unmapped(void)
 	};
 
 	/* create hardlink target */
-	hardlink_target_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	hardlink_target_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (hardlink_target_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
 	/* create directory for rename test */
-	if (mkdirat(t_dir1_fd, DIR1, 0700)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0700)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -916,7 +898,7 @@ static int fsids_unmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1051,7 +1033,7 @@ out:
 	return fret;
 }
 
-static int fsids_mapped(void)
+static int fsids_mapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, hardlink_target_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1064,20 +1046,20 @@ static int fsids_mapped(void)
 		return 0;
 
 	/* create hardlink target */
-	hardlink_target_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	hardlink_target_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (hardlink_target_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
 	/* create directory for rename test */
-	if (mkdirat(t_dir1_fd, DIR1, 0700)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0700)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1089,7 +1071,7 @@ static int fsids_mapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1183,7 +1165,7 @@ out:
 }
 
 /* Validate that basic file operations on idmapped mounts from a user namespace. */
-static int create_in_userns(void)
+static int create_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1193,7 +1175,7 @@ static int create_in_userns(void)
 	pid_t pid;
 
 	/* change ownership of all files to uid 0 */
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1205,7 +1187,7 @@ static int create_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1298,17 +1280,17 @@ out:
 	return fret;
 }
 
-static int hardlink_crossing_mounts(void)
+static int hardlink_crossing_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 
-        if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+        if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1336,7 +1318,7 @@ static int hardlink_crossing_mounts(void)
 	 * interested in making sure we're not introducing an accidental way to
 	 * violate that restriction or that suddenly this becomes possible.
 	 */
-	if (!linkat(open_tree_fd, FILE1, t_dir1_fd, HARDLINK1, 0)) {
+	if (!linkat(open_tree_fd, FILE1, info->t_dir1_fd, HARDLINK1, 0)) {
 		log_stderr("failure: linkat");
 		goto out;
 	}
@@ -1354,7 +1336,7 @@ out:
 	return fret;
 }
 
-static int hardlink_crossing_idmapped_mounts(void)
+static int hardlink_crossing_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd1 = -EBADF, open_tree_fd2 = -EBADF;
@@ -1362,7 +1344,7 @@ static int hardlink_crossing_idmapped_mounts(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1373,7 +1355,7 @@ static int hardlink_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd1 = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd1 = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1400,7 +1382,7 @@ static int hardlink_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 10000, 10000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1412,7 +1394,7 @@ static int hardlink_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd2 = sys_open_tree(t_dir1_fd, DIR1,
+	open_tree_fd2 = sys_open_tree(info->t_dir1_fd, DIR1,
 				      AT_NO_AUTOMOUNT |
 				      AT_SYMLINK_NOFOLLOW |
 				      OPEN_TREE_CLOEXEC |
@@ -1454,7 +1436,7 @@ out:
 	return fret;
 }
 
-static int hardlink_from_idmapped_mount(void)
+static int hardlink_from_idmapped_mount(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1462,7 +1444,7 @@ static int hardlink_from_idmapped_mount(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1473,7 +1455,7 @@ static int hardlink_from_idmapped_mount(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1501,7 +1483,7 @@ static int hardlink_from_idmapped_mount(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 10000, 10000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1523,7 +1505,7 @@ out:
 	return fret;
 }
 
-static int hardlink_from_idmapped_mount_in_userns(void)
+static int hardlink_from_idmapped_mount_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1532,7 +1514,7 @@ static int hardlink_from_idmapped_mount_in_userns(void)
 	};
 	pid_t pid;
 
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1543,7 +1525,7 @@ static int hardlink_from_idmapped_mount_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1598,17 +1580,17 @@ out:
 	return fret;
 }
 
-static int rename_crossing_mounts(void)
+static int rename_crossing_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1636,7 +1618,7 @@ static int rename_crossing_mounts(void)
 	 * interested in making sure we're not introducing an accidental way to
 	 * violate that restriction or that suddenly this becomes possible.
 	 */
-	if (!renameat(open_tree_fd, FILE1, t_dir1_fd, FILE1_RENAME)) {
+	if (!renameat(open_tree_fd, FILE1, info->t_dir1_fd, FILE1_RENAME)) {
 		log_stderr("failure: renameat");
 		goto out;
 	}
@@ -1654,7 +1636,7 @@ out:
 	return fret;
 }
 
-static int rename_crossing_idmapped_mounts(void)
+static int rename_crossing_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd1 = -EBADF, open_tree_fd2 = -EBADF;
@@ -1662,7 +1644,7 @@ static int rename_crossing_idmapped_mounts(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1673,7 +1655,7 @@ static int rename_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd1 = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd1 = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1700,7 +1682,7 @@ static int rename_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 10000, 10000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1710,7 +1692,7 @@ static int rename_crossing_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd2 = sys_open_tree(t_dir1_fd, DIR1,
+	open_tree_fd2 = sys_open_tree(info->t_dir1_fd, DIR1,
 				      AT_NO_AUTOMOUNT |
 				      AT_SYMLINK_NOFOLLOW |
 				      OPEN_TREE_CLOEXEC |
@@ -1752,7 +1734,7 @@ out:
 	return fret;
 }
 
-static int rename_from_idmapped_mount(void)
+static int rename_from_idmapped_mount(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1760,7 +1742,7 @@ static int rename_from_idmapped_mount(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1771,7 +1753,7 @@ static int rename_from_idmapped_mount(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1798,7 +1780,7 @@ static int rename_from_idmapped_mount(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 10000, 10000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1819,7 +1801,7 @@ out:
 	return fret;
 }
 
-static int rename_from_idmapped_mount_in_userns(void)
+static int rename_from_idmapped_mount_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1828,7 +1810,7 @@ static int rename_from_idmapped_mount_in_userns(void)
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
 
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1839,7 +1821,7 @@ static int rename_from_idmapped_mount_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1894,24 +1876,24 @@ out:
 	return fret;
 }
 
-static int symlink_regular_mounts(void)
+static int symlink_regular_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct stat st;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	if (chown_r(t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -1961,7 +1943,7 @@ out:
 	return fret;
 }
 
-static int symlink_idmapped_mounts(void)
+static int symlink_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -1973,13 +1955,13 @@ static int symlink_idmapped_mounts(void)
 	if (!caps_supported())
 		return 0;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -1991,7 +1973,7 @@ static int symlink_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -2046,7 +2028,7 @@ out:
 	return fret;
 }
 
-static int symlink_idmapped_mounts_in_userns(void)
+static int symlink_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -2055,7 +2037,7 @@ static int symlink_idmapped_mounts_in_userns(void)
 	};
 	pid_t pid;
 
-	if (chown_r(t_mnt_fd, T_DIR1, 0, 0)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 0, 0)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -2067,7 +2049,7 @@ static int symlink_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -2115,12 +2097,12 @@ static int symlink_idmapped_mounts_in_userns(void)
 	if (wait_for_pid(pid))
 		goto out;
 
-	if (!expected_uid_gid(t_dir1_fd, FILE2, AT_SYMLINK_NOFOLLOW, 5000, 5000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE2, AT_SYMLINK_NOFOLLOW, 5000, 5000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2138,7 +2120,7 @@ out:
 /* Validate that a caller whose fsids map into the idmapped mount within it's
  * user namespace cannot create any device nodes.
  */
-static int device_node_in_userns(void)
+static int device_node_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF;
@@ -2153,7 +2135,7 @@ static int device_node_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -2199,7 +2181,7 @@ out:
 
 
 /* Validate that changing file ownership works correctly on idmapped mounts. */
-static int expected_uid_gid_idmapped_mounts(void)
+static int expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd1 = -EBADF, open_tree_fd2 = -EBADF;
@@ -2217,38 +2199,38 @@ static int expected_uid_gid_idmapped_mounts(void)
 	}
 
 	/* create regular file via open() */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
 	/* create regular file via mknod */
-	if (mknodat(t_dir1_fd, FILE2, S_IFREG | 0000, 0)) {
+	if (mknodat(info->t_dir1_fd, FILE2, S_IFREG | 0000, 0)) {
 		log_stderr("failure: mknodat");
 		goto out;
 	}
 
 	/* create character device */
-	if (mknodat(t_dir1_fd, CHRDEV1, S_IFCHR | 0644, makedev(5, 1))) {
+	if (mknodat(info->t_dir1_fd, CHRDEV1, S_IFCHR | 0644, makedev(5, 1))) {
 		log_stderr("failure: mknodat");
 		goto out;
 	}
 
 	/* create hardlink */
-	if (linkat(t_dir1_fd, FILE1, t_dir1_fd, HARDLINK1, 0)) {
+	if (linkat(info->t_dir1_fd, FILE1, info->t_dir1_fd, HARDLINK1, 0)) {
 		log_stderr("failure: linkat");
 		goto out;
 	}
 
 	/* create symlink */
-	if (symlinkat(FILE2, t_dir1_fd, SYMLINK1)) {
+	if (symlinkat(FILE2, info->t_dir1_fd, SYMLINK1)) {
 		log_stderr("failure: symlinkat");
 		goto out;
 	}
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0700)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0700)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
@@ -2260,7 +2242,7 @@ static int expected_uid_gid_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd1 = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd1 = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -2279,31 +2261,31 @@ static int expected_uid_gid_idmapped_mounts(void)
 	/* Validate that all files created through the image mountpoint are
 	 * owned by the callers fsuid and fsgid.
 	 */
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2347,7 +2329,7 @@ static int expected_uid_gid_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd2 = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd2 = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -2396,61 +2378,61 @@ static int expected_uid_gid_idmapped_mounts(void)
 	}
 
 	/* Change ownership throught original image mountpoint. */
-	if (fchownat(t_dir1_fd, FILE1, 2000, 2000, 0)) {
+	if (fchownat(info->t_dir1_fd, FILE1, 2000, 2000, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, FILE2, 2000, 2000, 0)) {
+	if (fchownat(info->t_dir1_fd, FILE2, 2000, 2000, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, HARDLINK1, 2000, 2000, 0)) {
+	if (fchownat(info->t_dir1_fd, HARDLINK1, 2000, 2000, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, CHRDEV1, 2000, 2000, 0)) {
+	if (fchownat(info->t_dir1_fd, CHRDEV1, 2000, 2000, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW)) {
+	if (fchownat(info->t_dir1_fd, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, SYMLINK1, 2000, 2000, AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, SYMLINK1, 2000, 2000, AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(t_dir1_fd, DIR1, 2000, 2000, AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, DIR1, 2000, 2000, AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
 
 	/* Check ownership through original mount. */
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 3000, 3000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 3000, 3000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2502,7 +2484,7 @@ static int expected_uid_gid_idmapped_mounts(void)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, t_overflowuid, t_overflowgid)) {
+	if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2524,19 +2506,19 @@ static int expected_uid_gid_idmapped_mounts(void)
 		if (!switch_userns(attr1.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!fchownat(t_dir1_fd, FILE1, 1000, 1000, 0))
+		if (!fchownat(info->t_dir1_fd, FILE1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, FILE2, 1000, 1000, 0))
+		if (!fchownat(info->t_dir1_fd, FILE2, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, HARDLINK1, 1000, 1000, 0))
+		if (!fchownat(info->t_dir1_fd, HARDLINK1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, CHRDEV1, 1000, 1000, 0))
+		if (!fchownat(info->t_dir1_fd, CHRDEV1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, SYMLINK1, 2000, 2000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
+		if (!fchownat(info->t_dir1_fd, SYMLINK1, 2000, 2000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, SYMLINK1, 1000, 1000, AT_EMPTY_PATH))
+		if (!fchownat(info->t_dir1_fd, SYMLINK1, 1000, 1000, AT_EMPTY_PATH))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, DIR1, 1000, 1000, AT_EMPTY_PATH))
+		if (!fchownat(info->t_dir1_fd, DIR1, 1000, 1000, AT_EMPTY_PATH))
 			die("failure: fchownat");
 
 		if (!fchownat(open_tree_fd2, FILE1, 1000, 1000, 0))
@@ -2569,34 +2551,34 @@ static int expected_uid_gid_idmapped_mounts(void)
 		if (fchownat(open_tree_fd1, DIR1, 1000, 1000, AT_EMPTY_PATH))
 			die("failure: fchownat");
 
-		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, FILE2, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
-		if (!expected_uid_gid(open_tree_fd2, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, FILE2, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, FILE2, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, HARDLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, DIR1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd2, DIR1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd1, FILE1, 0, 1000, 1000))
@@ -2621,31 +2603,31 @@ static int expected_uid_gid_idmapped_mounts(void)
 		goto out;
 
 	/* Check ownership through original mount. */
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 1000, 1000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2719,19 +2701,19 @@ static int expected_uid_gid_idmapped_mounts(void)
 		if (!switch_userns(attr2.userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!fchownat(t_dir1_fd, FILE1, 0, 0, 0))
+		if (!fchownat(info->t_dir1_fd, FILE1, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, FILE2, 0, 0, 0))
+		if (!fchownat(info->t_dir1_fd, FILE2, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, HARDLINK1, 0, 0, 0))
+		if (!fchownat(info->t_dir1_fd, HARDLINK1, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, CHRDEV1, 0, 0, 0))
+		if (!fchownat(info->t_dir1_fd, CHRDEV1, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
+		if (!fchownat(info->t_dir1_fd, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, SYMLINK1, 0, 0, AT_EMPTY_PATH))
+		if (!fchownat(info->t_dir1_fd, SYMLINK1, 0, 0, AT_EMPTY_PATH))
 			die("failure: fchownat");
-		if (!fchownat(t_dir1_fd, DIR1, 0, 0, AT_EMPTY_PATH))
+		if (!fchownat(info->t_dir1_fd, DIR1, 0, 0, AT_EMPTY_PATH))
 			die("failure: fchownat");
 
 		if (!fchownat(open_tree_fd1, FILE1, 0, 0, 0))
@@ -2764,34 +2746,34 @@ static int expected_uid_gid_idmapped_mounts(void)
 		if (fchownat(open_tree_fd2, DIR1, 0, 0, AT_EMPTY_PATH))
 			die("failure: fchownat");
 
-		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, FILE2, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
-		if (!expected_uid_gid(open_tree_fd1, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, FILE2, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, FILE2, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, HARDLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, AT_SYMLINK_NOFOLLOW, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, DIR1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd1, DIR1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd2, FILE1, 0, 0, 0))
@@ -2816,31 +2798,31 @@ static int expected_uid_gid_idmapped_mounts(void)
 		goto out;
 
 	/* Check ownership through original mount. */
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, HARDLINK1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, SYMLINK1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -2917,13 +2899,13 @@ out:
 	return fret;
 }
 
-static int fscaps(void)
+static int fscaps(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, fd_userns = -EBADF;
 	pid_t pid;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3033,7 +3015,7 @@ out:
 	return fret;
 }
 
-static int fscaps_idmapped_mounts(void)
+static int fscaps_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, file1_fd2 = -EBADF, open_tree_fd = -EBADF;
@@ -3042,7 +3024,7 @@ static int fscaps_idmapped_mounts(void)
 	};
 	pid_t pid;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3064,7 +3046,7 @@ static int fscaps_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3181,7 +3163,7 @@ out:
 	return fret;
 }
 
-static int fscaps_idmapped_mounts_in_userns(void)
+static int fscaps_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, file1_fd2 = -EBADF, open_tree_fd = -EBADF;
@@ -3190,7 +3172,7 @@ static int fscaps_idmapped_mounts_in_userns(void)
 	};
 	pid_t pid;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3212,7 +3194,7 @@ static int fscaps_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3279,7 +3261,7 @@ out:
 	return fret;
 }
 
-static int fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns(void)
+static int fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, file1_fd2 = -EBADF, open_tree_fd = -EBADF;
@@ -3288,7 +3270,7 @@ static int fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns(void)
 	};
 	pid_t pid;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3318,7 +3300,7 @@ static int fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3394,7 +3376,7 @@ out:
 	return fret;
 }
 
-static int fscaps_idmapped_mounts_in_userns_separate_userns(void)
+static int fscaps_idmapped_mounts_in_userns_separate_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, file1_fd2 = -EBADF, open_tree_fd = -EBADF;
@@ -3403,7 +3385,7 @@ static int fscaps_idmapped_mounts_in_userns_separate_userns(void)
 	};
 	pid_t pid;
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3421,7 +3403,7 @@ static int fscaps_idmapped_mounts_in_userns_separate_userns(void)
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (chown_r(t_mnt_fd, T_DIR1, 20000, 20000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 20000, 20000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -3433,7 +3415,7 @@ static int fscaps_idmapped_mounts_in_userns_separate_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3585,14 +3567,14 @@ static void __attribute__((constructor)) setuid_rexec(void)
 }
 
 /* Validate that setid transitions are handled correctly. */
-static int setid_binaries(void)
+static int setid_binaries(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, exec_fd = -EBADF;
 	pid_t pid;
 
 	/* create a file to be used as setuid binary */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3624,7 +3606,7 @@ static int setid_binaries(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -3651,10 +3633,10 @@ static int setid_binaries(void)
 			NULL,
 		};
 
-		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 5000, 5000))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 5000, 5000))
 			die("failure: expected_uid_gid");
 
-		sys_execveat(t_dir1_fd, FILE1, argv, envp, 0);
+		sys_execveat(info->t_dir1_fd, FILE1, argv, envp, 0);
 		die("failure: sys_execveat");
 
 		exit(EXIT_FAILURE);
@@ -3670,7 +3652,7 @@ out:
 }
 
 /* Validate that setid transitions are handled correctly on idmapped mounts. */
-static int setid_binaries_idmapped_mounts(void)
+static int setid_binaries_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, exec_fd = -EBADF, open_tree_fd = -EBADF;
@@ -3679,13 +3661,13 @@ static int setid_binaries_idmapped_mounts(void)
 	};
 	pid_t pid;
 
-	if (mkdirat(t_mnt_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_mnt_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
 	/* create a file to be used as setuid binary */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3717,7 +3699,7 @@ static int setid_binaries_idmapped_mounts(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -3732,7 +3714,7 @@ static int setid_binaries_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3757,7 +3739,7 @@ static int setid_binaries_idmapped_mounts(void)
 	 * use this can't work. So attach the mount to the filesystem first
 	 * before performing this check.
 	 */
-	if (sys_move_mount(open_tree_fd, "", t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
+	if (sys_move_mount(open_tree_fd, "", info->t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
 		log_stderr("failure: sys_move_mount");
 		goto out;
 	}
@@ -3798,9 +3780,9 @@ out:
 	safe_close(file1_fd);
 	safe_close(open_tree_fd);
 
-	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, t_mountpoint);
+	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, info->t_mountpoint);
 	sys_umount2(t_buf, MNT_DETACH);
-	rm_r(t_mnt_fd, DIR1);
+	rm_r(info->t_mnt_fd, DIR1);
 
 	return fret;
 }
@@ -3809,7 +3791,7 @@ out:
  * running in a user namespace where the uid and gid of the setid binary have no
  * mapping.
  */
-static int setid_binaries_idmapped_mounts_in_userns(void)
+static int setid_binaries_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, exec_fd = -EBADF, open_tree_fd = -EBADF;
@@ -3818,13 +3800,13 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 	};
 	pid_t pid;
 
-	if (mkdirat(t_mnt_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_mnt_fd, DIR1, 0777)) {
 		log_stderr("failure: ");
 		goto out;
 	}
 
 	/* create a file to be used as setuid binary */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3858,7 +3840,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -3872,7 +3854,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -3897,7 +3879,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 	 * use this can't work. So attach the mount to the filesystem first
 	 * before performing this check.
 	 */
-	if (sys_move_mount(open_tree_fd, "", t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
+	if (sys_move_mount(open_tree_fd, "", info->t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
 		log_stderr("failure: sys_move_mount");
 		goto out;
 	}
@@ -3935,7 +3917,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -3954,7 +3936,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -3999,7 +3981,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4017,7 +3999,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -4054,7 +4036,7 @@ static int setid_binaries_idmapped_mounts_in_userns(void)
 		snprintf(expected_egid, sizeof(expected_egid), "EXPECTED_EGID=%d", getegid());
 		envp[2] = expected_egid;
 
-		if (!expected_uid_gid(open_tree_fd, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		sys_execveat(open_tree_fd, FILE1, argv, envp, 0);
@@ -4076,9 +4058,9 @@ out:
 	safe_close(file1_fd);
 	safe_close(open_tree_fd);
 
-	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, t_mountpoint);
+	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, info->t_mountpoint);
 	sys_umount2(t_buf, MNT_DETACH);
-	rm_r(t_mnt_fd, DIR1);
+	rm_r(info->t_mnt_fd, DIR1);
 
 	return fret;
 }
@@ -4087,7 +4069,7 @@ out:
  * running in a user namespace where the uid and gid of the setid binary have no
  * mapping.
  */
-static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
+static int setid_binaries_idmapped_mounts_in_userns_separate_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, exec_fd = -EBADF, open_tree_fd = -EBADF;
@@ -4096,13 +4078,13 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	};
 	pid_t pid;
 
-	if (mkdirat(t_mnt_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_mnt_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
 	/* create a file to be used as setuid binary */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC | O_RDWR, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4124,7 +4106,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	safe_close(exec_fd);
 
 	/* change ownership of all files to uid 0 */
-	if (chown_r(t_mnt_fd, T_DIR1, 20000, 20000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 20000, 20000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
@@ -4142,7 +4124,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -4156,7 +4138,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -4181,7 +4163,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	 * use this can't work. So attach the mount to the filesystem first
 	 * before performing this check.
 	 */
-	if (sys_move_mount(open_tree_fd, "", t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
+	if (sys_move_mount(open_tree_fd, "", info->t_mnt_fd, DIR1, MOVE_MOUNT_F_EMPTY_PATH)) {
 		log_stderr("failure: sys_move_mount");
 		goto out;
 	}
@@ -4224,7 +4206,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 		goto out;
 	}
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4243,7 +4225,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -4292,7 +4274,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 		goto out;
 	}
 
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDWR | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4310,7 +4292,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setid(t_dir1_fd, FILE1, 0)) {
+	if (!is_setid(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: is_setid");
 		goto out;
 	}
@@ -4352,7 +4334,7 @@ static int setid_binaries_idmapped_mounts_in_userns_separate_userns(void)
 		snprintf(expected_egid, sizeof(expected_egid), "EXPECTED_EGID=%d", getegid());
 		envp[2] = expected_egid;
 
-		if (!expected_uid_gid(open_tree_fd, FILE1, 0, t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(open_tree_fd, FILE1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		sys_execveat(open_tree_fd, FILE1, argv, envp, 0);
@@ -4373,14 +4355,14 @@ out:
 	safe_close(file1_fd);
 	safe_close(open_tree_fd);
 
-	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, t_mountpoint);
+	snprintf(t_buf, sizeof(t_buf), "%s/" DIR1, info->t_mountpoint);
 	sys_umount2(t_buf, MNT_DETACH);
-	rm_r(t_mnt_fd, DIR1);
+	rm_r(info->t_mnt_fd, DIR1);
 
 	return fret;
 }
 
-static int sticky_bit_unlink(void)
+static int sticky_bit_unlink(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF;
@@ -4390,12 +4372,12 @@ static int sticky_bit_unlink(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4471,7 +4453,7 @@ static int sticky_bit_unlink(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -4578,7 +4560,7 @@ static int sticky_bit_unlink(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -4644,7 +4626,7 @@ out:
 	return fret;
 }
 
-static int sticky_bit_unlink_idmapped_mounts(void)
+static int sticky_bit_unlink_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, open_tree_fd = -EBADF;
@@ -4657,12 +4639,12 @@ static int sticky_bit_unlink_idmapped_mounts(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -4759,7 +4741,7 @@ static int sticky_bit_unlink_idmapped_mounts(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -4866,7 +4848,7 @@ static int sticky_bit_unlink_idmapped_mounts(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -4937,7 +4919,7 @@ out:
 /* Validate that the sticky bit behaves correctly on idmapped mounts for unlink
  * operations in a user namespace.
  */
-static int sticky_bit_unlink_idmapped_mounts_in_userns(void)
+static int sticky_bit_unlink_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, open_tree_fd = -EBADF;
@@ -4950,12 +4932,12 @@ static int sticky_bit_unlink_idmapped_mounts_in_userns(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -5057,7 +5039,7 @@ static int sticky_bit_unlink_idmapped_mounts_in_userns(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5194,7 +5176,7 @@ static int sticky_bit_unlink_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5278,7 +5260,7 @@ out:
 	return fret;
 }
 
-static int sticky_bit_rename(void)
+static int sticky_bit_rename(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF;
@@ -5288,12 +5270,12 @@ static int sticky_bit_rename(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -5373,7 +5355,7 @@ static int sticky_bit_rename(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5458,7 +5440,7 @@ static int sticky_bit_rename(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5503,7 +5485,7 @@ out:
 	return fret;
 }
 
-static int sticky_bit_rename_idmapped_mounts(void)
+static int sticky_bit_rename_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, open_tree_fd = -EBADF;
@@ -5516,12 +5498,12 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -5626,7 +5608,7 @@ static int sticky_bit_rename_idmapped_mounts(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5711,7 +5693,7 @@ static int sticky_bit_rename_idmapped_mounts(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -5760,7 +5742,7 @@ out:
 /* Validate that the sticky bit behaves correctly on idmapped mounts for unlink
  * operations in a user namespace.
  */
-static int sticky_bit_rename_idmapped_mounts_in_userns(void)
+static int sticky_bit_rename_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, open_tree_fd = -EBADF;
@@ -5773,12 +5755,12 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -5886,7 +5868,7 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 	}
 
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -6001,7 +5983,7 @@ static int sticky_bit_rename_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -6065,7 +6047,7 @@ out:
 }
 
 /* Validate that protected symlinks work correctly. */
-static int protected_symlinks(void)
+static int protected_symlinks(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, fd = -EBADF;
@@ -6078,12 +6060,12 @@ static int protected_symlinks(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -6097,7 +6079,7 @@ static int protected_symlinks(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -6276,7 +6258,7 @@ out:
 }
 
 /* Validate that protected symlinks work correctly on idmapped mounts. */
-static int protected_symlinks_idmapped_mounts(void)
+static int protected_symlinks_idmapped_mounts(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, fd = -EBADF, open_tree_fd = -EBADF;
@@ -6292,12 +6274,12 @@ static int protected_symlinks_idmapped_mounts(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -6311,7 +6293,7 @@ static int protected_symlinks_idmapped_mounts(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -6389,7 +6371,7 @@ static int protected_symlinks_idmapped_mounts(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -6517,7 +6499,7 @@ out:
 /* Validate that protected symlinks work correctly on idmapped mounts inside a
  * user namespace.
  */
-static int protected_symlinks_idmapped_mounts_in_userns(void)
+static int protected_symlinks_idmapped_mounts_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir_fd = -EBADF, fd = -EBADF, open_tree_fd = -EBADF;
@@ -6533,12 +6515,12 @@ static int protected_symlinks_idmapped_mounts_in_userns(void)
 		return 0;
 
 	/* create directory */
-	if (mkdirat(t_dir1_fd, DIR1, 0000)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0000)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -6552,7 +6534,7 @@ static int protected_symlinks_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 	/* validate sticky bit is set */
-	if (!is_sticky(t_dir1_fd, DIR1, 0)) {
+	if (!is_sticky(info->t_dir1_fd, DIR1, 0)) {
 		log_stderr("failure: is_sticky");
 		goto out;
 	}
@@ -6630,7 +6612,7 @@ static int protected_symlinks_idmapped_mounts_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -6764,7 +6746,7 @@ out:
 	return fret;
 }
 
-static int acls(void)
+static int acls(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int dir1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -6773,20 +6755,20 @@ static int acls(void)
 	};
 	pid_t pid;
 
-	if (mkdirat(t_dir1_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
-	if (fchmodat(t_dir1_fd, DIR1, 0777, 0)) {
+	if (fchmodat(info->t_dir1_fd, DIR1, 0777, 0)) {
 		log_stderr("failure: fchmodat");
 		goto out;
 	}
 
-	if (mkdirat(t_dir1_fd, DIR2, 0777)) {
+	if (mkdirat(info->t_dir1_fd, DIR2, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
-	if (fchmodat(t_dir1_fd, DIR2, 0777, 0)) {
+	if (fchmodat(info->t_dir1_fd, DIR2, 0777, 0)) {
 		log_stderr("failure: fchmodat");
 		goto out;
 	}
@@ -6798,7 +6780,7 @@ static int acls(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, DIR1,
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, DIR1,
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
 				     OPEN_TREE_CLOEXEC |
@@ -6813,12 +6795,12 @@ static int acls(void)
 		goto out;
 	}
 
-	if (sys_move_mount(open_tree_fd, "", t_dir1_fd, DIR2, MOVE_MOUNT_F_EMPTY_PATH)) {
+	if (sys_move_mount(open_tree_fd, "", info->t_dir1_fd, DIR2, MOVE_MOUNT_F_EMPTY_PATH)) {
 		log_stderr("failure: sys_move_mount");
 		goto out;
 	}
 
-	dir1_fd = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	dir1_fd = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (dir1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -6837,19 +6819,19 @@ static int acls(void)
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "setfacl -m u:100010:rwx %s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+	snprintf(t_buf, sizeof(t_buf), "setfacl -m u:100010:rwx %s/%s/%s/%s", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 	if (system(t_buf)) {
 		log_stderr("failure: system");
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:100010:rwx", t_mountpoint, T_DIR1, DIR1, DIR3);
+	snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:100010:rwx", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 	if (system(t_buf)) {
 		log_stderr("failure: system");
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:100020:rwx", t_mountpoint, T_DIR1, DIR2, DIR3);
+	snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:100020:rwx", info->t_mountpoint, T_DIR1, DIR2, DIR3);
 	if (system(t_buf)) {
 		log_stderr("failure: system");
 		goto out;
@@ -6870,7 +6852,7 @@ static int acls(void)
 			die("failure: switch_userns");
 
 		snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:%lu:rwx",
-			 t_mountpoint, T_DIR1, DIR1, DIR3, 4294967295LU);
+			 info->t_mountpoint, T_DIR1, DIR1, DIR3, 4294967295LU);
 		if (system(t_buf))
 			die("failure: system");
 
@@ -6896,7 +6878,7 @@ static int acls(void)
 			die("failure: switch_userns");
 
 		snprintf(t_buf, sizeof(t_buf), "getfacl -p %s/%s/%s/%s | grep -q user:%lu:rwx",
-			 t_mountpoint, T_DIR1, DIR2, DIR3, 100010LU);
+			 info->t_mountpoint, T_DIR1, DIR2, DIR3, 100010LU);
 		if (system(t_buf))
 			die("failure: system");
 
@@ -6943,7 +6925,7 @@ static int acls(void)
 	}
 
 	/* if we delete the acls, the ls should fail because it's 700. */
-	snprintf(t_buf, sizeof(t_buf), "%s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+	snprintf(t_buf, sizeof(t_buf), "%s/%s/%s/%s", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 	if (removexattr(t_buf, "system.posix_acl_access")) {
 		log_stderr("failure: removexattr");
 		goto out;
@@ -6976,7 +6958,7 @@ static int acls(void)
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "%s/" T_DIR1 "/" DIR2, t_mountpoint);
+	snprintf(t_buf, sizeof(t_buf), "%s/" T_DIR1 "/" DIR2, info->t_mountpoint);
 	sys_umount2(t_buf, MNT_DETACH);
 
 	fret = 0;
@@ -7043,7 +7025,7 @@ out:
 	return ret;
 }
 
-static int io_uring(void)
+static int io_uring(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF;
@@ -7070,7 +7052,7 @@ static int io_uring(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7092,7 +7074,7 @@ static int io_uring(void)
 	}
 	if (pid == 0) {
 		/* Verify we can open it with our current credentials. */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, false, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7115,7 +7097,7 @@ static int io_uring(void)
 
 		/* Verify we can't open it with our current credentials. */
 		ret_cqe = 0;
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, false, &ret_cqe);
 		if (file1_fd >= 0)
 			die("failure: io_uring_open_file");
@@ -7141,7 +7123,7 @@ static int io_uring(void)
 			die("failure: switch_ids");
 
 		/* Verify we can open it with the registered credentials. */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      cred_id, false, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7149,7 +7131,7 @@ static int io_uring(void)
 		/* Verify we can open it with the registered credentials and as
 		 * a link.
 		 */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      cred_id, true, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7176,7 +7158,7 @@ out_unmap:
 	return fret;
 }
 
-static int io_uring_userns(void)
+static int io_uring_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, userns_fd = -EBADF;
@@ -7203,7 +7185,7 @@ static int io_uring_userns(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7231,7 +7213,7 @@ static int io_uring_userns(void)
 	}
 	if (pid == 0) {
 		/* Verify we can open it with our current credentials. */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, false, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7254,7 +7236,7 @@ static int io_uring_userns(void)
 
 		/* Verify we can't open it with our current credentials. */
 		ret_cqe = 0;
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, false, &ret_cqe);
 		if (file1_fd >= 0)
 			die("failure: io_uring_open_file");
@@ -7280,7 +7262,7 @@ static int io_uring_userns(void)
 			die("failure: switch_userns");
 
 		/* Verify we can open it with the registered credentials. */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      cred_id, false, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7288,7 +7270,7 @@ static int io_uring_userns(void)
 		/* Verify we can open it with the registered credentials and as
 		 * a link.
 		 */
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      cred_id, true, NULL);
 		if (file1_fd < 0)
 			die("failure: io_uring_open_file");
@@ -7316,7 +7298,7 @@ out_unmap:
 	return fret;
 }
 
-static int io_uring_idmapped(void)
+static int io_uring_idmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -7346,7 +7328,7 @@ static int io_uring_idmapped(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7366,7 +7348,7 @@ static int io_uring_idmapped(void)
 	if (attr.userns_fd < 0)
 		return log_errno(-1, "failure: create user namespace");
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -7447,7 +7429,7 @@ out_unmap:
  * In no circumstances, even with recorded credentials can it be allowed to
  * open the file.
  */
-static int io_uring_idmapped_unmapped(void)
+static int io_uring_idmapped_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -7477,7 +7459,7 @@ static int io_uring_idmapped_unmapped(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7497,7 +7479,7 @@ static int io_uring_idmapped_unmapped(void)
 	if (attr.userns_fd < 0)
 		return log_errno(-1, "failure: create user namespace");
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -7562,7 +7544,7 @@ out_unmap:
 	return fret;
 }
 
-static int io_uring_idmapped_userns(void)
+static int io_uring_idmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -7592,7 +7574,7 @@ static int io_uring_idmapped_userns(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7612,7 +7594,7 @@ static int io_uring_idmapped_userns(void)
 	if (attr.userns_fd < 0)
 		return log_errno(-1, "failure: create user namespace");
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -7660,7 +7642,7 @@ static int io_uring_idmapped_userns(void)
 			die("failure: switch_userns");
 
 		ret_cqe = 0;
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, false, &ret_cqe);
 		if (file1_fd >= 0)
 			die("failure: io_uring_open_file");
@@ -7670,7 +7652,7 @@ static int io_uring_idmapped_userns(void)
 			die("failure: errno(%d)", abs(ret_cqe));
 
 		ret_cqe = 0;
-		file1_fd = io_uring_openat_with_creds(ring, t_dir1_fd, FILE1,
+		file1_fd = io_uring_openat_with_creds(ring, info->t_dir1_fd, FILE1,
 						      -1, true, &ret_cqe);
 		if (file1_fd >= 0)
 			die("failure: io_uring_open_file");
@@ -7733,7 +7715,7 @@ out_unmap:
 	return fret;
 }
 
-static int io_uring_idmapped_unmapped_userns(void)
+static int io_uring_idmapped_unmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -7763,7 +7745,7 @@ static int io_uring_idmapped_unmapped_userns(void)
 	cred_id = ret;
 
 	/* create file only owner can open */
-	file1_fd = openat(t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_RDONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0000);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -7783,7 +7765,7 @@ static int io_uring_idmapped_unmapped_userns(void)
 	if (attr.userns_fd < 0)
 		return log_errno(-1, "failure: create user namespace");
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -7859,7 +7841,7 @@ out_unmap:
  * created within a setgid directory and irix_sgid_inhiert is set then inherit
  * the setgid bit if the caller is in the group of the directory.
  */
-static int setgid_create(void)
+static int setgid_create(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF;
@@ -7870,7 +7852,7 @@ static int setgid_create(void)
 	if (!caps_supported())
 		return 0;
 
-	if (fchmod(t_dir1_fd, S_IRUSR |
+	if (fchmod(info->t_dir1_fd, S_IRUSR |
 			      S_IWUSR |
 			      S_IRGRP |
 			      S_IWGRP |
@@ -7885,12 +7867,12 @@ static int setgid_create(void)
 	}
 
 	/* Verify that the setgid bit got raised. */
-	if (!is_setgid(t_dir1_fd, "", AT_EMPTY_PATH)) {
+	if (!is_setgid(info->t_dir1_fd, "", AT_EMPTY_PATH)) {
 		log_stderr("failure: is_setgid");
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(t_dir1_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -7899,77 +7881,77 @@ static int setgid_create(void)
 	}
 	if (pid == 0) {
 		/* create regular file via open() */
-		file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, S_IXGRP | S_ISGID);
+		file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, S_IXGRP | S_ISGID);
 		if (file1_fd < 0)
 			die("failure: create");
 
 		/* We're capable_wrt_inode_uidgid() and also our fsgid matches
 		 * the directories gid.
 		 */
-		if (!is_setgid(t_dir1_fd, FILE1, 0))
+		if (!is_setgid(info->t_dir1_fd, FILE1, 0))
 			die("failure: is_setgid");
 
 		/* create directory */
-		if (mkdirat(t_dir1_fd, DIR1, 0000))
+		if (mkdirat(info->t_dir1_fd, DIR1, 0000))
 			die("failure: create");
 
 		/* Directories always inherit the setgid bit. */
-		if (!is_setgid(t_dir1_fd, DIR1, 0))
+		if (!is_setgid(info->t_dir1_fd, DIR1, 0))
 			die("failure: is_setgid");
 
 		/* create a special file via mknodat() vfs_create */
-		if (mknodat(t_dir1_fd, FILE2, S_IFREG | S_ISGID | S_IXGRP, 0))
+		if (mknodat(info->t_dir1_fd, FILE2, S_IFREG | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (!is_setgid(t_dir1_fd, FILE2, 0))
+		if (!is_setgid(info->t_dir1_fd, FILE2, 0))
 			die("failure: is_setgid");
 
 		/* create a character device via mknodat() vfs_mknod */
-		if (mknodat(t_dir1_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, makedev(5, 1)))
+		if (mknodat(info->t_dir1_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, makedev(5, 1)))
 			die("failure: mknodat");
 
-		if (!is_setgid(t_dir1_fd, CHRDEV1, 0))
+		if (!is_setgid(info->t_dir1_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (unlinkat(t_dir1_fd, FILE1, 0))
+		if (unlinkat(info->t_dir1_fd, FILE1, 0))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, DIR1, AT_REMOVEDIR))
+		if (unlinkat(info->t_dir1_fd, DIR1, AT_REMOVEDIR))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, FILE2, 0))
+		if (unlinkat(info->t_dir1_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, CHRDEV1, 0))
+		if (unlinkat(info->t_dir1_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
 		if (supported) {
-			tmpfile_fd = openat(t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			tmpfile_fd = openat(info->t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
 			if (tmpfile_fd < 0)
 				die("failure: create");
 			/* link the temporary file into the filesystem, making it permanent */
-			if (linkat(tmpfile_fd, "", t_dir1_fd, FILE3, AT_EMPTY_PATH))
+			if (linkat(tmpfile_fd, "", info->t_dir1_fd, FILE3, AT_EMPTY_PATH))
 				die("failure: linkat");
 			if (close(tmpfile_fd))
 				die("failure: close");
-			if (!is_setgid(t_dir1_fd, FILE3, 0))
+			if (!is_setgid(info->t_dir1_fd, FILE3, 0))
 				die("failure: is_setgid");
-			if (!expected_uid_gid(t_dir1_fd, FILE3, 0, 0, 0))
+			if (!expected_uid_gid(info->t_dir1_fd, FILE3, 0, 0, 0))
 				die("failure: check ownership");
-			if (unlinkat(t_dir1_fd, FILE3, 0))
+			if (unlinkat(info->t_dir1_fd, FILE3, 0))
 				die("failure: delete");
 		}
 
@@ -7991,49 +7973,49 @@ static int setgid_create(void)
 			die("failure: caps_down_fsetid");
 
 		/* create regular file via open() */
-		file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, S_IXGRP | S_ISGID);
+		file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_CLOEXEC, S_IXGRP | S_ISGID);
 		if (file1_fd < 0)
 			die("failure: create");
 
 		/* Neither in_group_p() nor capable_wrt_inode_uidgid() so setgid
 		 * bit needs to be stripped.
 		 */
-		if (is_setgid(t_dir1_fd, FILE1, 0))
+		if (is_setgid(info->t_dir1_fd, FILE1, 0))
 			die("failure: is_setgid");
 
 		/* create directory */
-		if (mkdirat(t_dir1_fd, DIR1, 0000))
+		if (mkdirat(info->t_dir1_fd, DIR1, 0000))
 			die("failure: create");
 
-		if (xfs_irix_sgid_inherit_enabled()) {
+		if (xfs_irix_sgid_inherit_enabled(info->t_fstype)) {
 			/* We're not in_group_p(). */
-			if (is_setgid(t_dir1_fd, DIR1, 0))
+			if (is_setgid(info->t_dir1_fd, DIR1, 0))
 				die("failure: is_setgid");
 		} else {
 			/* Directories always inherit the setgid bit. */
-			if (!is_setgid(t_dir1_fd, DIR1, 0))
+			if (!is_setgid(info->t_dir1_fd, DIR1, 0))
 				die("failure: is_setgid");
 		}
 
 		/* create a special file via mknodat() vfs_create */
-		if (mknodat(t_dir1_fd, FILE2, S_IFREG | S_ISGID | S_IXGRP, 0))
+		if (mknodat(info->t_dir1_fd, FILE2, S_IFREG | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(t_dir1_fd, FILE2, 0))
+		if (is_setgid(info->t_dir1_fd, FILE2, 0))
 			die("failure: is_setgid");
 
 		/* create a character device via mknodat() vfs_mknod */
-		if (mknodat(t_dir1_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, makedev(5, 1)))
+		if (mknodat(info->t_dir1_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, makedev(5, 1)))
 			die("failure: mknodat");
 
-		if (is_setgid(t_dir1_fd, CHRDEV1, 0))
+		if (is_setgid(info->t_dir1_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 		/*
 		 * In setgid directories newly created files always inherit the
 		 * gid from the parent directory. Verify that the file is owned
 		 * by gid 0, not by gid 10000.
 		 */
-		if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0))
 			die("failure: check ownership");
 
 		/*
@@ -8041,42 +8023,42 @@ static int setgid_create(void)
 		 * inherit the gid from the parent directory. Verify that the
 		 * directory is owned by gid 0, not by gid 10000.
 		 */
-		if (!expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(t_dir1_fd, FILE2, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, FILE2, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(t_dir1_fd, CHRDEV1, 0, 0, 0))
+		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (unlinkat(t_dir1_fd, FILE1, 0))
+		if (unlinkat(info->t_dir1_fd, FILE1, 0))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, DIR1, AT_REMOVEDIR))
+		if (unlinkat(info->t_dir1_fd, DIR1, AT_REMOVEDIR))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, FILE2, 0))
+		if (unlinkat(info->t_dir1_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(t_dir1_fd, CHRDEV1, 0))
+		if (unlinkat(info->t_dir1_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
 		if (supported) {
-			tmpfile_fd = openat(t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+			tmpfile_fd = openat(info->t_dir1_fd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
 			if (tmpfile_fd < 0)
 				die("failure: create");
 			/* link the temporary file into the filesystem, making it permanent */
-			if (linkat(tmpfile_fd, "", t_dir1_fd, FILE3, AT_EMPTY_PATH))
+			if (linkat(tmpfile_fd, "", info->t_dir1_fd, FILE3, AT_EMPTY_PATH))
 				die("failure: linkat");
 			if (close(tmpfile_fd))
 				die("failure: close");
-			if (is_setgid(t_dir1_fd, FILE3, 0))
+			if (is_setgid(info->t_dir1_fd, FILE3, 0))
 				die("failure: is_setgid");
-			if (!expected_uid_gid(t_dir1_fd, FILE3, 0, 0, 0))
+			if (!expected_uid_gid(info->t_dir1_fd, FILE3, 0, 0, 0))
 				die("failure: check ownership");
-			if (unlinkat(t_dir1_fd, FILE3, 0))
+			if (unlinkat(info->t_dir1_fd, FILE3, 0))
 				die("failure: delete");
 		}
 
@@ -8093,7 +8075,7 @@ out:
 	return fret;
 }
 
-static int setgid_create_idmapped(void)
+static int setgid_create_idmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -8108,7 +8090,7 @@ static int setgid_create_idmapped(void)
 	if (!caps_supported())
 		return 0;
 
-	if (fchmod(t_dir1_fd, S_IRUSR |
+	if (fchmod(info->t_dir1_fd, S_IRUSR |
 			      S_IWUSR |
 			      S_IRGRP |
 			      S_IWGRP |
@@ -8123,7 +8105,7 @@ static int setgid_create_idmapped(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setgid(t_dir1_fd, "", AT_EMPTY_PATH)) {
+	if (!is_setgid(info->t_dir1_fd, "", AT_EMPTY_PATH)) {
 		log_stderr("failure: is_setgid");
 		goto out;
 	}
@@ -8135,7 +8117,7 @@ static int setgid_create_idmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -8177,7 +8159,7 @@ static int setgid_create_idmapped(void)
 		if (mkdirat(open_tree_fd, DIR1, 0000))
 			die("failure: create");
 
-		if (xfs_irix_sgid_inherit_enabled()) {
+		if (xfs_irix_sgid_inherit_enabled(info->t_fstype)) {
 			/* We're not in_group_p(). */
 			if (is_setgid(open_tree_fd, DIR1, 0))
 				die("failure: is_setgid");
@@ -8269,7 +8251,7 @@ out:
 	return fret;
 }
 
-static int setgid_create_idmapped_in_userns(void)
+static int setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -8284,7 +8266,7 @@ static int setgid_create_idmapped_in_userns(void)
 	if (!caps_supported())
 		return 0;
 
-	if (fchmod(t_dir1_fd, S_IRUSR |
+	if (fchmod(info->t_dir1_fd, S_IRUSR |
 			      S_IWUSR |
 			      S_IRGRP |
 			      S_IWGRP |
@@ -8299,7 +8281,7 @@ static int setgid_create_idmapped_in_userns(void)
 	}
 
 	/* Verify that the sid bits got raised. */
-	if (!is_setgid(t_dir1_fd, "", AT_EMPTY_PATH)) {
+	if (!is_setgid(info->t_dir1_fd, "", AT_EMPTY_PATH)) {
 		log_stderr("failure: is_setgid");
 		goto out;
 	}
@@ -8311,7 +8293,7 @@ static int setgid_create_idmapped_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -8427,7 +8409,7 @@ static int setgid_create_idmapped_in_userns(void)
 	 * and create a file with fs{g,u}id 0 and verify that the newly created
 	 * file and directory inherit gid 1000, not 0.
 	 */
-	if (fchownat(t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -8464,7 +8446,7 @@ static int setgid_create_idmapped_in_userns(void)
 		if (mkdirat(open_tree_fd, DIR1, 0000))
 			die("failure: create");
 
-		if (xfs_irix_sgid_inherit_enabled()) {
+		if (xfs_irix_sgid_inherit_enabled(info->t_fstype)) {
 			/* We're not in_group_p(). */
 			if (is_setgid(open_tree_fd, DIR1, 0))
 				die("failure: is_setgid");
@@ -8546,12 +8528,12 @@ static int setgid_create_idmapped_in_userns(void)
 	if (wait_for_pid(pid))
 		goto out;
 
-	if (fchownat(t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
 
-	if (fchownat(t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -8589,7 +8571,7 @@ static int setgid_create_idmapped_in_userns(void)
 			die("failure: create");
 
 		/* Directories always inherit the setgid bit. */
-		if (xfs_irix_sgid_inherit_enabled()) {
+		if (xfs_irix_sgid_inherit_enabled(info->t_fstype)) {
 			/* We're not in_group_p(). */
 			if (is_setgid(open_tree_fd, DIR1, 0))
 				die("failure: is_setgid");
@@ -8674,12 +8656,18 @@ out:
 #define PTR_TO_INT(p) ((int)((intptr_t)(p)))
 #define INT_TO_PTR(u) ((void *)((intptr_t)(u)))
 
+struct threaded_args {
+	const struct vfstest_info *info;
+	int open_tree_fd;
+};
+
 static void *idmapped_mount_create_cb(void *data)
 {
-	int fret = EXIT_FAILURE, open_tree_fd = PTR_TO_INT(data);
+	int fret = EXIT_FAILURE;
 	struct mount_attr attr = {
 		.attr_set = MOUNT_ATTR_IDMAP,
 	};
+	struct threaded_args *args = data;
 
 	/* Changing mount properties on a detached mount. */
 	attr.userns_fd	= get_userns_fd(0, 10000, 10000);
@@ -8688,7 +8676,7 @@ static void *idmapped_mount_create_cb(void *data)
 		goto out;
 	}
 
-	if (sys_mount_setattr(open_tree_fd, "", AT_EMPTY_PATH, &attr, sizeof(attr))) {
+	if (sys_mount_setattr(args->open_tree_fd, "", AT_EMPTY_PATH, &attr, sizeof(attr))) {
 		log_stderr("failure: sys_mount_setattr");
 		goto out;
 	}
@@ -8712,95 +8700,96 @@ out:
 static void *idmapped_mount_operations_cb(void *data)
 {
 	int file1_fd = -EBADF, file2_fd = -EBADF, dir1_fd = -EBADF,
-	    dir1_fd2 = -EBADF, fret = EXIT_FAILURE,
-	    open_tree_fd = PTR_TO_INT(data);
+	    dir1_fd2 = -EBADF, fret = EXIT_FAILURE;
+	struct threaded_args *args = data;
+	const struct vfstest_info *info = args->info;
 
 	if (!switch_fsids(10000, 10000)) {
 		log_stderr("failure: switch fsids");
 		goto out;
 	}
 
-	file1_fd = openat(open_tree_fd, FILE1,
+	file1_fd = openat(args->open_tree_fd, FILE1,
 			  O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	file2_fd = openat(open_tree_fd, FILE2,
+	file2_fd = openat(args->open_tree_fd, FILE2,
 			  O_CREAT | O_EXCL | O_CLOEXEC, 0644);
 	if (file2_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	if (mkdirat(open_tree_fd, DIR1, 0777)) {
+	if (mkdirat(args->open_tree_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	dir1_fd = openat(open_tree_fd, DIR1,
+	dir1_fd = openat(args->open_tree_fd, DIR1,
 			 O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (dir1_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(open_tree_fd, FILE1, 0, 0, 0, false) &&
-	    !__expected_uid_gid(open_tree_fd, FILE1, 0, 10000, 10000, false) &&
-	    !__expected_uid_gid(open_tree_fd, FILE1, 0, t_overflowuid, t_overflowgid, false)) {
+	if (!__expected_uid_gid(args->open_tree_fd, FILE1, 0, 0, 0, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, FILE1, 0, 10000, 10000, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, FILE1, 0, info->t_overflowuid, info->t_overflowgid, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(open_tree_fd, FILE2, 0, 0, 0, false) &&
-	    !__expected_uid_gid(open_tree_fd, FILE2, 0, 10000, 10000, false) &&
-	    !__expected_uid_gid(open_tree_fd, FILE2, 0, t_overflowuid, t_overflowgid, false)) {
+	if (!__expected_uid_gid(args->open_tree_fd, FILE2, 0, 0, 0, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, FILE2, 0, 10000, 10000, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, FILE2, 0, info->t_overflowuid, info->t_overflowgid, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(open_tree_fd, DIR1, 0, 0, 0, false) &&
-	    !__expected_uid_gid(open_tree_fd, DIR1, 0, 10000, 10000, false) &&
-	    !__expected_uid_gid(open_tree_fd, DIR1, 0, t_overflowuid, t_overflowgid, false)) {
+	if (!__expected_uid_gid(args->open_tree_fd, DIR1, 0, 0, 0, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, DIR1, 0, 10000, 10000, false) &&
+	    !__expected_uid_gid(args->open_tree_fd, DIR1, 0, info->t_overflowuid, info->t_overflowgid, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
 	if (!__expected_uid_gid(dir1_fd, "", AT_EMPTY_PATH, 0, 0, false) &&
 	    !__expected_uid_gid(dir1_fd, "", AT_EMPTY_PATH, 10000, 10000, false) &&
-	    !__expected_uid_gid(dir1_fd, "", AT_EMPTY_PATH, t_overflowuid, t_overflowgid, false)) {
+	    !__expected_uid_gid(dir1_fd, "", AT_EMPTY_PATH, info->t_overflowuid, info->t_overflowgid, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	dir1_fd2 = openat(t_dir1_fd, DIR1,
+	dir1_fd2 = openat(info->t_dir1_fd, DIR1,
 			 O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (dir1_fd2 < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-        if (!__expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0, false) &&
-	    !__expected_uid_gid(t_dir1_fd, FILE1, 0, 10000, 10000, false)) {
+        if (!__expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0, false) &&
+	    !__expected_uid_gid(info->t_dir1_fd, FILE1, 0, 10000, 10000, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(t_dir1_fd, FILE2, 0, 0, 0, false) &&
-	    !__expected_uid_gid(t_dir1_fd, FILE2, 0, 10000, 10000, false)) {
+	if (!__expected_uid_gid(info->t_dir1_fd, FILE2, 0, 0, 0, false) &&
+	    !__expected_uid_gid(info->t_dir1_fd, FILE2, 0, 10000, 10000, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0, false) &&
-	    !__expected_uid_gid(t_dir1_fd, DIR1, 0, 10000, 10000, false)) {
+	if (!__expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0, false) &&
+	    !__expected_uid_gid(info->t_dir1_fd, DIR1, 0, 10000, 10000, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
 
-	if (!__expected_uid_gid(t_dir1_fd, DIR1, 0, 0, 0, false) &&
-	    !__expected_uid_gid(t_dir1_fd, DIR1, 0, 10000, 10000, false)) {
+	if (!__expected_uid_gid(info->t_dir1_fd, DIR1, 0, 0, 0, false) &&
+	    !__expected_uid_gid(info->t_dir1_fd, DIR1, 0, 10000, 10000, false)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -8822,7 +8811,7 @@ out:
 	pthread_exit(INT_TO_PTR(fret));
 }
 
-static int threaded_idmapped_mount_interactions(void)
+static int threaded_idmapped_mount_interactions(const struct vfstest_info *info)
 {
 	int i;
 	int fret = -1;
@@ -8842,8 +8831,12 @@ static int threaded_idmapped_mount_interactions(void)
 		}
 		if (pid == 0) {
 			int open_tree_fd = -EBADF;
+			struct threaded_args args = {
+				.info = info,
+				.open_tree_fd = -EBADF,
+			};
 
-			open_tree_fd = sys_open_tree(t_dir1_fd, "",
+			open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 						     AT_EMPTY_PATH |
 						     AT_NO_AUTOMOUNT |
 						     AT_SYMLINK_NOFOLLOW |
@@ -8852,14 +8845,16 @@ static int threaded_idmapped_mount_interactions(void)
 			if (open_tree_fd < 0)
 				die("failure: sys_open_tree");
 
+			args.open_tree_fd = open_tree_fd;
+
 			if (pthread_create(&threads[0], &thread_attr,
 					   idmapped_mount_create_cb,
-					   INT_TO_PTR(open_tree_fd)))
+					   &args))
 				die("failure: pthread_create");
 
 			if (pthread_create(&threads[1], &thread_attr,
 					   idmapped_mount_operations_cb,
-					   INT_TO_PTR(open_tree_fd)))
+					   &args))
 				die("failure: pthread_create");
 
 			ret1 = pthread_join(threads[0], INT_TO_PTR(tret1));
@@ -8887,7 +8882,7 @@ static int threaded_idmapped_mount_interactions(void)
 			goto out;
 		}
 
-		rm_r(t_dir1_fd, ".");
+		rm_r(info->t_dir1_fd, ".");
 
 	}
 
@@ -8898,13 +8893,13 @@ out:
 	return fret;
 }
 
-static int setattr_truncate(void)
+static int setattr_truncate(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF;
 
 	/* create regular file via open() */
-	file1_fd = openat(t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, S_IXGRP | S_ISGID);
+	file1_fd = openat(info->t_dir1_fd, FILE1, O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, S_IXGRP | S_ISGID);
 	if (file1_fd < 0) {
 		log_stderr("failure: create");
 		goto out;
@@ -8915,7 +8910,7 @@ static int setattr_truncate(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0)) {
 		log_stderr("failure: check ownership");
 		goto out;
 	}
@@ -8930,7 +8925,7 @@ static int setattr_truncate(void)
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, FILE1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, FILE1, 0, 0, 0)) {
 		log_stderr("failure: check ownership");
 		goto out;
 	}
@@ -8940,7 +8935,7 @@ static int setattr_truncate(void)
 		goto out;
 	}
 
-	if (unlinkat(t_dir1_fd, FILE1, 0)) {
+	if (unlinkat(info->t_dir1_fd, FILE1, 0)) {
 		log_stderr("failure: remove");
 		goto out;
 	}
@@ -8953,7 +8948,7 @@ out:
 	return fret;
 }
 
-static int setattr_truncate_idmapped(void)
+static int setattr_truncate_idmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -8969,7 +8964,7 @@ static int setattr_truncate_idmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -9067,7 +9062,7 @@ out:
 	return fret;
 }
 
-static int setattr_truncate_idmapped_in_userns(void)
+static int setattr_truncate_idmapped_in_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
@@ -9083,7 +9078,7 @@ static int setattr_truncate_idmapped_in_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -9139,12 +9134,12 @@ static int setattr_truncate_idmapped_in_userns(void)
 	if (wait_for_pid(pid))
 		goto out;
 
-	if (fchownat(t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
 
-	if (fchownat(t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 1000, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -9194,12 +9189,12 @@ static int setattr_truncate_idmapped_in_userns(void)
 	if (wait_for_pid(pid))
 		goto out;
 
-	if (fchownat(t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
 
-	if (fchownat(t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
+	if (fchownat(info->t_dir1_fd, "", -1, 0, AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -9259,7 +9254,7 @@ out:
 	return fret;
 }
 
-static int nested_userns(void)
+static int nested_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int ret;
@@ -9395,12 +9390,12 @@ static int nested_userns(void)
 	 * Create one directory where we create files for each uid/gid within
 	 * the first userns.
 	 */
-	if (mkdirat(t_dir1_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	fd_dir1 = openat(t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
+	fd_dir1 = openat(info->t_dir1_fd, DIR1, O_DIRECTORY | O_CLOEXEC);
 	if (fd_dir1 < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -9411,24 +9406,24 @@ static int nested_userns(void)
 
 		snprintf(file, sizeof(file), DIR1 "/" FILE1 "_%u", id);
 
-		if (mknodat(t_dir1_fd, file, S_IFREG | 0644, 0)) {
+		if (mknodat(info->t_dir1_fd, file, S_IFREG | 0644, 0)) {
 			log_stderr("failure: create %s", file);
 			goto out;
 		}
 
-		if (fchownat(t_dir1_fd, file, id, id, AT_SYMLINK_NOFOLLOW)) {
+		if (fchownat(info->t_dir1_fd, file, id, id, AT_SYMLINK_NOFOLLOW)) {
 			log_stderr("failure: fchownat %s", file);
 			goto out;
 		}
 
-		if (!expected_uid_gid(t_dir1_fd, file, 0, id, id)) {
+		if (!expected_uid_gid(info->t_dir1_fd, file, 0, id, id)) {
 			log_stderr("failure: check ownership %s", file);
 			goto out;
 		}
 	}
 
 	/* Create detached mounts for all the user namespaces. */
-	fd_open_tree_level1 = sys_open_tree(t_dir1_fd, DIR1,
+	fd_open_tree_level1 = sys_open_tree(info->t_dir1_fd, DIR1,
 					    AT_NO_AUTOMOUNT |
 					    AT_SYMLINK_NOFOLLOW |
 					    OPEN_TREE_CLOEXEC |
@@ -9438,7 +9433,7 @@ static int nested_userns(void)
 		goto out;
 	}
 
-	fd_open_tree_level2 = sys_open_tree(t_dir1_fd, DIR1,
+	fd_open_tree_level2 = sys_open_tree(info->t_dir1_fd, DIR1,
 					    AT_NO_AUTOMOUNT |
 					    AT_SYMLINK_NOFOLLOW |
 					    OPEN_TREE_CLOEXEC |
@@ -9448,7 +9443,7 @@ static int nested_userns(void)
 		goto out;
 	}
 
-	fd_open_tree_level3 = sys_open_tree(t_dir1_fd, DIR1,
+	fd_open_tree_level3 = sys_open_tree(info->t_dir1_fd, DIR1,
 					    AT_NO_AUTOMOUNT |
 					    AT_SYMLINK_NOFOLLOW |
 					    OPEN_TREE_CLOEXEC |
@@ -9458,7 +9453,7 @@ static int nested_userns(void)
 		goto out;
 	}
 
-	fd_open_tree_level4 = sys_open_tree(t_dir1_fd, DIR1,
+	fd_open_tree_level4 = sys_open_tree(info->t_dir1_fd, DIR1,
 					    AT_NO_AUTOMOUNT |
 					    AT_SYMLINK_NOFOLLOW |
 					    OPEN_TREE_CLOEXEC |
@@ -9515,7 +9510,7 @@ static int nested_userns(void)
 
 		if (id == 999) {
 			/* This id is unmapped. */
-			bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+			bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 		} else if (id == 1000) {
 			id_level3 = id + 2000000; /* We punched a hole in the map at 1000. */
 			bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9528,7 +9523,7 @@ static int nested_userns(void)
 			goto out;
 		}
 
-		if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid)) {
+		if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid)) {
 			log_stderr("failure: check ownership %s", file);
 			goto out;
 		}
@@ -9561,7 +9556,7 @@ static int nested_userns(void)
 
 			if (id == 999) {
 				/* This id is unmapped. */
-				bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 			} else if (id == 1000) {
 				id_level3 = id + 1000000; /* We punched a hole in the map at 1000. */
 				bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9572,7 +9567,7 @@ static int nested_userns(void)
 			if (!bret)
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 		}
 
@@ -9598,7 +9593,7 @@ static int nested_userns(void)
 
 			snprintf(file, sizeof(file), FILE1 "_%u", id);
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			id_level2 = id;
@@ -9607,7 +9602,7 @@ static int nested_userns(void)
 
 			if (id == 999) {
 				/* This id is unmapped. */
-				bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 			} else if (id == 1000) {
 				id_level3 = id; /* We punched a hole in the map at 1000. */
 				bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9618,7 +9613,7 @@ static int nested_userns(void)
 			if (!bret)
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 		}
 
@@ -9644,7 +9639,7 @@ static int nested_userns(void)
 
 			snprintf(file, sizeof(file), FILE1 "_%u", id);
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			if (id == 1000) {
@@ -9659,7 +9654,7 @@ static int nested_userns(void)
 				id_level2 = id;
 				bret = expected_uid_gid(fd_open_tree_level2, file, 0, id_level2, id_level2);
 			} else {
-				bret = expected_uid_gid(fd_open_tree_level2, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level2, file, 0, info->t_overflowuid, info->t_overflowgid);
 			}
 			if (!bret)
 				die("failure: check ownership %s", file);
@@ -9667,7 +9662,7 @@ static int nested_userns(void)
 
 			if (id == 999) {
 				/* This id is unmapped. */
-				bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 			} else {
 				id_level3 = id; /* Rest is business as usual. */
 				bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9675,7 +9670,7 @@ static int nested_userns(void)
 			if (!bret)
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 		}
 
@@ -9699,16 +9694,16 @@ static int nested_userns(void)
 
 			snprintf(file, sizeof(file), FILE1 "_%u", id);
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level2, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level2, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 		}
 
@@ -9748,7 +9743,7 @@ static int nested_userns(void)
 
 			if (id_new == 999) {
 				/* This id is unmapped. */
-				bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 			} else if (id_new == 1000) {
 				id_level3 = id_new + 1000000; /* We punched a hole in the map at 1000. */
 				bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9759,7 +9754,7 @@ static int nested_userns(void)
 			if (!bret)
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			/* Revert ownership. */
@@ -9793,7 +9788,7 @@ static int nested_userns(void)
 			if (fchownat(fd_open_tree_level2, file, id_new, id_new, AT_SYMLINK_NOFOLLOW))
 				die("failure: fchownat %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			id_level2 = id_new;
@@ -9802,7 +9797,7 @@ static int nested_userns(void)
 
 			if (id_new == 999) {
 				/* This id is unmapped. */
-				bret = expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid);
+				bret = expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid);
 			} else if (id_new == 1000) {
 				id_level3 = id_new; /* We punched a hole in the map at 1000. */
 				bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
@@ -9813,7 +9808,7 @@ static int nested_userns(void)
 			if (!bret)
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			/* Revert ownership. */
@@ -9855,11 +9850,11 @@ static int nested_userns(void)
 					die("failure: fchownat %s", file);
 			}
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			/* There's no id 1000 anymore as we changed ownership for id 1000 to 1001 above. */
-			if (!expected_uid_gid(fd_open_tree_level2, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level2, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			if (id_new == 999) {
@@ -9874,14 +9869,14 @@ static int nested_userns(void)
 				 * We did not change ownership as we can't
 				 * chown from an unmapped id.
 				 */
-				if (!expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid))
+				if (!expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid))
 					die("failure: check ownership %s", file);
 			} else {
 				if (!expected_uid_gid(fd_open_tree_level3, file, 0, id_new, id_new))
 					die("failure: check ownership %s", file);
 			}
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 			/* Revert ownership. */
@@ -9916,16 +9911,16 @@ static int nested_userns(void)
 			if (!fchownat(fd_open_tree_level4, file, id_new, id_new, AT_SYMLINK_NOFOLLOW))
 				die("failure: fchownat %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level1, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level1, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level2, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level2, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level3, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level3, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
-			if (!expected_uid_gid(fd_open_tree_level4, file, 0, t_overflowuid, t_overflowgid))
+			if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid))
 				die("failure: check ownership %s", file);
 
 		}
@@ -10580,7 +10575,7 @@ out:
 #define BTRFS_SUBVOLUME1_RENAME "subvol1_rename"
 #define BTRFS_SUBVOLUME2 "subvol2"
 
-static int btrfs_subvolumes_fsids_mapped(void)
+static int btrfs_subvolumes_fsids_mapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -10599,7 +10594,7 @@ static int btrfs_subvolumes_fsids_mapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -10697,7 +10692,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_fsids_mapped_userns(void)
+static int btrfs_subvolumes_fsids_mapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -10716,7 +10711,7 @@ static int btrfs_subvolumes_fsids_mapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -10788,7 +10783,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_fsids_unmapped(void)
+static int btrfs_subvolumes_fsids_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -10797,13 +10792,13 @@ static int btrfs_subvolumes_fsids_unmapped(void)
 	};
 
 	/* create directory for rename test */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (fchownat(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (fchownat(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -10815,7 +10810,7 @@ static int btrfs_subvolumes_fsids_unmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -10891,7 +10886,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_fsids_unmapped_userns(void)
+static int btrfs_subvolumes_fsids_unmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF, userns_fd = -EBADF;
@@ -10901,13 +10896,13 @@ static int btrfs_subvolumes_fsids_unmapped_userns(void)
 	pid_t pid;
 
 	/* create directory for rename test */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (fchownat(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (fchownat(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -10926,7 +10921,7 @@ static int btrfs_subvolumes_fsids_unmapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -10962,12 +10957,12 @@ static int btrfs_subvolumes_fsids_unmapped_userns(void)
 		if (!switch_userns(userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0,
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		/*
@@ -11019,7 +11014,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_mapped(void)
+static int btrfs_snapshots_fsids_mapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11038,7 +11033,7 @@ static int btrfs_snapshots_fsids_mapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11190,7 +11185,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_mapped_userns(void)
+static int btrfs_snapshots_fsids_mapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11209,7 +11204,7 @@ static int btrfs_snapshots_fsids_mapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11320,7 +11315,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_unmapped(void)
+static int btrfs_snapshots_fsids_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11333,13 +11328,13 @@ static int btrfs_snapshots_fsids_unmapped(void)
 		return 0;
 
 	/* create directory for rename test */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (fchownat(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (fchownat(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -11351,7 +11346,7 @@ static int btrfs_snapshots_fsids_unmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11485,7 +11480,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_unmapped_userns(void)
+static int btrfs_snapshots_fsids_unmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, subvolume_fd = -EBADF, tree_fd = -EBADF,
@@ -11499,13 +11494,13 @@ static int btrfs_snapshots_fsids_unmapped_userns(void)
 		return 0;
 
 	/* create directory for rename test */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
 	/* change ownership of all files to uid 0 */
-	if (fchownat(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (fchownat(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -11524,7 +11519,7 @@ static int btrfs_snapshots_fsids_unmapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11569,12 +11564,12 @@ static int btrfs_snapshots_fsids_unmapped_userns(void)
 		if (!switch_userns(userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0,
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		/*
@@ -11641,7 +11636,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed(void)
+static int btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11660,7 +11655,7 @@ static int btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_mnt_scratch_fd, "",
+	open_tree_fd = sys_open_tree(info->t_mnt_scratch_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11733,7 +11728,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_fsids_mapped_userns_user_subvol_rm_allowed(void)
+static int btrfs_subvolumes_fsids_mapped_userns_user_subvol_rm_allowed(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11752,7 +11747,7 @@ static int btrfs_subvolumes_fsids_mapped_userns_user_subvol_rm_allowed(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_mnt_scratch_fd, "",
+	open_tree_fd = sys_open_tree(info->t_mnt_scratch_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11821,7 +11816,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_mapped_user_subvol_rm_allowed(void)
+static int btrfs_snapshots_fsids_mapped_user_subvol_rm_allowed(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11840,7 +11835,7 @@ static int btrfs_snapshots_fsids_mapped_user_subvol_rm_allowed(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_mnt_scratch_fd, "",
+	open_tree_fd = sys_open_tree(info->t_mnt_scratch_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -11958,7 +11953,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_fsids_mapped_userns_user_subvol_rm_allowed(void)
+static int btrfs_snapshots_fsids_mapped_userns_user_subvol_rm_allowed(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -11977,7 +11972,7 @@ static int btrfs_snapshots_fsids_mapped_userns_user_subvol_rm_allowed(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_mnt_scratch_fd, "",
+	open_tree_fd = sys_open_tree(info->t_mnt_scratch_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12091,7 +12086,7 @@ out:
 	return fret;
 }
 
-static int btrfs_delete_by_spec_id(void)
+static int btrfs_delete_by_spec_id(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, subvolume_fd = -EBADF, tree_fd = -EBADF;
@@ -12109,18 +12104,18 @@ static int btrfs_delete_by_spec_id(void)
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_mnt_scratch_fd, "A")) {
+	if (btrfs_create_subvolume(info->t_mnt_scratch_fd, "A")) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_mnt_scratch_fd, "B")) {
+	if (btrfs_create_subvolume(info->t_mnt_scratch_fd, "B")) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	subvolume_fd = openat(t_mnt_scratch_fd, "B", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+	subvolume_fd = openat(info->t_mnt_scratch_fd, "B", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -12134,7 +12129,7 @@ static int btrfs_delete_by_spec_id(void)
 
 	safe_close(subvolume_fd);
 
-	subvolume_fd = openat(t_mnt_scratch_fd, "A", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+	subvolume_fd = openat(info->t_mnt_scratch_fd, "A", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -12145,7 +12140,7 @@ static int btrfs_delete_by_spec_id(void)
 		goto out;
 	}
 
-	subvolume_fd = openat(t_mnt_scratch_fd, "B/C", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+	subvolume_fd = openat(info->t_mnt_scratch_fd, "B/C", O_RDONLY | O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
@@ -12156,12 +12151,12 @@ static int btrfs_delete_by_spec_id(void)
 		goto out;
 	}
 
-	if (sys_mount(t_device_scratch, t_mountpoint, "btrfs", 0, "subvol=B/C")) {
+	if (sys_mount(info->t_device_scratch, info->t_mountpoint, "btrfs", 0, "subvol=B/C")) {
 		log_stderr("failure: mount");
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(-EBADF, t_mountpoint,
+	open_tree_fd = sys_open_tree(-EBADF, info->t_mountpoint,
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
 				     OPEN_TREE_CLOEXEC |
@@ -12202,7 +12197,7 @@ static int btrfs_delete_by_spec_id(void)
 		if (errno != EOPNOTSUPP)
 			die("failure: errno");
 
-		if (btrfs_delete_subvolume_id(t_mnt_scratch_fd, subvolume_id1))
+		if (btrfs_delete_subvolume_id(info->t_mnt_scratch_fd, subvolume_id1))
 			die("failure: btrfs_delete_subvolume_id");
 
 		exit(EXIT_SUCCESS);
@@ -12216,14 +12211,14 @@ out:
 	safe_close(attr.userns_fd);
 	safe_close(open_tree_fd);
 	safe_close(tree_fd);
-	sys_umount2(t_mountpoint, MNT_DETACH);
-	btrfs_delete_subvolume_id(t_mnt_scratch_fd, subvolume_id2);
-	btrfs_delete_subvolume(t_mnt_scratch_fd, "B");
+	sys_umount2(info->t_mountpoint, MNT_DETACH);
+	btrfs_delete_subvolume_id(info->t_mnt_scratch_fd, subvolume_id2);
+	btrfs_delete_subvolume(info->t_mnt_scratch_fd, "B");
 
 	return fret;
 }
 
-static int btrfs_subvolumes_setflags_fsids_mapped(void)
+static int btrfs_subvolumes_setflags_fsids_mapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -12242,7 +12237,7 @@ static int btrfs_subvolumes_setflags_fsids_mapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12347,7 +12342,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_setflags_fsids_mapped_userns(void)
+static int btrfs_subvolumes_setflags_fsids_mapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -12366,7 +12361,7 @@ static int btrfs_subvolumes_setflags_fsids_mapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12468,7 +12463,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_setflags_fsids_unmapped(void)
+static int btrfs_subvolumes_setflags_fsids_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -12487,7 +12482,7 @@ static int btrfs_subvolumes_setflags_fsids_unmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12515,12 +12510,12 @@ static int btrfs_subvolumes_setflags_fsids_unmapped(void)
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -12589,7 +12584,7 @@ out:
 	return fret;
 }
 
-static int btrfs_subvolumes_setflags_fsids_unmapped_userns(void)
+static int btrfs_subvolumes_setflags_fsids_unmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF, userns_fd = -EBADF;
@@ -12615,7 +12610,7 @@ static int btrfs_subvolumes_setflags_fsids_unmapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12643,12 +12638,12 @@ static int btrfs_subvolumes_setflags_fsids_unmapped_userns(void)
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -12680,12 +12675,12 @@ static int btrfs_subvolumes_setflags_fsids_unmapped_userns(void)
 		if (!switch_userns(userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0,
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (btrfs_get_subvolume_ro(subvolume_fd, &read_only))
@@ -12723,7 +12718,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_setflags_fsids_mapped(void)
+static int btrfs_snapshots_setflags_fsids_mapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -12742,7 +12737,7 @@ static int btrfs_snapshots_setflags_fsids_mapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -12868,7 +12863,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_setflags_fsids_mapped_userns(void)
+static int btrfs_snapshots_setflags_fsids_mapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, tree_fd = -EBADF;
@@ -12887,7 +12882,7 @@ static int btrfs_snapshots_setflags_fsids_mapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -13010,7 +13005,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_setflags_fsids_unmapped(void)
+static int btrfs_snapshots_setflags_fsids_unmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, subvolume_fd = -EBADF, tree_fd = -EBADF;
@@ -13029,7 +13024,7 @@ static int btrfs_snapshots_setflags_fsids_unmapped(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -13057,12 +13052,12 @@ static int btrfs_snapshots_setflags_fsids_unmapped(void)
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -13072,7 +13067,7 @@ static int btrfs_snapshots_setflags_fsids_unmapped(void)
 		goto out;
 	}
 
-	subvolume_fd = openat(t_dir1_fd, BTRFS_SUBVOLUME1,
+	subvolume_fd = openat(info->t_dir1_fd, BTRFS_SUBVOLUME1,
 			      O_RDONLY | O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fd < 0) {
 		log_stderr("failure: openat");
@@ -13080,13 +13075,13 @@ static int btrfs_snapshots_setflags_fsids_unmapped(void)
 	}
 
 	/* create read-write snapshot */
-	if (btrfs_create_snapshot(subvolume_fd, t_dir1_fd,
+	if (btrfs_create_snapshot(subvolume_fd, info->t_dir1_fd,
 				  BTRFS_SUBVOLUME1_SNAPSHOT1, 0)) {
 		log_stderr("failure: btrfs_create_snapshot");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1_SNAPSHOT1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1_SNAPSHOT1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -13162,7 +13157,7 @@ out:
 	return fret;
 }
 
-static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
+static int btrfs_snapshots_setflags_fsids_unmapped_userns(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF, subvolume_fd = -EBADF, tree_fd = -EBADF,
@@ -13189,7 +13184,7 @@ static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, "",
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, "",
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
@@ -13217,12 +13212,12 @@ static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
 	}
 
 	/* create subvolume */
-	if (btrfs_create_subvolume(t_dir1_fd, BTRFS_SUBVOLUME1)) {
+	if (btrfs_create_subvolume(info->t_dir1_fd, BTRFS_SUBVOLUME1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -13232,7 +13227,7 @@ static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
 		goto out;
 	}
 
-	subvolume_fd = openat(t_dir1_fd, BTRFS_SUBVOLUME1,
+	subvolume_fd = openat(info->t_dir1_fd, BTRFS_SUBVOLUME1,
 			      O_RDONLY | O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fd < 0) {
 		log_stderr("failure: openat");
@@ -13240,13 +13235,13 @@ static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
 	}
 
 	/* create read-write snapshot */
-	if (btrfs_create_snapshot(subvolume_fd, t_dir1_fd,
+	if (btrfs_create_snapshot(subvolume_fd, info->t_dir1_fd,
 				  BTRFS_SUBVOLUME1_SNAPSHOT1, 0)) {
 		log_stderr("failure: btrfs_create_snapshot");
 		goto out;
 	}
 
-	if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1_SNAPSHOT1, 0, 0, 0)) {
+	if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1_SNAPSHOT1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -13279,12 +13274,12 @@ static int btrfs_snapshots_setflags_fsids_unmapped_userns(void)
 		if (!switch_userns(userns_fd, 0, 0, false))
 			die("failure: switch_userns");
 
-		if (!expected_uid_gid(t_dir1_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+		if (!expected_uid_gid(info->t_dir1_fd, BTRFS_SUBVOLUME1, 0,
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		if (!expected_uid_gid(open_tree_fd, BTRFS_SUBVOLUME1, 0,
-				      t_overflowuid, t_overflowgid))
+				      info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 
 		/*
@@ -13360,7 +13355,7 @@ out:
  * | |-/mnt/test/mnt1             /dev/loop1[/subvol1]         btrfs       rw,relatime,space_cache,user_subvol_rm_allowed,subvolid=268,subvol=/subvol1
  * '-/mnt/scratch                 /dev/loop1                   btrfs       rw,relatime,space_cache,user_subvol_rm_allowed,subvolid=5,subvol=/
  */
-static int btrfs_subvolume_lookup_user(void)
+static int btrfs_subvolume_lookup_user(const struct vfstest_info *info)
 {
 	int fret = -1, i;
 	int dir1_fd = -EBADF, dir2_fd = -EBADF, mnt_fd = -EBADF,
@@ -13383,17 +13378,17 @@ static int btrfs_subvolume_lookup_user(void)
 	for (i = 0; i < ARRAY_SIZE(subvolume_ids); i++)
 		subvolume_ids[i] = -EINVAL;
 
-	if (btrfs_create_subvolume(t_mnt_scratch_fd, BTRFS_SUBVOLUME_SUBVOL1)) {
+	if (btrfs_create_subvolume(info->t_mnt_scratch_fd, BTRFS_SUBVOLUME_SUBVOL1)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	if (btrfs_create_subvolume(t_mnt_scratch_fd, BTRFS_SUBVOLUME_SUBVOL2)) {
+	if (btrfs_create_subvolume(info->t_mnt_scratch_fd, BTRFS_SUBVOLUME_SUBVOL2)) {
 		log_stderr("failure: btrfs_create_subvolume");
 		goto out;
 	}
 
-	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL1_ID] = openat(t_mnt_scratch_fd,
+	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL1_ID] = openat(info->t_mnt_scratch_fd,
 							   BTRFS_SUBVOLUME_SUBVOL1,
 							   O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fds[BTRFS_SUBVOLUME_SUBVOL1_ID] < 0) {
@@ -13435,30 +13430,30 @@ static int btrfs_subvolume_lookup_user(void)
 		goto out;
 	}
 
-	if (mkdirat(t_mnt_fd, BTRFS_SUBVOLUME_MNT, 0777)) {
+	if (mkdirat(info->t_mnt_fd, BTRFS_SUBVOLUME_MNT, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "%s/%s", t_mountpoint, BTRFS_SUBVOLUME_MNT);
-	if (sys_mount(t_device_scratch, t_buf, "btrfs", 0,
+	snprintf(t_buf, sizeof(t_buf), "%s/%s", info->t_mountpoint, BTRFS_SUBVOLUME_MNT);
+	if (sys_mount(info->t_device_scratch, t_buf, "btrfs", 0,
 		      "subvol=" BTRFS_SUBVOLUME_SUBVOL1)) {
 		log_stderr("failure: mount");
 		goto out;
 	}
 
-	mnt_fd = openat(t_mnt_fd, BTRFS_SUBVOLUME_MNT, O_CLOEXEC | O_DIRECTORY);
+	mnt_fd = openat(info->t_mnt_fd, BTRFS_SUBVOLUME_MNT, O_CLOEXEC | O_DIRECTORY);
 	if (mnt_fd < 0) {
 		log_stderr("failure: openat");
 		goto out;
 	}
 
-	if (chown_r(t_mnt_scratch_fd, ".", 1000, 1000)) {
+	if (chown_r(info->t_mnt_scratch_fd, ".", 1000, 1000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL2_ID] = openat(t_mnt_scratch_fd,
+	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL2_ID] = openat(info->t_mnt_scratch_fd,
 							   BTRFS_SUBVOLUME_SUBVOL2,
 							   O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fds[BTRFS_SUBVOLUME_SUBVOL2_ID] < 0) {
@@ -13478,7 +13473,7 @@ static int btrfs_subvolume_lookup_user(void)
 		goto out;
 	}
 
-	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL3_ID] = openat(t_mnt_scratch_fd,
+	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL3_ID] = openat(info->t_mnt_scratch_fd,
 							   BTRFS_SUBVOLUME_SUBVOL1xSUBVOL3,
 							   O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fds[BTRFS_SUBVOLUME_SUBVOL3_ID] < 0) {
@@ -13492,7 +13487,7 @@ static int btrfs_subvolume_lookup_user(void)
 		goto out;
 	}
 
-	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL4_ID] = openat(t_mnt_scratch_fd,
+	subvolume_fds[BTRFS_SUBVOLUME_SUBVOL4_ID] = openat(info->t_mnt_scratch_fd,
 							   BTRFS_SUBVOLUME_SUBVOL1xDIR1xDIR2xSUBVOL4,
 							   O_CLOEXEC | O_DIRECTORY);
 	if (subvolume_fds[BTRFS_SUBVOLUME_SUBVOL4_ID] < 0) {
@@ -13744,9 +13739,9 @@ out:
 	safe_close(userns_fd);
 	for (i = 0; i < ARRAY_SIZE(subvolume_fds); i++)
 		safe_close(subvolume_fds[i]);
-	snprintf(t_buf, sizeof(t_buf), "%s/%s", t_mountpoint, BTRFS_SUBVOLUME_MNT);
+	snprintf(t_buf, sizeof(t_buf), "%s/%s", info->t_mountpoint, BTRFS_SUBVOLUME_MNT);
 	sys_umount2(t_buf, MNT_DETACH);
-	unlinkat(t_mnt_fd, BTRFS_SUBVOLUME_MNT, AT_REMOVEDIR);
+	unlinkat(info->t_mnt_fd, BTRFS_SUBVOLUME_MNT, AT_REMOVEDIR);
 
 	return fret;
 }
@@ -13839,7 +13834,7 @@ static bool lookup_ids(const char *name, uid_t *uid, gid_t *gid)
  *    Only {g,u}id 1000 and 1001 have a mapping in the idmapped mount. Other
  *    {g,u}id are unmapped.
  */
-static int setattr_fix_968219708108(void)
+static int setattr_fix_968219708108(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int open_tree_fd = -EBADF;
@@ -13872,32 +13867,32 @@ static int setattr_fix_968219708108(void)
 	log_debug("Found " USER1 " with uid(%d) and gid(%d) and " USER2 " with uid(%d) and gid(%d)",
 		  user1_uid, user1_gid, user2_uid, user2_gid);
 
-	if (mkdirat(t_dir1_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	if (mknodat(t_dir1_fd, DIR1 "/" FILE1, S_IFREG | 0644, 0)) {
+	if (mknodat(info->t_dir1_fd, DIR1 "/" FILE1, S_IFREG | 0644, 0)) {
 		log_stderr("failure: mknodat");
 		goto out;
 	}
 
-	if (chown_r(t_mnt_fd, T_DIR1, user1_uid, user1_gid)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, user1_uid, user1_gid)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	if (mknodat(t_dir1_fd, DIR1 "/" FILE2, S_IFREG | 0644, 0)) {
+	if (mknodat(info->t_dir1_fd, DIR1 "/" FILE2, S_IFREG | 0644, 0)) {
 		log_stderr("failure: mknodat");
 		goto out;
 	}
 
-	if (fchownat(t_dir1_fd, DIR1 "/" FILE2, user2_uid, user2_gid, AT_SYMLINK_NOFOLLOW)) {
+	if (fchownat(info->t_dir1_fd, DIR1 "/" FILE2, user2_uid, user2_gid, AT_SYMLINK_NOFOLLOW)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
 
-	print_r(t_mnt_fd, T_DIR1);
+	print_r(info->t_mnt_fd, T_DIR1);
 
 	/* u:1000:1001:1 */
 	ret = add_map_entry(&idmap, user1_uid, user2_uid, 1, ID_TYPE_UID);
@@ -13933,7 +13928,7 @@ static int setattr_fix_968219708108(void)
 		goto out;
 	}
 
-	open_tree_fd = sys_open_tree(t_dir1_fd, DIR1,
+	open_tree_fd = sys_open_tree(info->t_dir1_fd, DIR1,
 				     AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW |
 				     OPEN_TREE_CLOEXEC |
@@ -14149,7 +14144,7 @@ out:
 /**
  * setxattr_fix_705191b03d50 - test for commit 705191b03d50 ("fs: fix acl translation").
  */
-static int setxattr_fix_705191b03d50(void)
+static int setxattr_fix_705191b03d50(const struct vfstest_info *info)
 {
 	int fret = -1;
 	int fd_userns = -EBADF;
@@ -14169,17 +14164,17 @@ static int setxattr_fix_705191b03d50(void)
 
 	log_debug("Found " USER1 " with uid(%d) and gid(%d)", user1_uid, user1_gid);
 
-	if (mkdirat(t_dir1_fd, DIR1, 0777)) {
+	if (mkdirat(info->t_dir1_fd, DIR1, 0777)) {
 		log_stderr("failure: mkdirat");
 		goto out;
 	}
 
-	if (chown_r(t_mnt_fd, T_DIR1, user1_uid, user1_gid)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, user1_uid, user1_gid)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
 
-	print_r(t_mnt_fd, T_DIR1);
+	print_r(info->t_mnt_fd, T_DIR1);
 
 	/* u:0:user1_uid:1 */
 	ret = add_map_entry(&idmap, user1_uid, 0, 1, ID_TYPE_UID);
@@ -14232,20 +14227,20 @@ static int setxattr_fix_705191b03d50(void)
 		if (sys_mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, 0))
 			die("failure: turn mount propagation off");
 
-		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s", t_mountpoint, T_DIR1, DIR1);
+		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s", info->t_mountpoint, T_DIR1, DIR1);
 
 		if (sys_mount("none", t_buf, "tmpfs", 0, "mode=0755"))
 			die("failure: mount");
 
-		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+		snprintf(t_buf, sizeof(t_buf), "%s/%s/%s/%s", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 		if (mkdir(t_buf, 0700))
 			die("failure: mkdir");
 
-		snprintf(t_buf, sizeof(t_buf), "setfacl -m u:100:rwx %s/%s/%s/%s", t_mountpoint, T_DIR1, DIR1, DIR3);
+		snprintf(t_buf, sizeof(t_buf), "setfacl -m u:100:rwx %s/%s/%s/%s", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 		if (system(t_buf))
 			die("failure: system");
 
-		snprintf(t_buf, sizeof(t_buf), "getfacl -n -p %s/%s/%s/%s | grep -q user:100:rwx", t_mountpoint, T_DIR1, DIR1, DIR3);
+		snprintf(t_buf, sizeof(t_buf), "getfacl -n -p %s/%s/%s/%s | grep -q user:100:rwx", info->t_mountpoint, T_DIR1, DIR1, DIR3);
 		if (system(t_buf))
 			die("failure: system");
 
@@ -14403,12 +14398,12 @@ struct test_struct t_setxattr_fix_705191b03d50[] = {
 	{ setxattr_fix_705191b03d50,					T_REQUIRE_USERNS,		"test that setxattr works correctly for userns mountable filesystems",				},
 };
 
-static bool run_test(struct test_struct suite[], size_t suite_size)
+static bool run_test(struct vfstest_info *info, const struct test_struct suite[], size_t suite_size)
 {
 	int i;
 
 	for (i = 0; i < suite_size; i++) {
-		struct test_struct *t = &suite[i];
+		const struct test_struct *t = &suite[i];
 		int ret;
 		pid_t pid;
 
@@ -14417,20 +14412,20 @@ static bool run_test(struct test_struct suite[], size_t suite_size)
 		 * mounts only run vfs generic tests.
 		 */
 		if ((t->support_flags & T_REQUIRE_IDMAPPED_MOUNTS &&
-		    !t_fs_allow_idmap) ||
-		    (t->support_flags & T_REQUIRE_USERNS && !t_has_userns)) {
+		     !info->t_fs_allow_idmap) ||
+		    (t->support_flags & T_REQUIRE_USERNS && !info->t_has_userns)) {
 			log_debug("Skipping test %s", t->description);
 			continue;
 		}
 
-		test_setup();
+		test_setup(info);
 
 		pid = fork();
 		if (pid < 0)
 			return false;
 
 		if (pid == 0) {
-			ret = t->test();
+			ret = t->test(info);
 			if (ret)
 				die("failure: %s", t->description);
 
@@ -14438,7 +14433,7 @@ static bool run_test(struct test_struct suite[], size_t suite_size)
 		}
 
 		ret = wait_for_pid(pid);
-		test_cleanup();
+		test_cleanup(info);
 
 		if (ret)
 			return false;
@@ -14447,7 +14442,7 @@ static bool run_test(struct test_struct suite[], size_t suite_size)
 	return true;
 }
 
-static bool fs_allow_idmap(void)
+static bool fs_allow_idmap(const struct vfstest_info *info)
 {
 	int ret;
 	int open_tree_fd = -EBADF;
@@ -14461,7 +14456,7 @@ static bool fs_allow_idmap(void)
 	if (attr.userns_fd < 0)
 		return false;
 
-	open_tree_fd = sys_open_tree(t_mnt_fd, "",
+	open_tree_fd = sys_open_tree(info->t_mnt_fd, "",
 				     AT_EMPTY_PATH | AT_NO_AUTOMOUNT |
 				     AT_SYMLINK_NOFOLLOW | OPEN_TREE_CLOEXEC |
 				     OPEN_TREE_CLONE);
@@ -14488,6 +14483,7 @@ static bool sys_has_userns(void)
 
 int main(int argc, char *argv[])
 {
+	struct vfstest_info info;
 	int fret, ret;
 	int index = 0;
 	bool idmapped_mounts_supported = false, test_btrfs = false,
@@ -14495,16 +14491,18 @@ int main(int argc, char *argv[])
 	     test_nested_userns = false, test_setattr_fix_968219708108 = false,
 	     test_setxattr_fix_705191b03d50 = false;
 
+	init_vfstest_info(&info);
+
 	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
 		switch (ret) {
 		case 'd':
-			t_device = optarg;
+			info.t_device = optarg;
 			break;
 		case 'f':
-			t_fstype = optarg;
+			info.t_fstype = optarg;
 			break;
 		case 'm':
-			t_mountpoint = optarg;
+			info.t_mountpoint = optarg;
 			break;
 		case 's':
 			idmapped_mounts_supported = true;
@@ -14522,10 +14520,10 @@ int main(int argc, char *argv[])
 			test_btrfs = true;
 			break;
 		case 'a':
-			t_mountpoint_scratch = optarg;
+			info.t_mountpoint_scratch = optarg;
 			break;
 		case 'e':
-			t_device_scratch = optarg;
+			info.t_device_scratch = optarg;
 			break;
 		case 'i':
 			test_setattr_fix_968219708108 = true;
@@ -14540,13 +14538,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!t_device)
+	if (!info.t_device)
 		die_errno(EINVAL, "test device missing");
 
-	if (!t_fstype)
+	if (!info.t_fstype)
 		die_errno(EINVAL, "test filesystem type missing");
 
-	if (!t_mountpoint)
+	if (!info.t_mountpoint)
 		die_errno(EINVAL, "mountpoint of test device missing");
 
 	/* create separate mount namespace */
@@ -14557,56 +14555,56 @@ int main(int argc, char *argv[])
 	if (sys_mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, 0))
 		die("failure: turn mount propagation off");
 
-	t_mnt_fd = openat(-EBADF, t_mountpoint, O_CLOEXEC | O_DIRECTORY);
-	if (t_mnt_fd < 0)
-		die("failed to open %s", t_mountpoint);
+	info.t_mnt_fd = openat(-EBADF, info.t_mountpoint, O_CLOEXEC | O_DIRECTORY);
+	if (info.t_mnt_fd < 0)
+		die("failed to open %s", info.t_mountpoint);
 
-	t_mnt_scratch_fd = openat(-EBADF, t_mountpoint_scratch, O_CLOEXEC | O_DIRECTORY);
-	if (t_mnt_fd < 0)
-		die("failed to open %s", t_mountpoint_scratch);
+	info.t_mnt_scratch_fd = openat(-EBADF, info.t_mountpoint_scratch, O_CLOEXEC | O_DIRECTORY);
+	if (info.t_mnt_fd < 0)
+		die("failed to open %s", info.t_mountpoint_scratch);
 
-	t_fs_allow_idmap = fs_allow_idmap();
+	info.t_fs_allow_idmap = fs_allow_idmap(&info);
 	if (idmapped_mounts_supported) {
 		/*
 		 * Caller just wants to know whether the filesystem we're on
 		 * supports idmapped mounts.
 		 */
-		if (!t_fs_allow_idmap)
+		if (!info.t_fs_allow_idmap)
 			exit(EXIT_FAILURE);
 
 		exit(EXIT_SUCCESS);
 	}
-	t_has_userns = sys_has_userns();
+	info.t_has_userns = sys_has_userns();
 	/* don't copy ENOSYS errno to child process on older kernel */
 	errno = 0;
 
-	stash_overflowuid();
-	stash_overflowgid();
+	stash_overflowuid(&info);
+	stash_overflowgid(&info);
 
 	fret = EXIT_FAILURE;
 
-	if (test_core && !run_test(basic_suite, ARRAY_SIZE(basic_suite)))
+	if (test_core && !run_test(&info, basic_suite, ARRAY_SIZE(basic_suite)))
 		goto out;
 
 	if (test_fscaps_regression &&
-	    !run_test(fscaps_in_ancestor_userns,
+	    !run_test(&info, fscaps_in_ancestor_userns,
 		      ARRAY_SIZE(fscaps_in_ancestor_userns)))
 		goto out;
 
 	if (test_nested_userns &&
-	    !run_test(t_nested_userns, ARRAY_SIZE(t_nested_userns)))
+	    !run_test(&info, t_nested_userns, ARRAY_SIZE(t_nested_userns)))
 		goto out;
 
-	if (test_btrfs && !run_test(t_btrfs, ARRAY_SIZE(t_btrfs)))
+	if (test_btrfs && !run_test(&info, t_btrfs, ARRAY_SIZE(t_btrfs)))
 		goto out;
 
 	if (test_setattr_fix_968219708108 &&
-	    !run_test(t_setattr_fix_968219708108,
+	    !run_test(&info, t_setattr_fix_968219708108,
 		      ARRAY_SIZE(t_setattr_fix_968219708108)))
 		goto out;
 
 	if (test_setxattr_fix_705191b03d50 &&
-	    !run_test(t_setxattr_fix_705191b03d50,
+	    !run_test(&info, t_setxattr_fix_705191b03d50,
 		      ARRAY_SIZE(t_setxattr_fix_705191b03d50)))
 		goto out;
 
