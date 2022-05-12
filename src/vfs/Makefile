@@ -4,10 +4,10 @@ TOPDIR = ../..
 include $(TOPDIR)/include/builddefs
 
 TARGETS = vfstest mount-idmapped
-CFILES_VFSTEST = vfstest.c utils.c
+CFILES_VFSTEST = vfstest.c idmapped-mounts.c utils.c
 CFILES_MOUNT_IDMAPPED = mount-idmapped.c utils.c
 
-HFILES = missing.h utils.h
+HFILES = missing.h utils.h idmapped-mounts.h
 LLDLIBS += -pthread
 LDIRT = $(TARGETS)
 
