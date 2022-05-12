@@ -9,12 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/eventfd.h>
+#include <sys/fsuid.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/xattr.h>
 
 #include "utils.h"
 
@@ -422,4 +424,497 @@ int add_map_entry(struct list *head,
 	new_list->elem = newmap;
 	list_add_tail(head, new_list);
 	return 0;
+}
+
+/* __expected_uid_gid - check whether file is owned by the provided uid and gid */
+bool __expected_uid_gid(int dfd, const char *path, int flags,
+			uid_t expected_uid, gid_t expected_gid, bool log)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return log_errno(false, "failure: fstatat");
+
+	if (log && st.st_uid != expected_uid)
+		log_stderr("failure: uid(%d) != expected_uid(%d)", st.st_uid, expected_uid);
+
+	if (log && st.st_gid != expected_gid)
+		log_stderr("failure: gid(%d) != expected_gid(%d)", st.st_gid, expected_gid);
+
+	errno = 0; /* Don't report misleading errno. */
+	return st.st_uid == expected_uid && st.st_gid == expected_gid;
+}
+
+/* caps_down - lower all effective caps */
+int caps_down(void)
+{
+	bool fret = false;
+#ifdef HAVE_SYS_CAPABILITY_H
+	cap_t caps = NULL;
+	int ret = -1;
+
+	caps = cap_get_proc();
+	if (!caps)
+		goto out;
+
+	ret = cap_clear_flag(caps, CAP_EFFECTIVE);
+	if (ret)
+		goto out;
+
+	ret = cap_set_proc(caps);
+	if (ret)
+		goto out;
+
+	fret = true;
+
+out:
+	cap_free(caps);
+#endif
+	return fret;
+}
+
+/* caps_down_fsetid - lower CAP_FSETID effective cap */
+int caps_down_fsetid(void)
+{
+	bool fret = false;
+#ifdef HAVE_SYS_CAPABILITY_H
+	cap_t caps = NULL;
+	cap_value_t cap = CAP_FSETID;
+	int ret = -1;
+
+	caps = cap_get_proc();
+	if (!caps)
+		goto out;
+
+	ret = cap_set_flag(caps, CAP_EFFECTIVE, 1, &cap, 0);
+	if (ret)
+		goto out;
+
+	ret = cap_set_proc(caps);
+	if (ret)
+		goto out;
+
+	fret = true;
+
+out:
+	cap_free(caps);
+#endif
+	return fret;
+}
+
+#ifdef HAVE_LIBURING_H
+int io_uring_openat_with_creds(struct io_uring *ring, int dfd, const char *path,
+			       int cred_id, bool with_link, int *ret_cqe)
+{
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	int ret, i, to_submit = 1;
+
+	if (with_link) {
+		sqe = io_uring_get_sqe(ring);
+		if (!sqe)
+			return log_error_errno(-EINVAL, EINVAL, "failure: io_uring_sqe");
+		io_uring_prep_nop(sqe);
+		sqe->flags |= IOSQE_IO_LINK;
+		sqe->user_data = 1;
+		to_submit++;
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe)
+		return log_error_errno(-EINVAL, EINVAL, "failure: io_uring_sqe");
+	io_uring_prep_openat(sqe, dfd, path, O_RDONLY | O_CLOEXEC, 0);
+	sqe->user_data = 2;
+
+	if (cred_id != -1)
+		sqe->personality = cred_id;
+
+	ret = io_uring_submit(ring);
+	if (ret != to_submit) {
+		log_stderr("failure: io_uring_submit");
+		goto out;
+	}
+
+	for (i = 0; i < to_submit; i++) {
+		ret = io_uring_wait_cqe(ring, &cqe);
+		if (ret < 0) {
+			log_stderr("failure: io_uring_wait_cqe");
+			goto out;
+		}
+
+		ret = cqe->res;
+		/*
+		 * Make sure caller can identify that this is a proper io_uring
+		 * failure and not some earlier error.
+		 */
+		if (ret_cqe)
+			*ret_cqe = ret;
+		io_uring_cqe_seen(ring, cqe);
+	}
+	log_debug("Ran test");
+out:
+	return ret;
+}
+#endif /* HAVE_LIBURING_H */
+
+/* caps_up - raise all permitted caps */
+int caps_up(void)
+{
+	bool fret = false;
+#ifdef HAVE_SYS_CAPABILITY_H
+	cap_t caps = NULL;
+	cap_value_t cap;
+	int ret = -1;
+
+	caps = cap_get_proc();
+	if (!caps)
+		goto out;
+
+	for (cap = 0; cap <= CAP_LAST_CAP; cap++) {
+		cap_flag_value_t flag;
+
+		ret = cap_get_flag(caps, cap, CAP_PERMITTED, &flag);
+		if (ret) {
+			if (errno == EINVAL)
+				break;
+			else
+				goto out;
+		}
+
+		ret = cap_set_flag(caps, CAP_EFFECTIVE, 1, &cap, flag);
+		if (ret)
+			goto out;
+	}
+
+	ret = cap_set_proc(caps);
+	if (ret)
+		goto out;
+
+	fret = true;
+out:
+	cap_free(caps);
+#endif
+	return fret;
+}
+
+/* chown_r - recursively change ownership of all files */
+int chown_r(int fd, const char *path, uid_t uid, gid_t gid)
+{
+	int dfd, ret;
+	DIR *dir;
+	struct dirent *direntp;
+
+	dfd = openat(fd, path, O_CLOEXEC | O_DIRECTORY);
+	if (dfd < 0)
+		return -1;
+
+	dir = fdopendir(dfd);
+	if (!dir) {
+		close(dfd);
+		return -1;
+	}
+
+	while ((direntp = readdir(dir))) {
+		struct stat st;
+
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+
+		ret = fstatat(dfd, direntp->d_name, &st, AT_SYMLINK_NOFOLLOW);
+		if (ret < 0 && errno != ENOENT)
+			break;
+
+		if (S_ISDIR(st.st_mode))
+			ret = chown_r(dfd, direntp->d_name, uid, gid);
+		else
+			ret = fchownat(dfd, direntp->d_name, uid, gid, AT_SYMLINK_NOFOLLOW);
+		if (ret < 0 && errno != ENOENT)
+			break;
+	}
+
+	ret = fchownat(fd, path, uid, gid, AT_SYMLINK_NOFOLLOW);
+	closedir(dir);
+	return ret;
+}
+
+/* expected_dummy_vfs_caps_uid - check vfs caps are stored with the provided uid */
+bool expected_dummy_vfs_caps_uid(int fd, uid_t expected_uid)
+{
+#define __cap_raised_permitted(x, ns_cap_data)                                 \
+	((ns_cap_data.data[(x) >> 5].permitted) & (1 << ((x)&31)))
+	struct vfs_ns_cap_data ns_xattr = {};
+	ssize_t ret;
+
+	ret = fgetxattr(fd, "security.capability", &ns_xattr, sizeof(ns_xattr));
+	if (ret < 0 || ret == 0)
+		return false;
+
+	if (ns_xattr.magic_etc & VFS_CAP_REVISION_3) {
+
+		if (le32_to_cpu(ns_xattr.rootid) != expected_uid) {
+			errno = EINVAL;
+			log_stderr("failure: rootid(%d) != expected_rootid(%d)", le32_to_cpu(ns_xattr.rootid), expected_uid);
+		}
+
+		return (le32_to_cpu(ns_xattr.rootid) == expected_uid) &&
+		       (__cap_raised_permitted(CAP_NET_RAW, ns_xattr) > 0);
+	} else {
+		log_stderr("failure: fscaps version");
+	}
+
+	return false;
+}
+
+/* set_dummy_vfs_caps - set dummy vfs caps for the provided uid */
+int set_dummy_vfs_caps(int fd, int flags, int rootuid)
+{
+#define __raise_cap_permitted(x, ns_cap_data)                                  \
+	ns_cap_data.data[(x) >> 5].permitted |= (1 << ((x)&31))
+
+	struct vfs_ns_cap_data ns_xattr;
+
+	memset(&ns_xattr, 0, sizeof(ns_xattr));
+	__raise_cap_permitted(CAP_NET_RAW, ns_xattr);
+	ns_xattr.magic_etc |= VFS_CAP_REVISION_3 | VFS_CAP_FLAGS_EFFECTIVE;
+	ns_xattr.rootid = cpu_to_le32(rootuid);
+
+	return fsetxattr(fd, "security.capability",
+			 &ns_xattr, sizeof(ns_xattr), flags);
+}
+
+bool protected_symlinks_enabled(void)
+{
+	static int enabled = -1;
+
+	if (enabled == -1) {
+		int fd;
+		ssize_t ret;
+		char buf[256];
+
+		enabled = 0;
+
+		fd = open("/proc/sys/fs/protected_symlinks", O_RDONLY | O_CLOEXEC);
+		if (fd < 0)
+			return false;
+
+		ret = read(fd, buf, sizeof(buf));
+		close(fd);
+		if (ret < 0)
+			return false;
+
+		if (atoi(buf) >= 1)
+			enabled = 1;
+        }
+
+	return enabled == 1;
+}
+
+static bool is_xfs(const char *fstype)
+{
+	static int enabled = -1;
+
+	if (enabled == -1)
+		enabled = !strcmp(fstype, "xfs");
+
+	return enabled;
+}
+
+bool xfs_irix_sgid_inherit_enabled(const char *fstype)
+{
+	static int enabled = -1;
+
+	if (enabled == -1) {
+		int fd;
+		ssize_t ret;
+		char buf[256];
+
+		enabled = 0;
+
+		if (is_xfs(fstype)) {
+			fd = open("/proc/sys/fs/xfs/irix_sgid_inherit", O_RDONLY | O_CLOEXEC);
+			if (fd < 0)
+				return false;
+
+			ret = read(fd, buf, sizeof(buf));
+			close(fd);
+			if (ret < 0)
+				return false;
+
+			if (atoi(buf) >= 1)
+				enabled = 1;
+		}
+        }
+
+	return enabled == 1;
+}
+
+bool expected_file_size(int dfd, const char *path, int flags, off_t expected_size)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return log_errno(false, "failure: fstatat");
+
+	if (st.st_size != expected_size)
+		return log_errno(false, "failure: st_size(%zu) != expected_size(%zu)",
+				 (size_t)st.st_size, (size_t)expected_size);
+
+	return true;
+}
+
+/* is_setid - check whether file is S_ISUID and S_ISGID */
+bool is_setid(int dfd, const char *path, int flags)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return false;
+
+	errno = 0; /* Don't report misleading errno. */
+	return (st.st_mode & S_ISUID) || (st.st_mode & S_ISGID);
+}
+
+/* is_setgid - check whether file or directory is S_ISGID */
+bool is_setgid(int dfd, const char *path, int flags)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return false;
+
+	errno = 0; /* Don't report misleading errno. */
+	return (st.st_mode & S_ISGID);
+}
+
+/* is_sticky - check whether file is S_ISVTX */
+bool is_sticky(int dfd, const char *path, int flags)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return false;
+
+	errno = 0; /* Don't report misleading errno. */
+	return (st.st_mode & S_ISVTX) > 0;
+}
+
+bool switch_resids(uid_t uid, gid_t gid)
+{
+	if (setresgid(gid, gid, gid))
+		return log_errno(false, "failure: setregid");
+
+	if (setresuid(uid, uid, uid))
+		return log_errno(false, "failure: setresuid");
+
+	if (setfsgid(-1) != gid)
+		return log_errno(false, "failure: setfsgid(-1)");
+
+	if (setfsuid(-1) != uid)
+		return log_errno(false, "failure: setfsuid(-1)");
+
+	return true;
+}
+
+/* rm_r - recursively remove all files */
+int rm_r(int fd, const char *path)
+{
+	int dfd, ret;
+	DIR *dir;
+	struct dirent *direntp;
+
+	if (!path || strcmp(path, "") == 0)
+		return -1;
+
+	dfd = openat(fd, path, O_CLOEXEC | O_DIRECTORY);
+	if (dfd < 0)
+		return -1;
+
+	dir = fdopendir(dfd);
+	if (!dir) {
+		close(dfd);
+		return -1;
+	}
+
+	while ((direntp = readdir(dir))) {
+		struct stat st;
+
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+
+		ret = fstatat(dfd, direntp->d_name, &st, AT_SYMLINK_NOFOLLOW);
+		if (ret < 0 && errno != ENOENT)
+			break;
+
+		if (S_ISDIR(st.st_mode))
+			ret = rm_r(dfd, direntp->d_name);
+		else
+			ret = unlinkat(dfd, direntp->d_name, 0);
+		if (ret < 0 && errno != ENOENT)
+			break;
+	}
+
+	ret = unlinkat(fd, path, AT_REMOVEDIR);
+	closedir(dir);
+	return ret;
+}
+
+/* fd_to_fd - transfer data from one fd to another */
+int fd_to_fd(int from, int to)
+{
+	for (;;) {
+		uint8_t buf[PATH_MAX];
+		uint8_t *p = buf;
+		ssize_t bytes_to_write;
+		ssize_t bytes_read;
+
+		bytes_read = read_nointr(from, buf, sizeof buf);
+		if (bytes_read < 0)
+			return -1;
+		if (bytes_read == 0)
+			break;
+
+		bytes_to_write = (size_t)bytes_read;
+		do {
+			ssize_t bytes_written;
+
+			bytes_written = write_nointr(to, p, bytes_to_write);
+			if (bytes_written < 0)
+				return -1;
+
+			bytes_to_write -= bytes_written;
+			p += bytes_written;
+		} while (bytes_to_write > 0);
+	}
+
+	return 0;
+}
+
+bool openat_tmpfile_supported(int dirfd)
+{
+	int fd = -1;
+
+	fd = openat(dirfd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
+	if (fd == -1) {
+		if (errno == ENOTSUP)
+			return false;
+		else
+			return log_errno(false, "failure: create");
+	}
+
+	if (close(fd))
+		log_stderr("failure: close");
+
+	return true;
 }
