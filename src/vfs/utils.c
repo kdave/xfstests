@@ -918,3 +918,133 @@ bool openat_tmpfile_supported(int dirfd)
 
 	return true;
 }
+
+/*
+ * There'll be scenarios where you'll want to see the attributes associated with
+ * a directory tree during debugging or just to make sure things look correct.
+ * Simply uncomment and place the print_r() helper where you need it.
+ */
+#ifdef DEBUG_TRACE
+static int fd_cloexec(int fd, bool cloexec)
+{
+	int oflags, nflags;
+
+	oflags = fcntl(fd, F_GETFD, 0);
+	if (oflags < 0)
+		return -errno;
+
+	if (cloexec)
+		nflags = oflags | FD_CLOEXEC;
+	else
+		nflags = oflags & ~FD_CLOEXEC;
+
+	if (nflags == oflags)
+		return 0;
+
+	if (fcntl(fd, F_SETFD, nflags) < 0)
+		return -errno;
+
+	return 0;
+}
+
+static inline int dup_cloexec(int fd)
+{
+	int fd_dup;
+
+	fd_dup = dup(fd);
+	if (fd_dup < 0)
+		return -errno;
+
+	if (fd_cloexec(fd_dup, true)) {
+		close(fd_dup);
+		return -errno;
+	}
+
+	return fd_dup;
+}
+
+int print_r(int fd, const char *path)
+{
+	int ret = 0;
+	int dfd, dfd_dup;
+	DIR *dir;
+	struct dirent *direntp;
+	struct stat st;
+
+	if (!path || *path == '\0') {
+		char buf[sizeof("/proc/self/fd/") + 30];
+
+		ret = snprintf(buf, sizeof(buf), "/proc/self/fd/%d", fd);
+		if (ret < 0 || (size_t)ret >= sizeof(buf))
+			return -1;
+
+		/*
+		 * O_PATH file descriptors can't be used so we need to re-open
+		 * just in case.
+		 */
+		dfd = openat(-EBADF, buf, O_CLOEXEC | O_DIRECTORY, 0);
+	} else {
+		dfd = openat(fd, path, O_CLOEXEC | O_DIRECTORY, 0);
+	}
+	if (dfd < 0)
+		return -1;
+
+	/*
+	 * When fdopendir() below succeeds it assumes ownership of the fd so we
+	 * to make sure we always have an fd that fdopendir() can own which is
+	 * why we dup() in the case where the caller wants us to operate on the
+	 * fd directly.
+	 */
+	dfd_dup = dup_cloexec(dfd);
+	if (dfd_dup < 0) {
+		close(dfd);
+		return -1;
+	}
+
+	dir = fdopendir(dfd);
+	if (!dir) {
+		close(dfd);
+		close(dfd_dup);
+		return -1;
+	}
+	/* Transfer ownership to fdopendir(). */
+	dfd = -EBADF;
+
+	while ((direntp = readdir(dir))) {
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+
+		ret = fstatat(dfd_dup, direntp->d_name, &st, AT_SYMLINK_NOFOLLOW);
+		if (ret < 0 && errno != ENOENT)
+			break;
+
+		ret = 0;
+		if (S_ISDIR(st.st_mode))
+			ret = print_r(dfd_dup, direntp->d_name);
+		else
+			fprintf(stderr, "mode(%o):uid(%d):gid(%d) -> %d/%s\n",
+				(st.st_mode & ~S_IFMT), st.st_uid, st.st_gid,
+				dfd_dup, direntp->d_name);
+		if (ret < 0 && errno != ENOENT)
+			break;
+	}
+
+	if (!path || *path == '\0')
+		ret = fstatat(fd, "", &st,
+			      AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW |
+			      AT_EMPTY_PATH);
+	else
+		ret = fstatat(fd, path, &st,
+			      AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW);
+	if (!ret)
+		fprintf(stderr, "mode(%o):uid(%d):gid(%d) -> %s\n",
+			(st.st_mode & ~S_IFMT), st.st_uid, st.st_gid,
+			(path && *path) ? path : "(null)");
+
+	close(dfd_dup);
+	closedir(dir);
+
+	return ret;
+}
+#endif

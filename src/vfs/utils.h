@@ -355,6 +355,11 @@ extern int io_uring_openat_with_creds(struct io_uring *ring, int dfd,
 
 extern int chown_r(int fd, const char *path, uid_t uid, gid_t gid);
 extern int rm_r(int fd, const char *path);
+#ifdef DEBUG_TRACE
+extern int print_r(int fd, const char *path);
+#else
+static inline int print_r(int fd, const char *path) { return 0; }
+#endif
 extern int fd_to_fd(int from, int to);
 extern bool protected_symlinks_enabled(void);
 extern bool xfs_irix_sgid_inherit_enabled(const char *fstype);
