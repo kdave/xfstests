@@ -13,7 +13,6 @@
 #include <limits.h>
 #include <linux/limits.h>
 #include <linux/types.h>
-#include <pthread.h>
 #include <pwd.h>
 #include <sched.h>
 #include <stdbool.h>
