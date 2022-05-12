@@ -3,8 +3,8 @@
 TOPDIR = ../..
 include $(TOPDIR)/include/builddefs
 
-TARGETS = idmapped-mounts mount-idmapped
-CFILES_IDMAPPED_MOUNTS = idmapped-mounts.c utils.c
+TARGETS = vfstest mount-idmapped
+CFILES_VFSTEST = vfstest.c utils.c
 CFILES_MOUNT_IDMAPPED = mount-idmapped.c utils.c
 
 HFILES = missing.h utils.h
@@ -25,9 +25,9 @@ depend: .dep
 
 include $(BUILDRULES)
 
-idmapped-mounts: $(CFILES_IDMAPPED_MOUNTS)
+vfstest: $(CFILES_VFSTEST)
 	@echo "    [CC]    $@"
-	$(Q)$(LTLINK) $(CFILES_IDMAPPED_MOUNTS) -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
+	$(Q)$(LTLINK) $(CFILES_VFSTEST) -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 
 mount-idmapped: $(CFILES_MOUNT_IDMAPPED)
 	@echo "    [CC]    $@"

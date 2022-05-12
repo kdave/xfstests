@@ -14278,7 +14278,7 @@ static void usage(void)
 	fprintf(stderr, "--fstype                            Filesystem type used in the tests\n");
 	fprintf(stderr, "--help                              Print help\n");
 	fprintf(stderr, "--mountpoint                        Mountpoint of device\n");
-	fprintf(stderr, "--supported                         Test whether idmapped mounts are supported on this filesystem\n");
+	fprintf(stderr, "--idmapped-mounts-supported	     Test whether idmapped mounts are supported on this filesystem\n");
 	fprintf(stderr, "--scratch-mountpoint                Mountpoint of scratch device used in the tests\n");
 	fprintf(stderr, "--scratch-device                    Scratch device used in the tests\n");
 	fprintf(stderr, "--test-core                         Run core idmapped mount testsuite\n");
@@ -14297,7 +14297,7 @@ static const struct option longopts[] = {
 	{"mountpoint",				required_argument,	0,	'm'},
 	{"scratch-mountpoint",			required_argument,	0,	'a'},
 	{"scratch-device",			required_argument,	0,	'e'},
-	{"supported",				no_argument,		0,	's'},
+	{"idmapped-mounts-supported",		no_argument,		0,	's'},
 	{"help",				no_argument,		0,	'h'},
 	{"test-core",				no_argument,		0,	'c'},
 	{"test-fscaps-regression",		no_argument,		0,	'g'},
@@ -14494,9 +14494,9 @@ int main(int argc, char *argv[])
 {
 	int fret, ret;
 	int index = 0;
-	bool supported = false, test_btrfs = false, test_core = false,
-	     test_fscaps_regression = false, test_nested_userns = false,
-	     test_setattr_fix_968219708108 = false,
+	bool idmapped_mounts_supported = false, test_btrfs = false,
+	     test_core = false, test_fscaps_regression = false,
+	     test_nested_userns = false, test_setattr_fix_968219708108 = false,
 	     test_setxattr_fix_705191b03d50 = false;
 
 	while ((ret = getopt_long_only(argc, argv, "", longopts, &index)) != -1) {
@@ -14511,7 +14511,7 @@ int main(int argc, char *argv[])
 			t_mountpoint = optarg;
 			break;
 		case 's':
-			supported = true;
+			idmapped_mounts_supported = true;
 			break;
 		case 'c':
 			test_core = true;
@@ -14570,7 +14570,7 @@ int main(int argc, char *argv[])
 		die("failed to open %s", t_mountpoint_scratch);
 
 	t_fs_allow_idmap = fs_allow_idmap();
-	if (supported) {
+	if (idmapped_mounts_supported) {
 		/*
 		 * Caller just wants to know whether the filesystem we're on
 		 * supports idmapped mounts.
