@@ -14308,10 +14308,6 @@ static const struct option longopts[] = {
 	{NULL,					0,			0,	  0},
 };
 
-/* Flags for which functionality is required by the test */
-#define T_REQUIRE_IDMAPPED_MOUNTS (1U << 0)
-#define T_REQUIRE_USERNS (1U << 1)
-
 struct t_idmapped_mounts {
 	int (*test)(void);
 	unsigned int support_flags;
@@ -14369,46 +14365,46 @@ struct t_idmapped_mounts {
 };
 
 struct t_idmapped_mounts fscaps_in_ancestor_userns[] = {
-	{ fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns,	true,	"fscaps on idmapped mounts in user namespace writing fscap valid in ancestor userns",		},
+	{ fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns,	T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace writing fscap valid in ancestor userns",		},
 };
 
 struct t_idmapped_mounts t_nested_userns[] = {
-	{ nested_userns,						true,	"test that nested user namespaces behave correctly when attached to idmapped mounts",		},
+	{ nested_userns,						T_REQUIRE_IDMAPPED_MOUNTS,	"test that nested user namespaces behave correctly when attached to idmapped mounts",		},
 };
 
 struct t_idmapped_mounts t_btrfs[] = {
-	{ btrfs_subvolumes_fsids_mapped,				true,	"test subvolumes with mapped fsids",								},
-	{ btrfs_subvolumes_fsids_mapped_userns,				true, 	"test subvolumes with mapped fsids inside user namespace",					},
-	{ btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed,		true, 	"test subvolume deletion with user_subvol_rm_allowed mount option",				},
-	{ btrfs_subvolumes_fsids_mapped_userns_user_subvol_rm_allowed,	true, 	"test subvolume deletion with user_subvol_rm_allowed mount option inside user namespace",	},
-	{ btrfs_subvolumes_fsids_unmapped,				true, 	"test subvolumes with unmapped fsids",								},
-	{ btrfs_subvolumes_fsids_unmapped_userns,			true, 	"test subvolumes with unmapped fsids inside user namespace",					},
-	{ btrfs_snapshots_fsids_mapped,					true, 	"test snapshots with mapped fsids",								},
-	{ btrfs_snapshots_fsids_mapped_userns,				true, 	"test snapshots with mapped fsids inside user namespace",					},
-	{ btrfs_snapshots_fsids_mapped_user_subvol_rm_allowed,		true, 	"test snapshots deletion with user_subvol_rm_allowed mount option",				},
-	{ btrfs_snapshots_fsids_mapped_userns_user_subvol_rm_allowed,	true, 	"test snapshots deletion with user_subvol_rm_allowed mount option inside user namespace",	},
-	{ btrfs_snapshots_fsids_unmapped,				true, 	"test snapshots with unmapped fsids",								},
-	{ btrfs_snapshots_fsids_unmapped_userns,			true, 	"test snapshots with unmapped fsids inside user namespace",					},
-	{ btrfs_delete_by_spec_id,					true, 	"test subvolume deletion by spec id",								},
-	{ btrfs_subvolumes_setflags_fsids_mapped,			true, 	"test subvolume flags with mapped fsids",							},
-	{ btrfs_subvolumes_setflags_fsids_mapped_userns,		true, 	"test subvolume flags with mapped fsids inside user namespace",					},
-	{ btrfs_subvolumes_setflags_fsids_unmapped,			true, 	"test subvolume flags with unmapped fsids",							},
-	{ btrfs_subvolumes_setflags_fsids_unmapped_userns,		true, 	"test subvolume flags with unmapped fsids inside user namespace",				},
-	{ btrfs_snapshots_setflags_fsids_mapped,			true, 	"test snapshots flags with mapped fsids",							},
-	{ btrfs_snapshots_setflags_fsids_mapped_userns,			true, 	"test snapshots flags with mapped fsids inside user namespace",					},
-	{ btrfs_snapshots_setflags_fsids_unmapped,			true, 	"test snapshots flags with unmapped fsids",							},
-	{ btrfs_snapshots_setflags_fsids_unmapped_userns,		true, 	"test snapshots flags with unmapped fsids inside user namespace",				},
-	{ btrfs_subvolume_lookup_user,					true, 	"test unprivileged subvolume lookup",								},
+	{ btrfs_subvolumes_fsids_mapped,				T_REQUIRE_IDMAPPED_MOUNTS,	"test subvolumes with mapped fsids",								},
+	{ btrfs_subvolumes_fsids_mapped_userns,				T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolumes with mapped fsids inside user namespace",					},
+	{ btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume deletion with user_subvol_rm_allowed mount option",				},
+	{ btrfs_subvolumes_fsids_mapped_userns_user_subvol_rm_allowed,	T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume deletion with user_subvol_rm_allowed mount option inside user namespace",	},
+	{ btrfs_subvolumes_fsids_unmapped,				T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolumes with unmapped fsids",								},
+	{ btrfs_subvolumes_fsids_unmapped_userns,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolumes with unmapped fsids inside user namespace",					},
+	{ btrfs_snapshots_fsids_mapped,					T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots with mapped fsids",								},
+	{ btrfs_snapshots_fsids_mapped_userns,				T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots with mapped fsids inside user namespace",					},
+	{ btrfs_snapshots_fsids_mapped_user_subvol_rm_allowed,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots deletion with user_subvol_rm_allowed mount option",				},
+	{ btrfs_snapshots_fsids_mapped_userns_user_subvol_rm_allowed,	T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots deletion with user_subvol_rm_allowed mount option inside user namespace",	},
+	{ btrfs_snapshots_fsids_unmapped,				T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots with unmapped fsids",								},
+	{ btrfs_snapshots_fsids_unmapped_userns,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots with unmapped fsids inside user namespace",					},
+	{ btrfs_delete_by_spec_id,					T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume deletion by spec id",								},
+	{ btrfs_subvolumes_setflags_fsids_mapped,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume flags with mapped fsids",							},
+	{ btrfs_subvolumes_setflags_fsids_mapped_userns,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume flags with mapped fsids inside user namespace",					},
+	{ btrfs_subvolumes_setflags_fsids_unmapped,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume flags with unmapped fsids",							},
+	{ btrfs_subvolumes_setflags_fsids_unmapped_userns,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume flags with unmapped fsids inside user namespace",				},
+	{ btrfs_snapshots_setflags_fsids_mapped,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots flags with mapped fsids",							},
+	{ btrfs_snapshots_setflags_fsids_mapped_userns,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots flags with mapped fsids inside user namespace",					},
+	{ btrfs_snapshots_setflags_fsids_unmapped,			T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots flags with unmapped fsids",							},
+	{ btrfs_snapshots_setflags_fsids_unmapped_userns,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test snapshots flags with unmapped fsids inside user namespace",				},
+	{ btrfs_subvolume_lookup_user,					T_REQUIRE_IDMAPPED_MOUNTS, 	"test unprivileged subvolume lookup",								},
 };
 
 /* Test for commit 968219708108 ("fs: handle circular mappings correctly"). */
 struct t_idmapped_mounts t_setattr_fix_968219708108[] = {
-	{ setattr_fix_968219708108,					true,	"test that setattr works correctly",								},
+	{ setattr_fix_968219708108,					T_REQUIRE_IDMAPPED_MOUNTS,	"test that setattr works correctly",								},
 };
 
 /* Test for commit 705191b03d50 ("fs: fix acl translation"). */
 struct t_idmapped_mounts t_setxattr_fix_705191b03d50[] = {
-	{ setxattr_fix_705191b03d50,					false,	"test that setxattr works correctly for userns mountable filesystems",				},
+	{ setxattr_fix_705191b03d50,					T_REQUIRE_USERNS,		"test that setxattr works correctly for userns mountable filesystems",				},
 };
 
 static bool run_test(struct t_idmapped_mounts suite[], size_t suite_size)

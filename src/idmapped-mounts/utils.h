@@ -20,6 +20,10 @@
 
 #include "missing.h"
 
+/* Flags for which functionality is required by the test */
+#define T_REQUIRE_IDMAPPED_MOUNTS (1U << 0)
+#define T_REQUIRE_USERNS (1U << 1)
+
 /* Maximum number of nested user namespaces in the kernel. */
 #define MAX_USERNS_LEVEL 32
 
