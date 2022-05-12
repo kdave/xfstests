@@ -53,6 +53,12 @@
 		__internal_ret__;                             \
 	})
 
+struct test_struct {
+	int (*test)(void);
+	unsigned int support_flags;
+	const char *description;
+};
+
 typedef enum idmap_type_t {
 	ID_TYPE_UID,
 	ID_TYPE_GID
