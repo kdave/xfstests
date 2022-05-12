@@ -46,7 +46,7 @@
 #include <liburing.h>
 #endif
 
-#include "idmapped-mounts/missing.h"
+#include "vfs/missing.h"
 
 #ifndef USRQUOTA
 #define USRQUOTA  0

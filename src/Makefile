@@ -76,7 +76,7 @@ TARGETS += uring_read_fault
 LLDLIBS += -luring
 endif
 
-SUBDIRS += idmapped-mounts
+SUBDIRS += vfs
 ifeq ($(HAVE_LIBCAP), true)
 LLDLIBS += -lcap
 endif

@@ -355,23 +355,23 @@ _scratch_mount_idmapped()
 	if [ "$type" = "u" ]; then
 		# This means root will be able to create files as uid %id in
 		# the underlying filesystem by going through the idmapped mount.
-		$here/src/idmapped-mounts/mount-idmapped --map-mount u:0:$id:1 \
-							 --map-mount u:$id:0:1 \
-							 --map-mount g:0:0:1 \
-							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+		$here/src/vfs/mount-idmapped --map-mount u:0:$id:1 \
+					     --map-mount u:$id:0:1 \
+					     --map-mount g:0:0:1 \
+					     "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
 	elif [ "$type" = "g" ]; then
 		# This means root will be able to create files as gid %id in
 		# the underlying filesystem by going through the idmapped mount.
-		$here/src/idmapped-mounts/mount-idmapped --map-mount g:0:$id:1 \
-							 --map-mount g:$id:0:1 \
-							 --map-mount u:0:0:1 \
-							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+		$here/src/vfs/mount-idmapped --map-mount g:0:$id:1 \
+					     --map-mount g:$id:0:1 \
+					     --map-mount u:0:0:1 \
+					     "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
 	elif [ "$type" = "b" ]; then
 		# This means root will be able to create files as uid and gid
 		# %id in the underlying filesystem by going through the idmapped mount.
-		$here/src/idmapped-mounts/mount-idmapped --map-mount b:0:$id:1 \
-							 --map-mount b:$id:0:1 \
-							 "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
+		$here/src/vfs/mount-idmapped --map-mount b:0:$id:1 \
+					     --map-mount b:$id:0:1 \
+					     "$SCRATCH_MNT" "$SCRATCH_MNT" || _fail "mount-idmapped failed"
 	else
 		_fail "usage: either \"u\" (uid), \"g\" (gid), or \"b\" (uid and gid) must be specified "
 	fi
@@ -490,7 +490,7 @@ _idmapped_mount()
 	# {g,u}id 10000000 and $(id -u fsgqa) + 10000000. We change ownership
         # of $mnt so {g,u} id 0 can actually create objects in there.
 	chown 10000000:10000000 $mnt || return 1
-	$here/src/idmapped-mounts/mount-idmapped \
+	$here/src/vfs/mount-idmapped \
 		--map-mount b:10000000:0:100000000000 \
 		$mnt $tmp
 	if [ $? -ne 0 ]; then
@@ -2370,12 +2370,12 @@ _require_mount_setattr()
 # test whether idmapped mounts are supported
 _require_idmapped_mounts()
 {
-        IDMAPPED_MOUNTS_TEST=$here/src/idmapped-mounts/idmapped-mounts
+        IDMAPPED_MOUNTS_TEST=$here/src/vfs/idmapped-mounts
         [ -x $IDMAPPED_MOUNTS_TEST ] || _notrun "idmapped-mounts utilities required"
 
 	_require_mount_setattr
 
-	$here/src/idmapped-mounts/idmapped-mounts --supported \
+	$here/src/vfs/idmapped-mounts --supported \
 		--device "$TEST_DEV" \
 		--mount "$TEST_DIR" \
 		--fstype "$FSTYP"

@@ -26,7 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "idmapped-mounts/missing.h"
+#include "vfs/missing.h"
 
 static bool is_shared_mountpoint(const char *path)
 {

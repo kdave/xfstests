@@ -34,7 +34,7 @@ mount-idmapped: $(CFILES_MOUNT_IDMAPPED)
 	$(Q)$(LTLINK) $(CFILES_MOUNT_IDMAPPED) -o $@ $(CFLAGS) $(LDFLAGS) $(LDLIBS)
 
 install:
-	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src/idmapped-mounts
-	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src/idmapped-mounts
+	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/src/vfs
+	$(INSTALL) -m 755 $(TARGETS) $(PKG_LIB_DIR)/src/vfs
 
 -include .dep
