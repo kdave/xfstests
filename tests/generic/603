@@ -13,7 +13,7 @@ _begin_fstest auto quick quota
 # Override the default cleanup function.
 _cleanup()
 {
-	restore_project
+	_restore_project_quota
 	cd /
 	rm -f $tmp.*
 }
@@ -21,38 +21,6 @@ _cleanup()
 # Import common functions.
 . ./common/filter
 . ./common/quota
-
-require_project()
-{
-	rm -f $tmp.projects $tmp.projid
-	if [ -f /etc/projects ];then
-		cat /etc/projects > $tmp.projects
-	fi
-	if [ -f /etc/projid ];then
-		cat /etc/projid > $tmp.projid
-	fi
-
-	cat >/etc/projects <<EOF
-100:$SCRATCH_MNT/t
-EOF
-	cat >/etc/projid <<EOF
-$qa_user:100
-EOF
-	PROJECT_CHANGED=1
-}
-
-restore_project()
-{
-	if [ "$PROJECT_CHANGED" = "1" ];then
-		rm -f /etc/projects /etc/projid
-		if [ -f $tmp.projects ];then
-			cat $tmp.projects > /etc/projects
-		fi
-		if [ -f $tmp.projid ];then
-			cat $tmp.projid > /etc/projid
-		fi
-	fi
-}
 
 init_files()
 {
@@ -157,7 +125,7 @@ BLOCK_SIZE=$(_get_file_block_size $SCRATCH_MNT)
 rm -rf $SCRATCH_MNT/t
 mkdir $SCRATCH_MNT/t
 $XFS_IO_PROG -r -c "chproj 100" -c "chattr +P" $SCRATCH_MNT/t
-require_project
+_create_project_quota $SCRATCH_MNT/t 100 $qa_user
 
 echo "### Set up different grace timers to each type of quota"
 UBGRACE=12
