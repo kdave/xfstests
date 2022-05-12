@@ -205,6 +205,11 @@ struct test_struct {
 	const char *description;
 };
 
+struct test_suite {
+	size_t nr_tests;
+	const struct test_struct *tests;
+};
+
 typedef enum idmap_type_t {
 	ID_TYPE_UID,
 	ID_TYPE_GID

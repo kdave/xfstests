@@ -13633,7 +13633,7 @@ static const struct option longopts[] = {
 	{NULL,					0,			0,	  0},
 };
 
-struct test_struct basic_suite[] = {
+static const struct test_struct t_basic[] = {
 	{ acls,								T_REQUIRE_IDMAPPED_MOUNTS,	"posix acls on regular mounts",									},
 	{ create_in_userns,						T_REQUIRE_IDMAPPED_MOUNTS,	"create operations in user namespace",								},
 	{ device_node_in_userns,					T_REQUIRE_IDMAPPED_MOUNTS,	"device node in user namespace",								},
@@ -13685,15 +13685,30 @@ struct test_struct basic_suite[] = {
 	{ threaded_idmapped_mount_interactions,				T_REQUIRE_IDMAPPED_MOUNTS,	"threaded operations on idmapped mounts",							},
 };
 
-struct test_struct fscaps_in_ancestor_userns[] = {
+static const struct test_suite s_basic = {
+	.tests = t_basic,
+	.nr_tests = ARRAY_SIZE(t_basic),
+};
+
+static const struct test_struct t_fscaps_in_ancestor_userns[] = {
 	{ fscaps_idmapped_mounts_in_userns_valid_in_ancestor_userns,	T_REQUIRE_IDMAPPED_MOUNTS,	"fscaps on idmapped mounts in user namespace writing fscap valid in ancestor userns",		},
 };
 
-struct test_struct t_nested_userns[] = {
+static const struct test_suite s_fscaps_in_ancestor_userns = {
+	.tests = t_fscaps_in_ancestor_userns,
+	.nr_tests = ARRAY_SIZE(t_fscaps_in_ancestor_userns),
+};
+
+static const struct test_struct t_nested_userns[] = {
 	{ nested_userns,						T_REQUIRE_IDMAPPED_MOUNTS,	"test that nested user namespaces behave correctly when attached to idmapped mounts",		},
 };
 
-struct test_struct t_btrfs[] = {
+static const struct test_suite s_nested_userns = {
+	.tests = t_nested_userns,
+	.nr_tests = ARRAY_SIZE(t_nested_userns),
+};
+
+static const struct test_struct t_btrfs[] = {
 	{ btrfs_subvolumes_fsids_mapped,				T_REQUIRE_IDMAPPED_MOUNTS,	"test subvolumes with mapped fsids",								},
 	{ btrfs_subvolumes_fsids_mapped_userns,				T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolumes with mapped fsids inside user namespace",					},
 	{ btrfs_subvolumes_fsids_mapped_user_subvol_rm_allowed,		T_REQUIRE_IDMAPPED_MOUNTS, 	"test subvolume deletion with user_subvol_rm_allowed mount option",				},
@@ -13718,14 +13733,29 @@ struct test_struct t_btrfs[] = {
 	{ btrfs_subvolume_lookup_user,					T_REQUIRE_IDMAPPED_MOUNTS, 	"test unprivileged subvolume lookup",								},
 };
 
+static const struct test_suite s_btrfs = {
+	.tests = t_btrfs,
+	.nr_tests = ARRAY_SIZE(t_btrfs),
+};
+
 /* Test for commit 968219708108 ("fs: handle circular mappings correctly"). */
-struct test_struct t_setattr_fix_968219708108[] = {
+static const struct test_struct t_setattr_fix_968219708108[] = {
 	{ setattr_fix_968219708108,					T_REQUIRE_IDMAPPED_MOUNTS,	"test that setattr works correctly",								},
 };
 
+static const struct test_suite s_setattr_fix_968219708108 = {
+	.tests = t_setattr_fix_968219708108,
+	.nr_tests = ARRAY_SIZE(t_setattr_fix_968219708108),
+};
+
 /* Test for commit 705191b03d50 ("fs: fix acl translation"). */
-struct test_struct t_setxattr_fix_705191b03d50[] = {
-	{ setxattr_fix_705191b03d50,					T_REQUIRE_USERNS,		"test that setxattr works correctly for userns mountable filesystems",				},
+static const struct test_struct t_setxattr_fix_705191b03d50[] = {
+	{ setxattr_fix_705191b03d50,					T_REQUIRE_USERNS,	"test that setxattr works correctly for userns mountable filesystems",				},
+};
+
+static const struct test_suite s_setxattr_fix_705191b03d50 = {
+	.tests = t_setxattr_fix_705191b03d50,
+	.nr_tests = ARRAY_SIZE(t_setxattr_fix_705191b03d50),
 };
 
 static bool run_test(struct vfstest_info *info, const struct test_struct suite[], size_t suite_size)
@@ -13770,6 +13800,12 @@ static bool run_test(struct vfstest_info *info, const struct test_struct suite[]
 	}
 
 	return true;
+}
+
+static inline bool run_suite(struct vfstest_info *info,
+			     const struct test_suite *suite)
+{
+	return run_test(info, suite->tests, suite->nr_tests);
 }
 
 static bool fs_allow_idmap(const struct vfstest_info *info)
@@ -13913,29 +13949,25 @@ int main(int argc, char *argv[])
 
 	fret = EXIT_FAILURE;
 
-	if (test_core && !run_test(&info, basic_suite, ARRAY_SIZE(basic_suite)))
+	if (test_core && !run_suite(&info, &s_basic))
 		goto out;
 
 	if (test_fscaps_regression &&
-	    !run_test(&info, fscaps_in_ancestor_userns,
-		      ARRAY_SIZE(fscaps_in_ancestor_userns)))
+	    !run_suite(&info, &s_fscaps_in_ancestor_userns))
 		goto out;
 
-	if (test_nested_userns &&
-	    !run_test(&info, t_nested_userns, ARRAY_SIZE(t_nested_userns)))
+	if (test_nested_userns && !run_suite(&info, &s_nested_userns))
 		goto out;
 
-	if (test_btrfs && !run_test(&info, t_btrfs, ARRAY_SIZE(t_btrfs)))
+	if (test_btrfs && !run_suite(&info, &s_btrfs))
 		goto out;
 
 	if (test_setattr_fix_968219708108 &&
-	    !run_test(&info, t_setattr_fix_968219708108,
-		      ARRAY_SIZE(t_setattr_fix_968219708108)))
+	    !run_suite(&info, &s_setattr_fix_968219708108))
 		goto out;
 
 	if (test_setxattr_fix_705191b03d50 &&
-	    !run_test(&info, t_setxattr_fix_705191b03d50,
-		      ARRAY_SIZE(t_setxattr_fix_705191b03d50)))
+	    !run_suite(&info, &s_setxattr_fix_705191b03d50))
 		goto out;
 
 	fret = EXIT_SUCCESS;
