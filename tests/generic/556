@@ -353,6 +353,21 @@ test_file_rename()
 		echo "Name shouldn't change."
 }
 
+test_toplevel_dir_rename()
+{
+	local dir=${SCRATCH_MNT}/dir_rename
+
+	# With the cache cold, rename a casefolded directory located in the
+	# top-level directory.  If $MOUNT_OPTIONS contains
+	# test_dummy_encryption, this detects the bug that was fixed by
+	# 'f2fs: don't use casefolded comparison for "." and ".."'.
+	mkdir ${dir}
+	_casefold_set_attr ${dir}
+	sync
+	echo 2 > /proc/sys/vm/drop_caches
+	mv ${dir} ${dir}.new
+}
+
 # Test openfd with casefold.
 # 1. Delete a file after gettings its fd.
 # 2. Then create new dir with same name
@@ -491,6 +506,7 @@ test_dir_name_preserve
 test_name_reuse
 test_create_with_same_name
 test_file_rename
+test_toplevel_dir_rename
 test_casefold_openfd
 test_casefold_openfd2
 test_hard_link_lookups
