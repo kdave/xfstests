@@ -16,7 +16,7 @@ _cleanup()
 	cd /
 	$UMOUNT_PROG $mntpt > /dev/null 2>&1
 	test -n "$loopdev" && _destroy_loop_device $loopdev > /dev/null 2>&1
-	rm -r -f $imgfile $mntpt $tmp.*
+	rm -r -f $tmp.*
 }
 
 # Import common functions.
@@ -37,6 +37,8 @@ testfile=$mntpt/testfile
 nullstr="too_many_beans"
 slashstr="are_bad_for_you"
 test_names=("something" "$nullstr" "$slashstr" "another")
+
+rm -f $imgfile $imgfile.old
 
 # Format image file w/o crcs so we can sed the image file
 $XFS_IO_PROG -f -c 'truncate 40m' $imgfile
@@ -91,7 +93,6 @@ sed -b \
 	-i $imgfile
 test "$(md5sum < $imgfile)" != "$(md5sum < $imgfile.old)" ||
 	_fail "sed failed to change the image file?"
-rm -f $imgfile.old
 loopdev=$(_create_loop_device $imgfile)
 _mount $loopdev $mntpt
 
