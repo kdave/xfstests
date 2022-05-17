@@ -15,7 +15,7 @@ _cleanup()
 {
 	cd /
 	$UMOUNT_PROG $mntpt > /dev/null 2>&1
-	test -n "$loopdev" && _destroy_loop_device $loopdev > /dev/null 2>&1
+	_destroy_loop_device $loopdev > /dev/null 2>&1
 	rm -r -f $tmp.*
 }
 
@@ -41,9 +41,12 @@ test_names=("something" "$nullstr" "$slashstr" "another")
 rm -f $imgfile $imgfile.old
 
 # Format image file w/o crcs so we can sed the image file
+# We need to use 512 byte inodes to ensure the attr forks remain in short form
+# even when security xattrs are present so we are always doing name matches on
+# lookup and not name hash compares as leaf/node forms will do.
 $XFS_IO_PROG -f -c 'truncate 40m' $imgfile
 loopdev=$(_create_loop_device $imgfile)
-MKFS_OPTIONS="-m crc=0" _mkfs_dev $loopdev >> $seqres.full
+MKFS_OPTIONS="-m crc=0 -i size=512" _mkfs_dev $loopdev >> $seqres.full
 
 # Mount image file
 mkdir -p $mntpt
@@ -120,9 +123,6 @@ $XFS_REPAIR_PROG -n $loopdev >> $seqres.full 2>&1
 res=$?
 test $res -eq 1 || \
 	echo "repair failed to report corruption ($res)"
-
-_destroy_loop_device $loopdev
-loopdev=
 
 # success, all done
 status=0
