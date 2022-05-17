@@ -89,9 +89,6 @@ run_tests()
 	_qsetup $1
 
 	echo "Using type=$type id=$id" >>$seqres.full
-
-	$XFS_QUOTA_PROG -x -c "warn -$type 65535 -d" $SCRATCH_DEV
-
 	echo
 	echo "*** report no quota settings" | tee -a $seqres.full
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
@@ -122,7 +119,6 @@ run_tests()
 	_file_as_id $SCRATCH_MNT/softie4 0 $type 1024 0
 	_scratch_umount_idmapped
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -133,8 +129,6 @@ run_tests()
 	_file_as_id $SCRATCH_MNT/softie 0 $type $bsize 300
 	_scratch_umount_idmapped
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" \
-		-c "warn -b -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -149,8 +143,6 @@ run_tests()
 		_scratch_umount_idmapped
 	done
 	_qmount
-	$XFS_QUOTA_PROG -x  -c "warn -b -$type 0 $id" \
-		-c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -164,7 +156,6 @@ run_tests()
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -b -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_and_check_blks | LC_COLLATE=POSIX sort -ru

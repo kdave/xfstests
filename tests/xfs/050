@@ -84,9 +84,6 @@ _exercise()
 	_qsetup $1
 
 	echo "Using type=$type id=$id" >>$seqres.full
-
-	$XFS_QUOTA_PROG -x -c "warn -$type 65535 -d" $SCRATCH_DEV
-
 	echo
 	echo "*** report no quota settings" | tee -a $seqres.full
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
@@ -113,7 +110,6 @@ _exercise()
 	_file_as_id $SCRATCH_MNT/softie3 $id $type 1024 0
 	_file_as_id $SCRATCH_MNT/softie4 $id $type 1024 0
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -122,8 +118,6 @@ _exercise()
 	echo "*** push past the soft block limit" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie $id $type $bsize 300
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -i -$type 0 $id" \
-		-c "warn -b -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -136,8 +130,6 @@ _exercise()
 		_file_as_id $SCRATCH_MNT/hard$i $id $type 1024 0
 	done
 	_qmount
-	$XFS_QUOTA_PROG -x  -c "warn -b -$type 0 $id" \
-		-c "warn -i -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_quota_report | LC_COLLATE=POSIX sort -ru
@@ -149,7 +141,6 @@ _exercise()
 	echo "ls -l $SCRATCH_MNT" >>$seqres.full
 	ls -l $SCRATCH_MNT >>$seqres.full
 	_qmount
-	$XFS_QUOTA_PROG -x -c "warn -b -$type 0 $id" $SCRATCH_DEV
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
 		_filter_and_check_blks | LC_COLLATE=POSIX sort -ru
