@@ -1160,6 +1160,18 @@ _require_xfs_copy()
 	[ -n "$XFS_COPY_PROG" ] || _notrun "xfs_copy binary not yet installed"
 	[ "$USE_EXTERNAL" = yes ] && \
 		_notrun "Cannot xfs_copy with external devices"
+
+	# xfs_copy on v5 filesystems do not require the "-d" option if xfs_db
+	# can change the UUID on v5 filesystems
+	touch /tmp/$$.img
+	$MKFS_XFS_PROG -d file,name=/tmp/$$.img,size=64m >/dev/null 2>&1
+
+	# xfs_db will return 0 even if it can't generate a new uuid, so
+	# check the output to make sure if it can change UUID of V5 xfs
+	$XFS_DB_PROG -x -c "uuid generate" /tmp/$$.img \
+		| grep -q "invalid UUID\|supported on V5 fs" \
+		&& export XFS_COPY_PROG="$XFS_COPY_PROG -d"
+	rm -f /tmp/$$.img
 }
 
 __xfs_cowgc_interval_knob1="/proc/sys/fs/xfs/speculative_cow_prealloc_lifetime"
