@@ -86,10 +86,14 @@ check_copyfrom_metrics()
 	local copies=$4
 	local c1=$(get_copyfrom_total_copies)
 	local s1=$(get_copyfrom_total_size)
+	local hascopyfrom=$(_fs_options $TEST_DEV | grep "copyfrom")
 	local sum
 
-	if [ ! -d $metrics_dir ]; then
+	if [ ! -d "$metrics_dir" ]; then
 		return # skip metrics check if debugfs isn't mounted
+	fi
+	if [ -z "$hascopyfrom" ]; then
+		return # ... or if we don't have copyfrom mount option
 	fi
 
 	sum=$(($c0+$copies))
