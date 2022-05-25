@@ -481,6 +481,65 @@ _fsck_opts()
 	esac
 }
 
+# check necessary running dependences then source sepcific fs helpers
+_source_specific_fs()
+{
+	local fs=$1
+
+	if [ -z "$fs" ];then
+		fs=$FSTYP
+	fi
+
+	case "$fs" in
+	xfs)
+		[ "$XFS_LOGPRINT_PROG" = "" ] && _fatal "xfs_logprint not found"
+		[ "$XFS_REPAIR_PROG" = "" ] && _fatal "xfs_repair not found"
+		[ "$XFS_DB_PROG" = "" ] && _fatal "xfs_db not found"
+		[ "$MKFS_XFS_PROG" = "" ] && _fatal "mkfs_xfs not found"
+		[ "$XFS_INFO_PROG" = "" ] && _fatal "xfs_info not found"
+
+		. ./common/xfs
+		;;
+	udf)
+		[ "$MKFS_UDF_PROG" = "" ] && _fatal "mkfs_udf/mkudffs not found"
+		;;
+	btrfs)
+		[ "$MKFS_BTRFS_PROG" = "" ] && _fatal "mkfs.btrfs not found"
+
+		. ./common/btrfs
+		;;
+	ext4)
+		[ "$MKFS_EXT4_PROG" = "" ] && _fatal "mkfs.ext4 not found"
+		;;
+	f2fs)
+		[ "$MKFS_F2FS_PROG" = "" ] && _fatal "mkfs.f2fs not found"
+		;;
+	nfs)
+		. ./common/nfs
+		;;
+	cifs)
+		;;
+	9p)
+		;;
+	ceph)
+		. ./common/ceph
+		;;
+	glusterfs)
+		;;
+	overlay)
+		. ./common/overlay
+		;;
+	reiser4)
+		[ "$MKFS_REISER4_PROG" = "" ] && _fatal "mkfs.reiser4 not found"
+		;;
+	pvfs2)
+		;;
+	ubifs)
+		[ "$UBIUPDATEVOL_PROG" = "" ] && _fatal "ubiupdatevol not found"
+		;;
+	esac
+}
+
 known_hosts()
 {
 	[ "$HOST_CONFIG_DIR" ] || HOST_CONFIG_DIR=`pwd`/configs
