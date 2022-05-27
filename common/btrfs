@@ -505,3 +505,78 @@ _btrfs_metadump()
 	$BTRFS_IMAGE_PROG "$device" "$dumpfile"
 	[ -n "$DUMP_COMPRESSOR" ] && $DUMP_COMPRESSOR -f "$dumpfile" &> /dev/null
 }
+
+# Return the btrfs logical address for the first block in a file
+_btrfs_get_first_logical()
+{
+	local file=$1
+	_require_command "$FILEFRAG_PROG" filefrag
+
+	${FILEFRAG_PROG} -v $file >> $seqres.full
+	${FILEFRAG_PROG} -v $file | _filter_filefrag | cut -d '#' -f 1
+}
+
+# Find the device path for a btrfs logical offset
+_btrfs_get_device_path()
+{
+	local logical=$1
+	local stripe=$2
+
+	_require_command "$BTRFS_MAP_LOGICAL_PROG" btrfs-map-logical
+
+	$BTRFS_MAP_LOGICAL_PROG -l $logical $SCRATCH_DEV | \
+		$AWK_PROG "(\$1 ~ /mirror/ && \$2 ~ /$stripe/) { print \$8 }"
+}
+
+
+# Find the device physical sector for a btrfs logical offset
+_btrfs_get_physical()
+{
+	local logical=$1
+	local stripe=$2
+
+	_require_command "$BTRFS_MAP_LOGICAL_PROG" btrfs-map-logical
+
+	$BTRFS_MAP_LOGICAL_PROG -b -l $logical $SCRATCH_DEV >> $seqres.full 2>&1
+	$BTRFS_MAP_LOGICAL_PROG -l $logical $SCRATCH_DEV | \
+		$AWK_PROG "(\$1 ~ /mirror/ && \$2 ~ /$stripe/) { print \$6 }"
+}
+
+# Read from a specific stripe to test read recovery that corrupted a specific
+# stripe.  Btrfs uses the PID to select the mirror, so keep reading until the
+# xfs_io process that performed the read was executed with a PID that ends up
+# on the intended mirror.
+_btrfs_direct_read_on_mirror()
+{
+	local mirror=$1
+	local nr_mirrors=$2
+	local file=$3
+	local offset=$4
+	local size=$5
+
+	while [[ -z $( (( BASHPID % nr_mirrors == mirror )) &&
+		exec $XFS_IO_PROG -d \
+			-c "pread -b $size $offset $size" $file) ]]; do
+		:
+	done
+}
+
+# Read from a specific stripe to test read recovery that corrupted a specific
+# stripe.  Btrfs uses the PID to select the mirror, so keep reading until the
+# xfs_io process that performed the read was executed with a PID that ends up
+# on the intended mirror.
+_btrfs_buffered_read_on_mirror()
+{
+	local mirror=$1
+	local nr_mirrors=$2
+	local file=$3
+	local offset=$4
+	local size=$5
+
+	echo 3 > /proc/sys/vm/drop_caches
+	while [[ -z $( (( BASHPID % nr_mirrors == mirror )) &&
+		exec $XFS_IO_PROG \
+			-c "pread -b $size $offset $size" $file) ]]; do
+		:
+	done
+}
