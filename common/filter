@@ -380,6 +380,8 @@ _filter_ending_dot()
 # ancient:	   mount: cannot remount block device <device> read-write, is write-protected
 # prior to v2.30:  mount: cannot remount <device> read-write, is write-protected
 # v2.30 and later: mount: <mountpoint>: cannot remount <device> read-write, is write-protected.
+# v2.38 and later:
+# dmesg(1) may have more information after failed mount mount system call
 #
 # Now use _filter_ro_mount to unify all these differences across old & new
 # util-linux versions. So the filtered format would be:
@@ -412,7 +414,8 @@ _filter_ro_mount() {
 		print "mount: cannot remount device read-write, is write-protected\n";
 	} else {
 		print "$_";
-	}' | _filter_ending_dot
+	}' | grep -v "dmesg(1) may have more information after failed mount" | \
+	_filter_ending_dot
 }
 
 # Filter a failed mount output due to EUCLEAN and USTALE, util-linux changed
@@ -424,6 +427,8 @@ _filter_ro_mount() {
 # mount: mount <device> on <mountpoint> failed: Structure needs cleaning
 # v2.30 and later:
 # mount: <mountpoint>: mount(2) system call failed: Structure needs cleaning.
+# v2.38 and later:
+# dmesg(1) may have more information after failed mount mount system call
 #
 # This is also true for ESTALE error. So let's remove all the changing parts
 # and keep the 'prior to v2.21' format:
@@ -431,7 +436,8 @@ _filter_ro_mount() {
 # mount: Stale file handle
 _filter_error_mount()
 {
-	sed -e "s/mount:\(.*failed:\)/mount:/" | _filter_ending_dot
+	grep -v "dmesg(1) may have more information after failed mount" | \
+		sed -e "s/mount:\(.*failed:\)/mount:/" | _filter_ending_dot
 }
 
 # Similar to _filter_error_mount, filter a busy mount output.
@@ -440,8 +446,11 @@ _filter_error_mount()
 # old: mount: <device> is already mounted or <mountpoint> busy
 # new: mount: <mountpoint>: <device> already mounted or mount point busy.
 # filtered: mount: device already mounted or mount point busy
+# v2.38 and later, filter out:
+# dmesg(1) may have more information after failed mount mount system call
 _filter_busy_mount()
 {
+	grep -v "dmesg(1) may have more information after failed mount" | \
 	sed -e "s/.*: .* already mounted or .* busy/mount: device already mounted or mount point busy/" | \
 		_filter_ending_dot
 }
