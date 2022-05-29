@@ -140,6 +140,8 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 	filename = argv[optind];
 
+	/* force below printf line buffered */
+	setlinebuf(stdout);
 	printf("%s reader %s O_DIRECT\n",
 		   do_splice == do_splice1 ? "sequential" : "concurrent",
 		   (open_flags & O_DIRECT) ? "with" : "without");
