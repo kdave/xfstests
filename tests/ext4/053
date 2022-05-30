@@ -511,20 +511,6 @@ for fstype in ext2 ext3 ext4; do
 	mnt noinit_itable
 	mnt max_dir_size_kb=4096
 
-	if _has_kernel_config CONFIG_FS_ENCRYPTION; then
-		mnt test_dummy_encryption
-		mnt test_dummy_encryption=v1
-		mnt test_dummy_encryption=v2
-		not_mnt test_dummy_encryption=v3
-		not_mnt test_dummy_encryption=
-	else
-		mnt test_dummy_encryption ^test_dummy_encryption
-		mnt test_dummy_encryption=v1 ^test_dummy_encryption=v1
-		mnt test_dummy_encryption=v2 ^test_dummy_encryption=v2
-		mnt test_dummy_encryption=v3 ^test_dummy_encryption=v3
-		not_mnt test_dummy_encryption=
-	fi
-
 	if _has_kernel_config CONFIG_FS_ENCRYPTION_INLINE_CRYPT; then
 		mnt inlinecrypt
 	else
@@ -685,6 +671,27 @@ for fstype in ext2 ext3 ext4; do
 	mnt_then_not_remount defaults grpjquota=aquota.user
 	mnt_then_not_remount defaults jqfmt=vfsv1
 	remount defaults grpjquota=,usrjquota= ignored
+
+	echo "== Testing the test_dummy_encryption option" >> $seqres.full
+	# Since kernel commit 5f41fdaea63d ("ext4: only allow
+	# test_dummy_encryption when supported"), the test_dummy_encryption
+	# option is only allowed when the filesystem has the encrypt feature and
+	# the kernel has CONFIG_FS_ENCRYPTION.  The encrypt feature requirement
+	# implies that this option is never allowed on ext2 or ext3 mounts.
+	if [[ $fstype == ext4 ]] && _has_kernel_config CONFIG_FS_ENCRYPTION; then
+		do_mkfs -O encrypt $SCRATCH_DEV ${SIZE}k
+		mnt test_dummy_encryption
+		mnt test_dummy_encryption=v1
+		mnt test_dummy_encryption=v2
+		not_mnt test_dummy_encryption=bad
+		not_mnt test_dummy_encryption=
+		do_mkfs -O ^encrypt $SCRATCH_DEV ${SIZE}k
+	fi
+	not_mnt test_dummy_encryption
+	not_mnt test_dummy_encryption=v1
+	not_mnt test_dummy_encryption=v2
+	not_mnt test_dummy_encryption=bad
+	not_mnt test_dummy_encryption=
 
 done #for fstype in ext2 ext3 ext4; do
 
