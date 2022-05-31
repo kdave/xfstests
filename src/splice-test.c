@@ -19,19 +19,20 @@
 #include <errno.h>
 #include <malloc.h>
 
-#define SECTOR_SIZE 512
-#define BUFFER_SIZE (150 * SECTOR_SIZE)
+unsigned int sector_size;
+unsigned int buffer_size;
 
 void read_from_pipe(int fd, const char *filename, size_t size)
 {
-	char buffer[SECTOR_SIZE];
+	char *buffer;
 	size_t sz;
 	ssize_t ret;
+	buffer = malloc(buffer_size);
 
 	while (size) {
 		sz = size;
-		if (sz > sizeof buffer)
-			sz = sizeof buffer;
+		if (sz > buffer_size)
+			sz = buffer_size;
 		ret = read(fd, buffer, sz);
 		if (ret < 0)
 			err(1, "read: %s", filename);
@@ -41,6 +42,7 @@ void read_from_pipe(int fd, const char *filename, size_t size)
 		}
 		size -= sz;
 	}
+	free(buffer);
 }
 
 void do_splice1(int fd, const char *filename, size_t size)
@@ -108,7 +110,7 @@ void do_splice2(int fd, const char *filename, size_t size)
 
 void usage(const char *argv0)
 {
-	fprintf(stderr, "USAGE: %s [-rd] {filename}\n", basename(argv0));
+	fprintf(stderr, "USAGE: %s [-rd] [-s sectorsize] {filename}\n", basename(argv0));
 	exit(2);
 }
 
@@ -120,11 +122,22 @@ int main(int argc, char *argv[])
 	int opt, open_flags, fd;
 	ssize_t ret;
 
+	/*
+	 * init default sector_size and buffer_size, might be changed if the -s
+	 * option is specified
+	 */
+	sector_size = 512;
+	buffer_size = 150 * sector_size;
+
 	do_splice = do_splice1;
 	open_flags = O_CREAT | O_TRUNC | O_RDWR | O_DIRECT;
 
-	while ((opt = getopt(argc, argv, "rd")) != -1) {
+	while ((opt = getopt(argc, argv, "rds:")) != -1) {
 		switch(opt) {
+		case 's':
+			sector_size = strtol(optarg, NULL, 0);
+			buffer_size = 150 * sector_size;
+			break;
 		case 'r':
 			do_splice = do_splice2;
 			break;
@@ -146,7 +159,7 @@ int main(int argc, char *argv[])
 		   do_splice == do_splice1 ? "sequential" : "concurrent",
 		   (open_flags & O_DIRECT) ? "with" : "without");
 
-	buffer = memalign(SECTOR_SIZE, BUFFER_SIZE);
+	buffer = memalign(sector_size, buffer_size);
 	if (buffer == NULL)
 		err(1, "memalign");
 
@@ -154,11 +167,11 @@ int main(int argc, char *argv[])
 	if (fd == -1)
 		err(1, "open: %s", filename);
 
-	memset(buffer, 'x', BUFFER_SIZE);
-	ret = write(fd, buffer, BUFFER_SIZE);
+	memset(buffer, 'x', buffer_size);
+	ret = write(fd, buffer, buffer_size);
 	if (ret < 0)
 		err(1, "write: %s", filename);
-	if (ret != BUFFER_SIZE) {
+	if (ret != buffer_size) {
 		fprintf(stderr, "%s: short write\n", filename);
 		exit(1);
 	}
@@ -167,7 +180,7 @@ int main(int argc, char *argv[])
 	if (ret != 0)
 		err(1, "lseek: %s", filename);
 
-	do_splice(fd, filename, BUFFER_SIZE);
+	do_splice(fd, filename, buffer_size);
 
 	if (unlink(filename) == -1)
 		err(1, "unlink: %s", filename);
