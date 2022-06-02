@@ -2721,9 +2721,13 @@ _require_xfs_io_command()
 	fi
 }
 
-# check that kernel and filesystem support direct I/O
+# check that kernel and filesystem support direct I/O, and check if "$1" size
+# aligned (optional) is supported
 _require_odirect()
 {
+	local blocksize=$1
+	local align_args=${1:+"-b $1"}
+
 	if [ $FSTYP = "ext4" ] || [ $FSTYP = "f2fs" ] ; then
 		if echo "$MOUNT_OPTIONS" | grep -q "test_dummy_encryption"; then
 			_notrun "$FSTYP encryption doesn't support O_DIRECT"
@@ -2735,9 +2739,13 @@ _require_odirect()
 		fi
 	fi
 	local testfile=$TEST_DIR/$$.direct
-	$XFS_IO_PROG -F -f -d -c "pwrite 0 20k" $testfile > /dev/null 2>&1
+	$XFS_IO_PROG -F -f -d -c "pwrite ${align_args} 0 20k" $testfile > /dev/null 2>&1
 	if [ $? -ne 0 ]; then
-		_notrun "O_DIRECT is not supported"
+		if [ -n "$blocksize" ]; then
+			_notrun "O_DIRECT aligned to $blocksize bytes is not supported"
+		else
+			_notrun "O_DIRECT is not supported"
+		fi
 	fi
 	rm -f $testfile 2>&1 > /dev/null
 }
