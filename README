@@ -368,19 +368,41 @@ Test script environment:
 
      6. Test group membership: Each test can be associated with any number
 	of groups for convenient selection of subsets of tests.  Group names
-	can be any sequence of non-whitespace characters.  Test authors
-	associate a test with groups by passing the names of those groups as
-	arguments to the _begin_fstest function.  For example, the code:
+	must  be human readable using only characters in the set [:alnum:_-].
 
-	_begin_fstest auto quick subvol snapshot
+	Test authors associate a test with groups by passing the names of those
+	groups as arguments to the _begin_fstest function. While _begin_fstests
+	is a shell function that must be called at the start of a test to
+	initialise the test environment correctly, the the build infrastructure
+	also scans the test files for _begin_fstests invocations. It does this
+	to compile the group lists that are used to determine which tests to run
+	when `check` is executed. In other words, test files files must call
+	_begin_fstest with their intended groups or they will not be run.
+
+	However, because the build infrastructure also uses _begin_fstests as
+	a defined keyword, addition restrictions are placed on how it must be
+	formatted:
+
+	(a) It must be a single line with no multi-line continuations.
+
+	(b) group names should be separated by spaces and not other whitespace
+
+	(c) A '#' placed anywhere in the list, even in the middle of a group
+	    name, will cause everything from the # to the end of the line to be
+	    ignored.
+
+	For example, the code:
+
+	_begin_fstest auto quick subvol snapshot # metadata
 
 	associates the current test with the "auto", "quick", "subvol", and
-	"snapshot" groups.  It is not necessary to specify the "all" group
-	in the list because that group is computed at run time.
+	"snapshot" groups. Because "metadata" is after the "#" comment
+	delimiter, it is ignored by the build infrastructure and so it will not
+	be associated with that group.
 
-	The build process scans test files for _begin_fstest invocations and
-	compiles the group list from that information.  In other words, test
-	files must call _begin_fstest or they will not be run.
+	It is not necessary to specify the "all" group in the list because that
+	group is always computed at run time from the group lists.
+
 
 Verified output:
 
