@@ -2116,21 +2116,33 @@ _require_sane_bdev_flush()
 # Decide if the scratch filesystem is likely to be mounted in fsdax mode.
 # It goes 3 ways based on mount options::
 #	1. "dax" or "dax=always" means always test using DAX
-#	2. "dax=never" means we'll never use DAX
+#	2. "dax=never" means we'll never use DAX.
 #	3. "dax=inode" or nothing means "use scratch dev capability" to
 #	    determine whether DAX is going to be used.
 #
-# Returns 0 if DAX will be used, 1 if DAX is not going to be used.
+# Case 2 and 3 basically mean the same thing for the purpose of
+# _require_dm_target(). If the fs is not forcing the use of DAX, then DAX
+# can only be enabled if the underlying block device supports it.
+#
+# Returns 0 if the filesytem will use DAX, 1 if it won't.
 __scratch_uses_fsdax()
 {
 	local ops=$(_normalize_mount_options "$MOUNT_OPTIONS")
 
 	echo $ops | egrep -qw "dax(=always| |$)" && return 0
-	echo $ops | grep -qw "dax=never" && return 1
+	return 1
+}
 
+# Determine if the scratch device is DAX capable. Even if the fs is not
+# using DAX, we still can't use certain device mapper targets if the block
+# device is DAX capable. Hence the check needs to be separat from the FS
+# capability.
+__scratch_dev_has_dax()
+{
 	local sysfs="/sys/block/$(_short_dev $SCRATCH_DEV)"
 	test -e "${sysfs}/dax" && return 0
 	test "$(cat "${sysfs}/queue/dax" 2>/dev/null)" = "1" && return 0
+
 	return 1
 }
 
@@ -2147,15 +2159,18 @@ _require_dm_target()
 	_require_sane_bdev_flush $SCRATCH_DEV
 	_require_command "$DMSETUP_PROG" dmsetup
 
-	if __scratch_uses_fsdax; then
-		case $target in
-		stripe|linear|log-writes)
-			;;
-		*)
-			_notrun "Cannot run tests with DAX on $target devices."
-			;;
-		esac
-	fi
+	case $target in
+	stripe|linear|log-writes)
+		;;
+	*)
+		if __scratch_uses_fsdax; then
+			_notrun "Cannot run tests with fsdax on $target devices."
+		fi
+		if __scratch_dev_has_dax; then
+			_notrun "Cannot use $target devices on DAX capable block devices."
+		fi
+		;;
+	esac
 
 	modprobe dm-$target >/dev/null 2>&1
 
