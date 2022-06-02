@@ -36,6 +36,10 @@ _begin_fstest auto stress trim
 # Override the default cleanup function.
 _cleanup()
 {
+	[ -n "${create_pids}" ] && kill ${create_pids[@]}
+	[ -n "${fallocate_pids}" ] && kill ${fallocate_pids[@]}
+	[ -n "${trim_pids}" ] && kill ${trim_pids[@]}
+	wait
 	rm -fr $tmp
 }
 
@@ -46,6 +50,8 @@ _cleanup()
 _supported_fs generic
 _require_scratch
 _require_xfs_io_command "falloc"
+
+echo "Silence is golden"
 
 # Keep allocating and deallocating 1G of data space with the goal of creating
 # and deleting 1 block group constantly. The intention is to race with the
@@ -113,7 +119,7 @@ create_files()
 	done
 
 	wait ${create_pids[@]}
-
+	unset create_pids
 }
 
 _scratch_mkfs >>$seqres.full 2>&1
@@ -136,12 +142,8 @@ create_files "foobar"
 kill ${fallocate_pids[@]}
 kill ${trim_pids[@]}
 wait
+unset fallocate_pids
+unset trim_pids
 
-# The fstests framework will now check for fs consistency with fsck.
-# The trimming was racy and caused some btree nodes to get full of zeroes on
-# disk, which obviously caused fs metadata corruption. The race often lead
-# to missing free space entries in a block group's free space cache too.
-
-echo "Silence is golden"
 status=0
 exit
