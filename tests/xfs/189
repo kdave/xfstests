@@ -32,6 +32,23 @@
 #
 # <---- Normal programming is resumed ---->
 #
+# <---- Bbbzzzzzzztttt ---->
+#
+# < systemd enters the chat >
+#
+# xfs/189 [not run] noattr2 mount option not supported on /dev/vdc
+# xfs/190 1s ... mount: (hint) your fstab has been modified, but systemd still uses
+#        the old version; use 'systemctl daemon-reload' to reload.
+#  1s
+#  xfs/192 3s ... mount: (hint) your fstab has been modified, but systemd still uses
+#        the old version; use 'systemctl daemon-reload' to reload.
+#
+# mount/systemd sees that /etc/fstab has changed (because mtime changed)
+# and so it whines that systemd needs updating on every mount from this point
+# onwards. Yes, that's totally obnoxious behaviour from mount/systemd but we
+# have to work around it.
+#
+# < systemd leaves the chat >
 #
 . ./common/preamble
 _begin_fstest mount auto quick
@@ -190,6 +207,10 @@ ENDL
 # Example fstab entry
 # /dev/sdb2            /mnt/scratch1        xfs       defaults 0 0
 #
+# Note that to avoid mnt/systemd whining about /etc/fstab being modified, we
+# need to ensure that it reloads it's state once we restore the fstab to
+# original.
+#
 _add_scratch_fstab()
 {
 	# comment out any existing SCRATCH_DEV
@@ -201,7 +222,7 @@ _add_scratch_fstab()
 
 _modify_scratch_fstab()
 {
-	opts=$1
+	local opts=$1
 
 	# modify our fstab entry that we added
 	# modify opts by looking for last word which has non-space chars
@@ -215,6 +236,9 @@ _putback_scratch_fstab()
 
 	# remove the one we added at the end
 	$SED_PROG -i "/# $tag/d" /etc/fstab
+
+	# stop mount/systemd whining that /etcfstab was changed.
+	command -v systemctl > /dev/null 2>&1 && systemctl daemon-reload
 }
 
 # Import common functions.
