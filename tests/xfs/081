@@ -1,0 +1,80 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 081
+#
+# This's a regression test for:
+#   a1de97fe296c ("xfs: Fix the free logic of state in xfs_attr_node_hasname")
+#
+# After we corrupted an attr leaf block (under node block), getxattr might hit
+# EFSCORRUPTED in xfs_attr_node_get when it does xfs_attr_node_hasname. A bug
+# cause xfs_attr_node_get won't do xfs_buf_trans release job, then a subsequent
+# removexattr will hang.
+#
+. ./common/preamble
+_begin_fstest auto quick attr
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+. ./common/populate
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_kernel_commit a1de97fe296c \
+       "xfs: Fix the free logic of state in xfs_attr_node_hasname"
+
+_require_scratch_nocheck
+# Only test with v5 xfs on-disk format
+_require_scratch_xfs_crc
+_require_attrs
+_require_populate_commands
+_require_xfs_db_blocktrash_z_command
+
+_scratch_mkfs_xfs | _filter_mkfs >$seqres.full 2>$tmp.mkfs
+source $tmp.mkfs
+_scratch_mount
+
+# Create more than $((dbsize / 32)) xattr entries to force the creation of a
+# node block and two (or more) leaf blocks, which we need for this test.
+nr_xattr="$((dbsize / 32))"
+localfile="${SCRATCH_MNT}/attrfile"
+touch $localfile
+for ((i=0; i<nr_xattr; i++));do
+	$SETFATTR_PROG -n user.x$(printf "%.09d" "$i") -v "aaaaaaaaaaaaaaaa" $localfile
+done
+inumber="$(stat -c '%i' $localfile)"
+_scratch_unmount
+
+# Expect the ablock 0 is a node block, later ablocks(>=1) are leaf blocks, then corrupt
+# the last leaf block. (Don't corrupt node block, or can't reproduce the bug)
+magic=$(_scratch_xfs_get_metadata_field "hdr.info.hdr.magic" "inode $inumber" "ablock 0")
+level=$(_scratch_xfs_get_metadata_field "hdr.level" "inode $inumber" "ablock 0")
+count=$(_scratch_xfs_get_metadata_field "hdr.count" "inode $inumber" "ablock 0")
+if [ "$magic" = "0x3ebe" -a "$level" = "1" ];then
+	# Corrupt the last leaf block
+	_scratch_xfs_db -x -c "inode ${inumber}" -c "ablock $count" -c "stack" \
+		-c "blocktrash -x 32 -y $((dbsize*8)) -3 -z" >> $seqres.full
+else
+	_fail "The ablock 0 (magic=$magic, level=$level) isn't a root node block, maybe case issue"
+fi
+
+# This's the real testing, expect removexattr won't hang or panic.
+if _try_scratch_mount >> $seqres.full 2>&1; then
+	for ((i=0; i<nr_xattr; i++));do
+		$GETFATTR_PROG -n user.x$(printf "%.09d" "$i") $localfile >/dev/null 2>&1
+		$SETFATTR_PROG -x user.x$(printf "%.09d" "$i") $localfile 2>/dev/null
+	done
+else
+	# Due to we corrupt the xfs manually, so can't be sure if xfs can
+	# detect this corruption and refuse the mount directly in one day.
+	# If so, it's not a testing fail, so "notrun" directly to mark this
+	# test isn't really done
+	_notrun "XFS refused to mount with this xattr corruption, test skipped"
+fi
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
