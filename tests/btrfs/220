@@ -265,14 +265,16 @@ test_revertible_options()
 	test_roundtrip_mount "compress=zlib:20" "compress=zlib:9" "compress=zstd:16" "compress=zstd:15"
 	test_roundtrip_mount "compress-force=lzo" "compress-force=lzo" "compress-force=zlib:4" "compress-force=zlib:4"
 
-	# on remount, if we only pass datacow after nodatacow was used it will remain with nodatasum
-	test_roundtrip_mount "nodatacow" "nodatasum,nodatacow" "datacow,datasum" "$DEFAULT_OPTS"
-	# nodatacow disabled compression
-	test_roundtrip_mount "compress-force" "compress-force=zlib:3" "nodatacow" "nodatasum,nodatacow"
+	if ! _scratch_btrfs_is_zoned; then
+		# on remount, if we only pass datacow after nodatacow was used it will remain with nodatasum
+		test_roundtrip_mount "nodatacow" "nodatasum,nodatacow" "datacow,datasum" "$DEFAULT_OPTS"
+		# nodatacow disabled compression
+		test_roundtrip_mount "compress-force" "compress-force=zlib:3" "nodatacow" "nodatasum,nodatacow"
 
-	# nodatacow disabled both datacow and datasum, and datasum enabled datacow and datasum
-	test_roundtrip_mount "nodatacow" "nodatasum,nodatacow" "datasum" "$DEFAULT_OPTS"
-	test_roundtrip_mount "nodatasum" "nodatasum" "datasum" "$DEFAULT_OPTS"
+		# nodatacow disabled both datacow and datasum, and datasum enabled datacow and datasum
+		test_roundtrip_mount "nodatacow" "nodatasum,nodatacow" "datasum" "$DEFAULT_OPTS"
+		test_roundtrip_mount "nodatasum" "nodatasum" "datasum" "$DEFAULT_OPTS"
+	fi
 
 	test_should_fail "discard=invalid"
 	if [ "$enable_discard_sync" = true ]; then
