@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test 547
+#
+# Verify that correct inode extent count fields are populated with and without
+# nrext64 feature.
+#
+. ./common/preamble
+_begin_fstest auto quick metadata
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+. ./common/inject
+. ./common/populate
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_xfs_nrext64
+_require_attrs
+_require_xfs_debug
+_require_xfs_db_command path
+_require_test_program "punch-alternating"
+_require_xfs_io_error_injection "bmap_alloc_minlen_extent"
+
+for nrext64 in 0 1; do
+	echo "* Verify extent counter fields with nrext64=${nrext64} option"
+
+	_scratch_mkfs -i nrext64=${nrext64} -d size=$((512 * 1024 * 1024)) \
+		      >> $seqres.full
+	_scratch_mount >> $seqres.full
+
+	bsize=$(_get_file_block_size $SCRATCH_MNT)
+
+	testfile=$SCRATCH_MNT/testfile
+
+	nr_blks=20
+
+	echo "Add blocks to test file's data fork"
+	$XFS_IO_PROG -f -c "pwrite 0 $((nr_blks * bsize))" $testfile \
+		     >> $seqres.full
+	$here/src/punch-alternating $testfile
+
+	echo "Consume free space"
+	fillerdir=$SCRATCH_MNT/fillerdir
+	nr_free_blks=$(stat -f -c '%f' $SCRATCH_MNT)
+	nr_free_blks=$((nr_free_blks * 90 / 100))
+
+	_fill_fs $((bsize * nr_free_blks)) $fillerdir $bsize 0 \
+		 >> $seqres.full 2>&1
+
+	echo "Create fragmented filesystem"
+	for dentry in $(ls -1 $fillerdir/); do
+		$here/src/punch-alternating $fillerdir/$dentry >> $seqres.full
+	done
+
+	echo "Inject bmap_alloc_minlen_extent error tag"
+	_scratch_inject_error bmap_alloc_minlen_extent 1
+
+	echo "Add blocks to test file's attr fork"
+	attr_len=255
+	nr_attrs=$((nr_blks * bsize / attr_len))
+	for i in $(seq 1 $nr_attrs); do
+		attr="$(printf "trusted.%0247d" $i)"
+		$SETFATTR_PROG -n "$attr" $testfile >> $seqres.full 2>&1
+		[[ $? != 0 ]] && break
+	done
+
+	_scratch_unmount >> $seqres.full
+
+	dcnt=$(_scratch_xfs_get_metadata_field core.nextents \
+					       "path /$(basename $testfile)")
+	acnt=$(_scratch_xfs_get_metadata_field core.naextents \
+					       "path /$(basename $testfile)")
+
+	if (( $dcnt != 10 )); then
+		echo "Invalid data fork extent count: $dextcnt"
+		exit 1
+	fi
+
+	if (( $acnt < 10 )); then
+		echo "Invalid attr fork extent count: $aextcnt"
+		exit 1
+	fi
+done
+
+# success, all done
+status=0
+exit
