@@ -27,8 +27,30 @@ _scratch_mkfs_xfs >>$seqres.full 2>&1
 # set the highest bit of features_ro_compat, use it as an unknown
 # feature bit. If one day this bit become known feature, please
 # change this case.
-_scratch_xfs_set_metadata_field "features_ro_compat" "$((2**31))" "sb 0" | \
-	grep 'features_ro_compat'
+
+ro_compat=$(_scratch_xfs_get_metadata_field "features_ro_compat" "sb 0")
+echo $ro_compat | grep -q -E '^0x[[:xdigit:]]$'
+if [[ $? != 0  ]]; then
+	echo "features_ro_compat has an invalid value."
+fi
+
+ro_compat=$(echo $ro_compat | \
+		    awk '/^0x[[:xdigit:]]+/ {
+				printf("0x%x\n", or(strtonum($1), 0x80000000))
+			}')
+
+# write the new ro compat field to the superblock
+_scratch_xfs_set_metadata_field "features_ro_compat" "$ro_compat" "sb 0" \
+				> $seqres.full 2>&1
+
+# read the newly set ro compat filed for verification
+new_ro_compat=$(_scratch_xfs_get_metadata_field "features_ro_compat" "sb 0" \
+						2>/dev/null)
+
+# verify the new ro_compat field is correct.
+if [ $new_ro_compat != $ro_compat ]; then
+	echo "Unable to set new features_ro_compat. Wanted $ro_compat, got $new_ro_compat"
+fi
 
 # rw mount with unknown ro-compat feature should fail
 echo "rw mount test"
