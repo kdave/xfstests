@@ -1,0 +1,112 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test 548
+#
+# Test to verify upgrade of an existing V5 filesystem to support large extent
+# counters.
+#
+. ./common/preamble
+_begin_fstest auto quick metadata
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+. ./common/inject
+. ./common/populate
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_xfs_nrext64
+_require_attrs
+_require_xfs_debug
+_require_xfs_db_command path
+_require_test_program "punch-alternating"
+_require_xfs_io_error_injection "bmap_alloc_minlen_extent"
+
+_scratch_mkfs -d size=$((512 * 1024 * 1024)) >> $seqres.full
+_scratch_mount >> $seqres.full
+
+bsize=$(_get_file_block_size $SCRATCH_MNT)
+
+testfile=$SCRATCH_MNT/testfile
+
+nr_blks=20
+
+echo "Add blocks to file's data fork"
+$XFS_IO_PROG -f -c "pwrite 0 $((nr_blks * bsize))" $testfile \
+	     >> $seqres.full
+$here/src/punch-alternating $testfile
+
+echo "Consume free space"
+fillerdir=$SCRATCH_MNT/fillerdir
+nr_free_blks=$(stat -f -c '%f' $SCRATCH_MNT)
+nr_free_blks=$((nr_free_blks * 90 / 100))
+
+_fill_fs $((bsize * nr_free_blks)) $fillerdir $bsize 0 \
+	 >> $seqres.full 2>&1
+
+echo "Create fragmented filesystem"
+for dentry in $(ls -1 $fillerdir/); do
+	$here/src/punch-alternating $fillerdir/$dentry >> $seqres.full
+done
+
+echo "Inject bmap_alloc_minlen_extent error tag"
+_scratch_inject_error bmap_alloc_minlen_extent 1
+
+echo "Add blocks to file's attr fork"
+nr_blks=10
+attr_len=255
+nr_attrs=$((nr_blks * bsize / attr_len))
+for i in $(seq 1 $nr_attrs); do
+	attr="$(printf "trusted.%0247d" $i)"
+	$SETFATTR_PROG -n "$attr" $testfile >> $seqres.full 2>&1
+	[[ $? != 0 ]] && break
+done
+
+echo "Unmount filesystem"
+_scratch_unmount >> $seqres.full
+
+orig_dcnt=$(_scratch_xfs_get_metadata_field core.nextents \
+					    "path /$(basename $testfile)")
+orig_acnt=$(_scratch_xfs_get_metadata_field core.naextents \
+					    "path /$(basename $testfile)")
+
+echo "Upgrade filesystem to support large extent counters"
+_scratch_xfs_admin -O nrext64=1 >> $seqres.full 2>&1
+if [[ $? != 0 ]]; then
+	_notrun "Filesystem geometry is not suitable for upgrading"
+fi
+
+
+echo "Mount filesystem"
+_scratch_mount >> $seqres.full
+
+echo "Modify inode core"
+touch $testfile
+
+echo "Unmount filesystem"
+_scratch_unmount >> $seqres.full
+
+dcnt=$(_scratch_xfs_get_metadata_field core.nextents \
+				       "path /$(basename $testfile)")
+acnt=$(_scratch_xfs_get_metadata_field core.naextents \
+				       "path /$(basename $testfile)")
+
+echo "Verify inode extent counter values after fs upgrade"
+
+if [[ $orig_dcnt != $dcnt ]]; then
+	echo "Corrupt data extent counter"
+	exit 1
+fi
+
+if [[ $orig_acnt != $acnt ]]; then
+	echo "Corrupt attr extent counter"
+	exit 1
+fi
+
+# success, all done
+status=0
+exit
