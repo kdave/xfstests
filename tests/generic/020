@@ -51,13 +51,9 @@ _attr_list()
     fi
 }
 
-# set fs-specific max_attrs and max_attrval_size values. The parameter
-# @max_attrval_namelen is required for filesystems which take into account attr
-# name lengths (including namespace prefix) when determining limits.
+# set fs-specific max_attrs
 _attr_get_max()
 {
-	local max_attrval_namelen="$1"
-
 	# set maximum total attr space based on fs type
 	case "$FSTYP" in
 	xfs|udf|pvfs2|9p|ceph|nfs)
@@ -112,6 +108,16 @@ _attr_get_max()
 		# overhead
 		let max_attrs=$BLOCK_SIZE/40
 	esac
+}
+
+# set fs-specific max_attrval_size values. The parameter @max_attrval_namelen is
+# required for filesystems which take into account attr name lengths (including
+# namespace prefix) when determining limits; parameter @filename is required for
+# filesystems that need to take into account already existing attrs.
+_attr_get_maxval_size()
+{
+	local max_attrval_namelen="$1"
+	local filename="$2"
 
 	# Set max attr value size in bytes based on fs type
 	case "$FSTYP" in
@@ -128,7 +134,7 @@ _attr_get_max()
 	pvfs2)
 		max_attrval_size=8192
 		;;
-	xfs|udf|9p|ceph)
+	xfs|udf|9p)
 		max_attrval_size=65536
 		;;
 	bcachefs)
@@ -138,6 +144,15 @@ _attr_get_max()
 		# NFS doesn't provide a way to find out the max_attrval_size for
 		# the underlying filesystem, so just use the lowest value above.
 		max_attrval_size=1024
+		;;
+	ceph)
+		# CephFS does not have a maximum value for attributes.  Instead,
+		# it imposes a maximum size for the full set of xattrs
+		# names+values, which by default is 64K.  Compute the maximum
+		# taking into account the already existing attributes
+		max_attrval_size=$(getfattr --dump -e hex $filename 2>/dev/null | \
+			awk -F "=0x" '/^user/ {len += length($1) + length($2) / 2} END {print len}')
+		max_attrval_size=$((65536 - $max_attrval_size - $max_attrval_namelen))
 		;;
 	*)
 		# Assume max ~1 block of attrs
@@ -181,8 +196,7 @@ echo "*** remove attribute"
 _attr -r fish $testfile
 _attr_list $testfile
 
-max_attrval_name="long_attr"	# add 5 for "user." prefix
-_attr_get_max "$(( 5 + ${#max_attrval_name} ))"
+_attr_get_max
 
 echo "*** add lots of attributes"
 v=0
@@ -226,6 +240,9 @@ done
 _attr_list $testfile
 
 echo "*** really long value"
+max_attrval_name="long_attr"	# add 5 for "user." prefix
+_attr_get_maxval_size "$(( 5 + ${#max_attrval_name} ))" "$testfile"
+
 dd if=/dev/zero bs=1 count=$max_attrval_size 2>/dev/null \
     | _attr -s "$max_attrval_name" $testfile >/dev/null
 
