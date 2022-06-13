@@ -41,7 +41,16 @@ filter_attr_output() {
 		sed -e 's/has a [0-9]* byte value/has a NNNN byte value/g'
 }
 
-$here/src/attr_replace_test $SCRATCH_MNT/hello
+max_attr_size=65536
+
+# attr_replace_test can't easily auto-probe the attr size for ceph because:
+# - ceph imposes a maximum value for the total xattr names+values, and
+# - ceph reports the 'object size' in the block size, which is, by default, much
+#   larger than XATTR_SIZE_MAX (4M > 64k)
+# Hence, we need to provide it with a maximum size.
+[ "$FSTYP" = "ceph" ] && max_attr_size=65000
+
+$here/src/attr_replace_test -m $max_attr_size $SCRATCH_MNT/hello
 $ATTR_PROG -l $SCRATCH_MNT/hello >>$seqres.full 2>&1
 $ATTR_PROG -l $SCRATCH_MNT/hello | filter_attr_output
 

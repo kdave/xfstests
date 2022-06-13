@@ -20,19 +20,41 @@ exit(1); } while (0)
 fprintf(stderr, __VA_ARGS__); exit (1); \
 } while (0)
 
+void usage(char *progname)
+{
+	fail("usage: %s [-m max_attr_size] <file>\n", progname);
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
 	int fd;
+	int c;
 	char *path;
 	char *name = "user.world";
 	char *value;
 	struct stat sbuf;
 	size_t size = sizeof(value);
+	size_t maxsize = XATTR_SIZE_MAX;
 
-	if (argc != 2)
-		fail("Usage: %s <file>\n", argv[0]);
-	path = argv[1];
+	while ((c = getopt(argc, argv, "m:")) != -1) {
+		char *endp;
+
+		switch (c) {
+		case 'm':
+			maxsize = strtoul(optarg, &endp, 0);
+			if (*endp || (maxsize > XATTR_SIZE_MAX))
+				fail("Invalid 'max_attr_size' value\n");
+			break;
+		default:
+			usage(argv[0]);
+		}
+	}
+
+	if (optind == argc - 1)
+		path = argv[optind];
+	else
+		usage(argv[0]);
 
 	fd = open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd < 0) die();
@@ -46,7 +68,7 @@ int main(int argc, char *argv[])
 	size = sbuf.st_blksize * 3 / 4;
 	if (!size)
 		fail("Invalid st_blksize(%ld)\n", sbuf.st_blksize);
-	size = MIN(size, XATTR_SIZE_MAX);
+	size = MIN(size, maxsize);
 	value = malloc(size);
 	if (!value)
 		fail("Failed to allocate memory\n");
