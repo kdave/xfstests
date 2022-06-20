@@ -725,23 +725,17 @@ function run_section()
 	seqres="$check"
 	_check_test_fs
 
-	err=false
-	first_test=true
+	local tc_status="init"
 	prev_seq=""
 	for seq in $list ; do
 		# Run report for previous test!
-		if $err ; then
+		if [ "$tc_status" == "fail" ]; then
 			bad+=("$seqnum")
-			tc_status="fail"
 		fi
-		if $do_report && ! $first_test ; then
-			if [ $tc_status != "expunge" ] ; then
-				_make_testcase_report "$prev_seq" "$tc_status"
-			fi
+		if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
+			_make_testcase_report "$prev_seq" "$tc_status"
 		fi
-		first_test=false
 
-		err=false
 		prev_seq="$seq"
 		if [ ! -f $seq ]; then
 			# Try to get full name in case the user supplied only
@@ -845,7 +839,7 @@ function run_section()
 		if [ -f core ]; then
 			_dump_err_cont "[dumped core]"
 			mv core $RESULT_BASE/$seqnum.core
-			err=true
+			tc_status="fail"
 		fi
 
 		if [ -f $seqres.notrun ]; then
@@ -870,15 +864,15 @@ function run_section()
 			_scratch_unmount 2> /dev/null
 			rm -f ${RESULT_DIR}/require_test*
 			rm -f ${RESULT_DIR}/require_scratch*
-			err=true
+			tc_status="fail"
 		else
 			# The test apparently passed, so check for corruption
 			# and log messages that shouldn't be there.  Run the
 			# checking tools from a subshell with adjusted OOM
 			# score so that the OOM killer will target them instead
 			# of the check script itself.
-			(_adjust_oom_score 250; _check_filesystems) || err=true
-			_check_dmesg || err=true
+			(_adjust_oom_score 250; _check_filesystems) || tc_status="fail"
+			_check_dmesg || tc_status="fail"
 		fi
 
 		# Reload the module after each test to check for leaks or
@@ -892,7 +886,7 @@ function run_section()
 
 		# Scan for memory leaks after every test so that associating
 		# a leak to a particular test will be as accurate as possible.
-		_check_kmemleak || err=true
+		_check_kmemleak || tc_status="fail"
 
 		# test ends after all checks are done.
 		$timestamp && _timestamp
@@ -900,7 +894,7 @@ function run_section()
 
 		if [ ! -f $seq.out ]; then
 			_dump_err "no qualified output"
-			err=true
+			tc_status="fail"
 			continue;
 		fi
 
@@ -909,7 +903,7 @@ function run_section()
 		# version.
 		sed -i "s/\`/\'/g" $tmp.out
 		if diff $seq.out $tmp.out >/dev/null 2>&1 ; then
-			if ! $err ; then
+			if [ "$tc_status" != "fail" ]; then
 				echo "$seqnum `expr $stop - $start`" >>$tmp.time
 				echo -n " `expr $stop - $start`s"
 			fi
@@ -926,10 +920,10 @@ function run_section()
 				echo "(Run '$diff $here/$seq.out $seqres.out.bad'" \
 					" to see the entire diff)"
 			fi; } | sed -e 's/^\(.\)/    \1/'
-			err=true
+			tc_status="fail"
 		fi
 		if [ -f $seqres.hints ]; then
-			if $err; then
+			if [ "$tc_status" == "fail" ]; then
 				echo
 				cat $seqres.hints
 			else
@@ -939,14 +933,11 @@ function run_section()
 	done
 
 	# make sure we record the status of the last test we ran.
-	if $err ; then
+	if [ "$tc_status" == "fail" ]; then
 		bad+=("$seqnum")
-		tc_status="fail"
 	fi
-	if $do_report && ! $first_test ; then
-		if [ $tc_status != "expunge" ] ; then
-			_make_testcase_report "$prev_seq" "$tc_status"
-		fi
+	if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
+		_make_testcase_report "$prev_seq" "$tc_status"
 	fi
 
 	sect_stop=`_wallclock`
