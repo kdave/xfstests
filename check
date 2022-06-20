@@ -8,13 +8,10 @@ tmp=/tmp/$$
 status=0
 needwrap=true
 needsum=true
-n_try=0
-try=""
-n_bad=0
+try=()
 sum_bad=0
-bad=""
-n_notrun=0
-notrun=""
+bad=()
+notrun=()
 interrupt=true
 diff="diff -u"
 showme=false
@@ -412,10 +409,9 @@ fi
 
 _wipe_counters()
 {
-	n_try="0"
-	n_bad="0"
-	n_notrun="0"
-	unset try notrun bad
+	try=()
+	notrun=()
+	bad=()
 }
 
 _global_log() {
@@ -433,7 +429,7 @@ _wrapup()
 	if $showme && $needwrap; then
 		if $do_report; then
 			# $showme = all selected tests are notrun (no tries)
-			_make_section_report "$n_notrun" "0" "$n_notrun"
+			_make_section_report "${#notrun[*]}" "0" "${#notrun[*]}"
 		fi
 		needwrap=false
 	elif $needwrap; then
@@ -458,12 +454,12 @@ _wrapup()
 
 		echo "SECTION       -- $section" >>$tmp.summary
 		echo "=========================" >>$tmp.summary
-		if [ ! -z "$n_try" -a $n_try != 0 ]; then
+		if ((${#try[*]} > 0)); then
 			if [ $brief_test_summary == "false" ]; then
-				echo "Ran:$try"
-				echo "Ran:$try" >>$tmp.summary
+				echo "Ran: ${try[*]}"
+				echo "Ran: ${try[*]}" >>$tmp.summary
 			fi
-			_global_log "Ran:$try"
+			_global_log "Ran: ${try[*]}"
 		fi
 
 		$interrupt && echo "Interrupted!" | tee -a $check.log
@@ -472,34 +468,34 @@ _wrapup()
 				${REPORT_DIR}/check.log
 		fi
 
-		if [ ! -z "$notrun" ]; then
+		if ((${#notrun[*]} > 0)); then
 			if [ $brief_test_summary == "false" ]; then
-				echo "Not run:$notrun"
-				echo "Not run:$notrun" >>$tmp.summary
+				echo "Not run: ${notrun[*]}"
+				echo "Not run: ${notrun[*]}" >>$tmp.summary
 			fi
-			_global_log "Not run:$notrun"
+			_global_log "Not run: ${notrun[*]}"
 		fi
 
-		if [ ! -z "$n_bad" -a $n_bad != 0 ]; then
-			echo "Failures:$bad"
-			echo "Failed $n_bad of $n_try tests"
-			_global_log "Failures:$bad"
-			_global_log "Failed $n_bad of $n_try tests"
-			echo "Failures:$bad" >>$tmp.summary
-			echo "Failed $n_bad of $n_try tests" >>$tmp.summary
+		if ((${#bad[*]} > 0)); then
+			echo "Failures: ${bad[*]}"
+			echo "Failed ${#bad[*]} of ${#try[*]} tests"
+			_global_log "Failures: ${bad[*]}"
+			_global_log "Failed ${#bad[*]} of ${#try[*]} tests"
+			echo "Failures: ${bad[*]}" >>$tmp.summary
+			echo "Failed ${#bad[*]} of ${#try[*]} tests" >>$tmp.summary
 		else
-			echo "Passed all $n_try tests"
-			_global_log "Passed all $n_try tests"
-			echo "Passed all $n_try tests" >>$tmp.summary
+			echo "Passed all ${#try[*]} tests"
+			_global_log "Passed all ${#try[*]} tests"
+			echo "Passed all ${#try[*]} tests" >>$tmp.summary
 		fi
 		echo "" >>$tmp.summary
 		if $do_report; then
-			_make_section_report "$n_try" "$n_bad" "$n_notrun"
+			_make_section_report "${#try[*]}" "${#bad[*]}" "${#notrun[*]}"
 		fi
 		needwrap=false
 	fi
 
-	sum_bad=`expr $sum_bad + $n_bad`
+	sum_bad=`expr $sum_bad + ${#bad[*]}`
 	_wipe_counters
 	rm -f /tmp/*.rawout /tmp/*.out /tmp/*.err /tmp/*.time
 	if ! $OPTIONS_HAVE_SECTIONS; then
@@ -735,8 +731,7 @@ function run_section()
 	for seq in $list ; do
 		# Run report for previous test!
 		if $err ; then
-			bad="$bad $seqnum"
-			n_bad=`expr $n_bad + 1`
+			bad+=("$seqnum")
 			tc_status="fail"
 		fi
 		if $do_report && ! $first_test ; then
@@ -794,7 +789,7 @@ function run_section()
 			start=0
 			stop=0
 			tc_status="list"
-			n_notrun=`expr $n_notrun + 1`
+			notrun+=("$seqnum")
 			continue
 		fi
 
@@ -815,8 +810,7 @@ function run_section()
 		fi
 
 		# record that we really tried to run this test.
-		try="$try $seqnum"
-		n_try=`expr $n_try + 1`
+		try+=("$seqnum")
 
 		awk 'BEGIN {lasttime="       "} \
 		     $1 == "'$seqnum'" {lasttime=" " $2 "s ... "; exit} \
@@ -861,8 +855,7 @@ function run_section()
 			$timestamp && echo " [not run]" && \
 				      echo -n "	$seqnum -- "
 			cat $seqres.notrun
-			notrun="$notrun $seqnum"
-			n_notrun=`expr $n_notrun + 1`
+			notrun+=("$seqnum")
 			tc_status="notrun"
 
 			# Unmount the scratch fs so that we can wipe the scratch
@@ -947,8 +940,7 @@ function run_section()
 
 	# make sure we record the status of the last test we ran.
 	if $err ; then
-		bad="$bad $seqnum"
-		n_bad=`expr $n_bad + 1`
+		bad+=("$seqnum")
 		tc_status="fail"
 	fi
 	if $do_report && ! $first_test ; then
