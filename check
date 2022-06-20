@@ -819,13 +819,9 @@ function run_section()
 		try="$try $seqnum"
 		n_try=`expr $n_try + 1`
 
-		# slashes now in names, sed barfs on them so use grep
-		lasttime=`grep -w ^$seqnum $check.time | awk '// {print $2}'`
-		if [ "X$lasttime" != X ]; then
-			echo -n " ${lasttime}s ... "
-		else
-			echo -n "	" # prettier output with timestamps.
-		fi
+		awk 'BEGIN {lasttime="       "} \
+		     $1 == "'$seqnum'" {lasttime=" " $2 "s ... "; exit} \
+		     END {printf "%s", lasttime}' "$check.time"
 		rm -f core $seqres.notrun
 
 		start=`_wallclock`
