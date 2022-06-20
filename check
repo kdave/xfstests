@@ -430,13 +430,12 @@ _wrapup()
 	seq="check"
 	check="$RESULT_BASE/check"
 
-	if $showme; then
-		if $needwrap; then
-			if $do_report; then
-				_make_section_report
-			fi
-			needwrap=false
+	if $showme && $needwrap; then
+		if $do_report; then
+			# $showme = all selected tests are notrun (no tries)
+			_make_section_report "$n_notrun" "0" "$n_notrun"
 		fi
+		needwrap=false
 	elif $needwrap; then
 		if [ -f $check.time -a -f $tmp.time ]; then
 			cat $check.time $tmp.time  \
@@ -495,7 +494,7 @@ _wrapup()
 		fi
 		echo "" >>$tmp.summary
 		if $do_report; then
-			_make_section_report
+			_make_section_report "$n_try" "$n_bad" "$n_notrun"
 		fi
 		needwrap=false
 	fi

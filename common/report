@@ -49,9 +49,11 @@ _xunit_add_property()
 _xunit_make_section_report()
 {
 	# xfstest:section ==> xunit:testsuite
+	local tests_count="$1"
+	local bad_count="$2"
+	local notrun_count="$3"
 	local sect_name=$section
 	local sect_time=`expr $sect_stop - $sect_start`
-	local n_total=`expr $n_try + $n_notrun`
 
 	if [ $sect_name == '-no-sections-' ]; then
 		sect_name='global'
@@ -62,9 +64,8 @@ _xunit_make_section_report()
 	if [ -z "$date_time" ]; then
 		date_time=$(date +"%F %T")
 	fi
-	local dtime=`echo $date_time| tr  " " 'T'`
-	local stats="failures=\"$n_bad\" skipped=\"$n_notrun\" tests=\"$n_total\" time=\"$sect_time\""
-	local hw_info="hostname=\"$HOST\" timestamp=\"$dtime\" "
+	local stats="failures=\"$bad_count\" skipped=\"$notrun_count\" tests=\"$tests_count\" time=\"$sect_time\""
+	local hw_info="hostname=\"$HOST\" timestamp=\"${date_time/ /T}\" "
 	echo "<testsuite name=\"xfstests\" $stats  $hw_info >" >> $REPORT_DIR/result.xml
 
 	# Properties
@@ -149,10 +150,13 @@ _xunit_make_testcase_report()
 #  Common report generator entry points
 _make_section_report()
 {
+	local tests_count="$1"
+	local bad_count="$2"
+	local notrun_count="$3"
 	for report in $REPORT_LIST; do
 		case "$report" in
 		"xunit")
-			_xunit_make_section_report
+			_xunit_make_section_report "$tests_count" "$bad_count" "$notrun_count"
 			;;
 		*)
 			_dump_err "format '$report' is not supported"
