@@ -13,6 +13,32 @@ _begin_fstest dangerous_scrub dangerous_online_repair freeze
 
 _register_cleanup "_cleanup" BUS
 
+# First kill and wait the freeze loop so it won't try to freeze fs again
+# Then make sure fs is not frozen
+# Then kill and wait for the rest of the workers
+# Because if fs is frozen a killed writer will never exit
+kill_loops() {
+	local sig=$1
+
+	[ -n "$freeze_pid" ] && kill $sig $freeze_pid
+	wait $freeze_pid
+	unset freeze_pid
+	$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT
+	[ -n "$stress_pid" ] && kill $sig $stress_pid
+	[ -n "$repair_pid" ] && kill $sig $repair_pid
+	wait
+	unset stress_pid
+	unset repair_pid
+}
+
+# Override the default cleanup function.
+_cleanup()
+{
+	kill_loops -9 > /dev/null 2>&1
+	cd /
+	rm -rf $tmp.*
+}
+
 # Import common functions.
 . ./common/filter
 . ./common/fuzzy
@@ -78,8 +104,11 @@ end=$((start + (30 * TIME_FACTOR) ))
 
 echo "Loop started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
 stress_loop $end &
+stress_pid=$!
 freeze_loop $end &
+freeze_pid=$!
 repair_loop $end &
+repair_pid=$!
 
 # Wait until 2 seconds after the loops should have finished...
 while [ "$(date +%s)" -lt $((end + 2)) ]; do
@@ -87,8 +116,7 @@ while [ "$(date +%s)" -lt $((end + 2)) ]; do
 done
 
 # ...and clean up after the loops in case they didn't do it themselves.
-$KILLALL_PROG -TERM xfs_io fsstress >> $seqres.full 2>&1
-$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
+kill_loops >> $seqres.full 2>&1
 
 echo "Loop finished at $(date)" >> $seqres.full
 echo "Test done"
