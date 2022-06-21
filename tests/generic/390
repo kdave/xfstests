@@ -14,8 +14,12 @@ _begin_fstest auto freeze stress
 _cleanup()
 {
 	cd /
-	# Make sure $SCRATCH_MNT is unfreezed
+	# Kill freeze loops and make sure $SCRATCH_MNT is unfreezed
+	[ -n "$freeze_pids" ] && kill -9 $freeze_pids 2>/dev/null
+	wait $freeze_pids
 	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
+	[ -n "$fsstress_pid" ] && kill -9 $fsstress_pid 2>/dev/null
+	wait $fsstress_pid
 	rm -f $tmp.*
 }
 
@@ -62,7 +66,9 @@ done
 
 wait $fsstress_pid
 result=$?
+unset fsstress_pid
 wait $freeze_pids
+unset freeze_pids
 
 # Exit with fsstress return value
 status=$result

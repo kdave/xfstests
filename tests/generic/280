@@ -10,6 +10,17 @@
 . ./common/preamble
 _begin_fstest auto quota freeze
 
+# Override the default cleanup function.
+_cleanup()
+{
+	# Make sure $SCRATCH_MNT is unfreezed
+	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
+	[ -n "$pid" ] && kill -9 $pid 2>/dev/null
+	wait $pid
+	cd /
+	rm -f $tmp.*
+}
+
 # Import common functions.
 . ./common/filter
 . ./common/quota
@@ -34,7 +45,7 @@ pid=$!
 sleep 1
 xfs_freeze -u $SCRATCH_MNT
 wait $pid
-_scratch_unmount
+unset pid
 
 # Failure comes in the form of a deadlock.
 

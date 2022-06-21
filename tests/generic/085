@@ -25,6 +25,8 @@ cleanup_dmdev()
 {
 	# in case it's still suspended and/or mounted
 	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
+	[ -n "$pid" ] && kill -9 $pid 2>/dev/null
+	wait $pid
 	$UMOUNT_PROG $lvdev >/dev/null 2>&1
 	_dmsetup_remove $node
 }
@@ -75,6 +77,7 @@ done &
 pid="$pid $!"
 
 wait $pid
+unset pid
 
 status=0
 exit
