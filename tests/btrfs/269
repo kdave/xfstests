@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Christoph Hellwig.
+#
+# FS QA Test 269
+#
+# Test btrfs read repair over tricky stripe boundaries on the raid10 profile:
+#
+#             | stripe 0 | stripe 2
+#   --------------------------------
+#    mirror 1 | I/O FAIL | GOOD    
+#    mirror 2 | GOOD     | CSUM FAIL
+#
+
+. ./common/preamble
+_begin_fstest auto quick read_repair
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_odirect
+_require_non_zoned_device "${SCRATCH_DEV}" # no overwrites on zoned devices
+_require_scratch_dev_pool 4
+_scratch_dev_pool_get 4
+
+echo "step 1......mkfs.btrfs"
+
+_scratch_pool_mkfs "-d raid10 -b 1G" >>$seqres.full 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" \
+	"$SCRATCH_MNT/foobar" | \
+	_filter_xfs_io_offset
+
+# ensure btrfs-map-logical sees the tree updates
+sync
+
+logical=$(_btrfs_get_first_logical $SCRATCH_MNT/foobar)
+
+physical1=$(_btrfs_get_physical ${logical} 1)
+devpath1=$(_btrfs_get_device_path ${logical} 1)
+
+physical4=$(_btrfs_get_physical ${logical} 3)
+devpath4=$(_btrfs_get_device_path ${logical} 3)
+
+_scratch_unmount
+
+echo "step 2......corrupt file extent"
+
+$XFS_IO_PROG -d -c "pwrite -S 0xbd -b 64K $physical1 64K" \
+	$devpath1 > /dev/null
+$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $((physical4 + 65536)) 64K" \
+	$devpath4 > /dev/null
+
+_scratch_mount
+
+echo "step 3......repair the bad copy"
+
+_btrfs_direct_read_on_mirror 0 2 "$SCRATCH_MNT/foobar" 0 128K
+_btrfs_direct_read_on_mirror 1 2 "$SCRATCH_MNT/foobar" 0 128K
+
+_scratch_unmount
+
+echo "step 4......check if the repair worked"
+$XFS_IO_PROG -d -c "pread -v -b 512 $physical1 512" $devpath1 |\
+	_filter_xfs_io_offset
+$XFS_IO_PROG -d -c "pread -v -b 512 $((physical4 + 65536)) 512" $devpath4 |\
+	_filter_xfs_io_offset
+
+_scratch_dev_pool_put
+# success, all done
+status=0
+exit
