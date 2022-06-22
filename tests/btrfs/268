@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Christoph Hellwig.
+#
+# FS QA Test 268
+#
+# Test that btrfs read repair on a raid1 profile won't loop forever if data
+# is corrupted on both mirrors and can't be recovered.
+#
+
+. ./common/preamble
+_begin_fstest auto quick read_repair
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_odirect
+_require_non_zoned_device "${SCRATCH_DEV}" # no overwrites on zoned devices
+_require_scratch_dev_pool 2
+_scratch_dev_pool_get 2
+
+echo "step 1......mkfs.btrfs"
+
+_scratch_pool_mkfs "-d raid1 -b 1G" >>$seqres.full 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 256K 0 256K" \
+	"$SCRATCH_MNT/foobar" | \
+	_filter_xfs_io_offset
+
+# ensure btrfs-map-logical sees the tree updates
+sync
+
+logical=$(_btrfs_get_first_logical $SCRATCH_MNT/foobar)
+
+physical1=$(_btrfs_get_physical ${logical} 1)
+devpath1=$(_btrfs_get_device_path ${logical} 1)
+
+physical2=$(_btrfs_get_physical ${logical} 2)
+devpath2=$(_btrfs_get_device_path ${logical} 2)
+
+physical3=$(_btrfs_get_physical ${logical} 3)
+devpath3=$(_btrfs_get_device_path ${logical} 3)
+
+_scratch_unmount
+
+echo "step 2......corrupt file extent"
+$XFS_IO_PROG -d -c "pwrite -S 0xba -b 4K $physical1 4K" \
+	$devpath1 > /dev/null
+$XFS_IO_PROG -d -c "pwrite -S 0xba -b 4K $physical2 4K" \
+	$devpath2 > /dev/null
+
+_scratch_mount
+
+echo "step 3......try to repair"
+$XFS_IO_PROG -d -c "pread -b 4K 0 4K" $SCRATCH_MNT/foobar
+
+_scratch_unmount
+_scratch_dev_pool_put
+# success, all done
+status=0
+exit
