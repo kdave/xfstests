@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 005
+#
+# Make sure statfs reports correct total size when:
+# 1. using a directory with 'max_byte' quota as base for a mount
+# 2. using a subdirectory of the above directory with 'max_files' quota
+#
+. ./common/preamble
+_begin_fstest auto quick quota
+
+_supported_fs ceph
+_require_scratch
+
+_scratch_mount
+mkdir -p "$SCRATCH_MNT/quota-dir/subdir"
+
+# set quota
+quota=$((2 ** 30)) # 1G 
+$SETFATTR_PROG -n ceph.quota.max_bytes -v "$quota" "$SCRATCH_MNT/quota-dir"
+$SETFATTR_PROG -n ceph.quota.max_files -v "$quota" "$SCRATCH_MNT/quota-dir/subdir"
+_scratch_unmount
+
+SCRATCH_DEV_ORIG="$SCRATCH_DEV"
+SCRATCH_DEV="$SCRATCH_DEV/quota-dir" _scratch_mount
+echo ceph quota size is $(_get_total_space "$SCRATCH_MNT") bytes
+SCRATCH_DEV="$SCRATCH_DEV_ORIG/quota-dir" _scratch_unmount
+
+SCRATCH_DEV="$SCRATCH_DEV_ORIG/quota-dir/subdir" _scratch_mount
+echo subdir ceph quota size is $(_get_total_space "$SCRATCH_MNT") bytes
+SCRATCH_DEV="$SCRATCH_DEV_ORIG/quota-dir/subdir" _scratch_unmount
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
