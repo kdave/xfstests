@@ -45,6 +45,7 @@ static int get_io_sizes(int fd)
 	off_t pos = 0, offset = 1;
 	struct stat buf;
 	int shift, ret;
+	int pagesz = sysconf(_SC_PAGE_SIZE);
 
 	ret = fstat(fd, &buf);
 	if (ret) {
@@ -53,8 +54,16 @@ static int get_io_sizes(int fd)
 		return ret;
 	}
 
-	/* st_blksize is typically also the allocation size */
+	/*
+	 * st_blksize is typically also the allocation size.  However, XFS
+	 * rounds this up to the page size, so if the stat blocksize is exactly
+	 * one page, use this iterative algorithm to see if SEEK_DATA will hint
+	 * at a more precise answer based on the filesystem's (pre)allocation
+	 * decisions.
+	 */
 	alloc_size = buf.st_blksize;
+	if (alloc_size != pagesz)
+		goto done;
 
 	/* try to discover the actual alloc size */
 	while (pos == 0 && offset < alloc_size) {
@@ -80,6 +89,7 @@ static int get_io_sizes(int fd)
 	if (!shift)
 		offset += pos ? 0 : 1;
 	alloc_size = offset;
+done:
 	fprintf(stdout, "Allocation size: %ld\n", alloc_size);
 	return 0;
 
