@@ -16,12 +16,12 @@ _begin_fstest rw metadata auto quick
 # the others are unwritten.
 _filter_blocks()
 {
-	$AWK_PROG '
+	$AWK_PROG -v file_size=$FILE_SIZE '
 /^ +[0-9]/ {
 	if (!written_size) {
 		written_size = $6
-		unwritten1 = ((1048576/512) / 2) - written_size
-		unwritten2 = ((1048576/512) / 2) - 2 * written_size
+		unwritten1 = ((file_size/512) / 2) - written_size
+		unwritten2 = ((file_size/512) / 2) - 2 * written_size
 	}
 
 	# is the extent unwritten?
@@ -58,7 +58,18 @@ _scratch_mount
 
 TEST_FILE=$SCRATCH_MNT/test_file
 TEST_PROG=$here/src/unwritten_mmap
-FILE_SIZE=1048576
+
+# Beginning with 5.18, some filesystems support creating large folios for the
+# page cache.  A system with 64k pages can create 256k folios, which means
+# that with the old file size of 1M, the last half of the file is completely
+# converted from unwritten to written by page_mkwrite.  The test will fail on
+# the golden output when this happens, so increase the size from the original
+# 1MB file size to at least (6 * 256k == 1.5MB) prevent this from happening.
+#
+# However, increasing the file size to around 2MB causes regressions when fsdax
+# is enabled because fsdax will try to use PMD entries for the mappings.  Hence
+# we need to set the file size to (6 * 2MB == 12MB) to cover all cases.
+FILE_SIZE=$((12 * 1048576))
 
 rm -f $TEST_FILE
 $TEST_PROG $FILE_SIZE $TEST_FILE
