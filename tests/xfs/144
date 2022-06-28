@@ -1,0 +1,51 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 144
+#
+# Now that we've increased the default log size calculation, test mkfs with
+# various stripe units and filesystem sizes to see if we can provoke mkfs into
+# breaking.
+#
+. ./common/preamble
+_begin_fstest auto mkfs
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_test
+echo Silence is golden
+
+testfile=$TEST_DIR/a
+rm -f $testfile
+
+test_format() {
+	local tag="$1"
+	shift
+
+	echo "$tag" >> $seqres.full
+	$MKFS_XFS_PROG $@ -d file,name=$testfile &>> $seqres.full
+	local res=$?
+	test $res -eq 0 || echo "$tag FAIL $res" | tee -a $seqres.full
+}
+
+# First we try various small filesystems and stripe sizes.
+for M in `seq 298 302` `seq 490 520`; do
+	for S in `seq 32 4 64`; do
+		test_format "M=$M S=$S" -dsu=${S}k,sw=1,size=${M}m -N
+	done
+done
+
+# Log so large it pushes the root dir into AG 1.  We can't use -N for the mkfs
+# because this check only occurs after the root directory has been allocated,
+# which mkfs -N doesn't do.
+test_format "log pushes rootdir into AG 1" -d agcount=3200,size=6366g -lagnum=0 -N
+
+# log end rounded beyond EOAG due to stripe unit
+test_format "log end beyond eoag" -d agcount=3200,size=6366g -d su=256k,sw=4 -N
+
+# success, all done
+status=0
+exit
