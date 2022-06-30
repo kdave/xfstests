@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 082
+#
+# Regression test for xfsprogs commit:
+#
+# XXXXXXXX ("xfs_copy: don't use cached buffer reads until after libxfs_mount")
+#
+# It was discovered that passing xfs_copy a source device containing an ext4
+# filesystem would cause xfs_copy to crash.  Further investigation revealed
+# that any readable path that didn't have a plausible XFS superblock in block
+# zero would produce the same crash, so this regression test exploits that.
+#
+. ./common/preamble
+_begin_fstest auto copy quick
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_xfs_copy
+_require_test
+
+rm -f $TEST_DIR/$seq.*
+$XFS_IO_PROG -f -c 'truncate 100m' $TEST_DIR/$seq.a
+$XFS_IO_PROG -f -c 'truncate 100m' $TEST_DIR/$seq.b
+
+filter_copy() {
+	sed -e 's/Superblock has bad magic number.*/bad magic number/'
+}
+
+$XFS_COPY_PROG $TEST_DIR/$seq.a $TEST_DIR/$seq.b 2>&1 | filter_copy
+
+# success, all done
+status=0
+exit
