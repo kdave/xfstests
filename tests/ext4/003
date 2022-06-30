@@ -27,7 +27,11 @@ _require_scratch
 _require_scratch_ext4_feature "bigalloc"
 
 BLOCK_SIZE=$(get_page_size)
-$MKFS_EXT4_PROG -F -b $BLOCK_SIZE -O bigalloc -C $(($BLOCK_SIZE * 16)) -g 256 $SCRATCH_DEV 512m \
+features=bigalloc
+if echo "${MOUNT_OPTIONS}" | grep -q 'test_dummy_encryption' ; then
+    features+=",encrypt"
+fi
+$MKFS_EXT4_PROG -F -b $BLOCK_SIZE -O $features -C $(($BLOCK_SIZE * 16)) -g 256 $SCRATCH_DEV 512m \
 	>> $seqres.full 2>&1
 _scratch_mount
 
