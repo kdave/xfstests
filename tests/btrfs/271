@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Christoph Hellwig.
+#
+# FS QA Test btrfs/271
+#
+# Test btrfs write error propagation and reporting on the raid1 profile.
+#
+. ./common/preamble
+_begin_fstest auto quick raid
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_scratch
+_require_fail_make_request
+_require_scratch_dev_pool 2
+_scratch_dev_pool_get 2
+
+enable_io_failure()
+{
+	local sysfs_bdev=`_sysfs_dev $1`
+
+	echo 1 > $sysfs_bdev/make-it-fail
+}
+
+disable_io_failure()
+{
+	local sysfs_bdev=`_sysfs_dev $1`
+
+	echo 0 > $sysfs_bdev/make-it-fail
+}
+
+_check_minimal_fs_size $(( 1024 * 1024 * 1024 ))
+_scratch_pool_mkfs "-d raid1 -b 1G" >> $seqres.full 2>&1
+
+_scratch_mount
+
+dev2=`echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}'`
+
+pagesize=$(get_page_size)
+blocksize=$(_get_block_size $SCRATCH_MNT)
+sectors_per_page=$(($pagesize / $blocksize))
+
+# enable block I/O error injection
+echo 100 > $DEBUGFS_MNT/fail_make_request/probability
+echo 1000 > $DEBUGFS_MNT/fail_make_request/times
+echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
+
+echo "Step 1: writing with one failing mirror:"
+enable_io_failure $SCRATCH_DEV
+$XFS_IO_PROG -f -c "pwrite -W -S 0xaa 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
+disable_io_failure $SCRATCH_DEV
+
+errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | \
+	$AWK_PROG '/write_io_errs/ { print $2 }')
+if [ $errs -ne $((4 * $sectors_per_page)) ]; then
+        _fail "Errors: $errs expected: 4"
+fi
+
+echo "Step 2: verify that the data reads back fine:"
+$XFS_IO_PROG -c "pread -v 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io_offset
+
+echo "Step 3: writing with two failing mirrors (should fail):"
+enable_io_failure $SCRATCH_DEV
+enable_io_failure $dev2
+$XFS_IO_PROG -f -c "pwrite -W -S 0xbb 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
+disable_io_failure $dev2
+disable_io_failure $SCRATCH_DEV
+
+# disable block I/O error injection
+echo 0 > $DEBUGFS_MNT/fail_make_request/probability
+echo 0 > $DEBUGFS_MNT/fail_make_request/times
+
+_scratch_dev_pool_put
+# success, all done
+status=0
+exit
