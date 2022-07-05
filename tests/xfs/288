@@ -8,7 +8,7 @@
 # that leaf directly (as xfsprogs commit f714016).
 #
 . ./common/preamble
-_begin_fstest auto quick repair fuzzers
+_begin_fstest auto quick repair fuzzers attr
 
 # Import common functions.
 . ./common/filter
@@ -50,25 +50,19 @@ if [ "$count" != "0" ]; then
 	_notrun "xfs_db can't set attr hdr.count to 0"
 fi
 
-# make sure xfs_repair can find above corruption. If it can't, that
-# means we need to fix this bug on current xfs_repair
-_scratch_xfs_repair -n >> $seqres.full 2>&1
-if [ $? -eq 0 ];then
-	_fail "xfs_repair can't find the corruption"
-else
-	# If xfs_repair can find this corruption, then this repair
-	# should junk above leaf attribute and fix this XFS.
-	_scratch_xfs_repair >> $seqres.full 2>&1
+# Check that xfs_repair discards the attr fork if block 0 is an empty leaf
+# block.  Empty leaf blocks at the start of the xattr data can be a byproduct
+# of a shutdown race, and hence are not a corruption.
+_scratch_xfs_repair >> $seqres.full 2>&1
 
-	# Old xfs_repair maybe find and fix this corruption by
-	# reset the first used heap value and the usedbytes cnt
-	# in ablock 0. That's not what we want. So check if
-	# xfs_repair has junked the whole ablock 0 by xfs_db.
-	_scratch_xfs_db -x -c "inode $inum" -c "ablock 0" | \
-		grep -q "no attribute data"
-	if [ $? -ne 0 ]; then
-		_fail "xfs_repair didn't junk the empty attr leaf"
-	fi
+# Old xfs_repair maybe find and fix this corruption by
+# reset the first used heap value and the usedbytes cnt
+# in ablock 0. That's not what we want. So check if
+# xfs_repair has junked the whole ablock 0 by xfs_db.
+_scratch_xfs_db -x -c "inode $inum" -c "ablock 0" | \
+	grep -q "no attribute data"
+if [ $? -ne 0 ]; then
+	_fail "xfs_repair didn't junk the empty attr leaf"
 fi
 
 echo "Silence is golden"
