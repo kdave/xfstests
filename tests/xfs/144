@@ -16,6 +16,10 @@ _begin_fstest auto mkfs
 # Modify as appropriate.
 _supported_fs xfs
 _require_test
+
+# The last testcase creates a (sparse) fs image with a 2GB log, so we need
+# 3GB to avoid failing the mkfs due to ENOSPC.
+_require_fs_space $TEST_DIR $((3 * 1048576))
 echo Silence is golden
 
 testfile=$TEST_DIR/a
@@ -26,7 +30,7 @@ test_format() {
 	shift
 
 	echo "$tag" >> $seqres.full
-	$MKFS_XFS_PROG $@ -d file,name=$testfile &>> $seqres.full
+	$MKFS_XFS_PROG -f $@ -d file,name=$testfile &>> $seqres.full
 	local res=$?
 	test $res -eq 0 || echo "$tag FAIL $res" | tee -a $seqres.full
 }
@@ -38,13 +42,13 @@ for M in `seq 298 302` `seq 490 520`; do
 	done
 done
 
+# log end rounded beyond EOAG due to stripe unit
+test_format "log end beyond eoag" -d agcount=3200,size=6366g -d su=256k,sw=4 -N
+
 # Log so large it pushes the root dir into AG 1.  We can't use -N for the mkfs
 # because this check only occurs after the root directory has been allocated,
 # which mkfs -N doesn't do.
-test_format "log pushes rootdir into AG 1" -d agcount=3200,size=6366g -lagnum=0 -N
-
-# log end rounded beyond EOAG due to stripe unit
-test_format "log end beyond eoag" -d agcount=3200,size=6366g -d su=256k,sw=4 -N
+test_format "log pushes rootdir into AG 1" -d agcount=3200,size=6366g -lagnum=0
 
 # success, all done
 status=0
