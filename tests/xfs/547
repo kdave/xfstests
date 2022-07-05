@@ -33,6 +33,10 @@ for nrext64 in 0 1; do
 		      >> $seqres.full
 	_scratch_mount >> $seqres.full
 
+	# Force data device extents so that we can fragment the free space
+	# and force attr fork allocations to be non-contiguous
+	_xfs_force_bdev data $SCRATCH_MNT
+
 	bsize=$(_get_file_block_size $SCRATCH_MNT)
 
 	testfile=$SCRATCH_MNT/testfile
@@ -76,13 +80,15 @@ for nrext64 in 0 1; do
 	acnt=$(_scratch_xfs_get_metadata_field core.naextents \
 					       "path /$(basename $testfile)")
 
-	if (( $dcnt != 10 )); then
-		echo "Invalid data fork extent count: $dextcnt"
+	echo "nrext64: $nrext64 dcnt: $dcnt acnt: $acnt" >> $seqres.full
+
+	if [ -z "$dcnt" ] || (( $dcnt != 10 )); then
+		echo "Invalid data fork extent count: $dcnt"
 		exit 1
 	fi
 
-	if (( $acnt < 10 )); then
-		echo "Invalid attr fork extent count: $aextcnt"
+	if [ -z "$acnt" ] || (( $acnt < 10 )); then
+		echo "Invalid attr fork extent count: $acnt"
 		exit 1
 	fi
 done
