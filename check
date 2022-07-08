@@ -432,7 +432,9 @@ _wrapup()
 	if $showme && $needwrap; then
 		if $do_report; then
 			# $showme = all selected tests are notrun (no tries)
-			_make_section_report "${#notrun[*]}" "0" "${#notrun[*]}"
+			_make_section_report "$section" "${#notrun[*]}" "0" \
+					     "${#notrun[*]}" \
+					     "$((sect_stop - sect_start))"
 		fi
 		needwrap=false
 	elif $needwrap; then
@@ -493,7 +495,9 @@ _wrapup()
 		fi
 		echo "" >>$tmp.summary
 		if $do_report; then
-			_make_section_report "${#try[*]}" "${#bad[*]}" "${#notrun[*]}"
+			_make_section_report "$section" "${#try[*]}" \
+					     "${#bad[*]}" "${#notrun[*]}" \
+					     "$((sect_stop - sect_start))"
 		fi
 		needwrap=false
 	fi
@@ -736,7 +740,8 @@ function run_section()
 			bad+=("$seqnum")
 		fi
 		if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
-			_make_testcase_report "$prev_seq" "$tc_status"
+			_make_testcase_report "$section" "$seqnum" \
+					      "$tc_status" "$((stop - start))"
 		fi
 
 		prev_seq="$seq"
@@ -940,7 +945,8 @@ function run_section()
 		bad+=("$seqnum")
 	fi
 	if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
-		_make_testcase_report "$prev_seq" "$tc_status"
+		_make_testcase_report "$section" "$seqnum" "$tc_status" \
+				      "$((stop - start))"
 	fi
 
 	sect_stop=`_wallclock`

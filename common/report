@@ -33,11 +33,11 @@ _xunit_add_property()
 _xunit_make_section_report()
 {
 	# xfstest:section ==> xunit:testsuite
-	local tests_count="$1"
-	local bad_count="$2"
-	local notrun_count="$3"
-	local sect_name=$section
-	local sect_time=`expr $sect_stop - $sect_start`
+	local sect_name="$1"
+	local tests_count="$2"
+	local bad_count="$3"
+	local notrun_count="$4"
+	local sect_time="$5"
 
 	if [ $sect_name == '-no-sections-' ]; then
 		sect_name='global'
@@ -67,12 +67,10 @@ _xunit_make_section_report()
 
 _xunit_make_testcase_report()
 {
-	local test_seq="$1"
-	local test_status="$2"
-	local test_time=`expr $stop - $start`
-	local strip="$SRC_DIR/"
-	local test_name=${test_seq#$strip}
-	local sect_name=$section
+	local sect_name="$1"
+	local test_name="$2"
+	local test_status="$3"
+	local test_time="$4"
 
 	# TODO: other places may also win if no-section mode will be named like 'default/global'
 	if [ $sect_name == '-no-sections-' ]; then
@@ -86,8 +84,9 @@ _xunit_make_testcase_report()
 	"pass")
 		;;
 	"notrun")
-		if [ -f $seqres.notrun ]; then
-			local msg=`cat $seqres.notrun | encode_xml`
+		local notrun_file="${REPORT_DIR}/${test_name}.notrun"
+		if [ -f "$notrun_file" ]; then
+			local msg=`cat "$notrun_file" | encode_xml`
 			echo -e "\t\t<skipped message=\"$msg\" />" >> $report
 		else
 			echo -e "\t\t<skipped/>" >> $report
@@ -97,27 +96,31 @@ _xunit_make_testcase_report()
 		echo -e "\t\t<skipped/>" >> $report
 		;;
 	"fail")
+		local out_src="${SRC_DIR}/${test_name}.out"
+		local full_file="${REPORT_DIR}/${test_name}.full"
+		local dmesg_file="${REPORT_DIR}/${test_name}.dmesg"
+		local outbad_file="${REPORT_DIR}/${test_name}.out.bad"
 		if [ -z "$_err_msg" ]; then
-			_err_msg="Test $sequm failed, reason unknown"
+			_err_msg="Test $test_name failed, reason unknown"
 		fi
 		echo -e "\t\t<failure message=\"$_err_msg\" type=\"TestFail\" />" >> $report
-		if [ -s $seqres.full ]; then
+		if [ -s "$full_file" ]; then
 			echo -e "\t\t<system-out>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat $seqres.full | tr -dc '[:print:][:space:]' | encode_xml >>$report
+			cat "$full_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-out>" >> $report
 		fi
-		if [ -f $seqres.dmesg ]; then
+		if [ -f "$dmesg_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat $seqres.dmesg | tr -dc '[:print:][:space:]' | encode_xml >>$report
+			cat "$dmesg_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
-		elif [ -s $seqres.out.bad ]; then
+		elif [ -s "$outbad_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			$diff $test_seq.out $seqres.out.bad | encode_xml >>$report
+			$diff "$out_src" "$outbad_file" | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		fi
@@ -134,13 +137,17 @@ _xunit_make_testcase_report()
 #  Common report generator entry points
 _make_section_report()
 {
-	local tests_count="$1"
-	local bad_count="$2"
-	local notrun_count="$3"
+	local sect_name="$1"
+	local tests_count="$2"
+	local bad_count="$3"
+	local notrun_count="$4"
+	local sect_time="$5"
 	for report in $REPORT_LIST; do
 		case "$report" in
 		"xunit")
-			_xunit_make_section_report "$tests_count" "$bad_count" "$notrun_count"
+			_xunit_make_section_report "$sect_name" "$tests_count" \
+						   "$bad_count" "$notrun_count" \
+						   "$sect_time"
 			;;
 		*)
 			_dump_err "format '$report' is not supported"
@@ -151,12 +158,15 @@ _make_section_report()
 
 _make_testcase_report()
 {
-	local test_seq="$1"
-	local test_status="$2"
+	local sect_name="$1"
+	local test_seq="$2"
+	local test_status="$3"
+	local test_time="$4"
 	for report in $REPORT_LIST; do
 		case "$report" in
 		"xunit")
-			_xunit_make_testcase_report "$test_seq" "$test_status"
+			_xunit_make_testcase_report "$sect_name" "$test_seq" \
+						    "$test_status" "$test_time"
 			;;
 		*)
 			_dump_err "report format '$report' is not supported"
