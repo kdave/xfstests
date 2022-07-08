@@ -553,6 +553,32 @@ _expunge_test()
 	return 0
 }
 
+# Retain in @bad / @notrun the result of the just-run @test_seq. @try array
+# entries are added prior to execution.
+_stash_test_status() {
+	local test_seq="$1"
+	local test_status="$2"
+
+	if $do_report && [[ $test_status != "expunge" ]]; then
+		_make_testcase_report "$section" "$test_seq" \
+				      "$test_status" "$((stop - start))"
+	fi
+
+	case "$test_status" in
+	fail)
+		bad+=("$test_seq")
+		;;
+	list|notrun)
+		notrun+=("$test_seq")
+		;;
+	pass|expunge)
+		;;
+	*)
+		echo "Unexpected test $test_seq status: $test_status"
+		;;
+	esac
+}
+
 # Can we run systemd scopes?
 HAVE_SYSTEMD_SCOPES=
 systemctl reset-failed "fstests-check" &>/dev/null
@@ -732,19 +758,8 @@ function run_section()
 	seqres="$check"
 	_check_test_fs
 
-	local tc_status="init"
-	prev_seq=""
+	local tc_status
 	for seq in $list ; do
-		# Run report for previous test!
-		if [ "$tc_status" == "fail" ]; then
-			bad+=("$seqnum")
-		fi
-		if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
-			_make_testcase_report "$section" "$seqnum" \
-					      "$tc_status" "$((stop - start))"
-		fi
-
-		prev_seq="$seq"
 		if [ ! -f $seq ]; then
 			# Try to get full name in case the user supplied only
 			# seq id and the test has a name. A bit of hassle to
@@ -784,20 +799,21 @@ function run_section()
 		if $showme; then
 			_expunge_test $seqnum
 			if [ $? -eq 1 ]; then
-			    tc_status="expunge"
-			    continue
+				tc_status="expunge"
+			else
+				echo
+				start=0
+				stop=0
+				tc_status="list"
 			fi
-			echo
-			start=0
-			stop=0
-			tc_status="list"
-			notrun+=("$seqnum")
+			_stash_test_status "$seqnum" "$tc_status"
 			continue
 		fi
 
 		tc_status="pass"
 		if [ ! -f $seq ]; then
 			echo " - no such test?"
+			_stash_test_status "$seqnum" "$tc_status"
 			continue
 		fi
 
@@ -808,6 +824,7 @@ function run_section()
 		_expunge_test $seqnum
 		if [ $? -eq 1 ]; then
 			tc_status="expunge"
+			_stash_test_status "$seqnum" "$tc_status"
 			continue
 		fi
 
@@ -857,8 +874,8 @@ function run_section()
 			$timestamp && echo " [not run]" && \
 				      echo -n "	$seqnum -- "
 			cat $seqres.notrun
-			notrun+=("$seqnum")
 			tc_status="notrun"
+			_stash_test_status "$seqnum" "$tc_status"
 
 			# Unmount the scratch fs so that we can wipe the scratch
 			# dev state prior to the next test run.
@@ -903,6 +920,7 @@ function run_section()
 		if [ ! -f $seq.out ]; then
 			_dump_err "no qualified output"
 			tc_status="fail"
+			_stash_test_status "$seqnum" "$tc_status"
 			continue;
 		fi
 
@@ -938,16 +956,8 @@ function run_section()
 				rm -f $seqres.hints
 			fi
 		fi
+		_stash_test_status "$seqnum" "$tc_status"
 	done
-
-	# make sure we record the status of the last test we ran.
-	if [ "$tc_status" == "fail" ]; then
-		bad+=("$seqnum")
-	fi
-	if $do_report && [[ ! $tc_status =~ ^(init|expunge)$ ]]; then
-		_make_testcase_report "$section" "$seqnum" "$tc_status" \
-				      "$((stop - start))"
-	fi
 
 	sect_stop=`_wallclock`
 	interrupt=false
