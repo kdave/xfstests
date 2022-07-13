@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 HUAWEI.  All Rights Reserved.
+#
+# FS QA Test 058
+#
+# Set 256 blocks in a block group, then inject I/O pressure,
+# it will trigger off kernel BUG in ext4_mb_mark_diskspace_used
+#
+# Regression test for commit
+# a08f789d2ab5 ext4: fix bug_on ext4_mb_use_inode_pa
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# real QA test starts here
+
+_supported_fs ext4
+_fixed_by_kernel_commit a08f789d2ab5 \
+	"ext4: fix bug_on ext4_mb_use_inode_pa"
+_require_scratch
+
+# set 256 blocks in a block group
+_scratch_mkfs -g 256 >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+$FSSTRESS_PROG -d $SCRATCH_MNT/stress -n 1000 >> $seqres.full 2>&1
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
