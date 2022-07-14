@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat, Copyright.  All Rights Reserved.
+#
+# FS QA Test No. 700
+#
+# Verify selinux label can be kept after RENAME_WHITEOUT. This is
+# a regression test for:
+#   70b589a37e1a ("xfs: add selinux labels to whiteout inodes")
+#
+. ./common/preamble
+_begin_fstest auto quick rename attr whiteout
+
+# Import common functions.
+. ./common/attr
+. ./common/renameat2
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_attrs
+_require_renameat2 whiteout
+
+_fixed_by_kernel_commit 70b589a37e1a \
+	xfs: add selinux labels to whiteout inodes
+
+get_selinux_label()
+{
+	local label
+
+	label=$(_getfattr --absolute-names -n security.selinux $@ | sed -n 's/security.selinux=\"\(.*\)\"/\1/p')
+	if [ ${PIPESTATUS[0]} -ne 0 -o -z "$label" ];then
+		_fail "Fail to get selinux label: $label"
+	fi
+	echo $label
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+# SELINUX_MOUNT_OPTIONS will be set in common/config if selinux is enabled
+if [ -z "$SELINUX_MOUNT_OPTIONS" ]; then
+	_notrun "Require selinux to be enabled"
+fi
+# This test need to verify selinux labels in objects, so unset this selinux
+# mount option
+export SELINUX_MOUNT_OPTIONS=""
+_scratch_mount
+
+touch $SCRATCH_MNT/f1
+echo "Before RENAME_WHITEOUT" >> $seqres.full
+ls -lZ $SCRATCH_MNT >> $seqres.full 2>&1
+# Expect f1 and f2 have same label after RENAME_WHITEOUT
+$here/src/renameat2 -w $SCRATCH_MNT/f1 $SCRATCH_MNT/f2
+echo "After RENAME_WHITEOUT" >> $seqres.full
+ls -lZ $SCRATCH_MNT >> $seqres.full 2>&1
+label1=$(get_selinux_label $SCRATCH_MNT/f1)
+label2=$(get_selinux_label $SCRATCH_MNT/f2)
+if [ "$label1" != "$label2" ];then
+	echo "$label1 != $label2"
+fi
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
