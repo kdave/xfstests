@@ -37,6 +37,15 @@ _scratch_unmount 2>/dev/null
 _scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount
 
+# Certain filesystems such as XFS require sufficient free blocks to handle the
+# worst-case directory expansion as a result of a creat() call.  If the fs
+# block size is very large (e.g. 64k) then the number of blocks required for
+# the creat() call can represent far more free space than the 256K left at the
+# end of this test.  Therefore, create the file that the last dd will write to
+# now when we know there's enough free blocks.
+later_file=$SCRATCH_MNT/later
+touch $later_file
+
 # this file will get removed to create 256k of free space after ENOSPC
 # conditions are created.
 dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=256K count=1 >>$seqres.full 2>&1
@@ -63,12 +72,12 @@ _freespace=`$DF_PROG -k $SCRATCH_MNT | tail -n 1 | awk '{print $5}'`
 
 # Try to write more than available space in chunks that will allow at least one
 # full write to succeed.
-dd if=/dev/zero of=$SCRATCH_MNT/tmp1 bs=128k count=8 >>$seqres.full 2>&1
+dd if=/dev/zero of=$later_file bs=128k count=8 >>$seqres.full 2>&1
 echo "Bytes written until ENOSPC:" >>$seqres.full
-du $SCRATCH_MNT/tmp1 >>$seqres.full
+du $later_file >>$seqres.full
 
 # And at least some of it should succeed.
-_filesize=`_get_filesize $SCRATCH_MNT/tmp1`
+_filesize=`_get_filesize $later_file`
 [ $_filesize -lt $((128 * 1024)) ] && \
 	_fail "Partial write until enospc failed; wrote $_filesize bytes."
 
