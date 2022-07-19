@@ -1,0 +1,34 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 FUJITSU LIMITED. All rights reserved.
+#
+# FS QA Test 533
+#
+# Regression test for xfsprogs commit
+# f4afdcb0ad11 ("xfs_db: clean up the salvage read callsites in set_cur()")
+#
+# This case test xfs_db whether can get the new magicnum field value even we
+# just have corrupted this field value.
+#
+
+. ./common/preamble
+_begin_fstest auto quick db
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_git_commit xfsprogs f4afdcb0ad11 \
+	"xfs_db: clean up the salvage read callsites in set_cur()"
+#skip fs check because invalid superblock 1
+_require_scratch_nocheck
+
+_scratch_mkfs_xfs >>$seqres.full 2>&1
+
+# write the bad magicnum field value(0) to the superblock 1
+_scratch_xfs_set_metadata_field "magicnum" "0" "sb 1"
+
+#Even magicnum field has been corrupted, we still can read this field value
+_scratch_xfs_get_metadata_field "magicnum" "sb 1"
+
+# success, all done
+status=0
+exit
