@@ -4557,6 +4557,32 @@ _get_file_block_size()
 	esac
 }
 
+# Given a file path and a byte length of a file operation under test, ensure
+# that the length is an integer multiple of the file's allocation unit size.
+# In other words, skip the test unless (oplen ≡ alloc_unit mod 0).  This is
+# intended for file remapping operations.
+_require_congruent_file_oplen()
+{
+	local file="$1"
+	local alloc_unit=$(_get_file_block_size "$file")
+	local oplen="$2"
+
+	case $FSTYP in
+	nfs*|cifs|9p|virtiofs|ceph|glusterfs|overlay|pvfs2)
+		# Network filesystems don't know about (or tell the client
+		# about) the underlying file allocation unit and they generally
+		# pass the file IO request to the underlying filesystem, so we
+		# don't have anything to check here.
+		return
+		;;
+	esac
+
+	test $alloc_unit -gt $oplen && \
+		_notrun "$1: file alloc unit $alloc_unit larger than op length $oplen"
+	test $((oplen % alloc_unit)) -eq 0 || \
+		_notrun "$1: file alloc unit $alloc_unit not congruent with op length $oplen"
+}
+
 # Get the minimum block size of an fs.
 _get_block_size()
 {
