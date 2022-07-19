@@ -7,7 +7,7 @@
 # Regression test for btrfs buffered read repair of compressed data.
 #
 . ./common/preamble
-_begin_fstest auto quick read_repair
+_begin_fstest auto quick read_repair compress
 
 . ./common/filter
 
@@ -60,7 +60,9 @@ _scratch_unmount
 echo "step 2......corrupt file extent"
 echo " corrupt stripe #1, devid $devid devpath $devpath physical $physical" \
 	>> $seqres.full
-$XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical 64K" $devpath > /dev/null
+dd if=$devpath of=$TEST_DIR/$seq.dump.good skip=$physical bs=1 count=4096 \
+	2>/dev/null
+$XFS_IO_PROG -c "pwrite -S 0xbb -b 4K $physical 4K" $devpath > /dev/null
 
 _scratch_mount
 
@@ -70,8 +72,9 @@ _btrfs_buffered_read_on_mirror 1 2 "$SCRATCH_MNT/foobar" 0 128K
 _scratch_unmount
 
 echo "step 4......check if the repair worked"
-$XFS_IO_PROG -c "pread -v -b 512 $physical 512" $devpath |\
-	_filter_xfs_io_offset
+dd if=$devpath of=$TEST_DIR/$seq.dump skip=$physical bs=1 count=4096 \
+	2>/dev/null
+cmp -bl $TEST_DIR/$seq.dump.good $TEST_DIR/$seq.dump
 
 _scratch_dev_pool_put
 # success, all done
