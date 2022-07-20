@@ -126,6 +126,39 @@ corruption_test()
 	fi
 }
 
+# Reading the last block of the file with mmap is tricky, so we need to be
+# a bit careful. Some filesystems read the last block in full, while others
+# return zeros in the last block past EOF, regardless of the contents on
+# disk. In the former, corruption should be detected and result in SIGBUS,
+# while in the latter we would expect zeros past EOF, but no error.
+corrupt_eof_block_test() {
+	local file_len=$1
+	local zap_len=$2
+	local page_aligned_eof=$(round_up_to_page_boundary $file_len)
+	_fsv_scratch_begin_subtest "Corruption test: EOF block"
+	setup_zeroed_file $file_len false
+	cmp $fsv_file $fsv_orig_file
+	echo "Corrupting bytes..."
+	head -c $zap_len /dev/zero | tr '\0' X \
+		| _fsv_scratch_corrupt_bytes $fsv_file $file_len
+
+	echo "Reading eof block via mmap into a temporary file..."
+	bash -c "trap '' SIGBUS; $XFS_IO_PROG -r $fsv_file \
+		-c 'mmap -r 0 $page_aligned_eof' \
+		-c 'mread -v $file_len $zap_len'" \
+		|& filter_sigbus >$tmp.eof_block_read 2>&1
+
+	head -c $file_len /dev/zero > $tmp.zero_cmp_file
+	$XFS_IO_PROG -r $tmp.zero_cmp_file \
+		-c "mmap -r 0 $page_aligned_eof" \
+		-c "mread -v $file_len $zap_len" >$tmp.eof_zero_read
+
+	echo "Checking for SIGBUS or zeros..."
+	grep -q -e '^Bus error$' $tmp.eof_block_read \
+		|| diff $tmp.eof_block_read $tmp.eof_zero_read \
+		&& echo "OK"
+}
+
 # Note: these tests just overwrite some bytes without checking their original
 # values.  Therefore, make sure to overwrite at least 5 or so bytes, to make it
 # nearly guaranteed that there will be a change -- even when the test file is
@@ -136,9 +169,7 @@ corruption_test 131072 4091 5
 corruption_test 131072 65536 65536
 corruption_test 131072 131067 5
 
-# Non-zeroed bytes in the final partial block beyond EOF should cause reads to
-# fail too.  Such bytes would be visible via mmap().
-corruption_test 130999 131000 72
+corrupt_eof_block_test 130999 72
 
 # Merkle tree corruption.
 corruption_test 200000 100 10 true
