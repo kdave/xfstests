@@ -71,11 +71,16 @@ _xunit_make_testcase_report()
 	local test_name="$2"
 	local test_status="$3"
 	local test_time="$4"
+	local report_format="$5"
+	local quiet
+
+	if [ "$report_format" = xunit-quiet ]; then
+		quiet=yes
+	fi
 
 	# TODO: other places may also win if no-section mode will be named like 'default/global'
 	if [ $sect_name == '-no-sections-' ]; then
 		sect_name='global'
-
 	fi
 	local report=$tmp.report.xunit.$sect_name.xml
 
@@ -104,14 +109,16 @@ _xunit_make_testcase_report()
 			_err_msg="Test $test_name failed, reason unknown"
 		fi
 		echo -e "\t\t<failure message=\"$_err_msg\" type=\"TestFail\" />" >> $report
-		if [ -s "$full_file" ]; then
+		if [ -z "$quiet" -a -s "$full_file" ]; then
 			echo -e "\t\t<system-out>" >> $report
 			printf	'<![CDATA[\n' >>$report
 			cat "$full_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-out>" >> $report
 		fi
-		if [ -f "$dmesg_file" ]; then
+		if [ -n "$quiet" ]; then
+		   :
+		elif [ -f "$dmesg_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
 			cat "$dmesg_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
@@ -144,7 +151,7 @@ _make_section_report()
 	local sect_time="$5"
 	for report in $REPORT_LIST; do
 		case "$report" in
-		"xunit")
+		"xunit"|"xunit-quiet")
 			_xunit_make_section_report "$sect_name" "$tests_count" \
 						   "$bad_count" "$notrun_count" \
 						   "$sect_time"
@@ -164,9 +171,9 @@ _make_testcase_report()
 	local test_time="$4"
 	for report in $REPORT_LIST; do
 		case "$report" in
-		"xunit")
+		"xunit"|"xunit-quiet")
 			_xunit_make_testcase_report "$sect_name" "$test_seq" \
-						    "$test_status" "$test_time"
+						    "$test_status" "$test_time" "$report"
 			;;
 		*)
 			_dump_err "report format '$report' is not supported"
@@ -178,7 +185,7 @@ _make_testcase_report()
 _assert_report_list() {
 	for report in $REPORT_LIST; do
 		case "$report" in
-		"xunit")
+		"xunit"|"xunit-quiet")
 			;;
 		*)
 			_fatal "report format '$report' is not supported"
