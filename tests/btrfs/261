@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 261
+#
+# Make sure btrfs raid profiles can handling one corrupted device
+# without affecting the consistency of the fs.
+#
+. ./common/preamble
+_begin_fstest auto volume raid
+
+_supported_fs btrfs
+_require_scratch_dev_pool 4
+_btrfs_get_profile_configs replace-missing
+_require_fssum
+
+prepare_fs()
+{
+	local mkfs_opts=$1
+
+	# We don't want too large fs which can take too long to populate
+	# And the extra redirection of stderr is to avoid the RAID56 warning
+	# message to polluate the golden output
+	_scratch_pool_mkfs $mkfs_opts -b 1G >> $seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		_fail "mkfs $mkfs_opts failed"
+	fi
+
+	# Disable compression, as compressed read repair is known to have problems
+	_scratch_mount -o compress=no
+
+	# Fill some part of the fs first
+	$XFS_IO_PROG -f -c "pwrite -S 0xfe 0 400M" $SCRATCH_MNT/garbage > /dev/null 2>&1
+
+	# Then use fsstress to generate some extra contents.
+	# Disable setattr related operations, as it may set NODATACOW which will
+	# not allow us to use btrfs checksum to verify the content.
+	$FSSTRESS_PROG -f setattr=0 -d $SCRATCH_MNT -w -n 3000 > /dev/null 2>&1
+	sync
+
+	# Save the fssum of this fs
+	$FSSUM_PROG -A -f -w $tmp.saved_fssum $SCRATCH_MNT
+	_scratch_unmount
+}
+
+workload()
+{
+	local mkfs_opts=$1
+	local num_devs=$2
+
+	_scratch_dev_pool_get 4
+	echo "=== Testing profile $mkfs_opts ===" >> $seqres.full
+	rm -f -- $tmp.saved_fssum
+	prepare_fs "$mkfs_opts"
+
+	# $SCRATCH_DEV is always the first device of dev pool.
+	# Corrupt the disk but keep the primary superblock.
+	$XFS_IO_PROG -c "pwrite 1M 1023M" $SCRATCH_DEV > /dev/null 2>&1
+
+	_scratch_mount
+
+	# All content should be fine
+	$FSSUM_PROG -r $tmp.saved_fssum $SCRATCH_MNT > /dev/null
+
+	# Scrub to fix the fs, this is known to report various correctable
+	# errors
+	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full 2>&1
+
+	# Make sure above scrub fixed the fs
+	$BTRFS_UTIL_PROG scrub start -Br $SCRATCH_MNT >> $seqres.full
+	if [ $? -ne 0 ]; then
+		echo "scrub failed to fix the fs for profile $mkfs_opts"
+	fi
+	_scratch_unmount
+	_scratch_dev_pool_put
+}
+
+for t in "${_btrfs_profile_configs[@]}"; do
+	workload "$t"
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
