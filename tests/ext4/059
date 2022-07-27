@@ -1,0 +1,41 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 HUAWEI.  All Rights Reserved.
+#
+# FS QA Test No. 059
+#
+# A regression test for b55c3cd102a6 ("ext4: add reserved GDT blocks check").
+# Make sure there's not kernel crash, if resize an ext4 which resize_inode
+# feature is disabled but has reserved GDT blocks.
+#
+. ./common/preamble
+_begin_fstest auto resize quick
+
+# real QA test starts here
+_supported_fs ext4
+_fixed_by_kernel_commit b55c3cd102a6 \
+	"ext4: add reserved GDT blocks check"
+
+_require_command "$RESIZE2FS_PROG" resize2fs
+_require_command "$DEBUGFS_PROG" debugfs
+_require_scratch_size_nocheck $((1024 * 1024))
+
+# Initalize a 512M ext4 fs with resize_inode feature disabled
+dev_size=$((512 * 1024 * 1024))
+MKFS_OPTIONS="-O ^resize_inode $MKFS_OPTIONS" _scratch_mkfs_sized $dev_size \
+	>>$seqres.full 2>&1 || _fail "mkfs failed"
+
+# Force some reserved GDT blocks to trigger the bug
+$DEBUGFS_PROG -w -R "set_super_value s_reserved_gdt_blocks 100" $SCRATCH_DEV \
+	>>$seqres.full 2>&1
+$DEBUGFS_PROG -R "show_super_stats -h" $SCRATCH_DEV 2>/dev/null | \
+	grep "Reserved GDT blocks"
+
+_scratch_mount
+
+# Expect no crash from this resize operation
+$RESIZE2FS_PROG $SCRATCH_DEV 1G >> $seqres.full 2>&1
+
+# success, all done
+status=0
+exit
