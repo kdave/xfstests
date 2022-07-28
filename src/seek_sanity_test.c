@@ -40,12 +40,38 @@ static void get_file_system(int fd)
 	}
 }
 
+/* Compute the file allocation unit size for an XFS file. */
+static int detect_xfs_alloc_unit(int fd)
+{
+	struct fsxattr fsx;
+	struct xfs_fsop_geom fsgeom;
+	int ret;
+
+	ret = ioctl(fd, XFS_IOC_FSGEOMETRY, &fsgeom);
+	if (ret)
+		return -1;
+
+	ret = ioctl(fd, XFS_IOC_FSGETXATTR, &fsx);
+	if (ret)
+		return -1;
+
+	alloc_size = fsgeom.blocksize;
+	if (fsx.fsx_xflags & XFS_XFLAG_REALTIME)
+		alloc_size *= fsgeom.rtextsize;
+
+	return 0;
+}
+
 static int get_io_sizes(int fd)
 {
 	off_t pos = 0, offset = 1;
 	struct stat buf;
 	int shift, ret;
 	int pagesz = sysconf(_SC_PAGE_SIZE);
+
+	ret = detect_xfs_alloc_unit(fd);
+	if (!ret)
+		goto done;
 
 	ret = fstat(fd, &buf);
 	if (ret) {
@@ -54,16 +80,8 @@ static int get_io_sizes(int fd)
 		return ret;
 	}
 
-	/*
-	 * st_blksize is typically also the allocation size.  However, XFS
-	 * rounds this up to the page size, so if the stat blocksize is exactly
-	 * one page, use this iterative algorithm to see if SEEK_DATA will hint
-	 * at a more precise answer based on the filesystem's (pre)allocation
-	 * decisions.
-	 */
+	/* st_blksize is typically also the allocation size */
 	alloc_size = buf.st_blksize;
-	if (alloc_size != pagesz)
-		goto done;
 
 	/* try to discover the actual alloc size */
 	while (pos == 0 && offset < alloc_size) {
