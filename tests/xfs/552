@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Fujitsu Limited.  All Rights Reserved.
+#
+# FS QA Test No. 552
+#
+# Test memory failure mechanism when dax and reflink working together
+#   test for partly reflinked file
+#
+. ./common/preamble
+_begin_fstest auto quick clone dax
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_check_dmesg
+_require_scratch_reflink
+_require_xfs_scratch_rmapbt
+_require_scratch_dax_mountopt "dax"
+_require_test_program "t_mmap_cow_memory_failure"
+
+echo "Format and mount"
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount "-o dax" >> $seqres.full 2>&1
+
+testdir=$SCRATCH_MNT/test-$seq
+mkdir $testdir
+
+echo "Create the original files"
+nr=16
+blksz=$(get_page_size)
+_pwrite_byte 0x61 0 $((blksz * nr)) $testdir/testfile >> $seqres.full
+_pwrite_byte 0x62 0 $((blksz * nr)) $testdir/poisonfile >> $seqres.full
+seq 0 2 $((nr - 1)) | while read i; do
+	_reflink_range $testdir/testfile $((blksz * i)) \
+		$testdir/poisonfile $((blksz * i)) $blksz >> $seqres.full
+done
+_scratch_cycle_mount "dax"
+
+echo "Inject memory failure (1 page)"
+$here/src/t_mmap_cow_memory_failure -s1 -S1 -R $testdir/testfile -P $testdir/poisonfile
+
+echo "Inject memory failure (2 pages)"
+# poison on reflinked page and not reflinked page
+$here/src/t_mmap_cow_memory_failure -s2 -S2 -R $testdir/testfile -P $testdir/poisonfile
+
+_check_dmesg_for "Sending SIGBUS to t_mmap_cow_memo" || echo "Memory failure didn't kill the process"
+_check_dmesg_for "recovery action for dax page: Recovered" || echo "Failured page didn't recovered"
+
+# success, all done
+status=0
+exit
