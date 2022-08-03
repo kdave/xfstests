@@ -4212,6 +4212,20 @@ _check_dmesg()
 	fi
 }
 
+# Make whatever configuration changes we need ahead of testing fs shutdowns due
+# to unexpected IO errors while updating metadata.  The sole parameter should
+# be the fs device, e.g.  $SCRATCH_DEV.
+_prepare_for_eio_shutdown()
+{
+	local dev="$1"
+
+	case "$FSTYP" in
+	"xfs")
+		_xfs_prepare_for_eio_shutdown "$dev"
+		;;
+	esac
+}
+
 # capture the kmemleak report
 _capture_kmemleak()
 {
@@ -4474,7 +4488,7 @@ run_fsx()
 #
 # Usage example:
 #   _require_fs_sysfs error/fail_at_unmount
-_require_fs_sysfs()
+_has_fs_sysfs()
 {
 	local attr=$1
 	local dname
@@ -4490,9 +4504,18 @@ _require_fs_sysfs()
 		_fail "Usage: _require_fs_sysfs <sysfs_attr_path>"
 	fi
 
-	if [ ! -e /sys/fs/${FSTYP}/${dname}/${attr} ];then
-		_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr}"
-	fi
+	test -e /sys/fs/${FSTYP}/${dname}/${attr}
+}
+
+# Require the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
+_require_fs_sysfs()
+{
+	_has_fs_sysfs "$@" && return
+
+	local attr=$1
+	local dname=$(_short_dev $TEST_DEV)
+
+	_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr}"
 }
 
 _require_statx()

@@ -823,6 +823,35 @@ _scratch_xfs_unmount_dirty()
 	_scratch_unmount
 }
 
+# Prepare a mounted filesystem for an IO error shutdown test by disabling retry
+# for metadata writes.  This prevents a (rare) log livelock when:
+#
+# - The log has given out all available grant space, preventing any new
+#   writers from tripping over IO errors (and shutting down the fs/log),
+# - All log buffers were written to disk, and
+# - The log tail is pinned because the AIL keeps hitting EIO trying to write
+#   committed changes back into the filesystem.
+#
+# Real users might want the default behavior of the AIL retrying writes forever
+# but for testing purposes we don't want to wait.
+#
+# The sole parameter should be the filesystem data device, e.g. $SCRATCH_DEV.
+_xfs_prepare_for_eio_shutdown()
+{
+	local dev="$1"
+	local ctlfile="error/fail_at_unmount"
+
+	# Don't retry any writes during the (presumably) post-shutdown unmount
+	_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_attr $dev "$ctlfile" 1
+
+	# Disable retry of metadata writes that fail with EIO
+	for ctl in max_retries retry_timeout_seconds; do
+		ctlfile="error/metadata/EIO/$ctl"
+
+		_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_attr $dev "$ctlfile" 0
+	done
+}
+
 # Skip if we are running an older binary without the stricter input checks.
 # Make multiple checks to be sure that there is no regression on the one
 # selected feature check, which would skew the result.
