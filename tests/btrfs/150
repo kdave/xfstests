@@ -15,6 +15,7 @@ _begin_fstest auto quick dangerous read_repair
 
 # Import common functions.
 . ./common/filter
+. ./common/fail_make_request
 
 # real QA test starts here
 
@@ -25,22 +26,18 @@ _require_fail_make_request
 _require_scratch_dev_pool 2
 _scratch_dev_pool_get 2
 
-SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
 enable_io_failure()
 {
-	echo 100 > $DEBUGFS_MNT/fail_make_request/probability
-	echo 1000 > $DEBUGFS_MNT/fail_make_request/times
-	echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
+	_allow_fail_make_request 100 1000 > /dev/null
 	echo 1 > $DEBUGFS_MNT/fail_make_request/task-filter
-	echo 1 > $SYSFS_BDEV/make-it-fail
+	_start_fail_scratch_dev > /dev/null
 }
 
 disable_io_failure()
 {
-	echo 0 > $DEBUGFS_MNT/fail_make_request/probability
-	echo 0 > $DEBUGFS_MNT/fail_make_request/times
+	_disallow_fail_make_request > /dev/null
 	echo 0 > $DEBUGFS_MNT/fail_make_request/task-filter
-	echo 0 > $SYSFS_BDEV/make-it-fail
+	_stop_fail_scratch_dev > /dev/null
 }
 
 _check_minimal_fs_size $(( 1024 * 1024 * 1024 ))

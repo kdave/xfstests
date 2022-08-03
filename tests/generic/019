@@ -14,47 +14,17 @@ fio_config=$tmp.fio
 
 # Import common functions.
 . ./common/filter
+. ./common/fail_make_request
 _supported_fs generic
 _require_scratch
 _require_block_device $SCRATCH_DEV
 _require_fail_make_request
 
-SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
-
-allow_fail_make_request()
-{
-    echo "Allow global fail_make_request feature"
-    echo 100 > $DEBUGFS_MNT/fail_make_request/probability
-    echo 9999999 > $DEBUGFS_MNT/fail_make_request/times
-    echo 0 >  /sys/kernel/debug/fail_make_request/verbose
-}
-
-disallow_fail_make_request()
-{
-    echo "Disallow global fail_make_request feature"
-    echo 0 > $DEBUGFS_MNT/fail_make_request/probability
-    echo 0 > $DEBUGFS_MNT/fail_make_request/times
-}
-
-start_fail_scratch_dev()
-{
-    echo "Force SCRATCH_DEV device failure"
-    echo " echo 1 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
-    echo 1 > $SYSFS_BDEV/make-it-fail
-}
-
-stop_fail_scratch_dev()
-{
-    echo "Make SCRATCH_DEV device operable again"
-    echo " echo 0 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
-    echo 0 > $SYSFS_BDEV/make-it-fail
-}
-
 # Override the default cleanup function.
 _cleanup()
 {
 	kill $fs_pid $fio_pid &> /dev/null
-	disallow_fail_make_request
+	_disallow_fail_make_request
 	cd /
 	rm -r -f $tmp.*
 }
@@ -129,7 +99,7 @@ _workout()
 
 	# Let's it work for awhile, and force device failure
 	sleep $RUN_TIME
-	start_fail_scratch_dev
+	_start_fail_scratch_dev
 	# After device turns in to failed state filesystem may yet not know about
 	# that so buffered write(2) may succeed, but any integrity operations
 	# such as (sync, fsync, fdatasync, direct-io) should fail.
@@ -147,7 +117,7 @@ _workout()
 	run_check _scratch_unmount
 	# Once filesystem was umounted no one is able to write to block device
 	# It is now safe to bring device back to normal state
-	stop_fail_scratch_dev
+	_stop_fail_scratch_dev
 
 	# In order to check that filesystem is able to recover journal on mount(2)
 	# perform mount/umount, after that all errors should be fixed
@@ -159,7 +129,7 @@ _workout()
 
 _scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount
-allow_fail_make_request
+_allow_fail_make_request
 _workout
 status=$?
 exit

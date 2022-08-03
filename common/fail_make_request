@@ -1,0 +1,47 @@
+##/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# common functions for setting up and tearing down block device error injection
+
+_require_fail_make_request()
+{
+    [ -f "$DEBUGFS_MNT/fail_make_request/probability" ] \
+	|| _notrun "$DEBUGFS_MNT/fail_make_request \
+ not found. Seems that CONFIG_FAULT_INJECTION_DEBUG_FS kernel config option not enabled"
+}
+
+_allow_fail_make_request()
+{
+    local prob="${1:-100}"
+    local times="${2:-9999999}"
+    local verbose="${3:-0}"
+
+    echo "Allow global fail_make_request feature"
+    echo "$prob" > $DEBUGFS_MNT/fail_make_request/probability
+    echo "$times" > $DEBUGFS_MNT/fail_make_request/times
+    echo "$verbose" > $DEBUGFS_MNT/fail_make_request/verbose
+}
+
+_disallow_fail_make_request()
+{
+    echo "Disallow global fail_make_request feature"
+    echo 0 > $DEBUGFS_MNT/fail_make_request/probability
+    echo 0 > $DEBUGFS_MNT/fail_make_request/times
+    echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
+}
+
+_start_fail_scratch_dev()
+{
+    local SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
+    echo "Force SCRATCH_DEV device failure"
+    echo " echo 1 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
+    echo 1 > $SYSFS_BDEV/make-it-fail
+}
+
+_stop_fail_scratch_dev()
+{
+    local SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
+    echo "Make SCRATCH_DEV device operable again"
+    echo " echo 0 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
+    echo 0 > $SYSFS_BDEV/make-it-fail
+}

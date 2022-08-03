@@ -18,27 +18,23 @@ _begin_fstest auto quick metadata
 
 # Import common functions.
 . ./common/filter
+. ./common/fail_make_request
 
 # real QA test starts here
 _supported_fs btrfs
 _require_scratch
 _require_fail_make_request
 
-SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
-
 enable_io_failure()
 {
-	echo 100 > $DEBUGFS_MNT/fail_make_request/probability
-	echo 1000 > $DEBUGFS_MNT/fail_make_request/times
-	echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
-	echo 1 > $SYSFS_BDEV/make-it-fail
+	_allow_fail_make_request 100 1000 > /dev/null
+	_start_fail_scratch_dev > /dev/null
 }
 
 disable_io_failure()
 {
-	echo 0 > $SYSFS_BDEV/make-it-fail
-	echo 0 > $DEBUGFS_MNT/fail_make_request/probability
-	echo 0 > $DEBUGFS_MNT/fail_make_request/times
+	_stop_fail_scratch_dev > /dev/null
+	_disallow_fail_make_request > /dev/null
 }
 
 # We will abort a btrfs transaction later, which always produces a warning in
