@@ -30,18 +30,34 @@ _disallow_fail_make_request()
     echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
 }
 
+_bdev_fail_make_request()
+{
+    local bdev="$1"
+    local status="$2"
+    local sysfs_bdev=$(_sysfs_dev $bdev)
+
+    echo " echo $status > $sysfs_bdev/make-it-fail" >> $seqres.full
+    echo "$status" > $sysfs_bdev/make-it-fail
+}
+
 _start_fail_scratch_dev()
 {
-    local SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
     echo "Force SCRATCH_DEV device failure"
-    echo " echo 1 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
-    echo 1 > $SYSFS_BDEV/make-it-fail
+
+    _bdev_fail_make_request $SCRATCH_DEV 1
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        _bdev_fail_make_request $SCRATCH_LOGDEV 1
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        _bdev_fail_make_request $SCRATCH_RTDEV 1
 }
 
 _stop_fail_scratch_dev()
 {
-    local SYSFS_BDEV=`_sysfs_dev $SCRATCH_DEV`
     echo "Make SCRATCH_DEV device operable again"
-    echo " echo 0 > $SYSFS_BDEV/make-it-fail" >> $seqres.full
-    echo 0 > $SYSFS_BDEV/make-it-fail
+
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+        _bdev_fail_make_request $SCRATCH_RTDEV 0
+    [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+        _bdev_fail_make_request $SCRATCH_LOGDEV 0
+    _bdev_fail_make_request $SCRATCH_DEV 0
 }
