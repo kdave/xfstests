@@ -841,6 +841,13 @@ _xfs_prepare_for_eio_shutdown()
 	local dev="$1"
 	local ctlfile="error/fail_at_unmount"
 
+	# Once we enable IO errors, it's possible that a writer thread will
+	# trip over EIO, cancel the transaction, and shut down the system.
+	# This is expected behavior, so we need to remove the "Internal error"
+	# message from the list of things that can cause the test to be marked
+	# as failed.
+	_add_dmesg_filter "Internal error"
+
 	# Don't retry any writes during the (presumably) post-shutdown unmount
 	_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_attr $dev "$ctlfile" 1
 

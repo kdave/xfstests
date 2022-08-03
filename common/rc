@@ -4171,8 +4171,25 @@ _check_dmesg_for()
 # lockdep.
 _check_dmesg_filter()
 {
+	local extra_filter=
+	local filter_file="${RESULT_DIR}/dmesg_filter"
+
+	test -e "$filter_file" && extra_filter="-f $filter_file"
+
 	egrep -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
-		-e "BUG: MAX_STACK_TRACE_ENTRIES too low"
+		-e "BUG: MAX_STACK_TRACE_ENTRIES too low" \
+		$extra_filter
+}
+
+# Add a simple expression to the default dmesg filter
+_add_dmesg_filter()
+{
+	local regexp="$1"
+	local filter_file="${RESULT_DIR}/dmesg_filter"
+
+	if [ ! -e "$filter_file" ] || ! grep -q "$regexp" "$filter_file"; then
+		echo "$regexp" >> "${RESULT_DIR}/dmesg_filter"
+	fi
 }
 
 # check dmesg log for WARNING/Oops/etc.
