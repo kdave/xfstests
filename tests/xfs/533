@@ -21,13 +21,19 @@ _fixed_by_git_commit xfsprogs f4afdcb0ad11 \
 #skip fs check because invalid superblock 1
 _require_scratch_nocheck
 
+# The error messages in the golden output come from the V5 superblock verifier
+# routines, so ignore V4 filesystems.
+_require_scratch_xfs_crc
+
 _scratch_mkfs_xfs >>$seqres.full 2>&1
 
 # write the bad magicnum field value(0) to the superblock 1
 _scratch_xfs_set_metadata_field "magicnum" "0" "sb 1"
 
-#Even magicnum field has been corrupted, we still can read this field value
-_scratch_xfs_get_metadata_field "magicnum" "sb 1"
+# Even magicnum field has been corrupted, we still can read this field value.
+# The error message changed in xfsprogs 5.19.
+_scratch_xfs_get_metadata_field "magicnum" "sb 1" 2>&1 | \
+	sed -e 's/Superblock has bad magic number 0x0. Not an XFS filesystem?/bad magic number/g'
 
 # success, all done
 status=0
