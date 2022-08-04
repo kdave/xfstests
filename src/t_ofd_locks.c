@@ -187,6 +187,8 @@ int main(int argc, char **argv)
 	struct sembuf sop;
 	int opt, ret, retry;
 
+	//avoid libcap errno bug
+	errno = 0;
 	while((opt = getopt(argc, argv, "sgrwo:l:PRWtFd")) != -1) {
 		switch(opt) {
 		case 's':
