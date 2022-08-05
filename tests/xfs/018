@@ -47,7 +47,8 @@ test_attr_replay()
 	touch $testfile
 
 	# Verify attr recovery
-	$ATTR_PROG -l $testfile | _filter_scratch
+	$ATTR_PROG -l $testfile >> $seqres.full
+	echo "Checking contents of $attr_name" >> $seqres.full
 	echo -n "$attr_name: "
 	$ATTR_PROG -q -g $attr_name $testfile 2> /dev/null | md5sum;
 
@@ -98,6 +99,10 @@ attr64k="$attr32k$attr32k"
 echo "*** mkfs"
 _scratch_mkfs >/dev/null
 
+blk_sz=$(_scratch_xfs_get_sb_field blocksize)
+err_inj_attr_sz=$(( blk_sz / 3 - 50 ))
+err_inj_attr_val=$(printf "A%.0s" $(seq $err_inj_attr_sz))
+
 echo "*** mount FS"
 _scratch_mount
 
@@ -140,12 +145,12 @@ test_attr_replay extent_file1 "attr_name2" $attr1k "s" "larp"
 test_attr_replay extent_file1 "attr_name2" $attr1k "r" "larp"
 
 # extent, inject error on split
-create_test_file extent_file2 3 $attr1k
-test_attr_replay extent_file2 "attr_name4" $attr1k "s" "da_leaf_split"
+create_test_file extent_file2 3 $err_inj_attr_val
+test_attr_replay extent_file2 "attr_name4" $attr256 "s" "da_leaf_split"
 
 # extent, inject error on fork transition
-create_test_file extent_file3 3 $attr1k
-test_attr_replay extent_file3 "attr_name4" $attr1k "s" "attr_leaf_to_node"
+create_test_file extent_file3 3 $err_inj_attr_val
+test_attr_replay extent_file3 "attr_name4" $attr256 "s" "attr_leaf_to_node"
 
 # extent, remote
 create_test_file extent_file4 1 $attr1k
