@@ -178,6 +178,9 @@ _scratch_options()
     "xfs")
 	_scratch_xfs_options "$@"
 	;;
+    ext2|ext3|ext4|ext4dev)
+	_scratch_ext4_options "$@"
+	;;
     esac
 }
 
@@ -964,6 +967,13 @@ _scratch_mkfs_sized()
 		fi
 		;;
 	ext2|ext3|ext4|ext4dev)
+		# Can't use _scratch_mkfs_ext4 here because the block count has
+		# to come after the device path.
+		if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ]; then
+			${MKFS_PROG} -F -O journal_dev $MKFS_OPTIONS $SCRATCH_LOGDEV || \
+				_notrun "Could not make scratch logdev"
+			MKFS_OPTIONS="$MKFS_OPTIONS -J device=$SCRATCH_LOGDEV"
+		fi
 		${MKFS_PROG} -t $FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV $blocks
 		;;
 	gfs2)
@@ -1093,7 +1103,7 @@ _scratch_mkfs_blocksized()
 		_scratch_mkfs_xfs $MKFS_OPTIONS -b size=$blocksize
 		;;
 	ext2|ext3|ext4)
-		${MKFS_PROG} -t $FSTYP -F $MKFS_OPTIONS -b $blocksize $SCRATCH_DEV
+		_scratch_mkfs_ext4 $MKFS_OPTIONS -b $blocksize
 		;;
 	gfs2)
 		${MKFS_PROG} -t $FSTYP $MKFS_OPTIONS -O -b $blocksize $SCRATCH_DEV

@@ -63,16 +63,32 @@ _setup_large_ext4_fs()
 	return 0
 }
 
+_scratch_mkfs_ext4_opts()
+{
+	mkfs_opts=$*
+
+	_scratch_options mkfs
+
+	echo "$MKFS_EXT4_PROG $SCRATCH_OPTIONS $mkfs_opts"
+}
+
 _scratch_mkfs_ext4()
 {
-	local mkfs_cmd="$MKFS_EXT4_PROG -F"
+	local mkfs_cmd="`_scratch_mkfs_ext4_opts`"
 	local mkfs_filter="grep -v -e ^Warning: -e \"^mke2fs \" | grep -v \"^$\""
 	local tmp=`mktemp -u`
 	local mkfs_status
 
-	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
-	    $mkfs_cmd -O journal_dev $MKFS_OPTIONS $SCRATCH_LOGDEV && \
-	    mkfs_cmd="$mkfs_cmd -J device=$SCRATCH_LOGDEV"
+	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ]; then
+		$MKFS_EXT4_PROG -F -O journal_dev $MKFS_OPTIONS $* $SCRATCH_LOGDEV 2>$tmp.mkfserr 1>$tmp.mkfsstd
+		mkjournal_status=$?
+
+		if [ $mkjournal_status -ne 0 ]; then
+			cat $tmp.mkfsstd
+			cat $tmp.mkfserr >&2
+			return $mkjournal_status
+		fi
+	fi
 
 	_scratch_do_mkfs "$mkfs_cmd" "$mkfs_filter" $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
 	mkfs_status=$?
@@ -153,4 +169,25 @@ _require_scratch_richacl_ext4()
 	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel doesn't support richacl feature on $FSTYP"
 	_scratch_unmount
+}
+
+_scratch_ext4_options()
+{
+	local type=$1
+	local log_opt=""
+
+	case $type in
+	mkfs)
+		SCRATCH_OPTIONS="$SCRATCH_OPTIONS -F"
+		log_opt="-J device=$SCRATCH_LOGDEV"
+		;;
+	mount)
+		# As of kernel 5.19, the kernel mount option path parser only
+		# accepts direct paths to block devices--the final path
+		# component cannot be a symlink.
+		log_opt="-o journal_path=$(realpath -q "$SCRATCH_LOGDEV")"
+		;;
+	esac
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
+		SCRATCH_OPTIONS="$SCRATCH_OPTIONS ${log_opt}"
 }
