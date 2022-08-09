@@ -4,25 +4,88 @@
 #
 # common functions for setting up and tearing down a dmerror device
 
+_dmerror_setup_vars()
+{
+	local backing_dev="$1"
+	local tag="$2"
+	local target="$3"
+
+	test -z "$target" && target=error
+	local blk_dev_size=$(blockdev --getsz "$backing_dev")
+
+	eval export "DMLINEAR_${tag}TABLE=\"0 $blk_dev_size linear $backing_dev 0\""
+	eval export "DMERROR_${tag}TABLE=\"0 $blk_dev_size $target $backing_dev 0\""
+}
+
 _dmerror_setup()
 {
-	local dm_backing_dev=$SCRATCH_DEV
+	local rt_target=
+	local log_target=
 
-	local blk_dev_size=`blockdev --getsz $dm_backing_dev`
+	for arg in "$@"; do
+		case "${arg}" in
+		no_rt)		rt_target=linear;;
+		no_log)		log_target=linear;;
+		*)		echo "${arg}: Unknown _dmerror_setup arg.";;
+		esac
+	done
 
+	# Scratch device
 	export DMERROR_DEV='/dev/mapper/error-test'
+	_dmerror_setup_vars $SCRATCH_DEV
 
-	export DMLINEAR_TABLE="0 $blk_dev_size linear $dm_backing_dev 0"
+	# Realtime device.  We reassign SCRATCH_RTDEV so that all the scratch
+	# helpers continue to work unmodified.
+	if [ -n "$SCRATCH_RTDEV" ]; then
+		if [ -z "$NON_ERROR_RTDEV" ]; then
+			# Set up the device switch
+			local dm_backing_dev=$SCRATCH_RTDEV
+			export NON_ERROR_RTDEV="$SCRATCH_RTDEV"
+			SCRATCH_RTDEV='/dev/mapper/error-rttest'
+		else
+			# Already set up; recreate tables
+			local dm_backing_dev="$NON_ERROR_RTDEV"
+		fi
 
-	export DMERROR_TABLE="0 $blk_dev_size error $dm_backing_dev 0"
+		_dmerror_setup_vars $dm_backing_dev RT $rt_target
+	fi
+
+	# External log device.  We reassign SCRATCH_LOGDEV so that all the
+	# scratch helpers continue to work unmodified.
+	if [ -n "$SCRATCH_LOGDEV" ]; then
+		if [ -z "$NON_ERROR_LOGDEV" ]; then
+			# Set up the device switch
+			local dm_backing_dev=$SCRATCH_LOGDEV
+			export NON_ERROR_LOGDEV="$SCRATCH_LOGDEV"
+			SCRATCH_LOGDEV='/dev/mapper/error-logtest'
+		else
+			# Already set up; recreate tables
+			local dm_backing_dev="$NON_ERROR_LOGDEV"
+		fi
+
+		_dmerror_setup_vars $dm_backing_dev LOG $log_target
+	fi
 }
 
 _dmerror_init()
 {
-	_dmerror_setup
+	_dmerror_setup "$@"
+
 	_dmsetup_remove error-test
 	_dmsetup_create error-test --table "$DMLINEAR_TABLE" || \
 		_fatal "failed to create dm linear device"
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		_dmsetup_remove error-rttest
+		_dmsetup_create error-rttest --table "$DMLINEAR_RTTABLE" || \
+			_fatal "failed to create dm linear rt device"
+	fi
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		_dmsetup_remove error-logtest
+		_dmsetup_create error-logtest --table "$DMLINEAR_LOGTABLE" || \
+			_fatal "failed to create dm linear log device"
+	fi
 }
 
 _dmerror_mount()
@@ -39,11 +102,27 @@ _dmerror_unmount()
 
 _dmerror_cleanup()
 {
+	test -n "$NON_ERROR_LOGDEV" && $DMSETUP_PROG resume error-logtest &>/dev/null
+	test -n "$NON_ERROR_RTDEV" && $DMSETUP_PROG resume error-rttest &>/dev/null
 	$DMSETUP_PROG resume error-test > /dev/null 2>&1
+
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
+
+	test -n "$NON_ERROR_LOGDEV" && _dmsetup_remove error-logtest
+	test -n "$NON_ERROR_RTDEV" && _dmsetup_remove error-rttest
 	_dmsetup_remove error-test
 
 	unset DMERROR_DEV DMLINEAR_TABLE DMERROR_TABLE
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		SCRATCH_LOGDEV="$NON_ERROR_LOGDEV"
+		unset NON_ERROR_LOGDEV DMLINEAR_LOGTABLE DMERROR_LOGTABLE
+	fi
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		SCRATCH_RTDEV="$NON_ERROR_RTDEV"
+		unset NON_ERROR_RTDEV DMLINEAR_RTTABLE DMERROR_RTTABLE
+	fi
 }
 
 _dmerror_load_error_table()
@@ -59,11 +138,46 @@ _dmerror_load_error_table()
 		suspend_opt="$*"
 	fi
 
+	# Suspend the scratch device before the log and realtime devices so
+	# that the kernel can freeze and flush the filesystem if the caller
+	# wanted a freeze.
 	$DMSETUP_PROG suspend $suspend_opt error-test
 	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
 
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG suspend $suspend_opt error-rttest
+		[ $? -ne 0 ] && _fail "failed to suspend error-rttest"
+	fi
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG suspend $suspend_opt error-logtest
+		[ $? -ne 0 ] && _fail "failed to suspend error-logtest"
+	fi
+
+	# Load new table
 	$DMSETUP_PROG load error-test --table "$DMERROR_TABLE"
 	load_res=$?
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG load error-rttest --table "$DMERROR_RTTABLE"
+		[ $? -ne 0 ] && _fail "failed to load error table into error-rttest"
+	fi
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG load error-logtest --table "$DMERROR_LOGTABLE"
+		[ $? -ne 0 ] && _fail "failed to load error table into error-logtest"
+	fi
+
+	# Resume devices in the opposite order that we suspended them.
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG resume error-logtest
+		[ $? -ne 0 ] && _fail  "failed to resume error-logtest"
+	fi
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG resume error-rttest
+		[ $? -ne 0 ] && _fail  "failed to resume error-rttest"
+	fi
 
 	$DMSETUP_PROG resume error-test
 	resume_res=$?
@@ -85,11 +199,46 @@ _dmerror_load_working_table()
 		suspend_opt="$*"
 	fi
 
+	# Suspend the scratch device before the log and realtime devices so
+	# that the kernel can freeze and flush the filesystem if the caller
+	# wanted a freeze.
 	$DMSETUP_PROG suspend $suspend_opt error-test
 	[ $? -ne 0 ] && _fail  "dmsetup suspend failed"
 
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG suspend $suspend_opt error-rttest
+		[ $? -ne 0 ] && _fail "failed to suspend error-rttest"
+	fi
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG suspend $suspend_opt error-logtest
+		[ $? -ne 0 ] && _fail "failed to suspend error-logtest"
+	fi
+
+	# Load new table
 	$DMSETUP_PROG load error-test --table "$DMLINEAR_TABLE"
 	load_res=$?
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG load error-rttest --table "$DMLINEAR_RTTABLE"
+		[ $? -ne 0 ] && _fail "failed to load working table into error-rttest"
+	fi
+
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG load error-logtest --table "$DMLINEAR_LOGTABLE"
+		[ $? -ne 0 ] && _fail "failed to load working table into error-logtest"
+	fi
+
+	# Resume devices in the opposite order that we suspended them.
+	if [ -n "$NON_ERROR_LOGDEV" ]; then
+		$DMSETUP_PROG resume error-logtest
+		[ $? -ne 0 ] && _fail  "failed to resume error-logtest"
+	fi
+
+	if [ -n "$NON_ERROR_RTDEV" ]; then
+		$DMSETUP_PROG resume error-rttest
+		[ $? -ne 0 ] && _fail  "failed to resume error-rttest"
+	fi
 
 	$DMSETUP_PROG resume error-test
 	resume_res=$?
