@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022  Red Hat Inc. All Rights Reserved.
+#
+# FS QA Test 694
+#
+# Verify that i_blocks for files larger than 4 GiB have correct
+# values.
+#
+# This test verifies the problem fixed in kernel with commit
+# 0c336d6e33f4 exfat: fix incorrect loading of i_blocks for large files
+#
+. ./common/preamble
+_begin_fstest auto
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $junk_dir
+}
+
+_supported_fs generic
+_require_test
+_require_fs_space $TEST_DIR $((4 * 1024 * 1024)) #kB
+
+echo "Silence is golden"
+
+junk_dir=$TEST_DIR/$seq
+junk_file=$junk_dir/junk
+mkdir -p $junk_dir
+
+$XFS_IO_PROG -f -c "pwrite -W 0 4G" $junk_file > /dev/null
+
+iblocks=`stat -c '%b' $junk_file`
+
+_test_cycle_mount
+
+iblocks_after_remount=`stat -c '%b' $junk_file`
+
+if [ "$iblocks" != "$iblocks_after_remount" ]; then
+	echo "Number of blocks needs to be same: $iblocks, $iblocks_after_remount"
+fi
+
+status=0
+
+exit
