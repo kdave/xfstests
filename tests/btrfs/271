@@ -18,20 +18,6 @@ _require_fail_make_request
 _require_scratch_dev_pool 2
 _scratch_dev_pool_get 2
 
-enable_io_failure()
-{
-	local sysfs_bdev=`_sysfs_dev $1`
-
-	echo 1 > $sysfs_bdev/make-it-fail
-}
-
-disable_io_failure()
-{
-	local sysfs_bdev=`_sysfs_dev $1`
-
-	echo 0 > $sysfs_bdev/make-it-fail
-}
-
 _check_minimal_fs_size $(( 1024 * 1024 * 1024 ))
 _scratch_pool_mkfs "-d raid1 -b 1G" >> $seqres.full 2>&1
 
@@ -43,15 +29,12 @@ pagesize=$(get_page_size)
 blocksize=$(_get_block_size $SCRATCH_MNT)
 sectors_per_page=$(($pagesize / $blocksize))
 
-# enable block I/O error injection
-echo 100 > $DEBUGFS_MNT/fail_make_request/probability
-echo 1000 > $DEBUGFS_MNT/fail_make_request/times
-echo 0 > $DEBUGFS_MNT/fail_make_request/verbose
+_allow_fail_make_request
 
 echo "Step 1: writing with one failing mirror:"
-enable_io_failure $SCRATCH_DEV
+_bdev_fail_make_request $SCRATCH_DEV 1
 $XFS_IO_PROG -f -c "pwrite -W -S 0xaa 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
-disable_io_failure $SCRATCH_DEV
+_bdev_fail_make_request $SCRATCH_DEV 0
 
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | \
 	$AWK_PROG '/write_io_errs/ { print $2 }')
@@ -63,15 +46,13 @@ echo "Step 2: verify that the data reads back fine:"
 $XFS_IO_PROG -c "pread -v 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io_offset
 
 echo "Step 3: writing with two failing mirrors (should fail):"
-enable_io_failure $SCRATCH_DEV
-enable_io_failure $dev2
+_bdev_fail_make_request $SCRATCH_DEV 1
+_bdev_fail_make_request $dev2 1
 $XFS_IO_PROG -f -c "pwrite -W -S 0xbb 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
-disable_io_failure $dev2
-disable_io_failure $SCRATCH_DEV
+_bdev_fail_make_request $dev2 0
+_bdev_fail_make_request $SCRATCH_DEV 0
 
-# disable block I/O error injection
-echo 0 > $DEBUGFS_MNT/fail_make_request/probability
-echo 0 > $DEBUGFS_MNT/fail_make_request/times
+_disallow_fail_make_request
 
 _scratch_dev_pool_put
 # success, all done
