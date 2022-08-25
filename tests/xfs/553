@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test 553
+#
+# Test to check if a direct write on a delalloc extent present in CoW fork can
+# result in an ENOSPC error.
+#
+. ./common/preamble
+_begin_fstest auto quick clone
+
+# Import common functions.
+. ./common/reflink
+. ./common/inject
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_kernel_commit d62113303d691 \
+	"xfs: Fix false ENOSPC when performing direct write on a delalloc extent in cow fork"
+_require_scratch_reflink
+_require_xfs_debug
+_require_test_program "punch-alternating"
+_require_xfs_io_error_injection "bmap_alloc_minlen_extent"
+_require_xfs_io_command "reflink"
+_require_xfs_io_command "cowextsize"
+
+source=${SCRATCH_MNT}/source
+destination=${SCRATCH_MNT}/destination
+fragmented_file=${SCRATCH_MNT}/fragmented_file
+
+echo "Format and mount fs"
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+echo "Create source file"
+$XFS_IO_PROG -f -c "pwrite 0 $((blksz * 8192))" $source >> $seqres.full
+
+echo "Reflink destination file with source file"
+$XFS_IO_PROG -f -c "reflink $source" $destination >> $seqres.full
+
+echo "Set destination file's cowextsize to 4096 blocks"
+$XFS_IO_PROG -c "cowextsize $((blksz * 4096))" $destination >> $seqres.full
+
+echo "Fragment FS"
+$XFS_IO_PROG -f -c "pwrite 0 $((blksz * 16384))" $fragmented_file \
+	     >> $seqres.full
+sync
+$here/src/punch-alternating $fragmented_file >> $seqres.full
+
+echo "Inject bmap_alloc_minlen_extent error tag"
+_scratch_inject_error bmap_alloc_minlen_extent 1
+
+echo "Create delalloc extent of length 4096 blocks in destination file's CoW fork"
+$XFS_IO_PROG -c "pwrite 0 $blksz" $destination >> $seqres.full
+
+sync
+
+echo "Direct I/O write at 3rd block in destination file"
+$XFS_IO_PROG -d -c "pwrite $((blksz * 3)) $((blksz * 2))" $destination \
+	     >> $seqres.full
+
+# success, all done
+status=0
+exit
