@@ -15,5 +15,6 @@ extern const struct test_suite s_nested_userns;
 extern const struct test_suite s_setattr_fix_968219708108;
 extern const struct test_suite s_setxattr_fix_705191b03d50;
 extern const struct test_suite s_setgid_create_umask_idmapped_mounts;
+extern const struct test_suite s_setgid_create_acl_idmapped_mounts;
 
 #endif /* __IDMAPPED_MOUNTS_H */

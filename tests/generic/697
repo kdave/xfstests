@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Fujitsu Limited. All Rights Reserved.
+#
+# FS QA Test No. 697
+#
+# Test S_ISGID stripping whether works correctly when call process
+# uses posix acl.
+#
+# It is also a regression test for
+# commit 1639a49ccdce ("fs: move S_ISGID stripping into the vfs_*() helpers")
+
+. ./common/preamble
+_begin_fstest auto quick cap acl idmapped mount perms rw unlink
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+
+_supported_fs generic
+_require_test
+_require_acls
+_fixed_by_kernel_commit 1639a49ccdce \
+	"fs: move S_ISGID stripping into the vfs_*() helpers"
+
+$here/src/vfs/vfstest --test-setgid-create-acl \
+        --device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP"
+
+echo "Silence is golden"
+status=0
+exit
