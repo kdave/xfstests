@@ -809,6 +809,20 @@ bool is_sticky(int dfd, const char *path, int flags)
 	return (st.st_mode & S_ISVTX) > 0;
 }
 
+/*is_ixgrp - check whether file or directory is S_IXGRP */
+bool is_ixgrp(int dfd, const char *path, int flags)
+{
+	int ret;
+	struct stat st;
+
+	ret = fstatat(dfd, path, &st, flags);
+	if (ret < 0)
+		return false;
+
+	errno = 0; /* Don't report misleading errno. */
+	return (st.st_mode & S_IXGRP);
+}
+
 bool switch_resids(uid_t uid, gid_t gid)
 {
 	if (setresgid(gid, gid, gid))

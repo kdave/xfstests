@@ -1,0 +1,46 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Fujitsu Limited. All Rights Reserved.
+#
+# FS QA Test No. 696
+#
+# Test S_ISGID stripping whether works correctly when call process
+# uses umask(S_IXGRP).
+#
+# It is also a regression test for
+# commit ac6800e279a2 ("fs: Add missing umask strip in vfs_tmpfile")
+# commit 1639a49ccdce ("fs: move S_ISGID stripping into the vfs_*() helpers")
+
+. ./common/preamble
+_begin_fstest auto quick cap idmapped mount perms rw unlink
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs generic
+_require_test
+_require_scratch
+_fixed_by_kernel_commit ac6800e279a2 \
+	"fs: Add missing umask strip in vfs_tmpfile" \
+1639a49ccdce "fs: move S_ISGID stripping into the vfs_*() helpers"
+
+_scratch_mkfs >$seqres.full 2>&1
+
+$here/src/vfs/vfstest --test-setgid-create-umask \
+        --device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP"
+
+export MOUNT_OPTIONS="-o noacl $MOUNT_OPTIONS"
+
+# Also test S_ISGID stripping whether works correctly on underflying filesystem
+# that supports noacl feature.
+# noacl will earse acl flag in superblock, so kernel will use current_umask in
+# vfs directly instead of calling posix_acl_create on underflying filesystem.
+_try_scratch_mount >>$seqres.full 2>&1 && \
+	$here/src/vfs/vfstest --test-setgid-create-umask \
+        --device "$SCRATCH_DEV" --mount "$SCRATCH_MNT" --fstype "$FSTYP"
+
+echo "Silence is golden"
+status=0
+exit
