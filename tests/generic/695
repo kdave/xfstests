@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 695
+#
+# Test that if we punch a hole adjacent to an existing hole, fsync the file and
+# then power fail, the new hole exists after mounting again the filesystem.
+#
+# This is motivated by a regression on btrfs, fixed by the commit mentioned
+# below, when not using the no-holes feature (which is enabled by default since
+# btrfs-progs 5.15).
+#
+. ./common/preamble
+_begin_fstest auto quick log punch
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+. ./common/punch
+
+_supported_fs generic
+_fixed_by_kernel_commit e6e3dec6c3c288 \
+        "btrfs: update generation of hole file extent item when merging holes"
+_require_scratch
+_require_dm_target flakey
+_require_xfs_io_command "fpunch"
+_require_xfs_io_command "fiemap"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# We punch 2M holes and require extent allocations to align to 2M in fiemap
+# results.
+_require_congruent_file_oplen $SCRATCH_MNT $((2 * 1024 * 1024))
+
+# Create our test file with the following layout:
+#
+# [0, 2M)    - hole
+# [2M, 10M)  - extent
+# [10M, 12M) - hole
+$XFS_IO_PROG -f -c "truncate 12M" \
+	     -c "pwrite -S 0xab 2M 8M" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Persist everything, commit the filesystem's transaction.
+sync
+
+# Now punch two holes in the file:
+#
+# 1) For the range [2M, 4M), which is adjacent to the existing hole in the range
+#    [0, 2M);
+# 2) For the range [8M, 10M), which is adjacent to the existing hole in the
+#    range [10M, 12M).
+#
+# These operations start a new filesystem transaction.
+# Then finally fsync the file.
+$XFS_IO_PROG -c "fpunch 2M 2M" \
+	     -c "fpunch 8M 2M" \
+	     -c "fsync" $SCRATCH_MNT/foobar
+
+# Simulate a power failure and mount the filesystem to check that everything
+# is in the same state as before the power failure.
+_flakey_drop_and_remount
+
+# We expect the following file layout:
+#
+# [0, 4M)    - hole
+# [4M, 8M)   - extent
+# [8M, 12M)  - hole
+echo "File layout after power failure:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foobar | _filter_fiemap
+
+# When reading the file we expect to get the range [4M, 8M) filled with bytes
+# that have a value of 0xab and 0x00 for anything outside that range.
+echo "File content after power failure:"
+_hexdump $SCRATCH_MNT/foobar
+
+_unmount_flakey
+
+# success, all done
+status=0
+exit
