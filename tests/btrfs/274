@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 274
+#
+# Test that we can not delete a subvolume that has an active swap file.
+#
+. ./common/preamble
+_begin_fstest auto quick swap subvol
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	test -n "$swap_file" && swapoff $swap_file &> /dev/null
+}
+
+. ./common/filter
+
+_supported_fs btrfs
+_fixed_by_kernel_commit 60021bd754c6ca \
+    "btrfs: prevent subvol with swapfile from being deleted"
+_require_scratch_swapfile
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+swap_file="$SCRATCH_MNT/subvol/swap"
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol | _filter_scratch
+
+echo "Creating and activating swap file..."
+_format_swapfile $swap_file $(($(get_page_size) * 32)) >> $seqres.full
+_swapon_file $swap_file
+
+echo "Attempting to delete subvolume with swap file enabled..."
+# Output differs with different btrfs-progs versions and some display multiple
+# lines on failure like this for example:
+#
+#   ERROR: Could not destroy subvolume/snapshot: Operation not permitted
+#   WARNING: deletion failed with EPERM, send may be in progress
+#   Delete subvolume (no-commit): '/home/fdmanana/btrfs-tests/scratch_1/subvol'
+#
+# So just redirect all output to the .full file and check the command's exit
+# status instead.
+$BTRFS_UTIL_PROG subvolume delete $SCRATCH_MNT/subvol >> $seqres.full 2>&1 && \
+    echo "subvolume deletion successful, expected failure!"
+
+echo "Disabling swap file..."
+swapoff $swap_file
+
+echo "Attempting to delete subvolume after disabling swap file..."
+$BTRFS_UTIL_PROG subvolume delete $SCRATCH_MNT/subvol >> $seqres.full 2>&1 || \
+   echo "subvolume deletion failure, expected success!"
+
+# success, all done
+status=0
+exit
