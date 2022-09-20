@@ -103,7 +103,7 @@ _scratch_find_xfs_min_logblocks()
 	# try again without MKFS_OPTIONS because that's what _scratch_do_mkfs
 	# will do if we pass in the log size option.
 	if [ $mkfs_status -ne 0 ] &&
-	   ! egrep -q '(log size.*too small, minimum|external log device.*too small, must be)' $tmp.mkfserr; then
+	   ! grep -E -q '(log size.*too small, minimum|external log device.*too small, must be)' $tmp.mkfserr; then
 		eval "$mkfs_cmd $extra_mkfs_options $SCRATCH_DEV" \
 			2>$tmp.mkfserr 1>$tmp.mkfsstd
 		mkfs_status=$?
@@ -181,7 +181,7 @@ _xfs_get_file_block_size()
 {
 	local path="$1"
 
-	if ! ($XFS_IO_PROG -c "stat -v" "$path" 2>&1 | egrep -q '(rt-inherit|realtime)'); then
+	if ! ($XFS_IO_PROG -c "stat -v" "$path" 2>&1 | grep -E -q '(rt-inherit|realtime)'); then
 		_get_block_size "$path"
 		return
 	fi
@@ -1025,8 +1025,8 @@ _scratch_xfs_set_metadata_field()
 	done
 
 	local wr_cmd="write"
-	_scratch_xfs_db -x -c "help write" | egrep -q "(-c|-d)" && value="-- ${value}"
-	_scratch_xfs_db -x -c "help write" | egrep -q "(-d)" && wr_cmd="${wr_cmd} -d"
+	_scratch_xfs_db -x -c "help write" | grep -E -q "(-c|-d)" && value="-- ${value}"
+	_scratch_xfs_db -x -c "help write" | grep -E -q "(-d)" && wr_cmd="${wr_cmd} -d"
 	_scratch_xfs_db -x "${cmds[@]}" -c "${wr_cmd} ${key} ${value}"
 }
 
@@ -1166,8 +1166,8 @@ _force_xfsv4_mount_options()
 	local pquota=0
 
 	# Can't have group and project quotas in XFS v4
-	echo "$MOUNT_OPTIONS" | egrep -q "(gquota|grpquota|grpjquota=|gqnoenforce)" && gquota=1
-	echo "$MOUNT_OPTIONS" | egrep -q "(\bpquota|prjquota|pqnoenforce)" && pquota=1
+	echo "$MOUNT_OPTIONS" | grep -E -q "(gquota|grpquota|grpjquota=|gqnoenforce)" && gquota=1
+	echo "$MOUNT_OPTIONS" | grep -E -q "(\bpquota|prjquota|pqnoenforce)" && pquota=1
 
 	if [ $gquota -gt 0 ] && [ $pquota -gt 0 ]; then
 		export MOUNT_OPTIONS=$(echo $MOUNT_OPTIONS \

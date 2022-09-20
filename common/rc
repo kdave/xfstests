@@ -113,7 +113,7 @@ _get_hugepagesize()
 {
 	local hugepgsz=$(awk '/Hugepagesize/ {print $2}' /proc/meminfo)
 	# Call _notrun if $hugepgsz is not a number
-	echo "$hugepgsz" | egrep -q ^[0-9]+$ || \
+	echo "$hugepgsz" | grep -E -q ^[0-9]+$ || \
 		_notrun "Cannot get the value of Hugepagesize"
 	echo $((hugepgsz * 1024))
 }
@@ -959,7 +959,7 @@ _scratch_mkfs_sized()
 	case $FSTYP in
 	xfs)
 		# don't override MKFS_OPTIONS that set a block size.
-		echo $MKFS_OPTIONS |egrep -q "b?size="
+		echo $MKFS_OPTIONS |grep -E -q "b?size="
 		if [ $? -eq 0 ]; then
 			_scratch_mkfs_xfs -d size=$fssize $rt_ops
 		else
@@ -1051,13 +1051,13 @@ _scratch_mkfs_geom()
 
     case $FSTYP in
     xfs)
-	if echo "$MKFS_OPTIONS" | egrep -q "b?size="; then
+	if echo "$MKFS_OPTIONS" | grep -E -q "b?size="; then
 		MKFS_OPTIONS=$(echo "$MKFS_OPTIONS" | sed -r "s/(b?size=)[0-9]+k?/\1$blocksize/")
 	else
 		MKFS_OPTIONS+=" -b size=$blocksize"
 	fi
 
-	if echo "$MKFS_OPTIONS" | egrep -q "(su|sunit|sw|swidth)="; then
+	if echo "$MKFS_OPTIONS" | grep -E -q "(su|sunit|sw|swidth)="; then
 		MKFS_OPTIONS=$(echo "$MKFS_OPTIONS" | sed -r \
 			-e "s/(su|sunit)=[0-9kmg]+/su=$sunit_bytes/" \
 			-e "s/(sw|swidth)=[0-9kmg]+/sw=$swidth_mult/")
@@ -1559,7 +1559,7 @@ _require_scratch_nocheck()
 {
     case "$FSTYP" in
 	glusterfs)
-		echo $SCRATCH_DEV | egrep -q ":/?" > /dev/null 2>&1
+		echo $SCRATCH_DEV | grep -E -q ":/?" > /dev/null 2>&1
 		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
 			_notrun "this test requires a valid \$SCRATCH_DEV"
 		fi
@@ -1759,7 +1759,7 @@ _require_test()
 {
     case "$FSTYP" in
 	glusterfs)
-		echo $TEST_DEV | egrep -q ":/?" > /dev/null 2>&1
+		echo $TEST_DEV | grep -E -q ":/?" > /dev/null 2>&1
 		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
 			_notrun "this test requires a valid \$TEST_DEV"
 		fi
@@ -2026,7 +2026,7 @@ __scratch_uses_fsdax()
 {
 	local ops=$(_normalize_mount_options "$MOUNT_OPTIONS")
 
-	echo $ops | egrep -qw "dax(=always| |$)" && return 0
+	echo $ops | grep -E -qw "dax(=always| |$)" && return 0
 	return 1
 }
 
@@ -2460,7 +2460,7 @@ _require_xfs_io_command()
 		# Test xfs_io chattr support AND
 		# filesystem FS_IOC_FSSETXATTR support
 		# 'tPnE' flags are only valid for a directory so check them on a directory.
-		if echo "$param" | egrep -q 't|P|n|E'; then
+		if echo "$param" | grep -E -q 't|P|n|E'; then
 			testio=`$XFS_IO_PROG -F -c "chattr +$param" $testdir 2>&1`
 			attr_info=`$XFS_IO_PROG -F -r -c "lsattr" $testdir | awk '{print $1}'`
 			$XFS_IO_PROG -F -r -c "chattr -$param" $testdir 2>&1
@@ -2518,7 +2518,7 @@ _require_xfs_io_command()
 	"-T")
 		# Check O_TMPFILE support in xfs_io, kernel and fs
 		testio=`$XFS_IO_PROG -T -c quit $TEST_DIR 2>&1`
-		echo $testio | egrep -q "invalid option|Is a directory" && \
+		echo $testio | grep -E -q "invalid option|Is a directory" && \
 			_notrun "xfs_io $command support is missing"
 		echo $testio | grep -q "Operation not supported" && \
 			_notrun "O_TMPFILE is not supported"
@@ -3050,7 +3050,7 @@ _check_generic_filesystem()
 # Filter the knowen errors the UDF Verifier reports.
 _udf_test_known_error_filter()
 {
-	egrep -v "PVD  60  Error: Interchange Level: 1, Maximum Interchange Level: 0|FSD  28  Error: Interchange Level: 1, Maximum Interchange Level: 1,|PVD  72  Warning: Volume Set Identifier: \"\*IRIX UDF\",|Warning: [0-9]+ unused blocks NOT marked as unallocated."
+	grep -E -v "PVD  60  Error: Interchange Level: 1, Maximum Interchange Level: 0|FSD  28  Error: Interchange Level: 1, Maximum Interchange Level: 1,|PVD  72  Warning: Volume Set Identifier: \"\*IRIX UDF\",|Warning: [0-9]+ unused blocks NOT marked as unallocated."
 
 }
 
@@ -3082,9 +3082,9 @@ _check_udf_filesystem()
 
     rm -f $seqres.checkfs
     sleep 1 # Due to a problem with time stamps in udf_test
-    $here/src/udf_test $opt_arg $device | tee $seqres.checkfs | egrep "Error|Warning" | \
+    $here/src/udf_test $opt_arg $device | tee $seqres.checkfs | grep -E "Error|Warning" | \
 	_udf_test_known_error_filter | \
-	egrep -iv "Error count:.*[0-9]+.*total occurrences:.*[0-9]+|Warning count:.*[0-9]+.*total occurrences:.*[0-9]+" && \
+	grep -E -iv "Error count:.*[0-9]+.*total occurrences:.*[0-9]+|Warning count:.*[0-9]+.*total occurrences:.*[0-9]+" && \
         echo "Warning UDF Verifier reported errors see $seqres.checkfs." && return 1
     return 0
 }
@@ -3615,7 +3615,7 @@ _check_scratch_dax_mountopt()
 
 	_try_scratch_mount "-o $option" > /dev/null 2>&1 || return 1
 
-	if _fs_options $SCRATCH_DEV | egrep -q "dax(=always|,|$)"; then
+	if _fs_options $SCRATCH_DEV | grep -E -q "dax(=always|,|$)"; then
 		_scratch_unmount
 		return 0
 	else
@@ -3881,9 +3881,9 @@ _exclude_mount_option()
 	shift
 	while [ $# -gt 0 ]; do
 		local pattern=$1
-		echo "$pattern" | egrep -q "dax(=always|$)" && \
+		echo "$pattern" | grep -E -q "dax(=always|$)" && \
 			pattern="dax(=always| |$)"
-		if echo $mnt_opts | egrep -q "$pattern"; then
+		if echo $mnt_opts | grep -E -q "$pattern"; then
 			_notrun "mount option \"$1\" not allowed in this test"
 		fi
 		shift
@@ -4162,7 +4162,7 @@ _dmesg_since_test_start()
 # _dmesg_since_test_start.
 _check_dmesg_for()
 {
-	_dmesg_since_test_start | egrep -q "$1"
+	_dmesg_since_test_start | grep -E -q "$1"
 }
 
 # Default filter for dmesg scanning.
@@ -4176,7 +4176,7 @@ _check_dmesg_filter()
 
 	test -e "$filter_file" && extra_filter="-f $filter_file"
 
-	egrep -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
+	grep -E -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
 		-e "BUG: MAX_STACK_TRACE_ENTRIES too low" \
 		$extra_filter
 }
@@ -4206,7 +4206,7 @@ _check_dmesg()
 	local filter=${1:-_check_dmesg_filter}
 
 	_dmesg_since_test_start | $filter >$seqres.dmesg
-	egrep -q -e "kernel BUG at" \
+	grep -E -q -e "kernel BUG at" \
 	     -e "WARNING:" \
 	     -e "\bBUG:" \
 	     -e "Oops:" \
