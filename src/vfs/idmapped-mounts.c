@@ -7367,7 +7367,7 @@ static int setattr_fix_968219708108(const struct vfstest_info *info)
 		 */
 		if (!fchownat(open_tree_fd, FILE1, 0, 0, AT_SYMLINK_NOFOLLOW))
 			die("failure: change ownership");
-		if (errno != EINVAL)
+		if (errno != EINVAL && errno != EOVERFLOW)
 			die("failure: errno");
 
 		/*
@@ -7457,7 +7457,7 @@ static int setattr_fix_968219708108(const struct vfstest_info *info)
 		 */
 		if (!fchownat(open_tree_fd, FILE1, 0, 0, AT_SYMLINK_NOFOLLOW))
 			die("failure: change ownership");
-		if (errno != EINVAL)
+		if (errno != EINVAL && errno != EOVERFLOW)
 			die("failure: errno");
 
 		/*
