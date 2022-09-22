@@ -107,7 +107,21 @@ SCRATCH_BDEV=$(_real_dev $SCRATCH_DEV)
 
 # Get chunk sizes.
 echo "Capture default chunk sizes."
-FIRST_DATA_CHUNK_SIZE_B=$(_get_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/chunk_size)
+
+# The sysfs interface has only exported chunk_size (10G by default),
+# but no stripe_size (1G by default) exported.
+#
+# Btrfs calculate the real chunk to be allocated using both limits,
+# Thus the default 10G chunk size can only be fulfilled by something
+# like 10 disk RAID0
+#
+# The proper solution should be exporting the stripe_size limit too,
+# but that may take several cycles, here we just use hard coded 1G
+# as the expected chunk size.
+FIRST_DATA_CHUNK_SIZE_B=$((1024 * 1024 * 1024))
+
+# For metadata, we are safe to use the exported value, as the default
+# metadata chunk size limit is already smaller than its stripe size.
 FIRST_METADATA_CHUNK_SIZE_B=$(_get_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size)
 
 echo "Orig Data chunk size    = ${FIRST_DATA_CHUNK_SIZE_B}"     >> ${seqres}.full
@@ -226,7 +240,7 @@ FIRST_METADATA_CHUNK_SIZE_MB=$(expr ${FIRST_METADATA_CHUNK_SIZE_B} / 1024 / 1024
 
 # if [[ $(expr ${FIRST_DATA_CHUNK_SIZE_MB} + ${DATA_SIZE_START_MB}) -ne $(expr ${FIRST_DATA_SIZE_MB}) ]]; then
 if [[ $(expr ${FIRST_DATA_CHUNK_SIZE_MB} + ${DATA_SIZE_START_MB}) -ne ${FIRST_DATA_SIZE_MB} ]]; then
-	echo "tInitial data allocation not correct."
+	echo "Initial data allocation not correct."
 fi
 
 if [[ $(expr ${FIRST_METADATA_CHUNK_SIZE_MB} + ${METADATA_SIZE_START_MB}) -ne ${FIRST_METADATA_SIZE_MB} ]]; then
