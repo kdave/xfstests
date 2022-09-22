@@ -1,0 +1,88 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 275
+#
+# Test that no xattr can be changed once btrfs property is set to RO.
+#
+. ./common/preamble
+_begin_fstest auto quick attr
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs btrfs
+_fixed_by_kernel_commit b51111271b03 \
+	"btrfs: check if root is readonly while setting security xattr"
+_require_attrs
+_require_btrfs_command "property"
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+FILENAME=$SCRATCH_MNT/foo
+
+set_xattr()
+{
+	local value=$1
+	$SETFATTR_PROG -n "user.one" -v $value $FILENAME 2>&1 | _filter_scratch
+	$SETFATTR_PROG -n "security.one" -v $value $FILENAME 2>&1 | _filter_scratch
+	$SETFATTR_PROG -n "trusted.one" -v $value $FILENAME 2>&1 | _filter_scratch
+}
+
+get_xattr()
+{
+	_getfattr --absolute-names -n "user.one" $FILENAME 2>&1 | _filter_scratch
+	_getfattr --absolute-names -n "security.one" $FILENAME 2>&1 | _filter_scratch
+	_getfattr --absolute-names -n "trusted.one" $FILENAME 2>&1 | _filter_scratch
+}
+
+del_xattr()
+{
+	$SETFATTR_PROG -x "user.one" $FILENAME 2>&1 | _filter_scratch
+	$SETFATTR_PROG -x "security.one" $FILENAME 2>&1 | _filter_scratch
+	$SETFATTR_PROG -x "trusted.one" $FILENAME 2>&1 | _filter_scratch
+}
+
+# Create a test file.
+echo "hello world" > $FILENAME
+
+set_xattr 1
+
+$BTRFS_UTIL_PROG property set $SCRATCH_MNT ro true
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT ro
+
+# Attempt to change values of RO (property) filesystem.
+set_xattr 2
+
+# Check the values of RO (property) filesystem are not changed.
+get_xattr
+
+# Attempt to remove xattr from RO (property) filesystem.
+del_xattr
+
+# Check if xattr still exist.
+get_xattr
+
+# Change filesystem property RO to false
+$BTRFS_UTIL_PROG property set $SCRATCH_MNT ro false
+$BTRFS_UTIL_PROG property get $SCRATCH_MNT ro
+
+# Change the xattrs after RO is false.
+set_xattr 2
+
+# Get the changed values.
+get_xattr
+
+# Remove xattr.
+del_xattr
+
+# check if the xattrs are really deleted.
+get_xattr
+
+status=0
+exit
