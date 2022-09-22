@@ -4925,6 +4925,29 @@ hexdump()
 	_fail "Use _hexdump(), please!"
 }
 
+# Try to create a file with inode->i_blocks >= (length / blocksize).
+# There may be some small overhead, e.g. ext2 filesystem allocates a
+# substantial number of blocks to store block mappings. Those are accounted
+# to i_blocks.
+_create_file_sized()
+{
+	local length=$1
+	local file=$2
+	local tmp=`mktemp -u`
+	local ret=0
+
+	$XFS_IO_PROG -ft -c "falloc 0 $length" $file >$tmp.out 2>&1
+	ret=$?
+	if (grep -Eq "Operation not supported|command .* not found" $tmp.out);then
+		# fallocate isn't supported, fallback to general buffer write
+		$XFS_IO_PROG -ft -c "pwrite 0 $length" $file >$tmp.out 2>&1
+		ret=$?
+	fi
+	[ $ret -ne 0 ] && cat $tmp.out
+	rm -f $tmp.out
+	return $ret
+}
+
 init_rc
 
 ################################################################################

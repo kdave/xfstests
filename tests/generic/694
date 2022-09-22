@@ -21,6 +21,9 @@ _cleanup()
 }
 
 _supported_fs generic
+_fixed_by_kernel_commit 0c336d6e33f4 \
+	"exfat: fix incorrect loading of i_blocks for large file"
+
 _require_test
 _require_fs_space $TEST_DIR $((4 * 1024 * 1024)) #kB
 
@@ -30,7 +33,10 @@ junk_dir=$TEST_DIR/$seq
 junk_file=$junk_dir/junk
 mkdir -p $junk_dir
 
-$XFS_IO_PROG -f -c "pwrite -W 0 4G" $junk_file > /dev/null
+_create_file_sized 4G $junk_file
+if [ $? -ne 0 ]; then
+	echo "Could not create 4G test file"
+fi
 
 iblocks=`stat -c '%b' $junk_file`
 
