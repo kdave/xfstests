@@ -13,7 +13,7 @@
 _begin_fstest auto quick zone balance
 
 # Import common functions.
-. ./common/filter
+. ./common/zoned
 
 # real QA test starts here
 
@@ -56,11 +56,7 @@ fi
 
 start_data_bg_phy=$(get_data_bg_physical)
 start_data_bg_phy=$((start_data_bg_phy >> 9))
-
-size=$($BLKZONE_PROG report -o $start_data_bg_phy -l 1 $SCRATCH_DEV |\
-	_filter_blkzone_report |\
-	grep -Po "cap 0x[[:xdigit:]]+" | cut -d ' ' -f 2)
-size=$((size << 9))
+size=$(_zone_capacity $start_data_bg_phy)
 
 reclaim_threshold=75
 echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold

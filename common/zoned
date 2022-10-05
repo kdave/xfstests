@@ -1,0 +1,28 @@
+#
+# Common zoned block device specific functions
+#
+
+#
+# blkzone report added zone capacity to be printed from v2.37.
+# This filter will add an extra column 'cap' with the same value of
+# 'len'(zone size) for blkzone version < 2.37
+#
+# Before: start: 0x000100000, len 0x040000, wptr 0x000000 ..
+# After: start: 0x000100000, len 0x040000, cap 0x040000, wptr 0x000000 ..
+_filter_blkzone_report()
+{
+	$AWK_PROG -F "," 'BEGIN{OFS=",";} $3 !~ /cap/ {$2=$2","$2;} {print;}' |\
+	sed -e 's/len/cap/2'
+}
+
+_zone_capacity() {
+    local phy=$1
+    local dev=$2
+
+    [ -z "$dev" ] && dev=$SCRATCH_DEV
+
+    size=$($BLKZONE_PROG report -o $phy -l 1 $dev |\
+	       _filter_blkzone_report |\
+	       grep -Po "cap 0x[[:xdigit:]]+" | cut -d ' ' -f 2)
+    echo $((size << 9))
+}
