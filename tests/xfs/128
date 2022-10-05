@@ -34,7 +34,20 @@ margin=160
 blksz=65536
 real_blksz="$(_get_block_size $testdir)"
 blksz_factor=$((blksz / real_blksz))
+
+# The expected free space numbers in this test require file1 and file4 to share
+# the same blocks at the end of the test.  Therefore, we need the allocator to
+# give file1 a single extent at the start of the test so that fsr will not be
+# tempted to "defragment" a multi-extent file1 or file4.  Defragmenting really
+# means rewriting the file, and if that succeeds on either file, we'll have
+# unshared the space and there will be too little free space.  Therefore,
+# preallocate space to try to produce a single extent.
+$XFS_IO_PROG -f -c "falloc 0 $((blks * blksz))" $testdir/file1 >> $seqres.full
 _pwrite_byte 0x61 0 $((blks * blksz)) $testdir/file1 >> $seqres.full
+sync
+
+nextents=$($XFS_IO_PROG -c 'stat' $testdir/file1 | grep 'fsxattr.nextents' | awk '{print $3}')
+
 _cp_reflink $testdir/file1 $testdir/file2
 _cp_reflink $testdir/file2 $testdir/file3
 _cp_reflink $testdir/file3 $testdir/file4
@@ -106,10 +119,23 @@ test $c14 = $c24 || echo "File4 changed by defrag"
 
 #echo $free_blocks0 $free_blocks1 $free_blocks2 $free_blocks3
 
-_within_tolerance "free blocks after creating some reflink copies" $free_blocks1 $((free_blocks0 - (blks * blksz_factor) )) $margin -v
-_within_tolerance "free blocks after CoW some reflink copies" $free_blocks2 $((free_blocks1 - 2)) $margin -v
-_within_tolerance "free blocks after defragging all reflink copies" $free_blocks3 $((free_blocks2 - (blks * 2 * blksz_factor))) $margin -v
-_within_tolerance "free blocks after all tests" $free_blocks3 $((free_blocks0 - (blks * 3 * blksz_factor))) $margin -v
+freesp_bad=0
+
+_within_tolerance "free blocks after creating some reflink copies" \
+	$free_blocks1 $((free_blocks0 - (blks * blksz_factor) )) $margin -v || freesp_bad=1
+
+_within_tolerance "free blocks after CoW some reflink copies" \
+	$free_blocks2 $((free_blocks1 - 2)) $margin -v || freesp_bad=1
+
+_within_tolerance "free blocks after defragging all reflink copies" \
+	$free_blocks3 $((free_blocks2 - (blks * 2 * blksz_factor))) $margin -v || freesp_bad=1
+
+_within_tolerance "free blocks after all tests" \
+	$free_blocks3 $((free_blocks0 - (blks * 3 * blksz_factor))) $margin -v || freesp_bad=1
+
+if [ $freesp_bad -ne 0 ] && [ $nextents -gt 1 ]; then
+	echo "free space checks probably failed because file1 nextents was $nextents"
+fi
 
 # success, all done
 status=0
