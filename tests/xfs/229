@@ -31,10 +31,15 @@ _require_fs_space $TEST_DIR 3200000
 TDIR="${TEST_DIR}/t_holes"
 NFILES="10"
 EXTSIZE="256k"
-_xfs_force_bdev data $TEST_DIR
 
 # Create the test directory
 mkdir ${TDIR}
+
+# Per-directory extent size hints aren't particularly useful for files that
+# are created on the realtime section.  Force the test file to be created on
+# the data directory.  Do not change the rtinherit flag on $TEST_DIR because
+# that will affect other tests.
+_xfs_force_bdev data $TDIR
 
 # Set the test directory extsize
 $XFS_IO_PROG -c "extsize ${EXTSIZE}" ${TDIR}
