@@ -15,6 +15,17 @@ _filter_blkzone_report()
 	sed -e 's/len/cap/2'
 }
 
+_require_limited_active_zones() {
+    local dev=$1
+    local sysfs=$(_sysfs_dev ${dev})
+    local attr="${sysfs}/queue/max_active_zones"
+
+    [ -e "${attr}" ] || _notrun "cannot find queue/max_active_zones. Maybe non-zoned device?"
+    if [ $(cat "${attr}") == 0 ]; then
+	_notrun "this test requires limited active zones"
+    fi
+}
+
 _zone_capacity() {
     local phy=$1
     local dev=$2

@@ -1,0 +1,143 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test No. 273
+#
+# Test that an active zone is properly reclaimed to allow the further
+# allocations, even if the active zones are mostly filled.
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot zone
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+
+	# kill commands in stress_data_bgs_2
+	[ -n "$pid1" ] && kill $pid1
+	[ -n "$pid2" ] && kill $pid2
+	wait
+}
+
+# Import common functions.
+. ./common/zoned
+
+# real QA test starts here
+
+_supported_fs btrfs
+_fixed_by_kernel_commit 2ce543f47843 \
+	"btrfs: zoned: wait until zone is finished when allocation didn't progress"
+# which is further fixed by
+_fixed_by_kernel_commit d5b81ced74af \
+	"btrfs: zoned: fix API misuse of zone finish waiting"
+_require_zoned_device "$SCRATCH_DEV"
+_require_limited_active_zones "$SCRATCH_DEV"
+
+_require_command "$BLKZONE_PROG" blkzone
+_require_btrfs_command inspect-internal dump-tree
+
+# This test requires specific data space usage, skip if we have compression
+# enabled.
+_require_no_compress
+
+max_active=$(cat $(_sysfs_dev ${SCRATCH_DEV})/queue/max_active_zones)
+
+# Fill the zones leaving the last 1MB
+fill_active_zones() {
+	# Asuumes we have the same capacity between zones.
+	local capacity=$(_zone_capacity 0)
+	local fill_size=$((capacity - 1024 * 1024))
+
+	for x in $(seq ${max_active}); do
+		dd if=/dev/zero of=${SCRATCH_MNT}/fill$(printf "%02d" $x) \
+			bs=${fill_size} count=1 oflag=direct 2>/dev/null
+		$BTRFS_UTIL_PROG filesystem sync ${SCRATCH_MNT}
+
+		local nactive=$($BLKZONE_PROG report ${SCRATCH_DEV} | grep oi | wc -l)
+		if [[ ${nactive} == ${max_active} ]]; then
+			break
+		fi
+	done
+
+	echo "max active zones: ${max_active}" >> $seqres.full
+	$BLKZONE_PROG report ${SCRATCH_DEV} | grep oi | cat -n >> $seqres.full
+}
+
+workout() {
+	local func="$1"
+
+	_scratch_mkfs >/dev/null 2>&1
+	_scratch_mount
+
+	fill_active_zones
+	eval "$func" || _fail "${func} failed"
+
+	_scratch_unmount
+	_check_btrfs_filesystem ${SCRATCH_DEV}
+}
+
+stress_data_bgs() {
+	# This dd fails with ENOSPC, which should not :(
+	dd if=/dev/zero of=${SCRATCH_MNT}/large bs=64M count=1 oflag=sync \
+		>>$seqres.full 2>&1
+}
+
+stress_data_bgs_2() {
+	# This dd fails with ENOSPC, which should not :(
+	dd if=/dev/zero of=${SCRATCH_MNT}/large bs=64M count=10 conv=fsync \
+		>>$seqres.full 2>&1 &
+	pid1=$!
+
+	dd if=/dev/zero of=${SCRATCH_MNT}/large2 bs=64M count=10 conv=fsync \
+		>>$seqres.full 2>&1 &
+	pid2=$!
+
+	wait $pid1; local ret1=$?; unset pid1
+	wait $pid2; local ret2=$?; unset pid2
+
+	if [ $ret1 -ne 0 -o $ret2 -ne 0 ]; then
+		return 1
+	fi
+	return 0
+}
+
+get_meta_bgs() {
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t EXTENT ${SCRATCH_DEV} |
+		grep BLOCK_GROUP -A 1 |grep -B1 'METADATA|' |
+		grep -oP '\(\d+ BLOCK_GROUP_ITEM \d+\)'
+}
+
+# This test case does not return the result because
+# _run_btrfs_util_prog will call _fail() in the error case anyway.
+stress_metadata_bgs() {
+	local metabgs=$(get_meta_bgs)
+	local count=0
+
+	while : ; do
+		_run_btrfs_util_prog subvolume snapshot ${SCRATCH_MNT} ${SCRATCH_MNT}/snap$i
+		_run_btrfs_util_prog filesystem sync ${SCRATCH_MNT}
+		cur_metabgs=$(get_meta_bgs)
+		if [[ "${cur_metabgs}" != "${metabgs}" ]]; then
+			break
+		fi
+		i=$((i + 1))
+	done
+}
+
+WORKS=(
+	stress_data_bgs
+	stress_data_bgs_2
+	stress_metadata_bgs
+)
+
+for work in "${WORKS[@]}"; do
+	workout "${work}"
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
