@@ -28,6 +28,12 @@ _require_test
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "fiemap"
 
+# If the truncation sizes (5M/7M) aren't aligned with the file allocation unit
+# length, then the FIEMAP output will show blocks beyond EOF.  That will cause
+# trouble with the golden output, so skip this test if that will be the case.
+_require_congruent_file_oplen $TEST_DIR $((5 * 1048576))
+_require_congruent_file_oplen $TEST_DIR $((7 * 1048576))
+
 # First test to make sure that truncating at i_size trims the preallocated bit
 # past i_size
 $XFS_IO_PROG -f -c "falloc -k 0 10M" -c "pwrite 0 5M" -c "truncate 5M"\
