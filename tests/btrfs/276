@@ -1,0 +1,124 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 276
+#
+# Verify that fiemap correctly reports the sharedness of extents for a file with
+# a very large number of extents, spanning many b+tree leaves in the fs tree,
+# and when the file's subvolume was snapshoted.
+#
+. ./common/preamble
+_begin_fstest auto snapshot compress
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_scratch
+_require_xfs_io_command "fiemap" "ranged"
+
+_scratch_mkfs >> $seqres.full 2>&1
+# We use compression because it's a very quick way to create a file with a very
+# large number of extents (compression limits the maximum extent size to 128K)
+# and while using very little disk space.
+_scratch_mount -o compress
+
+fiemap_test_file()
+{
+	local offset=$1
+	local len=$2
+
+	# Skip the first two lines of xfs_io's fiemap output (file path and
+	# header describing the output columns).
+	$XFS_IO_PROG -c "fiemap -v $offset $len" $SCRATCH_MNT/foo | tail -n +3
+}
+
+# Count the number of shared extents for the whole test file or just for a given
+# range.
+count_shared_extents()
+{
+	local offset=$1
+	local len=$2
+
+	# Column 5 (from xfs_io's "fiemap -v" command) is the flags (hex field).
+	# 0x2000 is the value for the FIEMAP_EXTENT_SHARED flag.
+	fiemap_test_file $offset $len | \
+		$AWK_PROG --source 'BEGIN { cnt = 0 }' \
+			  --source '{ if (and(strtonum($5), 0x2000)) cnt++ }' \
+			  --source 'END { print cnt }'
+}
+
+# Count the number of non shared extents for the whole test file or just for a
+# given range.
+count_not_shared_extents()
+{
+	local offset=$1
+	local len=$2
+
+	# Column 5 (from xfs_io's "fiemap -v" command) is the flags (hex field).
+	# 0x2000 is the value for the FIEMAP_EXTENT_SHARED flag.
+	fiemap_test_file $offset $len | \
+		$AWK_PROG --source 'BEGIN { cnt = 0 }' \
+			  --source '{ if (!and(strtonum($5), 0x2000)) cnt++ }' \
+			  --source 'END { print cnt }'
+}
+
+# Create a 16G file as that results in 131072 extents, all with a size of 128K
+# (due to compression), and a fs tree with a height of 3 (root node at level 2).
+# We want to verify later that fiemap correctly reports the sharedness of each
+# extent, even when it needs to switch from one leaf to the next one and from a
+# node at level 1 to the next node at level 1.
+#
+$XFS_IO_PROG -f -c "pwrite -b 8M 0 16G" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Sync to flush delalloc and commit the current transaction, so fiemap will see
+# all extents in the fs tree and extent trees and not look at delalloc.
+sync
+
+# All extents should be reported as non shared (131072 extents).
+echo "Number of non-shared extents in the whole file: $(count_not_shared_extents)"
+
+# Creating a snapshot.
+$BTRFS_UTIL_PROG subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap | _filter_scratch
+
+# We have a snapshot, so now all extents should be reported as shared.
+echo "Number of shared extents in the whole file: $(count_shared_extents)"
+
+# Now COW two file ranges, of 1M each, in the snapshot's file.
+# So 16 extents should become non-shared after this.
+#
+$XFS_IO_PROG -c "pwrite -b 1M 8M 1M" \
+	     -c "pwrite -b 1M 12G 1M" \
+	     $SCRATCH_MNT/snap/foo | _filter_xfs_io
+
+# Sync to flush delalloc and commit the current transaction, so fiemap will see
+# all extents in the fs tree and extent trees and not look at delalloc.
+sync
+
+# Now we should have 16 non-shared extents and 131056 (131072 - 16) shared
+# extents.
+echo "Number of non-shared extents in the whole file: $(count_not_shared_extents)"
+echo "Number of shared extents in the whole file: $(count_shared_extents)"
+
+# Check that the non-shared extents are indeed in the expected file ranges (each
+# with 8 extents).
+echo "Number of non-shared extents in range [8M, 9M): $(count_not_shared_extents 8M 1M)"
+echo "Number of non-shared extents in range [12G, 12G + 1M): $(count_not_shared_extents 12G 1M)"
+
+# Now delete the snapshot.
+$BTRFS_UTIL_PROG subvolume delete -c $SCRATCH_MNT/snap | _filter_scratch
+
+# We deleted the snapshot and committed the transaction used to delete it (-c),
+# but all its extents (both metadata and data) are actually only deleted in the
+# background, by the cleaner kthread. So remount, which wakes up the cleaner
+# kthread, with a commit interval of 1 second and sleep for 1.1 seconds - after
+# this we are guaranteed all extents of the snapshot were deleted.
+_scratch_remount commit=1
+sleep 1.1
+
+# Now all extents should be reported as not shared (131072 extents).
+echo "Number of non-shared extents in the whole file: $(count_not_shared_extents)"
+
+# success, all done
+status=0
+exit
