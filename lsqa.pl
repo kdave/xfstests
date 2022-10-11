@@ -99,7 +99,7 @@ sub get_qa_header($) {
 	m/^# SPDX/i		and next; # SPDX tags
 	m/^# Copyright/i	and next; # Copyright tags
 	m/^#\s*\-{10}/		and last; # dashed lines
-	m/^seq/i		and last; # test start
+	m/^\. \.\/common\/preamble/ and last; # test start
 
 	s/^# *//;
 
