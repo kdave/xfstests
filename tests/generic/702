@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 702
+#
+# Test that if we have two consecutive extents and only one of them is cloned,
+# then fiemap correctly reports which one is shared and reports the other as not
+# shared.
+#
+. ./common/preamble
+_begin_fstest auto quick clone fiemap
+
+. ./common/filter
+. ./common/reflink
+
+_fixed_by_kernel_commit ac3c0d36a2a2f7 \
+	"btrfs: make fiemap more efficient and accurate reporting extent sharedness"
+
+_supported_fs generic
+_require_scratch_reflink
+_require_xfs_io_command "fiemap"
+
+fiemap_test_file()
+{
+	local filepath=$1
+
+	# Skip the first two lines of xfs_io's fiemap output (file path and
+	# header describing the output columns).
+	#
+	# Print the first column (extent number), second column (file range),
+	# fourth column (extent size) and fifth column (flags) of the fiemap
+	# output.
+	#
+	# We filter the flags column to only tell us if an extent is shared or
+	# not (flag 0x2000, which matches FIEMAP_EXTENT_SHARED) because on some
+	# filesystem configs we may have other flags printed - for example
+	# running btrfs with "-o compress" we get the flag 0x8 as well (which
+	# is FIEMAP_EXTENT_ENCODED).
+	#
+	# The third column is the physical location of the extents, so it's
+	# omitted because the location varies between different filesystems.
+	#
+	$XFS_IO_PROG -c "fiemap -v" $filepath | tail -n +3 | \
+		$AWK_PROG '{ print $1, $2, $4, \
+			  and(strtonum($5), 0x2000) ? "shared" : "not_shared" }'
+}
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# We create 128K extents in the test files below.
+_require_congruent_file_oplen $SCRATCH_MNT $((128 * 1024))
+
+# Create file foo with 2 consecutive extents, each one with a size of 128K.
+echo "Creating file foo"
+$XFS_IO_PROG -f -c "pwrite -b 128K 0 128K" -c "fsync" \
+	     -c "pwrite -b 128K 128K 128K" -c "fsync" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Clone only the first extent into another file.
+echo "Cloning first extent of file foo to file bar"
+$XFS_IO_PROG -f -c "reflink $SCRATCH_MNT/foo 0 0 128K" $SCRATCH_MNT/bar | \
+	_filter_xfs_io
+
+# Now fiemap file foo, it should report the first 128K extent as shared and the
+# second 128K extent as not shared.
+echo "fiemap of file foo:"
+fiemap_test_file $SCRATCH_MNT/foo
+
+# Now do a similar test as above, except that this time only the second 128K
+# extent is cloned, the first extent is not cloned.
+
+# Create file foo2 with 2 consecutive extents, each one with a size of 128K.
+echo "Creating file foo2"
+$XFS_IO_PROG -f -c "pwrite -b 128K 0 128K" -c "fsync" \
+	     -c "pwrite -b 128K 128K 128K" -c "fsync" \
+	     $SCRATCH_MNT/foo2 | _filter_xfs_io
+
+# Clone only the second extent of foo2 into another file.
+echo "Cloning second extent of file foo2 to file bar2"
+$XFS_IO_PROG -f -c "reflink $SCRATCH_MNT/foo2 128K 0 128K" $SCRATCH_MNT/bar2 | \
+	_filter_xfs_io
+
+# Now fiemap file foo2, it should report the first 128K extent as not shared and
+# the second 128K extent as shared
+echo "fiemap of file foo2:"
+fiemap_test_file $SCRATCH_MNT/foo2
+
+# success, all done
+status=0
+exit
