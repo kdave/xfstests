@@ -67,7 +67,6 @@ static int get_io_sizes(int fd)
 	off_t pos = 0, offset = 1;
 	struct stat buf;
 	int shift, ret;
-	int pagesz = sysconf(_SC_PAGE_SIZE);
 
 	ret = detect_xfs_alloc_unit(fd);
 	if (!ret)
