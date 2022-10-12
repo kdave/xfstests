@@ -11,7 +11,12 @@ _require_populate_commands() {
 	_require_xfs_io_command "falloc"
 	_require_xfs_io_command "fpunch"
 	_require_test_program "punch-alternating"
-	_require_command "$XFS_DB_PROG" "xfs_db"
+	case "${FSTYP}" in
+	"xfs")
+		_require_command "$XFS_DB_PROG" "xfs_db"
+		_require_command "$WIPEFS_PROG" "wipefs"
+		;;
+	esac
 }
 
 _require_xfs_db_blocktrash_z_command() {
@@ -851,7 +856,19 @@ _scratch_populate_restore_cached() {
 
 	case "${FSTYP}" in
 	"xfs")
-		xfs_mdrestore "${metadump}" "${SCRATCH_DEV}" && return 0
+		xfs_mdrestore "${metadump}" "${SCRATCH_DEV}"
+		res=$?
+		test $res -ne 0 && return $res
+
+		# Cached images should have been unmounted cleanly, so if
+		# there's an external log we need to wipe it and run repair to
+		# format it to match this filesystem.
+		if [ -n "${SCRATCH_LOGDEV}" ]; then
+			$WIPEFS_PROG -a "${SCRATCH_LOGDEV}"
+			_scratch_xfs_repair
+			res=$?
+		fi
+		return $res
 		;;
 	"ext2"|"ext3"|"ext4")
 		# ext4 cannot e2image external logs, so we cannot restore
