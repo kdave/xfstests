@@ -16,6 +16,9 @@ _require_populate_commands() {
 		_require_command "$XFS_DB_PROG" "xfs_db"
 		_require_command "$WIPEFS_PROG" "wipefs"
 		;;
+	ext*)
+		_require_command "$DUMPE2FS_PROG" "dumpe2fs"
+		;;
 	esac
 }
 
@@ -871,9 +874,20 @@ _scratch_populate_restore_cached() {
 		return $res
 		;;
 	"ext2"|"ext3"|"ext4")
-		# ext4 cannot e2image external logs, so we cannot restore
-		test -n "${SCRATCH_LOGDEV}" && return 1
-		e2image -r "${metadump}" "${SCRATCH_DEV}" && return 0
+		e2image -r "${metadump}" "${SCRATCH_DEV}"
+		ret=$?
+		test $ret -ne 0 && return $ret
+
+		# ext4 cannot e2image external logs, so we have to reformat
+		# the scratch device to match the restored fs
+		if [ -n "${SCRATCH_LOGDEV}" ]; then
+			local fsuuid="$($DUMPE2FS_PROG -h "${SCRATCH_DEV}" 2>/dev/null | \
+					grep 'Journal UUID:' | \
+					sed -e 's/Journal UUID:[[:space:]]*//g')"
+			$MKFS_EXT4_PROG -O journal_dev "${SCRATCH_LOGDEV}" \
+					-F -U "${fsuuid}"
+		fi
+		return 0
 		;;
 	esac
 	return 1
