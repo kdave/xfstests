@@ -4949,6 +4949,28 @@ _create_file_sized()
 	return $ret
 }
 
+# Save an arbitrary coredump to the report directory.
+_save_coredump()
+{
+	local path="$1"
+
+	if [ -z "$seqres" ]; then
+		echo "$path: seqres is not defined; ignoring coredump!"
+		return 1
+	fi
+
+	local core_hash="$(_md5_checksum "$path")"
+	local out_file="${seqres}.core.${core_hash}"
+
+	if [ -s "$out_file" ]; then
+		rm -f "$path"
+		return
+	fi
+	rm -f "$out_file"
+
+	mv "$path" "$out_file"
+}
+
 init_rc
 
 ################################################################################
