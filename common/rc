@@ -4962,13 +4962,17 @@ _save_coredump()
 	local core_hash="$(_md5_checksum "$path")"
 	local out_file="${seqres}.core.${core_hash}"
 
-	if [ -s "$out_file" ]; then
-		rm -f "$path"
-		return
-	fi
-	rm -f "$out_file"
+	for dump in "$out_file"*; do
+		if [ -s "$dump" ]; then
+			rm -f "$path"
+			return 0
+		fi
+	done
 
 	mv "$path" "$out_file"
+	test -z "$COREDUMP_COMPRESSOR" && return 0
+
+	$COREDUMP_COMPRESSOR -f "$out_file"
 }
 
 init_rc
