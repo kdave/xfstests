@@ -901,15 +901,15 @@ _scratch_populate_cached() {
 	local meta_tag="$(echo "${meta_descr}" | md5sum - | cut -d ' ' -f 1)"
 	local metadump_stem="${TEST_DIR}/__populate.${FSTYP}.${meta_tag}"
 
-	# These variables are shared outside this function
+	# This variable is shared outside this function
 	POPULATE_METADUMP="${metadump_stem}.metadump"
-	POPULATE_METADUMP_DESCR="${metadump_stem}.txt"
+	local populate_metadump_descr="${metadump_stem}.txt"
 
 	# Don't keep metadata images cached for more 48 hours...
 	rm -rf "$(find "${POPULATE_METADUMP}" -mtime +2 2>/dev/null)"
 
 	# Throw away cached image if it doesn't match our spec.
-	cmp -s "${POPULATE_METADUMP_DESCR}" <(echo "${meta_descr}") || \
+	cmp -s "${populate_metadump_descr}" <(echo "${meta_descr}") || \
 		rm -rf "${POPULATE_METADUMP}"
 
 	# Try to restore from the metadump
@@ -918,7 +918,7 @@ _scratch_populate_cached() {
 
 	# Oh well, just create one from scratch
 	_scratch_mkfs
-	echo "${meta_descr}" > "${POPULATE_METADUMP_DESCR}"
+	echo "${meta_descr}" > "${populate_metadump_descr}"
 	case "${FSTYP}" in
 	"xfs")
 		_scratch_xfs_populate $@
