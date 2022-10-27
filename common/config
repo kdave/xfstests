@@ -335,89 +335,72 @@ if [ "$FSTYP" == "xfs" ]; then
 	export XFS_MKFS_HAS_NO_META_SUPPORT
 fi
 
-_mount_opts()
+_common_mount_opts()
 {
 	case $FSTYP in
 	9p)
-		export MOUNT_OPTIONS=$PLAN9_MOUNT_OPTIONS
+		echo $PLAN9_MOUNT_OPTIONS
 		;;
 	xfs)
-		export MOUNT_OPTIONS=$XFS_MOUNT_OPTIONS
+		echo $XFS_MOUNT_OPTIONS
 		;;
 	udf)
-		export MOUNT_OPTIONS=$UDF_MOUNT_OPTIONS
+		echo $UDF_MOUNT_OPTIONS
 		;;
 	nfs)
-		export MOUNT_OPTIONS=$NFS_MOUNT_OPTIONS
+		echo $NFS_MOUNT_OPTIONS
 		;;
 	cifs)
-		export MOUNT_OPTIONS=$CIFS_MOUNT_OPTIONS
+		echo $CIFS_MOUNT_OPTIONS
 		;;
 	ceph)
-		export MOUNT_OPTIONS=$CEPHFS_MOUNT_OPTIONS
+		echo $CEPHFS_MOUNT_OPTIONS
 		;;
 	glusterfs)
-		export MOUNT_OPTIONS=$GLUSTERFS_MOUNT_OPTIONS
+		echo $GLUSTERFS_MOUNT_OPTIONS
 		;;
 	overlay)
-		export MOUNT_OPTIONS=$OVERLAY_MOUNT_OPTIONS
+		echo $OVERLAY_MOUNT_OPTIONS
 		;;
 	ext2|ext3|ext4|ext4dev)
 		# acls & xattrs aren't turned on by default on ext$FOO
-		export MOUNT_OPTIONS="-o acl,user_xattr $EXT_MOUNT_OPTIONS"
+		echo "-o acl,user_xattr $EXT_MOUNT_OPTIONS"
 		;;
 	f2fs)
-		export MOUNT_OPTIONS="-o acl,user_xattr $F2FS_MOUNT_OPTIONS"
+		echo "-o acl,user_xattr $F2FS_MOUNT_OPTIONS"
 		;;
 	reiserfs)
 		# acls & xattrs aren't turned on by default on reiserfs
-		export MOUNT_OPTIONS="-o acl,user_xattr $REISERFS_MOUNT_OPTIONS"
+		echo "-o acl,user_xattr $REISERFS_MOUNT_OPTIONS"
 		;;
        reiser4)
-               # acls & xattrs aren't supported by reiser4
-               export MOUNT_OPTIONS=$REISER4_MOUNT_OPTIONS
-               ;;
+		# acls & xattrs aren't supported by reiser4
+		echo $REISER4_MOUNT_OPTIONS
+		;;
 	gfs2)
 		# acls aren't turned on by default on gfs2
-		export MOUNT_OPTIONS="-o acl $GFS2_MOUNT_OPTIONS"
+		echo "-o acl $GFS2_MOUNT_OPTIONS"
 		;;
 	tmpfs)
 		# We need to specify the size at mount, use 1G by default
-		export MOUNT_OPTIONS="-o size=1G $TMPFS_MOUNT_OPTIONS"
+		echo "-o size=1G $TMPFS_MOUNT_OPTIONS"
 		;;
 	ubifs)
-		export MOUNT_OPTIONS=$UBIFS_MOUNT_OPTIONS
+		echo $UBIFS_MOUNT_OPTIONS
 		;;
 	*)
 		;;
 	esac
 }
 
+_mount_opts()
+{
+	export MOUNT_OPTIONS=$(_common_mount_opts)
+}
+
 _test_mount_opts()
 {
-	case $FSTYP in
-	9p)
-		export TEST_FS_MOUNT_OPTS=$PLAN9_MOUNT_OPTIONS
-		;;
-	cifs)
-		export TEST_FS_MOUNT_OPTS=$CIFS_MOUNT_OPTIONS
-		;;
-	ceph)
-		export TEST_FS_MOUNT_OPTS=$CEPHFS_MOUNT_OPTIONS
-		;;
-	nfs)
-		export TEST_FS_MOUNT_OPTS=$NFS_MOUNT_OPTIONS
-		;;
-	glusterfs)
-		export TEST_FS_MOUNT_OPTS=$GLUSTERFS_MOUNT_OPTIONS
-		;;
-	ext2|ext3|ext4|ext4dev)
-		# acls & xattrs aren't turned on by default on older ext$FOO
-		export TEST_FS_MOUNT_OPTS="-o acl,user_xattr $EXT_MOUNT_OPTIONS"
-		;;
-	*)
-		;;
-	esac
+	export TEST_FS_MOUNT_OPTS=$(_common_mount_opts)
 }
 
 _mkfs_opts()
