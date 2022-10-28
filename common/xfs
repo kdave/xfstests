@@ -413,6 +413,56 @@ _require_xfs_crc()
 	_scratch_unmount
 }
 
+# If the xfs_info output for the given XFS filesystem mount mentions the given
+# feature.  If so, return 0 for success.  If not, return 1 for failure.  If the
+# third option is -v, echo 1 for success and 0 for not.
+#
+# Starting with xfsprogs 4.17, this also works for unmounted filesystems.
+_xfs_has_feature()
+{
+	local fs="$1"
+	local feat="$2"
+	local verbose="$3"
+
+	local answer="$($XFS_INFO_PROG "$fs" 2>&1 | grep -w -c "$feat=1")"
+	if [ "$answer" -ne 0 ]; then
+		test "$verbose" = "-v" && echo 1
+		return 0
+	fi
+
+	test "$verbose" = "-v" && echo 0
+	return 1
+}
+
+# Require that the xfs_info output for the given XFS filesystem mount mentions
+# the given feature flag.  If the third argument is -u (or is empty and the
+# second argument is $SCRATCH_MNT), unmount the fs on failure.  If a fourth
+# argument is supplied, it will be used as the _notrun message.
+_require_xfs_has_feature()
+{
+	local fs="$1"
+	local feat="$2"
+	local umount="$3"
+	local message="$4"
+
+	if [ -z "$umount" ] && [ "$fs" = "$SCRATCH_MNT" ]; then
+		umount="-u"
+	fi
+
+	_xfs_has_feature "$1" "$2" && return 0
+
+	test "$umount" = "-u" && umount "$fs" &>/dev/null
+
+	test -n "$message" && _notrun "$message"
+
+	case "$fs" in
+	"$TEST_DIR"|"$TEST_DEV")	fsname="test";;
+	"$SCRATCH_MNT"|"$SCRATCH_DEV")	fsname="scratch";;
+	*)				fsname="$fs";;
+	esac
+	_notrun "$2 not supported by $fsname filesystem type: $FSTYP"
+}
+
 # this test requires the xfs kernel support crc feature on scratch device
 #
 _require_scratch_xfs_crc()
@@ -420,7 +470,8 @@ _require_scratch_xfs_crc()
 	_scratch_mkfs_xfs >/dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
-	$XFS_INFO_PROG $SCRATCH_MNT | grep -q 'crc=1' || _notrun "crc feature not supported by this filesystem"
+	_require_xfs_has_feature $SCRATCH_MNT crc -u \
+		"crc feature not supported by this filesystem"
 	_scratch_unmount
 }
 
@@ -739,10 +790,7 @@ _check_xfs_test_fs()
 _require_xfs_test_rmapbt()
 {
 	_require_test
-
-	if [ "$($XFS_INFO_PROG "$TEST_DIR" | grep -c "rmapbt=1")" -ne 1 ]; then
-		_notrun "rmapbt not supported by test filesystem type: $FSTYP"
-	fi
+	_require_xfs_has_feature "$TEST_DIR" rmapbt
 }
 
 _require_xfs_scratch_rmapbt()
@@ -751,10 +799,7 @@ _require_xfs_scratch_rmapbt()
 
 	_scratch_mkfs > /dev/null
 	_scratch_mount
-	if [ "$($XFS_INFO_PROG "$SCRATCH_MNT" | grep -c "rmapbt=1")" -ne 1 ]; then
-		_scratch_unmount
-		_notrun "rmapbt not supported by scratch filesystem type: $FSTYP"
-	fi
+	_require_xfs_has_feature "$SCRATCH_MNT" rmapbt
 	_scratch_unmount
 }
 
@@ -1357,8 +1402,8 @@ _require_scratch_xfs_bigtime()
 		_notrun "mkfs.xfs doesn't support bigtime feature"
 	_try_scratch_mount || \
 		_notrun "kernel doesn't support xfs bigtime feature"
-	$XFS_INFO_PROG "$SCRATCH_MNT" | grep -q -w "bigtime=1" || \
-		_notrun "bigtime feature not advertised on mount?"
+	_require_xfs_has_feature $SCRATCH_MNT bigtime -u \
+		"crc feature not supported by this filesystem"
 	_scratch_unmount
 }
 
