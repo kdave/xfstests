@@ -175,7 +175,7 @@ _scratch_xfs_populate() {
 	_xfs_force_bdev data $SCRATCH_MNT
 
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
-	dblksz="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep naming.*bsize | sed -e 's/^.*bsize=//g' -e 's/\([0-9]*\).*$/\1/g')"
+	dblksz="$(_xfs_get_dir_blocksize "$SCRATCH_MNT")"
 	crc="$(_xfs_has_feature "$SCRATCH_MNT" crc -v)"
 	if [ $crc -eq 1 ]; then
 		leaf_hdr_size=64
@@ -602,7 +602,7 @@ _scratch_xfs_populate_check() {
 	is_reflink=$(_xfs_has_feature "$SCRATCH_MNT" reflink -v)
 
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
-	dblksz="$($XFS_INFO_PROG "${SCRATCH_MNT}" | grep naming.*bsize | sed -e 's/^.*bsize=//g' -e 's/\([0-9]*\).*$/\1/g')"
+	dblksz="$(_xfs_get_dir_blocksize "$SCRATCH_MNT")"
 	leaf_lblk="$((32 * 1073741824 / blksz))"
 	node_lblk="$((64 * 1073741824 / blksz))"
 	umount "${SCRATCH_MNT}"
