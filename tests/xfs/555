@@ -1,0 +1,32 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 555
+#
+# Corrupt xfs sb_inopblock, make sure no crash. This's a test coverage of
+# 392c6de98af1 ("xfs: sanitize sb_inopblock in xfs_mount_validate_sb")
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_kernel_commit 392c6de98af1 \
+	"xfs: sanitize sb_inopblock in xfs_mount_validate_sb"
+_require_scratch
+
+_scratch_mkfs >>$seqres.full
+echo "corrupt inopblock of sb 0"
+_scratch_xfs_set_metadata_field "inopblock" "500" "sb 0" >> $seqres.full
+echo "try to mount ..."
+_try_scratch_mount 2>> $seqres.full && _fail "mount should not succeed!"
+echo "no crash or hang"
+echo "repair corrupted sb 0"
+_scratch_xfs_repair >> $seqres.full 2>&1
+echo "check fs"
+_scratch_xfs_repair -n >> $seqres.full 2>&1 || echo "fs isn't fixed!"
+
+# success, all done
+status=0
+exit
