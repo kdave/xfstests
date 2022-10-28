@@ -191,3 +191,12 @@ _scratch_ext4_options()
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 		SCRATCH_OPTIONS="$SCRATCH_OPTIONS ${log_opt}"
 }
+
+# Get the inode flags for a particular inode number
+_ext4_get_inum_iflags() {
+	local dev="$1"
+	local inumber="$2"
+
+	debugfs -R "stat <${inumber}>" "${dev}" 2> /dev/null | \
+			sed -n 's/^.*Flags: \([0-9a-fx]*\).*$/\1/p'
+}

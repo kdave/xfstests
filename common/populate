@@ -641,7 +641,7 @@ __populate_check_ext4_dformat() {
 	extents=0
 	etree=0
 	debugfs -R "stat <${inode}>" "${dev}" 2> /dev/null | grep 'ETB[0-9]' -q && etree=1
-	iflags="$(debugfs -R "stat <${inode}>" "${dev}" 2> /dev/null | grep 'Flags:' | sed -e 's/^.*Flags: \([0-9a-fx]*\).*$/\1/g')"
+	iflags="$(_ext4_get_inum_iflags "${dev}" "${inode}")"
 	test "$(echo "${iflags}" | awk '{print and(strtonum($1), 0x80000);}')" -gt 0 && extents=1
 
 	case "${format}" in
@@ -688,7 +688,7 @@ __populate_check_ext4_dir() {
 
 	htree=0
 	inline=0
-	iflags="$(debugfs -R "stat <${inode}>" "${dev}" 2> /dev/null | grep 'Flags:' | sed -e 's/^.*Flags: \([0-9a-fx]*\).*$/\1/g')"
+	iflags="$(_ext4_get_inum_iflags "${dev}" "${inode}")"
 	test "$(echo "${iflags}" | awk '{print and(strtonum($1), 0x1000);}')" -gt 0 && htree=1
 	test "$(echo "${iflags}" | awk '{print and(strtonum($1), 0x10000000);}')" -gt 0 && inline=1
 
