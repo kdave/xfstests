@@ -1,0 +1,82 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 279
+#
+# Test that if we have two files with shared extents, after removing one of the
+# files, if we do a fiemap against the other file, it does not report extents as
+# shared anymore.
+#
+# This exercises the processing of delayed references for data extents in the
+# backref walking code, used by fiemap to determine if an extent is shared.
+#
+. ./common/preamble
+_begin_fstest auto quick subvol fiemap clone
+
+. ./common/filter
+. ./common/reflink
+. ./common/punch # for _filter_fiemap_flags
+
+_supported_fs btrfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_xfs_io_command "fiemap"
+
+_fixed_by_kernel_commit 4fc7b5722824 \
+	"btrfs: fix processing of delayed data refs during backref walking"
+
+run_test()
+{
+	local file_path_1=$1
+	local file_path_2=$2
+	local do_sync=$3
+
+	$XFS_IO_PROG -f -c "pwrite 0 64K" $file_path_1 | _filter_xfs_io
+	_cp_reflink $file_path_1 $file_path_2
+
+	if [ $do_sync -eq 1 ]; then
+		sync
+	fi
+
+	echo "Fiemap of $file_path_1 before deleting $file_path_2:" | \
+		_filter_scratch
+	$XFS_IO_PROG -c "fiemap -v" $file_path_1 | _filter_fiemap_flags
+
+	rm -f $file_path_2
+
+	echo "Fiemap of $file_path_1 after deleting $file_path_2:" | \
+		_filter_scratch
+	$XFS_IO_PROG -c "fiemap -v" $file_path_1 | _filter_fiemap_flags
+}
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# Create two test subvolumes, we'll reflink files between them.
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subv1 | _filter_scratch
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subv2 | _filter_scratch
+
+echo
+echo "Testing with same subvolume and without transaction commit"
+echo
+run_test "$SCRATCH_MNT/subv1/f1" "$SCRATCH_MNT/subv1/f2" 0
+
+echo
+echo "Testing with same subvolume and with transaction commit"
+echo
+run_test "$SCRATCH_MNT/subv1/f3" "$SCRATCH_MNT/subv1/f4" 1
+
+echo
+echo "Testing with different subvolumes and without transaction commit"
+echo
+run_test "$SCRATCH_MNT/subv1/f5" "$SCRATCH_MNT/subv2/f6" 0
+
+echo
+echo "Testing with different subvolumes and with transaction commit"
+echo
+run_test "$SCRATCH_MNT/subv1/f7" "$SCRATCH_MNT/subv2/f8" 1
+
+# success, all done
+status=0
+exit
