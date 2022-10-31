@@ -1,0 +1,64 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 280
+#
+# Test that if we have a large file, with file extent items spanning several
+# leaves in the fs tree, and that is shared due to a snapshot, if we COW one of
+# the extents, doing a fiemap will report the respective file range as not
+# shared.
+#
+# This exercises the processing of delayed references for metadata extents in
+# the backref walking code, used by fiemap to determine if an extent is shared.
+#
+. ./common/preamble
+_begin_fstest auto quick compress snapshot fiemap
+
+. ./common/filter
+. ./common/punch # for _filter_fiemap_flags
+
+_supported_fs btrfs
+_require_scratch
+_require_xfs_io_command "fiemap"
+
+_fixed_by_kernel_commit 943553ef9b51 \
+	"btrfs: fix processing of delayed tree block refs during backref walking"
+
+_scratch_mkfs >> $seqres.full 2>&1
+# We use compression because it's a very quick way to create a file with a very
+# large number of extents (compression limits the maximum extent size to 128K)
+# and while using very little disk space.
+_scratch_mount -o compress
+
+# A 128M file full of compressed extents results in a fs tree with a heigth
+# of 2 (root at level 1), so we'll end up with tree block references in the
+# extent tree (if the root was a leaf, we would have only data references).
+$XFS_IO_PROG -f -c "pwrite -b 1M 0 128M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Create a RW snapshot of the default subvolume.
+$BTRFS_UTIL_PROG subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap | _filter_scratch
+
+echo
+echo "File foo fiemap before COWing extent:"
+echo
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_fiemap_flags
+
+echo
+echo "Overwriting file range [120M, 120M + 128K) in the snapshot"
+echo
+$XFS_IO_PROG -c "pwrite -b 128K 120M 128K" $SCRATCH_MNT/snap/foo | _filter_xfs_io
+# Now fsync the file to force COWing the extent and the path from the root of
+# the snapshot tree down to the leaf where the extent is at.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/snap/foo
+
+echo
+echo "File foo fiemap after COWing extent in the snapshot:"
+echo
+# Now we should have all extents marked as shared except the 128K extent in the
+# file range [120M, 120M + 128K).
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_fiemap_flags
+
+# success, all done
+status=0
+exit
