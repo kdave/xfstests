@@ -250,3 +250,150 @@ _dmerror_load_working_table()
 	[ $load_res -ne 0 ] && _fail "dmsetup failed to load error table"
 	[ $resume_res -ne 0 ] && _fail  "dmsetup resume failed"
 }
+
+# Given a list of (start, length) tuples on stdin, combine adjacent tuples into
+# larger ones and write the new list to stdout.
+__dmerror_combine_extents()
+{
+	local awk_program='
+	BEGIN {
+		start = 0; len = 0;
+	}
+	{
+		if (start + len == $1) {
+			len += $2;
+		} else {
+			if (len > 0)
+				printf("%d %d\n", start, len);
+			start = $1;
+			len = $2;
+		}
+	}
+	END {
+		if (len > 0)
+			printf("%d %d\n", start, len);
+	}'
+
+	awk "$awk_program"
+}
+
+# Given a block device, the name of a preferred dm target, the name of an
+# implied dm target, and a list of (start, len) tuples on stdin, create a new
+# dm table which maps each of the tuples to the preferred target and all other
+# areas to the implied dm target.
+__dmerror_recreate_map()
+{
+	local device="$1"
+	local preferred_tgt="$2"
+	local implied_tgt="$3"
+	local size=$(blockdev --getsz "$device")
+
+	local awk_program='
+	BEGIN {
+		implied_start = 0;
+	}
+	{
+		extent_start = $1;
+		extent_len = $2;
+
+		if (extent_start > size) {
+			extent_start = size;
+			extent_len = 0;
+		} else if (extent_start + extent_len > size) {
+			extent_len = size - extent_start;
+		}
+
+		if (implied_start < extent_start)
+			printf("%d %d %s %s %d\n", implied_start,
+					extent_start - implied_start,
+					implied_tgt, device, implied_start);
+		printf("%d %d %s %s %d\n", extent_start, extent_len,
+				preferred_tgt, device, extent_start);
+		implied_start = extent_start + extent_len;
+	}
+	END {
+		if (implied_start < size)
+			printf("%d %d %s %s %d\n", implied_start,
+					size - implied_start, implied_tgt,
+					device, implied_start);
+	}'
+
+	awk -v device="$device" -v size=$size -v implied_tgt="$implied_tgt" \
+		-v preferred_tgt="$preferred_tgt" "$awk_program"
+}
+
+# Update the dm error table so that the range (start, len) maps to the
+# preferred dm target, overriding anything that maps to the implied dm target.
+# This assumes that the only desired targets for this dm device are the
+# preferred and and implied targets.  The fifth argument is the scratch device
+# that we want to change the table for.
+__dmerror_change()
+{
+	local start="$1"
+	local len="$2"
+	local preferred_tgt="$3"
+	local implied_tgt="$4"
+	local whichdev="$5"
+	local old_table
+	local new_table
+
+	case "$whichdev" in
+	"SCRATCH_DEV"|"")	whichdev="$SCRATCH_DEV";;
+	"SCRATCH_LOGDEV"|"LOG")	whichdev="$NON_ERROR_LOGDEV";;
+	"SCRATCH_RTDEV"|"RT")	whichdev="$NON_ERROR_RTDEV";;
+	esac
+
+	case "$whichdev" in
+	"$SCRATCH_DEV")		old_table="$DMERROR_TABLE";;
+	"$NON_ERROR_LOGDEV")	old_table="$DMERROR_LOGTABLE";;
+	"$NON_ERROR_RTDEV")	old_table="$DMERROR_RTTABLE";;
+	*)
+		echo "$whichdev: Unknown dmerror device."
+		return
+		;;
+	esac
+
+	new_table="$( (echo "$old_table"; echo "$start $len $preferred_tgt") | \
+		awk -v type="$preferred_tgt" '{if ($3 == type) print $0;}' | \
+		sort -g | \
+		__dmerror_combine_extents | \
+		__dmerror_recreate_map "$whichdev" "$preferred_tgt" \
+				"$implied_tgt" )"
+
+	case "$whichdev" in
+	"$SCRATCH_DEV")		DMERROR_TABLE="$new_table";;
+	"$NON_ERROR_LOGDEV")	DMERROR_LOGTABLE="$new_table";;
+	"$NON_ERROR_RTDEV")	DMERROR_RTTABLE="$new_table";;
+	esac
+}
+
+# Reset the dm error table to everything ok.  The dm device itself must be
+# remapped by calling _dmerror_load_error_table.
+_dmerror_reset_table()
+{
+	DMERROR_TABLE="$DMLINEAR_TABLE"
+	DMERROR_LOGTABLE="$DMLINEAR_LOGTABLE"
+	DMERROR_RTTABLE="$DMLINEAR_RTTABLE"
+}
+
+# Update the dm error table so that IOs to the given range will return EIO.
+# The dm device itself must be remapped by calling _dmerror_load_error_table.
+_dmerror_mark_range_bad()
+{
+	local start="$1"
+	local len="$2"
+	local dev="$3"
+
+	__dmerror_change "$start" "$len" error linear "$dev"
+}
+
+# Update the dm error table so that IOs to the given range will succeed.
+# The dm device itself must be remapped by calling _dmerror_load_error_table.
+_dmerror_mark_range_good()
+{
+	local start="$1"
+	local len="$2"
+	local dev="$3"
+
+	__dmerror_change "$start" "$len" linear error "$dev"
+}

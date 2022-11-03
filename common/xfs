@@ -218,6 +218,15 @@ _xfs_get_dir_blocksize()
 	$XFS_INFO_PROG "$fs" | sed -n "s/^naming.*bsize=\([[:digit:]]*\).*/\1/p"
 }
 
+# Decide if this path is a file on the realtime device
+_xfs_is_realtime_file()
+{
+	if [ "$USE_EXTERNAL" != "yes" ] || [ -z "$SCRATCH_RTDEV" ]; then
+		return 1
+	fi
+	$XFS_IO_PROG -c 'stat -v' "$1" | grep -q -w realtime
+}
+
 # Set or clear the realtime status of every supplied path.  The first argument
 # is either 'data' or 'realtime'.  All other arguments should be paths to
 # existing directories or empty regular files.
