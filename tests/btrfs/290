@@ -15,6 +15,14 @@ _begin_fstest auto quick verity
 . ./common/filter
 . ./common/verity
 
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_restore_fsverity_signatures
+	rm -f $tmp.*
+}
+
 # real QA test starts here
 _supported_fs btrfs
 _require_scratch_verity
@@ -24,6 +32,7 @@ _require_xfs_io_command "falloc"
 _require_xfs_io_command "pread"
 _require_xfs_io_command "pwrite"
 _require_btrfs_corrupt_block
+_disable_fsverity_signatures
 
 get_ino() {
 	local file=$1
