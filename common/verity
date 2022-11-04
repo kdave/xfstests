@@ -44,12 +44,13 @@ _require_scratch_verity()
 	# doesn't work on ext3-style filesystems.  So, try actually using it.
 	echo foo > $SCRATCH_MNT/tmpfile
 	_disable_fsverity_signatures
-	if ! _fsv_enable $SCRATCH_MNT/tmpfile; then
-		_restore_fsverity_signatures
+	_fsv_enable $SCRATCH_MNT/tmpfile
+	local status=$?
+	_restore_prev_fsverity_signatures
+	rm -f $SCRATCH_MNT/tmpfile
+	if (( $status != 0 )); then
 		_notrun "$FSTYP verity isn't usable by default with these mkfs options"
 	fi
-	_restore_fsverity_signatures
-	rm -f $SCRATCH_MNT/tmpfile
 
 	_scratch_unmount
 
@@ -105,10 +106,7 @@ _fsv_load_cert()
 _disable_fsverity_signatures()
 {
 	if [ -e /proc/sys/fs/verity/require_signatures ]; then
-		if [ -z "$FSVERITY_SIG_CTL_ORIG" ]; then
-			FSVERITY_SIG_CTL_ORIG=$(</proc/sys/fs/verity/require_signatures)
-		fi
-		echo 0 > /proc/sys/fs/verity/require_signatures
+		_set_fsverity_require_signatures 0
 	fi
 }
 
@@ -116,18 +114,36 @@ _disable_fsverity_signatures()
 # This assumes that _require_fsverity_builtin_signatures() was called.
 _enable_fsverity_signatures()
 {
-	if [ -z "$FSVERITY_SIG_CTL_ORIG" ]; then
-		FSVERITY_SIG_CTL_ORIG=$(</proc/sys/fs/verity/require_signatures)
-	fi
-	echo 1 > /proc/sys/fs/verity/require_signatures
+	_set_fsverity_require_signatures 1
 }
 
-# Restore the original signature verification setting.
+# Restore the original value of fs.verity.require_signatures, i.e. the value it
+# had at the beginning of the test.
 _restore_fsverity_signatures()
 {
-        if [ -n "$FSVERITY_SIG_CTL_ORIG" ]; then
-                echo "$FSVERITY_SIG_CTL_ORIG" > /proc/sys/fs/verity/require_signatures
-        fi
+	if [ -n "$FSVERITY_SIG_CTL_ORIG" ]; then
+		_set_fsverity_require_signatures "$FSVERITY_SIG_CTL_ORIG"
+	fi
+}
+
+# Restore the previous value of fs.verity.require_signatures, i.e. the value it
+# had just before it was last written to.
+_restore_prev_fsverity_signatures()
+{
+	if [ -n "$FSVERITY_SIG_CTL_PREV" ]; then
+		_set_fsverity_require_signatures "$FSVERITY_SIG_CTL_PREV"
+	fi
+}
+
+_set_fsverity_require_signatures()
+{
+	local newval=$1
+	local oldval=$(</proc/sys/fs/verity/require_signatures)
+	FSVERITY_SIG_CTL_PREV=$oldval
+	if [ -z "$FSVERITY_SIG_CTL_ORIG" ]; then
+		FSVERITY_SIG_CTL_ORIG=$oldval
+	fi
+	echo "$newval" > /proc/sys/fs/verity/require_signatures
 }
 
 # Require userspace and kernel support for 'fsverity dump_metadata'.
@@ -245,14 +261,14 @@ _fsv_have_hash_algorithm()
 	local hash_alg=$1
 	local test_file=$2
 
+	_disable_fsverity_signatures
 	rm -f $test_file
 	head -c 4096 /dev/zero > $test_file
-	if ! _fsv_enable --hash-alg=$hash_alg $test_file &>> $seqres.full; then
-		# no kernel support
-		return 1
-	fi
+	_fsv_enable --hash-alg=$hash_alg $test_file &>> $seqres.full
+	local status=$?
+	_restore_prev_fsverity_signatures
 	rm -f $test_file
-	return 0
+	return $status
 }
 
 #
