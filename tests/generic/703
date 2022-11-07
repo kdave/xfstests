@@ -1,0 +1,103 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 703
+#
+# Test that direct IO writes with io_uring and O_DSYNC are durable if a power
+# failure happens after they complete.
+#
+. ./common/preamble
+_begin_fstest auto quick log prealloc io_uring
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/dmflakey
+
+fio_config=$tmp.fio
+fio_out=$tmp.fio.out
+test_file="${SCRATCH_MNT}/foo"
+
+[ $FSTYP == "btrfs" ] &&
+	_fixed_by_kernel_commit 8184620ae212 \
+	"btrfs: fix lost file sync on direct IO write with nowait and dsync iocb"
+
+_supported_fs generic
+# We allocate 256M of data for the test file, so require a higher size of 512M
+# which gives a margin of safety for a COW filesystem like btrfs (where metadata
+# is always COWed).
+_require_scratch_size $((512 * 1024))
+_require_odirect
+_require_io_uring
+_require_dm_target flakey
+_require_xfs_io_command "falloc"
+
+cat >$fio_config <<EOF
+[test_io_uring_dio_dsync]
+ioengine=io_uring
+direct=1
+bs=64K
+sync=1
+filename=$test_file
+rw=randwrite
+time_based
+runtime=10
+EOF
+
+_require_fio $fio_config
+
+_scratch_mkfs >>$seqres.full 2>&1
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# We do 64K writes in the fio job.
+_require_congruent_file_oplen $SCRATCH_MNT $((64 * 1024))
+
+touch $test_file
+
+# On btrfs IOCB_NOWAIT writes can only be done on NOCOW files, so enable
+# nodatacow on the file if we are running on btrfs.
+if [ $FSTYP == "btrfs" ]; then
+	_require_chattr C
+	$CHATTR_PROG +C $test_file
+fi
+
+$XFS_IO_PROG -c "falloc 0 256M" $test_file
+
+# Persist everything, make sure the file exists after power failure.
+sync
+
+echo -e "Running fio with config:\n" >> $seqres.full
+cat $fio_config >> $seqres.full
+
+$FIO_PROG $fio_config --output=$fio_out
+
+echo -e "\nOutput from fio:\n" >> $seqres.full
+cat $fio_out >> $seqres.full
+
+digest_before=$(_md5_checksum $test_file)
+
+# Simulate a power failure and mount the filesystem to check that all the data
+# previously written are available.
+_flakey_drop_and_remount
+
+digest_after=$(_md5_checksum $test_file)
+
+if [ "$digest_after" != "$digest_before" ]; then
+	echo "Error: not all file data got persisted."
+	echo "Digest before power failure: $digest_before"
+	echo "Digest after power failure:  $digest_after"
+fi
+
+_unmount_flakey
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
