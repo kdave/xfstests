@@ -1,0 +1,52 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 704
+#
+# Make sure logical-sector sized O_DIRECT write is allowed
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	[ -d "$SCSI_DEBUG_MNT" ] && $UMOUNT_PROG $SCSI_DEBUG_MNT 2>/dev/null
+	_put_scsi_debug_dev
+}
+
+# Import common functions.
+. ./common/scsi_debug
+
+# real QA test starts here
+_supported_fs generic
+_fixed_by_kernel_commit 7c71ee78031c "xfs: allow logical-sector sized O_DIRECT"
+_require_scsi_debug
+# If TEST_DEV is block device, make sure current fs is a localfs which can be
+# written on scsi_debug device
+_require_test
+_require_block_device $TEST_DEV
+
+echo "Get a device with 4096 physical sector size and 512 logical sector size"
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 0 256`
+blockdev --getpbsz --getss $SCSI_DEBUG_DEV
+
+echo "mkfs and mount"
+_mkfs_dev $SCSI_DEBUG_DEV || _fail "Can't make $FSTYP on scsi_debug device"
+SCSI_DEBUG_MNT="$TEST_DIR/scsi_debug_$seq"
+rm -rf $SCSI_DEBUG_MNT
+mkdir $SCSI_DEBUG_MNT
+run_check _mount $SCSI_DEBUG_DEV $SCSI_DEBUG_MNT
+
+echo "DIO read/write 512 bytes"
+# This dio write should succeed, even the physical sector size is 4096, but
+# the logical sector size is 512
+$XFS_IO_PROG -d -f -c "pwrite 0 512" $SCSI_DEBUG_MNT/testfile >> $seqres.full
+$XFS_IO_PROG -d -c "pread 0 512" $SCSI_DEBUG_MNT/testfile >> $seqres.full
+
+# success, all done
+status=0
+exit
