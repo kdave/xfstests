@@ -50,7 +50,9 @@ $FSSUM_PROG -A -f -w "$checksums_file" "$SCRATCH_MNT"
 # Now defrag each file.
 for sz in ${file_sizes[@]}; do
 	echo "Defragging file with $sz bytes..." >> $seqres.full
-	$BTRFS_UTIL_PROG filesystem defragment "$SCRATCH_MNT/f_$sz"
+	# In new versions of btrfs-progs (6.0+), the defrag command outputs to
+	# stdout the path of the files it operates on. So ignore that.
+	$BTRFS_UTIL_PROG filesystem defragment "$SCRATCH_MNT/f_$sz" > /dev/null
 done
 
 # Verify the checksums after the defrag operations.
