@@ -35,7 +35,18 @@ _filter_btrfs_filesystem_show()
 	_filter_size | _filter_btrfs_version | _filter_devid | \
 	_filter_zero_size | \
 	sed -e "s/\(Total devices\) $NUMDEVS/\1 $NUM_SUBST/g" | \
-	uniq
+	uniq > $tmp.btrfs_filesystem_show
+
+	# The first two lines are Label/UUID and total devices
+	head -n 2 $tmp.btrfs_filesystem_show
+
+	# The remaining is the device list, first filter out the detailed
+	# missing device to the generic one.
+	# Then sort and uniq the result
+	tail -n +3 $tmp.btrfs_filesystem_show | \
+	sed -e "s/devid <DEVID> size 0 used 0 path  MISSING/*** Some devices missing/" | \
+	sort -r | uniq
+	rm -f $tmp.btrfs_filesystem_show
 }
 
 # This eliminates all numbers, and shows only unique lines,
