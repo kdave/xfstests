@@ -15,37 +15,28 @@ _cleanup()
 {
 	cd /
 	_log_writes_cleanup
-	_dmthin_cleanup
 	rm -f $tmp.*
 }
 
 # Import common functions.
 . ./common/filter
-. ./common/dmthin
 . ./common/dmlogwrites
 
 # real QA test starts here
 _supported_fs generic
-_require_scratch_nocheck
+_require_scratch
 _require_no_logdev
 _require_log_writes_dax_mountopt "dax"
-_require_dm_target thin-pool
 _require_xfs_io_command "mmap" "-S"
 _require_xfs_io_command "log_writes"
+_require_command "$BLKDISCARD_PROG" blkdiscard
 
-devsize=$((1024*1024*200 / 512))        # 200m phys/virt size
-csize=$((1024*64 / 512))                # 64k cluster size
-lowspace=$((1024*1024 / 512))           # 1m low space threshold
+MAPPED_LEN=$((512 * 1024 * 1024)) # 512 MiB
+LEN=$((1024 * 1024)) # 1 MiB
 
-# Use a thin device to provide deterministic discard behavior. Discards are used
-# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
-_dmthin_init $devsize $devsize $csize $lowspace
-
-_log_writes_init $DMTHIN_VOL_DEV
+_log_writes_init $SCRATCH_DEV $MAPPED_LEN
 _log_writes_mkfs >> $seqres.full 2>&1
 _log_writes_mount -o dax
-
-LEN=$((1024 * 1024)) # 1 MiB
 
 $XFS_IO_PROG -t -c "truncate $LEN" -c "mmap -S 0 $LEN" -c "mwrite 0 $LEN" \
 	-c "log_writes -d $LOGWRITES_NAME -m preunmap" \
@@ -54,14 +45,19 @@ $XFS_IO_PROG -t -c "truncate $LEN" -c "mmap -S 0 $LEN" -c "mwrite 0 $LEN" \
 # Unmount the scratch dir and tear down the log writes target
 _log_writes_unmount
 _log_writes_remove
-_dmthin_check_fs
+_check_scratch_fs
 
-# destroy previous filesystem so we can be sure our rebuild works
-_mkfs_dev $DMTHIN_VOL_DEV >> $seqres.full 2>&1
+# Forcibly zero the mapped range of scratch device and destroy
+# previous filesystem so we can be sure our rebuild works.
+# Note that blkdiscard -z will fall back to writing buffers of zeroes
+# if scratch device doesn't support write zeroes operation(i.e.
+# REQ_OP_WRITE_ZEROES).
+$BLKDISCARD_PROG -fzl $MAPPED_LEN $SCRATCH_DEV >> $seqres.full 2>&1
+_scratch_mkfs >> $seqres.full 2>&1
 
 # check pre-unmap state
-_log_writes_replay_log preunmap $DMTHIN_VOL_DEV
-_dmthin_mount
+_log_writes_replay_log preunmap $SCRATCH_DEV
+_scratch_mount
 
 # We should see $SCRATCH_MNT/test as having 1 MiB in block allocations
 du -sh $SCRATCH_MNT/test | _filter_scratch | _filter_spaces
