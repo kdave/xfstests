@@ -59,14 +59,28 @@ _require_log_writes_dax_mountopt()
 	fi
 }
 
+# Set up a dm-log-writes device
+#
+# blkdev: the specified target device
+# length(optional): the mapped length in bytes
+# Note that the entire size of the target device will be used
+# if length is not specified.
 _log_writes_init()
 {
-	blkdev=$1
+	local blkdev=$1
+	local length=$2
+	local BLK_DEV_SIZE
 
 	[ -z "$blkdev" ] && _fail \
 	"block dev must be specified for _log_writes_init"
 
-	local BLK_DEV_SIZE=`blockdev --getsz $blkdev`
+	if [ -z "$length" ]; then
+		BLK_DEV_SIZE=`blockdev --getsz $blkdev`
+	else
+		local blksz=`blockdev --getss $blkdev`
+		BLK_DEV_SIZE=$((length / blksz))
+	fi
+
 	LOGWRITES_NAME=logwrites-test
 	LOGWRITES_DMDEV=/dev/mapper/$LOGWRITES_NAME
 	LOGWRITES_TABLE="0 $BLK_DEV_SIZE log-writes $blkdev $LOGWRITES_DEV"
