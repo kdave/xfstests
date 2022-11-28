@@ -1,0 +1,89 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2022 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 281
+#
+# Test that if we have a snapshot with a compressed extent that is partially
+# shared between two files, one of them has a size that is not sector size
+# aligned, we create a v2 send stream for the snapshot with compressed data,
+# and then apply that stream to another filesystem, the operation succeeds and
+# no data is missing. Also check that the file that had a reference to the whole
+# extent gets two compressed extents in the new filesystem, with only one of
+# them being shared (reflinked).
+#
+. ./common/preamble
+_begin_fstest auto quick send compress clone fiemap
+
+. ./common/filter
+. ./common/reflink
+. ./common/punch # for _filter_fiemap_flags
+
+_supported_fs btrfs
+_require_test
+_require_scratch_reflink
+_require_btrfs_send_v2
+_require_xfs_io_command "fiemap"
+_require_fssum
+
+_fixed_by_kernel_commit a11452a3709e \
+	"btrfs: send: avoid unaligned encoded writes when attempting to clone range"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+send_stream=$send_files_dir/snap.stream
+snap_fssum=$send_files_dir/snap.fssum
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount -o compress
+
+# File foo has a size of 65K, which is not sector size aligned for any
+# supported sector size on btrfs.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 65K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# File bar has a compressed extent (and its size is sector size aligned).
+$XFS_IO_PROG -f -c "pwrite -S 0xcd 0 128K" $SCRATCH_MNT/bar | _filter_xfs_io
+
+# Now clone only half of bar's extent into foo.
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 0 0 64K" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+echo "Creating snapshot and a send stream for it..."
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap \
+	| _filter_scratch
+$BTRFS_UTIL_PROG send --compressed-data -f $send_stream $SCRATCH_MNT/snap 2>&1 \
+	| _filter_scratch
+
+$FSSUM_PROG -A -f -w $snap_fssum $SCRATCH_MNT/snap
+
+echo "Creating a new filesystem to receive the send stream..."
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1
+# Mount without compression, we created the stream with data compression enabled
+# so we want to verify that applying the stream preserves the compression.
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_stream $SCRATCH_MNT
+
+echo "Verifying data matches the original filesystem..."
+$FSSUM_PROG -r $snap_fssum $SCRATCH_MNT/snap
+
+# Now check that fiemap reports two extents for file bar:
+#
+# 1) The first extent should be encoded, because compression was enabled in the
+#    original filesystem, and should also be flagged as shared, since that file
+#    range was reflinked with file foo in the original filesystem;
+#
+# 2) The second extent should also be encoded (compression was enabled in the
+#    original filesystem), but not shared since that file range was not
+#    reflinked in the original filesystem. It should also have the "last" flag
+#    set, as it's the last extent in the file.
+#
+echo "File bar fiemap output in the new filesystem:"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags 1
+
+# success, all done
+status=0
+exit
