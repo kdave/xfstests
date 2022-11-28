@@ -585,3 +585,17 @@ _require_btrfs_corrupt_block()
 {
 	_require_command "$BTRFS_CORRUPT_BLOCK_PROG" btrfs-corrupt-block
 }
+
+_require_btrfs_send_v2()
+{
+	# Check first if btrfs-progs supports the v2 stream.
+	_require_btrfs_command send --compressed-data
+
+	# Now check the kernel support. If send_stream_version does not exists,
+	# then it's a kernel that only supports v1.
+	[ -f /sys/fs/btrfs/features/send_stream_version ] || \
+		_notrun "kernel does not support send stream v2"
+
+	[ $(cat /sys/fs/btrfs/features/send_stream_version) -gt 1 ] || \
+		_notrun "kernel does not support send stream v2"
+}
