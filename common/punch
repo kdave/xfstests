@@ -109,7 +109,23 @@ _filter_fiemap()
 
 _filter_fiemap_flags()
 {
-	$AWK_PROG '
+	local include_encoded_flag=0
+
+	# Unless a first argument is passed and with a value of 1, the fiemap
+	# encoded flag is filtered out.
+	# This is because tests that use this filter's output in their golden
+	# output may get the encoded flag set or not depending on the filesystem
+	# and its configuration. For example, running btrfs with "-o compress"
+	# (or compress-force) set in MOUNT_OPTIONS, then extents that get
+	# compressed are reported with the encoded flag, otherwise that flag is
+	# not reported. Like this the fs configuration does not cause a mismatch
+	# with the golden output, and tests that exercise specific configurations
+	# can explicitly ask for the encoded flag to be printed.
+	if [ ! -z "$1" ] && [ $1 -eq 1 ]; then
+		include_encoded_flag=1
+	fi
+
+	local awk_script='
 		$3 ~ /hole/ {
 			print $1, $2, $3;
 			next;
@@ -126,7 +142,22 @@ _filter_fiemap_flags()
 			if (and(flags, 0x2000)) {
 				flag_str = "shared";
 				set = 1;
-			}
+			}'
+
+	if [ $include_encoded_flag -eq 1 ]; then
+		awk_script=$awk_script'
+			if (and(flags, 0x8)) {
+				if (set) {
+					flag_str = flag_str"|";
+				} else {
+					flag_str = "";
+				}
+				flag_str = flag_str"encoded";
+				set = 1;
+			}'
+	fi
+
+	awk_script=$awk_script'
 			if (and(flags, 0x1)) {
 				if (set) {
 					flag_str = flag_str"|";
@@ -136,8 +167,9 @@ _filter_fiemap_flags()
 				flag_str = flag_str"last";
 			}
 			print $1, $2, flag_str
-		}' |
-	_coalesce_extents
+		}'
+
+	$AWK_PROG -e "$awk_script" | _coalesce_extents
 }
 
 # Filters fiemap output to only print the 
