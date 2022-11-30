@@ -50,9 +50,21 @@ _file_create()
 
 	cd $SCRATCH_MNT/origin
 
-	_disksize=`$DF_PROG -B 1 $SCRATCH_MNT | tail -1 | $AWK_PROG '{ print $5 }'`
+	_disksize=$(_get_available_space $SCRATCH_MNT)
+	_free_inodes=$(_get_free_inode $SCRATCH_MNT)
+	# Some filesystems do not limit number of inodes and return 0
+	if [ $_free_inodes -eq 0 ]; then
+		# Guess one block per inode
+		_free_inodes=$(($_disksize / $block_size))
+	fi
+	# Leave some slack for directories etc.
+	_free_inodes=$(($_free_inodes - $_free_inodes/8))
 	_disksize=$(($_disksize / 3))
-	_num=$(($_disksize / $count / $threads / $block_size))
+	_num=$(($_disksize / $count / $block_size))
+	if [ $_num -gt $_free_inodes ]; then
+		_num=$_free_inodes
+	fi
+	_num=$(($_num/$threads))
 	_count=$count
 	while [ $_i -lt $_num ]
 	do
