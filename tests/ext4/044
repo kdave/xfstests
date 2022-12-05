@@ -53,9 +53,10 @@ _within_tolerance "sec_ctime" $sec_ctime $sec 1 -v
 
 _scratch_unmount >> $seqres.full 2>&1
 
-# Test mount to ext3 then mount back to ext4 and check timestamp again
-_mount -t ext3 `_scratch_mount_options $*` || _fail "ext3 mount failed"
-_scratch_unmount >> $seqres.full 2>&1
+# Test mount to ext3 then mount back to ext4 and check timestamp again.  We
+# ignore if ext3 failed to mount. It can happen because some mount options are
+# incompatible with ext3. Still the test makes sense.
+_mount -t ext3 `_scratch_mount_options $*` >> $seqres.full 2>&1 && _scratch_unmount >> $seqres.full 2>&1
 _scratch_mount
 
 nsec_atime2=`$here/src/t_get_file_time $SCRATCH_MNT/tmp_file atime nsec`
