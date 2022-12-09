@@ -280,10 +280,10 @@ test_revertible_options()
 	if [ "$enable_discard_sync" = true ]; then
 		test_roundtrip_mount "discard" "discard" "discard=sync" "discard"
 		test_roundtrip_mount "discard=async" "discard=async" "discard=sync" "discard"
-		test_roundtrip_mount "discard=sync" "discard" "nodiscard" "$DEFAULT_OPTS"
+		test_roundtrip_mount "discard=sync" "discard" "nodiscard" "$DEFAULT_NODISCARD_OPTS"
 	else
 		test_roundtrip_mount "discard" "discard" "discard" "discard"
-		test_roundtrip_mount "discard" "discard" "nodiscard" "$DEFAULT_OPTS"
+		test_roundtrip_mount "discard" "discard" "nodiscard" "$DEFAULT_NODISCARD_OPTS"
 	fi
 
 	test_roundtrip_mount "enospc_debug" "enospc_debug" "noenospc_debug" "$DEFAULT_OPTS"
@@ -343,6 +343,12 @@ _scratch_mount
 # from one mount option to the next one.
 DEFAULT_OPTS=$(cat /proc/self/mounts | grep $SCRATCH_MNT | \
 		$AWK_PROG '{ print $4 }')
+
+# Since 63a7cb130718 ("btrfs: auto enable discard=async when possible"),
+# "discard=async" will be automatically enabled if the device supports.
+# This can screw up our test against nodiscard options, thus remove the
+# default "discard=async" mount option for "nodiscard" tests.
+DEFAULT_NODISCARD_OPTS=$(echo -n "$DEFAULT_OPTS" | $SED_PROG 's/,discard=async//')
 
 $BTRFS_UTIL_PROG subvolume create "$SCRATCH_MNT/vol1" > /dev/null
 touch "$SCRATCH_MNT/vol1/file.txt"
