@@ -71,6 +71,37 @@ __populate_create_dir() {
 	done
 }
 
+# Create a large directory and ensure that it's a btree format
+__populate_xfs_create_btree_dir() {
+	local name="$1"
+	local isize="$2"
+	local missing="$3"
+	local icore_size="$(_xfs_get_inode_core_bytes $SCRATCH_MNT)"
+	# We need enough extents to guarantee that the data fork is in
+	# btree format.  Cycling the mount to use xfs_db is too slow, so
+	# watch for when the extent count exceeds the space after the
+	# inode core.
+	local max_nextents="$(((isize - icore_size) / 16))"
+	local nr=0
+
+	mkdir -p "${name}"
+	while true; do
+		local creat=mkdir
+		test "$((nr % 20))" -eq 0 && creat=touch
+		$creat "${name}/$(printf "%.08d" "$nr")"
+		if [ "$((nr % 40))" -eq 0 ]; then
+			local nextents="$(_xfs_get_fsxattr nextents $name)"
+			[ $nextents -gt $max_nextents ] && break
+		fi
+		nr=$((nr+1))
+	done
+
+	test -z "${missing}" && return
+	seq 1 2 "${nr}" | while read d; do
+		rm -rf "${name}/$(printf "%.08d" "$d")"
+	done
+}
+
 # Add a bunch of attrs to a file
 __populate_create_attr() {
 	name="$1"
@@ -176,6 +207,7 @@ _scratch_xfs_populate() {
 
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
 	dblksz="$(_xfs_get_dir_blocksize "$SCRATCH_MNT")"
+	isize="$(_xfs_get_inode_size "$SCRATCH_MNT")"
 	crc="$(_xfs_has_feature "$SCRATCH_MNT" crc -v)"
 	if [ $crc -eq 1 ]; then
 		leaf_hdr_size=64
@@ -226,7 +258,7 @@ _scratch_xfs_populate() {
 
 	# - BTREE
 	echo "+ btree dir"
-	__populate_create_dir "${SCRATCH_MNT}/S_IFDIR.FMT_BTREE" "$((128 * dblksz / 40))" true
+	__populate_xfs_create_btree_dir "${SCRATCH_MNT}/S_IFDIR.FMT_BTREE" "$isize" true
 
 	# Symlinks
 	# - FMT_LOCAL
