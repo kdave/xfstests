@@ -33,8 +33,9 @@ test_attr_replay()
 	# Inject error
 	_scratch_inject_error $error_tag
 
-	# Set attribute
-	echo "$attr_value" | ${ATTR_PROG} -$flag "$attr_name" $testfile 2>&1 | \
+	# Set attribute, being careful not to include the trailing newline
+	# in the attr value.
+	echo -n "$attr_value" | ${ATTR_PROG} -$flag "$attr_name" $testfile 2>&1 | \
 			    _filter_scratch
 
 	# FS should be shut down, touch will fail
@@ -87,6 +88,7 @@ ORIG_XFS_LARP=`cat /sys/fs/xfs/debug/larp`
 echo 1 > /sys/fs/xfs/debug/larp
 
 attr16="0123456789ABCDEF"
+attr17="X$attr16"
 attr64="$attr16$attr16$attr16$attr16"
 attr256="$attr64$attr64$attr64$attr64"
 attr1k="$attr256$attr256$attr256$attr256"
@@ -94,6 +96,7 @@ attr4k="$attr1k$attr1k$attr1k$attr1k"
 attr8k="$attr4k$attr4k"
 attr16k="$attr8k$attr8k"
 attr32k="$attr16k$attr16k"
+attr32l="X$attr32k"
 attr64k="$attr32k$attr32k"
 
 echo "*** mkfs"
@@ -114,6 +117,11 @@ create_test_file empty_file1 0
 test_attr_replay empty_file1 "attr_name" $attr64 "s" "larp"
 test_attr_replay empty_file1 "attr_name" $attr64 "r" "larp"
 
+# empty, inline with an unaligned value
+create_test_file empty_fileX 0
+test_attr_replay empty_fileX "attr_nameX" $attr17 "s" "larp"
+test_attr_replay empty_fileX "attr_nameX" $attr17 "r" "larp"
+
 # empty, internal
 create_test_file empty_file2 0
 test_attr_replay empty_file2 "attr_name" $attr1k "s" "larp"
@@ -123,6 +131,11 @@ test_attr_replay empty_file2 "attr_name" $attr1k "r" "larp"
 create_test_file empty_file3 0
 test_attr_replay empty_file3 "attr_name" $attr64k "s" "larp"
 test_attr_replay empty_file3 "attr_name" $attr64k "r" "larp"
+
+# empty, remote with an unaligned value
+create_test_file empty_fileY 0
+test_attr_replay empty_fileY "attr_name" $attr32l "s" "larp"
+test_attr_replay empty_fileY "attr_name" $attr32l "r" "larp"
 
 # inline, inline
 create_test_file inline_file1 1 $attr16
