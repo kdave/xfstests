@@ -921,10 +921,12 @@ bool openat_tmpfile_supported(int dirfd)
 
 	fd = openat(dirfd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
 	if (fd == -1) {
-		if (errno == ENOTSUP)
+		if (errno == ENOTSUP) {
+			errno = 0; /* Don't report misleading errno. */
 			return false;
-		else
+		} else {
 			return log_errno(false, "failure: create");
+		}
 	}
 
 	if (close(fd))
