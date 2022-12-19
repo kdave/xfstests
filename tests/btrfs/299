@@ -1,0 +1,103 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 299
+#
+# Given a file with extents:
+# [0 : 4096) (inline)
+# [4096 : N] (prealloc)
+# if a user uses the ioctl BTRFS_IOC_LOGICAL_INO[_V2] asking for the file of the
+# non-inline extent, it results in reading the offset field of the inline
+# extent, which is meaningless (it is full of user data..). If we are
+# particularly lucky, it can be past the end of the extent buffer, resulting in
+# a crash. This test creates that circumstance and asserts that logical inode
+# resolution is still successful.
+#
+. ./common/preamble
+_begin_fstest auto quick preallocrw
+
+# real QA test starts here
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+_require_xfs_io_command "falloc" "-k"
+_require_btrfs_command inspect-internal dump-tree
+_require_btrfs_command inspect-internal logical-resolve
+_fixed_by_kernel_commit xxxxxxxx "btrfs: fix logical_ino ioctl panic"
+
+dump_tree() {
+	$BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV
+}
+
+get_extent_data() {
+	local ino=$1
+	dump_tree $SCRATCH_DEV | grep -A4 "($ino EXTENT_DATA "
+}
+
+get_prealloc_offset() {
+	local ino=$1
+	get_extent_data $ino | grep "disk byte" | $AWK_PROG '{print $5}'
+}
+
+# This test needs to create conditions s.t. the special inode's inline extent
+# is the first item in a leaf. Therefore, fix a leaf size and add
+# items that are otherwise not necessary to reproduce the inline-prealloc
+# condition to get to such a state.
+#
+# Roughly, the idea for getting the right item fill is to:
+# 1. create extra inline items to cause leaf splitting.
+# 2. put the target item in the middle so it is likely to catch the split
+# 3. add an extra variable inline item to tweak any final adjustments
+#
+# It took a bit of trial and error to hit working counts of inline items, since
+# it also had to account for dir and index items all going to the front.
+
+# use a 64k nodesize so that an fs with 64k pages and no subpage sector size
+# support will correctly reproduce the problem.
+_scratch_mkfs "--nodesize 64k" >> $seqres.full || _fail "mkfs failed"
+_scratch_mount
+
+f=$SCRATCH_MNT/f
+# write extra files before the evil file to use up the leaf and
+# help trick leaf balancing
+for i in {1..41}; do
+	$XFS_IO_PROG -fc "pwrite -q 0 1024" $f.inl.$i
+done
+
+# write a variable inline file to help pad the preceeding leaf
+$XFS_IO_PROG -fc "pwrite -q 0 1" $f.inl-var.$i
+
+# falloc the evil file whose inline extent will start a leaf
+$XFS_IO_PROG -fc "falloc -k 0 1m" $f.evil
+$XFS_IO_PROG -fc fsync $f.evil
+
+# write extra files after the evil file to use up the leaf and
+# help trick leaf balancing
+for i in {1..42}; do
+	$XFS_IO_PROG -fc "pwrite -q 0 1024" $f.inl.2.$i
+done
+
+# grab the prealloc offset from dump tree while it's still the only
+# extent data item for the inode
+ino=$(stat -c '%i' $f.evil)
+logical=$(get_prealloc_offset $ino)
+
+# do the "small write; fsync; small write" pattern which reproduces the desired
+# item pattern of an inline extent followed by a preallocated extent. The 23
+# size is somewhat arbitrary, but ensures that the offset field is past the eb
+# when we are item 0 (borrowed from the actual crash this reproduces).
+$XFS_IO_PROG -fc "pwrite -q 0 23" $f.evil
+$XFS_IO_PROG -fc fsync $f.evil
+$XFS_IO_PROG -fc "pwrite -q 0 23" $f.evil
+
+# ensure we have all the extent_data items for when we do logical to inode
+# resolution
+sync
+
+# trigger the backref walk which accesses the bad inline extent
+btrfs inspect-internal logical-resolve $logical $SCRATCH_MNT
+
+echo "Silence is golden"
+status=0
+exit
