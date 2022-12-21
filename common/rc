@@ -3609,6 +3609,21 @@ _check_xflag()
 	fi
 }
 
+# Make sure the given file access mode is set to use the pagecache.  If
+# userspace or kernel don't support statx or STATX_ATTR_DAX, we assume that
+# means pagecache.  The sole parameter must be a directory.
+_require_pagecache_access() {
+	local testfile="$1/testfile"
+
+	touch "$testfile"
+	if ! _check_s_dax "$testfile" 0 &>> $seqres.full; then
+		rm -f "$testfile"
+		_notrun 'test requires pagecache access'
+	fi
+
+	rm -f "$testfile"
+}
+
 # Check if dax mount options are supported
 #
 # $1 can be either 'dax=always' or 'dax'

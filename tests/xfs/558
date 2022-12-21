@@ -1,0 +1,210 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 558
+#
+# This is a regression test for a data corruption bug that existed in XFS' copy
+# on write code between 4.9 and 4.19.  The root cause is a concurrency bug
+# wherein we would drop ILOCK_SHARED after querying the CoW fork in xfs_map_cow
+# and retake it before querying the data fork in xfs_map_blocks.  If a second
+# thread changes the CoW fork mappings between the two calls, it's possible for
+# xfs_map_blocks to return a zero-block mapping, which results in writeback
+# being elided for that block.  Elided writeback of dirty data results in
+# silent loss of writes.
+#
+# Worse yet, kernels from that era still used buffer heads, which means that an
+# elided writeback leaves the page clean but the bufferheads dirty.  Due to a
+# naïve optimization in mark_buffer_dirty, the SetPageDirty call is elided if
+# the bufferhead is dirty, which means that a subsequent rewrite of the data
+# block will never result in the page being marked dirty, and all subsequent
+# writes are lost.
+#
+# It turns out that Christoph Hellwig unwittingly fixed the race in commit
+# 5c665e5b5af6 ("xfs: remove xfs_map_cow"), and no testcase was ever written.
+# Four years later, we hit it on a production 4.14 kernel.  This testcase
+# relies on a debugging knob that introduces artificial delays into writeback.
+#
+# Before the race, the file blocks 0-1 are not shared and blocks 2-5 are
+# shared.  There are no extents in CoW fork.
+#
+# Two threads race like this:
+#
+# Thread 1 (writeback block 0)     | Thread 2  (write to block 2)
+# ---------------------------------|--------------------------------
+#                                  |
+# 1. Check if block 0 in CoW fork  |
+#    from xfs_map_cow.             |
+#                                  |
+# 2. Block 0 not found in CoW      |
+#    fork; the block is considered |
+#    not shared.                   |
+#                                  |
+# 3. xfs_map_blocks looks up data  |
+#    fork to get a map covering    |
+#    block 0.                      |
+#                                  |
+# 4. It gets a data fork mapping   |
+#    for block 0 with length 2.    |
+#                                  |
+#                                  | 1. A buffered write to block 2 sees
+#                                  |    that it is a shared block and no
+#                                  |    extent covers block 2 in CoW fork.
+#                                  |
+#                                  |    It creates a new CoW fork mapping.
+#                                  |    Due to the cowextsize, the new
+#                                  |    extent starts at block 0 with
+#                                  |    length 128.
+#                                  |
+#                                  |
+# 5. It lookup CoW fork again to   |
+#    trim the map (0, 2) to a      |
+#    shared block boundary.        |
+#                                  |
+# 5a. It finds (0, 128) in CoW fork|
+# 5b. It trims the data fork map   |
+#     from (0, 1) to (0, 0) (!!!)  |
+#                                  |
+# 6. The xfs_imap_valid call after |
+#    the xfs_map_blocks call checks|
+#    if the mapping (0, 0) covers  |
+#    block 0.  The result is "NO". |
+#                                  |
+# 7. Since block 0 has no physical |
+#    block mapped, it's not added  |
+#    to the ioend.  This is the    |
+#    first problem.                |
+#                                  |
+# 8. xfs_add_to_ioend usually      |
+#    clears the bufferhead dirty   |
+#    flag  Because this is skipped,|
+#    we leave the page clean with  |
+#    the associated buffer head(s) |
+#    dirty (the second problem).   |
+#    Now the dirty state is        |
+#    inconsistent.
+#
+# On newer kernels, this is also a functionality test for the ifork sequence
+# counter because the writeback completions will change the data fork and force
+# revalidations of the wb mapping.
+#
+. ./common/preamble
+_begin_fstest auto quick clone
+
+# Import common functions.
+. ./common/reflink
+. ./common/inject
+. ./common/tracing
+
+# real QA test starts here
+_cleanup()
+{
+	test -n "$sentryfile" && rm -f $sentryfile
+	wait
+	_ftrace_cleanup
+	cd /
+	rm -r -f $tmp.* $sentryfile $tracefile
+}
+
+# Modify as appropriate.
+_supported_fs xfs
+_fixed_by_kernel_commit 5c665e5b5af6 "xfs: remove xfs_map_cow"
+_require_ftrace
+_require_xfs_io_error_injection "wb_delay_ms"
+_require_scratch_reflink
+_require_cp_reflink
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+# This is a pagecache test, so try to disable fsdax mode.
+$XFS_IO_PROG -c 'chattr -x' $SCRATCH_MNT &> $seqres.full
+_require_pagecache_access $SCRATCH_MNT
+
+blksz=65536
+_require_congruent_file_oplen $SCRATCH_MNT $blksz
+
+# Make sure we have sufficient extent size to create speculative CoW
+# preallocations.
+$XFS_IO_PROG -c 'cowextsize 1m' $SCRATCH_MNT
+
+# Write out a file with the first two blocks unshared and the rest shared.
+_pwrite_byte 0x59 0 $((160 * blksz)) $SCRATCH_MNT/file >> $seqres.full
+_pwrite_byte 0x59 0 $((160 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
+sync
+
+_cp_reflink $SCRATCH_MNT/file $SCRATCH_MNT/file.reflink
+
+_pwrite_byte 0x58 0 $((2 * blksz)) $SCRATCH_MNT/file >> $seqres.full
+_pwrite_byte 0x58 0 $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
+sync
+
+# Avoid creation of large folios on newer kernels by cycling the mount and
+# immediately writing to the page cache.
+_scratch_cycle_mount
+
+# Write the same data to file.compare as we're about to do to file.  Do this
+# before slowing down writeback to avoid unnecessary delay.
+_pwrite_byte 0x57 0 $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
+_pwrite_byte 0x56 $((2 * blksz)) $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
+sync
+
+# Introduce a half-second wait to each writeback block mapping call.  This
+# gives us a chance to race speculative cow prealloc with writeback.
+_scratch_inject_error "wb_delay_ms" 500
+
+_ftrace_setup
+_ftrace_record_events 'xfs_wb*iomap_invalid'
+
+# Start thread 1 + writeback above
+$XFS_IO_PROG -c "pwrite -S 0x57 0 $((2 * blksz))" \
+	-c 'fsync' $SCRATCH_MNT/file >> $seqres.full &
+sleep 1
+
+# Start a sentry to look for evidence of invalidation tracepoint tripping.  If
+# we see that, we know we've forced writeback to revalidate a mapping.  The
+# test has been successful, so turn off the delay.
+sentryfile=$TEST_DIR/$seq.sentry
+tracefile=$TEST_DIR/$seq.ftrace
+wait_for_errortag() {
+	while [ -e "$sentryfile" ]; do
+		_ftrace_dump | grep iomap_invalid >> "$tracefile"
+		if grep -q iomap_invalid "$tracefile"; then
+			_scratch_inject_error "wb_delay_ms" 0
+			_ftrace_ignore_events
+			break;
+		fi
+		sleep 0.5
+	done
+}
+touch $sentryfile
+wait_for_errortag &
+
+# Start thread 2 to create the cowextsize reservation
+$XFS_IO_PROG -c "pwrite -S 0x56 $((2 * blksz)) $((2 * blksz))" \
+	-c 'fsync' $SCRATCH_MNT/file >> $seqres.full
+rm -f $sentryfile
+
+cat "$tracefile" >> $seqres.full
+grep -q iomap_invalid "$tracefile"
+saw_invalidation=$?
+
+# Flush everything to disk.  If the bug manifests, then after the cycle,
+# file should have stale 0x58 in block 0 because we silently dropped a write.
+_scratch_cycle_mount
+
+if ! cmp -s $SCRATCH_MNT/file $SCRATCH_MNT/file.compare; then
+	echo file and file.compare do not match
+	$XFS_IO_PROG -c 'bmap -celpv' -c 'bmap -elpv' $SCRATCH_MNT/file &>> $seqres.full
+	echo file.compare
+	od -tx1 -Ad -c $SCRATCH_MNT/file.compare
+	echo file
+	od -tx1 -Ad -c $SCRATCH_MNT/file
+elif [ $saw_invalidation -ne 0 ]; then
+	# The files matched, but nothing got logged about the revalidation?
+	echo "Expected to hear about writeback iomap invalidations?"
+fi
+
+echo Silence is golden
+status=0
+exit

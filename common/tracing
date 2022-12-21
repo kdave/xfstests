@@ -1,0 +1,66 @@
+##/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# Routines for dealing with ftrace (or any other tracing).
+
+FTRACE_INSTANCES_DIR="/sys/kernel/debug/tracing/instances/"
+
+_require_ftrace() {
+	test -d "$FTRACE_INSTANCES_DIR" || \
+		_notrun "kernel does not support ftrace"
+}
+
+_ftrace_cleanup() {
+	if [ -d "$FTRACE_DIR" ]; then
+		_ftrace_ignore_events
+		# Removing an ftrace buffer requires rmdir, even though the
+		# virtual directory contains children.
+		rmdir "$FTRACE_DIR"
+	fi
+}
+
+_ftrace_setup() {
+	test -n "$FTRACE_DIR" && _fail "_ftrace_setup already run?"
+
+	# Give this fstest its own ftrace buffer so that we don't mess up
+	# any other tracers that might be running.
+	FTRACE_DIR="$FTRACE_INSTANCES_DIR/fstests.$seq"
+
+	test -d "$FTRACE_DIR" && rmdir "$FTRACE_DIR"
+	mkdir "$FTRACE_DIR"
+}
+
+# Intercept the given events.  Arguments may be regular expressions.
+_ftrace_record_events() {
+	test -d "$FTRACE_DIR" || _fail "_ftrace_setup not run?"
+
+	for arg in "$@"; do
+		# Replace slashes with semicolons per ftrace convention
+		find "$FTRACE_DIR/events/" -type d -name "$arg" -printf '%P\n' | \
+			tr '/' ':' >> "$FTRACE_DIR/set_event"
+	done
+}
+
+# Stop intercepting the given events.  If no arguments, stops all events.
+_ftrace_ignore_events() {
+	test -d "$FTRACE_DIR" || _fail "_ftrace_setup not run?"
+
+	if [ "$#" -eq 0 ]; then
+		echo > "$FTRACE_DIR/set_event"
+	else
+		for arg in "$@"; do
+			# Replace slashes with semicolons per ftrace convention
+			find "$FTRACE_DIR/events/" -type d -name "$arg" -printf '!%P\n' | \
+				tr '/' ':' >> "$FTRACE_DIR/set_event"
+		done
+	fi
+}
+
+# Dump whatever was written to the ftrace buffer since the last time this
+# helper was called.
+_ftrace_dump() {
+	test -d "$FTRACE_DIR" || _fail "_ftrace_setup not run?"
+
+	cat "$FTRACE_DIR/trace"
+}
