@@ -21,17 +21,29 @@ _require_scratch_nocheck
 _require_cp_reflink
 _require_test_program "punch-alternating"
 
+_fixed_by_kernel_commit b25d1984aa88 \
+	"xfs: estimate post-merge refcounts correctly"
+
 echo "Format and mount"
 _scratch_mkfs -d agcount=1 > $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 
+# This test modifies the refcount btree on the data device, so we must force
+# rtinherit off so that the test files are created there.
+_xfs_force_bdev data $SCRATCH_MNT
+
 testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
 
+# Set the file size to 10x the block size to guarantee that the COW writes will
+# touch multiple blocks and exercise the refcount extent merging code.  This is
+# necessary to catch a bug in the refcount extent merging code that handles
+# MAXREFCOUNT edge cases.
 blksz=65536
+filesz=$((blksz * 10))
 
 echo "Create original files"
-_pwrite_byte 0x61 0 $blksz $testdir/file1 >> $seqres.full
+_pwrite_byte 0x61 0 $filesz $testdir/file1 >> $seqres.full
 _cp_reflink $testdir/file1 $testdir/file2 >> $seqres.full
 
 echo "Change reference count"
@@ -56,9 +68,23 @@ _scratch_xfs_db -c 'agf 0' -c 'addr refcntroot' -c 'p recs[1]' >> $seqres.full
 _scratch_mount >> $seqres.full
 
 echo "CoW a couple files"
-_pwrite_byte 0x62 0 $blksz $testdir/file3 >> $seqres.full
-_pwrite_byte 0x62 0 $blksz $testdir/file5 >> $seqres.full
+_pwrite_byte 0x62 0 $filesz $testdir/file3 >> $seqres.full
+_pwrite_byte 0x62 0 $filesz $testdir/file5 >> $seqres.full
+
+# For the last COW test, write single blocks at the start, middle, and end of
+# the shared file to exercise a refcount btree update that targets a single
+# block of the multiblock refcount record that we just modified.
+#
+# This trips a bug where XFS didn't correctly identify refcount record merge
+# candidates when any of the records are pinned at MAXREFCOUNT.  The bug was
+# originally discovered by enabling fsdax + reflink, but the bug can be
+# triggered by any COW that doesn't target the entire extent.
+#
+# The bug was fixed by kernel commit b25d1984aa88 ("xfs: estimate post-merge
+# refcounts correctly")
 _pwrite_byte 0x62 0 $blksz $testdir/file7 >> $seqres.full
+_pwrite_byte 0x62 $((blksz * 4)) $blksz $testdir/file7 >> $seqres.full
+_pwrite_byte 0x62 $((filesz - blksz)) $blksz $testdir/file7 >> $seqres.full
 
 echo "Check scratch fs"
 _scratch_unmount
