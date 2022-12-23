@@ -59,9 +59,10 @@ class CRC32(object):
     # deduce the 4 bytes we need to insert
     for c in struct.pack('<L',fwd_crc)[::-1]:
       bkd_crc = ((bkd_crc << 8) & 0xffffffff) ^ self.reverse[bkd_crc >> 24]
-      bkd_crc ^= ord(c)
+      bkd_crc ^= c
 
-    res = s[:pos] + struct.pack('<L', bkd_crc) + s[pos:]
+    res = bytes(s[:pos], 'ascii') + struct.pack('<L', bkd_crc) + \
+          bytes(s[pos:], 'ascii')
     return res
 
   def parse_args(self):
@@ -72,6 +73,12 @@ class CRC32(object):
                         help="number of forged names to create")
     return parser.parse_args()
 
+def has_invalid_chars(result: bytes):
+    for i in result:
+        if i == 0 or i == int.from_bytes(b'/', byteorder="little"):
+            return True
+    return False
+
 if __name__=='__main__':
 
   crc = CRC32()
@@ -80,12 +87,15 @@ if __name__=='__main__':
   args = crc.parse_args()
   dirpath=args.dir
   while count < args.count :
-    origname = os.urandom (89).encode ("hex")[:-1].strip ("\x00")
+    origname = os.urandom (89).hex()[:-1].strip ("\x00")
     forgename = crc.forge(wanted_crc, origname, 4)
-    if ("/" not in forgename) and ("\x00" not in forgename):
+    if not has_invalid_chars(forgename):
       srcpath=dirpath + '/' + str(count)
-      dstpath=dirpath + '/' + forgename
-      file (srcpath, 'a').close()
+      # We have to convert all strings to bytes to concatenate the forged
+      # name (bytes).
+      # Thankfully os.rename() can accept bytes directly.
+      dstpath=bytes(dirpath, "ascii") + bytes('/', "ascii") + forgename
+      open(srcpath, mode="a").close()
       os.rename(srcpath, dstpath)
       os.system('btrfs fi sync %s' % (dirpath))
       count+=1;
