@@ -249,7 +249,13 @@ _fsv_dump_signature()
 
 _fsv_enable()
 {
-	$FSVERITY_PROG enable "$@"
+	local args=("$@")
+	# If the caller didn't explicitly specify a Merkle tree block size, then
+	# use FSV_BLOCK_SIZE.
+	if ! [[ " $*" =~ " --block-size" ]]; then
+		args+=("--block-size=$FSV_BLOCK_SIZE")
+	fi
+	$FSVERITY_PROG enable "${args[@]}"
 }
 
 _fsv_measure()
@@ -259,7 +265,13 @@ _fsv_measure()
 
 _fsv_sign()
 {
-	$FSVERITY_PROG sign "$@"
+	local args=("$@")
+	# If the caller didn't explicitly specify a Merkle tree block size, then
+	# use FSV_BLOCK_SIZE.
+	if ! [[ " $*" =~ " --block-size" ]]; then
+		args+=("--block-size=$FSV_BLOCK_SIZE")
+	fi
+	$FSVERITY_PROG sign "${args[@]}"
 }
 
 # Generate a file, then enable verity on it.
