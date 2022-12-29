@@ -42,13 +42,7 @@ _require_scratch_verity()
 	# The filesystem may have fs-verity enabled but not actually usable by
 	# default.  E.g., ext4 only supports verity on extent-based files, so it
 	# doesn't work on ext3-style filesystems.  So, try actually using it.
-	echo foo > $SCRATCH_MNT/tmpfile
-	_disable_fsverity_signatures
-	_fsv_enable $SCRATCH_MNT/tmpfile
-	local status=$?
-	_restore_prev_fsverity_signatures
-	rm -f $SCRATCH_MNT/tmpfile
-	if (( $status != 0 )); then
+	if ! _fsv_can_enable $SCRATCH_MNT/tmpfile; then
 		_notrun "$FSTYP verity isn't usable by default with these mkfs options"
 	fi
 
@@ -256,15 +250,16 @@ _fsv_create_enable_file()
 	_fsv_enable "$file" "$@"
 }
 
-_fsv_have_hash_algorithm()
+_fsv_can_enable()
 {
-	local hash_alg=$1
-	local test_file=$2
+	local test_file=$1
+	shift
+	local params=("$@")
 
 	_disable_fsverity_signatures
 	rm -f $test_file
 	head -c 4096 /dev/zero > $test_file
-	_fsv_enable --hash-alg=$hash_alg $test_file &>> $seqres.full
+	_fsv_enable $test_file "${params[@]}" &>> $seqres.full
 	local status=$?
 	_restore_prev_fsverity_signatures
 	rm -f $test_file
