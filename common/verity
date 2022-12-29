@@ -13,6 +13,11 @@ if [ "$FSTYP" == "btrfs" ]; then
         fi
 fi
 
+# Require fs-verity support on the scratch filesystem.
+#
+# FSV_BLOCK_SIZE will be set to a Merkle tree block size that is supported by
+# the filesystem.  Other sizes may be supported too, but FSV_BLOCK_SIZE is the
+# only size that is guaranteed to work without any additional checks.
 _require_scratch_verity()
 {
 	_require_scratch
@@ -27,7 +32,7 @@ _require_scratch_verity()
 
 	# Try to mount the filesystem.  If this fails then either the kernel
 	# isn't aware of fs-verity, or the mkfs options were not compatible with
-	# verity (e.g. ext4 with block size != PAGE_SIZE).
+	# verity (e.g. ext4 with block size != PAGE_SIZE on old kernels).
 	if ! _try_scratch_mount &>>$seqres.full; then
 		_notrun "kernel is unaware of $FSTYP verity feature," \
 			"or mkfs options are not compatible with verity"
@@ -39,6 +44,27 @@ _require_scratch_verity()
 		_notrun "kernel $FSTYP isn't configured with verity support"
 	fi
 
+	# Select a default Merkle tree block size for when tests don't
+	# explicitly specify one.
+	#
+	# For consistency reasons, all 'fsverity' subcommands, including
+	# 'fsverity enable', default to 4K Merkle tree blocks.  That's generally
+	# not ideal for tests, since it's possible that the filesystem doesn't
+	# support 4K blocks but does support another size.  Specifically, the
+	# kernel originally supported only merkle_tree_block_size ==
+	# fs_block_size == page_size, and later it was updated to support
+	# merkle_tree_block_size <= min(fs_block_size, page_size).
+	#
+	# Therefore, we default to merkle_tree_block_size == min(fs_block_size,
+	# page_size).  That maximizes the chance of verity actually working.
+	local fs_block_size=$(_get_block_size $SCRATCH_MNT)
+	local page_size=$(get_page_size)
+	if (( fs_block_size <= page_size )); then
+		FSV_BLOCK_SIZE=$fs_block_size
+	else
+		FSV_BLOCK_SIZE=$page_size
+	fi
+
 	# The filesystem may have fs-verity enabled but not actually usable by
 	# default.  E.g., ext4 only supports verity on extent-based files, so it
 	# doesn't work on ext3-style filesystems.  So, try actually using it.
@@ -47,10 +73,6 @@ _require_scratch_verity()
 	fi
 
 	_scratch_unmount
-
-	# Merkle tree block size.  Currently all filesystems only support
-	# PAGE_SIZE for this.  This is also the default for 'fsverity enable'.
-	FSV_BLOCK_SIZE=$(get_page_size)
 }
 
 # Check for CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y, as well as the userspace
