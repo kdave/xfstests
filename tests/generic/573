@@ -36,23 +36,23 @@ fsv_file=$SCRATCH_MNT/file.fsv
 _fsv_scratch_begin_subtest "FS_IOC_ENABLE_VERITY doesn't require root"
 echo foo > $fsv_file
 chmod 666 $fsv_file
-_user_do "$FSVERITY_PROG enable $fsv_file"
+_user_do "$FSVERITY_PROG enable --block-size=$FSV_BLOCK_SIZE $fsv_file"
 
 _fsv_scratch_begin_subtest "FS_IOC_ENABLE_VERITY requires write access"
 echo foo > $fsv_file >> $seqres.full
 chmod 444 $fsv_file
-_user_do "$FSVERITY_PROG enable $fsv_file" |& _filter_scratch
+_user_do "$FSVERITY_PROG enable --block-size=$FSV_BLOCK_SIZE $fsv_file" |& _filter_scratch
 
 _fsv_scratch_begin_subtest "FS_IOC_ENABLE_VERITY requires !append-only"
 echo foo > $fsv_file >> $seqres.full
 $CHATTR_PROG +a $fsv_file
-$FSVERITY_PROG enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& _filter_scratch
 $CHATTR_PROG -a $fsv_file
 
 _fsv_scratch_begin_subtest "FS_IOC_ENABLE_VERITY requires !immutable"
 echo foo > $fsv_file >> $seqres.full
 $CHATTR_PROG +i $fsv_file
-$FSVERITY_PROG enable $fsv_file |& _filter_scratch
+_fsv_enable $fsv_file |& _filter_scratch
 $CHATTR_PROG -i $fsv_file
 
 _fsv_scratch_begin_subtest "FS_IOC_MEASURE_VERITY doesn't require root"
