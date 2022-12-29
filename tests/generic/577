@@ -38,6 +38,11 @@ sigfile=$tmp.sig
 otherfile=$SCRATCH_MNT/otherfile
 othersigfile=$tmp.othersig
 
+sign()
+{
+	_fsv_sign "$@" | _filter_scratch | _filter_fsverity_digest
+}
+
 # Setup
 
 echo -e "\n# Generating certificates and private keys"
@@ -57,14 +62,13 @@ _enable_fsverity_signatures
 echo -e "\n# Generating file and signing it for fs-verity"
 head -c 100000 /dev/zero > $fsv_orig_file
 for suffix in '' '.2'; do
-	_fsv_sign $fsv_orig_file $sigfile$suffix --key=$keyfile$suffix \
-		--cert=$certfile$suffix | _filter_scratch
+	sign $fsv_orig_file $sigfile$suffix --key=$keyfile$suffix \
+		--cert=$certfile$suffix
 done
 
 echo -e "\n# Signing a different file for fs-verity"
 head -c 100000 /dev/zero | tr '\0' 'X' > $otherfile
-_fsv_sign $otherfile $othersigfile --key=$keyfile --cert=$certfile \
-	| _filter_scratch
+sign $otherfile $othersigfile --key=$keyfile --cert=$certfile
 
 # Actual tests
 
@@ -106,16 +110,15 @@ _fsv_enable $fsv_file --signature=$tmp.malformed_sig |& _filter_scratch
 
 echo -e "\n# Testing salt"
 reset_fsv_file
-_fsv_sign $fsv_orig_file $sigfile.salted --key=$keyfile --cert=$certfile \
-	--salt=abcd | _filter_scratch
+sign $fsv_orig_file $sigfile.salted --key=$keyfile --cert=$certfile --salt=abcd
 _fsv_enable $fsv_file --signature=$sigfile.salted --salt=abcd
 cmp $fsv_file $fsv_orig_file
 
 echo -e "\n# Testing non-default hash algorithm"
 if _fsv_can_enable $fsv_file --hash-alg=sha512; then
 	reset_fsv_file
-	_fsv_sign $fsv_orig_file $sigfile.sha512 --key=$keyfile \
-		--cert=$certfile --hash-alg=sha512 > /dev/null
+	sign $fsv_orig_file $sigfile.sha512 --key=$keyfile --cert=$certfile \
+		--hash-alg=sha512 > /dev/null
 	_fsv_enable $fsv_file --signature=$sigfile.sha512 --hash-alg=sha512
 	cmp $fsv_file $fsv_orig_file
 fi
@@ -123,8 +126,7 @@ fi
 echo -e "\n# Testing empty file"
 rm -f $fsv_file
 echo -n > $fsv_file
-_fsv_sign $fsv_file $sigfile.emptyfile --key=$keyfile --cert=$certfile | \
-		_filter_scratch
+sign $fsv_file $sigfile.emptyfile --key=$keyfile --cert=$certfile
 _fsv_enable $fsv_file --signature=$sigfile.emptyfile
 
 # success, all done
