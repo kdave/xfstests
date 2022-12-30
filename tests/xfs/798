@@ -1,0 +1,105 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 798
+#
+# Make sure that xfs_scrub dry run, preen, and repair modes only modify the
+# things that they're allowed to touch.
+#
+. ./common/preamble
+_begin_fstest auto quick online_repair
+
+# Import common functions.
+. ./common/fuzzy
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_scratch_nocheck
+_require_scrub
+_require_xfs_db_command "fuzz"
+_require_xfs_io_command "repair"
+
+# Make sure we support repair?
+output="$($XFS_IO_PROG -x -c 'repair -R probe' $SCRATCH_MNT 2>&1)"
+test -z "$output" && _notrun 'kernel does not support repair'
+
+# Make sure xfs_scrub is new enough to support -p(reen)
+$XFS_SCRUB_PROG -p 2>&1 | grep -q 'invalid option' && \
+	_notrun 'scrub does not support -p'
+
+_scratch_mkfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
+. $tmp.mkfs
+
+test $agcount -ge 3 || _notrun 'filesystem must have at least 3 AGs'
+
+AWK_PROG='
+{
+	if ($1 ~ /Optimized:/)
+		optimized++;
+	else if ($1 ~ /Repaired:/)
+		repaired++;
+	else if ($1 ~ /Corruption:/)
+		corruption++;
+}
+END {
+	printf("corruption: %u optimized: %u repaired: %u\n",
+			corruption, optimized, repaired);
+}
+'
+
+test_scrub() {
+	local mode="$1"
+	local scrub_arg="$2"
+	local db_args=(-x)
+
+	# Fuzz secondary superblocks because this won't cause mount failures
+	if [[ $mode =~ c ]]; then
+		db_args+=(-c 'sb 1' -c 'fuzz -d dblocks add')
+	fi
+	if [[ $mode =~ o ]]; then
+		db_args+=(-c 'sb 2' -c 'fuzz -d fname random')
+	fi
+
+	echo "testing mode? $mode scrub_arg $scrub_arg"
+	echo "db_args:${db_args[@]}:scrub_arg:$scrub_arg:$mode:" >> $seqres.full
+	echo "----------------" >> $seqres.full
+
+	_scratch_mkfs >> $seqres.full
+
+	# Make sure there's nothing left to optimize, at least according to
+	# xfs_scrub.  This clears the way for us to make targeted changes to
+	# the filesystem.
+	_scratch_mount
+	_scratch_scrub $scrub_arg >> /dev/null
+	_scratch_unmount
+
+	# Modify the filesystem as needed to trip up xfs_scrub
+	_scratch_xfs_db "${db_args[@]}" >> $seqres.full
+
+	# See how many optimizations, repairs, and corruptions it'll report
+	_scratch_mount
+	_scratch_scrub $scrub_arg 2>&1 | awk "$AWK_PROG"
+	test "${PIPESTATUS[0]}" -eq 0 || echo "xfs_scrub returned ${PIPESTATUS[0]}?"
+	echo
+	_scratch_unmount
+}
+
+test_scrub 'o' -n	# dry run with possible optimizations
+test_scrub 'o' -p	# preen
+test_scrub 'o' 		# repair
+
+test_scrub 'co' -n	# dry run with corruptions and optimizations
+test_scrub 'co' -p	# preen
+test_scrub 'co' 	# repair
+
+test_scrub 'c' -n	# dry run with corruptions
+test_scrub 'c' -p	# preen
+test_scrub 'c' 		# repair
+
+# success, all done
+status=0
+exit
