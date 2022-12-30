@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 561
+#
+# Race xfs_scrub in check-only mode and ro remount for a while to see if we
+# crash or livelock.
+#
+. ./common/preamble
+_begin_fstest scrub dangerous_fsstress_scrub
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_scratch_xfs_stress_scrub_cleanup &> /dev/null
+	_scratch_remount rw
+	rm -rf $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/fuzzy
+. ./common/xfs
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_xfs_stress_scrub
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+_scratch_xfs_stress_scrub -r 5 -S '-n'
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
