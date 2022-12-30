@@ -338,11 +338,18 @@ __stress_scrub_filter_output() {
 		    -e '/No space left on device/d'
 }
 
+# Decide if we want to keep running stress tests.  The first argument is the
+# stop time, and second argument is the path to the sentinel file.
+__stress_scrub_running() {
+	test -e "$2" && test "$(date +%s)" -lt "$1"
+}
+
 # Run fs freeze and thaw in a tight loop.
 __stress_scrub_freeze_loop() {
 	local end="$1"
+	local runningfile="$2"
 
-	while [ "$(date +%s)" -lt $end ]; do
+	while __stress_scrub_running "$end" "$runningfile"; do
 		$XFS_IO_PROG -x -c 'freeze' -c 'thaw' $SCRATCH_MNT 2>&1 | \
 			__stress_freeze_filter_output
 	done
@@ -351,15 +358,16 @@ __stress_scrub_freeze_loop() {
 # Run individual XFS online fsck commands in a tight loop with xfs_io.
 __stress_one_scrub_loop() {
 	local end="$1"
-	local scrub_tgt="$2"
-	shift; shift
+	local runningfile="$2"
+	local scrub_tgt="$3"
+	shift; shift; shift
 
 	local xfs_io_args=()
 	for arg in "$@"; do
 		xfs_io_args+=('-c' "$arg")
 	done
 
-	while [ "$(date +%s)" -lt $end ]; do
+	while __stress_scrub_running "$end" "$runningfile"; do
 		$XFS_IO_PROG -x "${xfs_io_args[@]}" "$scrub_tgt" 2>&1 | \
 			__stress_scrub_filter_output
 	done
@@ -368,12 +376,16 @@ __stress_one_scrub_loop() {
 # Run fsstress while we're testing online fsck.
 __stress_scrub_fsstress_loop() {
 	local end="$1"
+	local runningfile="$2"
 
 	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000 $FSSTRESS_AVOID)
+	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
 
-	while [ "$(date +%s)" -lt $end ]; do
+	while __stress_scrub_running "$end" "$runningfile"; do
 		$FSSTRESS_PROG $args >> $seqres.full
+		echo "fsstress exits with $? at $(date)" >> $seqres.full
 	done
+	rm -f "$runningfile"
 }
 
 # Make sure we have everything we need to run stress and scrub
@@ -397,6 +409,7 @@ _require_xfs_stress_online_repair() {
 
 # Clean up after the loops in case they didn't do it themselves.
 _scratch_xfs_stress_scrub_cleanup() {
+	rm -f "$runningfile"
 	echo "Cleaning up scrub stress run at $(date)" >> $seqres.full
 
 	# Send SIGINT so that bash won't print a 'Terminated' message that
@@ -436,6 +449,10 @@ __stress_scrub_check_commands() {
 _scratch_xfs_stress_scrub() {
 	local one_scrub_args=()
 	local scrub_tgt="$SCRATCH_MNT"
+	local runningfile="$tmp.fsstress"
+
+	rm -f "$runningfile"
+	touch "$runningfile"
 
 	OPTIND=1
 	while getopts "s:t:" c; do
@@ -454,17 +471,17 @@ _scratch_xfs_stress_scrub() {
 	echo "Loop started at $(date --date="@${start}")," \
 		   "ending at $(date --date="@${end}")" >> $seqres.full
 
-	__stress_scrub_fsstress_loop $end &
-	__stress_scrub_freeze_loop $end &
+	__stress_scrub_fsstress_loop "$end" "$runningfile" &
+	__stress_scrub_freeze_loop "$end" "$runningfile" &
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
-		__stress_one_scrub_loop "$end" "$scrub_tgt" \
+		__stress_one_scrub_loop "$end" "$runningfile" "$scrub_tgt" \
 				"${one_scrub_args[@]}" &
 	fi
 
-	# Wait until 2 seconds after the loops should have finished, then
-	# clean up after ourselves.
-	while [ "$(date +%s)" -lt $((end + 2)) ]; do
+	# Wait until the designated end time or fsstress dies, then kill all of
+	# our background processes.
+	while __stress_scrub_running "$end" "$runningfile"; do
 		sleep 1
 	done
 	_scratch_xfs_stress_scrub_cleanup
