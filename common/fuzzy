@@ -338,6 +338,47 @@ __scratch_xfs_fuzz_field_both() {
 	return 0
 }
 
+# Assess the state of the filesystem after a repair strategy has been run by
+# trying to make changes to it.
+_scratch_xfs_fuzz_field_modifyfs() {
+	local fuzz_action="$1"
+	local repair="$2"
+
+	# Try to mount the filesystem
+	echo "+ Make sure error is gone (online)"
+	_try_scratch_mount 2>&1
+	res=$?
+	if [ $res -eq 0 ]; then
+		# Make sure online scrub says the filesystem is clean now
+		if [ "${repair}" != "none" ]; then
+			echo "++ Online scrub"
+			_scratch_scrub -n -e continue 2>&1
+				res=$?
+				test $res -ne 0 && \
+					(>&2 echo "online re-scrub ($res) with ${field} = ${fuzzverb}.")
+			fi
+		fi
+
+		# Try modifying the filesystem again
+		__fuzz_notify "++ Try to write filesystem again"
+		_scratch_fuzz_modify 100 2>&1
+		__scratch_xfs_fuzz_unmount
+	else
+		(>&2 echo "re-mount failed ($res) with ${fuzz_action}.")
+	fi
+
+	# See if repair finds a clean fs
+	if [ "${repair}" != "none" ]; then
+		echo "+ Re-check the filesystem (offline)"
+		_scratch_xfs_repair -n 2>&1
+		res=$?
+		test $res -ne 0 && \
+			(>&2 echo "re-repair failed ($res) with ${field} = ${fuzzverb}.")
+	fi
+
+	return 0
+}
+
 # Fuzz one field of some piece of metadata.
 # First arg is the field name
 # Second arg is the fuzz verb (ones, zeroes, random, add, sub...)
@@ -381,39 +422,9 @@ __scratch_xfs_fuzz_field_test() {
 	esac
 	test $res -eq 0 || return $res
 
-	# See if scrub finds a clean fs
-	echo "+ Make sure error is gone (online)"
-	_try_scratch_mount 2>&1
-	res=$?
-	if [ $res -eq 0 ]; then
-		# Try an online scrub unless we're fuzzing ag 0's sb,
-		# which scrub doesn't know how to fix.
-		if [ "${repair}" != "none" ]; then
-			echo "++ Online scrub"
-			if [ "$1" != "sb 0" ]; then
-				_scratch_scrub -n -e continue 2>&1
-				res=$?
-				test $res -ne 0 && \
-					(>&2 echo "online re-scrub ($res) with ${field} = ${fuzzverb}.")
-			fi
-		fi
-
-		# Try modifying the filesystem again!
-		__fuzz_notify "++ Try to write filesystem again"
-		_scratch_fuzz_modify 100 2>&1
-		__scratch_xfs_fuzz_unmount
-	else
-		(>&2 echo "re-mount failed ($res) with ${field} = ${fuzzverb}.")
-	fi
-
-	# See if repair finds a clean fs
-	if [ "${repair}" != "none" ]; then
-		echo "+ Re-check the filesystem (offline)"
-		_scratch_xfs_repair -n 2>&1
-		res=$?
-		test $res -ne 0 && \
-			(>&2 echo "re-repair failed ($res) with ${field} = ${fuzzverb}.")
-	fi
+	# See what happens when we modify the fs
+	_scratch_xfs_fuzz_field_modifyfs "${fuzz_action}" "${repair}"
+	return $?
 }
 
 # Make sure we have all the pieces we need for field fuzzing
