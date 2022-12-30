@@ -253,6 +253,17 @@ __scratch_xfs_fuzz_field_offline() {
 	test $res -eq 0 && \
 		(>&2 echo "${fuzz_action}: offline scrub didn't fail.")
 
+	# Make sure xfs_repair catches at least as many things as the old
+	# xfs_check did.
+	if [ -n "${SCRATCH_XFS_FUZZ_CHECK}" ]; then
+		__fuzz_notify "+ Detect fuzzed field (xfs_check)"
+		_scratch_xfs_check 2>&1
+		res1=$?
+		if [ $res1 -ne 0 ] && [ $res -eq 0 ]; then
+			(>&2 echo "${fuzz_action}: xfs_repair passed but xfs_check failed ($res1).")
+		fi
+	fi
+
 	# Repair the filesystem offline
 	__fuzz_notify "+ Try to repair the filesystem (offline)"
 	_repair_scratch_fs -P 2>&1
