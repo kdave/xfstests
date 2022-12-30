@@ -439,8 +439,39 @@ _scratch_xfs_stress_scrub_cleanup() {
 
 	# Send SIGINT so that bash won't print a 'Terminated' message that
 	# distorts the golden output.
+	echo "Killing stressor processes at $(date)" >> $seqres.full
 	$KILLALL_PROG -INT xfs_io fsstress >> $seqres.full 2>&1
-	$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
+
+	# Tests are not allowed to exit with the scratch fs frozen.  If we
+	# started a fs freeze/thaw background loop, wait for that loop to exit
+	# and then thaw the filesystem.  Cleanup for the freeze loop must be
+	# performed prior to waiting for the other children to avoid triggering
+	# a race condition that can hang fstests.
+	#
+	# If the xfs_io -c freeze process is asleep waiting for a write lock on
+	# s_umount or sb_write when the killall signal is delivered, it will
+	# not check for pending signals until after it has frozen the fs.  If
+	# even one thread of the stress test processes (xfs_io, fsstress, etc.)
+	# is waiting for read locks on sb_write when the killall signals are
+	# delivered, they will block in the kernel until someone thaws the fs,
+	# and the `wait' below will wait forever.
+	#
+	# Hence we issue the killall, wait for the freezer loop to exit, thaw
+	# the filesystem, and wait for the rest of the children.
+	if [ -n "$__SCRUB_STRESS_FREEZE_PID" ]; then
+		echo "Waiting for fs freezer $__SCRUB_STRESS_FREEZE_PID to exit at $(date)" >> $seqres.full
+		wait "$__SCRUB_STRESS_FREEZE_PID"
+
+		echo "Thawing filesystem at $(date)" >> $seqres.full
+		$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
+		__SCRUB_STRESS_FREEZE_PID=""
+	fi
+
+	# Wait for the remaining children to exit.
+	echo "Waiting for children to exit at $(date)" >> $seqres.full
+	wait
+
+	echo "Cleanup finished at $(date)" >> $seqres.full
 }
 
 # Make sure the provided scrub/repair commands actually work on the scratch
@@ -476,6 +507,7 @@ _scratch_xfs_stress_scrub() {
 	local scrub_tgt="$SCRATCH_MNT"
 	local runningfile="$tmp.fsstress"
 
+	__SCRUB_STRESS_FREEZE_PID=""
 	rm -f "$runningfile"
 	touch "$runningfile"
 
@@ -498,6 +530,7 @@ _scratch_xfs_stress_scrub() {
 
 	__stress_scrub_fsstress_loop "$end" "$runningfile" &
 	__stress_scrub_freeze_loop "$end" "$runningfile" &
+	__SCRUB_STRESS_FREEZE_PID="$!"
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
 		__stress_one_scrub_loop "$end" "$runningfile" "$scrub_tgt" \
