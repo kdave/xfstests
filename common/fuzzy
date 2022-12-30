@@ -274,14 +274,28 @@ __scratch_xfs_fuzz_field_offline() {
 __scratch_xfs_fuzz_field_norepair() {
 	local fuzz_action="$1"
 
+	# Make sure offline scrub will catch whatever we fuzzed
+	__fuzz_notify "+ Detect fuzzed field (offline)"
+	_scratch_xfs_repair -P -n 2>&1
+	res=$?
+	test $res -eq 0 && \
+		(>&2 echo "${fuzz_action}: offline scrub didn't fail.")
+
 	# Mount or else we can't do anything in norepair mode
-	echo "+ Mount filesystem to try no repair"
+	__fuzz_notify "+ Mount filesystem to try online scan"
 	_try_scratch_mount 2>&1
 	res=$?
 	if [ $res -ne 0 ]; then
-		(>&2 echo "mount failed ($res) with ${fuzz_action}.")
-		return 0
+		(>&2 echo "${fuzz_action}: mount failed ($res).")
+		return 1
 	fi
+
+	# Make sure online scrub will catch whatever we fuzzed
+	__fuzz_notify "++ Detect fuzzed field (online)"
+	_scratch_scrub -n -a 1 -e continue 2>&1
+	res=$?
+	test $res -eq 0 && \
+		(>&2 echo "${fuzz_action}: online scrub didn't fail.")
 
 	__scratch_xfs_fuzz_unmount
 
