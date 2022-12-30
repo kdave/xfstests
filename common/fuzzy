@@ -246,37 +246,26 @@ __scratch_xfs_fuzz_field_online() {
 __scratch_xfs_fuzz_field_offline() {
 	local fuzz_action="$1"
 
-	# Mount or else we can't do anything offline
-	echo "+ Mount filesystem to try offline repair"
-	_try_scratch_mount 2>&1
-	res=$?
-	if [ $res -ne 0 ]; then
-		(>&2 echo "mount failed ($res) with ${fuzz_action}.")
-		return 0
-	fi
-
-	# Make sure online scrub will catch whatever we fuzzed
-	echo "++ Online scrub"
-	_scratch_scrub -n -a 1 -e continue 2>&1
+	# Make sure offline scrub will catch whatever we fuzzed
+	__fuzz_notify "+ Detect fuzzed field (offline)"
+	_scratch_xfs_repair -P -n 2>&1
 	res=$?
 	test $res -eq 0 && \
-		(>&2 echo "scrub didn't fail with ${fuzz_action}.")
-
-	__scratch_xfs_fuzz_unmount
+		(>&2 echo "${fuzz_action}: offline scrub didn't fail.")
 
 	# Repair the filesystem offline
-	echo "+ Try to repair the filesystem offline"
-	_repair_scratch_fs 2>&1
+	__fuzz_notify "+ Try to repair the filesystem (offline)"
+	_repair_scratch_fs -P 2>&1
 	res=$?
 	test $res -ne 0 && \
-		(>&2 echo "offline repair failed ($res) with ${fuzz_action}.")
+		(>&2 echo "${fuzz_action}: offline repair failed ($res).")
 
 	# See if repair finds a clean fs
-	echo "+ Make sure error is gone (offline)"
-	_scratch_xfs_repair -n 2>&1
+	__fuzz_notify "+ Make sure error is gone (offline)"
+	_scratch_xfs_repair -P -n 2>&1
 	res=$?
 	test $res -ne 0 && \
-		(>&2 echo "offline re-scrub failed ($res) with ${fuzz_action}.")
+		(>&2 echo "${fuzz_action}: offline re-scrub failed ($res).")
 
 	return 0
 }
