@@ -499,6 +499,8 @@ __stress_scrub_check_commands() {
 #
 # Various options include:
 #
+# -f	Run a freeze/thaw loop while we're doing other things.  Defaults to
+#	disabled, unless XFS_SCRUB_STRESS_FREEZE is set.
 # -s	Pass this command to xfs_io to test scrub.  If zero -s options are
 #	specified, xfs_io will not be run.
 # -t	Run online scrub against this file; $SCRATCH_MNT is the default.
@@ -506,14 +508,16 @@ _scratch_xfs_stress_scrub() {
 	local one_scrub_args=()
 	local scrub_tgt="$SCRATCH_MNT"
 	local runningfile="$tmp.fsstress"
+	local freeze="${XFS_SCRUB_STRESS_FREEZE}"
 
 	__SCRUB_STRESS_FREEZE_PID=""
 	rm -f "$runningfile"
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "s:t:" c; do
+	while getopts "fs:t:" c; do
 		case "$c" in
+			f) freeze=yes;;
 			s) one_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
 			*) return 1; ;;
@@ -529,8 +533,11 @@ _scratch_xfs_stress_scrub() {
 		   "ending at $(date --date="@${end}")" >> $seqres.full
 
 	__stress_scrub_fsstress_loop "$end" "$runningfile" &
-	__stress_scrub_freeze_loop "$end" "$runningfile" &
-	__SCRUB_STRESS_FREEZE_PID="$!"
+
+	if [ -n "$freeze" ]; then
+		__stress_scrub_freeze_loop "$end" "$runningfile" &
+		__SCRUB_STRESS_FREEZE_PID="$!"
+	fi
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
 		__stress_one_scrub_loop "$end" "$runningfile" "$scrub_tgt" \
