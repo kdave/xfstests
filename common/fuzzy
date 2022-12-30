@@ -154,6 +154,12 @@ _scratch_xfs_dump_metadata() {
 	_scratch_xfs_db "${cmds[@]}" -c print
 }
 
+# Decide from the output of the xfs_db "stack" command if the debugger's io
+# cursor is pointed at a block that is an unstructured data format (blob).
+__scratch_xfs_detect_blob_from_stack() {
+	grep -q -E 'inode.*, type (data|rtsummary|rtbitmap)'
+}
+
 # Navigate to some part of the filesystem and print the field info.
 # The first argument is an grep filter for the fields
 # The rest of the arguments are xfs_db commands to locate the metadata.
@@ -169,7 +175,17 @@ _scratch_xfs_list_metadata_fields() {
 	for arg in "$@"; do
 		cmds+=("-c" "${arg}")
 	done
-	_scratch_xfs_db "${cmds[@]}" -c print | __filter_xfs_db_print_fields "${filter}"
+
+	# Does the path argument point towards something that is an
+	# unstructured blob?
+	if _scratch_xfs_db "${cmds[@]}" -c stack 2>/dev/null | \
+			__scratch_xfs_detect_blob_from_stack; then
+		echo "<blob>"
+		return
+	fi
+
+	_scratch_xfs_db "${cmds[@]}" -c print | \
+		__filter_xfs_db_print_fields "${filter}"
 }
 
 # Fuzz a metadata field
@@ -202,6 +218,70 @@ _scratch_xfs_fuzz_metadata_field() {
 	done
 	if [ "${oldval}" = "${newval}" ]; then
 		echo "Field ${key} already set to ${newval}, skipping test."
+		return 1
+	fi
+	return 0
+}
+
+# List the fuzzing verbs available for unstructured blobs
+__scratch_xfs_list_blob_fuzz_verbs() {
+		cat << ENDL
+zeroes
+ones
+firstbit
+middlebit
+lastbit
+random
+ENDL
+}
+
+# Fuzz a metadata blob
+# The first arg is a blob fuzzing verb
+# The rest of the arguments are xfs_db commands to find the metadata.
+_scratch_xfs_fuzz_metadata_blob() {
+	local fuzzverb="$1"
+	shift
+	local trashcmd=(blocktrash -z)
+
+	local cmds=()
+	for arg in "$@"; do
+		cmds+=("-c" "${arg}")
+	done
+
+	local bytecount=$(_scratch_xfs_db "${cmds[@]}" -c "stack" | grep 'byte.*length' | awk '{print $5}')
+	local bitmax=$((bytecount * 8))
+
+	case "${fuzzverb}" in
+	"zeroes")
+		trashcmd+=(-0 -o 0 -x "${bitmax}" -y "${bitmax}");;
+	"ones")
+		trashcmd+=(-1 -o 0 -x "${bitmax}" -y "${bitmax}");;
+	"firstbit")
+		trashcmd+=(-2 -o 0 -x 1 -y 1);;
+	"middlebit")
+		trashcmd+=(-2 -o $((bitmax / 2)) -x 1 -y 1);;
+	"lastbit")
+		trashcmd+=(-2 -o "${bitmax}" -x 1 -y 1);;
+	"random")
+		trashcmd+=(-3 -o 0 -x "${bitmax}" -y "${bitmax}");;
+	*)
+		echo "Unknown blob fuzz verb \"${fuzzverb}\"."
+		return 1
+		;;
+	esac
+
+	trashcmd="${trashcmd[@]}"
+	oldval="$(_scratch_xfs_get_metadata_field "" "$@")"
+	while true; do
+		_scratch_xfs_db -x "${cmds[@]}" -c "${trashcmd}"
+		echo
+		newval="$(_scratch_xfs_get_metadata_field "" "$@" 2> /dev/null)"
+		if [ "${fuzzverb}" != "random" ] || [ "${oldval}" != "${newval}" ]; then
+			break;
+		fi
+	done
+	if [ "${oldval}" = "${newval}" ]; then
+		echo "Blob already set to new value, skipping test."
 		return 1
 	fi
 	return 0
@@ -503,7 +583,11 @@ __scratch_xfs_fuzz_field_test() {
 
 	# Set the new field value
 	__fuzz_notify "+ Fuzz ${field} = ${fuzzverb}"
-	_scratch_xfs_fuzz_metadata_field "${field}" ${fuzzverb} "$@"
+	if [ "$field" = "<blob>" ]; then
+		_scratch_xfs_fuzz_metadata_blob ${fuzzverb} "$@"
+	else
+		_scratch_xfs_fuzz_metadata_field "${field}" ${fuzzverb} "$@"
+	fi
 	res=$?
 	test $res -ne 0 && return
 
@@ -587,7 +671,22 @@ _scratch_xfs_list_fuzz_verbs() {
 		echo "${SCRATCH_XFS_LIST_FUZZ_VERBS}" | tr '[ ,]' '[\n\n]'
 		return;
 	fi
-	_scratch_xfs_db -x -c 'sb 0' -c 'fuzz' | grep '^Fuzz commands:' | \
+
+	local cmds=()
+	for arg in "$@"; do
+		cmds+=("-c" "${arg}")
+	done
+	test "${#cmds[@]}" -eq 0 && cmds=('-c' 'sb 0')
+
+	# Does the path argument point towards something that is an
+	# unstructured blob?
+	if _scratch_xfs_db "${cmds[@]}" -c stack 2>/dev/null | \
+			__scratch_xfs_detect_blob_from_stack; then
+		__scratch_xfs_list_blob_fuzz_verbs
+		return
+	fi
+
+	_scratch_xfs_db -x "${cmds[@]}" -c 'fuzz' | grep '^Fuzz commands:' | \
 		sed -e 's/[,.]//g' -e 's/Fuzz commands: //g' -e 's/ /\n/g' | \
 		grep -v '^random$'
 }
@@ -605,7 +704,7 @@ _scratch_xfs_fuzz_metadata() {
 	shift; shift
 
 	fields="$(_scratch_xfs_list_metadata_fields "${filter}" "$@")"
-	verbs="$(_scratch_xfs_list_fuzz_verbs)"
+	verbs="$(_scratch_xfs_list_fuzz_verbs "$@")"
 	echo "Fields we propose to fuzz with the \"${repair}\" repair strategy: $@"
 	echo $(echo "${fields}")
 	echo "Verbs we propose to fuzz with:"
