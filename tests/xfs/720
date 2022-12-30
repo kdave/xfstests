@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 720
+#
+# Ensure that the sysadmin won't hit EDQUOT while repairing file data forks
+# even if the file's quota limits have been exceeded.  This tests the quota
+# reservation handling inside the bmap btree rebuilding code.
+#
+. ./common/preamble
+_begin_fstest online_repair
+
+# Import common functions.
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/quota
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_xfs_io_command "falloc"
+_require_quota
+_require_user
+_require_test_program "punch-alternating"
+_require_scratch
+_require_xfs_stress_online_repair
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_qmount_option usrquota
+_qmount
+
+blocksize=$(_get_block_size $SCRATCH_MNT)
+alloc_unit=$(_get_file_block_size $SCRATCH_MNT)
+
+# Make sure we can actually repair a data fork
+scratchfile=$SCRATCH_MNT/file
+touch $scratchfile
+$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
+__stress_scrub_check_commands "$scratchfile" "" 'repair bmapbtd'
+
+# Compute the number of extent records needed to guarantee btree format,
+# assuming 16 bytes for each ondisk extent record
+bmbt_records=$(( (blocksize / 16) * 5 / 4 ))
+total_size=$(( bmbt_records * 2 * alloc_unit ))
+
+# Create a file with a data fork in bmap btree format
+$XFS_IO_PROG -c "falloc 0 $total_size" $scratchfile >> $seqres.full
+$here/src/punch-alternating $scratchfile
+
+# Set a low quota hardlimit for an unprivileged uid and chown the file to it
+echo "set up quota" >> $seqres.full
+$XFS_QUOTA_PROG -x -c "limit -u bhard=$((alloc_unit * 2)) $qa_user" $SCRATCH_MNT
+chown $qa_user $scratchfile
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# Rebuild the data fork
+echo "repairs" >> $seqres.full
+$XFS_IO_PROG -x -c 'inject force_repair' -c 'repair bmapbtd' $scratchfile
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# Fail at appending the file as qa_user to ensure quota enforcement works
+echo "fail quota" >> $seqres.full
+su - "$qa_user" -c "$XFS_IO_PROG -c 'pwrite 10g 1' $scratchfile" >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# success, all done
+echo Silence is golden
+status=0
+exit
