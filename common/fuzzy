@@ -549,6 +549,22 @@ _require_scratch_xfs_fuzz_fields()
 	_require_xfs_db_command "fuzz"
 }
 
+# Sets the array SCRATCH_XFS_DIR_FUZZ_TYPES to the list of directory formats
+# available for fuzzing.  Each list item must match one of the /S_IFDIR.FMT_*
+# files created by the fs population code.  Users can override this by setting
+# SCRATCH_XFS_LIST_FUZZ_DIRTYPE in the environment.  BTREE is omitted here
+# because that refers to the fork format and does not affect the directory
+# structure at all.
+_scratch_xfs_set_dir_fuzz_types() {
+	if [ -n "${SCRATCH_XFS_LIST_FUZZ_DIRTYPE}" ]; then
+		mapfile -t SCRATCH_XFS_DIR_FUZZ_TYPES < \
+				<(echo "${SCRATCH_XFS_LIST_FUZZ_DIRTYPE}" | tr '[ ,]' '[\n\n]')
+		return
+	fi
+
+	SCRATCH_XFS_DIR_FUZZ_TYPES=(BLOCK LEAF LEAFN NODE)
+}
+
 # Grab the list of available fuzzing verbs
 _scratch_xfs_list_fuzz_verbs() {
 	if [ -n "${SCRATCH_XFS_LIST_FUZZ_VERBS}" ]; then
