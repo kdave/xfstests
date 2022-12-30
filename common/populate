@@ -605,8 +605,8 @@ __populate_check_xfs_attr() {
 
 # Check that there's at least one per-AG btree with multiple levels
 __populate_check_xfs_agbtree_height() {
-	bt_type="$1"
-	nr_ags=$(_scratch_xfs_db -c 'sb 0' -c 'p agcount' | awk '{print $3}')
+	local bt_type="$1"
+	local agcount=$(_scratch_xfs_db -c 'sb 0' -c 'p agcount' | awk '{print $3}')
 
 	case "${bt_type}" in
 	"bno"|"cnt"|"rmap"|"refcnt")
@@ -626,13 +626,14 @@ __populate_check_xfs_agbtree_height() {
 		;;
 	esac
 
-	seq 0 $((nr_ags - 1)) | while read ag; do
-		bt_level=$(_scratch_xfs_db -c "${hdr} ${ag}" -c "p ${bt_prefix}level" | awk '{print $3}')
+	for ((agno = 0; agno < agcount; agno++)); do
+		bt_level=$(_scratch_xfs_db -c "${hdr} ${agno}" -c "p ${bt_prefix}level" | awk '{print $3}')
+		# "level" is really the btree height
 		if [ "${bt_level}" -gt 1 ]; then
-			return 100
+			return 0
 		fi
 	done
-	test $? -eq 100 || __populate_fail "Failed to create ${bt_type} of sufficient height!"
+	__populate_fail "Failed to create ${bt_type} of sufficient height!"
 	return 1
 }
 
