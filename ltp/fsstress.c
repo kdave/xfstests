@@ -426,6 +426,7 @@ int	symlink_path(const char *, pathname_t *);
 int	truncate64_path(pathname_t *, off64_t);
 int	unlink_path(pathname_t *);
 void	usage(void);
+void	read_freq(void);
 void	write_freq(void);
 void	zero_freq(void);
 void	non_btrfs_freq(const char *);
@@ -472,7 +473,7 @@ int main(int argc, char **argv)
 	xfs_error_injection_t	        err_inj;
 	struct sigaction action;
 	int		loops = 1;
-	const char	*allopts = "cd:e:f:i:l:m:M:n:o:p:rs:S:vVwx:X:zH";
+	const char	*allopts = "cd:e:f:i:l:m:M:n:o:p:rRs:S:vVwx:X:zH";
 
 	errrange = errtag = 0;
 	umask(0);
@@ -537,6 +538,9 @@ int main(int argc, char **argv)
 			break;
 		case 'r':
 			namerand = 1;
+			break;
+		case 'R':
+			read_freq();
 			break;
 		case 's':
 			seed = strtoul(optarg, NULL, 0);
@@ -1917,6 +1921,7 @@ usage(void)
 	printf("   -o logfile       specifies logfile name\n");
 	printf("   -p nproc         specifies the no. of processes (default 1)\n");
 	printf("   -r               specifies random name padding\n");
+	printf("   -R               zeros frequencies of write operations\n");
 	printf("   -s seed          specifies the seed for the random generator (default random)\n");
 	printf("   -v               specifies verbose mode\n");
 	printf("   -w               zeros frequencies of non-write operations\n");
@@ -1926,6 +1931,17 @@ usage(void)
 	printf("   -V               specifies verifiable logging mode (omitting inode numbers)\n");
 	printf("   -X ncmd          number of calls to the -x command (default 1)\n");
 	printf("   -H               prints usage and exits\n");
+}
+
+void
+read_freq(void)
+{
+	opdesc_t	*p;
+
+	for (p = ops; p < ops_end; p++) {
+		if (p->iswrite)
+			p->freq = 0;
+	}
 }
 
 void

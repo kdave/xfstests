@@ -429,6 +429,7 @@ __stress_scrub_clean_scratch() {
 __stress_scrub_fsx_loop() {
 	local end="$1"
 	local runningfile="$2"
+	local remount_period="$3"
 	local focus=(-q -X)	# quiet, validate file contents
 
 	# As of November 2022, 2 million fsx ops should be enough to keep
@@ -439,6 +440,43 @@ __stress_scrub_fsx_loop() {
 
 	local args="$FSX_AVOID ${focus[@]} ${SCRATCH_MNT}/fsx.$seq"
 	echo "Running $here/ltp/fsx $args" >> $seqres.full
+
+	if [ -n "$remount_period" ]; then
+		local mode="rw"
+		local rw_arg=""
+		while __stress_scrub_running "$end" "$runningfile"; do
+			# Need to recheck running conditions if we cleared
+			# anything.
+			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
+
+			timeout -s TERM "$remount_period" $here/ltp/fsx \
+					$args $rw_arg >> $seqres.full
+			res=$?
+			echo "$mode fsx exits with $res at $(date)" >> $seqres.full
+			if [ "$res" -ne 0 ] && [ "$res" -ne 124 ]; then
+				# Stop if fsstress returns error.  Mask off
+				# the magic code 124 because that is how the
+				# timeout(1) program communicates that we ran
+				# out of time.
+				break;
+			fi
+			if [ "$mode" = "rw" ]; then
+				mode="ro"
+				rw_arg="-t 0 -w 0 -FHzCIJBE0"
+			else
+				mode="rw"
+				rw_arg=""
+			fi
+
+			# Try remounting until we get the result we wanted
+			while ! _scratch_remount "$mode" &>/dev/null && \
+			      __stress_scrub_running "$end" "$runningfile"; do
+				sleep 0.2
+			done
+		done
+		rm -f "$runningfile"
+		return 0
+	fi
 
 	while __stress_scrub_running "$end" "$runningfile"; do
 		# Need to recheck running conditions if we cleared anything
@@ -453,11 +491,49 @@ __stress_scrub_fsx_loop() {
 __stress_scrub_fsstress_loop() {
 	local end="$1"
 	local runningfile="$2"
+	local remount_period="$3"
 
 	# As of March 2022, 2 million fsstress ops should be enough to keep
 	# any filesystem busy for a couple of hours.
 	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000000 $FSSTRESS_AVOID)
 	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
+
+	if [ -n "$remount_period" ]; then
+		local mode="rw"
+		local rw_arg=""
+		while __stress_scrub_running "$end" "$runningfile"; do
+			# Need to recheck running conditions if we cleared
+			# anything.
+			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
+
+			timeout -s TERM "$remount_period" $FSSTRESS_PROG \
+					$args $rw_arg >> $seqres.full
+			res=$?
+			echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
+			if [ "$res" -ne 0 ] && [ "$res" -ne 124 ]; then
+				# Stop if fsstress returns error.  Mask off
+				# the magic code 124 because that is how the
+				# timeout(1) program communicates that we ran
+				# out of time.
+				break;
+			fi
+			if [ "$mode" = "rw" ]; then
+				mode="ro"
+				rw_arg="-R"
+			else
+				mode="rw"
+				rw_arg=""
+			fi
+
+			# Try remounting until we get the result we wanted
+			while ! _scratch_remount "$mode" &>/dev/null && \
+			      __stress_scrub_running "$end" "$runningfile"; do
+				sleep 0.2
+			done
+		done
+		rm -f "$runningfile"
+		return 0
+	fi
 
 	while __stress_scrub_running "$end" "$runningfile"; do
 		# Need to recheck running conditions if we cleared anything
@@ -526,6 +602,13 @@ _scratch_xfs_stress_scrub_cleanup() {
 	echo "Waiting for children to exit at $(date)" >> $seqres.full
 	wait
 
+	# Ensure the scratch fs is also writable before we exit.
+	if [ -n "$__SCRUB_STRESS_REMOUNT_LOOP" ]; then
+		echo "Remounting rw at $(date)" >> $seqres.full
+		_scratch_remount rw >> $seqres.full 2>&1
+		__SCRUB_STRESS_REMOUNT_LOOP=""
+	fi
+
 	echo "Cleanup finished at $(date)" >> $seqres.full
 }
 
@@ -561,6 +644,9 @@ __stress_scrub_check_commands() {
 #	in a separate loop.  If zero -i options are specified, do not run.
 #	Callers must check each of these commands (via _require_xfs_io_command)
 #	before calling here.
+# -r	Run fsstress for this amount of time, then remount the fs ro or rw.
+#	The default is to run fsstress continuously with no remount, unless
+#	XFS_SCRUB_STRESS_REMOUNT_PERIOD is set.
 # -s	Pass this command to xfs_io to test scrub.  If zero -s options are
 #	specified, xfs_io will not be run.
 # -t	Run online scrub against this file; $SCRATCH_MNT is the default.
@@ -577,16 +663,19 @@ _scratch_xfs_stress_scrub() {
 	local scrub_delay="${XFS_SCRUB_STRESS_DELAY:--1}"
 	local exerciser="fsstress"
 	local io_args=()
+	local remount_period="${XFS_SCRUB_STRESS_REMOUNT_PERIOD}"
 
 	__SCRUB_STRESS_FREEZE_PID=""
+	__SCRUB_STRESS_REMOUNT_LOOP=""
 	rm -f "$runningfile"
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fi:s:t:w:X:" c; do
+	while getopts "fi:r:s:t:w:X:" c; do
 		case "$c" in
 			f) freeze=yes;;
 			i) io_args+=("$OPTARG");;
+			r) remount_period="$OPTARG";;
 			s) one_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
 			w) scrub_delay="$OPTARG";;
@@ -611,7 +700,12 @@ _scratch_xfs_stress_scrub() {
 	echo "Loop started at $(date --date="@${start}")," \
 		   "ending at $(date --date="@${end}")" >> $seqres.full
 
-	"__stress_scrub_${exerciser}_loop" "$end" "$runningfile" &
+	if [ -n "$remount_period" ]; then
+		__SCRUB_STRESS_REMOUNT_LOOP="1"
+	fi
+
+	"__stress_scrub_${exerciser}_loop" "$end" "$runningfile" \
+			"$remount_period" &
 
 	if [ -n "$freeze" ]; then
 		__stress_scrub_freeze_loop "$end" "$runningfile" &
