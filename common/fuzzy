@@ -53,12 +53,46 @@ _scratch_scrub() {
 	esac
 }
 
-# Filter out any keys with an array index >= 10, collapse any array range
-# ("[1-195]") to the first item, and ignore padding fields.
-__filter_xfs_db_keys() {
-	sed -e '/\([a-z]*\)\[\([0-9][0-9]\+\)\].*/d' \
-	    -e 's/\([a-zA-Z0-9_]*\)\[\([0-9]*\)-[0-9]*\]/\1[\2]/g' \
-	    -e '/pad/d'
+# Expand indexed keys (i.e. arrays) into a long format so that we can filter
+# the array indices individually, and pass regular keys right through.
+#
+# For example, "u3.bmx[0-1] = [foo,bar]" is exploded into:
+# u3.bmx[0] = [foo,bar]
+# u3.bmx[1] = [foo,bar]
+#
+# Note that we restrict array indices to [0-9] to reduce fuzz runtime.  The
+# minimum and maximum array indices can be changed by setting the variables
+# SCRATCH_XFS_{MIN,MAX}_ARRAY_IDX.
+#
+# Also filter padding fields.
+__explode_xfs_db_fields() {
+	local min_idx="${SCRATCH_XFS_MIN_ARRAY_IDX}"
+	local max_idx="${SCRATCH_XFS_MAX_ARRAY_IDX}"
+
+	test -z "${min_idx}" && min_idx=0
+	test -z "${max_idx}" && max_idx=9
+	test "${max_idx}" = "none" && max_idx=99999
+
+	grep ' = ' | \
+	sed -e 's/^\([.a-zA-Z0-9_]*\)\[\([0-9]*\)-\([0-9]*\)\]\(.*\) = \(.*\)$/\1[%d]\4 \2 \3 = \5/g' \
+	    -e 's/^\([.a-zA-Z0-9_]*\)\[\([0-9]*\)\]\(.*\) = \(.*\)$/\1[%d]\3 \2 \2 = \4/g' | \
+	while read name col1 col2 rest; do
+		if [[ "${name}" == *pad* ]]; then
+			continue
+		fi
+
+		if [ "${col1}" = "=" ]; then
+			echo "${name} ${col1} ${col2} ${rest}"
+			continue
+		fi
+
+		test "${min_idx}" -gt "${col1}" && col1="${min_idx}"
+		test "${max_idx}" -lt "${col2}" && col2="${max_idx}"
+
+		seq "${col1}" "${col2}" | while read idx; do
+			printf "${name} %s\n" "${idx}" "${rest}"
+		done
+	done
 }
 
 # Filter out metadata fields that are completely controlled by userspace
@@ -96,14 +130,14 @@ __filter_xfs_db_print_fields() {
 	if [ -z "${filter}" ] || [ "${filter}" = "nofilter" ]; then
 		filter='^'
 	fi
-	grep ' = ' | while read key equals value; do
-		fuzzkey="$(echo "${key}" | __filter_xfs_db_keys)"
+	__explode_xfs_db_fields | while read key equals value; do
+		fuzzkey="$(echo "${key}")"
 		if [ -z "${fuzzkey}" ]; then
 			continue
 		elif [[ "${value}" == "["* ]]; then
 			echo "${value}" | sed -e 's/^.//g' -e 's/.$//g' -e 's/,/\n/g' | while read subfield; do
 				echo "${fuzzkey}.${subfield}"
-			done | __filter_xfs_db_keys
+			done
 		else
 			echo "${fuzzkey}"
 		fi
