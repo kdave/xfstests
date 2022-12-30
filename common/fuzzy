@@ -73,6 +73,14 @@ __filter_xfs_db_keys() {
 	    -e '/pad/d'
 }
 
+# Filter out metadata fields that are completely controlled by userspace
+# or are arbitrary bit sequences.  In other words, fields where the filesystem
+# does no validation.
+__filter_unvalidated_xfs_db_fields() {
+	sed -e '/\.sec/d' \
+	    -e '/\.nsec/d'
+}
+
 # Filter the xfs_db print command's field debug information
 # into field name and type.
 __filter_xfs_db_print_fields() {
@@ -91,7 +99,7 @@ __filter_xfs_db_print_fields() {
 		else
 			echo "${fuzzkey}"
 		fi
-	done | grep -E "${filter}"
+	done | grep -E "${filter}" | __filter_unvalidated_xfs_db_fields
 }
 
 # Navigate to some part of the filesystem and print the field info.
