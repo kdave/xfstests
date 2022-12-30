@@ -1,0 +1,77 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 795
+#
+# Ensure that the sysadmin won't hit EDQUOT while repairing file data contents
+# even if the file's quota limits have been exceeded.  This tests the quota
+# reservation handling inside the swapext code used by repair.
+#
+. ./common/preamble
+_begin_fstest online_repair
+
+# Import common functions.
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/quota
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_quota
+_require_user
+_require_scratch
+_require_xfs_stress_online_repair
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_qmount_option usrquota
+_qmount
+
+blocksize=$(_get_block_size $SCRATCH_MNT)
+alloc_unit=$(_xfs_get_dir_blocksize $SCRATCH_MNT)
+
+# Make sure we can actually repair a directory
+scratchdir=$SCRATCH_MNT/dir
+scratchfile=$SCRATCH_MNT/file
+mkdir $scratchdir
+touch $scratchfile
+$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
+__stress_scrub_check_commands "$scratchdir" "" 'repair directory'
+
+# Create a 2-dirblock directory
+total_size=$((alloc_unit * 2))
+dirents=$((total_size / 255))
+
+for ((i = 0; i < dirents; i++)); do
+	name=$(printf "x%0254d" $i)
+	ln $scratchfile $scratchdir/$name
+done
+
+# Set a low quota hardlimit for an unprivileged uid and chown the files to it
+echo "set up quota" >> $seqres.full
+$XFS_QUOTA_PROG -x -c "limit -u bhard=$alloc_unit $qa_user" $SCRATCH_MNT
+chown $qa_user $scratchdir $scratchfile
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# Rebuild the directory
+echo "repairs" >> $seqres.full
+$XFS_IO_PROG -x -c 'inject force_repair' -c 'repair directory' $scratchdir
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# Fail at appending the directory as qa_user to ensure quota enforcement works
+echo "fail quota" >> $seqres.full
+for ((i = 0; i < dirents; i++)); do
+	name=$(printf "y%0254d" $i)
+	su - "$qa_user" -c "ln $scratchfile $scratchdir/$name" 2>&1 | \
+		_filter_scratch | sed -e 's/y[0-9]*/yXXX/g'
+	test "${PIPESTATUS[0]}" -ne 0 && break
+done
+$XFS_QUOTA_PROG -x -c 'report -u' $SCRATCH_MNT >> $seqres.full
+
+# success, all done
+echo Silence is golden
+status=0
+exit
