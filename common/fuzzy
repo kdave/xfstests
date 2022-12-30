@@ -216,6 +216,15 @@ __scratch_xfs_fuzz_field_online() {
 	test $res -eq 0 && \
 		(>&2 echo "${fuzz_action}: online scrub didn't fail.")
 
+	# Does the health status report reflect the corruption?
+	if [ $res -ne 0 ]; then
+		__fuzz_notify "++ Detect fuzzed field ill-health report"
+		_check_xfs_health $SCRATCH_MNT 2>&1
+		res=$?
+		test $res -ne 1 && \
+			(>&2 echo "${fuzz_action}: online health check failed ($res).")
+	fi
+
 	# Try fixing the filesystem online
 	__fuzz_notify "++ Try to repair filesystem (online)"
 	_scratch_scrub 2>&1
@@ -308,6 +317,15 @@ __scratch_xfs_fuzz_field_norepair() {
 	test $res -eq 0 && \
 		(>&2 echo "${fuzz_action}: online scrub didn't fail.")
 
+	# Does the health status report reflect the corruption?
+	if [ $res -ne 0 ]; then
+		__fuzz_notify "++ Detect fuzzed field ill-health report"
+		_check_xfs_health $SCRATCH_MNT 2>&1
+		res=$?
+		test $res -ne 1 && \
+			(>&2 echo "${fuzz_action}: online health check failed ($res).")
+	fi
+
 	__scratch_xfs_fuzz_unmount
 
 	return 0
@@ -337,6 +355,15 @@ __scratch_xfs_fuzz_field_both() {
 		res=$?
 		test $res -eq 0 && \
 			(>&2 echo "${fuzz_action}: online scrub didn't fail.")
+
+		# Does the health status report reflect the corruption?
+		if [ $res -ne 0 ]; then
+			__fuzz_notify "++ Detect fuzzed field ill-health report"
+			_check_xfs_health $SCRATCH_MNT 2>&1
+			res=$?
+			test $res -ne 1 && \
+				(>&2 echo "${fuzz_action}: online health check failed ($res).")
+		fi
 
 		# Try fixing the filesystem online
 		__fuzz_notify "++ Try to repair filesystem (online)"

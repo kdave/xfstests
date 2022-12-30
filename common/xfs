@@ -589,6 +589,37 @@ _require_xfs_db_command()
 		_notrun "xfs_db $command support is missing"
 }
 
+# Check the health of a mounted XFS filesystem.  Callers probably want to
+# ensure that xfs_scrub has been run first.  Returns 1 if unhealthy metadata
+# are found or 0 otherwise.
+_check_xfs_health() {
+	local mntpt="$1"
+	local ret=0
+	local t="$tmp.health_helper"
+
+	test -x "$XFS_SPACEMAN_PROG" || return 0
+
+	$XFS_SPACEMAN_PROG -c 'health -c -q' $mntpt > $t.out 2> $t.err
+	test $? -ne 0 && ret=1
+
+	# Don't return error if userspace or kernel don't support health
+	# reporting.
+	grep -q 'command.*health.*not found' $t.err && return 0
+	grep -q 'Inappropriate ioctl for device' $t.err && return 0
+
+	# Filter out the "please run scrub" message if nothing's been checked.
+	sed -e '/Health status has not been/d' -e '/Please run xfs_scrub/d' -i \
+			$t.err
+
+	grep -q unhealthy $t.out && ret=1
+	test $(wc -l < $t.err) -gt 0 && ret=1
+	cat $t.out
+	cat $t.err 1>&2
+	rm -f $t.out $t.err
+
+	return $ret
+}
+
 # Does the filesystem mounted from a particular device support scrub?
 _supports_xfs_scrub()
 {
@@ -740,6 +771,18 @@ _check_xfs_filesystem()
 			ok=0
 		fi
 		rm -f $tmp.scrub
+
+		# Does the health reporting notice anything?
+		_check_xfs_health $mntpt > $tmp.health 2>&1
+		res=$?
+		if [ $((res ^ ok)) -eq 0 ]; then
+			_log_err "_check_xfs_filesystem: filesystem on $device failed health check"
+			echo "*** xfs_spaceman -c 'health -c -q' output ***" >> $seqres.full
+			cat $tmp.health >> $seqres.full
+			echo "*** end xfs_spaceman output" >> $seqres.full
+			ok=0
+		fi
+		rm -f $tmp.health
 	fi
 
 	if [ "$type" = "xfs" ]; then
