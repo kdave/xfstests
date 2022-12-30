@@ -405,6 +405,25 @@ _scratch_xfs_stress_scrub_cleanup() {
 	$XFS_IO_PROG -x -c 'thaw' $SCRATCH_MNT >> $seqres.full 2>&1
 }
 
+# Make sure the provided scrub/repair commands actually work on the scratch
+# filesystem before we start running them in a loop.
+__stress_scrub_check_commands() {
+	local scrub_tgt="$1"
+	shift
+
+	for arg in "$@"; do
+		testio=`$XFS_IO_PROG -x -c "$arg" $scrub_tgt 2>&1`
+		echo $testio | grep -q "Unknown type" && \
+			_notrun "xfs_io scrub subcommand support is missing"
+		echo $testio | grep -q "Inappropriate ioctl" && \
+			_notrun "kernel scrub ioctl is missing"
+		echo $testio | grep -q "No such file or directory" && \
+			_notrun "kernel does not know about: $arg"
+		echo $testio | grep -q "Operation not supported" && \
+			_notrun "kernel does not support: $arg"
+	done
+}
+
 # Start scrub, freeze, and fsstress in background looping processes, and wait
 # for 30*TIME_FACTOR seconds to see if the filesystem goes down.  Callers
 # must call _scratch_xfs_stress_scrub_cleanup from their cleanup functions.
@@ -426,6 +445,8 @@ _scratch_xfs_stress_scrub() {
 			*) return 1; ;;
 		esac
 	done
+
+	__stress_scrub_check_commands "$scrub_tgt" "${one_scrub_args[@]}"
 
 	local start="$(date +%s)"
 	local end="$((start + (30 * TIME_FACTOR) ))"
