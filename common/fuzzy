@@ -362,6 +362,23 @@ __stress_scrub_freeze_loop() {
 	done
 }
 
+# Run individual xfs_io commands in a tight loop.
+__stress_xfs_io_loop() {
+	local end="$1"
+	local runningfile="$2"
+	shift; shift
+
+	local xfs_io_args=()
+	for arg in "$@"; do
+		xfs_io_args+=('-c' "$arg")
+	done
+
+	while __stress_scrub_running "$end" "$runningfile"; do
+		$XFS_IO_PROG -x "${xfs_io_args[@]}" "$SCRATCH_MNT" \
+				> /dev/null 2>> $seqres.full
+	done
+}
+
 # Run individual XFS online fsck commands in a tight loop with xfs_io.
 __stress_one_scrub_loop() {
 	local end="$1"
@@ -540,6 +557,10 @@ __stress_scrub_check_commands() {
 #
 # -f	Run a freeze/thaw loop while we're doing other things.  Defaults to
 #	disabled, unless XFS_SCRUB_STRESS_FREEZE is set.
+# -i	Pass this command to xfs_io to exercise something that is not scrub
+#	in a separate loop.  If zero -i options are specified, do not run.
+#	Callers must check each of these commands (via _require_xfs_io_command)
+#	before calling here.
 # -s	Pass this command to xfs_io to test scrub.  If zero -s options are
 #	specified, xfs_io will not be run.
 # -t	Run online scrub against this file; $SCRATCH_MNT is the default.
@@ -555,15 +576,17 @@ _scratch_xfs_stress_scrub() {
 	local freeze="${XFS_SCRUB_STRESS_FREEZE}"
 	local scrub_delay="${XFS_SCRUB_STRESS_DELAY:--1}"
 	local exerciser="fsstress"
+	local io_args=()
 
 	__SCRUB_STRESS_FREEZE_PID=""
 	rm -f "$runningfile"
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fs:t:w:X:" c; do
+	while getopts "fi:s:t:w:X:" c; do
 		case "$c" in
 			f) freeze=yes;;
+			i) io_args+=("$OPTARG");;
 			s) one_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
 			w) scrub_delay="$OPTARG";;
@@ -593,6 +616,11 @@ _scratch_xfs_stress_scrub() {
 	if [ -n "$freeze" ]; then
 		__stress_scrub_freeze_loop "$end" "$runningfile" &
 		__SCRUB_STRESS_FREEZE_PID="$!"
+	fi
+
+	if [ "${#io_args[@]}" -gt 0 ]; then
+		__stress_xfs_io_loop "$end" "$runningfile" \
+				"${io_args[@]}" &
 	fi
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
