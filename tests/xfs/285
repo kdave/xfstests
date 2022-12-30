@@ -4,55 +4,35 @@
 #
 # FS QA Test No. 285
 #
-# Race fio and xfs_scrub for a while to see if we crash or livelock.
+# Race fsstress and xfs_scrub in read-only mode for a while to see if we crash
+# or livelock.
 #
 . ./common/preamble
-_begin_fstest dangerous_fuzzers dangerous_scrub
+_begin_fstest scrub dangerous_fsstress_scrub
 
+_cleanup() {
+	cd /
+	_scratch_xfs_stress_scrub_cleanup &> /dev/null
+	rm -r -f $tmp.*
+}
 _register_cleanup "_cleanup" BUS
 
 # Import common functions.
 . ./common/filter
 . ./common/fuzzy
 . ./common/inject
+. ./common/xfs
 
 # real QA test starts here
 _supported_fs xfs
-_require_test_program "feature"
-_require_command "$KILLALL_PROG" killall
-_require_command "$TIMEOUT_PROG" timeout
-_require_scrub
 _require_scratch
+_require_xfs_stress_scrub
 
-echo "Format and populate"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount
-
-STRESS_DIR="$SCRATCH_MNT/testdir"
-mkdir -p $STRESS_DIR
-
-cpus=$(( $($here/src/feature -o) * 4 * LOAD_FACTOR))
-$FSSTRESS_PROG -d $STRESS_DIR -p $cpus -n $((cpus * 100000)) $FSSTRESS_AVOID >/dev/null 2>&1 &
-$XFS_SCRUB_PROG -d -T -v -n $SCRATCH_MNT >> $seqres.full
-
-killstress() {
-	sleep $(( 60 * TIME_FACTOR ))
-	$KILLALL_PROG -q $FSSTRESS_PROG
-}
-
-echo "Concurrent scrub"
-start=$(date +%s)
-end=$((start + (60 * TIME_FACTOR) ))
-killstress &
-echo "Scrub started at $(date --date="@${start}"), ending at $(date --date="@${end}")" >> $seqres.full
-while [ "$(date +%s)" -lt "$end" ]; do
-	$TIMEOUT_PROG -s TERM $(( end - $(date +%s) + 2 )) $XFS_SCRUB_PROG -d -T -v -n $SCRATCH_MNT >> $seqres.full 2>&1
-done
-
-echo "Test done"
-echo "Scrub finished at $(date)" >> $seqres.full
-$KILLALL_PROG -q $FSSTRESS_PROG
+_scratch_xfs_stress_scrub -S '-n'
 
 # success, all done
+echo Silence is golden
 status=0
 exit

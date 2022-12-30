@@ -411,6 +411,42 @@ __stress_one_scrub_loop() {
 	done
 }
 
+# Run xfs_scrub online fsck in a tight loop.
+__stress_xfs_scrub_loop() {
+	local end="$1"
+	local runningfile="$2"
+	local scrub_startat="$3"
+	shift; shift; shift
+	local sigint_ret="$(( $(kill -l SIGINT) + 128 ))"
+	local scrublog="$tmp.scrub"
+
+	while __stress_scrub_running "$scrub_startat" "$runningfile"; do
+		sleep 1
+	done
+
+	while __stress_scrub_running "$end" "$runningfile"; do
+		_scratch_scrub "$@" &> $scrublog
+		res=$?
+		if [ "$res" -eq "$sigint_ret" ]; then
+			# Ignore SIGINT because the cleanup function sends
+			# that to terminate xfs_scrub
+			res=0
+		fi
+		echo "xfs_scrub exits with $res at $(date)" >> $seqres.full
+		if [ "$res" -ge 128 ]; then
+			# Report scrub death due to fatal signals
+			echo "xfs_scrub died with SIG$(kill -l $res)"
+			cat $scrublog >> $seqres.full 2>/dev/null
+		elif [ "$((res & 0x1))" -gt 0 ]; then
+			# Report uncorrected filesystem errors
+			echo "xfs_scrub reports uncorrected errors:"
+			grep -E '(Repair unsuccessful;|Corruption:)' $scrublog
+			cat $scrublog >> $seqres.full 2>/dev/null
+		fi
+		rm -f $scrublog
+	done
+}
+
 # Clean the scratch filesystem between rounds of fsstress if there is 2%
 # available space or less because that isn't an interesting stress test.
 #
@@ -571,7 +607,7 @@ _scratch_xfs_stress_scrub_cleanup() {
 	# Send SIGINT so that bash won't print a 'Terminated' message that
 	# distorts the golden output.
 	echo "Killing stressor processes at $(date)" >> $seqres.full
-	$KILLALL_PROG -INT xfs_io fsstress fsx >> $seqres.full 2>&1
+	$KILLALL_PROG -INT xfs_io fsstress fsx xfs_scrub >> $seqres.full 2>&1
 
 	# Tests are not allowed to exit with the scratch fs frozen.  If we
 	# started a fs freeze/thaw background loop, wait for that loop to exit
@@ -649,6 +685,8 @@ __stress_scrub_check_commands() {
 #	XFS_SCRUB_STRESS_REMOUNT_PERIOD is set.
 # -s	Pass this command to xfs_io to test scrub.  If zero -s options are
 #	specified, xfs_io will not be run.
+# -S	Pass this option to xfs_scrub.  If zero -S options are specified,
+#	xfs_scrub will not be run.  To select repair mode, pass '-k' or '-v'.
 # -t	Run online scrub against this file; $SCRATCH_MNT is the default.
 # -w	Delay the start of the scrub/repair loop by this number of seconds.
 #	Defaults to no delay unless XFS_SCRUB_STRESS_DELAY is set.  This value
@@ -657,6 +695,7 @@ __stress_scrub_check_commands() {
 #       options are 'fsx' and 'fsstress'.  The default is 'fsstress'.
 _scratch_xfs_stress_scrub() {
 	local one_scrub_args=()
+	local xfs_scrub_args=()
 	local scrub_tgt="$SCRATCH_MNT"
 	local runningfile="$tmp.fsstress"
 	local freeze="${XFS_SCRUB_STRESS_FREEZE}"
@@ -671,12 +710,13 @@ _scratch_xfs_stress_scrub() {
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fi:r:s:t:w:X:" c; do
+	while getopts "fi:r:s:S:t:w:X:" c; do
 		case "$c" in
 			f) freeze=yes;;
 			i) io_args+=("$OPTARG");;
 			r) remount_period="$OPTARG";;
 			s) one_scrub_args+=("$OPTARG");;
+			S) xfs_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
 			w) scrub_delay="$OPTARG";;
 			X) exerciser="$OPTARG";;
@@ -689,6 +729,18 @@ _scratch_xfs_stress_scrub() {
 	if ! command -v "__stress_scrub_${exerciser}_loop" &>/dev/null; then
 		echo "${exerciser}: Unknown fs exercise program."
 		return 1
+	fi
+
+	if [ "${#xfs_scrub_args[@]}" -gt 0 ]; then
+		_scratch_scrub "${xfs_scrub_args[@]}" &> "$tmp.scrub"
+		res=$?
+		if [ $res -ne 0 ]; then
+			echo "xfs_scrub ${xfs_scrub_args[@]} failed, err $res" >> $seqres.full
+			cat "$tmp.scrub" >> $seqres.full
+			rm -f "$tmp.scrub"
+			_notrun 'scrub not supported on scratch filesystem'
+		fi
+		rm -f "$tmp.scrub"
 	fi
 
 	local start="$(date +%s)"
@@ -722,6 +774,11 @@ _scratch_xfs_stress_scrub() {
 				"$scrub_startat" "${one_scrub_args[@]}" &
 	fi
 
+	if [ "${#xfs_scrub_args[@]}" -gt 0 ]; then
+		__stress_xfs_scrub_loop "$end" "$runningfile" "$scrub_startat" \
+				"${xfs_scrub_args[@]}" &
+	fi
+
 	# Wait until the designated end time or fsstress dies, then kill all of
 	# our background processes.
 	while __stress_scrub_running "$end" "$runningfile"; do
@@ -741,5 +798,5 @@ _scratch_xfs_stress_scrub() {
 # Same requirements and arguments as _scratch_xfs_stress_scrub.
 _scratch_xfs_stress_online_repair() {
 	$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
-	_scratch_xfs_stress_scrub "$@"
+	XFS_SCRUB_FORCE_REPAIR=1 _scratch_xfs_stress_scrub "$@"
 }
