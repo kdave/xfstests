@@ -466,6 +466,7 @@ __stress_scrub_fsx_loop() {
 	local end="$1"
 	local runningfile="$2"
 	local remount_period="$3"
+	local stress_tgt="$4"	# ignored
 	local focus=(-q -X)	# quiet, validate file contents
 
 	# As of November 2022, 2 million fsx ops should be enough to keep
@@ -528,10 +529,70 @@ __stress_scrub_fsstress_loop() {
 	local end="$1"
 	local runningfile="$2"
 	local remount_period="$3"
+	local stress_tgt="$4"
+	local focus=()
+
+	case "$stress_tgt" in
+	"dir")
+		focus+=('-z')
+
+		# Create a directory tree rapidly
+		for op in creat link mkdir mknod symlink; do
+			focus+=('-f' "${op}=8")
+		done
+		focus+=('-f' 'rmdir=2' '-f' 'unlink=8')
+
+		# Rename half as often
+		for op in rename rnoreplace rexchange; do
+			focus+=('-f' "${op}=4")
+		done
+
+		# Read and sync occasionally
+		for op in getdents stat fsync; do
+			focus+=('-f' "${op}=1")
+		done
+		;;
+	"xattr")
+		focus+=('-z')
+
+		# Create a directory tree slowly
+		for op in creat ; do
+			focus+=('-f' "${op}=2")
+		done
+		for op in unlink rmdir; do
+			focus+=('-f' "${op}=1")
+		done
+
+		# Create xattrs rapidly
+		for op in attr_set setfattr; do
+			focus+=('-f' "${op}=80")
+		done
+
+		# Remove xattrs 1/4 as quickly
+		for op in attr_remove removefattr; do
+			focus+=('-f' "${op}=20")
+		done
+
+		# Read and sync occasionally
+		for op in listfattr getfattr fsync; do
+			focus+=('-f' "${op}=10")
+		done
+		;;
+	"writeonly")
+		# Only do things that cause filesystem writes
+		focus+=('-w')
+		;;
+	"default")
+		# No new arguments
+		;;
+	*)
+		echo "$stress_tgt: Unrecognized stress target, using defaults."
+		;;
+	esac
 
 	# As of March 2022, 2 million fsstress ops should be enough to keep
 	# any filesystem busy for a couple of hours.
-	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000000 $FSSTRESS_AVOID)
+	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000000 "${focus[@]}" $FSSTRESS_AVOID)
 	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
 
 	if [ -n "$remount_period" ]; then
@@ -691,6 +752,14 @@ __stress_scrub_check_commands() {
 # -w	Delay the start of the scrub/repair loop by this number of seconds.
 #	Defaults to no delay unless XFS_SCRUB_STRESS_DELAY is set.  This value
 #	will be clamped to ten seconds before the end time.
+# -x	Focus on this type of fsstress operation.  Possible values:
+#
+#       'dir': Grow the directory trees as much as possible.
+#       'xattr': Grow extended attributes in a small tree.
+#       'default': Run fsstress with default arguments.
+#       'writeonly': Only perform fs updates, no reads.
+#
+#       The default is 'default' unless XFS_SCRUB_STRESS_TARGET is set.
 # -X	Run this program to exercise the filesystem.  Currently supported
 #       options are 'fsx' and 'fsstress'.  The default is 'fsstress'.
 _scratch_xfs_stress_scrub() {
@@ -703,6 +772,7 @@ _scratch_xfs_stress_scrub() {
 	local exerciser="fsstress"
 	local io_args=()
 	local remount_period="${XFS_SCRUB_STRESS_REMOUNT_PERIOD}"
+	local stress_tgt="${XFS_SCRUB_STRESS_TARGET:-default}"
 
 	__SCRUB_STRESS_FREEZE_PID=""
 	__SCRUB_STRESS_REMOUNT_LOOP=""
@@ -710,7 +780,7 @@ _scratch_xfs_stress_scrub() {
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fi:r:s:S:t:w:X:" c; do
+	while getopts "fi:r:s:S:t:w:x:X:" c; do
 		case "$c" in
 			f) freeze=yes;;
 			i) io_args+=("$OPTARG");;
@@ -719,6 +789,7 @@ _scratch_xfs_stress_scrub() {
 			S) xfs_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
 			w) scrub_delay="$OPTARG";;
+			x) stress_tgt="$OPTARG";;
 			X) exerciser="$OPTARG";;
 			*) return 1; ;;
 		esac
@@ -757,7 +828,7 @@ _scratch_xfs_stress_scrub() {
 	fi
 
 	"__stress_scrub_${exerciser}_loop" "$end" "$runningfile" \
-			"$remount_period" &
+			"$remount_period" "$stress_tgt" &
 
 	if [ -n "$freeze" ]; then
 		__stress_scrub_freeze_loop "$end" "$runningfile" &
