@@ -398,6 +398,9 @@ __stress_one_scrub_loop() {
 
 	local xfs_io_args=()
 	for arg in "$@"; do
+		if [ -n "$SCRUBSTRESS_USE_FORCE_REBUILD" ]; then
+			arg="$(echo "$arg" | sed -e 's/^repair/repair -R/g')"
+		fi
 		if echo "$arg" | grep -q -w '%agno%'; then
 			# Substitute the AG number
 			for ((agno = 0; agno < agcount; agno++)); do
@@ -695,13 +698,21 @@ _require_xfs_stress_scrub() {
 		_notrun 'xfs scrub stress test requires common/filter'
 }
 
+# Make sure that we can force repairs either by error injection or passing
+# FORCE_REBUILD via ioctl.
+__require_xfs_stress_force_rebuild() {
+	local output="$($XFS_IO_PROG -x -c 'repair -R probe' $SCRATCH_MNT 2>&1)"
+	test -z "$output" && return
+	_require_xfs_io_error_injection "force_repair"
+}
+
 # Make sure we have everything we need to run stress and online repair
 _require_xfs_stress_online_repair() {
 	_require_xfs_stress_scrub
 	_require_xfs_io_command "repair"
 	command -v _require_xfs_io_error_injection &>/dev/null || \
 		_notrun 'xfs repair stress test requires common/inject'
-	_require_xfs_io_error_injection "force_repair"
+	__require_xfs_stress_force_rebuild
 	_require_freeze
 }
 
@@ -783,7 +794,11 @@ __stress_scrub_check_commands() {
 	esac
 
 	for arg in "$@"; do
-		local cooked_arg="$(echo "$arg" | sed -e "s/%agno%/0/g")"
+		local cooked_arg="$arg"
+		if [ -n "$SCRUBSTRESS_USE_FORCE_REBUILD" ]; then
+			cooked_arg="$(echo "$cooked_arg" | sed -e 's/^repair/repair -R/g')"
+		fi
+		cooked_arg="$(echo "$cooked_arg" | sed -e "s/%agno%/0/g")"
 		testio=`$XFS_IO_PROG -x -c "$cooked_arg" "$cooked_tgt" 2>&1`
 		echo $testio | grep -q "Unknown type" && \
 			_notrun "xfs_io scrub subcommand support is missing"
@@ -943,10 +958,23 @@ _scratch_xfs_stress_scrub() {
 	echo "Loop finished at $(date)" >> $seqres.full
 }
 
+# Decide if we're going to force repairs either by error injection or passing
+# FORCE_REBUILD via ioctl.
+__scratch_xfs_stress_setup_force_rebuild() {
+	local output="$($XFS_IO_PROG -x -c 'repair -R probe' $SCRATCH_MNT 2>&1)"
+
+	if [ -z "$output" ]; then
+		SCRUBSTRESS_USE_FORCE_REBUILD=1
+		return
+	fi
+
+	$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
+}
+
 # Start online repair, freeze, and fsstress in background looping processes,
 # and wait for 30*TIME_FACTOR seconds to see if the filesystem goes down.
 # Same requirements and arguments as _scratch_xfs_stress_scrub.
 _scratch_xfs_stress_online_repair() {
-	$XFS_IO_PROG -x -c 'inject force_repair' $SCRATCH_MNT
+	__scratch_xfs_stress_setup_force_rebuild
 	XFS_SCRUB_FORCE_REPAIR=1 _scratch_xfs_stress_scrub "$@"
 }
