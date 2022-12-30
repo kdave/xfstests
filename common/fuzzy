@@ -393,7 +393,8 @@ __stress_one_scrub_loop() {
 	local runningfile="$2"
 	local scrub_tgt="$3"
 	local scrub_startat="$4"
-	shift; shift; shift; shift
+	local start_agno="$5"
+	shift; shift; shift; shift; shift
 	local agcount="$(_xfs_mount_agcount $SCRATCH_MNT)"
 
 	local xfs_io_args=()
@@ -403,7 +404,7 @@ __stress_one_scrub_loop() {
 		fi
 		if echo "$arg" | grep -q -w '%agno%'; then
 			# Substitute the AG number
-			for ((agno = 0; agno < agcount; agno++)); do
+			for ((agno = start_agno; agno < agcount; agno++)); do
 				local ag_arg="$(echo "$arg" | sed -e "s|%agno%|$agno|g")"
 				xfs_io_args+=('-c' "$ag_arg")
 			done
@@ -413,20 +414,26 @@ __stress_one_scrub_loop() {
 	done
 
 	local extra_filters=()
-	local target_cmd=(echo "$scrub_tgt")
 	case "$scrub_tgt" in
 	"%file%"|"%datafile%"|"%attrfile%")
 		extra_filters+=('No such file or directory' 'No such device or address')
-		target_cmd=(find "$SCRATCH_MNT" -print)
 		;;
 	"%dir%")
 		extra_filters+=('No such file or directory' 'Not a directory')
-		target_cmd=(find "$SCRATCH_MNT" -type d -print)
 		;;
 	"%regfile%"|"%cowfile%")
 		extra_filters+=('No such file or directory')
-		target_cmd=(find "$SCRATCH_MNT" -type f -print)
 		;;
+	esac
+
+	local target_cmd=(echo "$scrub_tgt")
+	case "$scrub_tgt" in
+	"%file%")	target_cmd=($here/src/xfsfind -q  "$SCRATCH_MNT");;
+	"%attrfile%")	target_cmd=($here/src/xfsfind -qa "$SCRATCH_MNT");;
+	"%datafile%")	target_cmd=($here/src/xfsfind -qb "$SCRATCH_MNT");;
+	"%dir%")	target_cmd=($here/src/xfsfind -qd "$SCRATCH_MNT");;
+	"%regfile%")	target_cmd=($here/src/xfsfind -qr "$SCRATCH_MNT");;
+	"%cowfile%")	target_cmd=($here/src/xfsfind -qs "$SCRATCH_MNT");;
 	esac
 
 	while __stress_scrub_running "$scrub_startat" "$runningfile"; do
@@ -434,7 +441,7 @@ __stress_one_scrub_loop() {
 	done
 
 	while __stress_scrub_running "$end" "$runningfile"; do
-		readarray -t fnames < <("${target_cmd[@]}" 2>/dev/null)
+		readarray -t fnames < <("${target_cmd[@]}" 2>> $seqres.full)
 		for fname in "${fnames[@]}"; do
 			$XFS_IO_PROG -x "${xfs_io_args[@]}" "$fname" 2>&1 | \
 				__stress_scrub_filter_output "${extra_filters[@]}"
@@ -692,6 +699,7 @@ __stress_scrub_fsstress_loop() {
 # Make sure we have everything we need to run stress and scrub
 _require_xfs_stress_scrub() {
 	_require_xfs_io_command "scrub"
+	_require_test_program "xfsfind"
 	_require_command "$KILLALL_PROG" killall
 	_require_freeze
 	command -v _filter_scratch &>/dev/null || \
@@ -769,7 +777,8 @@ _scratch_xfs_stress_scrub_cleanup() {
 # filesystem before we start running them in a loop.
 __stress_scrub_check_commands() {
 	local scrub_tgt="$1"
-	shift
+	local start_agno="$2"
+	shift; shift
 
 	local cooked_tgt="$scrub_tgt"
 	case "$scrub_tgt" in
@@ -798,7 +807,7 @@ __stress_scrub_check_commands() {
 		if [ -n "$SCRUBSTRESS_USE_FORCE_REBUILD" ]; then
 			cooked_arg="$(echo "$cooked_arg" | sed -e 's/^repair/repair -R/g')"
 		fi
-		cooked_arg="$(echo "$cooked_arg" | sed -e "s/%agno%/0/g")"
+		cooked_arg="$(echo "$cooked_arg" | sed -e "s/%agno%/$start_agno/g")"
 		testio=`$XFS_IO_PROG -x -c "$cooked_arg" "$cooked_tgt" 2>&1`
 		echo $testio | grep -q "Unknown type" && \
 			_notrun "xfs_io scrub subcommand support is missing"
@@ -817,6 +826,7 @@ __stress_scrub_check_commands() {
 #
 # Various options include:
 #
+# -a	For %agno% substitution, start with this AG instead of AG 0.
 # -f	Run a freeze/thaw loop while we're doing other things.  Defaults to
 #	disabled, unless XFS_SCRUB_STRESS_FREEZE is set.
 # -i	Pass this command to xfs_io to exercise something that is not scrub
@@ -867,6 +877,7 @@ _scratch_xfs_stress_scrub() {
 	local io_args=()
 	local remount_period="${XFS_SCRUB_STRESS_REMOUNT_PERIOD}"
 	local stress_tgt="${XFS_SCRUB_STRESS_TARGET:-default}"
+	local start_agno=0
 
 	__SCRUB_STRESS_FREEZE_PID=""
 	__SCRUB_STRESS_REMOUNT_LOOP=""
@@ -874,8 +885,9 @@ _scratch_xfs_stress_scrub() {
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fi:r:s:S:t:w:x:X:" c; do
+	while getopts "a:fi:r:s:S:t:w:x:X:" c; do
 		case "$c" in
+			a) start_agno="$OPTARG";;
 			f) freeze=yes;;
 			i) io_args+=("$OPTARG");;
 			r) remount_period="$OPTARG";;
@@ -889,7 +901,8 @@ _scratch_xfs_stress_scrub() {
 		esac
 	done
 
-	__stress_scrub_check_commands "$scrub_tgt" "${one_scrub_args[@]}"
+	__stress_scrub_check_commands "$scrub_tgt" "$start_agno" \
+			"${one_scrub_args[@]}"
 
 	if ! command -v "__stress_scrub_${exerciser}_loop" &>/dev/null; then
 		echo "${exerciser}: Unknown fs exercise program."
@@ -936,7 +949,8 @@ _scratch_xfs_stress_scrub() {
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
 		__stress_one_scrub_loop "$end" "$runningfile" "$scrub_tgt" \
-				"$scrub_startat" "${one_scrub_args[@]}" &
+				"$scrub_startat" "$start_agno" \
+				"${one_scrub_args[@]}" &
 	fi
 
 	if [ "${#xfs_scrub_args[@]}" -gt 0 ]; then
