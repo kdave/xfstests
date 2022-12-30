@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 716
+#
+# Make sure online repair can handle rebuilding xattrs when the data fork is
+# in btree format and we cannot just zap the attr fork.
+
+. ./common/preamble
+_begin_fstest auto quick online_repair
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+}
+
+# Import common functions.
+. ./common/inject
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_xfs_io_error_injection "force_repair"
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "repair"
+_require_test_program "punch-alternating"
+
+_scratch_mkfs > $tmp.mkfs
+_scratch_mount
+
+_supports_xfs_scrub $SCRATCH_MNT $SCRATCH_DEV || _notrun "Scrub not supported"
+
+# Force data device extents so that we can create a file with the exact bmbt
+# that we need regardless of rt configuration.
+_xfs_force_bdev data $SCRATCH_MNT
+
+file=$SCRATCH_MNT/moofile
+touch $file
+
+# Create some xattrs so that we have to rebuild them.
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 76' $file.txt >> $seqres.full
+$SETFATTR_PROG -n user.SGI_BCL_FILE -v "$(cat $file.txt)" $file
+
+$SETFATTR_PROG -n user.crtime_usec -v 12345678 $file
+
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+ino=$(stat -c '%i' $file)
+
+# Figure out how many extents we need to have to create a data fork that's in
+# btree format.
+umount $SCRATCH_MNT
+di_forkoff=$(_scratch_xfs_db -c "inode $ino" -c "p core.forkoff" | \
+	awk '{print $3}')
+_scratch_xfs_db -c "inode $ino" -c "p" >> $seqres.full
+_scratch_mount
+
+# Create a data fork in btree format
+min_ext_for_btree=$((di_forkoff * 8 / 16))
+$XFS_IO_PROG -c "falloc 0 $(( (min_ext_for_btree + 1) * 2 * blksz))" $file
+$here/src/punch-alternating $file
+
+# Make sure the data fork is in btree format.
+umount $SCRATCH_MNT
+_scratch_xfs_db -c "inode $ino" -c "p core.format" | grep -q "btree" || \
+	echo "data fork not in btree format?"
+echo "about to start test" >> $seqres.full
+_scratch_xfs_db -c "inode $ino" -c "p" >> $seqres.full
+_scratch_mount
+
+# Force repair the xattr fork
+_scratch_inject_error force_repair
+$XFS_IO_PROG -x -c 'repair xattr' $file 2>&1 | tee $tmp.repair.log
+grep -q 'Operation not supported' $tmp.repair.log && \
+	_notrun "online xattr repair not supported"
+
+# If online repair did it correctly, the filesystem won't be corrupt.  Let the
+# post-test check do its thing.
+
+# success, all done
+echo "Silence is golden."
+status=0
+exit
