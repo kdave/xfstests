@@ -1,0 +1,45 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 749
+#
+# Populate a XFS filesystem and fuzz every AGFL field.
+# Try online repair and, if necessary, offline repair,
+# to test the most likely usage pattern.
+
+. ./common/preamble
+_begin_fstest dangerous_fuzzers dangerous_bothrepair
+
+_register_cleanup "_cleanup" BUS
+
+# Import common functions.
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_xfs_fuzz_fields
+_disable_dmesg_check
+
+echo "Format and populate"
+_scratch_populate_cached nofill > $seqres.full 2>&1
+
+echo "Fuzz AGFL"
+_scratch_xfs_fuzz_metadata '' 'both' 'agfl 0' >> $seqres.full
+echo "Done fuzzing AGFL"
+
+# Restore a correct copy of the filesystem before we start the second round of
+# fuzzing.  This avoids corruption errors from xfs_db when we probe for flfirst
+# in the AGF and later when _scratch_xfs_fuzz_metadata probes the AGFL fields.
+__scratch_xfs_fuzz_mdrestore
+flfirst=$(_scratch_xfs_db -c 'agf 0' -c 'p flfirst' | sed -e 's/flfirst = //g')
+
+echo "Fuzz AGFL flfirst"
+SCRATCH_XFS_LIST_METADATA_FIELDS="bno[${flfirst}]" _scratch_xfs_fuzz_metadata '' 'both' 'agfl 0' >> $seqres.full
+echo "Done fuzzing AGFL flfirst"
+
+# success, all done
+status=0
+exit

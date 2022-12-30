@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 779
+#
+# Populate a XFS filesystem and fuzz every user dquot field.
+# Try online repair and, if necessary, offline repair,
+# to test the most likely usage pattern.
+
+. ./common/preamble
+_begin_fstest dangerous_fuzzers dangerous_bothrepair
+
+_register_cleanup "_cleanup" BUS
+
+# Import common functions.
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+. ./common/quota
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch_xfs_fuzz_fields
+_disable_dmesg_check
+_require_quota
+
+echo "Format and populate"
+_scratch_populate_cached nofill > $seqres.full 2>&1
+echo "${MOUNT_OPTIONS}" | grep -q 'usrquota' || _notrun "user quota disabled"
+
+echo "Fuzz user 0 dquot"
+_scratch_xfs_fuzz_metadata '' 'both'  "dquot -u 0" >> $seqres.full
+echo "Done fuzzing dquot"
+
+# success, all done
+status=0
+exit
