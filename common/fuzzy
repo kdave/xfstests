@@ -367,7 +367,8 @@ __stress_one_scrub_loop() {
 	local end="$1"
 	local runningfile="$2"
 	local scrub_tgt="$3"
-	shift; shift; shift
+	local scrub_startat="$4"
+	shift; shift; shift; shift
 	local agcount="$(_xfs_mount_agcount $SCRATCH_MNT)"
 
 	local xfs_io_args=()
@@ -381,6 +382,10 @@ __stress_one_scrub_loop() {
 		else
 			xfs_io_args+=('-c' "$arg")
 		fi
+	done
+
+	while __stress_scrub_running "$scrub_startat" "$runningfile"; do
+		sleep 1
 	done
 
 	while __stress_scrub_running "$end" "$runningfile"; do
@@ -514,22 +519,27 @@ __stress_scrub_check_commands() {
 # -s	Pass this command to xfs_io to test scrub.  If zero -s options are
 #	specified, xfs_io will not be run.
 # -t	Run online scrub against this file; $SCRATCH_MNT is the default.
+# -w	Delay the start of the scrub/repair loop by this number of seconds.
+#	Defaults to no delay unless XFS_SCRUB_STRESS_DELAY is set.  This value
+#	will be clamped to ten seconds before the end time.
 _scratch_xfs_stress_scrub() {
 	local one_scrub_args=()
 	local scrub_tgt="$SCRATCH_MNT"
 	local runningfile="$tmp.fsstress"
 	local freeze="${XFS_SCRUB_STRESS_FREEZE}"
+	local scrub_delay="${XFS_SCRUB_STRESS_DELAY:--1}"
 
 	__SCRUB_STRESS_FREEZE_PID=""
 	rm -f "$runningfile"
 	touch "$runningfile"
 
 	OPTIND=1
-	while getopts "fs:t:" c; do
+	while getopts "fs:t:w:" c; do
 		case "$c" in
 			f) freeze=yes;;
 			s) one_scrub_args+=("$OPTARG");;
 			t) scrub_tgt="$OPTARG";;
+			w) scrub_delay="$OPTARG";;
 			*) return 1; ;;
 		esac
 	done
@@ -538,6 +548,9 @@ _scratch_xfs_stress_scrub() {
 
 	local start="$(date +%s)"
 	local end="$((start + (30 * TIME_FACTOR) ))"
+	local scrub_startat="$((start + scrub_delay))"
+	test "$scrub_startat" -gt "$((end - 10))" &&
+		scrub_startat="$((end - 10))"
 
 	echo "Loop started at $(date --date="@${start}")," \
 		   "ending at $(date --date="@${end}")" >> $seqres.full
@@ -551,7 +564,7 @@ _scratch_xfs_stress_scrub() {
 
 	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
 		__stress_one_scrub_loop "$end" "$runningfile" "$scrub_tgt" \
-				"${one_scrub_args[@]}" &
+				"$scrub_startat" "${one_scrub_args[@]}" &
 	fi
 
 	# Wait until the designated end time or fsstress dies, then kill all of
