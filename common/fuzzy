@@ -380,37 +380,43 @@ _scratch_xfs_fuzz_field_modifyfs() {
 	local fuzz_action="$1"
 	local repair="$2"
 
-	# Try to mount the filesystem
-	echo "+ Make sure error is gone (online)"
+	# Try to mount the filesystem so that we can make changes
+	__fuzz_notify "+ Mount filesystem to make changes"
 	_try_scratch_mount 2>&1
 	res=$?
-	if [ $res -eq 0 ]; then
-		# Make sure online scrub says the filesystem is clean now
-		if [ "${repair}" != "none" ]; then
-			echo "++ Online scrub"
-			_scratch_scrub -n -e continue 2>&1
-				res=$?
-				test $res -ne 0 && \
-					(>&2 echo "online re-scrub ($res) with ${field} = ${fuzzverb}.")
-			fi
-		fi
+	if [ $res -ne 0 ]; then
+		(>&2 echo "${fuzz_action}: pre-mod mount failed ($res).")
+		return $res
+	fi
 
-		# Try modifying the filesystem again
-		__fuzz_notify "++ Try to write filesystem again"
-		_scratch_fuzz_modify 100 2>&1
+	# Try modifying the filesystem again
+	__fuzz_notify "++ Try to write filesystem again"
+	_scratch_fuzz_modify 100 2>&1
+
+	# If we didn't repair anything, there's no point in checking further,
+	# the fs is still corrupt.
+	if [ "${repair}" = "none" ]; then
 		__scratch_xfs_fuzz_unmount
-	else
-		(>&2 echo "re-mount failed ($res) with ${fuzz_action}.")
+		return 0
 	fi
 
-	# See if repair finds a clean fs
-	if [ "${repair}" != "none" ]; then
-		echo "+ Re-check the filesystem (offline)"
-		_scratch_xfs_repair -n 2>&1
-		res=$?
-		test $res -ne 0 && \
-			(>&2 echo "re-repair failed ($res) with ${field} = ${fuzzverb}.")
-	fi
+	# Run an online check to make sure the fs is still ok, unless we
+	# are running the norepair strategy.
+	__fuzz_notify "+ Re-check the filesystem (online)"
+	_scratch_scrub -n -e continue 2>&1
+	res=$?
+	test $res -ne 0 && \
+		(>&2 echo "${fuzz_action}: online post-mod scrub failed ($res).")
+
+	__scratch_xfs_fuzz_unmount
+
+	# Run an offline check to make sure the fs is still ok, unless we
+	# are running the norepair strategy.
+	__fuzz_notify "+ Re-check the filesystem (offline)"
+	_scratch_xfs_repair -P -n 2>&1
+	res=$?
+	test $res -ne 0 && \
+		(>&2 echo "${fuzz_action}: offline post-mod scrub failed ($res).")
 
 	return 0
 }
