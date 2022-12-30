@@ -682,6 +682,8 @@ _scratch_xfs_mdrestore()
 # run xfs_check and friends on a FS.
 _check_xfs_filesystem()
 {
+	local can_scrub=
+
 	if [ $# -ne 3 ]; then
 		echo "Usage: _check_xfs_filesystem device <logdev>|none <rtdev>|none" 1>&2
 		exit 1
@@ -716,6 +718,8 @@ _check_xfs_filesystem()
 	# Run online scrub if we can.
 	mntpt="$(_is_dev_mounted $device)"
 	if [ -n "$mntpt" ] && _supports_xfs_scrub "$mntpt" "$device"; then
+		can_scrub=1
+
 		# Tests can create a scenario in which a call to syncfs() issued
 		# at the end of the execution of the test script would return an
 		# error code. xfs_scrub internally calls syncfs() before
@@ -830,6 +834,79 @@ _check_xfs_filesystem()
 		echo "*** end mount output"		>>$seqres.full
 	elif [ "$type" = "xfs" ]; then
 		_mount_or_remount_rw "$extra_mount_options" $device $mountpoint
+	fi
+
+	# If desired, test the online metadata rebuilding behavior if the
+	# filesystem was mounted when this function was called.
+	if [ -n "$TEST_XFS_SCRUB_REBUILD" ] && [ -n "$can_scrub" ] && [ ! -e "$RESULT_DIR/.skip_orebuild" ]; then
+		orebuild_ok=1
+
+		# Walk the entire directory tree to load directory blocks into
+		# memory and populate the dentry cache, which can speed up the
+		# repairs considerably when the directory tree is very large.
+		find $mntpt &>/dev/null &
+
+		XFS_SCRUB_FORCE_REPAIR=1 "$XFS_SCRUB_PROG" -v -d $mntpt > $tmp.scrub 2>&1
+		if [ $? -ne 0 ]; then
+			if grep -q 'No space left on device' $tmp.scrub; then
+				# It's not an error if the fs does not have
+				# enough space to complete a repair.  We will
+				# check everything, though.
+				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d ran out of space ***" >> $seqres.full
+				cat $tmp.scrub >> $seqres.full
+				echo "*** end xfs_scrub output" >> $seqres.full
+			else
+				_log_err "_check_xfs_filesystem: filesystem on $device failed scrub orebuild"
+				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d output ***" >> $seqres.full
+				cat $tmp.scrub >> $seqres.full
+				echo "*** end xfs_scrub output" >> $seqres.full
+				ok=0
+				orebuild_ok=0
+			fi
+		fi
+		rm -f $tmp.scrub
+
+		# Clear force_repair because xfs_scrub could have set it
+		$XFS_IO_PROG -x -c 'inject noerror' "$mntpt" >> $seqres.full
+
+		"$XFS_SCRUB_PROG" -v -d -n $mntpt > $tmp.scrub 2>&1
+		if [ $? -ne 0 ]; then
+			_log_err "_check_xfs_filesystem: filesystem on $device failed scrub orebuild recheck"
+			echo "*** xfs_scrub -v -d -n output ***" >> $seqres.full
+			cat $tmp.scrub >> $seqres.full
+			echo "*** end xfs_scrub output" >> $seqres.full
+			ok=0
+			orebuild_ok=0
+		fi
+		rm -f $tmp.scrub
+
+		mountpoint=`_umount_or_remount_ro $device`
+
+		$XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
+		if [ $? -ne 0 ]; then
+			_log_err "_check_xfs_filesystem: filesystem on $device is inconsistent (orebuild-reverify)"
+			echo "*** xfs_repair -n output ***"	>>$seqres.full
+			cat $tmp.repair				>>$seqres.full
+			echo "*** end xfs_repair output"	>>$seqres.full
+
+			ok=0
+			orebuild_ok=0
+		fi
+		rm -f $tmp.repair
+
+		if [ $ok -eq 0 ]; then
+			echo "*** mount output ***"		>>$seqres.full
+			_mount					>>$seqres.full
+			echo "*** end mount output"		>>$seqres.full
+		elif [ "$type" = "xfs" ]; then
+			_mount_or_remount_rw "$extra_mount_options" $device $mountpoint
+		fi
+
+		if [ "$orebuild_ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
+			local flatdev="$(basename "$device")"
+			_xfs_metadump "$seqres.$flatdev.orebuild.md" "$device" \
+				"$logdev" compress >> $seqres.full
+		fi
 	fi
 
 	if [ $ok -eq 0 ]; then
