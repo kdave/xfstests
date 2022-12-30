@@ -338,10 +338,17 @@ __stress_scrub_filter_output() {
 		    -e '/No space left on device/d'
 }
 
+# Decide if the scratch filesystem is still alive.
+__stress_scrub_scratch_alive() {
+	# If we can't stat the scratch filesystem, there's a reasonably good
+	# chance that the fs shut down, which is not good.
+	stat "$SCRATCH_MNT" &>/dev/null
+}
+
 # Decide if we want to keep running stress tests.  The first argument is the
 # stop time, and second argument is the path to the sentinel file.
 __stress_scrub_running() {
-	test -e "$2" && test "$(date +%s)" -lt "$1"
+	test -e "$2" && test "$(date +%s)" -lt "$1" && __stress_scrub_scratch_alive
 }
 
 # Run fs freeze and thaw in a tight loop.
@@ -485,6 +492,10 @@ _scratch_xfs_stress_scrub() {
 		sleep 1
 	done
 	_scratch_xfs_stress_scrub_cleanup
+
+	# Warn the user if we think the scratch filesystem went down.
+	__stress_scrub_scratch_alive || \
+		echo "Did the scratch filesystem die?"
 
 	echo "Loop finished at $(date)" >> $seqres.full
 }
