@@ -368,10 +368,19 @@ __stress_one_scrub_loop() {
 	local runningfile="$2"
 	local scrub_tgt="$3"
 	shift; shift; shift
+	local agcount="$(_xfs_mount_agcount $SCRATCH_MNT)"
 
 	local xfs_io_args=()
 	for arg in "$@"; do
-		xfs_io_args+=('-c' "$arg")
+		if echo "$arg" | grep -q -w '%agno%'; then
+			# Substitute the AG number
+			for ((agno = 0; agno < agcount; agno++)); do
+				local ag_arg="$(echo "$arg" | sed -e "s|%agno%|$agno|g")"
+				xfs_io_args+=('-c' "$ag_arg")
+			done
+		else
+			xfs_io_args+=('-c' "$arg")
+		fi
 	done
 
 	while __stress_scrub_running "$end" "$runningfile"; do
@@ -481,7 +490,8 @@ __stress_scrub_check_commands() {
 	shift
 
 	for arg in "$@"; do
-		testio=`$XFS_IO_PROG -x -c "$arg" $scrub_tgt 2>&1`
+		local cooked_arg="$(echo "$arg" | sed -e "s/%agno%/0/g")"
+		testio=`$XFS_IO_PROG -x -c "$cooked_arg" $scrub_tgt 2>&1`
 		echo $testio | grep -q "Unknown type" && \
 			_notrun "xfs_io scrub subcommand support is missing"
 		echo $testio | grep -q "Inappropriate ioctl" && \
