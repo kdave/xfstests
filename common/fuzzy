@@ -380,6 +380,20 @@ __stress_one_scrub_loop() {
 	done
 }
 
+# Clean the scratch filesystem between rounds of fsstress if there is 2%
+# available space or less because that isn't an interesting stress test.
+#
+# Returns 0 if we cleared anything, and 1 if we did nothing.
+__stress_scrub_clean_scratch() {
+	local used_pct="$(_used $SCRATCH_DEV)"
+
+	test "$used_pct" -lt 98 && return 1
+
+	echo "Clearing scratch fs at $(date)" >> $seqres.full
+	rm -r -f $SCRATCH_MNT/p*
+	return 0
+}
+
 # Run fsstress while we're testing online fsck.
 __stress_scrub_fsstress_loop() {
 	local end="$1"
@@ -389,6 +403,8 @@ __stress_scrub_fsstress_loop() {
 	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
 
 	while __stress_scrub_running "$end" "$runningfile"; do
+		# Need to recheck running conditions if we cleared anything
+		__stress_scrub_clean_scratch && continue
 		$FSSTRESS_PROG $args >> $seqres.full
 		echo "fsstress exits with $? at $(date)" >> $seqres.full
 	done
