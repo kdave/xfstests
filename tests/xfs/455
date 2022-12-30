@@ -29,8 +29,13 @@ echo "Fuzz AGFL"
 _scratch_xfs_fuzz_metadata '' 'none' 'agfl 0' >> $seqres.full
 echo "Done fuzzing AGFL"
 
-echo "Fuzz AGFL flfirst"
+# Restore a correct copy of the filesystem before we start the second round of
+# fuzzing.  This avoids corruption errors from xfs_db when we probe for flfirst
+# in the AGF and later when _scratch_xfs_fuzz_metadata probes the AGFL fields.
+__scratch_xfs_fuzz_mdrestore
 flfirst=$(_scratch_xfs_db -c 'agf 0' -c 'p flfirst' | sed -e 's/flfirst = //g')
+
+echo "Fuzz AGFL flfirst"
 SCRATCH_XFS_LIST_METADATA_FIELDS="bno[${flfirst}]" _scratch_xfs_fuzz_metadata '' 'none' 'agfl 0' >> $seqres.full
 echo "Done fuzzing AGFL flfirst"
 
