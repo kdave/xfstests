@@ -53,6 +53,70 @@ _require_xfs_quota()
     [ -n "$XFS_QUOTA_PROG" ] || _notrun "XFS quota user tools not installed"
 }
 
+# Check that a mounted fs has a particular type of quota accounting turned on.
+#
+# The first argument must be the data device of a mounted fs.  It must not be
+# the actual mountpath.
+#
+# The second argument is the quota type ('usrquota', 'grpquota', 'prjquota',
+# 'any', or 'all').
+_xfs_quota_acct_enabled()
+{
+	local dev="$1"
+	local qtype="$2"
+	local f_args=()
+	local any=
+
+	case "$qtype" in
+	"usrquota"|"uquota")	f_args=("-U");;
+	"grpquota"|"gquota")	f_args=("-G");;
+	"prjquota"|"pquota")	f_args=("-P");;
+	"all")			f_args=("-U" "-G" "-P");;
+	"any")			f_args=("-U" "-G" "-P"); any=1;;
+	*)			echo "$qtype: Unknown quota type."; return 1;;
+	esac
+
+	if [ "$any" = "1" ]; then
+		for arg in "$f_args"; do
+			$here/src/feature "$arg" "$dev" && return 0
+		done
+		return 1
+	fi
+
+	$here/src/feature "${f_args[@]}" "$dev"
+}
+
+# Require that a mounted fs has a particular type of quota turned on.  This
+# takes the same arguments as _xfs_quota_acct_enabled.  If the third argument is
+# '-u' (or is empty and dev is $SCRATCH_DEV) the fs will be unmounted on
+# failure.
+_require_xfs_quota_acct_enabled()
+{
+	local dev="$1"
+	local qtype="$2"
+	local umount="$3"
+	local fsname="$dev"
+
+	_xfs_quota_acct_enabled "$dev" "$qtype" "$qmode" && return 0
+
+	if [ -z "$umount" ] && [ "$dev" = "$SCRATCH_DEV" ]; then
+		umount="-u"
+	fi
+	test "$umount" = "-u" && umount "$dev" &>/dev/null
+
+	case "$dev" in
+	"$TEST_DEV")	fsname="test";;
+	"$SCRATCH_DEV")	fsname="scratch";;
+	esac
+
+	case "$qtype" in
+	"any")		qtype="any quotas";;
+	"all")		qtype="all quotas";;
+	esac
+
+	_notrun "$qtype: accounting not enabled on $fsname filesystem."
+}
+
 #
 # checks that xfs_quota can operate on foreign (non-xfs) filesystems
 # Skips check on xfs filesystems, old xfs_quota is fine there.
