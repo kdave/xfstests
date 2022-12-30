@@ -45,6 +45,27 @@ __populate_create_file() {
 	$XFS_IO_PROG -f -c "pwrite -S 0x62 -W -b 1m 0 $sz" "${fname}"
 }
 
+# Fail the test if we failed to create some kind of filesystem metadata.
+# Create a metadata dump of the failed filesystem so that we can analyze
+# how things went rong.
+__populate_fail() {
+	local flatdev="$(basename "$SCRATCH_DEV")"
+	local metadump="$seqres.$flatdev.populate.md"
+
+	case "$FSTYP" in
+	xfs)
+		_scratch_unmount
+		_scratch_xfs_metadump "$metadump"
+		;;
+	ext4)
+		_scratch_unmount
+		_ext4_metadump "${SCRATCH_DEV}" "$metadump"
+		;;
+	esac
+
+	_fail "$@"
+}
+
 # Punch out every other hole in this file, if it exists.
 #
 # The goal here is to force the creation of a large number of metadata records
@@ -507,7 +528,7 @@ __populate_check_xfs_dformat() {
 	format="$2"
 
 	fmt="$(_scratch_xfs_db -c "inode ${inode}" -c 'p core.format' | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
-	test "${format}" = "${fmt}" || _fail "failed to create ino ${inode} dformat expected ${format} saw ${fmt}"
+	test "${format}" = "${fmt}" || __populate_fail "failed to create ino ${inode} dformat expected ${format} saw ${fmt}"
 }
 
 # Check attr fork format of XFS file
@@ -516,7 +537,7 @@ __populate_check_xfs_aformat() {
 	format="$2"
 
 	fmt="$(_scratch_xfs_db -c "inode ${inode}" -c 'p core.aformat' | sed -e 's/^.*(\([a-z]*\)).*$/\1/g')"
-	test "${format}" = "${fmt}" || _fail "failed to create ino ${inode} aformat expected ${format} saw ${fmt}"
+	test "${format}" = "${fmt}" || __populate_fail "failed to create ino ${inode} aformat expected ${format} saw ${fmt}"
 }
 
 # Check structure of XFS directory
@@ -535,21 +556,21 @@ __populate_check_xfs_dir() {
 
 	case "${dtype}" in
 	"shortform"|"inline"|"local")
-		(test "${datab}" -eq 0 && test "${leafb}" -eq 0 && test "${freeb}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		(test "${datab}" -eq 0 && test "${leafb}" -eq 0 && test "${freeb}" -eq 0) || __populate_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"block")
-		(test "${datab}" -eq 1 && test "${leafb}" -eq 0 && test "${freeb}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		(test "${datab}" -eq 1 && test "${leafb}" -eq 0 && test "${freeb}" -eq 0) || __populate_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"leaf")
-		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 0) || __populate_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"leafn")
 		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.hdr.magic" | grep -q '0x3dff' && return
 		_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${leaf_lblk}" -c "p lhdr.info.magic" | grep -q '0xd2ff' && return
-		_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		__populate_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	"node"|"btree")
-		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 1) || _fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
+		(test "${datab}" -eq 1 && test "${leafb}" -eq 1 && test "${freeb}" -eq 1) || __populate_fail "failed to create ${dtype} dir ino ${inode} datab ${datab} leafb ${leafb} freeb ${freeb}"
 		;;
 	*)
 		_fail "Unknown directory type ${dtype}"
@@ -569,13 +590,13 @@ __populate_check_xfs_attr() {
 
 	case "${atype}" in
 	"shortform"|"inline"|"local")
-		(test "${datab}" -eq 0 && test "${leafb}" -eq 0) || _fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
+		(test "${datab}" -eq 0 && test "${leafb}" -eq 0) || __populate_fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
 		;;
 	"leaf")
-		(test "${datab}" -eq 1 && test "${leafb}" -eq 0) || _fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
+		(test "${datab}" -eq 1 && test "${leafb}" -eq 0) || __populate_fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
 		;;
 	"node"|"btree")
-		(test "${datab}" -eq 1 && test "${leafb}" -eq 1) || _fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
+		(test "${datab}" -eq 1 && test "${leafb}" -eq 1) || __populate_fail "failed to create ${atype} attr ino ${inode} datab ${datab} leafb ${leafb}"
 		;;
 	*)
 		_fail "Unknown attribute type ${atype}"
@@ -611,7 +632,7 @@ __populate_check_xfs_agbtree_height() {
 			return 100
 		fi
 	done
-	test $? -eq 100 || _fail "Failed to create ${bt_type} of sufficient height!"
+	test $? -eq 100 || __populate_fail "Failed to create ${bt_type} of sufficient height!"
 	return 1
 }
 
@@ -684,13 +705,13 @@ __populate_check_ext4_dformat() {
 
 	case "${format}" in
 	"blockmap")
-		test "${extents}" -eq 0 || _fail "failed to create ino ${inode} with blockmap"
+		test "${extents}" -eq 0 || __populate_fail "failed to create ino ${inode} with blockmap"
 		;;
 	"extent"|"extents")
-		test "${extents}" -eq 1 || _fail "failed to create ino ${inode} with extents"
+		test "${extents}" -eq 1 || __populate_fail "failed to create ino ${inode} with extents"
 		;;
 	"etree")
-		(test "${extents}" -eq 1 && test "${etree}" -eq 1) || _fail "failed to create ino ${inode} with extent tree"
+		(test "${extents}" -eq 1 && test "${etree}" -eq 1) || __populate_fail "failed to create ino ${inode} with extent tree"
 		;;
 	*)
 		_fail "Unknown dformat ${format}"
@@ -708,10 +729,10 @@ __populate_check_ext4_aformat() {
 
 	case "${format}" in
 	"local"|"inline")
-		test "${ablock}" -eq 0 || _fail "failed to create inode ${inode} with ${format} xattr"
+		test "${ablock}" -eq 0 || __populate_fail "failed to create inode ${inode} with ${format} xattr"
 		;;
 	"block")
-		test "${extents}" -eq 1 || _fail "failed to create inode ${inode} with ${format} xattr"
+		test "${extents}" -eq 1 || __populate_fail "failed to create inode ${inode} with ${format} xattr"
 		;;
 	*)
 		_fail "Unknown aformat ${format}"
@@ -732,13 +753,13 @@ __populate_check_ext4_dir() {
 
 	case "${dtype}" in
 	"inline")
-		(test "${inline}" -eq 1 && test "${htree}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
+		(test "${inline}" -eq 1 && test "${htree}" -eq 0) || __populate_fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
 		;;
 	"block")
-		(test "${inline}" -eq 0 && test "${htree}" -eq 0) || _fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
+		(test "${inline}" -eq 0 && test "${htree}" -eq 0) || __populate_fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
 		;;
 	"htree")
-		(test "${inline}" -eq 0 && test "${htree}" -eq 1) || _fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
+		(test "${inline}" -eq 0 && test "${htree}" -eq 1) || __populate_fail "failed to create ${dtype} dir ino ${inode} htree ${htree} inline ${inline}"
 		;;
 	*)
 		_fail "Unknown directory type ${dtype}"
