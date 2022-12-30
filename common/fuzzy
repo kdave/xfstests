@@ -323,14 +323,19 @@ _scratch_xfs_fuzz_metadata() {
 # Filter freeze and thaw loop output so that we don't tarnish the golden output
 # if the kernel temporarily won't let us freeze.
 __stress_freeze_filter_output() {
-	grep -E -v '(Device or resource busy|Invalid argument)'
+	_filter_scratch | \
+		sed -e '/Device or resource busy/d' \
+		    -e '/Invalid argument/d'
 }
 
 # Filter scrub output so that we don't tarnish the golden output if the fs is
 # too busy to scrub.  Note: Tests should _notrun if the scrub type is not
 # supported.
 __stress_scrub_filter_output() {
-	grep -E -v '(Device or resource busy|Invalid argument)'
+	_filter_scratch | \
+		sed -e '/Device or resource busy/d' \
+		    -e '/Optimization possible/d' \
+		    -e '/No space left on device/d'
 }
 
 # Run fs freeze and thaw in a tight loop.
@@ -369,6 +374,8 @@ _require_xfs_stress_scrub() {
 	_require_xfs_io_command "scrub"
 	_require_command "$KILLALL_PROG" killall
 	_require_freeze
+	command -v _filter_scratch &>/dev/null || \
+		_notrun 'xfs scrub stress test requires common/filter'
 }
 
 # Make sure we have everything we need to run stress and online repair
