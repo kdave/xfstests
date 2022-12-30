@@ -348,12 +348,19 @@ __stress_scrub_freeze_loop() {
 	done
 }
 
-# Run xfs online fsck commands in a tight loop.
-__stress_scrub_loop() {
+# Run individual XFS online fsck commands in a tight loop with xfs_io.
+__stress_one_scrub_loop() {
 	local end="$1"
+	local scrub_tgt="$2"
+	shift; shift
+
+	local xfs_io_args=()
+	for arg in "$@"; do
+		xfs_io_args+=('-c' "$arg")
+	done
 
 	while [ "$(date +%s)" -lt $end ]; do
-		$XFS_IO_PROG -x -c 'repair rmapbt 0' -c 'repair rmapbt 1' $SCRATCH_MNT 2>&1 | \
+		$XFS_IO_PROG -x "${xfs_io_args[@]}" "$scrub_tgt" 2>&1 | \
 			__stress_scrub_filter_output
 	done
 }
@@ -390,6 +397,8 @@ _require_xfs_stress_online_repair() {
 
 # Clean up after the loops in case they didn't do it themselves.
 _scratch_xfs_stress_scrub_cleanup() {
+	echo "Cleaning up scrub stress run at $(date)" >> $seqres.full
+
 	# Send SIGINT so that bash won't print a 'Terminated' message that
 	# distorts the golden output.
 	$KILLALL_PROG -INT xfs_io fsstress >> $seqres.full 2>&1
@@ -399,7 +408,25 @@ _scratch_xfs_stress_scrub_cleanup() {
 # Start scrub, freeze, and fsstress in background looping processes, and wait
 # for 30*TIME_FACTOR seconds to see if the filesystem goes down.  Callers
 # must call _scratch_xfs_stress_scrub_cleanup from their cleanup functions.
+#
+# Various options include:
+#
+# -s	Pass this command to xfs_io to test scrub.  If zero -s options are
+#	specified, xfs_io will not be run.
+# -t	Run online scrub against this file; $SCRATCH_MNT is the default.
 _scratch_xfs_stress_scrub() {
+	local one_scrub_args=()
+	local scrub_tgt="$SCRATCH_MNT"
+
+	OPTIND=1
+	while getopts "s:t:" c; do
+		case "$c" in
+			s) one_scrub_args+=("$OPTARG");;
+			t) scrub_tgt="$OPTARG";;
+			*) return 1; ;;
+		esac
+	done
+
 	local start="$(date +%s)"
 	local end="$((start + (30 * TIME_FACTOR) ))"
 
@@ -408,7 +435,11 @@ _scratch_xfs_stress_scrub() {
 
 	__stress_scrub_fsstress_loop $end &
 	__stress_scrub_freeze_loop $end &
-	__stress_scrub_loop $end &
+
+	if [ "${#one_scrub_args[@]}" -gt 0 ]; then
+		__stress_one_scrub_loop "$end" "$scrub_tgt" \
+				"${one_scrub_args[@]}" &
+	fi
 
 	# Wait until 2 seconds after the loops should have finished, then
 	# clean up after ourselves.
