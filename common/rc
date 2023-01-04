@@ -261,7 +261,7 @@ _try_scratch_mount()
 		_overlay_scratch_mount $*
 		return $?
 	fi
-	_mount -t $FSTYP `_scratch_mount_options $*`
+	_mount -t $FSTYP$FUSE_SUBTYP `_scratch_mount_options $*`
 	mount_ret=$?
 	[ $mount_ret -ne 0 ] && return $mount_ret
 	_idmapped_mount $SCRATCH_DEV $SCRATCH_MNT
@@ -445,7 +445,7 @@ _test_mount()
     fi
 
     _test_options mount
-    _mount -t $FSTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
+    _mount -t $FSTYP$FUSE_SUBTYP $TEST_OPTIONS $TEST_FS_MOUNT_OPTS $SELINUX_MOUNT_OPTIONS $* $TEST_DEV $TEST_DIR
     mount_ret=$?
     [ $mount_ret -ne 0 ] && return $mount_ret
     _idmapped_mount $TEST_DEV $TEST_DIR
@@ -571,6 +571,9 @@ _test_mkfs()
     9p)
 	# do nothing for 9p
 	;;
+    fuse)
+	# do nothing for fuse
+	;;
     virtiofs)
 	# do nothing for virtiofs
 	;;
@@ -610,6 +613,9 @@ _mkfs_dev()
 	;;
     9p)
 	# do nothing for 9p
+	;;
+    fuse)
+	# do nothing for fuse
 	;;
     virtiofs)
 	# do nothing for virtiofs
@@ -678,7 +684,7 @@ _scratch_mkfs()
 	local mkfs_status
 
 	case $FSTYP in
-	nfs*|cifs|ceph|overlay|glusterfs|pvfs2|9p|virtiofs)
+	nfs*|cifs|ceph|overlay|glusterfs|pvfs2|9p|fuse|virtiofs)
 		# unable to re-create this fstyp, just remove all files in
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
@@ -1574,7 +1580,7 @@ _require_scratch_nocheck()
 			_notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
-	9p|virtiofs)
+	9p|fuse|virtiofs)
 		if [ -z "$SCRATCH_DEV" ]; then
 			_notrun "this test requires a valid \$SCRATCH_DEV"
 		fi
@@ -1774,7 +1780,7 @@ _require_test()
 			_notrun "this test requires a valid \$TEST_DIR"
 		fi
 		;;
-	9p|virtiofs)
+	9p|fuse|virtiofs)
 		if [ -z "$TEST_DEV" ]; then
 			_notrun "this test requires a valid \$TEST_DEV"
 		fi
@@ -2973,7 +2979,7 @@ _mount_or_remount_rw()
 
 	if [ $USE_REMOUNT -eq 0 ]; then
 		if [ "$FSTYP" != "overlay" ]; then
-			_mount -t $FSTYP $mount_opts $device $mountpoint
+			_mount -t $FSTYP$FUSE_SUBTYP $mount_opts $device $mountpoint
 			_idmapped_mount $device $mountpoint
 		else
 			_overlay_mount $device $mountpoint
@@ -3111,6 +3117,9 @@ _check_test_fs()
     9p)
 	# no way to check consistency for 9p
 	;;
+    fuse)
+	# no way to check consistency for fuse
+	;;
     virtiofs)
 	# no way to check consistency for virtiofs
 	;;
@@ -3171,6 +3180,9 @@ _check_scratch_fs()
 	;;
     9p)
 	# no way to check consistency for 9p
+	;;
+    fuse)
+	# no way to check consistency for fuse
 	;;
     virtiofs)
 	# no way to check consistency for virtiofs

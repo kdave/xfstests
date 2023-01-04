@@ -1,0 +1,26 @@
+Here are instructions for testing fuse using the passthrough_ll example
+filesystem provided in the libfuse source tree:
+
+git clone git://github.com/libfuse/libfuse.git
+cd libfuse
+meson build
+cd build
+ninja
+cat << EOF | sudo tee /sbin/mount.fuse.passthrough_ll
+#!/bin/bash
+ulimit -n 1048576
+exec $(pwd)/example/passthrough_ll -ofsname="\$@"
+EOF
+sudo chmod +x /sbin/mount.fuse.passthrough_ll
+mkdir -p /mnt/test /mnt/scratch /home/test/test /home/test/scratch
+
+Use the following local.config file:
+
+export TEST_DEV=non1
+export TEST_DIR=/mnt/test
+export SCRATCH_DEV=non2
+export SCRATCH_MNT=/mnt/scratch
+export FSTYP=fuse
+export FUSE_SUBTYP=.passthrough_ll
+export MOUNT_OPTIONS="-osource=/home/test/scratch,allow_other,default_permissions"
+export TEST_FS_MOUNT_OPTS="-osource=/home/test/test,allow_other,default_permissions"
