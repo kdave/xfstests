@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 282
+#
+# Make sure scrub speed limitation works as expected.
+#
+. ./common/preamble
+_begin_fstest auto scrub
+
+. ./common/filter
+
+# real QA test starts here
+_supported_fs btrfs
+_wants_kernel_commit eb3b50536642 \
+	"btrfs: scrub: per-device bandwidth control"
+
+# We want at least 5G for the scratch device.
+_require_scratch_size $(( 5 * 1024 * 1024))
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+uuid=$(findmnt -n -o UUID $SCRATCH_MNT)
+
+devinfo_dir="/sys/fs/btrfs/${uuid}/devinfo/1"
+
+# Check if we have the sysfs interface first.
+if [ ! -f "${devinfo_dir}/scrub_speed_max" ]; then
+	_notrun "No sysfs interface for scrub speed throttle"
+fi
+
+# Create a 2G file for later scrub workload.
+# The 2G size is chosen to fit even DUP on a 5G disk.
+$XFS_IO_PROG -f -c "pwrite -i /dev/urandom 0 2G" $SCRATCH_MNT/file | _filter_xfs_io
+
+# Writeback above data, as scrub only verify the committed data.
+sync
+
+# The first scrub, mostly to grab the speed of the scrub.
+$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full
+
+# We grab the rate from "scrub status" which supports raw bytes reporting
+#
+# The output looks like this:
+# UUID:             62eaabc5-93e8-445f-b8a7-6f027934aea7
+# Scrub started:    Thu Jan  5 14:59:12 2023
+# Status:           finished
+# Duration:         0:00:02
+# Total to scrub:   1076166656
+# Rate:             538083328/s
+# Error summary:    no errors found
+#
+# What we care is that Rate line.
+init_speed=$($BTRFS_UTIL_PROG scrub status --raw $SCRATCH_MNT | grep "Rate:" |\
+	     $AWK_PROG '{print $2}' | cut -f1 -d\/)
+
+# This can happen for older progs
+if [ -z "$init_speed" ]; then
+	_notrun "btrfs-progs doesn't support scrub rate reporting"
+fi
+
+# Cycle mount to drop any possible cache.
+_scratch_cycle_mount
+
+target_speed=$(( $init_speed / 2 ))
+echo "$target_speed" > "${devinfo_dir}/scrub_speed_max"
+
+# The second scrub, to check the throttled speed.
+$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full
+speed=$($BTRFS_UTIL_PROG scrub status --raw $SCRATCH_MNT | grep "Rate:" |\
+	     $AWK_PROG '{print $2}' | cut -f1 -d\/)
+
+# We gave a +- 10% tolerance for the throttle
+if [ "$speed" -gt "$(( $target_speed * 11 / 10 ))" -o \
+     "$speed" -lt "$(( $target_speed * 9 / 10))" ]; then
+	echo "scrub speed $speed Bytes/s is not properly throttled, target is $target_speed Bytes/s"
+fi
+
+# success, all done
+status=0
+exit
