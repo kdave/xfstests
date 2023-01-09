@@ -293,6 +293,41 @@ out:
 }
 
 /*
+ * Test seeking for data on a 1 byte file, both when there's delalloc and also
+ * after delalloc is flushed.
+ */
+static int test22(int fd, int testnum)
+{
+	const char buf = 'X';
+	int ret;
+
+	ret = do_pwrite(fd, &buf, 1, 0);
+	if (ret)
+		return ret;
+
+	/*
+	 * Our file as a size of 1 byte and that byte is in delalloc. Seeking
+	 * for data, with a start offset of 0, should return file offset 0.
+	 */
+	ret = do_lseek(testnum, 1, fd, 1, SEEK_DATA, 0, 0);
+	if (ret)
+		return ret;
+
+	/* Flush all delalloc. */
+	ret = fsync(fd);
+	if (ret) {
+		fprintf(stderr, "fsync failed: %s (%d)\n", strerror(errno), errno);
+		return ret;
+	}
+
+	/*
+	 * We should get the same result we got when we had delalloc, 0 is the
+	 * offset with data.
+	 */
+	return do_lseek(testnum, 2, fd, 1, SEEK_DATA, 0, 0);
+}
+
+/*
  * Make sure hole size is properly reported when punched in the middle of a file
  */
 static int test21(int fd, int testnum)
@@ -1131,6 +1166,7 @@ struct testrec seek_tests[] = {
        { 19, test19, "Test file SEEK_DATA from middle of a large hole" },
        { 20, test20, "Test file SEEK_DATA from middle of a huge hole" },
        { 21, test21, "Test file SEEK_HOLE that was created by PUNCH_HOLE" },
+       { 22, test22, "Test a 1 byte file" },
 };
 
 static int run_test(struct testrec *tr)

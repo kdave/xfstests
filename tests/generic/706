@@ -1,0 +1,36 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 706
+#
+# Test that seeking for data on a 1 byte file works correctly, the returned
+# offset should be 0 if the start offset is 0.
+#
+. ./common/preamble
+_begin_fstest auto quick seek
+
+[ $FSTYP == "btrfs" ] &&
+	_fixed_by_kernel_commit 2f2e84ca6066 \
+	"btrfs: fix off-by-one in delalloc search during lseek"
+
+_supported_fs generic
+_require_test
+_require_seek_data_hole
+_require_test_program "seek_sanity_test"
+
+test_file=$TEST_DIR/seek_sanity_testfile.$seq
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $test_file
+}
+
+_run_seek_sanity_test -s 22 -e 22 $test_file > $seqres.full 2>&1 ||
+	_fail "seek sanity check failed!"
+
+echo "Silence is golden"
+status=0
+exit
