@@ -201,6 +201,39 @@ _btrfs_get_profile_configs()
 		return
 	fi
 
+	local unsupported=()
+	if [ "$1" == "replace" ]; then
+		# We can't do replace with these profiles because they
+		# imply only one device ($SCRATCH_DEV), and we need to
+		# keep $SCRATCH_DEV around for _scratch_mount
+		# and _check_scratch_fs.
+		unsupported+=(
+			"dup"
+		)
+	elif [ "$1" == "replace-missing" ]; then
+		# We can't replace missing devices with these profiles
+		# because there isn't enough redundancy.
+		unsupported+=(
+			"single"
+			"dup"
+			"raid0"
+		)
+	fi
+
+	if _scratch_btrfs_is_zoned; then
+		# Zoned btrfs only supports SINGLE profile
+		unsupported+=(
+			"dup"
+			"raid0"
+			"raid1"
+			"raid1c3"
+			"raid1c4"
+			"raid10"
+			"raid5"
+			"raid6"
+		)
+	fi
+
 	if [ -z "$BTRFS_PROFILE_CONFIGS" ]; then
 		# Default configurations to test.
 		local configs=(
@@ -222,39 +255,6 @@ _btrfs_get_profile_configs()
 	for cfg in "${configs[@]}"; do
 		local supported=true
 		local profiles=(${cfg/:/ })
-		if [ "$1" == "replace" ]; then
-			# We can't do replace with these profiles because they
-			# imply only one device ($SCRATCH_DEV), and we need to
-			# keep $SCRATCH_DEV around for _scratch_mount
-			# and _check_scratch_fs.
-			local unsupported=(
-				"dup"
-			)
-		elif [ "$1" == "replace-missing" ]; then
-			# We can't replace missing devices with these profiles
-			# because there isn't enough redundancy.
-			local unsupported=(
-				"single"
-				"dup"
-				"raid0"
-			)
-		else
-			local unsupported=()
-		fi
-
-		if _scratch_btrfs_is_zoned; then
-			# Zoned btrfs only supports SINGLE profile
-			unsupported+=(
-				"dup"
-				"raid0"
-				"raid1"
-				"raid1c3"
-				"raid1c4"
-				"raid10"
-				"raid5"
-				"raid6"
-			)
-		fi
 
 		for unsupp in "${unsupported[@]}"; do
 			if [ "${profiles[0]}" == "$unsupp" -o "${profiles[1]}" == "$unsupp" ]; then
