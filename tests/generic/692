@@ -51,18 +51,31 @@ _fsv_enable $fsv_file |& _filter_scratch
 #
 # The Merkle tree is stored with the leaf node level (L0) last, but it is
 # written first.  To get an interesting overflow, we need the maximum file size
-# (MAX) to be in the middle of L0 -- ideally near the beginning of L0 so that we
-# don't have to write many blocks before getting an error.
-#
-# With SHA-256 and 4K blocks, there are 128 hashes per block.  Thus, ignoring
-# padding, L0 is 1/128 of the file size while the other levels in total are
-# 1/128**2 + 1/128**3 + 1/128**4 + ... = 1/16256 of the file size.  So still
-# ignoring padding, for L0 start exactly at MAX, the file size must be s such
-# that s + s/16256 = MAX, i.e. s = MAX * (16256/16257).  Then to get a file size
-# where MAX occurs *near* the start of L0 rather than *at* the start, we can
-# just subtract an overestimate of the padding: 64K after the file contents,
-# then 4K per level, where the consideration of 8 levels is sufficient.
-sz=$(echo "scale=20; $max_sz * (16256/16257) - 65536 - 4096*8" | $BC -q | cut -d. -f1)
+# ($max_sz) to be in the middle of L0 -- ideally near the beginning of L0 so
+# that we don't have to write many blocks before getting an error.
+
+bs=$FSV_BLOCK_SIZE
+hash_size=32   # SHA-256
+hashes_per_block=$(echo "scale=30; $bs/$hash_size" | $BC -q)
+
+# Compute the proportion of the original file size that the non-leaf levels of
+# the Merkle tree take up.  Ignoring padding, this is 1/($hashes_per_block^2) +
+# 1/($hashes_per_block^3) + 1/($hashes_per_block^4) + ...  Compute it using the
+# formula for the sum of a geometric series: \sum_{k=0}^{\infty} ar^k = a/(1-r).
+a=$(echo "scale=30; 1/($hashes_per_block^2)" | $BC -q)
+r=$(echo "scale=30; 1/$hashes_per_block" | $BC -q)
+nonleaves_relative_size=$(echo "scale=30; $a/(1-$r)" | $BC -q)
+
+# Compute the original file size where the leaf level L0 starts at $max_sz.
+# Padding is still ignored, so the real value is slightly smaller than this.
+sz=$(echo "$max_sz/(1+$nonleaves_relative_size)" | $BC -q)
+
+# Finally, to get a file size where $max_sz occurs just after the start of L0
+# rather than *at* the start of L0, subtract an overestimate of the padding: 64K
+# after the file contents, then $bs per level for 11 levels.  11 levels is the
+# most levels that can ever be needed, assuming the block size is at least 1K.
+sz=$(echo "$sz - 65536 - $bs*11" | $BC -q)
+
 _fsv_scratch_begin_subtest "still too big: fail on first invalid merkle block"
 truncate -s $sz $fsv_file
 _fsv_enable $fsv_file |& _filter_scratch
