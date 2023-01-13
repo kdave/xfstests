@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 296
+#
+# Make sure that per-fs features sysfs interface get properly updated
+# when a new feature is added.
+#
+. ./common/preamble
+_begin_fstest auto quick balance
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch_dev_pool 3
+_fixed_by_kernel_commit b7625f461da6 \
+	"btrfs: sysfs: update fs features directory asynchronously"
+
+# We need the global features support
+_require_btrfs_fs_sysfs
+
+global_features="/sys/fs/btrfs/features"
+# Make sure we have support RAID1C34 first
+if [ ! -f "${global_features}/raid1c34" ]; then
+	_notrun "no RAID1C34 support"
+fi
+
+_scratch_dev_pool_get 3
+
+# Go the very basic profile first, so that even older progs can support it.
+_scratch_pool_mkfs -m dup -d single >> $seqres.full 2>&1
+
+_scratch_mount
+uuid="$(findmnt -n -o UUID "$SCRATCH_MNT")"
+per_fs_features="/sys/fs/btrfs/${uuid}/features"
+
+# First we need per-fs features directory
+if [ ! -d "${per_fs_features}" ]; then
+	_notrun "no per-fs features sysfs directory"
+fi
+
+# Make sure the per-fs features doesn't include raid1c34
+if [ -f "${per_fs_features}/raid1c34" ]; then
+	_fail "raid1c34 feature found unexpectedly"
+fi
+
+# Balance to RAID1C3
+$BTRFS_UTIL_PROG balance start -mconvert=raid1c3 "$SCRATCH_MNT" >> $seqres.full
+
+# Sync before checking for sysfs update during cleaner_kthread().
+sync
+
+# Check if the per-fs features directory contains raid1c34 now
+# Make sure the per-fs features doesn't include raid1c34
+if [ ! -f "${per_fs_features}/raid1c34" ]; then
+	_fail "raid1c34 feature not found"
+fi
+
+echo "Silence is golden"
+
+_scratch_unmount
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
