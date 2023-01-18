@@ -36,7 +36,7 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	uuid_ioctl
 
 EXTRA_EXECS = dmerror fill2attr fill2fs fill2fs_check scaleread.sh \
-	      btrfs_crc32c_forged_name.py popdir.pl
+	      btrfs_crc32c_forged_name.py popdir.pl popattr.py
 
 SUBDIRS = log-writes perf
 

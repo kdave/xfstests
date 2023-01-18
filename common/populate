@@ -12,6 +12,10 @@ _require_populate_commands() {
 	_require_xfs_io_command "fpunch"
 	_require_test_program "punch-alternating"
 	_require_test_program "popdir.pl"
+	if [ -n "${PYTHON3_PROG}" ]; then
+		_require_command $PYTHON3_PROG python3
+		_require_test_program "popattr.py"
+	fi
 	case "${FSTYP}" in
 	"xfs")
 		_require_command "$XFS_DB_PROG" "xfs_db"
@@ -108,9 +112,21 @@ __populate_create_attr() {
 	missing="$3"
 
 	touch "${name}"
-	seq 0 "${nr}" | while read d; do
-		setfattr -n "user.$(printf "%.08d" "$d")" -v "$(printf "%.08d" "$d")" "${name}"
-	done
+
+	if [ -n "${PYTHON3_PROG}" ]; then
+		${PYTHON3_PROG} $here/src/popattr.py --file "${name}" --end "${nr}"
+
+		test -z "${missing}" && return
+		${PYTHON3_PROG} $here/src/popattr.py --file "${name}" --start 1 --incr 2 --end "${nr}" --remove
+		return
+	fi
+
+	# Simulate a getfattr dump file so we can bulk-add attrs.
+	(
+		echo "# file: ${name}";
+		seq --format "user.%08g=\"abcdefgh\"" 0 "${nr}"
+		echo
+	) | setfattr --restore -
 
 	test -z "${missing}" && return
 	seq 1 2 "${nr}" | while read d; do
