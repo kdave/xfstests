@@ -89,9 +89,12 @@ __populate_xfs_create_btree_dir() {
 		local creat=mkdir
 		test "$((nr % 20))" -eq 0 && creat=touch
 		$creat "${name}/$(printf "%.08d" "$nr")"
+		# Extent count checks use data blocks only to avoid the removal
+		# step from removing dabtree index blocks and reducing the
+		# number of extents below the required threshold.
 		if [ "$((nr % 40))" -eq 0 ]; then
-			local nextents="$(_xfs_get_fsxattr nextents $name)"
-			[ $nextents -gt $max_nextents ] && break
+			local nextents="$(xfs_bmap ${name} | grep -v hole | wc -l)"
+			[ "$((nextents - 1))" -gt $max_nextents ] && break
 		fi
 		nr=$((nr+1))
 	done
