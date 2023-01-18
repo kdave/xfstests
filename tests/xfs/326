@@ -43,6 +43,18 @@ _scratch_mount >> $seqres.full
 _require_congruent_file_oplen $SCRATCH_MNT $blksz
 $XFS_IO_PROG -c "cowextsize $sz" $SCRATCH_MNT
 
+# This test uses a very large cowextszhint to manipulate the COW fork to
+# contain a large unwritten extent before injecting the error.  The goal is
+# that the write() will succeed, writeback will flush the dirty data to disk,
+# and writeback completion will shut down the filesystem when it tries to
+# remove the staging extent record from the refcount btree.  In other words,
+# this test ensures that XFS always finishes a COW completion it has started.
+#
+# This test isn't compatible with always_cow mode because the hole in the COW
+# fork left by the first write means that writeback tries to allocate a COW
+# staging extent for an unshared extent and trips over the injected error.
+_require_no_xfs_always_cow
+
 echo "Create files"
 _pwrite_byte 0x66 0 $sz $SCRATCH_MNT/file1 >> $seqres.full
 _cp_reflink $SCRATCH_MNT/file1 $SCRATCH_MNT/file2

@@ -28,6 +28,16 @@ _scratch_mkfs >/dev/null 2>&1
 _require_metadata_journaling $SCRATCH_DEV
 _scratch_mount
 
+# This test requires that i_blocks remains unchanged from the start of the
+# check_inode_metadata call until after recovery is complete.  fpunch calls
+# turn into pagecache writes if the arguments are not aligned to the fs
+# blocksize.  If the range being punched is already mapped to a written extent
+# and alwayscow is enabled, i_blocks will increase by the size of the COW
+# staging extent.  This causes stat to report different numbers for %b, which
+# results in a test failure.  Hence do not run this test if XFS is in alwayscow
+# mode.
+test "$FSTYP" = "xfs" && _require_no_xfs_always_cow
+
 testfile=$SCRATCH_MNT/testfile
 
 # check inode metadata after shutdown
