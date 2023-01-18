@@ -11,6 +11,7 @@ _require_populate_commands() {
 	_require_xfs_io_command "falloc"
 	_require_xfs_io_command "fpunch"
 	_require_test_program "punch-alternating"
+	_require_test_program "popdir.pl"
 	case "${FSTYP}" in
 	"xfs")
 		_require_command "$XFS_DB_PROG" "xfs_db"
@@ -54,55 +55,50 @@ __populate_fragment_file() {
 
 # Create a large directory
 __populate_create_dir() {
-	name="$1"
-	nr="$2"
-	missing="$3"
+	local name="$1"
+	local nr="$2"
+	local missing="$3"
+	shift; shift; shift
 
 	mkdir -p "${name}"
-	seq 0 "${nr}" | while read d; do
-		creat=mkdir
-		test "$((d % 20))" -eq 0 && creat=touch
-		$creat "${name}/$(printf "%.08d" "$d")"
-	done
+	$here/src/popdir.pl --dir "${name}" --end "${nr}" "$@"
 
 	test -z "${missing}" && return
-	seq 1 2 "${nr}" | while read d; do
-		rm -rf "${name}/$(printf "%.08d" "$d")"
-	done
+	$here/src/popdir.pl --dir "${name}" --start 1 --incr 2 --end "${nr}" --remove "$@"
 }
 
 # Create a large directory and ensure that it's a btree format
 __populate_xfs_create_btree_dir() {
 	local name="$1"
 	local isize="$2"
-	local missing="$3"
+	local dblksz="$3"
+	local missing="$4"
 	local icore_size="$(_xfs_get_inode_core_bytes $SCRATCH_MNT)"
 	# We need enough extents to guarantee that the data fork is in
 	# btree format.  Cycling the mount to use xfs_db is too slow, so
 	# watch for when the extent count exceeds the space after the
 	# inode core.
 	local max_nextents="$(((isize - icore_size) / 16))"
-	local nr=0
+	local nr
+	local incr
+
+	# Add about one block's worth of dirents before we check the data fork
+	# format.
+	incr=$(( (dblksz / 8) / 100 * 100 ))
 
 	mkdir -p "${name}"
-	while true; do
-		local creat=mkdir
-		test "$((nr % 20))" -eq 0 && creat=touch
-		$creat "${name}/$(printf "%.08d" "$nr")"
+	for ((nr = 0; ; nr += incr)); do
+		$here/src/popdir.pl --dir "${name}" --start "${nr}" --end "$((nr + incr - 1))"
+
 		# Extent count checks use data blocks only to avoid the removal
 		# step from removing dabtree index blocks and reducing the
 		# number of extents below the required threshold.
-		if [ "$((nr % 40))" -eq 0 ]; then
-			local nextents="$(xfs_bmap ${name} | grep -v hole | wc -l)"
-			[ "$((nextents - 1))" -gt $max_nextents ] && break
-		fi
-		nr=$((nr+1))
+		local nextents="$(xfs_bmap ${name} | grep -v hole | wc -l)"
+		[ "$((nextents - 1))" -gt $max_nextents ] && break
 	done
 
 	test -z "${missing}" && return
-	seq 1 2 "${nr}" | while read d; do
-		rm -rf "${name}/$(printf "%.08d" "$d")"
-	done
+	$here/src/popdir.pl --dir "${name}" --start 1 --incr 2 --end "${nr}" --remove
 }
 
 # Add a bunch of attrs to a file
@@ -224,9 +220,7 @@ _scratch_xfs_populate() {
 
 	# Fill up the root inode chunk
 	echo "+ fill root ino chunk"
-	seq 1 64 | while read f; do
-		$XFS_IO_PROG -f -c "truncate 0" "${SCRATCH_MNT}/dummy${f}"
-	done
+	$here/src/popdir.pl --dir "${SCRATCH_MNT}" --start 1 --end 64 --format "dummy%u" --file-mult 1
 
 	# Regular files
 	# - FMT_EXTENTS
@@ -261,7 +255,7 @@ _scratch_xfs_populate() {
 
 	# - BTREE
 	echo "+ btree dir"
-	__populate_xfs_create_btree_dir "${SCRATCH_MNT}/S_IFDIR.FMT_BTREE" "$isize" true
+	__populate_xfs_create_btree_dir "${SCRATCH_MNT}/S_IFDIR.FMT_BTREE" "$isize" "$dblksz" true
 
 	# Symlinks
 	# - FMT_LOCAL
@@ -340,14 +334,7 @@ _scratch_xfs_populate() {
 	local rec_per_btblock=16
 	local nr="$(( 2 * (blksz / rec_per_btblock) * ino_per_rec ))"
 	local dir="${SCRATCH_MNT}/INOBT"
-	mkdir -p "${dir}"
-	seq 0 "${nr}" | while read f; do
-		touch "${dir}/${f}"
-	done
-
-	seq 0 2 "${nr}" | while read f; do
-		rm -f "${dir}/${f}"
-	done
+	__populate_create_dir "${dir}" "${nr}" true --file-mult 1
 
 	# Reverse-mapping btree
 	is_rmapbt="$(_xfs_has_feature "$SCRATCH_MNT" rmapbt -v)"
