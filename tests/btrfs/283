@@ -1,0 +1,88 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 283
+#
+# Test that send operations do the best cloning decisions when we have extents
+# that are shared but some files refer to the full extent while others refer to
+# only a section of the extent.
+#
+. ./common/preamble
+_begin_fstest auto quick send clone fiemap
+
+. ./common/filter
+. ./common/reflink
+. ./common/punch # for _filter_fiemap_flags
+
+_supported_fs btrfs
+_require_test
+_require_scratch_reflink
+_require_cp_reflink
+_require_xfs_io_command "fiemap"
+_require_fssum
+
+_wants_kernel_commit c7499a64dcf6 \
+	     "btrfs: send: optimize clone detection to increase extent sharing"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+send_stream=$send_files_dir/snap.stream
+snap_fssum=$send_files_dir/snap.fssum
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+# When using compression, btrfs limits the extent size to 128K, so do not do
+# larger writes and then expect larger extents, as that would break the test
+# if we are run with compression enabled through $MOUNT_OPTIONS (resulting in
+# mismatch with the golden output).
+$XFS_IO_PROG -f -c "pwrite -S 0xab -b 128K 0 128K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Now clone file foo twice, which will make the 128K extent shared 3 times.
+_cp_reflink $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+_cp_reflink $SCRATCH_MNT/foo $SCRATCH_MNT/baz
+
+# Overwrite the second half of file foo.
+$XFS_IO_PROG -c "pwrite -S 0xcd -b 64K 64K 64K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+echo "Creating snapshot and a send stream for it..."
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap \
+	| _filter_scratch
+
+$BTRFS_UTIL_PROG send -f $send_stream $SCRATCH_MNT/snap 2>&1 | _filter_scratch
+
+$FSSUM_PROG -A -f -w $snap_fssum $SCRATCH_MNT/snap
+
+echo "Creating a new filesystem to receive the send stream..."
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_stream $SCRATCH_MNT
+
+echo "Verifying data matches the original filesystem..."
+$FSSUM_PROG -r $snap_fssum $SCRATCH_MNT/snap
+
+# Now verify that all extents, for all files, are shared.
+
+# File 'foo' should have a single 128K extent, which is shared because its first
+# half is referred by files 'bar' and 'baz'.
+echo -e "\nfiemap of file foo:\n"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/foo | _filter_fiemap_flags
+
+# File 'bar' should have two 64K shared extents. The first one is shared with
+# files 'foo' and 'baz', while the second one is only shared with file 'baz'.
+echo -e "\nfiemap of file bar:\n"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags
+
+# File 'baz' should have two 64K shared extents. The first one is shared with
+# files 'foo' and 'bar', while the second one is only shared with file 'bar'.
+echo -e "\nfiemap of file baz:\n"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/baz | _filter_fiemap_flags
+
+# success, all done
+status=0
+exit
