@@ -30,14 +30,14 @@ int test_getcwd(char *init_cwd)
 	return 0;
 }
 
-void do_rename(char *prefix)
+static void do_rename(char *prefix)
 {
 	int i = 0;
 	int fd;
 	char c_name[BUF_SIZE];
 	char n_name[BUF_SIZE];
 
-	strncpy(c_name, prefix, BUF_SIZE);
+	strncpy(c_name, prefix, BUF_SIZE - 1);
 
 	fd = open(c_name, O_CREAT | O_RDWR, 0644);
 	if (fd < 0) {
