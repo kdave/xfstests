@@ -402,6 +402,7 @@ int main(int argc, char **argv)
 	}
 
 	strncpy(filename, argv[argc-1], PATH_MAX);
+	filename[PATH_MAX - 1] = '\0';
 
 	if (alignment == 0)
 		alignment = get_logical_block_size(filename);
