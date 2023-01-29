@@ -88,11 +88,16 @@ static void check_buffer(uchar *buf, int loop, int child, int fnum, int ofs)
 static void create_file(const char *dir, int loop, int child, int fnum)
 {
 	char *buf;
-	int size, fd;
+	int size, fd, ret;
 	char fname[1024];
 
 	buf = x_malloc(block_size);
-	sprintf(fname, "%s/file%d", dir, fnum);
+	ret = snprintf(fname, sizeof(fname), "%s/file%d", dir, fnum);
+	if (ret < 0 || ret >= sizeof(fname)) {
+		fprintf(stderr,"file path '%s' too long %d\n", dir, ret);
+		exit(1);
+	}
+
 	fd = open(fname, O_RDWR|O_CREAT|O_TRUNC | (use_sync?O_SYNC:0), 0644);
 	if (fd == -1) {
 		perror(fname);
@@ -158,12 +163,16 @@ bozo!
 static void check_file(const char *dir, int loop, int child, int fnum)
 {
 	uchar *buf;
-	int size, fd;
+	int size, fd, ret;
 	char fname[1024];
 
 	buf = x_malloc(block_size);
 
-	sprintf(fname, "%s/file%d", dir, fnum);
+	ret = snprintf(fname, sizeof(fname), "%s/file%d", dir, fnum);
+	if (ret < 0 || ret >= sizeof(fname)) {
+		fprintf(stderr,"file path is '%s' too long %d\n", dir, ret);
+		exit(1);
+	}
 	fd = open(fname, O_RDONLY);
 	if (fd == -1) {
 		perror(fname);
