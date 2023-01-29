@@ -3106,6 +3106,7 @@ char	*opts;
 
 		case 'C':
 			C_opt++;
+			tok = strtok(optarg, ",");
 			for(s=checkmap; s->string != NULL; s++)
 				if(!strcmp(s->string, optarg))
 					break;
