@@ -21,33 +21,10 @@ _require_xfs_io_command "falloc"
 _require_scratch
 _require_xfsrestore_xflag
 
-# A large stripe unit will put the root inode out quite far
-# due to alignment, leaving free blocks ahead of it.
-_scratch_mkfs_xfs -d sunit=1024,swidth=1024 > $seqres.full 2>&1 || _fail "mkfs failed"
-
-# Mounting /without/ a stripe should allow inodes to be allocated
-# in lower free blocks, without the stripe alignment.
-_scratch_mount -o sunit=0,swidth=0
-
-root_inum=$(stat -c %i $SCRATCH_MNT)
-
-# Consume space after the root inode so that the blocks before
-# root look "close" for the next inode chunk allocation
-$XFS_IO_PROG -f -c "falloc 0 16m" $SCRATCH_MNT/fillfile
-
-# And make a bunch of inodes until we (hopefully) get one lower
-# than root, in a new inode chunk.
-echo "root_inum: $root_inum" >> $seqres.full
-for i in $(seq 0 4096) ; do
-	fname=$SCRATCH_MNT/$(printf "FILE_%03d" $i)
-	touch $fname
-	inum=$(stat -c "%i" $fname)
-	[[ $inum -lt $root_inum ]] && break
-done
-
-echo "created: $inum" >> $seqres.full
-
-[[ $inum -lt $root_inum ]] || _notrun "Could not set up test"
+# Create a filesystem which contains a fake root inode
+inums=($(_scratch_xfs_create_fake_root))
+root_inum=${inums[0]}
+fake_inum=${inums[1]}
 
 # Now try a dump and restore. Cribbed from xfs/068
 _create_dumpdir_stress
@@ -59,10 +36,10 @@ _do_dump_file
 
 # Set the wrong root inode number to the dump file
 # as problematic xfsdump used to do.
-$here/src/fake-dump-rootino $dump_file $inum
+$here/src/fake-dump-rootino $dump_file $fake_inum
 
 _do_restore_file -x | \
-sed -e "s/rootino #${inum}/rootino #FAKENO/g" \
+sed -e "s/rootino #${fake_inum}/rootino #FAKENO/g" \
 	-e "s/# to ${root_inum}/# to ROOTNO/g" \
 	-e "/entries processed$/s/[0-9][0-9]*/NUM/g"
 
