@@ -1,0 +1,125 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Fujitsu Limited. All Rights Reserved.
+#
+# FS QA Test No. 567
+#
+# Tests `xfsrestore -x` which handles an wrong inode in a dump, with the
+# multi-level dumps where we hit an issue during development.
+# This procedure is cribbed from:
+#     xfs/064: test multilevel dump and restores with hardlinks
+
+. ./common/preamble
+_begin_fstest auto dump
+
+# Import common functions.
+. ./common/dump
+
+_supported_fs xfs
+_fixed_by_git_commit xfsdump \
+	"XXXXXXXXXXXX xfsrestore: fix rootdir due to xfsdump bulkstat misuse"
+_require_xfs_io_command "falloc"
+_require_scratch
+_require_xfsrestore_xflag
+
+# Create a filesystem which contains a fake root inode
+inums=($(_scratch_xfs_create_fake_root))
+root_inum=${inums[0]}
+fake_inum=${inums[1]}
+
+# Remove unnecessary files
+find $SCRATCH_MNT -not -inum $fake_inum -type f -delete
+# Rename a file root file to the static filename
+find $SCRATCH_MNT -inum $fake_inum -exec mv {} $SCRATCH_MNT/fakeroot \;
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_cleanup_dump
+	cd /
+	rm -f $tmp.*
+}
+
+_ls_size_filter()
+{
+	#
+	# Print size ($5) and fname ($9).
+	# The size is significant since we add to the file as part
+	# of a file change for the incremental.
+	#
+	# Filter out the housekeeping files of xfsrestore
+	#
+	$AWK_PROG 'NF == 9 { print $5, $9 }' |\
+	grep -E -v 'dumpdir|housekeeping|dirattr|dirextattr|namreg|state|tree'
+}
+
+
+_create_dumpdir_hardlinks 9
+
+echo "Do the incremental dumps"
+i=0
+while [ $i -le 9 ]; do
+	if [ $i -gt 0 ]; then
+		sleep 2
+		_modify_level $i
+	fi
+
+	_stable_fs
+	sleep 2
+
+	echo "********* level $i ***********" >>$seqres.full
+	date >>$seqres.full
+	find $SCRATCH_MNT -exec $here/src/lstat64 {} \; | sed 's/(00.*)//' >$tmp.dates.$i
+	if [ $i -gt 0 ]; then
+		let level_1=$i-1
+		diff -c $tmp.dates.$level_1 $tmp.dates.$i >>$seqres.full
+	else
+		cat $tmp.dates.$i >>$seqres.full
+	fi
+
+	dumpfile=$tmp.df.level$i
+	_do_dump_file -f $dumpfile -l $i
+	# Set the wrong root inode number to the dump file
+	# as problematic xfsdump used to do.
+	$here/src/fake-dump-rootino $dumpfile $fake_inum
+
+	let i=$i+1
+done
+
+echo "Listing of what files we start with:"
+ls -l $dump_dir | _ls_size_filter
+
+echo "Look at what files are contained in the inc. dump"
+i=0
+while [ $i -le 9 ]; do
+	echo ""
+	echo "restoring from df.level$i"
+	_do_restore_toc -x -f $tmp.df.level$i | \
+		sed -e "s/rootino #${fake_inum}/rootino #FAKENO/g" \
+		-e "s/# to ${root_inum}/# to ROOTNO/g"
+	let i=$i+1
+done
+
+echo "Do the cumulative restores"
+_prepare_restore_dir
+i=0
+while [ $i -le 9 ]; do
+	if [ $i -eq 0 ]; then
+		# The root inode is fixed at the first restore
+		opt='-x'
+	else
+		opt=
+	fi
+	echo ""
+	echo "restoring from df.level$i"
+	_do_restore_file_cum $opt -f $tmp.df.level$i | \
+		sed -e "s/rootino #${fake_inum}/rootino #FAKENO/g" \
+		-e "s/# to ${root_inum}/# to ROOTNO/g"
+	echo "ls -l restore_dir"
+	ls -lR $restore_dir | _ls_size_filter | _check_quota_file
+	let i=$i+1
+done
+
+# success, all done
+status=0
+exit

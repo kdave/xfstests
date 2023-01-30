@@ -1,0 +1,213 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Fujitsu Limited. All Rights Reserved.
+#
+# FS QA Test No. 568
+#
+# Tests `xfsrestore -x` which handles an wrong inode in a dump, with the
+# multi-level dumps where we hit an issue during development.
+# This procedure is cribbed from:
+#   xfs/065: Testing incremental dumps and cumulative restores with
+#            different operations for each level
+
+. ./common/preamble
+_begin_fstest auto dump
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_cleanup_dump
+	cd /
+	rm -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/dump
+. ./common/quota
+
+#
+# list recursively the directory
+#
+# e.g. lstat output: src/lstat64 31056 -rwxr-xr-x 38403,0
+# Don't print out sizes of directories - which can vary - overwrite with XXX.
+#
+_list_dir()
+{
+	__dir=$1
+	find $__dir  -exec $here/src/lstat64 -t {} \; |\
+	sed -e 's/.*dumpdir/dumpdir/' -e '/^dumpdir /d' |\
+	sed -e 's/.*restoredir/restoredir/' -e '/^restoredir /d' |\
+	grep -E -v 'housekeeping|dirattr|dirextattr|namreg|state|tree|fakeroot' |\
+	awk '$3 ~ /^d/ { $2 = "XXX" } {print}' |\
+	LC_COLLATE=POSIX sort
+}
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_git_commit xfsdump \
+	"XXXXXXXXXXXX xfsrestore: fix rootdir due to xfsdump bulkstat misuse"
+_require_xfs_io_command "falloc"
+_require_scratch
+_require_xfsrestore_xflag
+
+#
+# too much hassle to get output matching with quotas turned on
+# so don't run it
+#
+_scratch_mkfs_xfs >> $seqres.full
+_qmount_option noquota
+_scratch_mount
+$here/src/feature -U $SCRATCH_DEV && \
+	_notrun "UQuota enabled, test needs controlled xfsdump output"
+$here/src/feature -G $SCRATCH_DEV && \
+	_notrun "GQuota enabled, test needs controlled xfsdump output"
+$here/src/feature -P $SCRATCH_DEV && \
+	_notrun "PQuota enabled, test needs controlled xfsdump output"
+_scratch_unmount
+
+#
+# adding      - touch/echo, mkdir
+# deleting    - rm, rmdir
+# renaming    - mv
+# linking     - ln
+# unlinking   - rm
+# files and directories
+#
+
+# Create a filesystem which contains a fake root inode
+inums=($(_scratch_xfs_create_fake_root))
+root_inum=${inums[0]}
+fake_inum=${inums[1]}
+
+# Remove unnecessary files
+find $SCRATCH_MNT -not -inum $fake_inum -type f -delete
+# Rename a file root file to the static filename
+find $SCRATCH_MNT -inum $fake_inum -exec mv {} $SCRATCH_MNT/fakeroot \;
+
+mkdir -p $dump_dir || _fail "cannot mkdir \"$dump_dir\""
+cd $dump_dir
+
+echo "Do the incremental dumps"
+i=0
+num_dumps=8 # do some extra to ensure nothing changes
+while [ $i -le $num_dumps ]; do
+	cd $dump_dir
+	case $i in
+	0)
+		# adding
+		echo 'add0' >addedfile0
+		echo 'add1' >addedfile1
+		echo 'add2' >addedfile2
+		echo 'add3' >addedfile3
+		mkdir addeddir1
+		mkdir addeddir2
+		mkdir addeddir3
+		mkdir addeddir4
+		echo 'add4' >addeddir3/addedfile4
+		echo 'add5' >addeddir4/addedfile5
+		;;
+	1)
+		# deleting
+		rm addedfile2
+		rmdir addeddir2
+		rm -rf addeddir3
+		;;
+	2)
+		# renaming
+		mv addedfile1 addedfile2 # rename to previous existing file
+		mv addeddir4/addedfile5 addeddir4/addedfile4
+		mv addeddir4 addeddir6
+		mv addeddir1 addeddir2 # rename to previous existing dir
+		;;
+	3)
+		# linking
+		ln addedfile0 linkfile0
+		ln addedfile0 linkfile0_1  # have a 2nd link to file
+		ln addedfile2 linkfile2
+		ln addeddir6/addedfile4 linkfile64
+		;;
+	4)
+		# unlinking
+		rm linkfile0  # remove a link
+		rm addedfile2 # remove original link
+		rm linkfile64  # remove link
+		rm addeddir6/addedfile4 # remove last link
+		;;
+	5)  # link first - then onto 6)
+		rm -rf *
+		echo 'add6' >addedfile6
+		ln addedfile6 linkfile6_1
+		ln addedfile6 linkfile6_2
+		ln addedfile6 linkfile6_3
+		;;
+	6)  # then move the inode that the links point to
+			mv addedfile6 addedfile6_mv
+		rm linkfile6_1
+		rm linkfile6_2
+		rm linkfile6_3
+		ln addedfile6_mv linkfile6_mv_1
+		ln addedfile6_mv linkfile6_mv_2
+		ln addedfile6_mv linkfile6_mv_3
+		;;
+	esac
+	cd $here
+	sleep 2
+	_stable_fs
+
+	echo "Listing of what files we have at level $i:"
+	_list_dir $dump_dir	| tee $tmp.ls.$i
+
+	dumpfile=$tmp.df.level$i
+	_do_dump_file -f $dumpfile -l $i
+	# Set the wrong root inode number to the dump file
+	# as problematic xfsdump used to do.
+	$here/src/fake-dump-rootino $dumpfile $fake_inum
+
+	let i=$i+1
+done
+
+echo "Look at what files are contained in the inc. dump"
+i=0
+while [ $i -le $num_dumps ]; do
+	echo ""
+	echo "restoring from df.level$i"
+	_do_restore_toc -x -f $tmp.df.level$i | \
+		sed -e "s/rootino #${fake_inum}/rootino #FAKENO/g" \
+		-e "s/# to ${root_inum}/# to ROOTNO/g"
+	let i=$i+1
+done
+
+echo "Do the cumulative restores"
+_prepare_restore_dir
+i=0
+while [ $i -le $num_dumps ]; do
+	if [ $i -eq 0 ]; then
+		# The root inode is fixed at the first restore
+		opt='-x'
+	else
+		opt=
+	fi
+	echo ""
+	echo "restoring from df.level$i"
+	_do_restore_file_cum $opt -f $tmp.df.level$i | \
+		sed -e "s/rootino #${fake_inum}/rootino #FAKENO/g" \
+		-e "s/# to ${root_inum}/# to ROOTNO/g"
+	echo "list restore_dir"
+	_list_dir $restore_dir | _check_quota_file | tee $tmp.restorals.$i
+	let i=$i+1
+done
+
+echo ""
+echo "Do the ls comparison"
+i=0
+while [ $i -le $num_dumps ]; do
+	echo "Comparing ls of FS with restored FS at level $i"
+	diff -s $tmp.ls.$i $tmp.restorals.$i | sed "s#$tmp#TMP#g"
+	echo ""
+	let i=$i+1
+done
+
+# success, all done
+status=0
+exit
