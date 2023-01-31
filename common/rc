@@ -915,8 +915,14 @@ _scratch_mkfs_sized()
 	btrfs)
 		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-s ?+([0-9]+).*/\1/p'`
 		;;
-	ext2|ext3|ext4|ext4dev|udf|reiser4|ocfs2|reiserfs)
+	ext2|ext3|ext4|ext4dev|reiser4|ocfs2|reiserfs)
 		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
+		;;
+	udf)
+		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*(-b|--blocksize)[ =]?+([0-9]+).*/\2/p'`
+		if [ -z "$def_blksz" ]; then
+			def_blksz=512
+		fi
 		;;
 	jfs)
 		def_blksz=4096
@@ -1108,6 +1114,9 @@ _scratch_mkfs_blocksized()
 	bcachefs)
 		${MKFS_PROG} -t $FSTYP $MKFS_OPTIONS --block_size=$blocksize \
 								$SCRATCH_DEV
+		;;
+	udf)
+		_scratch_mkfs -b $blocksize
 		;;
 	*)
 		_notrun "Filesystem $FSTYP not supported in _scratch_mkfs_blocksized"
@@ -3087,17 +3096,18 @@ _check_udf_filesystem()
 	return
     fi
 
-    # Is the filesystem mounted?
-    local type=`_fs_type $device`
-    if [ "$type" = "$FSTYP" ]; then
-	local mountpoint=`_umount_or_remount_ro $device`
-    fi
-
     local device=$1
     local blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*(-b|--blocksize)[ =]?+([0-9]+).*/\2/p'`
     if [ -z "$blksz" ]; then
 	blksz=512
     fi
+    # Is the filesystem mounted?
+    local type=`_fs_type $device`
+    if [ "$type" = "$FSTYP" ]; then
+	blksz=`blockdev --getbsz $device`
+	local mountpoint=`_umount_or_remount_ro $device`
+    fi
+
     local opt_arg="-ecclength 1 -blocksize $blksz"
     if [ $# -eq 2 ]; then
 	opt_arg+=" -lastvalidblock $(( $2 - 1 ))"
