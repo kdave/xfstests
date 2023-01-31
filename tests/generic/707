@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Jan Kara, SUSE Linux.  All Rights Reserved.
+#
+# FS QA Test 707
+#
+# This is a test verifying whether the filesystem can gracefully handle
+# modifying of a directory while it is being moved, in particular the cases
+# where directory format changes
+#
+. ./common/preamble
+_begin_fstest auto
+
+_supported_fs generic
+_require_scratch
+
+_fixed_by_kernel_commit f950fd052913 \
+	"udf: Protect rename against modification of moved directory"
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"ext4: fix possible corruption when moving a directory"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	if [ -n "$BGPID" ]; then
+		# Stop background process
+		kill -9 $BGPID &>/dev/null
+		wait
+	fi
+}
+
+# Loop multiple times trying to hit the race
+loops=$((100*TIME_FACTOR))
+files=500
+moves=500
+
+create_files()
+{
+	# We use slightly longer file name to make directory grow faster and
+	# hopefully convert between various types
+	for (( i = 0; i < $files; i++ )); do
+		touch somewhatlongerfilename$i
+	done
+}
+
+for (( i = 0; i <= $moves; i++ )); do
+	mkdir $SCRATCH_MNT/dir$i
+done
+
+for (( l = 0; l < $loops; l++ )); do
+	mkdir $SCRATCH_MNT/dir0/dir
+	pushd $SCRATCH_MNT/dir0/dir &>/dev/null
+	create_files &
+	BGPID=$!
+	popd &>/dev/null
+	for (( i = 0; i < $moves; i++ )); do
+		mv $SCRATCH_MNT/dir$i/dir $SCRATCH_MNT/dir$((i+1))/dir
+	done
+	wait
+	unset BGPID
+	rm -r $SCRATCH_MNT/dir$moves/dir
+done
+
+echo "Silence is golden"
+status=0
+exit
