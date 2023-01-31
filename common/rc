@@ -3088,9 +3088,13 @@ _check_udf_filesystem()
     fi
 
     local device=$1
-    local opt_arg=""
+    local blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*(-b|--blocksize)[ =]?+([0-9]+).*/\2/p'`
+    if [ -z "$blksz" ]; then
+	blksz=512
+    fi
+    local opt_arg="-ecclength 1 -blocksize $blksz"
     if [ $# -eq 2 ]; then
-	opt_arg="-lastvalidblock $(( $2 - 1 ))"
+	opt_arg+=" -lastvalidblock $(( $2 - 1 ))"
     fi
 
     rm -f $seqres.checkfs
