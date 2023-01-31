@@ -3087,6 +3087,12 @@ _check_udf_filesystem()
 	return
     fi
 
+    # Is the filesystem mounted?
+    local type=`_fs_type $device`
+    if [ "$type" = "$FSTYP" ]; then
+	local mountpoint=`_umount_or_remount_ro $device`
+    fi
+
     local device=$1
     local blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*(-b|--blocksize)[ =]?+([0-9]+).*/\2/p'`
     if [ -z "$blksz" ]; then
@@ -3103,6 +3109,10 @@ _check_udf_filesystem()
 	_udf_test_known_error_filter | \
 	grep -E -iv "Error count:.*[0-9]+.*total occurrences:.*[0-9]+|Warning count:.*[0-9]+.*total occurrences:.*[0-9]+" && \
         echo "Warning UDF Verifier reported errors see $seqres.checkfs." && return 1
+    # Remount the filesystem
+    if [ "$type" = "$FSTYP" ]; then
+	_mount_or_remount_rw "$MOUNT_OPTIONS" $device $mountpoint
+    fi
     return 0
 }
 
