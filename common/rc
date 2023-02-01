@@ -604,9 +604,8 @@ _test_mkfs()
     esac
 }
 
-_mkfs_dev()
+_try_mkfs_dev()
 {
-    local tmp=`mktemp -u`
     case $FSTYP in
     nfs*)
 	# do nothing for nfs
@@ -627,26 +626,27 @@ _mkfs_dev()
 	# do nothing for pvfs2
 	;;
     udf)
-        $MKFS_UDF_PROG $MKFS_OPTIONS $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
+        $MKFS_UDF_PROG $MKFS_OPTIONS $*
 	;;
     btrfs)
-        $MKFS_BTRFS_PROG $MKFS_OPTIONS $* 2>$tmp.mkfserr 1>$tmp.mkfsstd
+        $MKFS_BTRFS_PROG $MKFS_OPTIONS $*
 	;;
     ext2|ext3|ext4)
-	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $* \
-		2>$tmp.mkfserr 1>$tmp.mkfsstd
+	$MKFS_PROG -t $FSTYP -- -F $MKFS_OPTIONS $*
 	;;
     xfs)
-	$MKFS_PROG -t $FSTYP -- -f $MKFS_OPTIONS $* \
-		2>$tmp.mkfserr 1>$tmp.mkfsstd
+	$MKFS_PROG -t $FSTYP -- -f $MKFS_OPTIONS $*
 	;;
     *)
-	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $* \
-		2>$tmp.mkfserr 1>$tmp.mkfsstd
+	yes | $MKFS_PROG -t $FSTYP -- $MKFS_OPTIONS $*
 	;;
     esac
+}
 
-    if [ $? -ne 0 ]; then
+_mkfs_dev()
+{
+    local tmp=`mktemp -u`
+    if ! _try_mkfs_dev "$@" 2>$tmp.mkfserr 1>$tmp.mkfsstd; then
 	# output stored mkfs output
 	cat $tmp.mkfserr >&2
 	cat $tmp.mkfsstd
