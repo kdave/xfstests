@@ -27,6 +27,7 @@ struct linux_dirent64 {
 static DIR *dir;
 static int dfd;
 static int ignore_error;
+static int ignore_dtype = 0;
 
 struct dir_ops {
 	loff_t (*getpos)(void);
@@ -61,6 +62,10 @@ static void libc_getentry(struct dirent *entry)
 		exit(1);
 	}
 	memcpy(entry, ret, sizeof(struct dirent));
+
+	/* NFS may or may not set d_type, depending on READDIRPLUS */
+	if (!ignore_dtype && entry->d_type == DT_UNKNOWN)
+		ignore_dtype = 1;
 }
 
 static off64_t kernel_getpos(void)
@@ -95,6 +100,10 @@ static void kernel_getentry(struct dirent *entry)
 	entry->d_reclen = lentry->d_reclen;
 	entry->d_type = lentry->d_type;
 	strcpy(entry->d_name, lentry->d_name);
+
+	/* NFS may or may not set d_type, depending on READDIRPLUS */
+	if (!ignore_dtype && entry->d_type == DT_UNKNOWN)
+		ignore_dtype = 1;
 }
 
 struct dir_ops libc_ops = {
@@ -168,8 +177,9 @@ static void test(int count, struct dir_ops *ops)
 		pos = random() % count;
 		ops->setpos(pbuf[pos]);
 		ops->getentry(&entry);
+
 		if (dbuf[pos].d_ino != entry.d_ino ||
-		    dbuf[pos].d_type != entry.d_type ||
+		    (!ignore_dtype && dbuf[pos].d_type != entry.d_type) ||
 		    strcmp(dbuf[pos].d_name, entry.d_name)) {
 			fprintf(stderr,
 				"Mismatch in dir entry %u at pos %llu\n", pos,
