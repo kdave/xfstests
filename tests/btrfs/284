@@ -1,0 +1,133 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 284
+#
+# Test btrfs send stream v2, sending and receiving compressed data without
+# decompression at the sending side.
+#
+. ./common/preamble
+_begin_fstest auto quick send compress snapshot
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_btrfs_send_v2
+_require_test
+# The size needed is variable as it depends on the specific randomized
+# operations from fsstress and on the value of $LOAD_FACTOR. But require at
+# least $LOAD_FACTOR * 1G, just to be on the safe side.
+_require_scratch_size $(($LOAD_FACTOR * 1 * 1024 * 1024))
+_require_fssum
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+# Redirect stdout to the .full file and make it not part of the golden output.
+# This is because the number of available compression algorithms may vary across
+# kernel versions, so the number of times we are running this function is
+# variable.
+run_send_test()
+{
+	local algo=$1
+	local snapshot_cmd
+	local first_stream="$send_files_dir/snap1.stream"
+	local second_stream="$send_files_dir/snap2.stream"
+	local first_fssum="$send_files_dir/snap1.fssum"
+	local second_fssum="$send_files_dir/snap2.fssum"
+
+	_scratch_mkfs >> $seqres.full 2>&1
+	_scratch_mount -o compress=$algo
+
+	snapshot_cmd="$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT"
+	snapshot_cmd="$snapshot_cmd $SCRATCH_MNT/snap1"
+
+	# Use a single process so that in case of failure it's easier to
+	# reproduce by using the same seed (logged in $seqres.full).
+	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -p 1 -n $((LOAD_FACTOR * 200)) \
+		  -w $FSSTRESS_AVOID -x "$snapshot_cmd" >> $seqres.full
+
+	$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2 \
+			 >> $seqres.full
+
+	echo "Creating full and incremental send streams..." >> $seqres.full
+
+	$BTRFS_UTIL_PROG send --compressed-data -q -f $first_stream \
+			 $SCRATCH_MNT/snap1 2>&1 | tee -a $seqres.full
+	$BTRFS_UTIL_PROG send --compressed-data -q -f $second_stream \
+			 -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2 2>&1 | \
+			 tee -a $seqres.full
+
+	echo "Computing the checksums for each snapshot..." >> $seqres.full
+
+	$FSSUM_PROG -A -f -w $first_fssum $SCRATCH_MNT/snap1 2>&1 | \
+		tee -a $seqres.full
+	$FSSUM_PROG -A -f -w $second_fssum -x $SCRATCH_MNT/snap2/snap1 \
+		    $SCRATCH_MNT/snap2 2>&1 | tee -a $seqres.full
+
+	echo "Creating a new fs to receive the streams..." >> $seqres.full
+
+	_scratch_unmount
+	_scratch_mkfs >> $seqres.full 2>&1
+	_scratch_mount
+
+	echo "Receiving the streams..." >> $seqres.full
+
+	$BTRFS_UTIL_PROG receive -q -f $first_stream $SCRATCH_MNT 2>&1 | \
+		tee -a $seqres.full
+	$BTRFS_UTIL_PROG receive -q -f $second_stream $SCRATCH_MNT 2>&1 | \
+		tee -a $seqres.full
+
+	echo "Verifying the checksums for each snapshot..." >> $seqres.full
+
+	# On success, fssum outputs only a single line with "OK" to stdout, and
+	# on error it outputs several lines to stdout telling about each file
+	# with data or metadata mismatches. Since the number of times we run
+	# fssum depends on the available compression algorithms for the running
+	# kernel, filter out the success case, so we don't have a mismatch with
+	# the golden output. We only want the mismatch with the golden output in
+	# case there's a checksum failure.
+	$FSSUM_PROG -r $first_fssum $SCRATCH_MNT/snap1 | grep -Ev '^OK$' | \
+		tee -a $seqres.full
+	$FSSUM_PROG -r $second_fssum $SCRATCH_MNT/snap2 | grep -Ev '^OK$' | \
+		tee -a $seqres.full
+
+	# Now receive again the streams in a new filesystem, but this time use
+	# the option --force-decompress of the receiver to verify that it works
+	# as expected.
+	echo "Creating a new fs to receive the streams with decompression..." >> $seqres.full
+
+	_scratch_unmount
+	_scratch_mkfs >> $seqres.full 2>&1
+	_scratch_mount
+
+	echo "Receiving the streams with decompression..." >> $seqres.full
+
+	$BTRFS_UTIL_PROG receive -q --force-decompress -f $first_stream $SCRATCH_MNT 2>&1 \
+		| tee -a $seqres.full
+	$BTRFS_UTIL_PROG receive -q --force-decompress -f $second_stream $SCRATCH_MNT 2>&1 \
+		| tee -a $seqres.full
+
+	echo "Verifying the checksums for each snapshot..." >> $seqres.full
+
+	$FSSUM_PROG -r $first_fssum $SCRATCH_MNT/snap1 | grep -Ev '^OK$' | \
+		tee -a $seqres.full
+	$FSSUM_PROG -r $second_fssum $SCRATCH_MNT/snap2 | grep -Ev '^OK$' | \
+		tee -a $seqres.full
+
+	_scratch_unmount
+	rm -f $send_files_dir/*
+}
+
+algo_list=($(_btrfs_compression_algos))
+for algo in ${algo_list[@]}; do
+	echo -e "\nTesting with $algo...\n" >> $seqres.full
+	run_send_test $algo
+done
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
