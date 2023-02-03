@@ -408,10 +408,6 @@ _idmapped_mount()
 	local tmp=`mktemp -d`
 
 	local mount_rec=`findmnt -rncv -S $dev -o OPTIONS`
-	if [[ "$mount_rec" == *"idmapped"* ]]; then
-		return 0
-	fi
-
 	# We create an idmapped mount where {g,u}id 0 writes to disk as
 	# {g,u}id 10000000 and $(id -u fsgqa) + 10000000. We change ownership
 	# of $mnt, provided it's not read-only, so {g,u} id 0 can actually
@@ -419,6 +415,11 @@ _idmapped_mount()
 	if [[ "$mount_rec" != *"ro,"* && "$mount_rec" != *",ro"* ]]; then
 		chown 10000000:10000000 $mnt || return 1
 	fi
+	# But if the mount is already idmapped, then there's nothing more to do.
+	if [[ "$mount_rec" == *"idmapped"* ]]; then
+		return 0
+	fi
+
 	$here/src/vfs/mount-idmapped \
 		--map-mount b:10000000:0:100000000000 \
 		$mnt $tmp
