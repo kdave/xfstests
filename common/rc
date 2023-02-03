@@ -414,8 +414,11 @@ _idmapped_mount()
 
 	# We create an idmapped mount where {g,u}id 0 writes to disk as
 	# {g,u}id 10000000 and $(id -u fsgqa) + 10000000. We change ownership
-        # of $mnt so {g,u} id 0 can actually create objects in there.
-	chown 10000000:10000000 $mnt || return 1
+	# of $mnt, provided it's not read-only, so {g,u} id 0 can actually
+	# create objects in there.
+	if [[ "$mount_rec" != *"ro,"* && "$mount_rec" != *",ro"* ]]; then
+		chown 10000000:10000000 $mnt || return 1
+	fi
 	$here/src/vfs/mount-idmapped \
 		--map-mount b:10000000:0:100000000000 \
 		$mnt $tmp
