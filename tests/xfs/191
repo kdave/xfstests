@@ -30,6 +30,7 @@ _supported_fs xfs
 _require_scratch
 _require_scratch_xfs_crc # V4 is deprecated
 _fixed_by_kernel_commit 7be3bd8856fb "xfs: empty xattr leaf header blocks are not corruption"
+_fixed_by_kernel_commit e87021a2bc10 "xfs: use larger in-core attr firstused field and detect overflow"
 _fixed_by_git_commit xfsprogs f50d3462c654 "xfs_repair: ignore empty xattr leaf blocks"
 
 _scratch_mkfs_xfs | _filter_mkfs >$seqres.full 2>$tmp.mkfs
@@ -78,10 +79,19 @@ make_empty_leaf() {
 
 	base=$(_scratch_xfs_get_metadata_field "hdr.freemap[0].base" "inode $inum" "ablock 0")
 
+	# 64k dbsize is a special case since it overflows the 16 bit firstused
+	# field and it needs to be set to the special XFS_ATTR3_LEAF_NULLOFF (0)
+	# value to indicate a null leaf.
+	if [ $dbsize -eq 65536 ]; then
+		firstused=0
+	else
+		firstused=$dbsize
+	fi
+
 	_scratch_xfs_db -x -c "inode $inum" -c "ablock 0" \
 		-c "write -d hdr.count 0" \
 		-c "write -d hdr.usedbytes 0" \
-		-c "write -d hdr.firstused $dbsize" \
+		-c "write -d hdr.firstused $firstused" \
 		-c "write -d hdr.freemap[0].size $((dbsize - base))" \
 		-c print >> $seqres.full
 }
