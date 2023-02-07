@@ -83,6 +83,16 @@ ifeq ($(HAVE_LIBCAP), true)
 LLDLIBS += -lcap
 endif
 
+ifeq ($(HAVE_SEEK_DATA), yes)
+ ifeq ($(HAVE_NFTW), yes)
+  ifeq ($(HAVE_BMV_OF_SHARED), yes)
+   ifeq ($(HAVE_RLIMIT_NOFILE), yes)
+     TARGETS += xfsfind
+   endif
+  endif
+ endif
+endif
+
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS) fssum
 

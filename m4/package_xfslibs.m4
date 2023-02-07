@@ -104,3 +104,18 @@ AC_DEFUN([AC_PACKAGE_NEED_XFSCTL_MACRO],
         exit 1
       ])
   ])
+
+# Check if we have BMV_OF_SHARED from the GETBMAPX ioctl
+AC_DEFUN([AC_HAVE_BMV_OF_SHARED],
+  [ AC_MSG_CHECKING([for BMV_OF_SHARED])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE
+#include <xfs/xfs.h>
+    ]], [[
+         struct getbmapx obj;
+         ioctl(-1, XFS_IOC_GETBMAPX, &obj);
+         obj.bmv_oflags |= BMV_OF_SHARED;
+    ]])],[have_bmv_of_shared=yes
+       AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
+    AC_SUBST(have_bmv_of_shared)
+  ])
