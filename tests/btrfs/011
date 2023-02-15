@@ -48,6 +48,7 @@ _require_scratch_dev_pool 5
 _require_scratch_dev_pool_equal_size
 _require_scratch_size $((10 * 1024 * 1024)) #kB
 _require_command "$WIPEFS_PROG" wipefs
+_btrfs_get_profile_configs dup
 
 rm -f $tmp.*
 
@@ -237,19 +238,22 @@ btrfs_replace_test()
 	fi
 }
 
-workout "-m single -d single" 1 no 64
-# Mixed BG & RAID/DUP profiles are not supported on zoned btrfs
-if ! _scratch_btrfs_is_zoned; then
-	workout "-m dup -d single" 1 no 64
-	workout "-m dup -d single" 1 cancel 1024
-	workout "-m raid0 -d raid0" 2 no 64
-	workout "-m raid1 -d raid1" 2 no 2048
-	workout "-m raid10 -d raid10" 4 no 64
-	workout "-m single -d single -M" 1 no 64
-	workout "-m dup -d dup -M" 1 no 64
-	workout "-m raid5 -d raid5" 2 no 64
-	workout "-m raid6 -d raid6" 3 no 64
-fi
+for t in "-m single -d single:1 no 64" \
+	"-m dup -d single:1 no 64" \
+	"-m dup -d single:1 cancel 1024" \
+	"-m raid0 -d raid0:2 no 64" \
+	"-m raid1 -d raid1:2 no 2048" \
+	"-m raid10 -d raid10:4 no 64" \
+	"-m single -d single -M:1 no 64" \
+	"-m dup -d dup -M:1 no 64" \
+	"-m raid5 -d raid5:2 no 64" \
+	"-m raid6 -d raid6:3 no 64"; do
+	mkfs_option=${t%:*}
+	workout_option=${t#*:}
+	if [[ "${_btrfs_profile_configs[@]}" =~ "${mkfs_option/ -M}"( |$) ]]; then
+		workout "$mkfs_option" $workout_option
+	fi
+done
 
 echo "*** done"
 status=0
