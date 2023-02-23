@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 286
+#
+# Make sure btrfs dev-replace on missing device won't cause data corruption
+# for NODATASUM data.
+#
+. ./common/preamble
+_begin_fstest auto replace
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_command "$WIPEFS_PROG" wipefs
+_btrfs_get_profile_configs replace-missing
+_require_fssum
+_require_scratch_dev_pool 5
+_scratch_dev_pool_get 4
+_spare_dev_get
+
+workload()
+{
+	local profile=$1
+	local victim="$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}')"
+
+	echo "=== Profile: $profile ===" >> $seqres.full
+	rm -f $tmp.fssum
+	_scratch_pool_mkfs "$profile" >> $seqres.full 2>&1
+
+	# Use nodatasum mount option, so all data won't have checksum.
+	_scratch_mount -o nodatasum
+
+	$FSSTRESS_PROG -p 10 -n 200 -d $SCRATCH_MNT > /dev/null 2>&1
+	sync
+
+	# Generate fssum for later verification, here we only care
+	# about the file contents, thus we don't bother metadata at all.
+	$FSSUM_PROG -n -d -f -w $tmp.fssum $SCRATCH_MNT
+	_scratch_unmount
+
+	# Wipe devid 2
+	$WIPEFS_PROG -a $victim >> $seqres.full 2>&1
+
+	# Mount the fs with the victim device missing
+	_scratch_mount -o degraded,nodatasum
+
+	# Verify no data corruption first.
+	echo "=== Verify the contents before replace ===" >> $seqres.full
+	$FSSUM_PROG -r $tmp.fssum $SCRATCH_MNT >> $seqres.full 2>&1
+
+	# Replace the missing device
+	$BTRFS_UTIL_PROG replace start -Bf 2 $SPARE_DEV $SCRATCH_MNT >> $seqres.full
+
+	# Drop all cache to make sure later read are all from the disks
+	echo 3 > /proc/sys/vm/drop_caches
+
+	# Re-check the file contents
+	echo "=== Verify the contents after replace ===" >> $seqres.full
+	$FSSUM_PROG -r $tmp.fssum $SCRATCH_MNT >> $seqres.full 2>&1
+
+	_scratch_unmount
+}
+
+for t in "${_btrfs_profile_configs[@]}"; do
+	workload "$t"
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
