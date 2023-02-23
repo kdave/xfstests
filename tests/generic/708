@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 708
+#
+# Test iomap direct_io partial writes.
+#
+# Create a reasonably large file, then run a program which mmaps it,
+# touches the first page, then dio writes it to a second file. This
+# can result in a page fault reading from the mmapped dio write buffer and
+# thus the iomap direct_io partial write codepath.
+#
+. ./common/preamble
+_begin_fstest quick auto
+[ $FSTYP == "btrfs" ] && \
+	_fixed_by_kernel_commit XXXX 'btrfs: fix dio continue after short write due to buffer page fault'
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_odirect
+_require_test_program dio-buf-fault
+src=$TEST_DIR/dio-buf-fault-$seq.src
+dst=$TEST_DIR/dio-buf-fault-$seq.dst
+
+rm -rf "$src" "$dst"
+
+echo "Silence is golden"
+
+$XFS_IO_PROG -fc "pwrite -q -S 0xcd 0 $((2 * 1024 * 1024))" $src
+$here/src/dio-buf-fault $src $dst > /dev/null || _fail "failed doing the dio copy"
+diff $src $dst
+
+# success, all done
+status=$?
+exit
