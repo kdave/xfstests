@@ -1716,3 +1716,40 @@ _scratch_xfs_create_fake_root()
 
 	echo "$root_inum $inum"
 }
+
+# Find us the path to the AG header containing a per-AG btree with a specific
+# height.
+_scratch_xfs_find_agbtree_height() {
+	local bt_type="$1"
+	local bt_height="$2"
+	local agcount=$(_xfs_mount_agcount $SCRATCH_DEV)
+
+	case "${bt_type}" in
+	"bno"|"cnt"|"rmap"|"refcnt")
+		hdr="agf"
+		bt_prefix="${bt_type}"
+		;;
+	"ino")
+		hdr="agi"
+		bt_prefix=""
+		;;
+	"fino")
+		hdr="agi"
+		bt_prefix="free_"
+		;;
+	*)
+		_fail "Don't know about AG btree ${bt_type}"
+		;;
+	esac
+
+	for ((agno = 0; agno < agcount; agno++)); do
+		bt_level=$(_scratch_xfs_db -c "${hdr} ${agno}" -c "p ${bt_prefix}level" | awk '{print $3}')
+		# "level" is really the btree height
+		if [ "${bt_level}" -eq "${bt_height}" ]; then
+			echo "${hdr} ${agno}"
+			return 0
+		fi
+	done
+
+	return 1
+}

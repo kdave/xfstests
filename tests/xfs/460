@@ -25,8 +25,11 @@ _disable_dmesg_check
 echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 
+path="$(_scratch_xfs_find_agbtree_height 'ino' 2)" || \
+	_fail "could not find two-level inobt"
+
 echo "Fuzz inobt"
-_scratch_xfs_fuzz_metadata '' 'none'  'agi 1' 'addr root' >> $seqres.full
+_scratch_xfs_fuzz_metadata '' 'none'  "$path" 'addr root' 'addr ptrs[1]' >> $seqres.full
 echo "Done fuzzing inobt"
 
 # success, all done
