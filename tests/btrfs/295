@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 295
+#
+# Make sure btrfs handles critical errors gracefully during mount.
+#
+. ./common/preamble
+_begin_fstest auto quick dangerous
+
+. ./common/filter
+_supported_fs btrfs
+_require_scratch
+
+# Use single metadata profile so we only need to corrupt one copy of tree block
+_scratch_mkfs -m single > $seqres.full
+
+logical_root=$($BTRFS_UTIL_PROG inspect dump-tree -t root "$SCRATCH_DEV" | \
+	       grep leaf | head -n1 | cut -f2 -d\ )
+physical_root=$(_btrfs_get_physical $logical_root 1)
+
+echo "tree root logical=$logical_root" >> $seqres.full
+echo "tree root physical=$physical_root" >> $seqres.full
+
+_pwrite_byte 0x00 "$physical_root" 4 $SCRATCH_DEV >> $seqres.full
+
+# mount may lead to crash
+_try_scratch_mount >> $seqres.full 2>&1
+
+echo "Silence is golden"
+
+# Re-create the fs to avoid false alert from the corrupted fs.
+_scratch_mkfs -m single >> $seqres.full
+
+# success, all done
+status=0
+exit
