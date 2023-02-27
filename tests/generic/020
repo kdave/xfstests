@@ -150,9 +150,11 @@ _attr_get_maxval_size()
 		# it imposes a maximum size for the full set of xattrs
 		# names+values, which by default is 64K.  Compute the maximum
 		# taking into account the already existing attributes
-		max_attrval_size=$(getfattr --dump -e hex $filename 2>/dev/null | \
+		local size=$(getfattr --dump -e hex $filename 2>/dev/null | \
 			awk -F "=0x" '/^user/ {len += length($1) + length($2) / 2} END {print len}')
-		max_attrval_size=$((65536 - $max_attrval_size - $max_attrval_namelen))
+		local selinux_size=$(getfattr -n 'security.selinux' --dump -e hex $filename 2>/dev/null | \
+			awk -F "=0x" '/^security/ {len += length($1) + length($2) / 2} END {print len}')
+		max_attrval_size=$((65536 - $size - $selinux_size - $max_attrval_namelen))
 		;;
 	*)
 		# Assume max ~1 block of attrs
