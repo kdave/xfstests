@@ -1,0 +1,61 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 792
+#
+# Test scatter-gather atomic file commits.  Use the startupdate command to
+# create a temporary file, write sparsely to it, then commitupdate -h to
+# perform the scattered update.  Inject an error so that we can test that log
+# recovery finishes the swap.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/inject
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_io_command swapext '-v vfs -a'
+_require_xfs_io_command startupdate '-e'
+_require_xfs_scratch_atomicswap
+_require_xfs_io_error_injection "bmap_finish_one"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# Create original file
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/a >> $seqres.full
+sync
+md5sum $SCRATCH_MNT/a | _filter_scratch
+
+# Test atomic scatter-gather file commits.
+echo commit | tee -a $seqres.full
+$XFS_IO_PROG -x \
+	-c 'bmap -elpv' \
+	-c 'startupdate -e' \
+	-c 'truncate 1m' \
+	-c 'pwrite -S 0x59 64k 64k' \
+	-c 'pwrite -S 0x57 768k 64k' \
+	-c 'sync' \
+	-c 'bmap -elpv' \
+	-c 'inject bmap_finish_one' \
+	-c 'commitupdate -h -k' \
+	$SCRATCH_MNT/a >> $seqres.full
+_scratch_cycle_mount
+
+$XFS_IO_PROG -c 'bmap -elpv' $SCRATCH_MNT/a >> $seqres.full
+md5sum $SCRATCH_MNT/a | _filter_scratch
+
+# success, all done
+status=0
+exit

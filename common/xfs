@@ -1753,3 +1753,22 @@ _scratch_xfs_find_agbtree_height() {
 
 	return 1
 }
+
+_require_xfs_mkfs_atomicswap()
+{
+	# atomicswap can be activated on rmap or reflink filesystems.
+	# reflink is newer (4.9 for reflink vs. 4.8 for rmap) so test that.
+	_scratch_mkfs_xfs_supported -m reflink=1 >/dev/null 2>&1 || \
+		_notrun "mkfs.xfs doesn't have atomicswap dependent features"
+}
+
+_require_xfs_scratch_atomicswap()
+{
+	_require_xfs_mkfs_atomicswap
+	_require_scratch
+	_require_xfs_io_command swapext '-v vfs -a'
+	_scratch_mkfs -m reflink=1 > /dev/null
+	_try_scratch_mount || \
+		_notrun "atomicswap dependencies not supported by scratch filesystem type: $FSTYP"
+	_scratch_unmount
+}
