@@ -154,3 +154,23 @@ AC_DEFUN([AC_HAVE_RLIMIT_NOFILE],
        AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
     AC_SUBST(have_rlimit_nofile)
   ])
+
+#
+# Check if we have a FIEXCHANGE_RANGE ioctl (Linux)
+#
+AC_DEFUN([AC_HAVE_FIEXCHANGE],
+  [ AC_MSG_CHECKING([for FIEXCHANGE_RANGE])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE
+#include <sys/syscall.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <linux/fs.h>
+#include <linux/fiexchange.h>
+    ]], [[
+         struct file_xchg_range fxr;
+         ioctl(-1, FIEXCHANGE_RANGE, &fxr);
+    ]])],[have_fiexchange=yes
+       AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
+    AC_SUBST(have_fiexchange)
+  ])

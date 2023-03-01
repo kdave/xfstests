@@ -36,6 +36,10 @@ ifeq ($(HAVE_COPY_FILE_RANGE),yes)
 LCFLAGS += -DHAVE_COPY_FILE_RANGE
 endif
 
+ifeq ($(HAVE_FIEXCHANGE),yes)
+LCFLAGS += -DHAVE_FIEXCHANGE
+endif
+
 default: depend $(TARGETS)
 
 depend: .dep
