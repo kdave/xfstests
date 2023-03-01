@@ -1,0 +1,53 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 710
+#
+# Can we use swapext to exceed the quota enforcement?
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext quota
+
+# Import common functions.
+. ./common/filter
+. ./common/quota
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_user
+_require_nobody
+_require_quota
+_require_xfs_quota
+_require_scratch
+
+# Format filesystem and set up quota limits
+_scratch_mkfs > $seqres.full
+_qmount_option "usrquota,grpquota"
+_qmount >> $seqres.full
+
+# Set up initial files
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 256k -b 1m' $SCRATCH_MNT/a >> $seqres.full
+chown $qa_user $SCRATCH_MNT/a
+$XFS_IO_PROG -f -c 'pwrite -S 0x59 0 64k -b 64k' -c 'truncate 256k' $SCRATCH_MNT/b >> $seqres.full
+chown nobody $SCRATCH_MNT/b
+
+# Set up a quota limit
+$XFS_QUOTA_PROG -x -c "limit -u bhard=70k nobody" $SCRATCH_MNT
+
+echo before swapext >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'report -a' $SCRATCH_MNT >> $seqres.full
+stat $SCRATCH_MNT/* >> $seqres.full
+
+# Now try to swapext
+$XFS_IO_PROG -c "swapext $SCRATCH_MNT/b" $SCRATCH_MNT/a
+
+echo after swapext >> $seqres.full
+$XFS_QUOTA_PROG -x -c 'report -a' $SCRATCH_MNT >> $seqres.full
+stat $SCRATCH_MNT/* >> $seqres.full
+
+_check_quota_usage
+
+# success, all done
+status=0
+exit

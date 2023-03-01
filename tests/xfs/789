@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 789
+#
+# Simple tests of the old xfs swapext ioctl
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_io_command swapext '-v vfs'
+_require_test
+
+# We can't do any reasonable swapping if the files we're going to create are
+# realtime files, the rt extent size is greater than 1 block, and we can't use
+# atomic extent swapping to make sure that partially written extents are fully
+# swapped.
+file_blksz=$(_get_file_block_size $TEST_DIR)
+fs_blksz=$(_get_block_size $TEST_DIR)
+if (( $file_blksz != $fs_blksz )); then
+	_xfs_has_feature $TEST_DIR reflink || \
+		_notrun "test requires atomic extent swapping for rextsize=$((file_blksz / fs_blksz))"
+fi
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 256k -b 1m' $dir/a >> $seqres.full
+$XFS_IO_PROG -f -c 'pwrite -S 0x59 0 256k -b 1m' $dir/b >> $seqres.full
+$XFS_IO_PROG -f -c 'pwrite -S 0x60 0 256k -b 1m' $dir/c >> $seqres.full
+$XFS_IO_PROG -f -c 'pwrite -S 0x61 0 128k -b 1m' $dir/d >> $seqres.full
+md5sum $dir/a $dir/b $dir/c $dir/d | _filter_test_dir
+
+# Swap two files that are the same length
+echo swap
+$XFS_IO_PROG -c "swapext $dir/b" $dir/a
+md5sum $dir/a $dir/b | _filter_test_dir
+
+# Try to swap two files that are not the same length
+echo fail swap
+$XFS_IO_PROG -c "swapext $dir/c" $dir/d
+md5sum $dir/c $dir/d | _filter_test_dir
+
+# success, all done
+status=0
+exit

@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 711
+#
+# Make sure that swapext won't touch a swap file.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	test -e "$dir/a" && swapoff $dir/a
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_test
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+
+# Set up a fragmented swapfile and a dummy donor file.
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 32m -b 1m' -c fsync $dir/a >> $seqres.full
+$here/src/punch-alternating $dir/a
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 32m -b 1m' -c fsync $dir/a >> $seqres.full
+$MKSWAP_PROG $dir/a >> $seqres.full
+
+$XFS_IO_PROG -f -c 'pwrite -S 0x59 0 32m -b 1m' $dir/b >> $seqres.full
+
+swapon $dir/a || _notrun 'failed to swapon'
+
+# Now try to swapext.  The old code would return EINVAL for swapfiles
+# even though everything else in the VFS returns ETXTBSY.
+$XFS_IO_PROG -c "swapext $dir/b" $dir/a 2>&1 | \
+	sed -e 's/swapext: Invalid argument/swapext: Text file busy/g'
+
+# success, all done
+status=0
+exit
