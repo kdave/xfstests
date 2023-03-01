@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 790
+#
+# Make sure an atomic swapext actually runs to completion even if we shut
+# down the filesystem midway through.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+. ./common/inject
+
+# real QA test starts here
+_supported_fs xfs
+_require_xfs_io_command swapext '-v vfs -a'
+_require_test_program "punch-alternating"
+_require_xfs_io_command startupdate
+_require_xfs_io_error_injection "bmap_finish_one"
+_require_test
+
+filesnap() {
+	echo "$1"
+	md5sum $dir/a $dir/b $dir/c | _filter_test_dir
+}
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=65536
+nrblks=137
+
+# Create two files to swap, and try to fragment the first file.
+rm -f $dir/a
+_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+$here/src/punch-alternating $dir/a
+_pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
+_pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/c >> $seqres.full
+_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+sync
+
+# Inject a bmap error and trigger it via swapext.
+filesnap "before commit"
+$XFS_IO_PROG -x -c 'inject bmap_finish_one' -c "swapext $dir/b" $dir/a
+
+# Check the file afterwards.
+_test_cycle_mount
+filesnap "after commit"
+
+# success, all done
+status=0
+exit

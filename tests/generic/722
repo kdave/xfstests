@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 722
+#
+# Test swapext with the fsync flag flushes everything to disk before the call
+# returns.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_test_program "punch-alternating"
+_require_xfs_io_command swapext '-v vfs -a'
+_require_scratch
+_require_scratch_shutdown
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+_pwrite_byte 0x58 0 2m $SCRATCH_MNT/a >> $seqres.full
+_pwrite_byte 0x59 0 2m $SCRATCH_MNT/b >> $seqres.full
+$here/src/punch-alternating $SCRATCH_MNT/a
+$here/src/punch-alternating $SCRATCH_MNT/b
+
+old_a=$(md5sum $SCRATCH_MNT/a | awk '{print $1}')
+old_b=$(md5sum $SCRATCH_MNT/b | awk '{print $1}')
+echo "md5 a: $old_a md5 b: $old_b" >> $seqres.full
+
+od -tx1 -Ad -c $SCRATCH_MNT/a > /tmp/a0
+od -tx1 -Ad -c $SCRATCH_MNT/b > /tmp/b0
+
+echo swap >> $seqres.full
+$XFS_IO_PROG -c "swapext -v vfs -a -e -f -u $SCRATCH_MNT/a" $SCRATCH_MNT/b
+_scratch_shutdown
+_scratch_cycle_mount
+
+new_a=$(md5sum $SCRATCH_MNT/a | awk '{print $1}')
+new_b=$(md5sum $SCRATCH_MNT/b | awk '{print $1}')
+echo "md5 a: $new_a md5 b: $new_b" >> $seqres.full
+
+test $old_a = $new_b || echo "scratch file B doesn't match old file A"
+test $old_b = $new_a || echo "scratch file A doesn't match old file B"
+
+od -tx1 -Ad -c $SCRATCH_MNT/a > /tmp/a1
+od -tx1 -Ad -c $SCRATCH_MNT/b > /tmp/b1
+
+# success, all done
+echo Silence is golden
+status=0
+exit

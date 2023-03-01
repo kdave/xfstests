@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 720
+#
+# Stress testing with a lot of extents.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_test_program punch-alternating
+_require_test
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=$(_get_file_block_size $TEST_DIR)
+nrblks=$((LOAD_FACTOR * 100000))
+
+_require_fs_space $TEST_DIR $(( (2 * blksz * nrblks) / 1024 ))
+
+# Create some big swiss cheese files to test swapext with a lot of extents
+_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+$here/src/punch-alternating $dir/a
+_pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
+$here/src/punch-alternating -o 1 $dir/b
+filefrag -v $dir/a $dir/b >> $seqres.full
+
+# Now try to swapext
+md5_a="$(md5sum < $dir/a)"
+md5_b="$(md5sum < $dir/b)"
+date >> $seqres.full
+$XFS_IO_PROG -c "swapext $dir/b" $dir/a
+date >> $seqres.full
+
+echo "md5_a=$md5_a" >> $seqres.full
+echo "md5_b=$md5_b" >> $seqres.full
+md5sum $dir/a $dir/b >> $seqres.full
+
+test "$(md5sum < $dir/b)" = "$md5_a" || echo "file b does not match former a"
+test "$(md5sum < $dir/a)" = "$md5_b" || echo "file a does not match former b"
+
+echo "Silence is golden!"
+# success, all done
+status=0
+exit

@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 712
+#
+# Make sure that swapext modifies ctime and not mtime of the file.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_require_test_program punch-alternating
+_require_xfs_io_command swapext '-v vfs'
+_require_test
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+
+# Set up initial files
+$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 256k -b 1m' $dir/a >> $seqres.full
+$here/src/punch-alternating $dir/a
+$XFS_IO_PROG -f -c 'pwrite -S 0x59 0 256k -b 1m' $dir/b >> $seqres.full
+
+# Snapshot the 'a' file before we swap
+echo before >> $seqres.full
+md5sum $dir/a $dir/b >> $seqres.full
+old_mtime="$(echo $(stat -c '%y' $dir/a $dir/b))"
+old_ctime="$(echo $(stat -c '%z' $dir/a $dir/b))"
+stat -c '%y %Y %z %Z' $dir/a $dir/b >> $seqres.full
+
+# Now try to swapext
+$XFS_IO_PROG -c "swapext $dir/b" $dir/a
+
+# Snapshot the 'a' file after we swap
+echo after >> $seqres.full
+md5sum $dir/a $dir/b >> $seqres.full
+new_mtime="$(echo $(stat -c '%y' $dir/a $dir/b))"
+new_ctime="$(echo $(stat -c '%z' $dir/a $dir/b))"
+stat -c '%y %Y %z %Z' $dir/a $dir/b >> $seqres.full
+
+test "$new_mtime" = "$old_mtime" && echo "mtime: $new_mtime == $old_mtime"
+test "$new_ctime" = "$old_ctime" && echo "ctime: $new_ctime == $old_ctime"
+
+# success, all done
+echo Silence is golden.
+status=0
+exit

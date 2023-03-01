@@ -1,0 +1,122 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 716
+#
+# Test atomic file updates when (a) the length is the same; (b) the length
+# is different; and (c) someone modifies the original file and we need to
+# cancel the update.  The file contents are cloned into the staging file,
+# and some of the contents are updated.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_xfs_io_command startupdate
+_require_test_reflink
+_require_test
+
+filesnap() {
+	echo "$1"
+	md5sum $2 | _filter_test_dir
+}
+
+mkfile() {
+	rm -f $dir/a
+	_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+	sync
+}
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=65536
+nrblks=64
+
+# Use the atomic file update staging prototype in xfs_io to update a file.
+mkfile
+filesnap "before commit" $dir/a
+
+$XFS_IO_PROG \
+	-c 'startupdate' \
+	-c 'pwrite -S 0x60 44k 55k -b 1m' \
+	-c 'commitupdate -q' \
+	"$dir/a" 2>&1 | _filter_xfs_io | _filter_test_dir
+
+filesnap "after commit" $dir/a
+echo
+
+# Use the atomic file updates to replace a file with a shorter file.
+mkfile
+filesnap "before shorten commit" $dir/a
+
+$XFS_IO_PROG \
+	-c 'startupdate' \
+	-c 'truncate 55k' \
+	-c 'pwrite -S 0x60 0 55k' \
+	-c 'commitupdate -q' \
+	"$dir/a" 2>&1 | _filter_xfs_io | _filter_test_dir
+
+filesnap "after shorten commit" $dir/a
+echo
+
+# Use the atomic file updates to replace a file with a longer file.
+mkfile
+filesnap "before lengthen commit" $dir/a
+
+$XFS_IO_PROG \
+	-c 'startupdate' \
+	-c "pwrite -S 0x60 0 $(( (blksz * nrblks) + 37373 ))" \
+	-c 'commitupdate -q' \
+	"$dir/a" 2>&1 | _filter_xfs_io | _filter_test_dir
+
+filesnap "after lengthen commit" $dir/a
+echo
+
+# Use the atomic file update staging prototype in xfs_io to cancel updating a
+# file.
+mkfile
+filesnap "before cancel" $dir/a
+
+$XFS_IO_PROG \
+	-c 'startupdate' \
+	-c 'pwrite -S 0x60 44k 55k -b 1m' \
+	-c 'cancelupdate' \
+	"$dir/a" 2>&1 | _filter_xfs_io | _filter_test_dir
+
+filesnap "after cancel" $dir/a
+echo
+
+# Now try the update but with the A file open separately so that we clobber
+# mtime and fail the update.
+mkfile
+filesnap "before fail commit" $dir/a
+
+$XFS_IO_PROG \
+	-c "open $dir/a" \
+	-c 'startupdate' \
+	-c 'pwrite -S 0x58 44k 55k -b 1m' \
+	-c 'file 0' \
+	-c 'close' \
+	-c 'pwrite -S 0x61 22k 11k -b 1m' \
+	-c 'commitupdate -q' \
+	"$dir/a" 2>&1 | _filter_xfs_io | _filter_test_dir
+
+filesnap "after fail commit" $dir/a
+echo
+
+# success, all done
+status=0
+exit

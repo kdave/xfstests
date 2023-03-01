@@ -1,0 +1,116 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 714
+#
+# Test swapext between ranges of two different files, when one of the files
+# is shared.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_xfs_io_command "falloc"
+_require_test_reflink
+
+filesnap() {
+	echo "$1"
+	if [ "$2" != "$3" ]; then
+		md5sum $2 $3 | _filter_test_dir
+	else
+		md5sum $2 | _filter_test_dir
+	fi
+}
+
+test_swapext_once() {
+	filesnap "$1: before swapext" $dir/$3 $dir/$4
+	$XFS_IO_PROG -c "swapext -v vfs $2 $dir/$3" $dir/$4
+	filesnap "$1: after swapext" $dir/$3 $dir/$4
+	_test_cycle_mount
+	filesnap "$1: after cycling mount" $dir/$3 $dir/$4
+	echo
+}
+
+test_swapext_two() {
+	# swapext the same range of two files
+	test_swapext_once "$*: samerange" \
+		"-s $((blksz * 3)) -d $((blksz * 3)) -l $((blksz * 5))" b a
+
+	# swapext different ranges of two files
+	test_swapext_once "$*: diffrange" \
+		"-s $((blksz * 37)) -d $((blksz * 47)) -l $((blksz * 7))" b a
+
+	# swapext overlapping ranges of two files
+	test_swapext_once "$*: overlap" \
+		"-s $((blksz * 17)) -d $((blksz * 23)) -l $((blksz * 7))" b a
+
+	# Now let's overwrite a entirely to make sure COW works
+	echo "overwrite A and B entirely"
+	md5sum $dir/sharea | _filter_test_dir
+	$XFS_IO_PROG -c "pwrite -S 0x60 0 $((blksz * nrblks))" $dir/a >> $seqres.full
+	$XFS_IO_PROG -c "pwrite -S 0x60 0 $((blksz * nrblks))" $dir/b >> $seqres.full
+	md5sum $dir/sharea | _filter_test_dir
+	_test_cycle_mount
+	md5sum $dir/sharea | _filter_test_dir
+	echo
+}
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=65536
+_require_congruent_file_oplen $TEST_DIR $blksz
+nrblks=57
+
+# Set up some simple files for a first test.
+rm -f $dir/a $dir/b $dir/sharea
+_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+_pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
+_cp_reflink $dir/a $dir/sharea
+test_swapext_two "simple"
+
+# Set up some crazy rainbow files
+rm -f $dir/a $dir/b $dir/sharea
+_weave_file_rainbow $blksz $nrblks $dir/a >> $seqres.full
+_weave_file_rainbow $blksz $nrblks $dir/b >> $seqres.full
+_cp_reflink $dir/a $dir/sharea
+test_swapext_two "rainbow"
+
+# Now set up a simple file for testing within the same file
+rm -f $dir/c $dir/sharec
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 $((blksz * nrblks))" \
+	-c "pwrite -S 0x59 $((blksz * nrblks)) $((blksz * nrblks))" \
+	$dir/c >> $seqres.full
+_cp_reflink $dir/c $dir/sharec
+
+# swapext the same offset into the 'X' and 'Y' regions of the file
+test_swapext_once "single: sameXandY" \
+	"-s $((blksz * 3)) -d $((blksz * (nrblks + 3))) -l $((blksz * 5))" c c
+
+# swapext the same offset into the 'X' and 'Y' regions of the file
+test_swapext_once "single: overlap" \
+	"-s $((blksz * 13)) -d $((blksz * 17)) -l $((blksz * 5))" c c
+
+# Now let's overwrite a entirely to make sure COW works
+echo "overwrite C entirely"
+md5sum $dir/sharec | _filter_test_dir
+$XFS_IO_PROG -c "pwrite -S 0x60 0 $((blksz * nrblks))" $dir/c >> $seqres.full
+md5sum $dir/sharec | _filter_test_dir
+_test_cycle_mount
+md5sum $dir/sharec | _filter_test_dir
+
+# success, all done
+status=0
+exit

@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 715
+#
+# Test swapext between two files of unlike size.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs -s 64k -l 64k'
+_require_test
+
+filesnap() {
+	echo "$1"
+	if [ "$2" != "$3" ]; then
+		md5sum $2 $3 | _filter_test_dir
+	else
+		md5sum $2 | _filter_test_dir
+	fi
+}
+
+test_swapext_once() {
+	local tag=$1
+	local a_len=$2
+	local b_len=$3
+	local a_off=$4
+	local b_off=$5
+	local len=$6
+
+	# len is either a block count or -e to swap to EOF
+	if [ "$len" != "-e" ]; then
+		len="-l $((blksz * len))"
+	fi
+
+	rm -f $dir/a $dir/b
+	_pwrite_byte 0x58 0 $((blksz * a_len)) $dir/a >> $seqres.full
+	_pwrite_byte 0x59 0 $((blksz * b_len)) $dir/b >> $seqres.full
+	filesnap "$tag: before swapext" $dir/a $dir/b
+
+	cmd="swapext -v vfs -s $((blksz * a_off)) -d $((blksz * b_off)) $len $dir/a"
+	echo "$cmd" >> $seqres.full
+	$XFS_IO_PROG -c "$cmd" $dir/b
+	filesnap "$tag: after swapext" $dir/a $dir/b
+
+	_test_cycle_mount
+	filesnap "$tag: after cycling mount" $dir/a $dir/b
+	echo
+}
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=65536
+
+test_swapext_once "last 5 blocks" 27 37 22 32 5
+
+test_swapext_once "whole file to eof" 27 37 0 0 -e
+
+test_swapext_once "blocks 30-40" 27 37 30 30 10
+
+# success, all done
+status=0
+exit

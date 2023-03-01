@@ -2581,6 +2581,17 @@ _require_xfs_io_command()
 		echo $testio | grep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"startupdate"|"commitupdate"|"cancelupdate")
+		$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 128k -b 128k' $testfile > /dev/null
+		testio=$($XFS_IO_PROG -c "startupdate $param" \
+				-c 'pwrite -S 0x59 0 192k' \
+				-c 'commitupdate' $testfile 2>&1)
+		echo $testio | grep -q "Inappropriate ioctl" && \
+			_notrun "xfs_io $command $param support is missing"
+		echo $testio | grep -q "Operation not supported" && \
+			_notrun "xfs_io $command $param kernel support is missing"
+		param_checked="$param"
+		;;
 	"swapext")
 		$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 128k -b 128k' $testfile > /dev/null
 		$XFS_IO_PROG -f -c 'truncate 128k' $testfile.1 > /dev/null
@@ -2589,6 +2600,8 @@ _require_xfs_io_command()
 			_notrun "xfs_io $command $param support is missing"
 		echo $testio | grep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command $param ioctl support is missing"
+		echo $testio | grep -q "Operation not supported" && \
+			_notrun "xfs_io $command $param kernel support is missing"
 		rm -f $testfile.1
 		param_checked="$param"
 		;;

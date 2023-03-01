@@ -1,0 +1,48 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 718
+#
+# Make sure swapext honors RLIMIT_FSIZE.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_xfs_io_command swapext '-v vfs'
+_require_test
+
+dir=$TEST_DIR/test-$seq
+mkdir -p $dir
+blksz=65536
+nrblks=64
+
+# Create some 4M files to test swapext
+_pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
+_pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
+sync
+md5sum $dir/a $dir/b | _filter_test_dir
+
+# Set FSIZE to twice the blocksize (IOWs, 128k)
+ulimit -f $(( (blksz * 2) / 512))
+ulimit -a >> $seqres.full
+
+# Now try to swapext
+$XFS_IO_PROG -c "swapext $dir/b" $dir/a
+md5sum $dir/a $dir/b | _filter_test_dir
+
+# success, all done
+status=0
+exit

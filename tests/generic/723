@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 723
+#
+# Test swapext with the dry run flag doesn't change anything.
+
+. ./common/preamble
+_begin_fstest auto quick fiexchange swapext
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $dir
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+# real QA test starts here
+_require_test_program "punch-alternating"
+_require_xfs_io_command swapext '-v vfs'
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/a >> $seqres.full
+_pwrite_byte 0x59 0 2m $SCRATCH_MNT/b >> $seqres.full
+$XFS_IO_PROG -c 'truncate 2m' $SCRATCH_MNT/a
+$here/src/punch-alternating $SCRATCH_MNT/a
+$here/src/punch-alternating $SCRATCH_MNT/b
+
+old_a=$(md5sum $SCRATCH_MNT/a | awk '{print $1}')
+old_b=$(md5sum $SCRATCH_MNT/b | awk '{print $1}')
+echo "md5 a: $old_a md5 b: $old_b" >> $seqres.full
+
+# Test swapext with the -n option, which will do all the input parameter
+# checking and return 0 without changing anything.
+echo dry run swap >> $seqres.full
+$XFS_IO_PROG -c "swapext -v vfs -n -f -u $SCRATCH_MNT/a" $SCRATCH_MNT/b
+_scratch_cycle_mount
+
+new_a=$(md5sum $SCRATCH_MNT/a | awk '{print $1}')
+new_b=$(md5sum $SCRATCH_MNT/b | awk '{print $1}')
+echo "md5 a: $new_a md5 b: $new_b" >> $seqres.full
+
+test $old_a = $new_a || echo "scratch file A should not have swapped"
+test $old_b = $new_b || echo "scratch file B should not have swapped"
+
+# Do it again, but without the -n option, to prove that we can actually
+# swap the file contents.
+echo actual swap >> $seqres.full
+$XFS_IO_PROG -c "swapext -v vfs -f -u $SCRATCH_MNT/a" $SCRATCH_MNT/b
+_scratch_cycle_mount
+
+new_a=$(md5sum $SCRATCH_MNT/a | awk '{print $1}')
+new_b=$(md5sum $SCRATCH_MNT/b | awk '{print $1}')
+echo "md5 a: $new_a md5 b: $new_b" >> $seqres.full
+
+test $old_a = $new_b || echo "scratch file A should have swapped"
+test $old_b = $new_a || echo "scratch file B should have swapped"
+
+# success, all done
+echo Silence is golden
+status=0
+exit
