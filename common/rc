@@ -3517,9 +3517,15 @@ _require_scratch_dev_pool()
 		            exit 1
 		        fi
 		fi
-		# to help better debug when something fails, we remove
-		# traces of previous btrfs FS on the dev.
-		dd if=/dev/zero of=$i bs=4096 count=100 > /dev/null 2>&1
+		# To help better debug when something fails, we remove
+		# traces of previous btrfs FS on the dev. For zoned devices we
+		# can't use dd as it'll lead to unaligned writes so simply
+		# reset the first two zones.
+		if [ "`_zone_type "$i"`" = "none" ]; then
+			dd if=/dev/zero of=$i bs=4096 count=100 > /dev/null 2>&1
+		else
+			$BLKZONE_PROG reset -c 2 $i
+		fi
 	done
 }
 
