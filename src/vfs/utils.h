@@ -45,6 +45,8 @@
 #define DIR2 "dir2"
 #define DIR3 "dir3"
 #define DIR1_RENAME "dir1_rename"
+// This directory may be used by tests that call another test.
+#define DIR0 "dir0"
 #define HARDLINK1 "hardlink1"
 #define SYMLINK1 "symlink1"
 #define SYMLINK_USER1 "symlink_user1"

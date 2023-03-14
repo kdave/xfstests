@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "btrfs-idmapped-mounts.h"
+#include "tmpfs-idmapped-mounts.h"
 #include "idmapped-mounts.h"
 #include "missing.h"
 #include "utils.h"
@@ -2316,6 +2317,7 @@ static void usage(void)
 	fprintf(stderr, "--test-fscaps-regression            Run fscap regression tests\n");
 	fprintf(stderr, "--test-nested-userns                Run nested userns idmapped mount testsuite\n");
 	fprintf(stderr, "--test-btrfs                        Run btrfs specific idmapped mount testsuite\n");
+	fprintf(stderr, "--test-tmpfs                        Run tmpfs specific idmapped mount testsuite\n");
 	fprintf(stderr, "--test-setattr-fix-968219708108     Run setattr regression tests\n");
 	fprintf(stderr, "--test-setxattr-fix-705191b03d50    Run setxattr regression tests\n");
 	fprintf(stderr, "--test-setgid-create-umask          Run setgid with umask tests\n");
@@ -2340,6 +2342,7 @@ static const struct option longopts[] = {
 	{"test-setxattr-fix-705191b03d50",	no_argument,		0,	'j'},
 	{"test-setgid-create-umask",		no_argument,		0,	'u'},
 	{"test-setgid-create-acl",		no_argument,		0,	'l'},
+	{"test-tmpfs",				no_argument,		0,	't'},
 	{NULL,					0,			0,	  0},
 };
 
@@ -2480,7 +2483,7 @@ int main(int argc, char *argv[])
 	bool idmapped_mounts_supported = false, test_btrfs = false,
 	     test_core = false, test_fscaps_regression = false,
 	     test_nested_userns = false, test_setattr_fix_968219708108 = false,
-	     test_setxattr_fix_705191b03d50 = false,
+	     test_setxattr_fix_705191b03d50 = false, test_tmpfs = false,
 	     test_setgid_create_umask = false, test_setgid_create_acl = false;
 
 	init_vfstest_info(&info);
@@ -2528,6 +2531,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			test_setgid_create_acl = true;
+			break;
+		case 't':
+			test_tmpfs = true;
 			break;
 		case 'h':
 			/* fallthrough */
@@ -2619,6 +2625,11 @@ int main(int argc, char *argv[])
 			goto out;
 
 		if (!run_suite(&info, &s_setgid_create_acl_idmapped_mounts))
+			goto out;
+	}
+
+	if (test_tmpfs) {
+		if (!run_suite(&info, &s_tmpfs_idmapped_mounts))
 			goto out;
 	}
 
