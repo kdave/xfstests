@@ -105,7 +105,7 @@ static int hardlink_crossing_mounts(const struct vfstest_info *info)
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 
-        if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
+	if (chown_r(info->t_mnt_fd, T_DIR1, 10000, 10000)) {
 		log_stderr("failure: chown_r");
 		goto out;
 	}
