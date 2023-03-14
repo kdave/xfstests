@@ -129,10 +129,8 @@ static int write_id_mapping(idmap_type_t map_type, pid_t pid, const char *buf, s
 
 	fret = 0;
 out:
-	if (fd >= 0)
-		close(fd);
-	if (setgroups_fd >= 0)
-		close(setgroups_fd);
+	safe_close(fd);
+	safe_close(setgroups_fd);
 
 	return fret;
 }
