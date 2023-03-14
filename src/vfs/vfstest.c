@@ -80,7 +80,7 @@ static void stash_overflowgid(struct vfstest_info *info)
 	info->t_overflowgid = atoi(buf);
 }
 
-static void test_setup(struct vfstest_info *info)
+void test_setup(struct vfstest_info *info)
 {
 	if (mkdirat(info->t_mnt_fd, T_DIR1, 0777))
 		die("failure: mkdirat");
@@ -93,7 +93,7 @@ static void test_setup(struct vfstest_info *info)
 		die("failure: fchmod");
 }
 
-static void test_cleanup(struct vfstest_info *info)
+void test_cleanup(struct vfstest_info *info)
 {
 	safe_close(info->t_dir1_fd);
 	if (rm_r(info->t_mnt_fd, T_DIR1))
