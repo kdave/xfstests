@@ -286,6 +286,10 @@ bool switch_ids(uid_t uid, gid_t gid)
 	if (setresuid(uid, uid, uid))
 		return syserror("failure: setresuid");
 
+	/* Ensure we can access proc files from processes we can ptrace. */
+	if (prctl(PR_SET_DUMPABLE, 1, 0, 0, 0))
+		return syserror("failure: make dumpable");
+
 	return true;
 }
 
@@ -303,11 +307,6 @@ static int userns_fd_cb(void *data)
 	if (c == '1') {
 		if (!switch_ids(0, 0))
 			return syserror("failure: switch ids to 0");
-
-		/* Ensure we can access proc files from processes we can ptrace. */
-		ret = prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
-		if (ret < 0)
-			return syserror("failure: make dumpable");
 	}
 
 	ret = write_nointr(h->fd_event, "1", 1);
