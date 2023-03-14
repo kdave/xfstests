@@ -60,7 +60,9 @@ pid_t do_clone(int (*fn)(void *), void *arg, int flags)
 
 static int get_userns_fd_cb(void *data)
 {
-	return 0;
+	for (;;)
+		pause();
+	_exit(0);
 }
 
 int wait_for_pid(pid_t pid)
