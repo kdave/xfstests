@@ -177,7 +177,7 @@ struct vfs_ns_cap_data {
 struct vfstest_info {
 	uid_t t_overflowuid;
 	gid_t t_overflowgid;
-	/* path of the test device */
+	/* Filesystem type of the mountpoint */
 	const char *t_fstype;
 	/* path of the test device */
 	const char *t_device;
