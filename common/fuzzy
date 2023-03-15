@@ -986,6 +986,20 @@ __stress_scrub_fsstress_loop() {
 	local focus=()
 
 	case "$stress_tgt" in
+	"parent")
+		focus+=('-z')
+
+		# Create a directory tree very gradually
+		for op in creat link mkdir; do
+			focus+=('-f' "${op}=2")
+		done
+		focus+=('-f' 'unlink=1' '-f' 'rmdir=1')
+
+		# But do a lot of renames to cycle parent pointers
+		for op in rename rnoreplace rexchange; do
+			focus+=('-f' "${op}=40")
+		done
+		;;
 	"dir")
 		focus+=('-z')
 
@@ -1276,6 +1290,7 @@ __stress_scrub_check_commands() {
 #       'writeonly': Only perform fs updates, no reads.
 #       'symlink': Only create symbolic links.
 #       'mknod': Only create special files.
+#       'parent': Focus on updating parent pointers
 #
 #       The default is 'default' unless XFS_SCRUB_STRESS_TARGET is set.
 # -X	Run this program to exercise the filesystem.  Currently supported
