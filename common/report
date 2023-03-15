@@ -9,6 +9,11 @@ REPORT_ENV_LIST=("SECTION" "FSTYP" "PLATFORM" "MKFS_OPTIONS" "MOUNT_OPTIONS" \
 		 "TIME_FACTOR" "LOAD_FACTOR" "TEST_DIR" "TEST_DEV" \
 		 "SCRATCH_DEV" "SCRATCH_MNT" "OVL_UPPER" "OVL_LOWER" "OVL_WORK")
 
+# Variables that are captured in the report /if/ they are set.
+REPORT_ENV_LIST_OPT=("TAPE_DEV" "RMT_TAPE_DEV" "FSSTRES_AVOID" "FSX_AVOID"
+		     "KCONFIG_PATH" "PERF_CONFIGNAME" "MIN_FSSIZE"
+		     "IDMAPPED_MOUNTS")
+
 encode_xml()
 {
 	cat -v | \
@@ -58,6 +63,11 @@ __generate_report_vars() {
 
 	__generate_blockdev_report_vars "TEST_DEV"
 	__generate_blockdev_report_vars "SCRATCH_DEV"
+
+	# Optional environmental variables
+	for varname in "${REPORT_ENV_LIST_OPT[@]}"; do
+		test -n "${!varname}" && REPORT_VARS["${varname}"]="${!varname}"
+	done
 }
 
 #
