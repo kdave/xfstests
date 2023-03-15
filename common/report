@@ -48,9 +48,18 @@ _xunit_make_section_report()
 	if [ -z "$date_time" ]; then
 		date_time=$(date +"%F %T")
 	fi
-	local stats="failures=\"$bad_count\" skipped=\"$notrun_count\" tests=\"$tests_count\" time=\"$sect_time\""
-	local hw_info="hostname=\"$HOST\" timestamp=\"${date_time/ /T}\" "
-	echo "<testsuite name=\"xfstests\" $stats  $hw_info >" >> $REPORT_DIR/result.xml
+
+	local fstests_ns="https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git"
+	cat >> $REPORT_DIR/result.xml << ENDL
+<testsuite
+ xmlns="$fstests_ns"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="$fstests_ns $fstests_ns/tree/doc/xunit.xsd"
+
+ name="xfstests"
+ failures="$bad_count" skipped="$notrun_count" tests="$tests_count" time="$sect_time"
+ hostname="$HOST" timestamp="${date_time/ /T}">
+ENDL
 
 	# Properties
 	echo -e "\t<properties>" >> $REPORT_DIR/result.xml
