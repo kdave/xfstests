@@ -29,12 +29,13 @@ encode_cdata()
 _xunit_add_property()
 {
 	local name="$1"
-	local value="${!name}"
+	local value="$2"
 
-	if [ ! -z "$value" ]; then
-		echo -e "\t\t<property name=\"$name\" value=\"$value\"/>"
-	fi
+	test -z "$value" && return
+
+	echo -e "\t\t<property name=\"$name\" value=\"$value\"/>"
 }
+
 _xunit_make_section_report()
 {
 	# xfstest:section ==> xunit:testsuite
@@ -76,7 +77,7 @@ ENDL
 	# Properties
 	echo -e "\t<properties>" >> $REPORT_DIR/result.xml
 	for p in "${REPORT_ENV_LIST[@]}"; do
-		_xunit_add_property "$p"
+		_xunit_add_property "$p" "${!p}"
 	done | sort >> $REPORT_DIR/result.xml
 	echo -e "\t</properties>" >> $REPORT_DIR/result.xml
 	if [ -f $report ]; then
