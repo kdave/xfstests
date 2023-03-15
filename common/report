@@ -49,9 +49,19 @@ __generate_blockdev_report_vars() {
 	REPORT_VARS["${bdev_var}_ZONES"]="$(cat "$sysfs_bdev/queue/nr_zones" 2>/dev/null)"
 }
 
+__import_report_vars() {
+	local fname="$1"
+
+	while IFS=':' read key value; do
+		REPORT_VARS["${key%% }"]="${value## }"
+	done < "$1"
+}
+
 # Fill out REPORT_VARS with tidbits about our test runner configuration.
 # Caller is required to declare REPORT_VARS to be an associative array.
 __generate_report_vars() {
+	test "$REPORT_VARS_FILE" && __import_report_vars "$REPORT_VARS_FILE"
+
 	REPORT_VARS["ARCH"]="$(uname -m)"
 	REPORT_VARS["KERNEL"]="$(uname -r)"
 	REPORT_VARS["CPUS"]="$(getconf _NPROCESSORS_ONLN 2>/dev/null)"
