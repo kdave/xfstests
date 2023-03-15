@@ -38,6 +38,7 @@ _xunit_make_section_report()
 	local bad_count="$3"
 	local notrun_count="$4"
 	local sect_time="$5"
+	local timestamp
 
 	if [ $sect_name == '-no-sections-' ]; then
 		sect_name='global'
@@ -45,8 +46,10 @@ _xunit_make_section_report()
 	local report=$tmp.report.xunit.$sect_name.xml
 	# Header
 	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $REPORT_DIR/result.xml
-	if [ -z "$date_time" ]; then
-		date_time=$(date +"%F %T")
+	if [ -n "$date_time" ]; then
+		timestamp="$(date -Iseconds --date="$date_time")"
+	else
+		timestamp="$(date -Iseconds)"
 	fi
 
 	local fstests_ns="https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git"
@@ -58,7 +61,7 @@ _xunit_make_section_report()
 
  name="xfstests"
  failures="$bad_count" skipped="$notrun_count" tests="$tests_count" time="$sect_time"
- hostname="$HOST" timestamp="${date_time/ /T}">
+ hostname="$HOST" timestamp="$timestamp">
 ENDL
 
 	# Properties
