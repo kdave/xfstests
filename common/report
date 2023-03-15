@@ -24,6 +24,42 @@ encode_cdata()
 	cat -v | sed -e 's/]]>/]]]]><![CDATA[>/g'
 }
 
+# Fill out REPORT_VARS with information about the block device referred to by
+# the passed-in bash variable.
+__generate_blockdev_report_vars() {
+	local bdev_var="$1"
+	local bdev="${!bdev_var}"
+
+	test -z "$bdev" && return
+	test -b "$bdev" || return
+	local sysfs_bdev="$(_sysfs_dev "$bdev")"
+
+	REPORT_VARS["${bdev_var}_SIZE_KB"]="$(( "$(blockdev --getsz "$bdev")" / 2 ))"
+	REPORT_VARS["${bdev_var}_ROTATIONAL"]="$(cat "$sysfs_bdev/queue/rotational" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_DAX"]="$(cat "$sysfs_bdev/queue/dax" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_DISCARD"]="$(sed -e 's/[1-9][0-9]*/1/g' "$sysfs_bdev/queue/discard_max_bytes" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_WRITE_ZEROES"]="$(sed -e 's/[1-9][0-9]*/1/g' "$sysfs_bdev/queue/write_zeroes_max_bytes" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_PHYS_BLOCK_BYTES"]="$(cat "$sysfs_bdev/queue/physical_block_size" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_LBA_BYTES"]="$(cat "$sysfs_bdev/queue/logical_block_size" 2>/dev/null)"
+	REPORT_VARS["${bdev_var}_ZONES"]="$(cat "$sysfs_bdev/queue/nr_zones" 2>/dev/null)"
+}
+
+# Fill out REPORT_VARS with tidbits about our test runner configuration.
+# Caller is required to declare REPORT_VARS to be an associative array.
+__generate_report_vars() {
+	REPORT_VARS["ARCH"]="$(uname -m)"
+	REPORT_VARS["KERNEL"]="$(uname -r)"
+	REPORT_VARS["CPUS"]="$(getconf _NPROCESSORS_ONLN 2>/dev/null)"
+	REPORT_VARS["MEM_KB"]="$(grep MemTotal: /proc/meminfo | awk '{print $2}')"
+	REPORT_VARS["SWAP_KB"]="$(grep SwapTotal: /proc/meminfo | awk '{print $2}')"
+
+	test -e /sys/devices/system/node/possible && \
+		REPORT_VARS["NUMA_NODES"]="$(cat /sys/devices/system/node/possible 2>/dev/null)"
+
+	__generate_blockdev_report_vars "TEST_DEV"
+	__generate_blockdev_report_vars "SCRATCH_DEV"
+}
+
 #
 # Xunit format report functions
 _xunit_add_property()
@@ -77,11 +113,17 @@ _xunit_make_section_report()
 >
 ENDL
 
+	declare -A REPORT_VARS
+	__generate_report_vars
+
 	# Properties
 	echo -e "\t<properties>" >> $REPORT_DIR/result.xml
+	(for key in "${!REPORT_VARS[@]}"; do
+		_xunit_add_property "$key" "${REPORT_VARS["$key"]}"
+	done;
 	for p in "${REPORT_ENV_LIST[@]}"; do
 		_xunit_add_property "$p" "${!p}"
-	done | sort >> $REPORT_DIR/result.xml
+	done) | sort >> $REPORT_DIR/result.xml
 	echo -e "\t</properties>" >> $REPORT_DIR/result.xml
 	if [ -f $report ]; then
 		cat $report >> $REPORT_DIR/result.xml
