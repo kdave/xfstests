@@ -137,15 +137,14 @@ _xunit_make_testcase_report()
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-out>" >> $report
 		fi
-		if [ -n "$quiet" ]; then
-		   :
-		elif [ -f "$dmesg_file" ]; then
-			echo -e "\t\t<system-err>" >> $report
+		if [ -z "$quiet" -a -f "$dmesg_file" ]; then
+			echo -e "\t\t<kernel-log>" >> $report
 			printf	'<![CDATA[\n' >>$report
 			cat "$dmesg_file" | tr -dc '[:print:][:space:]' | encode_cdata >>$report
 			printf ']]>\n'	>>$report
-			echo -e "\t\t</system-err>" >> $report
-		elif [ -s "$outbad_file" ]; then
+			echo -e "\t\t</kernel-log>" >> $report
+		fi
+		if [ -z "$quiet" -a -s "$outbad_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
 			$diff "$out_src" "$outbad_file" | encode_cdata >>$report
