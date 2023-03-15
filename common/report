@@ -19,6 +19,11 @@ encode_xml()
 		-e 's/"/\&quot;/g'
 }
 
+encode_cdata()
+{
+	cat -v | sed -e 's/]]>/]]]]><![CDATA[>/g'
+}
+
 #
 # Xunit format report functions
 _xunit_add_property()
@@ -128,7 +133,7 @@ _xunit_make_testcase_report()
 		if [ -z "$quiet" -a -s "$full_file" ]; then
 			echo -e "\t\t<system-out>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat "$full_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
+			cat "$full_file" | tr -dc '[:print:][:space:]' | encode_cdata >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-out>" >> $report
 		fi
@@ -137,13 +142,13 @@ _xunit_make_testcase_report()
 		elif [ -f "$dmesg_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			cat "$dmesg_file" | tr -dc '[:print:][:space:]' | encode_xml >>$report
+			cat "$dmesg_file" | tr -dc '[:print:][:space:]' | encode_cdata >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		elif [ -s "$outbad_file" ]; then
 			echo -e "\t\t<system-err>" >> $report
 			printf	'<![CDATA[\n' >>$report
-			$diff "$out_src" "$outbad_file" | encode_xml >>$report
+			$diff "$out_src" "$outbad_file" | encode_cdata >>$report
 			printf ']]>\n'	>>$report
 			echo -e "\t\t</system-err>" >> $report
 		fi
