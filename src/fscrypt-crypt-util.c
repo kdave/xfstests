@@ -662,19 +662,37 @@ static void aes_decrypt(const struct aes_key *k, const u8 src[AES_BLOCK_SIZE],
 }
 
 #ifdef ENABLE_ALG_TESTS
-#include <openssl/aes.h>
+#include <openssl/evp.h>
 static void test_aes_keysize(int keysize)
 {
 	unsigned long num_tests = NUM_ALG_TEST_ITERATIONS;
+	const EVP_CIPHER *evp_cipher;
+	EVP_CIPHER_CTX *ctx;
 
+	switch (keysize) {
+	case 16:
+		evp_cipher = EVP_aes_128_ecb();
+		break;
+	case 24:
+		evp_cipher = EVP_aes_192_ecb();
+		break;
+	case 32:
+		evp_cipher = EVP_aes_256_ecb();
+		break;
+	default:
+		ASSERT(0);
+	}
+
+	ctx = EVP_CIPHER_CTX_new();
+	ASSERT(ctx != NULL);
 	while (num_tests--) {
 		struct aes_key k;
-		AES_KEY ref_k;
 		u8 key[AES_256_KEY_SIZE];
 		u8 ptext[AES_BLOCK_SIZE];
 		u8 ctext[AES_BLOCK_SIZE];
 		u8 ref_ctext[AES_BLOCK_SIZE];
 		u8 decrypted[AES_BLOCK_SIZE];
+		int outl, res;
 
 		rand_bytes(key, keysize);
 		rand_bytes(ptext, AES_BLOCK_SIZE);
@@ -682,14 +700,18 @@ static void test_aes_keysize(int keysize)
 		aes_setkey(&k, key, keysize);
 		aes_encrypt(&k, ptext, ctext);
 
-		ASSERT(AES_set_encrypt_key(key, keysize*8, &ref_k) == 0);
-		AES_encrypt(ptext, ref_ctext, &ref_k);
-
+		res = EVP_EncryptInit_ex(ctx, evp_cipher, NULL, key, NULL);
+		ASSERT(res > 0);
+		res = EVP_EncryptUpdate(ctx, ref_ctext, &outl, ptext,
+					AES_BLOCK_SIZE);
+		ASSERT(res > 0);
+		ASSERT(outl == AES_BLOCK_SIZE);
 		ASSERT(memcmp(ctext, ref_ctext, AES_BLOCK_SIZE) == 0);
 
 		aes_decrypt(&k, ctext, decrypted);
 		ASSERT(memcmp(ptext, decrypted, AES_BLOCK_SIZE) == 0);
 	}
+	EVP_CIPHER_CTX_free(ctx);
 }
 
 static void test_aes(void)
