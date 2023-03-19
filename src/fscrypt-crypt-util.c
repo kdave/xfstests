@@ -1109,12 +1109,18 @@ static void test_aes_256_xts(void)
 	while (num_tests--) {
 		u8 key[2 * AES_256_KEY_SIZE];
 		u8 iv[AES_BLOCK_SIZE];
-		u8 ptext[512];
+		u8 ptext[32 * AES_BLOCK_SIZE];
 		u8 ctext[sizeof(ptext)];
 		u8 ref_ctext[sizeof(ptext)];
 		u8 decrypted[sizeof(ptext)];
-		const size_t datalen = ROUND_DOWN(rand() % (1 + sizeof(ptext)),
-						  AES_BLOCK_SIZE);
+		/*
+		 * Don't test message lengths that aren't a multiple of the AES
+		 * block size, since support for that is not implemented here.
+		 * Also don't test zero-length messages, since OpenSSL 3.0 and
+		 * later returns an error for those.
+		 */
+		const size_t datalen = AES_BLOCK_SIZE *
+			(1 + rand() % (sizeof(ptext) / AES_BLOCK_SIZE));
 		int outl, res;
 
 		rand_bytes(key, sizeof(key));
