@@ -975,7 +975,11 @@ static void test_hkdf_sha512(void)
 		size_t ikmlen = 1 + (rand() % sizeof(ikm));
 		size_t saltlen = rand() % (1 + sizeof(salt));
 		size_t infolen = rand() % (1 + sizeof(info));
-		size_t outlen = rand() % (1 + sizeof(actual_output));
+		/*
+		 * Don't test zero-length outputs, since OpenSSL 3.0 and later
+		 * returns an error for those.
+		 */
+		size_t outlen = 1 + (rand() % sizeof(actual_output));
 
 		rand_bytes(ikm, ikmlen);
 		rand_bytes(salt, saltlen);
