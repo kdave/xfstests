@@ -499,6 +499,28 @@ _require_btrfs_support_sectorsize()
 		_notrun "sectorsize $sectorsize is not supported"
 }
 
+_require_btrfs_inline_extents_creation()
+{
+	local ino
+
+	_require_xfs_io_command fiemap
+	_require_scratch
+
+	_scratch_mkfs &> /dev/null
+	_scratch_mount -o max_inline=2048,compress=none
+	_pwrite_byte 0x00 0 1024 $SCRATCH_MNT/inline &> /dev/null
+	sync
+	$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/inline | tail -n 1 > $tmp.fiemap
+	_scratch_unmount
+	# 0x200 means inlined, 0x100 means not block aligned, 0x1 means
+	# the last extent.
+	if ! grep -q "0x301" $tmp.fiemap; then
+		rm -f -- $tmp.fiemap
+		_notrun "No inline extent creation support, maybe subpage?"
+	fi
+	rm -f -- $tmp.fiemap
+}
+
 _btrfs_metadump()
 {
 	local device="$1"
