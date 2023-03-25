@@ -132,7 +132,7 @@ AC_DEFUN([AC_HAVE_NFTW],
 #include <stddef.h>
 #include <ftw.h>
     ]], [[
-         nftw("/", (int (*)(const char *, const struct stat *, int, struct FTW *))1, 0, 0);
+         nftw("/", (int (*)(const char *, const struct stat *, int, struct FTW *))1, 0, FTW_ACTIONRETVAL);
     ]])],[have_nftw=yes
        AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
     AC_SUBST(have_nftw)
