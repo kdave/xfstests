@@ -188,6 +188,7 @@ _filter_hole_fiemap()
 	_coalesce_extents
 }
 
+# Column 7 for datadev files and column 5 for rtdev files
 #     10000 Unwritten preallocated extent
 #     01000 Doesn't begin on stripe unit
 #     00100 Doesn't end   on stripe unit
@@ -199,6 +200,13 @@ _filter_bmap()
 		$3 ~ /hole/ {
 			print $1, $2, $3;
 			next;
+		}
+		$5 ~ /1[01][01][01][01]/ {
+			print $1, $2, "unwritten";
+			next;
+		}
+		$5 ~ /0[01][01][01][01]/ {
+			print $1, $2, "data"
 		}
 		$7 ~ /1[01][01][01][01]/ {
 			print $1, $2, "unwritten";
