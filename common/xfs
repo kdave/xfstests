@@ -1783,3 +1783,11 @@ _require_xfs_scratch_atomicswap()
 		_notrun "atomicswap dependencies not supported by scratch filesystem type: $FSTYP"
 	_scratch_unmount
 }
+
+# Return the maximum start offset that the FITRIM command will accept, in units
+# of 1024 byte blocks.
+_xfs_discard_max_offset_kb()
+{
+	$XFS_IO_PROG -c 'statfs' "$1" | \
+		awk '{g[$1] = $3} END {print (g["geom.bsize"] * g["geom.datablocks"] / 1024)}'
+}

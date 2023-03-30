@@ -3927,6 +3927,21 @@ _require_batched_discard()
 	fi
 }
 
+# Given a mountpoint and the device associated with that mountpoint, return the
+# maximum start offset that the FITRIM command will accept, in units of 1024
+# byte blocks.
+_discard_max_offset_kb()
+{
+	case "$FSTYP" in
+	xfs)
+		_xfs_discard_max_offset_kb "$1"
+		;;
+	*)
+		$DF_PROG -k | awk -v dev="$2" -v mnt="$1" '$1 == dev && $7 == mnt { print $3 }'
+		;;
+	esac
+}
+
 _require_dumpe2fs()
 {
 	if [ -z "$DUMPE2FS_PROG" ]; then
