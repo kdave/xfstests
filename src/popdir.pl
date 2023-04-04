@@ -11,7 +11,7 @@ use File::Basename;
 $progname=$0;
 GetOptions("start=i" => \$start,
 	   "end=i" => \$end,
-	   "file-mult=i" => \$file_mult,
+	   "file-pct=i" => \$file_pct,
 	   "incr=i" => \$incr,
 	   "format=s" => \$format,
 	   "dir=s" => \$dir,
@@ -30,8 +30,7 @@ Options:
   --start=num       create names starting with this number (0)
   --incr=num        increment file number by this much (1)
   --end=num         stop at this file number (100)
-  --file-mult       create a regular file when file number is a multiple
-                    of this quantity (20)
+  --file-pct        create this percentage of regular files (90 percent)
   --remove          remove instead of creating
   --format=str      printf formatting string for file name ("%08d")
   --verbose         verbose output
@@ -47,9 +46,15 @@ if (defined $dir) {
 }
 $start = 0 if (!defined $start);
 $end = 100 if (!defined $end);
-$file_mult = 20 if (!defined $file_mult);
+$file_pct = 90 if (!defined $file_pct);
 $format = "%08d" if (!defined $format);
 $incr = 1 if (!defined $incr);
+
+if ($file_pct < 0) {
+	$file_pct = 0;
+} elsif ($file_pct > 100) {
+	$file_pct = 100;
+}
 
 for ($i = $start; $i <= $end; $i += $incr) {
 	$fname = sprintf($format, $i);
@@ -57,7 +62,7 @@ for ($i = $start; $i <= $end; $i += $incr) {
 	if ($remove) {
 		$verbose && print "rm $fname\n";
 		unlink($fname) or rmdir($fname) or die("unlink $fname");
-	} elsif ($file_mult == 0 or ($i % $file_mult) == 0) {
+	} elsif (($i % 100) < $file_pct) {
 		# create a file
 		$verbose && print "touch $fname\n";
 		open(DONTCARE, ">$fname") or die("touch $fname");
