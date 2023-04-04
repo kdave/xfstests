@@ -155,6 +155,57 @@ __populate_create_attr() {
 	done
 }
 
+# Create an extended attr structure and ensure that the fork is btree format
+__populate_xfs_create_btree_attr() {
+	local name="$1"
+	local isize="$2"
+	local dblksz="$3"
+	local icore_size="$(_xfs_get_inode_core_bytes $SCRATCH_MNT)"
+	# We need enough extents to guarantee that the attr fork is in btree
+	# format.  Cycling the mount to use xfs_db is too slow, so watch for
+	# when the number of holes that we can punch in the attr fork by
+	# deleting remote xattrs exceeds the number of extent mappings that can
+	# fit in the inode core.
+	local max_nextents="$(((isize - icore_size) / 16))"
+	local nr
+	local i
+	local incr
+	local bigval
+
+	# Add about one block's worth of attrs in betweeen creating punchable
+	# remote value blocks.
+	incr=$(( (dblksz / 16) / 100 * 100 ))
+	bigval="$(perl -e "print \"@\" x $dblksz;")"
+
+	touch "${name}"
+
+	# We cannot control the mapping behaviors of the attr fork leaf and
+	# dabtree blocks, but we do know that remote values are stored in a
+	# single extent, and that those mappings are removed if the xattr is
+	# deleted.
+	#
+	# The extended attribute structure tends to grow from offset zero
+	# upwards, so we try to set up a sparse attr fork mapping by
+	# iteratively creating at least one leaf block's worth of local attrs,
+	# and then one remote attr, until the number of remote xattrs exceeds
+	# the number of mappings that fit in the inode core...
+	for ((nr = 0; nr < (incr * max_nextents); nr += incr)); do
+		# Simulate a getfattr dump file so we can bulk-add attrs.
+		(
+			echo "# file: ${name}";
+			seq --format "user.%08g=\"abcdefgh\"" "${nr}" "$((nr + incr + 1))"
+			echo "user.v$(printf "%.08d" "$nr")=\"${bigval}\""
+			echo
+		) | setfattr --restore -
+	done
+
+	# ... and in the second loop we delete all the remote attrs to
+	# fragment the attr fork mappings.
+	for ((i = 0; i < nr; i += incr)); do
+		setfattr -x "user.v$(printf "%.08d" "$i")" "${name}"
+	done
+}
+
 # Fill up some percentage of the remaining free space
 __populate_fill_fs() {
 	dir="$1"
@@ -327,7 +378,7 @@ _scratch_xfs_populate() {
 
 	# BTREE
 	echo "+ btree attr"
-	__populate_create_attr "${SCRATCH_MNT}/ATTR.FMT_BTREE" "$((64 * blksz / 40))" true
+	__populate_xfs_create_btree_attr "${SCRATCH_MNT}/ATTR.FMT_BTREE" "$isize" "$dblksz"
 
 	# trusted namespace
 	touch ${SCRATCH_MNT}/ATTR.TRUSTED
