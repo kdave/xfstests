@@ -1199,6 +1199,47 @@ _repair_scratch_fs()
     esac
 }
 
+_repair_test_fs()
+{
+	case $FSTYP in
+	xfs)
+		_test_xfs_repair "$@" >$tmp.repair 2>&1
+		res=$?
+		if [ "$res" -ne 0 ]; then
+			echo "xfs_repair returns $res; replay log?" >>$tmp.repair
+			_test_mount
+			res=$?
+			if [ $res -gt 0 ]; then
+				echo "mount returns $res; zap log?" >>$tmp.repair
+				_xfs_repair_test_fs -L >>$tmp.repair 2>&1
+				echo "log zap returns $?" >> $tmp.repair
+			else
+				umount "$TEST_DEV"
+			fi
+			_xfs_repair_test_fs "$@" >>$tmp.repair 2>&1
+			res=$?
+		fi
+		;;
+	*)
+		# Let's hope fsck -y suffices...
+		fsck -t $FSTYP -fy $TEST_DEV >$tmp.repair 2>&1
+		res=$?
+		if test "$res" -lt 4 ; then
+			res=0
+		fi
+		;;
+	esac
+	if [ $res -ne 0 ]; then
+		_log_err "_repair_test_fs: failed, err=$res"
+		echo "*** fsck.$FSTYP output ***"	>>$seqres.full
+		cat $tmp.repair				>>$seqres.full
+		echo "*** end fsck.$FSTYP output"	>>$seqres.full
+
+	fi
+	rm -f $tmp.repair
+	return $res
+}
+
 _get_pids_by_name()
 {
     if [ $# -ne 1 ]

@@ -536,7 +536,12 @@ _check_filesystems()
 	local ret=0
 
 	if [ -f ${RESULT_DIR}/require_test ]; then
-		_check_test_fs || ret=1
+		if ! _check_test_fs ; then
+			ret=1
+			echo "Trying to repair broken TEST_DEV file system"
+			_repair_test_fs
+			_test_mount
+		fi
 		rm -f ${RESULT_DIR}/require_test*
 	else
 		_test_unmount 2> /dev/null
