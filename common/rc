@@ -569,6 +569,9 @@ _test_mkfs()
     nfs*)
 	# do nothing for nfs
 	;;
+    afs*)
+	# do nothing for afs
+	;;
     cifs)
 	# do nothing for cifs
 	;;
@@ -613,6 +616,9 @@ _try_mkfs_dev()
     case $FSTYP in
     nfs*)
 	# do nothing for nfs
+	;;
+    afs*)
+	# do nothing for afs
 	;;
     9p)
 	# do nothing for 9p
@@ -660,7 +666,7 @@ _mkfs_dev()
     rm -f $tmp.mkfserr $tmp.mkfsstd
 }
 
-# remove all files in $SCRATCH_MNT, useful when testing on NFS/CIFS
+# remove all files in $SCRATCH_MNT, useful when testing on NFS/AFS/CIFS
 _scratch_cleanup_files()
 {
 	case $FSTYP in
@@ -688,7 +694,7 @@ _scratch_mkfs()
 	local mkfs_status
 
 	case $FSTYP in
-	nfs*|cifs|ceph|overlay|glusterfs|pvfs2|9p|fuse|virtiofs)
+	nfs*|afs|cifs|ceph|overlay|glusterfs|pvfs2|9p|fuse|virtiofs)
 		# unable to re-create this fstyp, just remove all files in
 		# $SCRATCH_MNT to avoid EEXIST caused by the leftover files
 		# created in previous runs
@@ -1612,7 +1618,7 @@ _check_mounted_on()
 
 	if [ -n "$type" -a "`_fs_type $dev`" != "$type" ]; then
 		echo "$devname=$dev is mounted but not a type $type filesystem"
-		# raw $DF_PROG cannot handle NFS/CIFS/overlay correctly
+		# raw $DF_PROG cannot handle NFS/AFS/CIFS/overlay correctly
 		_df_device $dev
 		return 3 # 3 = mounted as wrong type
 	fi
@@ -1644,6 +1650,15 @@ _require_scratch_nocheck()
 		;;
 	nfs*)
 		echo $SCRATCH_DEV | grep -q ":/" > /dev/null 2>&1
+		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV"
+		fi
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
+	afs)
+		echo $SCRATCH_DEV | grep -q "^%" > /dev/null 2>&1
 		if [ -z "$SCRATCH_DEV" -o "$?" != "0" ]; then
 			_notrun "this test requires a valid \$SCRATCH_DEV"
 		fi
@@ -1844,6 +1859,15 @@ _require_test()
 		;;
 	nfs*)
 		echo $TEST_DEV | grep -q ":/" > /dev/null 2>&1
+		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
+			_notrun "this test requires a valid \$TEST_DEV"
+		fi
+		if [ ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
+	afs)
+		echo $TEST_DEV | grep -q "^%" > /dev/null 2>&1
 		if [ -z "$TEST_DEV" -o "$?" != "0" ]; then
 			_notrun "this test requires a valid \$TEST_DEV"
 		fi
@@ -2964,7 +2988,7 @@ _scratch_mkfs_richacl()
 		;;
 	ext4)   _scratch_mkfs -O richacl
 		;;
-	nfs*|cifs|overlay)
+	nfs*|afs|cifs|overlay)
 		_scratch_mkfs
 		;;
 	esac
@@ -3204,6 +3228,9 @@ _check_test_fs()
     nfs)
 	# no way to check consistency for nfs
 	;;
+    afs)
+	# no way to check consistency for afs
+	;;
     cifs)
 	# no way to check consistency for cifs
 	;;
@@ -3267,6 +3294,9 @@ _check_scratch_fs()
 	;;
     nfs*)
 	# Don't know how to check an NFS filesystem, yet.
+	;;
+    afs*)
+	# Don't know how to check an AFS filesystem, yet.
 	;;
     cifs)
 	# Don't know how to check a CIFS filesystem, yet.
@@ -4052,7 +4082,7 @@ _require_atime()
 {
 	_exclude_scratch_mount_option "noatime"
 	case $FSTYP in
-	nfs|cifs|virtiofs)
+	nfs|afs|cifs|virtiofs)
 		_notrun "atime related mount options have no effect on $FSTYP"
 		;;
 	ceph)
@@ -4587,7 +4617,7 @@ _require_congruent_file_oplen()
 	local oplen="$2"
 
 	case $FSTYP in
-	nfs*|cifs|9p|virtiofs|ceph|glusterfs|overlay|pvfs2)
+	nfs*|afs|cifs|9p|virtiofs|ceph|glusterfs|overlay|pvfs2)
 		# Network filesystems don't know about (or tell the client
 		# about) the underlying file allocation unit and they generally
 		# pass the file IO request to the underlying filesystem, so we
