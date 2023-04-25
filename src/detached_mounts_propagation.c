@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -127,7 +126,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		exit_log("%m - Failed to create new mount namespace");
 
-	ret = mount(NULL, base_dir, NULL, MS_REC | MS_SHARED, NULL);
+	ret = sys_mount(NULL, base_dir, NULL, MS_REC | MS_SHARED, NULL);
 	if (ret < 0)
 		exit_log("%m - Failed to make base_dir shared mountpoint");
 
@@ -174,7 +173,7 @@ int main(int argc, char *argv[])
 		}
 		close(fd_tree);
 
-		ret = umount2(target, MNT_DETACH);
+		ret = sys_umount2(target, MNT_DETACH);
 		if (ret < 0) {
 			fprintf(stderr, "%m - Failed to unmount %s", target);
 			exit_code = EXIT_FAILURE;

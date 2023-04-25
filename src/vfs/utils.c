@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <sys/eventfd.h>
 #include <sys/fsuid.h>
-#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
