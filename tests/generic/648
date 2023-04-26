@@ -74,14 +74,14 @@ snap_loop_fs() {
 
 fsstress=($FSSTRESS_PROG $FSSTRESS_AVOID -d "$loopmnt" -n 999999 -p "$((LOAD_FACTOR * 4))")
 
-for i in $(seq 1 $((25 * TIME_FACTOR)) ); do
+while _soak_loop_running $((25 * TIME_FACTOR)); do
 	touch $scratch_aliveflag
 	snap_loop_fs >> $seqres.full 2>&1 &
 
 	if ! _mount $loopimg $loopmnt -o loop; then
 		rm -f $scratch_aliveflag
 		_metadump_dev $loopimg $seqres.loop.$i.md
-		_fail "iteration $i loopimg mount failed"
+		_fail "iteration $SOAK_LOOPIDX loopimg mount failed"
 		break
 	fi
 
@@ -126,12 +126,12 @@ for i in $(seq 1 $((25 * TIME_FACTOR)) ); do
 	done
 	if [ $is_unmounted -ne 0 ];then
 		cat $tmp.unmount.err
-		_fail "iteration $i scratch unmount failed"
+		_fail "iteration $SOAK_LOOPIDX scratch unmount failed"
 	fi
 	_dmerror_load_working_table
 	if ! _dmerror_mount; then
 		_metadump_dev $DMERROR_DEV $seqres.scratch.$i.md
-		_fail "iteration $i scratch mount failed"
+		_fail "iteration $SOAK_LOOPIDX scratch mount failed"
 	fi
 done
 

@@ -5183,6 +5183,40 @@ _require_unix_perm_checking()
 	esac
 }
 
+# Decide if a soak test should continue looping.  The sole parameter is the
+# number of soak loops that the test wants to run by default.  The actual
+# loop iteration number is stored in SOAK_LOOPIDX until the loop completes.
+#
+# If the test runner set a SOAK_DURATION value, this predicate will keep
+# looping until it has run for at least that long.
+_soak_loop_running() {
+	local max_soak_loops="$1"
+
+	test -z "$SOAK_LOOPIDX" && SOAK_LOOPIDX=1
+
+	if [ -n "$SOAK_DURATION" ]; then
+		if [ -z "$SOAK_DEADLINE" ]; then
+			SOAK_DEADLINE="$(( $(date +%s) + SOAK_DURATION))"
+		fi
+
+		local now="$(date +%s)"
+		if [ "$now" -gt "$SOAK_DEADLINE" ]; then
+			unset SOAK_DEADLINE
+			unset SOAK_LOOPIDX
+			return 1
+		fi
+		SOAK_LOOPIDX=$((SOAK_LOOPIDX + 1))
+		return 0
+	fi
+
+	if [ "$SOAK_LOOPIDX" -gt "$max_soak_loops" ]; then
+		unset SOAK_LOOPIDX
+		return 1
+	fi
+	SOAK_LOOPIDX=$((SOAK_LOOPIDX + 1))
+	return 0
+}
+
 init_rc
 
 ################################################################################
