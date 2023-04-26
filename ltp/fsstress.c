@@ -386,6 +386,8 @@ char		*execute_cmd = NULL;
 int		execute_freq = 1;
 struct print_string	flag_str = {0};
 
+struct timespec deadline = { 0 };
+
 void	add_to_flist(int, int, int, int);
 void	append_pathname(pathname_t *, char *);
 int	attr_list_path(pathname_t *, char *, const int);
@@ -459,6 +461,34 @@ void sg_handler(int signum)
 	}
 }
 
+bool
+keep_looping(int i, int loops)
+{
+	int ret;
+
+	if (deadline.tv_nsec) {
+		struct timespec now;
+
+		ret = clock_gettime(CLOCK_MONOTONIC, &now);
+		if (ret) {
+			perror("CLOCK_MONOTONIC");
+			return false;
+		}
+
+		return now.tv_sec <= deadline.tv_sec;
+	}
+
+	if (!loops)
+		return true;
+
+	return i < loops;
+}
+
+static struct option longopts[] = {
+	{"duration", optional_argument, 0, 256},
+	{ }
+};
+
 int main(int argc, char **argv)
 {
 	char		buf[10];
@@ -478,13 +508,14 @@ int main(int argc, char **argv)
 	struct sigaction action;
 	int		loops = 1;
 	const char	*allopts = "cd:e:f:i:l:m:M:n:o:p:rRs:S:vVwx:X:zH";
+	long long	duration;
 
 	errrange = errtag = 0;
 	umask(0);
 	nops = sizeof(ops) / sizeof(ops[0]);
 	ops_end = &ops[nops];
 	myprog = argv[0];
-	while ((c = getopt(argc, argv, allopts)) != -1) {
+	while ((c = getopt_long(argc, argv, allopts, longopts, NULL)) != -1) {
 		switch (c) {
 		case 'c':
 			cleanup = 1;
@@ -578,6 +609,26 @@ int main(int argc, char **argv)
 
 		case 'X':
 			execute_freq = strtoul(optarg, NULL, 0);
+			break;
+		case 256:  /* --duration */
+			if (!optarg) {
+				fprintf(stderr, "Specify time with --duration=\n");
+				exit(87);
+			}
+			duration = strtoll(optarg, NULL, 0);
+			if (duration < 1) {
+				fprintf(stderr, "%lld: invalid duration\n", duration);
+				exit(88);
+			}
+
+			i = clock_gettime(CLOCK_MONOTONIC, &deadline);
+			if (i) {
+				perror("CLOCK_MONOTONIC");
+				exit(89);
+			}
+
+			deadline.tv_sec += duration;
+			deadline.tv_nsec = 1;
 			break;
 		case '?':
 			fprintf(stderr, "%s - invalid parameters\n",
@@ -721,7 +772,7 @@ int main(int argc, char **argv)
 				}
 			}
 #endif
-			for (i = 0; !loops || (i < loops); i++)
+			for (i = 0; keep_looping(i, loops); i++)
 				doproc();
 #ifdef AIO
 			if(io_destroy(io_ctx) != 0) {
@@ -1121,6 +1172,26 @@ again:
 	return NULL;
 }
 
+bool
+keep_running(opnum_t opno, opnum_t operations)
+{
+	int ret;
+
+	if (deadline.tv_nsec) {
+		struct timespec now;
+
+		ret = clock_gettime(CLOCK_MONOTONIC, &now);
+		if (ret) {
+			perror("CLOCK_MONOTONIC");
+			return false;
+		}
+
+		return now.tv_sec <= deadline.tv_sec;
+	}
+
+	return opno < operations;
+}
+
 void
 doproc(void)
 {
@@ -1149,7 +1220,7 @@ doproc(void)
 	srandom(seed);
 	if (namerand)
 		namerand = random();
-	for (opno = 0; opno < operations; opno++) {
+	for (opno = 0; keep_running(opno, operations); opno++) {
 		if (execute_cmd && opno && opno % dividend == 0) {
 			if (verbose)
 				printf("%lld: execute command %s\n", opno,
@@ -1935,6 +2006,7 @@ usage(void)
 	printf("   -V               specifies verifiable logging mode (omitting inode numbers)\n");
 	printf("   -X ncmd          number of calls to the -x command (default 1)\n");
 	printf("   -H               prints usage and exits\n");
+	printf("   --duration=s     ignore any -n setting and run for this many seconds\n");
 }
 
 void

@@ -193,6 +193,8 @@ int fsx_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
 #define fsxread(a,b,c,d)	fsx_rw(READ, a,b,c,d)
 #define fsxwrite(a,b,c,d)	fsx_rw(WRITE, a,b,c,d)
 
+struct timespec deadline;
+
 const char *replayops = NULL;
 const char *recordops = NULL;
 FILE *	fsxlogf = NULL;
@@ -2457,6 +2459,7 @@ usage(void)
         -Z: O_DIRECT (use -R, -W, -r and -w too)\n\
 	--replay-ops opsfile: replay ops from recorded .fsxops file\n\
 	--record-ops[=opsfile]: dump ops file also on success. optionally specify ops file name\n\
+	--duration=seconds: ignore any -N setting and run for this many seconds\n\
 	fname: this filename is REQUIRED (no default)\n");
 	exit(90);
 }
@@ -2739,9 +2742,33 @@ __test_fallocate(int mode, const char *mode_str)
 #endif
 }
 
+bool
+keep_running(void)
+{
+	int ret;
+
+	if (deadline.tv_nsec) {
+		struct timespec now;
+
+		ret = clock_gettime(CLOCK_MONOTONIC, &now);
+		if (ret) {
+			perror("CLOCK_MONOTONIC");
+			return false;
+		}
+
+		return now.tv_sec <= deadline.tv_sec;
+	}
+
+	if (numops == -1)
+		return true;
+
+	return numops-- != 0;
+}
+
 static struct option longopts[] = {
 	{"replay-ops", required_argument, 0, 256},
 	{"record-ops", optional_argument, 0, 255},
+	{"duration", optional_argument, 0, 254},
 	{ }
 };
 
@@ -2753,6 +2780,7 @@ main(int argc, char **argv)
 	char logfile[PATH_MAX];
 	struct stat statbuf;
 	int o_flags = O_RDWR|O_CREAT|O_TRUNC;
+	long long duration;
 
 	logfile[0] = 0;
 	dname[0] = 0;
@@ -2950,6 +2978,26 @@ main(int argc, char **argv)
 			o_direct = O_DIRECT;
 			o_flags |= O_DIRECT;
 			break;
+		case 254:  /* --duration */
+			if (!optarg) {
+				fprintf(stderr, "Specify time with --duration=\n");
+				exit(87);
+			}
+			duration = strtoll(optarg, NULL, 0);
+			if (duration < 1) {
+				fprintf(stderr, "%lld: invalid duration\n", duration);
+				exit(88);
+			}
+
+			i = clock_gettime(CLOCK_MONOTONIC, &deadline);
+			if (i) {
+				perror("CLOCK_MONOTONIC");
+				exit(89);
+			}
+
+			deadline.tv_sec += duration;
+			deadline.tv_nsec = 1;
+			break;
 		case 255:  /* --record-ops */
 			if (optarg)
 				snprintf(opsfile, sizeof(opsfile), "%s", optarg);
@@ -3145,7 +3193,7 @@ main(int argc, char **argv)
 	if (xchg_range_calls)
 		xchg_range_calls = test_xchg_range();
 
-	while (numops == -1 || numops--)
+	while (keep_running())
 		if (!test())
 			break;
 
