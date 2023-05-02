@@ -669,17 +669,18 @@ check_buffers(char *buf, unsigned offset, unsigned size)
 	if (memcmp(good_buf + offset, buf, size) != 0) {
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, fname);
-		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
+		prt("%-10s  %-6s  %-6s  %s\n", "OFFSET", "GOOD", "BAD", "RANGE");
 		while (size > 0) {
 			c = good_buf[offset];
 			t = buf[i];
 			if (c != t) {
 			        if (n < 16) {
 					bad = short_at(&buf[i]);
-				        prt("0x%05x\t0x%04x\t0x%04x", offset,
-				            short_at(&good_buf[offset]), bad);
+				        prt("0x%-8x  0x%04x  0x%04x  0x%x\n",
+					    offset,
+					    short_at(&good_buf[offset]), bad,
+					    n);
 					op = buf[offset & 1 ? i+1 : i];
-				        prt("\t0x%05x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
 						  "the bad data may be %u\n",
