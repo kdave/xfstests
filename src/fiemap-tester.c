@@ -375,6 +375,13 @@ check_hole(struct fiemap *fiemap, int fd, __u64 logical_offset, int blocksize)
 		if (logical_offset + blocksize < start)
 			break;
 
+		/*
+		 * Filesystems are allowed to fill in holes with preallocated
+		 * unwritten extents
+		 */
+		if (extent->fe_flags & FIEMAP_EXTENT_UNWRITTEN)
+			continue;
+
 		if (logical_offset >= start &&
 		    logical_offset < end) {
 
