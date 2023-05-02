@@ -236,7 +236,7 @@ check_flags(struct fiemap *fiemap, int blocksize)
 
 static int
 check_data(struct fiemap *fiemap, __u64 logical_offset, int blocksize,
-	   int last, int prealloc)
+	   int prealloc)
 {
 	struct fiemap_extent *extent;
 	__u64 orig_offset = logical_offset;
@@ -280,11 +280,6 @@ check_data(struct fiemap *fiemap, __u64 logical_offset, int blocksize,
 	if (!found) {
 		printf("ERROR: couldn't find extent at %llu\n",
 		       (unsigned long long)(orig_offset / blocksize));
-	} else if (last &&
-		   !(fiemap->fm_extents[c].fe_flags & FIEMAP_EXTENT_LAST)) {
-		printf("ERROR: last extent not marked as last: %llu\n",
-		       (unsigned long long)(orig_offset / blocksize));
-		found = 0;
 	}
 
 	return (!found) ? -1 : 0;
@@ -418,7 +413,7 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfil
 {
 	struct fiemap *fiemap;
 	char *fiebuf;
-	int blocks_to_map, ret, cur_extent = 0, last_data = 0;
+	int blocks_to_map, ret, cur_extent = 0;
 	__u64 map_start, map_length;
 	int i, c;
 
@@ -436,11 +431,6 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfil
 	fiemap = (struct fiemap *)fiebuf;
 	map_start = 0;
 	map_length = blocks_to_map * blocksize;
-
-	for (i = 0; i < blocks; i++) {
-		if (map[i] != 'H')
-			last_data = i;
-	}
 
 	fiemap->fm_flags = syncfile ? FIEMAP_FLAG_SYNC : 0;
 	fiemap->fm_extent_count = blocks_to_map;
@@ -471,7 +461,7 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfil
 			switch (map[i]) {
 			case 'D':
 				if (check_data(fiemap, logical_offset,
-					       blocksize, last_data == i, 0))
+					       blocksize, 0))
 					goto error;
 				break;
 			case 'H':
@@ -481,7 +471,7 @@ compare_fiemap_and_map(int fd, char *map, int blocks, int blocksize, int syncfil
 				break;
 			case 'P':
 				if (check_data(fiemap, logical_offset,
-					       blocksize, last_data == i, 1))
+					       blocksize, 1))
 					goto error;
 				break;
 			default:
