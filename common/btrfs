@@ -647,3 +647,32 @@ _btrfs_get_file_extent_item_bytenr()
 		grep -A4 "$file_extent_key" | grep "disk byte" | \
 		$AWK_PROG '{ print $5 }'
 }
+
+# Check that btrfs-progs has support for the logical-resolve command, with the
+# -o option, and that the kernel supports the logical to ino ioctl v2 (which
+# adds the ignore offset parameter).
+_require_btrfs_scratch_logical_resolve_v2()
+{
+	local bytenr
+
+	# First check if we have support for calling the v2 logical resolve
+	# ioctl in btrfs-progs. Check if the -o options exists, which makes
+	# btrfs-progs call v2 of the ioctl (because the flag
+	# BTRFS_LOGICAL_INO_ARGS_IGNORE_OFFSET is only supported in v2).
+	_require_btrfs_command inspect-internal logical-resolve -o
+	_require_scratch
+
+	_scratch_mkfs > /dev/null || \
+		_fail "_require_btrfs_scratch_logical_resolve_v2: mkfs failed"
+	_scratch_mount
+
+	$XFS_IO_PROG -f -c "pwrite -q 0 128K" "$SCRATCH_MNT/file1"
+	bytenr=$(_btrfs_get_file_extent_item_bytenr "$SCRATCH_MNT/file1" 0)
+	$BTRFS_UTIL_PROG inspect-internal logical-resolve -o $bytenr \
+			 $SCRATCH_MNT > /dev/null
+	if [ $? -ne 0 ]; then
+		_scratch_unmount
+		_notrun "Logical resolve ioctl v2 not supported in the kernel"
+	fi
+	_scratch_unmount
+}

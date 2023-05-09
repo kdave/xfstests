@@ -1,0 +1,154 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 287
+#
+# Test btrfs' logical to inode ioctls (v1 and v2).
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot clone punch
+
+. ./common/filter
+. ./common/reflink
+
+_supported_fs btrfs
+_require_btrfs_scratch_logical_resolve_v2
+_require_scratch_reflink
+_require_xfs_io_command "fpunch"
+
+# This is a test case to test the logical to ino ioctl in general but it also
+# serves as a regression a test for an issue fixed by the following commit.
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix backref walking not returning all inode refs"
+
+query_logical_ino()
+{
+	$BTRFS_UTIL_PROG inspect-internal logical-resolve -P $* $SCRATCH_MNT
+}
+
+_scratch_mkfs >> $seqres.full || _fail "mkfs failed"
+_scratch_mount
+
+# Create a file with two extents:
+#
+# 1) One 4M extent covering the file range [0, 4M)
+# 2) Another 4M extent covering the file range [4M, 8M)
+$XFS_IO_PROG -f -c "pwrite -S 0xab -b 4M 0 4M" \
+	     -c "fsync" \
+	     -c "pwrite -S 0xcd -b 4M 4M 8M" \
+	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io
+
+echo "resolve first extent:"
+first_extent_bytenr=$(_btrfs_get_file_extent_item_bytenr "$SCRATCH_MNT/foo" 0)
+query_logical_ino $first_extent_bytenr
+
+echo "resolve second extent:"
+sz_4m=$((4 * 1024 * 1024))
+second_extent_bytenr=$(_btrfs_get_file_extent_item_bytenr "$SCRATCH_MNT/foo" $sz_4m)
+query_logical_ino $second_extent_bytenr
+
+# Now clone both extents twice to the end of the file.
+sz_8m=$((8 * 1024 * 1024))
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 $sz_8m $sz_8m" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+sz_16m=$((16 * 1024 * 1024))
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 $sz_16m $sz_8m" $SCRATCH_MNT/foo \
+	| _filter_xfs_io
+
+# Now lets resolve the extents again. They should now be listed 3 times each, at
+# the right file offsets.
+echo "resolve first extent:"
+query_logical_ino $first_extent_bytenr
+
+echo "resolve second extent:"
+query_logical_ino $second_extent_bytenr
+
+# Now lets punch a 2M hole at file offset 0. This changes the first file extent
+# item to point to the first extent with an offset of 2M and a length of 2M, so
+# doing a logical resolve with the bytenr of the first extent should not return
+# file offset 0.
+$XFS_IO_PROG -c "fpunch 0 2M" $SCRATCH_MNT/foo
+echo "resolve first extent after punching hole at file range [0, 2M):"
+query_logical_ino $first_extent_bytenr
+
+# Doing a logical resolve call with the BTRFS_LOGICAL_INO_ARGS_IGNORE_OFFSET
+# flag (passing -o to logical-resolve command) should ignore file extent offsets
+# and return file offsets for all file extent items that point to any section of
+# the extent (3 of them, file offsets 2M, 8M and 16M).
+echo "resolve first extent with ignore offset option:"
+query_logical_ino -o $first_extent_bytenr
+
+# Now query for file extent items containing the first extent at offset +1M.
+# Should only return the file offsets 9M and 17M.
+bytenr=$(( $first_extent_bytenr + 1024 * 1024))
+echo "resolve first extent +1M offset:"
+query_logical_ino $bytenr
+
+# Now do the same query again but with the ignore offset ioctl argument. This
+# should returns 3 results, for file offsets 2M, 8M and 16M.
+echo "resolve first extent +1M offset with ignore offset option:"
+query_logical_ino -o $bytenr
+
+# Now query for file extent items containing the first extent at offset +3M.
+# Should return the file offsets 3M and 11M and 19M.
+bytenr=$(( $first_extent_bytenr + 3 * 1024 * 1024))
+echo "resolve first extent +3M offset:"
+query_logical_ino $bytenr
+
+# Now do the same query again but with the ignore offset ioctl argument. This
+# should returns 3 results, for file offsets 2M, 8M and 16M.
+echo "resolve first extent +3M offset with ignore offset option:"
+query_logical_ino -o $bytenr
+
+# Now create two snapshots and then do some queries.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1 \
+	| _filter_scratch
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2 \
+	| _filter_scratch
+
+# Query for the first extent (at offset 0). Should give two entries for each
+# root - default subvolume and the 2 snapshots, for file offsets 8M and 16M.
+echo "resolve first extent:"
+query_logical_ino $first_extent_bytenr
+
+# Query for the first extent (at offset 0) with the ignore offset option.
+# Should give 3 entries for each root - default subvolume and the 2 snapshots,
+# for file offsets 2M, 8M and 16M.
+echo "resolve first extent with ignore offset option:"
+query_logical_ino -o $first_extent_bytenr
+
+# Now lets punch a 1M hole at file offset 4M. This changes the second file
+# extent item to point to the second extent with an offset of 1M and a length
+# of 3M, so doing a logical resolve with the bytenr of the second extent should
+# not return file offset 4M for root 5 (default subvolume), bit it should return
+# file offset 4M for the files in the snapshots. For all the roots, it should
+# return file offsets 12M and 20M.
+$XFS_IO_PROG -c "fpunch 4M 1M" $SCRATCH_MNT/foo
+echo "resolve second extent after punching hole at file range [4M, 5M):"
+query_logical_ino $second_extent_bytenr
+
+# Repeat the query but with the ignore offset option. We should get 3 entries
+# for each root. For the snapshot roots, we should get entries for file offsets
+# 4M, 12M and 20M, while for the default subvolume (root 5) we should get for
+# file offsets 5M, 12M and 20M.
+echo "resolve second extent with ignore offset option:"
+query_logical_ino -o $second_extent_bytenr
+
+# Now delete the first snapshot and repeat the last 2 queries.
+$BTRFS_UTIL_PROG subvolume delete -C $SCRATCH_MNT/snap1 | _filter_scratch
+
+# Query the second extent with an offset of 0, should return file offsets 12M
+# and 20M for the default subvolume (root 5) and file offsets 4M, 12M and 20M
+# for the second snapshot root.
+echo "resolve second extent:"
+query_logical_ino $second_extent_bytenr
+
+# Query the second extent with the ignore offset option, should return file
+# offsets 5M, 12M and 20M for the default subvolume (root 5) and file offsets
+# 4M, 12M and 20M for the second snapshot root.
+echo "resolve second extent with ignore offset option:"
+query_logical_ino -o $second_extent_bytenr
+
+status=0
+exit
