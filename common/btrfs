@@ -624,3 +624,26 @@ _require_btrfs_send_v2()
 	[ $(cat /sys/fs/btrfs/features/send_stream_version) -gt 1 ] || \
 		_notrun "kernel does not support send stream v2"
 }
+
+# Get the bytenr associated to a file extent item at a given file offset.
+#
+# NOTE: At the moment this only works if the file is on a filesystem on top of
+#       the scratch device and the file is in the default subvolume (tree id 5).
+_btrfs_get_file_extent_item_bytenr()
+{
+	local file="$1"
+	local offset="$2"
+	local ino=$(stat -c "%i" "$file")
+	local file_extent_key="($ino EXTENT_DATA $offset)"
+
+	_require_btrfs_command inspect-internal dump-tree
+
+	# The tree dump command below works on committed roots, by reading from
+	# a device directly, so we have to sync the filesystem to commit any
+	# open transaction.
+	$BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 5 $SCRATCH_DEV | \
+		grep -A4 "$file_extent_key" | grep "disk byte" | \
+		$AWK_PROG '{ print $5 }'
+}

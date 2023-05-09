@@ -22,24 +22,9 @@ _begin_fstest auto quick preallocrw
 _supported_fs btrfs
 _require_scratch
 _require_xfs_io_command "falloc" "-k"
-_require_btrfs_command inspect-internal dump-tree
 _require_btrfs_command inspect-internal logical-resolve
 _fixed_by_kernel_commit 560840afc3e6 \
 	"btrfs: fix resolving backrefs for inline extent followed by prealloc"
-
-dump_tree() {
-	$BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV
-}
-
-get_extent_data() {
-	local ino=$1
-	dump_tree $SCRATCH_DEV | grep -A4 "($ino EXTENT_DATA "
-}
-
-get_prealloc_offset() {
-	local ino=$1
-	get_extent_data $ino | grep "disk byte" | $AWK_PROG '{print $5}'
-}
 
 # This test needs to create conditions s.t. the special inode's inline extent
 # is the first item in a leaf. Therefore, fix a leaf size and add
@@ -81,8 +66,7 @@ done
 
 # grab the prealloc offset from dump tree while it's still the only
 # extent data item for the inode
-ino=$(stat -c '%i' $f.evil)
-logical=$(get_prealloc_offset $ino)
+logical=$(_btrfs_get_file_extent_item_bytenr $f.evil 0)
 
 # do the "small write; fsync; small write" pattern which reproduces the desired
 # item pattern of an inline extent followed by a preallocated extent. The 23
