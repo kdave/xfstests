@@ -28,6 +28,11 @@ _scratch_mount
 $BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/newvol >> $seqres.full 2>&1 \
 	|| _fail "couldn't create subvol"
 
+# Subvolume creation used to commit the transaction used to create it, but after
+# the patch "btrfs: don't commit transaction for every subvol create", that
+# changed, so sync the fs to commit any open transaction.
+$BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+
 $BTRFS_UTIL_PROG inspect-internal dump-tree -t1 $SCRATCH_DEV \
 	| grep -q "256 ROOT_ITEM"  ||	_fail "First subvol with id 256 doesn't exist"
 
