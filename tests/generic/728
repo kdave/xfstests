@@ -1,0 +1,43 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Netapp Inc., All Rights Reserved.
+#
+# FS QA Test 728
+#
+# Test a bug where the NFS client wasn't sending a post-op GETATTR to the
+# server after setting an xattr, resulting in `stat` reporting a stale ctime.
+#
+. ./common/preamble
+_begin_fstest auto quick attr
+
+# Import common functions
+. ./common/attr
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_attrs
+
+rm -rf $TEST_DIR/testfile
+touch $TEST_DIR/testfile
+
+check_xattr_op()
+{
+	what=$1
+	shift 1
+
+	before_ctime=$(stat -c %z $TEST_DIR/testfile)
+	# maximum known ctime granularity is 2s (e.g. FAT)
+	sleep 2
+	$SETFATTR_PROG $* $TEST_DIR/testfile
+	after_ctime=$(stat -c %z $TEST_DIR/testfile)
+
+	test "$before_ctime" != "$after_ctime" || echo "Expected ctime to change after $what."
+}
+
+check_xattr_op setxattr -n user.foobar -v 123
+check_xattr_op removexattr -x user.foobar
+
+echo "Silence is golden"
+status=0
+exit
