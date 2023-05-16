@@ -41,6 +41,7 @@
  */
 static void prepare_pipe(int p[2])
 {
+	unsigned int r = 0;
 	if (pipe(p)) {
 		perror("pipe failed");
 		abort();
@@ -51,7 +52,7 @@ static void prepare_pipe(int p[2])
 
 	/* fill the pipe completely; each pipe_buffer will now have
 	   the PIPE_BUF_FLAG_CAN_MERGE flag */
-	for (unsigned r = pipe_size; r > 0;) {
+	for (r = pipe_size; r > 0;) {
 		unsigned n = r > sizeof(buffer) ? sizeof(buffer) : r;
 		write(p[1], buffer, n);
 		r -= n;
@@ -59,7 +60,7 @@ static void prepare_pipe(int p[2])
 
 	/* drain the pipe, freeing all pipe_buffer instances (but
 	   leaving the flags initialized) */
-	for (unsigned r = pipe_size; r > 0;) {
+	for (r = pipe_size; r > 0;) {
 		unsigned n = r > sizeof(buffer) ? sizeof(buffer) : r;
 		read(p[0], buffer, n);
 		r -= n;
