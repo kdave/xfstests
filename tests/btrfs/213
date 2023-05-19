@@ -31,7 +31,7 @@ _fixed_by_kernel_commit 1dae7e0e58b4 \
 _scratch_mkfs >> $seqres.full
 _scratch_mount
 
-runtime=4
+runtime=8
 
 # Create enough IO so that we need around $runtime seconds to relocate it.
 #
@@ -42,11 +42,21 @@ sleep $runtime
 kill $write_pid
 wait $write_pid
 
+# Unmount and mount again the fs to clear any cached data and metadata, so that
+# it's less likely balance has already finished when we try to cancel it below.
+_scratch_cycle_mount
+
 # Now balance should take at least $runtime seconds, we can cancel it at
 # $runtime/2 to ensure a success cancel.
 _run_btrfs_balance_start -d --bg "$SCRATCH_MNT"
-sleep $(($runtime / 2))
-$BTRFS_UTIL_PROG balance cancel "$SCRATCH_MNT"
+sleep $(($runtime / 4))
+# It's possible that balance has already completed. It's unlikely but often
+# it may happen due to virtualization, caching and other factors, so ignore
+# any error about no balance currently running.
+$BTRFS_UTIL_PROG balance cancel "$SCRATCH_MNT" 2>&1 | grep -iq 'not in progress'
+if [ $? -eq 0 ]; then
+	_not_run "balance finished before we could cancel it"
+fi
 
 # Now check if we can finish relocating metadata, which should finish very
 # quickly.
