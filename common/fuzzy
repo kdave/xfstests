@@ -422,6 +422,12 @@ __scratch_xfs_fuzz_field_norepair() {
 		return 1
 	fi
 
+	# Skip scrub and health check if scrub is not supported
+	if ! _supports_xfs_scrub $SCRATCH_MNT $SCRATCH_DEV; then
+		__scratch_xfs_fuzz_unmount
+		return 0
+	fi
+
 	# Make sure online scrub will catch whatever we fuzzed
 	__fuzz_notify "++ Detect fuzzed field (online)"
 	_scratch_scrub -n -a 1 -e continue 2>&1
