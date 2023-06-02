@@ -38,8 +38,9 @@ test_clone_and_read_compressed_extent()
 	$CLONER_PROG -s 0 -d $((16 * $PAGE_SIZE)) -l $((16 * $PAGE_SIZE)) \
 		$SCRATCH_MNT/foo $SCRATCH_MNT/foo
 
-	echo "File contents before unmount:"
-	od -t x1 $SCRATCH_MNT/foo | _filter_od
+	echo "Hash before unmount:" >> $seqres.full
+	old_md5=$(_md5_checksum "$SCRATCH_MNT/foo")
+	echo "$old_md5" >> $seqres.full
 
 	# Remount the fs or clear the page cache to trigger the bug in btrfs.
 	# Because the extent has an uncompressed length that is a multiple of 16
@@ -52,9 +53,15 @@ test_clone_and_read_compressed_extent()
 	# correctly.
 	_scratch_cycle_mount
 
-	echo "File contents after remount:"
+	echo "Hash after remount:" >> $seqres.full
 	# Must match the digest we got before.
-	od -t x1 $SCRATCH_MNT/foo | _filter_od
+	new_md5=$(_md5_checksum "$SCRATCH_MNT/foo")
+	echo "$new_md5" >> $seqres.full
+	if [ "$old_md5" != "$new_md5" ]; then
+		echo "Hash mismatches after remount"
+	else
+		echo "Hash matches after remount"
+	fi
 }
 
 echo -e "\nTesting with zlib compression..."
