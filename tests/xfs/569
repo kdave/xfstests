@@ -1,0 +1,32 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test 569
+#
+# Check for any installed example mkfs config files and validate that
+# mkfs.xfs can properly use them.
+#
+. ./common/preamble
+_begin_fstest mkfs
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_scratch
+
+ls /usr/share/xfsprogs/mkfs/*.conf &>/dev/null || \
+	_notrun "No mkfs.xfs config files installed"
+
+# We only fail if mkfs.xfs fails outright, ignoring warnings etc
+echo "Silence is golden"
+
+for CONFIG in /usr/share/xfsprogs/mkfs/*.conf; do
+	$MKFS_XFS_PROG -c options=$CONFIG -f $SCRATCH_DEV &>>$seqres.full || \
+		echo "mkfs.xfs config file $CONFIG failed"
+done
+
+# success, all done
+status=0
+exit
