@@ -1,0 +1,69 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 289
+#
+# Make sure btrfs-scrub reports errors correctly for repaired sectors.
+#
+. ./common/preamble
+_begin_fstest auto quick scrub repair
+
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+_require_odirect
+# Overwriting data is forbidden on a zoned block device
+_require_non_zoned_device "${SCRATCH_DEV}"
+
+# The errors reported would be in the unit of sector, thus the number
+# is dependent on the sectorsize.
+_require_btrfs_support_sectorsize 4096
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: scrub: also report errors hit during the initial read"
+
+# Create a single btrfs with DUP data profile, and create one 128K file.
+_scratch_mkfs -s 4k -d dup -b 1G >> $seqres.full 2>&1
+_scratch_mount
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" \
+	> /dev/null
+sync
+
+logical=$(_btrfs_get_first_logical "$SCRATCH_MNT/foobar")
+
+physical1=$(_btrfs_get_physical ${logical} 1)
+devpath1=$(_btrfs_get_device_path ${logical} 1)
+_scratch_unmount
+
+echo " corrupt stripe #1, devpath $devpath1 physical $physical1" \
+	>> $seqres.full
+$XFS_IO_PROG -d -c "pwrite -S 0xf1 -b 64K $physical1 128K" $devpath1 \
+	>> $seqres.full
+
+# Mount and do a scrub and compare the output
+_scratch_mount
+$BTRFS_UTIL_PROG scrub start -BR $SCRATCH_MNT >> $tmp.scrub_report 2>&1
+cat $tmp.scrub_report >> $seqres.full
+
+# Csum errors should be 128K/4K = 32
+csum_errors=$(grep "csum_errors" $tmp.scrub_report | $AWK_PROG '{print $2}')
+if [ $csum_errors -ne 32 ]; then
+	echo "csum_errors incorrect, expect 32 has $csum_errors"
+fi
+
+# And all errors should be repaired, thus corrected errors should also be 32.
+corrected_errors=$(grep "corrected_errors" $tmp.scrub_report | $AWK_PROG '{print $2}')
+if [ $corrected_errors -ne 32 ]; then
+	echo "corrected_errors incorrect, expect 32 has $corrected_errors"
+fi
+
+echo "Silence is golden"
+
+status=0
+exit
