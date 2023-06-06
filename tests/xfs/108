@@ -32,6 +32,14 @@ test_files()
 	done
 }
 
+# Some filesystem configurations fragment the file mapping more than others,
+# which leads to the quota block counts being slightly higher than the 48MB
+# written.
+filter_quota()
+{
+	sed -e 's/48\.[01]M/48M/g' | _filter_quota
+}
+
 test_accounting()
 {
 	echo "### some controlled buffered, direct and mmapd IO (type=$type)"
@@ -49,9 +57,9 @@ test_accounting()
 		$here/src/lstat64 $file | head -3 | _filter_scratch
 	done
 	$XFS_IO_PROG -c syncfs $SCRATCH_MNT
-	$XFS_QUOTA_PROG -c "quota -hnb -$type $id" $QARGS | _filter_quota
-	$XFS_QUOTA_PROG -c "quota -hni -$type $id" $QARGS | _filter_quota
-	$XFS_QUOTA_PROG -c "quota -hnr -$type $id" $QARGS | _filter_quota
+	$XFS_QUOTA_PROG -c "quota -hnb -$type $id" $QARGS | filter_quota
+	$XFS_QUOTA_PROG -c "quota -hni -$type $id" $QARGS | filter_quota
+	$XFS_QUOTA_PROG -c "quota -hnr -$type $id" $QARGS | filter_quota
 }
 
 export MOUNT_OPTIONS="-opquota"
