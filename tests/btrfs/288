@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 288
+#
+# Make sure btrfs-scrub respects the read-only flag.
+#
+. ./common/preamble
+_begin_fstest auto repair quick volume scrub
+
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch_dev_pool 2
+
+
+_require_odirect
+# Overwriting data is forbidden on a zoned block device
+_require_non_zoned_device "${SCRATCH_DEV}"
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: scrub: respect the read-only flag during repair"
+
+_scratch_dev_pool_get 2
+
+# Step 1, create a raid btrfs with one 128K file
+echo "step 1......mkfs.btrfs"
+_scratch_pool_mkfs -d raid1 -b 1G >> $seqres.full 2>&1
+_scratch_mount
+
+$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 128K 0 128K" "$SCRATCH_MNT/foobar" |\
+	_filter_xfs_io
+
+# Step 2, corrupt one mirror so we can still repair the fs.
+echo "step 2......corrupt one mirror"
+# ensure btrfs-map-logical sees the tree updates
+sync
+
+logical=$(_btrfs_get_first_logical $SCRATCH_MNT/foobar)
+
+physical1=$(_btrfs_get_physical ${logical} 1)
+devpath1=$(_btrfs_get_device_path ${logical} 1)
+
+_scratch_unmount
+
+echo " corrupt stripe #1, devpath $devpath1 physical $physical1" \
+	>> $seqres.full
+$XFS_IO_PROG -d -c "pwrite -S 0xf1 -b 64K $physical1 64K" $devpath1 \
+	> /dev/null
+
+# Step 3, do a read-only scrub, which should not fix the corruption.
+echo "step 3......do a read-only scrub"
+_scratch_mount -o ro
+$BTRFS_UTIL_PROG scrub start -BRrd $SCRATCH_MNT >> $seqres.full 2>&1
+_scratch_unmount
+
+# Step 4, make sure the corruption is still there
+echo "step 4......verify the corruption is not repaired"
+echo "  the first 16 bytes of the extent at mirror 1:"
+$XFS_IO_PROG -c "pread -qv $physical1 16" $devpath1 |\
+	_filter_xfs_io_offset
+
+_scratch_dev_pool_put
+# success, all done
+status=0
+exit
