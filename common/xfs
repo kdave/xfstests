@@ -721,6 +721,16 @@ _scratch_xfs_mdrestore()
 	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$@"
 }
 
+# Do not use xfs_repair (offline fsck) to rebuild the filesystem
+_xfs_skip_offline_rebuild() {
+	touch "$RESULT_DIR/.skip_rebuild"
+}
+
+# Do not use xfs_scrub (online fsck) to rebuild the filesystem
+_xfs_skip_online_rebuild() {
+	touch "$RESULT_DIR/.skip_orebuild"
+}
+
 # run xfs_check and friends on a FS.
 _check_xfs_filesystem()
 {
@@ -849,7 +859,7 @@ _check_xfs_filesystem()
 	fi
 
 	# Optionally test the index rebuilding behavior.
-	if [ -n "$TEST_XFS_REPAIR_REBUILD" ]; then
+	if [ -n "$TEST_XFS_REPAIR_REBUILD" ] && [ ! -e "$RESULT_DIR/.skip_rebuild" ]; then
 		rebuild_ok=1
 		$XFS_REPAIR_PROG $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
 		if [ $? -ne 0 ]; then

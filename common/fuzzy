@@ -721,6 +721,9 @@ _scratch_xfs_fuzz_metadata() {
 	# Always capture full core dumps from crashing tools
 	ulimit -c unlimited
 
+	_xfs_skip_online_rebuild
+	_xfs_skip_offline_rebuild
+
 	echo "${fields}" | while read field; do
 		echo "${verbs}" | while read fuzzverb; do
 			__scratch_xfs_fuzz_mdrestore
@@ -1356,6 +1359,9 @@ _scratch_xfs_stress_scrub() {
 		rm -f "$tmp.scrub"
 	fi
 
+	_xfs_skip_online_rebuild
+	_xfs_skip_offline_rebuild
+
 	local start="$(date +%s)"
 	local end
 	if [ -n "$SOAK_DURATION" ]; then
@@ -1429,7 +1435,6 @@ __scratch_xfs_stress_setup_force_rebuild() {
 # and wait for 30*TIME_FACTOR seconds to see if the filesystem goes down.
 # Same requirements and arguments as _scratch_xfs_stress_scrub.
 _scratch_xfs_stress_online_repair() {
-	touch "$RESULT_DIR/.skip_orebuild"	# no need to test online rebuild
 	__scratch_xfs_stress_setup_force_rebuild
 	XFS_SCRUB_FORCE_REPAIR=1 _scratch_xfs_stress_scrub "$@"
 }
