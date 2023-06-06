@@ -910,25 +910,28 @@ _check_xfs_filesystem()
 		# repairs considerably when the directory tree is very large.
 		find $mntpt &>/dev/null &
 
-		XFS_SCRUB_FORCE_REPAIR=1 "$XFS_SCRUB_PROG" -v -d $mntpt > $tmp.scrub 2>&1
-		if [ $? -ne 0 ]; then
-			if grep -q 'No space left on device' $tmp.scrub; then
+		XFS_SCRUB_FORCE_REPAIR=1 "$XFS_SCRUB_PROG" -v -d $mntpt 2>&1 | gzip > $tmp.scrub.gz
+		ret=$?
+		if [ $ret -ne 0 ]; then
+			if zgrep -q 'No space left on device' $tmp.scrub.gz; then
 				# It's not an error if the fs does not have
 				# enough space to complete a repair.  We will
 				# check everything, though.
-				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d ran out of space ***" >> $seqres.full
-				cat $tmp.scrub >> $seqres.full
+				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d ran out of space ret=$ret ***" >> $seqres.full
+				echo "See $seqres.scrubout.gz for details." >> $seqres.full
+				mv $tmp.scrub.gz $seqres.scrubout.gz
 				echo "*** end xfs_scrub output" >> $seqres.full
 			else
 				_log_err "_check_xfs_filesystem: filesystem on $device failed scrub orebuild"
-				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d output ***" >> $seqres.full
-				cat $tmp.scrub >> $seqres.full
+				echo "*** XFS_SCRUB_FORCE_REPAIR=1 xfs_scrub -v -d output ret=$ret ***" >> $seqres.full
+				echo "See $seqres.scrubout.gz for details." >> $seqres.full
+				mv $tmp.scrub.gz $seqres.scrubout.gz
 				echo "*** end xfs_scrub output" >> $seqres.full
 				ok=0
 				orebuild_ok=0
 			fi
 		fi
-		rm -f $tmp.scrub
+		rm -f $tmp.scrub.gz
 
 		# Clear force_repair because xfs_scrub could have set it
 		$XFS_IO_PROG -x -c 'inject noerror' "$mntpt" >> $seqres.full
