@@ -1,0 +1,42 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 729
+#
+# Trigger page faults in the same file during read and write
+#
+# This is generic/647 with an additional test that writes a memory-mapped page
+# onto itself using direct I/O.
+#
+# The kernel will invalidate the page cache before carrying out the write, so
+# filesystems that fault in the page and then carry out the direct I/O write
+# with page faults disabled will never make any progress.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	rm -f $TEST_DIR/mmap-rw-fault.tmp
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+_supported_fs generic
+_require_test
+_require_odirect
+_require_test_program mmap-rw-fault
+
+echo "Silence is golden"
+
+$here/src/mmap-rw-fault -2 $TEST_DIR/mmap-rw-fault.tmp
+
+status=$?
+exit

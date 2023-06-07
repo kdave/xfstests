@@ -20,6 +20,7 @@
 #include <string.h>
 #include <errno.h>
 #include <err.h>
+#include <getopt.h>
 
 char *filename;
 unsigned int page_size;
@@ -109,11 +110,29 @@ static ssize_t do_write(int fd, const void *buf, size_t count, off_t offset)
 	return count2;
 }
 
+static void usage(const char *argv0)
+{
+	fprintf(stderr, "Usage: %s [-2] {filename}\n", argv0);
+	exit(2);
+}
+
 int main(int argc, char *argv[])
 {
-	if (argc != 2)
-		errx(1, "no test filename argument given");
-	filename = argv[1];
+	int opt, opt_2 = 0;
+
+	while ((opt = getopt(argc, argv, "2")) != -1) {
+		switch(opt) {
+		case '2':
+			opt_2 = 1;
+			break;
+		default:
+			usage(argv[0]);
+		}
+	}
+
+	if (optind + 1 != argc)
+		usage(argv[0]);
+	filename = argv[optind];
 
 	page_size = ret = sysconf(_SC_PAGE_SIZE);
 	if (ret == -1)
@@ -178,6 +197,14 @@ int main(int argc, char *argv[])
 	if (memcmp(addr, page, page_size))
 		errx(1, "pread (D_DIRECT) from hole is broken");
 	done();
+
+	if (opt_2) {
+		init('f', O_RDWR | O_DIRECT);
+		ret = do_write(fd, addr + page_size, page_size, page_size);
+		if (ret != page_size)
+			err(1, "pwrite %s (O_DIRECT): %ld != %u", filename, ret, page_size);
+		done();
+	}
 
 	if (unlink(filename))
 		err(1, "unlink %s", filename);
