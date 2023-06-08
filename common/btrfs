@@ -598,7 +598,11 @@ _btrfs_buffered_read_on_mirror()
 	local offset=$4
 	local size=$5
 
-	echo 3 > /proc/sys/vm/drop_caches
+	# The drop_caches doesn't seem to drop every pages on aarch64 with
+	# 64K page size.
+	# So here as another workaround, cycle mount the SCRATCH_MNT to ensure
+	# the cache are dropped.
+	_scratch_cycle_mount
 	while [[ -z $( (( BASHPID % nr_mirrors == mirror )) &&
 		exec $XFS_IO_PROG \
 			-c "pread -b $size $offset $size" $file) ]]; do
