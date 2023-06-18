@@ -24,7 +24,9 @@ _scratch_mount
 for i in $(seq 0 500); do
 	$XFS_IO_PROG -f -c "pwrite 0 4K" $SCRATCH_MNT/$i >/dev/null
 done
-_scratch_unmount &
+# For overlayfs, avoid unmouting the base fs after _scratch_mount
+# tries to mount the base fs
+$UMOUNT_PROG $SCRATCH_MNT &
 _scratch_mount
 wait
 
