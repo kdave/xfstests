@@ -399,9 +399,9 @@ if $have_test_arg; then
 		*)	# Expand test pattern (e.g. xfs/???, *fs/001)
 			list=$(cd $SRC_DIR; echo $1)
 			for t in $list; do
-				test_dir=`dirname $t`
-				test_dir=${test_dir#$SRC_DIR/*}
-				test_name=`basename $t`
+				t=${t#$SRC_DIR/}
+				test_dir=${t%%/*}
+				test_name=${t##*/}
 				group_file=$SRC_DIR/$test_dir/group.list
 
 				if grep -Eq "^$test_name" $group_file; then
@@ -849,18 +849,14 @@ function run_section()
 
 		# the filename for the test and the name output are different.
 		# we don't include the tests/ directory in the name output.
-		export seqnum=`echo $seq | sed -e "s;$SRC_DIR/;;"`
-
-		# Similarly, the result directory needs to replace the tests/
-		# part of the test location.
-		group=`dirname $seq`
+		export seqnum=${seq#$SRC_DIR/}
+		group=${seqnum%%/*}
 		if $OPTIONS_HAVE_SECTIONS; then
-			export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;${RESULT_BASE}/$section;"`
 			REPORT_DIR="$RESULT_BASE/$section"
 		else
-			export RESULT_DIR=`echo $group | sed -e "s;$SRC_DIR;$RESULT_BASE;"`
 			REPORT_DIR="$RESULT_BASE"
 		fi
+		export RESULT_DIR="$REPORT_DIR/$group"
 		seqres="$REPORT_DIR/$seqnum"
 
 		# Generate the entire section report with whatever test results
@@ -872,9 +868,6 @@ function run_section()
 					     "" &> /dev/null
 		fi
 
-		mkdir -p $RESULT_DIR
-		rm -f ${RESULT_DIR}/require_scratch*
-		rm -f ${RESULT_DIR}/require_test*
 		echo -n "$seqnum"
 
 		if $showme; then
@@ -899,6 +892,9 @@ function run_section()
 		fi
 
 		# really going to try and run this one
+		mkdir -p $RESULT_DIR
+		rm -f ${RESULT_DIR}/require_scratch*
+		rm -f ${RESULT_DIR}/require_test*
 		rm -f $seqres.out.bad $seqres.hints
 
 		# check if we really should run it
