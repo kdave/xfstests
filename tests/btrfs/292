@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 292
+#
+# Test btrfs behavior with large chunks (size beyond 4G) for basic read-write
+# and discard.
+# This test focus on RAID0.
+#
+. ./common/preamble
+_begin_fstest auto raid volume trim
+
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch_dev_pool 6
+_require_fstrim
+_fixed_by_kernel_commit a7299a18a179 \
+	"btrfs: fix u32 overflows when left shifting @stripe_nr"
+
+_scratch_dev_pool_get 6
+
+
+datasize=$((5 * 1024 * 1024 * 1024))
+filesize=$((8 * 1024 * 1024))
+nr_files=$(($datasize / $filesize))
+
+# Make sure each device has at least 2G.
+# Btrfs has a limits on per-device stripe length of 1G.
+# Double that so that we can ensure a RAID0 data chunk with 6G size.
+for i in $SCRATCH_DEV_POOL; do
+	devsize=$(blockdev --getsize64 "$i")
+	if [ $devsize -lt $((2 * 1024 * 1024 * 1024)) ]; then
+		_scratch_dev_pool_put
+		_notrun "device $i is too small, need at least 2G"
+	fi
+done
+
+_scratch_pool_mkfs -m raid1 -d raid0 >> $seqres.full 2>&1
+
+# We disable async/sync auto discard, so that btrfs won't try to
+# cache the discard result which can cause unexpected skip for some trim range.
+_scratch_mount -o nodiscard
+_require_batched_discard $SCRATCH_MNT
+
+# Fill the data chunk with 5G data.
+for (( i = 0; i < $nr_files; i++ )); do
+	$XFS_IO_PROG -f -c "pwrite -i /dev/urandom 0 $filesize" \
+		$SCRATCH_MNT/file_$i > /dev/null
+done
+sync
+echo "=== With initial 5G data written ===" >> $seqres.full
+$BTRFS_UTIL_PROG filesystem df $SCRATCH_MNT >> $seqres.full
+
+_scratch_unmount
+
+# Make sure we haven't corrupted anything.
+$BTRFS_UTIL_PROG check --check-data-csum $SCRATCH_DEV >> $seqres.full 2>&1
+if [ $? -ne 0 ]; then
+	_scratch_dev_pool_put
+	_fail "data corruption detected after initial data filling"
+fi
+
+_scratch_mount -o nodiscard
+# Delete half of the data, and do discard
+rm -rf - "$SCRATCH_MNT/*[02468]"
+sync
+$FSTRIM_PROG $SCRATCH_MNT
+
+echo "=== With 2.5G data trimmed ===" >> $seqres.full
+$BTRFS_UTIL_PROG filesystem df $SCRATCH_MNT >> $seqres.full
+_scratch_unmount
+
+# Make sure fstrim doesn't corrupt anything.
+$BTRFS_UTIL_PROG check --check-data-csum $SCRATCH_DEV >> $seqres.full 2>&1
+if [ $? -ne 0 ]; then
+	_scratch_dev_pool_put
+	_fail "data corruption detected after running fstrim"
+fi
+
+_scratch_dev_pool_put
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
