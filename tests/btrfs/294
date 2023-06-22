@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 294
+#
+# Test btrfs write behavior with large RAID56 chunks (size beyond 4G).
+#
+. ./common/preamble
+_begin_fstest auto raid volume
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch_dev_pool 8
+_fixed_by_kernel_commit a7299a18a179 \
+	"btrfs: fix u32 overflows when left shifting @stripe_nr"
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: use a dedicated helper to convert stripe_nr to offset"
+
+_scratch_dev_pool_get 8
+
+datasize=$((5 * 1024 * 1024 * 1024))
+
+
+workload()
+{
+	local data_profile=$1
+
+	_scratch_pool_mkfs -m raid1 -d $data_profile >> $seqres.full 2>&1
+	_scratch_mount
+	$XFS_IO_PROG -f -c "pwrite -b 1m 0 $datasize" $SCRATCH_MNT/foobar > /dev/null
+
+	# Unpatched kernel would trigger an ASSERT() or crash at writeback.
+	sync
+
+	echo "=== With initial 5G data written ($data_profile) ===" >> $seqres.full
+	$BTRFS_UTIL_PROG filesystem df $SCRATCH_MNT >> $seqres.full
+	_scratch_unmount
+
+	# Make sure we haven't corrupted anything.
+	$BTRFS_UTIL_PROG check --check-data-csum $SCRATCH_DEV >> $seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		_scratch_dev_pool_put
+		_fail "data corruption detected after initial data filling"
+	fi
+}
+
+# Make sure each device has at least 2G.
+# Btrfs has a limits on per-device stripe length of 1G.
+# Double that so that we can ensure a RAID6 data chunk with 6G size.
+for i in $SCRATCH_DEV_POOL; do
+	devsize=$(blockdev --getsize64 "$i")
+	if [ $devsize -lt $((2 * 1024 * 1024 * 1024)) ]; then
+		_scratch_dev_pool_put
+		_notrun "device $i is too small, need at least 2G"
+	fi
+done
+
+workload raid5
+workload raid6
+
+_scratch_dev_pool_put
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
