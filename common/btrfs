@@ -601,8 +601,17 @@ _btrfs_buffered_read_on_mirror()
 	# The drop_caches doesn't seem to drop every pages on aarch64 with
 	# 64K page size.
 	# So here as another workaround, cycle mount the SCRATCH_MNT to ensure
-	# the cache are dropped.
-	_scratch_cycle_mount
+	# the cache are dropped, but we can not use _scratch_cycle_mount, as
+	# we may mount whatever dm device at SCRATCH_MNT.
+	# So here we grab the mounted block device and its mount options, then
+	# unmount and re-mount with the same device and options.
+	local dev=$(findmnt -n -T $SCRATCH_MNT -o SOURCE)
+	local opts=$(findmnt -n -T $SCRATCH_MNT -o OPTIONS)
+	if [ -z "$dev" -o -z "$opts" ]; then
+		_fail "failed to grab mount info of $SCRATCH_MNT"
+	fi
+	_scratch_unmount
+	_mount $dev -o $opts $SCRATCH_MNT
 	while [[ -z $( (( BASHPID % nr_mirrors == mirror )) &&
 		exec $XFS_IO_PROG \
 			-c "pread -b $size $offset $size" $file) ]]; do
