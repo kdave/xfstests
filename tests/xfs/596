@@ -1,0 +1,79 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 596
+#
+# growfs QA tests - repeatedly fill/grow the rt volume of the filesystem check
+# the filesystem contents after each operation.  This is the rt equivalent of
+# xfs/041.
+#
+. ./common/preamble
+_begin_fstest growfs ioctl auto
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_scratch_unmount
+	rm -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs xfs
+
+_require_scratch
+_require_realtime
+_require_no_large_scratch_dev
+_scratch_unmount 2>/dev/null
+
+_fill()
+{
+    if [ $# -ne 1 ]; then echo "Usage: _fill \"path\"" 1>&2 ; exit 1; fi
+    _do "Fill filesystem" \
+	"$here/src/fill2fs --verbose --dir=$1 --seed=0 --filesize=65536 --stddev=32768 --list=- >>$tmp.manifest"
+}
+
+_do_die_on_error=message_only
+rtsize=32
+echo -n "Make $rtsize megabyte rt filesystem on SCRATCH_DEV and mount... "
+_scratch_mkfs_xfs -rsize=${rtsize}m | _filter_mkfs 2> "$tmp.mkfs" >> $seqres.full
+test "${PIPESTATUS[0]}" -eq 0 || _fail "mkfs failed"
+
+. $tmp.mkfs
+onemeginblocks=`expr 1048576 / $dbsize`
+_scratch_mount
+
+# We're growing the realtime device, so force new file creation there
+_xfs_force_bdev realtime $SCRATCH_MNT
+
+echo "done"
+
+# full allocation group -> partial; partial -> expand partial + new partial;
+# partial -> expand partial; partial -> full
+# cycle through 33m -> 67m -> 75m -> 96m
+for size in 33 67 75 96
+do
+    grow_size=`expr $size \* $onemeginblocks`
+    _fill $SCRATCH_MNT/fill_$size
+    _do "Grow filesystem to ${size}m" "xfs_growfs -R $grow_size $SCRATCH_MNT"
+    echo -n "Flush filesystem... "
+    _do "_scratch_unmount"
+    _do "_try_scratch_mount"
+    echo "done"
+    echo -n "Check files... "
+    if ! _do "$here/src/fill2fs_check $tmp.manifest"; then
+      echo "fail (see $seqres.full)"
+      _do "cat $tmp.manifest"
+      _do "ls -altrR $SCRATCH_MNT"
+      status=1 ; exit
+    fi
+    echo "done"
+done
+
+# success, all done
+echo "Growfs tests passed."
+status=0 ; exit
