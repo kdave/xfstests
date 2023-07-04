@@ -27,6 +27,7 @@ DUMP_OUTPUT=false
 iterations=1
 istop=false
 loop_on_fail=0
+exclude_tests=()
 
 # This is a global variable used to pass test failure text to reporting gunk
 _err_msg=""
@@ -46,7 +47,7 @@ export DIFF_LENGTH=${DIFF_LENGTH:=10}
 # by default don't output timestamps
 timestamp=${TIMESTAMP:=false}
 
-rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.xlist $tmp.report.* $tmp.arglist
+rm -f $tmp.list $tmp.tmp $tmp.grep $here/$iam.out $tmp.report.* $tmp.arglist
 
 SRC_GROUPS="generic shared"
 export SRC_DIR="tests"
@@ -302,13 +303,15 @@ while [ $# -gt 0 ]; do
 		;;
 	-e)
 		xfile=$2; shift ;
-		echo "$xfile" | tr ', ' '\n\n' >> $tmp.xlist
+		readarray -t -O "${#exclude_tests[@]}" exclude_tests < \
+			<(echo "$xfile" | tr ', ' '\n\n')
 		;;
 
 	-E)	xfile=$2; shift ;
 		if [ -f $xfile ]; then
-			sed "s/#.*$//" "$xfile" >> $tmp.xlist
-	        fi
+			readarray -t -O ${#exclude_tests[@]} exclude_tests < \
+				<(sed "s/#.*$//" $xfile)
+		fi
 		;;
 	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
 	-S)	EXCLUDE_SECTION="$EXCLUDE_SECTION $2"; shift ;;
@@ -383,7 +386,7 @@ if [ -n "$subdir_xfile" ]; then
 	for d in $SRC_GROUPS $FSTYP; do
 		[ -f $SRC_DIR/$d/$subdir_xfile ] || continue
 		for f in `sed "s/#.*$//" $SRC_DIR/$d/$subdir_xfile`; do
-			echo $d/$f >> $tmp.xlist
+			exclude_tests+=($d/$f)
 		done
 	done
 fi
@@ -570,13 +573,14 @@ _check_filesystems()
 _expunge_test()
 {
 	local TEST_ID="$1"
-	if [ -s $tmp.xlist ]; then
-		if grep -q $TEST_ID $tmp.xlist; then
+
+	for f in "${exclude_tests[@]}"; do
+		if [ "${TEST_ID}" == "$f" ]; then
 			echo "       [expunged]"
-			return 1
+			return 0
 		fi
-	fi
-	return 0
+	done
+	return 1
 }
 
 # retain files which would be overwritten in subsequent reruns of the same test
@@ -871,8 +875,7 @@ function run_section()
 		echo -n "$seqnum"
 
 		if $showme; then
-			_expunge_test $seqnum
-			if [ $? -eq 1 ]; then
+			if _expunge_test $seqnum; then
 				tc_status="expunge"
 			else
 				echo
@@ -898,8 +901,7 @@ function run_section()
 		rm -f $seqres.out.bad $seqres.hints
 
 		# check if we really should run it
-		_expunge_test $seqnum
-		if [ $? -eq 1 ]; then
+		if _expunge_test $seqnum; then
 			tc_status="expunge"
 			_stash_test_status "$seqnum" "$tc_status"
 			continue
