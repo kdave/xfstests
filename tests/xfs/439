@@ -20,8 +20,16 @@ _begin_fstest auto quick fuzzers log
 # real QA test starts here
 _supported_fs xfs
 _require_scratch_nocheck
-# We corrupt XFS on purpose, and check if assert failures would crash system.
-_require_no_xfs_bug_on_assert
+
+# We corrupt XFS on purpose, and check if assert failures would crash the
+# system when trying to xfs_log_mount.  Hence this is a regression test for:
+_fixed_by_kernel_commit 9c92ee208b1f \
+	"xfs: validate sb_logsunit is a multiple of the fs blocksize"
+
+# This used to be _require_no_xfs_bug_on_assert, but now we've fixed the sb
+# verifier to reject this before xfs_log_mount gets to it:
+_fixed_by_kernel_commit f1e1765aad7d \
+	"xfs: journal geometry is not properly bounds checked"
 
 rm -f "$seqres.full"
 
@@ -33,7 +41,7 @@ blksz=$(_scratch_xfs_get_sb_field blocksize)
 _scratch_xfs_set_sb_field logsunit $((blksz - 1)) >> $seqres.full 2>&1
 
 # Check if logsunit is set correctly
-lsunit=$(_scratch_xfs_get_sb_field logsunit)
+lsunit=$(_scratch_xfs_get_sb_field logsunit 2>/dev/null)
 [ $lsunit -ne $((blksz - 1)) ] && _notrun "failed to set sb_logsunit"
 
 # Mount and writing log may trigger a crash on buggy kernel
