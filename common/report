@@ -109,13 +109,16 @@ _xunit_make_section_report()
 	local notrun_count="$4"
 	local sect_time="$5"
 	local timestamp
+	local tmp_fn="$REPORT_DIR/result.xml.new"
+	local out_fn="$REPORT_DIR/result.xml"
 
 	if [ $sect_name == '-no-sections-' ]; then
 		sect_name='global'
 	fi
 	local report=$tmp.report.xunit.$sect_name.xml
+	rm -f "$tmp_fn"
 	# Header
-	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $REPORT_DIR/result.xml
+	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > "$tmp_fn"
 	if [ -n "$test_start_time" ]; then
 		timestamp="$(date -Iseconds --date="$test_start_time")"
 	else
@@ -123,7 +126,7 @@ _xunit_make_section_report()
 	fi
 
 	local fstests_ns="https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git"
-	cat >> $REPORT_DIR/result.xml << ENDL
+	cat >> "$tmp_fn" << ENDL
 <testsuite
  xmlns="$fstests_ns"
  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -142,19 +145,20 @@ ENDL
 	__generate_report_vars
 
 	# Properties
-	echo -e "\t<properties>" >> $REPORT_DIR/result.xml
+	echo -e "\t<properties>" >> "$tmp_fn"
 	(for key in "${!REPORT_VARS[@]}"; do
 		_xunit_add_property "$key" "${REPORT_VARS["$key"]}"
 	done;
 	for p in "${REPORT_ENV_LIST[@]}"; do
 		_xunit_add_property "$p" "${!p}"
-	done) | sort >> $REPORT_DIR/result.xml
-	echo -e "\t</properties>" >> $REPORT_DIR/result.xml
+	done) | sort >> "$tmp_fn"
+	echo -e "\t</properties>" >> "$tmp_fn"
 	if [ -f $report ]; then
-		cat $report >> $REPORT_DIR/result.xml
+		cat $report >> "$tmp_fn"
 	fi
-	echo "</testsuite>" >> $REPORT_DIR/result.xml
-	echo "Xunit report: $REPORT_DIR/result.xml"
+	echo "</testsuite>" >> "$tmp_fn"
+	sync "$tmp_fn" && mv "$tmp_fn" "$out_fn"
+	echo "Xunit report: $out_fn"
 }
 
 _xunit_make_testcase_report()
