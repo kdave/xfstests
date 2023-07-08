@@ -3872,9 +3872,12 @@ _link_out_file()
 }
 
 # convert urandom incompressible data to compressible text data
+# There's a weird bug in od where it can start dumping to stdout and not notice
+# that stdout has disconnect and so it'll spew forever
 _ddt()
 {
-	od /dev/urandom | dd iflag=fullblock ${*}
+	local isize=$1; shift
+	od -N $isize /dev/urandom | dd iflag=fullblock ${*}
 }
 
 #takes files, randomdata
@@ -3889,7 +3892,7 @@ _nfiles()
                     if [ "$2" == "false" ]; then
                         dd if=/dev/zero of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     elif [ "$2" == "comp" ]; then
-                        _ddt of=$file bs=1024 count=$size 2>&1 | _filter_dd
+                        _ddt ${size}K of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     else
                         dd if=/dev/urandom of=$file bs=1024 count=$size 2>&1 | _filter_dd
                     fi
