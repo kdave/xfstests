@@ -60,7 +60,7 @@ _read_modify_write()
 	do
 		FSIZE=`stat -t $i | cut -d" " -f2`
 		dd if=$i of=/dev/null obs=$FSIZE count=1 status=noxfer 2>/dev/null &
-		_ddt of=$i obs=$FSIZE count=1 status=noxfer 2>/dev/null &
+		_ddt $FSIZE of=$i obs=$FSIZE count=1 status=noxfer 2>/dev/null &
 	done
 	wait $!
 }
@@ -74,7 +74,6 @@ _fill_blk()
 	local NBLK
 	local FALLOC
 	local WS
-
 	for i in `find /$1 -type f`
 	do
 		FSIZE=`stat -t $i | cut -d" " -f2`
@@ -82,7 +81,7 @@ _fill_blk()
 		NBLK=`stat -c "%b" $i`
 		FALLOC=$(($BLKS * $NBLK))
 		WS=$(($FALLOC - $FSIZE))
-		_ddt of=$i oseek=$FSIZE obs=$WS count=1 status=noxfer 2>/dev/null &
+		_ddt $WS of=$i oseek=$FSIZE obs=$WS count=1 status=noxfer 2>/dev/null &
 	done
 	wait $!
 }
