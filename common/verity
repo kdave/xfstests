@@ -38,10 +38,13 @@ _require_scratch_verity()
 			"or mkfs options are not compatible with verity"
 	fi
 
+	local fstyp=${1:-$FSTYP}
+	local scratch_mnt=${2:-$SCRATCH_MNT}
+
 	# The filesystem may be aware of fs-verity but have it disabled by
 	# CONFIG_FS_VERITY=n.  Detect support via sysfs.
-	if [ ! -e /sys/fs/$FSTYP/features/verity ]; then
-		_notrun "kernel $FSTYP isn't configured with verity support"
+	if [ ! -e /sys/fs/$fstyp/features/verity ]; then
+		_notrun "kernel $fstyp isn't configured with verity support"
 	fi
 
 	# Select a default Merkle tree block size for when tests don't
@@ -57,7 +60,7 @@ _require_scratch_verity()
 	#
 	# Therefore, we default to merkle_tree_block_size == min(fs_block_size,
 	# page_size).  That maximizes the chance of verity actually working.
-	local fs_block_size=$(_get_block_size $SCRATCH_MNT)
+	local fs_block_size=$(_get_block_size $scratch_mnt)
 	local page_size=$(get_page_size)
 	if (( fs_block_size <= page_size )); then
 		FSV_BLOCK_SIZE=$fs_block_size
@@ -68,8 +71,8 @@ _require_scratch_verity()
 	# The filesystem may have fs-verity enabled but not actually usable by
 	# default.  E.g., ext4 only supports verity on extent-based files, so it
 	# doesn't work on ext3-style filesystems.  So, try actually using it.
-	if ! _fsv_can_enable $SCRATCH_MNT/tmpfile; then
-		_notrun "$FSTYP verity isn't usable by default with these mkfs options"
+	if ! _fsv_can_enable $scratch_mnt/tmpfile; then
+		_notrun "$fstyp verity isn't usable by default with these mkfs options"
 	fi
 
 	_scratch_unmount
@@ -201,6 +204,9 @@ _scratch_mkfs_verity()
 	btrfs)
 		_scratch_mkfs
 		;;
+	overlay)
+		_scratch_mkfs # This relies on the scratch fs supporting verity
+                ;;
 	*)
 		_notrun "No verity support for $FSTYP"
 		;;
