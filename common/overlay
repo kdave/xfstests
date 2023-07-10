@@ -17,15 +17,19 @@ if [ -n "$OVL_BASE_FSTYP" ];then
 fi
 
 # helper function to do the actual overlayfs mount operation
+# accepts "-" as upperdir for non-upper overlayfs
 _overlay_mount_dirs()
 {
 	local lowerdir=$1
 	local upperdir=$2
 	local workdir=$3
 	shift 3
+	local diropts="-olowerdir=$lowerdir"
 
-	$MOUNT_PROG -t overlay -o lowerdir=$lowerdir -o upperdir=$upperdir \
-		    -o workdir=$workdir `_common_dev_mount_options $*`
+	[ -n "$upperdir" ] && [ "$upperdir" != "-" ] && \
+		diropts+=",upperdir=$upperdir,workdir=$workdir"
+
+	$MOUNT_PROG -t overlay $diropts `_common_dev_mount_options $*`
 }
 
 # Mount with same options/mnt/dev of scratch mount, but optionally
