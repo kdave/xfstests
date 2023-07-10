@@ -7,7 +7,7 @@
 # Test metadata only copy up functionality.
 #
 . ./common/preamble
-_begin_fstest auto quick metacopy prealloc
+_begin_fstest auto quick metacopy redirect prealloc
 
 # Import common functions.
 . ./common/filter
@@ -123,6 +123,13 @@ mount_overlay()
 	_overlay_scratch_mount_dirs "$_lowerdir" $upperdir $workdir -o redirect_dir=on,index=on,metacopy=on
 }
 
+mount_ro_overlay()
+{
+	local _lowerdir=$1
+
+	_overlay_scratch_mount_dirs "$_lowerdir" "-" "-" -o ro,redirect_dir=follow,metacopy=on
+}
+
 umount_overlay()
 {
 	$UMOUNT_PROG $SCRATCH_MNT
@@ -146,7 +153,8 @@ test_common()
 	check_file_size_contents $SCRATCH_MNT/$_target $_size "$_data"
 	check_file_blocks $SCRATCH_MNT/$_target $_blocks
 
-	# Make sure copied up file is a metacopy file.
+	# Trigger metadata copy up and check existence of metacopy xattr.
+	chmod 400 $SCRATCH_MNT/$_target
 	umount_overlay
 	check_metacopy $upperdir/$_target "y"
 	check_file_size_contents $upperdir/$_target $_size ""
@@ -165,7 +173,7 @@ test_common()
 create_basic_files()
 {
 	_scratch_mkfs
-	mkdir -p $lowerdir $lowerdir2 $upperdir $workdir $workdir2
+	mkdir -p $lowerdir/subdir $lowerdir2 $upperdir $workdir $workdir2
 	mkdir -p $upperdir/$udirname
 	echo "$lowerdata" > $lowerdir/$lowername
 	chmod 600 $lowerdir/$lowername
@@ -184,12 +192,19 @@ create_lower_link()
 
 prepare_midlayer()
 {
+	local _redirect=$1
+
 	_scratch_mkfs
 	create_basic_files
+	[ -n "$_redirect" ] && mv "$lowerdir/$lowername" "$lowerdir/$_redirect"
 	# Create midlayer
 	_overlay_scratch_mount_dirs $lowerdir $lowerdir2 $workdir2 -o redirect_dir=on,index=on,metacopy=on
-	# Trigger a metacopy
-	chmod 400 $SCRATCH_MNT/$lowername
+	# Trigger a metacopy with or without redirect
+	if [ -n "$_redirect" ]; then
+		mv "$SCRATCH_MNT/$_redirect" "$SCRATCH_MNT/$lowername"
+	else
+		chmod 400 $SCRATCH_MNT/$lowername
+	fi
 	umount_overlay
 }
 
@@ -253,6 +268,24 @@ create_lower_link
 mount_overlay $lowerdir
 mv $SCRATCH_MNT/$lowerlink $SCRATCH_MNT/$ufile
 test_common $lowerdir $ufile $lowersize $lowerblocks "$lowerdata" "/$lowerlink"
+
+echo -e "\n== Check follow to lowerdata without redirect =="
+prepare_midlayer
+mount_ro_overlay "$lowerdir2:$lowerdir"
+test_common "$lowerdir2:$lowerdir" $lowername $lowersize $lowerblocks \
+		"$lowerdata"
+
+echo -e "\n== Check follow to lowerdata with relative redirect =="
+prepare_midlayer "$lowername.renamed"
+mount_ro_overlay "$lowerdir2:$lowerdir"
+test_common "$lowerdir2:$lowerdir" "$lowername" $lowersize $lowerblocks \
+		"$lowerdata"
+
+echo -e "\n== Check follow to lowerdata with absolute redirect =="
+prepare_midlayer "/subdir/$lowername"
+mount_ro_overlay "$lowerdir2:$lowerdir"
+test_common "$lowerdir2:$lowerdir" "$lowername" $lowersize $lowerblocks \
+		"$lowerdata"
 
 # success, all done
 status=0
