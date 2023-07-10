@@ -201,6 +201,19 @@ _require_scratch_overlay_features()
 	_scratch_unmount
 }
 
+# Check kernel support for <lowerdirs>::<lowerdatadir> format
+_require_scratch_overlay_lowerdata_layers()
+{
+	local lowerdirs="$OVL_BASE_SCRATCH_MNT/$OVL_UPPER::$OVL_BASE_SCRATCH_MNT/$OVL_LOWER"
+
+	_scratch_mkfs > /dev/null 2>&1
+	_overlay_scratch_mount_dirs "$lowerdirs" "-" "-" \
+		-o ro,redirect_dir=follow,metacopy=on > /dev/null 2>&1 || \
+	        _notrun "overlay data-only layers not supported on ${SCRATCH_DEV}"
+
+	_scratch_unmount
+}
+
 # Helper function to check underlying dirs of overlay filesystem
 _overlay_fsck_dirs()
 {
