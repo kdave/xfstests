@@ -1,0 +1,101 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 598
+#
+# Make sure that metadump obfuscation works for filesystems with ascii-ci
+# enabled.
+#
+. ./common/preamble
+_begin_fstest auto dir ci
+
+_cleanup()
+{
+      cd /
+      rm -r -f $tmp.* $testdir
+}
+
+_fixed_by_git_commit xfsprogs 10a01bcd \
+	"xfs_db: fix metadump name obfuscation for ascii-ci filesystems"
+
+_supported_fs xfs
+_require_test
+_require_scratch
+_require_xfs_mkfs_ciname
+
+_scratch_mkfs -n version=ci > $seqres.full
+_scratch_mount
+
+# Create a two-block directory to force leaf format
+mkdir "$SCRATCH_MNT/lol"
+touch "$SCRATCH_MNT/lol/autoexec.bat"
+i=0
+dblksz=$(_xfs_get_dir_blocksize "$SCRATCH_MNT")
+nr_dirents=$((dblksz * 2 / 256))
+
+for ((i = 0; i < nr_dirents; i++)); do
+	name="$(printf "y%0254d" $i)"
+	ln "$SCRATCH_MNT/lol/autoexec.bat" "$SCRATCH_MNT/lol/$name"
+done
+
+dirsz=$(stat -c '%s' $SCRATCH_MNT/lol)
+test $dirsz -gt $dblksz || echo "dir size $dirsz, expected at least $dblksz?"
+stat $SCRATCH_MNT/lol >> $seqres.full
+
+# Create a two-block attr to force leaf format
+i=0
+for ((i = 0; i < nr_dirents; i++)); do
+	name="$(printf "user.%0250d" $i)"
+	$SETFATTR_PROG -n "$name" -v 1 "$SCRATCH_MNT/lol/autoexec.bat"
+done
+stat $SCRATCH_MNT/lol/autoexec.bat >> $seqres.full
+
+_scratch_unmount
+
+testdir=$TEST_DIR/$seq.metadumps
+mkdir -p $testdir
+metadump_file=$testdir/scratch.md
+metadump_file_a=${metadump_file}.a
+metadump_file_o=${metadump_file}.o
+metadump_file_ao=${metadump_file}.ao
+
+echo metadump
+_scratch_xfs_metadump $metadump_file >> $seqres.full
+
+echo metadump a
+_scratch_xfs_metadump $metadump_file_a -a >> $seqres.full
+
+echo metadump o
+_scratch_xfs_metadump $metadump_file_o -o >> $seqres.full
+
+echo metadump ao
+_scratch_xfs_metadump $metadump_file_ao -a -o >> $seqres.full
+
+echo mdrestore
+_scratch_xfs_mdrestore $metadump_file
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore a
+_scratch_xfs_mdrestore $metadump_file_a
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore o
+_scratch_xfs_mdrestore $metadump_file_o
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo mdrestore ao
+_scratch_xfs_mdrestore $metadump_file_ao
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+# success, all done
+status=0
+exit

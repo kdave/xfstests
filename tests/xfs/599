@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 599
+#
+# Make sure that the kernel and utilities can handle large numbers of dirhash
+# collisions in both the directory and extended attribute structures.
+#
+# This started as a regression test for the new 'hashcoll' function in xfs_db,
+# but became a regression test for an xfs_repair bug affecting hashval checks
+# applied to the second and higher node levels of a dabtree.
+#
+. ./common/preamble
+_begin_fstest auto dir
+
+_fixed_by_git_commit xfsprogs b7b81f336ac \
+	"xfs_repair: fix incorrect dabtree hashval comparison"
+
+_supported_fs xfs
+_require_xfs_db_command "hashcoll"
+_require_xfs_db_command "path"
+_require_scratch
+
+_scratch_mkfs > $seqres.full
+_scratch_mount
+
+crash_dir=$SCRATCH_MNT/lol/
+crash_attrs=$SCRATCH_MNT/hah
+
+mkdir -p "$crash_dir"
+touch "$crash_attrs"
+
+# Create enough dirents to fill two dabtree node blocks with names that all
+# hash to the same value.  Each dirent gets its own record in the dabtree,
+# so we must create enough dirents to get a dabtree of at least height 2.
+dblksz=$(_xfs_get_dir_blocksize "$SCRATCH_MNT")
+
+da_records_per_block=$((dblksz / 8))	# 32-bit hash and 32-bit before
+nr_dirents=$((da_records_per_block * 2))
+
+longname="$(mktemp --dry-run "$(perl -e 'print "X" x 255;')" | tr ' ' 'X')"
+echo "creating $nr_dirents dirents from '$longname'" >> $seqres.full
+_scratch_xfs_db -r -c "hashcoll -n $nr_dirents -p $crash_dir $longname"
+
+# Create enough xattrs to fill two dabtree nodes.  Each attribute leaf block
+# gets its own record in the dabtree, so we have to create enough attr blocks
+# (each full of attrs) to get a dabtree of at least height 2.
+blksz=$(_get_block_size "$SCRATCH_MNT")
+
+attr_records_per_block=$((blksz / 255))
+da_records_per_block=$((blksz / 8))	# 32-bit hash and 32-bit before
+nr_attrs=$((da_records_per_block * attr_records_per_block * 2))
+
+longname="$(mktemp --dry-run "$(perl -e 'print "X" x 249;')" | tr ' ' 'X')"
+echo "creating $nr_attrs attrs from '$longname'" >> $seqres.full
+_scratch_xfs_db -r -c "hashcoll -a -n $nr_attrs -p $crash_attrs $longname"
+
+_scratch_unmount
+
+# Make sure that there's one hash value dominating the dabtree block.
+# We don't require 100% because directories create dabtree records for dot
+# and dotdot.
+filter_hashvals() {
+	uniq -c | awk -v seqres_full="$seqres.full" \
+		'{print $0 >> seqres_full; tot += $1; if ($1 > biggest) biggest = $1;} END {if (biggest >= (tot - 2)) exit(0); exit(1);}'
+	test "${PIPESTATUS[1]}" -eq 0 || \
+		echo "Scattered dabtree hashes?  See seqres.full"
+}
+
+# Did we actually get a two-level dabtree for the directory?  Does it contain a
+# long run of hashes?
+echo "dir check" >> $seqres.full
+da_node_block_offset=$(( (2 ** 35) / blksz ))
+dir_db_args=(-c 'path /lol/' -c "dblock $da_node_block_offset" -c 'addr nbtree[0].before')
+dir_count="$(_scratch_xfs_db "${dir_db_args[@]}" -c 'print lhdr.count' | awk '{print $3}')"
+_scratch_xfs_db "${dir_db_args[@]}" -c "print lents[0-$((dir_count - 1))].hashval" | sed -e 's/lents\[[0-9]*\]/lents[NN]/g' | filter_hashvals
+
+# Did we actually get a two-level dabtree for the attrs?  Does it contain a
+# long run of hashes?
+echo "attr check" >> $seqres.full
+attr_db_args=(-c 'path /hah' -c "ablock 0" -c 'addr btree[0].before')
+attr_count="$(_scratch_xfs_db "${attr_db_args[@]}" -c 'print hdr.count' | awk '{print $3}')"
+_scratch_xfs_db "${attr_db_args[@]}" -c "print btree[0-$((attr_count - 1))].hashval" | sed -e 's/btree\[[0-9]*\]/btree[NN]/g' | filter_hashvals
+
+# Remount to get some coverage of xfs_scrub before seeing if xfs_repair
+# will trip over the large dabtrees.
+echo Silence is golden
+_scratch_mount
+status=0
+exit

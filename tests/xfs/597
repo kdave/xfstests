@@ -1,0 +1,56 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 597
+#
+# Make sure that the kernel and userspace agree on which byte sequences are
+# ASCII uppercase letters, and how to convert them.
+#
+. ./common/preamble
+_begin_fstest auto ci dir
+
+# Import common functions.
+. ./common/filter
+
+_fixed_by_kernel_commit a9248538facc \
+	"xfs: stabilize the dirent name transformation function used for ascii-ci dir hash computation"
+_fixed_by_kernel_commit 9dceccc5822f \
+	"xfs: use the directory name hash function for dir scrubbing"
+
+_supported_fs xfs
+_require_scratch
+_require_xfs_mkfs_ciname
+
+_scratch_mkfs -n version=ci > $seqres.full
+_scratch_mount
+
+# Create a two-block directory to force leaf format
+mkdir "$SCRATCH_MNT/lol"
+touch "$SCRATCH_MNT/lol/autoexec.bat"
+i=0
+dblksz=$(_xfs_get_dir_blocksize "$SCRATCH_MNT")
+nr_dirents=$((dblksz * 2 / 256))
+
+for ((i = 0; i < nr_dirents; i++)); do
+	name="$(printf "y%0254d" $i)"
+	ln "$SCRATCH_MNT/lol/autoexec.bat" "$SCRATCH_MNT/lol/$name"
+done
+
+dirsz=$(stat -c '%s' $SCRATCH_MNT/lol)
+test $dirsz -gt $dblksz || echo "dir size $dirsz, expected at least $dblksz?"
+stat $SCRATCH_MNT/lol >> $seqres.full
+
+# Create names with extended ascii characters in them to exploit the fact
+# that the Linux kernel will transform extended ASCII uppercase characters
+# but libc won't.  Need to force LANG=C here so that awk doesn't spit out utf8
+# sequences.
+test "$LANG" = "C" || _notrun "LANG=C required"
+awk 'END { for (i = 192; i < 247; i++) printf("%c\n", i); }' < /dev/null | while read name; do
+	ln "$SCRATCH_MNT/lol/autoexec.bat" "$SCRATCH_MNT/lol/$name" 2>&1 | _filter_scratch
+done
+
+# Now just let repair run
+
+status=0
+exit
