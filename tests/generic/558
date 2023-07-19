@@ -19,9 +19,8 @@ create_file()
 	local prefix=$3
 	local i=0
 
-	while [ $i -lt $nr_file ]; do
+	for ((i = 0; i < nr_file; i++)); do
 		echo -n > $dir/${prefix}_${i}
-		let i=$i+1
 	done
 }
 
@@ -39,15 +38,25 @@ _scratch_mkfs_sized $((1024 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount
 
 i=0
-free_inode=`_get_free_inode $SCRATCH_MNT`
-file_per_dir=1000
-loop=$((free_inode / file_per_dir + 1))
-mkdir -p $SCRATCH_MNT/testdir
+free_inodes=$(_get_free_inode $SCRATCH_MNT)
+# Round the number of inodes to create up to the nearest 1000, like the old
+# code did to make sure that we *cannot* allocate any more inodes at all.
+free_inodes=$(( ( (free_inodes + 999) / 1000) * 1000 ))
+nr_cpus=$(( $($here/src/feature -o) * 4 * LOAD_FACTOR ))
+echo "free inodes: $free_inodes nr_cpus: $nr_cpus" >> $seqres.full
 
-echo "Create $((loop * file_per_dir)) files in $SCRATCH_MNT/testdir" >>$seqres.full
-while [ $i -lt $loop ]; do
-	create_file $SCRATCH_MNT/testdir $file_per_dir $i >>$seqres.full 2>&1 &
-	let i=$i+1
+if ((free_inodes <= nr_cpus)); then
+	nr_cpus=1
+	files_per_dir=$free_inodes
+else
+	files_per_dir=$(( (free_inodes + nr_cpus - 1) / nr_cpus ))
+fi
+mkdir -p $SCRATCH_MNT/testdir
+echo "nr_cpus: $nr_cpus files_per_dir: $files_per_dir" >> $seqres.full
+
+echo "Create $((nr_cpus * files_per_dir)) files in $SCRATCH_MNT/testdir" >>$seqres.full
+for ((i = 0; i < nr_cpus; i++)); do
+	create_file $SCRATCH_MNT/testdir $files_per_dir $i >>$seqres.full 2>&1 &
 done
 wait
 
