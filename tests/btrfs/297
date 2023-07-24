@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 297
+#
+# Make sure btrfs scrub can fix parity stripe corruption
+#
+. ./common/preamble
+_begin_fstest auto quick raid scrub
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_odirect
+_require_non_zoned_device "${SCRATCH_DEV}"
+_require_scratch_dev_pool 3
+_fixed_by_kernel_commit 486c737f7fdc \
+	"btrfs: raid56: always verify the P/Q contents for scrub"
+
+workload()
+{
+	local profile=$1
+	local nr_devs=$2
+
+	echo "=== Testing $nr_devs devices $profile ===" >> $seqres.full
+	_scratch_dev_pool_get $nr_devs
+
+	_scratch_pool_mkfs -d $profile -m single >> $seqres.full 2>&1
+	# Use v2 space cache to prevent v1 space cache affecting
+	# the result.
+	_scratch_mount -o space_cache=v2
+
+	# Create one 64K extent which would cover one data stripe.
+	$XFS_IO_PROG -f -d -c "pwrite -S 0xaa -b 64K 0 64K" \
+		"$SCRATCH_MNT/foobar" > /dev/null
+	sync
+
+	# Corrupt the P/Q stripe
+	local logical=$(_btrfs_get_first_logical $SCRATCH_MNT/foobar)
+
+	# The 2nd copy is pointed to P stripe directly.
+	physical_p=$(_btrfs_get_physical ${logical} 2)
+	devpath_p=$(_btrfs_get_device_path ${logical} 2)
+
+	_scratch_unmount
+
+	echo "Corrupt stripe P at devpath $devpath_p physical $physical_p" \
+		>> $seqres.full
+	$XFS_IO_PROG -d -c "pwrite -S 0xff -b 64K $physical_p 64K" $devpath_p \
+		> /dev/null
+
+	# Do a scrub to try repair the P stripe.
+	_scratch_mount -o space_cache=v2
+	$BTRFS_UTIL_PROG scrub start -BdR $SCRATCH_MNT >> $seqres.full 2>&1
+	_scratch_unmount
+
+	# Verify the repaired content directly
+	local output=$($XFS_IO_PROG -c "pread -qv $physical_p 16" $devpath_p | _filter_xfs_io_offset)
+	local expect="XXXXXXXX:  aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa  ................"
+
+	echo "The first 16 bytes of parity stripe after scrub:" >> $seqres.full
+	echo $output >> $seqres.full
+	if [ "$output" != "$expect" ]; then
+		echo "Unexpected parity content"
+		echo "has:"
+		echo "$output"
+		echo "expect"
+		echo "$expect"
+	fi
+
+	# Last safenet, let btrfs check --check-data-csum to do an offline scrub.
+	$BTRFS_UTIL_PROG check --check-data-csum $SCRATCH_DEV >> $seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		echo "Error detected after the scrub"
+	fi
+	_scratch_dev_pool_put
+}
+
+workload raid5 2
+workload raid6 3
+
+echo "Silence is golden"
+status=0
+exit
