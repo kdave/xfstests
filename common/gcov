@@ -1,0 +1,87 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# Routines for capturing kernel code coverage reports
+
+GCOV_DIR=/sys/kernel/debug/gcov
+
+# Find the topmost directories of the .gcno directory hierarchy
+__gcov_find_topdirs() {
+	find "${GCOV_DIR}/" -name '*.gcno' -printf '%d|%h\n' | \
+		sort -g -k 1 | \
+		uniq | \
+		$AWK_PROG -F '|' 'BEGIN { x = -1 } { if (x < 0) x = $1; if ($1 == x) printf("%s\n", $2);}'
+}
+
+# Generate lcov html report from kernel gcov data if configured
+_gcov_generate_report() {
+	local output_dir="$1"
+	test -n "${output_dir}" || return
+
+	# Kernel support built in?
+	test -d "$GCOV_DIR" || return
+
+	readarray -t gcno_dirs < <(__gcov_find_topdirs)
+	test "${#gcno_dirs[@]}" -gt 0 || return
+
+	mkdir -p "${output_dir}/raw/"
+
+	# Collect raw coverage data from the kernel
+	readarray -t source_dirs < <(find "${GCOV_DIR}/" -mindepth 1 -maxdepth 1 -type d)
+	for dir in "${source_dirs[@]}"; do
+		cp -p -R -d -u "${dir}" "${output_dir}/raw/"
+	done
+
+	# If lcov is installed, use it to summarize the gcda data.
+	# If it is not installed, there's no point in going forward
+	command -v lcov > /dev/null || return
+	local lcov=(lcov --exclude 'include*' --capture)
+	lcov+=(--output-file "${output_dir}/gcov.report")
+	for d in "${gcno_dirs[@]}"; do
+		lcov+=(--directory "${d}")
+	done
+
+	# Generate a detailed HTML report from the summary
+	local gcov_start_time="$(date --date="${fstests_start_time:-now}")"
+	local genhtml=()
+	if command -v genhtml > /dev/null; then
+		genhtml+=(genhtml -o "${output_dir}/" "${output_dir}/gcov.report")
+		genhtml+=(--title "fstests on $(hostname -s) @ ${gcov_start_time}" --legend)
+	fi
+
+	# Try to convert the HTML report summary as text for easier grepping if
+	# there's an HTML renderer present
+	local totext=()
+	test "${#totext[@]}" -eq 0 && \
+		command -v lynx &>/dev/null && \
+		totext=(lynx -dump "${output_dir}/index.html" -width 120 -nonumbers -nolist)
+	test "${#totext[@]}" -eq 0 && \
+		command -v links &>/dev/null && \
+		totext=(links -dump "${output_dir}/index.html" -width 120)
+	test "${#totext[@]}" -eq 0 && \
+		command -v elinks &>/dev/null && \
+		totext=(elinks -dump "${output_dir}/index.html" --dump-width 120 --no-numbering --no-references)
+
+	# Analyze kernel data
+	"${lcov[@]}" > "${output_dir}/gcov.stdout" 2> "${output_dir}/gcov.stderr"
+	test "${#genhtml[@]}" -ne 0 && \
+		"${genhtml[@]}" >> "${output_dir}/gcov.stdout" 2>> "${output_dir}/gcov.stderr"
+	test "${#totext[@]}" -ne 0 && \
+		"${totext[@]}" > "${output_dir}/index.txt" 2>> "${output_dir}/gcov.stderr"
+}
+
+# Reset gcov usage data
+_gcov_reset() {
+	echo 1 > "${GCOV_DIR}/reset"
+}
+
+# If the caller wanted us to capture gcov reports but the kernel doesn't
+# support it, turn it off.
+_gcov_check_report_gcov() {
+	test -z "$REPORT_GCOV" && return 0
+	test -w "${GCOV_DIR}/reset" && return 0
+
+	unset REPORT_GCOV
+	return 1
+}

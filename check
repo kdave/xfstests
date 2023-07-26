@@ -447,6 +447,11 @@ _global_log() {
 	fi
 }
 
+if [ -n "$REPORT_GCOV" ]; then
+	. ./common/gcov
+	_gcov_check_report_gcov
+fi
+
 _wrapup()
 {
 	seq="check"
@@ -523,6 +528,18 @@ _wrapup()
 					     "${#bad[*]}" "${#notrun[*]}" \
 					     "$((sect_stop - sect_start))"
 		fi
+
+		# Generate code coverage report
+		if [ -n "$REPORT_GCOV" ]; then
+			# don't trigger multiple times if caller hits ^C
+			local gcov_report_dir="$REPORT_GCOV"
+			test "$gcov_report_dir" = "1" && \
+				gcov_report_dir="$REPORT_DIR/gcov"
+			unset REPORT_GCOV
+
+			_gcov_generate_report "$gcov_report_dir"
+		fi
+
 		needwrap=false
 	fi
 
@@ -797,6 +814,7 @@ function run_section()
 	  echo "MOUNT_OPTIONS -- `_scratch_mount_options`"
 	fi
 	echo
+	test -n "$REPORT_GCOV" && _gcov_reset
 	needwrap=true
 
 	if [ ! -z "$SCRATCH_DEV" ]; then
