@@ -99,33 +99,62 @@ _require_ofd_locks
 $XFS_IO_PROG -f -c "pwrite -S 0xFF 0 4096" \
 	$TEST_DIR/testfile >> $seqres.full 2>&1
 
+mk_sem()
+{
+	SEMID=$(ipcmk -S 2 | cut -d ":" -f 2 | tr -d '[:space:]')
+	if [ -z "$SEMID" ]; then
+		echo "ipcmk failed"
+		exit 1
+	fi
+	SEMKEY=$(ipcs -s | grep $SEMID | cut -d " " -f 1)
+	if [ -z "$SEMKEY" ]; then
+		echo "ipcs failed"
+		exit 1
+	fi
+}
+
+rm_sem()
+{
+	ipcrm -s $SEMID 2>/dev/null
+}
+
 do_test()
 {
-	local soptions="$1"
-	local goptions="$2"
+	local soptions
+	local goptions
 	# print options and getlk output for debug
 	echo $* >> $seqres.full 2>&1
+	mk_sem
+	soptions="$1 -K $SEMKEY"
+	goptions="$2 -K $SEMKEY"
 	# -s : do setlk
 	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
 	# -g : do getlk
 	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
 		tee -a $seqres.full
 	wait $!
+	rm_sem
 
+	mk_sem
 	# add -F to clone with CLONE_FILES
-	soptions="$1 -F"
+	soptions="$1 -F -K $SEMKEY"
+	goptions="$2 -K $SEMKEY"
 	# with -F, new locks are always file to place
 	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
 	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
 		tee -a $seqres.full
 	wait $!
+	rm_sem
 
+	mk_sem
 	# add -d to dup and close
-	soptions="$1 -d"
+	soptions="$1 -d -K $SEMKEY"
+	goptions="$2 -K $SEMKEY"
 	$here/src/t_ofd_locks $soptions $TEST_DIR/testfile &
 	$here/src/t_ofd_locks $goptions $TEST_DIR/testfile | \
 		tee -a $seqres.full
 	wait $!
+	rm_sem
 }
 
 # Always setlk at range [0,9], getlk at range [0,9] [5,24] or [20,29].

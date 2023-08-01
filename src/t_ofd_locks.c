@@ -87,8 +87,6 @@ static void err_exit(char *op, int errn)
 	fprintf(stderr, "%s: %s\n", op, strerror(errn));
 	if (fd > 0)
 		close(fd);
-	if (semid > 0 && semctl(semid, 2, IPC_RMID) == -1)
-		perror("exit rmid");
 	exit(errn);
 }
 
@@ -180,16 +178,16 @@ int main(int argc, char **argv)
 	int setlk_macro = F_OFD_SETLKW;
 	int getlk_macro = F_OFD_GETLK;
 	struct timespec ts;
-	key_t semkey;
+	key_t semkey = -1;
 	unsigned short vals[2];
 	union semun semu;
 	struct semid_ds sem_ds;
 	struct sembuf sop;
-	int opt, ret, retry;
+	int opt, ret;
 
 	//avoid libcap errno bug
 	errno = 0;
-	while((opt = getopt(argc, argv, "sgrwo:l:PRWtFd")) != -1) {
+	while((opt = getopt(argc, argv, "sgrwo:l:PRWtFdK:")) != -1) {
 		switch(opt) {
 		case 's':
 			lock_cmd = 1;
@@ -226,6 +224,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			use_dup = 1;
+			break;
+		case 'K':
+			semkey = strtol(optarg, NULL, 16);
 			break;
 		default:
 			usage(argv[0]);
@@ -276,37 +277,15 @@ int main(int argc, char **argv)
 		err_exit("test_ofd_getlk", errno);
 	}
 
-	if((semkey = ftok(argv[optind], 255)) == -1)
+	if (semkey == -1)
+		semkey = ftok(argv[optind], 255);
+	if (semkey == -1)
 		err_exit("ftok", errno);
 
 	/* setlk, and always init the semaphore at setlk time */
 	if (lock_cmd == 1) {
-		/*
-		 * Init the semaphore, with a key related to the testfile.
-		 * getlk routine will wait untill this sem has been created and
-		 * iniialized.
-		 *
-		 * We must make sure the semaphore set is newly created, rather
-		 * then the one left from last run. In which case getlk will
-		 * exit immediately and left setlk routine waiting forever.
-		 * Also because newly created semaphore has zero sem_otime,
-		 * which is used here to sync with getlk routine.
-		 */
-		retry = 0;
-		do {
-			semid = semget(semkey, 2, IPC_CREAT|IPC_EXCL);
-			if (semid < 0 && errno == EEXIST) {
-				/* remove sem set after one round of test */
-				if (semctl(semid, 2, IPC_RMID, semu) == -1)
-					err_exit("rmid 0", errno);
-				retry++;
-			} else if (semid < 0)
-				err_exit("semget", errno);
-			else
-				retry = 10;
-		} while (retry < 5);
-		/* We can't create a new semaphore set in 5 tries */
-		if (retry == 5)
+		semid = semget(semkey, 2, 0);
+		if (semid < 0)
 			err_exit("semget", errno);
 
 		/* Init both new sem to 1 */
@@ -382,35 +361,29 @@ int main(int argc, char **argv)
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("wait sem1 0", errno);
-
-		/* remove sem set after one round of test */
-		if (semctl(semid, 2, IPC_RMID, semu) == -1)
-			err_exit("rmid", errno);
 		close(fd);
 		exit(0);
 	}
 
 	/* getlck */
 	if (lock_cmd == 0) {
-		/* wait sem created and initialized */
-		retry = 5;
+		semid = semget(semkey, 2, 0);
+		if (semid < 0)
+			err_exit("getlk_semget", errno);
+
+		/*
+		 * Wait initialization complete.
+		 */
+		ret = -1;
 		do {
-			semid = semget(semkey, 2, 0);
-			if (semid != -1)
-				break;
-			if (errno == ENOENT && retry) {
-				sleep(1);
-				retry--;
-				continue;
-			} else {
-				err_exit("getlk_semget", errno);
-			}
-		} while (1);
-		do {
+			if (ret != -1)
+				usleep(100000);
 			memset(&sem_ds, 0, sizeof(sem_ds));
 			semu.buf = &sem_ds;
-			ret = semctl(semid, 0, IPC_STAT, semu);
-		} while (!(ret == 0 && sem_ds.sem_otime != 0));
+			ret = semctl(semid, 1, GETVAL, semu);
+			if (ret == -1)
+				err_exit("wait sem1 1", errno);
+		} while (ret != 1);
 
 		/* wait sem0 == 0 (setlk and close fd done) */
 		sop.sem_num = 0;
