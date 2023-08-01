@@ -294,7 +294,22 @@ int main(int argc, char **argv)
 		semu.array = vals;
 		if (semctl(semid, 2, SETALL, semu) == -1)
 			err_exit("init sem", errno);
-		/* Inc both new sem to 2 */
+
+		/*
+		 * Wait initialization complete.
+		 */
+		ret = -1;
+		do {
+			if (ret != -1)
+				usleep(100000);
+			memset(&sem_ds, 0, sizeof(sem_ds));
+			semu.buf = &sem_ds;
+			ret = semctl(semid, 1, GETVAL, semu);
+			if (ret == -1)
+				err_exit("wait sem1 2", errno);
+		} while (ret != 2);
+
+		/* Inc sem0 to 2 */
 		sop.sem_num = 0;
 		sop.sem_op = 1;
 		sop.sem_flg = 0;
@@ -302,24 +317,6 @@ int main(int argc, char **argv)
 		ts.tv_nsec = 0;
 		if (semtimedop(semid, &sop, 1, &ts) == -1)
 			err_exit("inc sem0 2", errno);
-		sop.sem_num = 1;
-		sop.sem_op = 1;
-		sop.sem_flg = 0;
-		ts.tv_sec = 5;
-		ts.tv_nsec = 0;
-		if (semtimedop(semid, &sop, 1, &ts) == -1)
-			err_exit("inc sem1 2", errno);
-
-		/*
-		 * Wait initialization complete. semctl(2) only update
-		 * sem_ctime, semop(2) will update sem_otime.
-		 */
-		ret = -1;
-		do {
-			memset(&sem_ds, 0, sizeof(sem_ds));
-			semu.buf = &sem_ds;
-			ret = semctl(semid, 0, IPC_STAT, semu);
-		} while (!(ret == 0 && sem_ds.sem_otime != 0));
 
 		/* place the lock */
 		if (fcntl(fd, setlk_macro, &flk) < 0)
@@ -384,6 +381,15 @@ int main(int argc, char **argv)
 			if (ret == -1)
 				err_exit("wait sem1 1", errno);
 		} while (ret != 1);
+
+		/* inc sem1 to 2 (initialization completed) */
+		sop.sem_num = 1;
+		sop.sem_op = 1;
+		sop.sem_flg = 0;
+		ts.tv_sec = 5;
+		ts.tv_nsec = 0;
+		if (semtimedop(semid, &sop, 1, &ts) == -1)
+			err_exit("inc sem1 2", errno);
 
 		/* wait sem0 == 0 (setlk and close fd done) */
 		sop.sem_num = 0;
