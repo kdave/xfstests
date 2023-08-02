@@ -64,7 +64,13 @@ while _soak_loop_running $((50 * TIME_FACTOR)); do
 
 	# Mount again to replay log after loading working table, so we have a
 	# consistent XFS after test.
-	_dmerror_unmount || _fail "unmount failed"
+
+	# The delayed fput with AIO can mean we still have a busy mount after
+	# killing fsstress, so do the umount in a loop
+	while [ 1 ]
+	do
+		_dmerror_unmount > /dev/null 2>&1 && break
+	done
 	_dmerror_load_working_table
 	_dmerror_mount || _fail "mount failed"
 done
