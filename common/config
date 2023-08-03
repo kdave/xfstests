@@ -25,6 +25,9 @@
 # KEEP_DMESG -      whether to keep all dmesg for each test case.
 #                   yes: keep all dmesg
 #                   no: only keep dmesg with error/warning (default)
+# CANON_DEVS -      whether or not to canonicalize device symlinks
+#                   yes: canonicalize device symlinks
+#                   no (default) do not canonicalize device if they are symlinks
 #
 # - These can be added to $HOST_CONFIG_DIR (witch default to ./config)
 #   below or a separate local configuration file can be used (using
@@ -655,6 +658,32 @@ _canonicalize_mountpoint()
 	echo "$parent/$base"
 }
 
+# Enables usage of /dev/disk/by-id/ symlinks to persist target devices
+# over reboots
+_canonicalize_devices()
+{
+	if [ "$CANON_DEVS" != "yes" ]; then
+		return
+	fi
+	[ -L "$TEST_DEV" ]	&& TEST_DEV=$(readlink -e "$TEST_DEV")
+	[ -L "$SCRATCH_DEV" ]	&& SCRATCH_DEV=$(readlink -e "$SCRATCH_DEV")
+	[ -L "$TEST_LOGDEV" ]	&& TEST_LOGDEV=$(readlink -e "$TEST_LOGDEV")
+	[ -L "$TEST_RTDEV" ]	&& TEST_RTDEV=$(readlink -e "$TEST_RTDEV")
+	[ -L "$SCRATCH_RTDEV" ]	&& SCRATCH_RTDEV=$(readlink -e "$SCRATCH_RTDEV")
+	[ -L "$LOGWRITES_DEV" ]	&& LOGWRITES_DEV=$(readlink -e "$LOGWRITES_DEV")
+	if [ ! -z "$SCRATCH_DEV_POOL" ]; then
+		local NEW_SCRATCH_POOL=""
+		for i in $SCRATCH_DEV_POOL; do
+			if [ -L $i ]; then
+				NEW_SCRATCH_POOL="$NEW_SCRATCH_POOL $(readlink -e $i)"
+			else
+				NEW_SCRATCH_POOL="$NEW_SCRATCH_POOL $i)"
+			fi
+		done
+		SCRATCH_DEV_POOL="$NEW_SCRATCH_POOL"
+	fi
+}
+
 # On check -overlay, for the non multi section config case, this
 # function is called on every test, before init_rc().
 # When SCRATCH/TEST_* vars are defined in config file, config file
@@ -785,7 +814,6 @@ get_next_config() {
 	fi
 
 	parse_config_section $1
-
 	if [ ! -z "$OLD_FSTYP" ] && [ $OLD_FSTYP != $FSTYP ]; then
 		[ -z "$MOUNT_OPTIONS" ] && _mount_opts
 		[ -z "$TEST_FS_MOUNT_OPTS" ] && _test_mount_opts
@@ -900,6 +928,8 @@ else
 		_overlay_config_override
 	fi
 fi
+
+_canonicalize_devices
 
 # make sure this script returns success
 /bin/true
