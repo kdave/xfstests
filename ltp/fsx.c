@@ -2393,11 +2393,17 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dknqxBEFJLOWZ][-A|-U] [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] fname\n\
+		"fsx [-dfknqxyzBEFHIJKLORWXZ0]\n\
+	   [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid]\n\
+	   [-l flen] [-m start:end] [-o oplen] [-p progressinterval]\n\
+	   [-r readbdy] [-s style] [-t truncbdy] [-w writebdy]\n\
+	   [-A|-U] [-D startingop] [-N numops] [-P dirpath] [-S seed]\n\
+	   [--replay-ops=opsfile] [--record-ops[=opsfile]] [--duration=seconds]\n\
+	   ... fname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
-	-f flush and invalidate cache after I/O\n\
+	-f: flush and invalidate cache after I/O\n\
 	-g X: write character X instead of random generated data\n\
 	-i logdev: do integrity testing, logdev is the dm log writes device\n\
 	-j logid: prefix debug log messsages with this id\n\
@@ -2412,15 +2418,15 @@ usage(void)
 	-s style: 1 gives smaller truncates (default 0)\n\
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
-	-x: preallocate file space before starting, XFS only (default 0)\n\
-	-y synchronize changes to a file\n"
+	-x: preallocate file space before starting, XFS only\n\
+	-y: synchronize changes to a file\n"
 
 #ifdef AIO
 "	-A: Use the AIO system calls, -A excludes -U\n"
 #endif
 #ifdef URING
 "	-U: Use the IO_URING system calls, -U excludes -A\n"
- #endif
+#endif
 "	-D startingop: debug output starting at specified operation\n"
 #ifdef HAVE_LINUX_FALLOC_H
 "	-F: Do not use fallocate (preallocation) calls\n"
@@ -2449,16 +2455,17 @@ usage(void)
 #ifdef FIEXCHANGE_RANGE
 "	-0: Do not use exchange range calls\n"
 #endif
-"	-L: fsxLite - no file creations & no file size changes\n\
+"	-K: Do not use keep size\n\
+	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
-	-P: save .fsxlog .fsxops and .fsxgood files in dirpath (default ./)\n\
+	-P dirpath: save .fsxlog .fsxops and .fsxgood files in dirpath (default ./)\n\
+	-R: read() system calls only (mapped reads disabled)\n\
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
 	-W: mapped write operations DISabled\n\
-	-X: Read file and compare to good buffer after every operation.\n\
-        -R: read() system calls only (mapped reads disabled)\n\
-        -Z: O_DIRECT (use -R, -W, -r and -w too)\n\
-	--replay-ops opsfile: replay ops from recorded .fsxops file\n\
+	-X: Read file and compare to good buffer after every operation\n\
+	-Z: O_DIRECT (use -R, -W, -r and -w too)\n\
+	--replay-ops=opsfile: replay ops from recorded .fsxops file\n\
 	--record-ops[=opsfile]: dump ops file also on success. optionally specify ops file name\n\
 	--duration=seconds: ignore any -N setting and run for this many seconds\n\
 	fname: this filename is REQUIRED (no default)\n");
