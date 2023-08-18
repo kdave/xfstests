@@ -279,7 +279,9 @@ test_revertible_options()
 	test_should_fail "discard=invalid"
 	if [ "$enable_discard_sync" = true ]; then
 		test_roundtrip_mount "discard" "discard" "discard=sync" "discard"
-		test_roundtrip_mount "discard=async" "discard=async" "discard=sync" "discard"
+		if ! _scratch_btrfs_is_zoned; then
+			test_roundtrip_mount "discard=async" "discard=async" "discard=sync" "discard"
+		fi
 		test_roundtrip_mount "discard=sync" "discard" "nodiscard" "$DEFAULT_NODISCARD_OPTS"
 	else
 		test_roundtrip_mount "discard" "discard" "discard" "discard"
