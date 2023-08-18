@@ -1,0 +1,52 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 300
+#
+# Validate that snapshots taken while in a remapped namespace preserve
+# the permissions of the user.
+#
+. ./common/preamble
+
+_begin_fstest auto quick subvol snapshot
+_register_cleanup "cleanup"
+
+_supported_fs btrfs
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: copy dir permission and time when creating a stub subvolume"
+
+_require_test
+_require_user
+_require_group
+_require_unix_perm_checking
+_require_unshare
+
+test_dir="${TEST_DIR}/${seq}"
+cleanup() {
+	rm -rf $test_dir
+	cd /
+	rm -rf $tmp.*
+}
+
+rm -rf $test_dir
+mkdir $test_dir
+chown $qa_user:$qa_group $test_dir
+
+# _user_do executes each command as $qa_user in its own subshell. unshare
+# sets the namespace for the running shell. The test must run in one user
+# subshell to preserve the namespace over multiple commands.
+_user_do "
+cd ${test_dir};
+unshare --user --keep-caps --map-auto --map-root-user;
+$BTRFS_UTIL_PROG subvolume create subvol;
+touch subvol/{1,2,3};
+$BTRFS_UTIL_PROG subvolume create subvol/subsubvol;
+touch subvol/subsubvol/{4,5,6};
+$BTRFS_UTIL_PROG subvolume snapshot subvol snapshot;
+"
+
+find $test_dir/. -printf "%M %u %g ./%P\n"
+
+status=0
+exit
