@@ -1180,6 +1180,15 @@ _repair_scratch_fs()
 	fi
 	return $res
         ;;
+    btrfs)
+	echo "yes|$BTRFS_UTIL_PROG check --repair --force $SCRATCH_DEV"
+	yes | $BTRFS_UTIL_PROG check --repair --force $SCRATCH_DEV 2>&1
+	local res=$?
+	if [ $res -ne 0 ]; then
+		_dump_err2 "btrfs repair failed, err=$res"
+	fi
+	return $res
+	;;
     bcachefs)
 	# With bcachefs, if fsck detects any errors we consider it a bug and we
 	# want the test to fail:
@@ -1231,6 +1240,13 @@ _repair_test_fs()
 			_xfs_repair_test_fs "$@" >>$tmp.repair 2>&1
 			res=$?
 		fi
+		;;
+	btrfs)
+	echo 'yes|$BTRFS_UTIL_PROG check --repair --force "$TEST_DEV"' > \
+								/tmp.repair 2>&1
+	yes | $BTRFS_UTIL_PROG check --repair --force "$TEST_DEV" >> \
+								/tmp.repair 2>&1
+		res=$?
 		;;
 	*)
 		# Let's hope fsck -y suffices...
