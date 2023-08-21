@@ -2072,6 +2072,22 @@ void inode_info(char *str, size_t sz, struct stat64 *s, int verbose)
 			 (long long) s->st_blocks, (long long) s->st_size);
 }
 
+#ifdef AIO
+static int io_get_single_event(struct io_event *event)
+{
+	int ret;
+
+	/*
+	 * We can get -EINTR if competing with io_uring using signal
+	 * based notifications. For that case, just retry the wait.
+	 */
+	do {
+		ret = io_getevents(io_ctx, 1, 1, event, NULL);
+	} while (ret == -EINTR);
+	return ret;
+}
+#endif
+
 void
 afsync_f(opnum_t opno, long r)
 {
@@ -2111,7 +2127,7 @@ afsync_f(opnum_t opno, long r)
 		close(fd);
 		return;
 	}
-	if ((e = io_getevents(io_ctx, 1, 1, &event, NULL)) != 1) {
+	if ((e = io_get_single_event(&event)) != 1) {
 		if (v)
 			printf("%d/%lld: afsync - io_getevents failed %d\n",
 			       procid, opno, e);
@@ -2223,7 +2239,7 @@ do_aio_rw(opnum_t opno, long r, int flags)
 			       procid, opno, iswrite ? "awrite" : "aread", e);
 		goto aio_out;
 	}
-	if ((e = io_getevents(io_ctx, 1, 1, &event, NULL)) != 1) {
+	if ((e = io_get_single_event(&event)) != 1) {
 		if (v)
 			printf("%d/%lld: %s - io_getevents failed %d\n",
 			       procid, opno, iswrite ? "awrite" : "aread", e);
