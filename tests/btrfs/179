@@ -45,8 +45,8 @@ fill_workload()
 
 		# Randomly remove some files for every 5 loop
 		if [ $(( $i % 5 )) -eq 0 ]; then
-			victim=$(ls "$SCRATCH_MNT/src" | sort -R | head -n1)
-			rm "$SCRATCH_MNT/src/$victim"
+			victim=$(_random_file "$SCRATCH_MNT/src")
+			rm "$victim"
 		fi
 		i=$((i + 1))
 	done
@@ -69,13 +69,12 @@ delete_workload()
 	trap "wait; exit" SIGTERM
 	while true; do
 		sleep $((sleep_time * 2))
-		victim=$(ls "$SCRATCH_MNT/snapshots" | sort -R | head -n1)
+		victim=$(_random_file "$SCRATCH_MNT/snapshots")
 		if [ -z "$victim" ]; then
 			# No snapshots available, sleep and retry later.
 			continue
 		fi
-		$BTRFS_UTIL_PROG subvolume delete \
-			"$SCRATCH_MNT/snapshots/$victim" > /dev/null
+		$BTRFS_UTIL_PROG subvolume delete "$victim" > /dev/null
 	done
 }
 

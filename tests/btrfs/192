@@ -69,12 +69,6 @@ $BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/src > /dev/null
 mkdir -p $SCRATCH_MNT/snapshots
 mkdir -p $SCRATCH_MNT/src/padding
 
-random_file()
-{
-	local basedir=$1
-	echo "$basedir/$(ls $basedir | sort -R | tail -1)"
-}
-
 snapshot_workload()
 {
 	trap "wait; exit" SIGTERM
@@ -85,9 +79,9 @@ snapshot_workload()
 			$SCRATCH_MNT/src $SCRATCH_MNT/snapshots/$i \
 			> /dev/null
 		# Do something small to make snapshots different
-		rm -f "$(random_file $SCRATCH_MNT/src/padding)"
-		rm -f "$(random_file $SCRATCH_MNT/src/padding)"
-		touch "$(random_file $SCRATCH_MNT/src/padding)"
+		rm -f "$(_random_file $SCRATCH_MNT/src/padding)"
+		rm -f "$(_random_file $SCRATCH_MNT/src/padding)"
+		touch "$(_random_file $SCRATCH_MNT/src/padding)"
 		touch "$SCRATCH_MNT/src/padding/random_$RANDOM"
 
 		i=$(($i + 1))
@@ -102,7 +96,7 @@ delete_workload()
 	while true; do
 		sleep 2
 		$BTRFS_UTIL_PROG subvolume delete \
-			"$(random_file $SCRATCH_MNT/snapshots)" \
+			"$(_random_file $SCRATCH_MNT/snapshots)" \
 			> /dev/null 2>&1
 	done
 }
