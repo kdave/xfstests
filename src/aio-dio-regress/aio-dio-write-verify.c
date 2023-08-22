@@ -238,6 +238,16 @@ static int io_write(int fd, int num_events)
 		return 1;
 	}
 
+	for (i = 0; i < num_events; i++) {
+		int err = (int)evs[i].res;
+
+		if (err < 0) {
+			fprintf(stderr, "error %s with event %d\n",
+				strerror(err), i);
+			return 1;
+		}
+	}
+
 	/* Try to destroy at here, not necessary, so don't check result */
 	io_destroy(ctx);
 
