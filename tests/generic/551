@@ -56,16 +56,18 @@ do_test()
 	truncsize=$(((RANDOM * diosize + RANDOM % diosize) % max_io_size_b))
 
 	$AIO_TEST -t $truncsize $oper_list $localfile
-	if [ $? -ne 0 ];then
+	ret=$?
+	if [ $ret -ne 0 ];then
 		echo "$AIO_TEST -t $truncsize $oper_list $localfile"
 		echo "==========^^ Fail ^^=========="
 	fi
+	return $ret
 }
 
 testimes=$((LOAD_FACTOR * 100))
 while [ $testimes -gt 0 ]; do
 	echo > $localfile
-	do_test
+	do_test || break
 	((testimes--))
 done
 
