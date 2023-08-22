@@ -267,13 +267,14 @@ static int io_verify(int fd)
 			perror("pread");
 			return 1;
 		} else if (sret != p->param->buf_size) {
-			fprintf(stderr, "short read %zd was less than %zu\n",
-			        sret, p->param->buf_size);
+			fprintf(stderr, "short read %zd was less than %zu at %zu\n",
+			        sret, p->param->buf_size, p->param->offset);
 			return 1;
 		}
 		if (memcmp(p->param->buf,
 		           p->param->cmp_buf, p->param->buf_size)) {
-			printf("Find corruption\n");
+			printf("Find corruption at %zu length %zu\n", p->param->offset,
+			       p->param->buf_size);
 			dump_buffer(p->param->buf, p->param->offset,
 			            p->param->buf_size);
 			corrupted++;
