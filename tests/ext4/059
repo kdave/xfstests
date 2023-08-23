@@ -31,6 +31,11 @@ $DEBUGFS_PROG -w -R "set_super_value s_reserved_gdt_blocks 100" $SCRATCH_DEV \
 $DEBUGFS_PROG -R "show_super_stats -h" $SCRATCH_DEV 2>/dev/null | \
 	grep "Reserved GDT blocks"
 
+# Kernels with the commit "ext4: add correct group descriptors and
+# reserved GDT blocks to system zone" will refuse to mount the file
+# system due to block_validity checks; so disable block_validity.
+MOUNT_OPTIONS="$MOUNT_OPTIONS -o noblock_validity"
+
 _scratch_mount
 
 # Expect no crash from this resize operation
