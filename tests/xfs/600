@@ -1,0 +1,55 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 600
+#
+# Regression test for an agbno overflow bug in XFS GETFSMAP involving an
+# fsmap_advance call.  Userspace can indicate that a GETFSMAP call is actually
+# a continuation of a previous call by setting the "low" key to the last record
+# returned by the previous call.
+#
+# If the last record returned by GETFSMAP is a non-shareable extent at the end
+# of an AG and the AG size is exactly a power of two, the startblock in the low
+# key of the rmapbt query can be set to a value larger than EOAG.  When this
+# happens, GETFSMAP will return EINVAL instead of returning records for the
+# next AG.
+#
+. ./common/preamble
+_begin_fstest auto quick fsmap
+
+. ./common/filter
+
+_fixed_by_git_commit kernel XXXXXXXXXXXXX \
+	"xfs: fix an agbno overflow in __xfs_getfsmap_datadev"
+
+# Modify as appropriate.
+_supported_fs generic
+_require_xfs_io_command fsmap
+_require_xfs_scratch_rmapbt
+
+_scratch_mkfs | _filter_mkfs 2> $tmp.mkfs >> $seqres.full
+source $tmp.mkfs
+
+# Find the next power of two agsize smaller than whatever the default is.
+for ((p = 31; p > 0; p--)); do
+	desired_agsize=$((2 ** p))
+	test "$desired_agsize" -lt "$agsize" && break
+done
+
+echo "desired asize=$desired_agsize" >> $seqres.full
+_scratch_mkfs -d "agsize=${desired_agsize}b" | _filter_mkfs 2> $tmp.mkfs >> $seqres.full
+source $tmp.mkfs
+
+test "$desired_agsize" -eq "$agsize" || _notrun "wanted agsize=$desired_agsize, got $agsize"
+
+_scratch_mount
+$XFS_IO_PROG -c 'fsmap -n 1024 -v' $SCRATCH_MNT >> $tmp.big
+$XFS_IO_PROG -c 'fsmap -n 1 -v' $SCRATCH_MNT >> $tmp.small
+
+diff -Naurpw $tmp.big $tmp.small
+
+# success, all done
+echo Silence is golden
+status=0
+exit
