@@ -28,14 +28,16 @@ _require_xfs_io_command "fiemap"
 _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
 
-blocksize=$((128 * 1024))
+blocksize=$(_get_file_block_size $SCRATCH_MNT)
 _require_congruent_file_oplen $SCRATCH_MNT $blocksize
 file="$SCRATCH_MNT/tmp"
 
 # Golden output is for $LOAD_FACTOR == 1 case
+# and assumes a normal blocksize of 4K
 orig_nr=8192
-orig_last_extent=$(($orig_nr * $blocksize / 512))
-orig_end=$(($orig_last_extent + $blocksize / 512 - 1))
+orig_blocksize=4096
+orig_last_extent=$(($orig_nr * $orig_blocksize / 512))
+orig_end=$(($orig_last_extent + $orig_blocksize / 512 - 1))
 
 # Real output
 nr=$(($orig_nr * $LOAD_FACTOR))
@@ -43,7 +45,7 @@ last_extent=$(($nr * $blocksize / 512))
 end=$(($last_extent + $blocksize / 512 - 1))
 
 # write the initial block for later reflink
-_pwrite_byte 0xcdcdcdcd 0 $blocksize $file | _filter_xfs_io
+_pwrite_byte 0xcdcdcdcd 0 $blocksize $file > /dev/null
 
 # use reflink to create the rest of the file, whose all extents are all
 # pointing to the first extent
