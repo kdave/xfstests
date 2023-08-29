@@ -8,7 +8,7 @@
 # hotplugging to shake out bugs in the write path.
 #
 . ./common/preamble
-_begin_fstest auto rw stress
+_begin_fstest auto rw stress soak
 
 # Override the default cleanup function.
 _cleanup()
@@ -60,13 +60,18 @@ sentinel_file=$tmp.hotplug
 touch $sentinel_file
 exercise_cpu_hotplug &
 
+fsstress_args=(-w -d $stress_dir)
+
 # Cap the number of fsstress threads at one per hotpluggable CPU if we exceed
 # 1024 IO threads, per maintainer request.
 nr_cpus=$((LOAD_FACTOR * nr_hotplug_cpus))
 test "$nr_cpus" -gt 1024 && nr_cpus="$nr_hotplug_cpus"
+fsstress_args+=(-p $nr_cpus)
+test -n "$SOAK_DURATION" && fsstress_args+=(--duration="$SOAK_DURATION")
 
 nr_ops=$((25000 * TIME_FACTOR))
-$FSSTRESS_PROG $FSSTRESS_AVOID -w -d $stress_dir -n $nr_ops -p $nr_cpus >> $seqres.full
+fsstress_args+=(-n $nr_ops)
+$FSSTRESS_PROG $FSSTRESS_AVOID -w "${fsstress_args[@]}" >> $seqres.full
 rm -f $sentinel_file
 
 # success, all done
