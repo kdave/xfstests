@@ -68,7 +68,9 @@ workload()
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full 2>&1
 
 	# Make sure above scrub fixed the fs
-	$BTRFS_UTIL_PROG scrub start -Br $SCRATCH_MNT >> $seqres.full
+	# Redirect the stderr to seqres.full as well to avoid warnings if
+	# /var/lib filesystem is readonly, as scrub fails to write status.
+	$BTRFS_UTIL_PROG scrub start -Br $SCRATCH_MNT >> $seqres.full 2>&1
 	if [ $? -ne 0 ]; then
 		echo "scrub failed to fix the fs for profile $mkfs_opts"
 	fi
