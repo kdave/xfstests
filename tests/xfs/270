@@ -17,12 +17,17 @@ _begin_fstest auto quick mount
 
 # real QA test starts here
 _supported_fs xfs
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"xfs: fix log recovery when unknown rocompat bits are set"
 # skip fs check because superblock contains unknown ro-compat features
 _require_scratch_nocheck
 # Only V5 XFS disallow rw mount/remount with unknown ro-compat features
 _require_scratch_xfs_crc
 
 _scratch_mkfs_xfs >>$seqres.full 2>&1
+_scratch_mount
+echo moo > $SCRATCH_MNT/testfile
+_scratch_unmount
 
 # set the highest bit of features_ro_compat, use it as an unknown
 # feature bit. If one day this bit become known feature, please
@@ -68,6 +73,7 @@ if [ $? -ne 0 ]; then
 	_fail "ro mount test failed"
 else
 	# no hang/panic is fine
+	cat $SCRATCH_MNT/testfile > /dev/null
 	$FSSTRESS_PROG -d $SCRATCH_MNT -p 4 -n 400 >>$seqres.full 2>&1
 fi
 
