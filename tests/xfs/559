@@ -42,10 +42,37 @@ $XFS_IO_PROG -c 'chattr -x' $SCRATCH_MNT &> $seqres.full
 _require_pagecache_access $SCRATCH_MNT
 
 blocks=10
-blksz=$(_get_page_size)
+
+# If this kernel advertises huge page support, it's possible that it could be
+# using large folios for the page cache writes.  It is necessary to write
+# multiple folios (large or regular) to triggering the write invalidation,
+# so we'll scale the test write size accordingly.
+blksz=$(_get_hugepagesize)
+base_pagesize=$(_get_page_size)
+test -z "$blksz" && blksz=${base_pagesize}
 filesz=$((blocks * blksz))
 dirty_offset=$(( filesz - 1 ))
 write_len=$(( ( (blocks - 1) * blksz) + 1 ))
+
+# The write invalidation that we're testing below can only occur as part of
+# a single large write.  The kernel limits writes to one base page less than
+# 2GiB to prevent lengthy IOs and integer overflows.  If the block size is so
+# huge (e.g. 512M huge pages on arm64) that we'd exceed that, reduce the number
+# of blocks to get us under the limit.
+max_writesize=$((2147483647 - base_pagesize))
+if ((write_len > max_writesize)); then
+	blocks=$(( ( (max_writesize - 1) / blksz) + 1))
+	# We need at least three blocks in the file to test invalidation
+	# between writes to multiple folios.  If we drop below that,
+	# reconfigure ourselves with base pages and hope for the best.
+	if ((blocks < 3)); then
+		blksz=$base_pagesize
+		blocks=10
+	fi
+	filesz=$((blocks * blksz))
+	dirty_offset=$(( filesz - 1 ))
+	write_len=$(( ( (blocks - 1) * blksz) + 1 ))
+fi
 
 # Create a large file with a large unwritten range.
 $XFS_IO_PROG -f -c "falloc 0 $filesz" $SCRATCH_MNT/file >> $seqres.full
