@@ -67,11 +67,18 @@ fsstress_args=(-w -d $stress_dir)
 nr_cpus=$((LOAD_FACTOR * nr_hotplug_cpus))
 test "$nr_cpus" -gt 1024 && nr_cpus="$nr_hotplug_cpus"
 fsstress_args+=(-p $nr_cpus)
-test -n "$SOAK_DURATION" && fsstress_args+=(--duration="$SOAK_DURATION")
+if [ -n "$SOAK_DURATION" ]; then
+	test "$SOAK_DURATION" -lt 10 && SOAK_DURATION=10
+	fsstress_args+=(--duration="$((SOAK_DURATION / 10))")
+fi
 
-nr_ops=$((25000 * TIME_FACTOR))
+nr_ops=$((2500 * TIME_FACTOR))
 fsstress_args+=(-n $nr_ops)
-$FSSTRESS_PROG $FSSTRESS_AVOID -w "${fsstress_args[@]}" >> $seqres.full
+for ((i = 0; i < 10; i++)); do
+	$FSSTRESS_PROG $FSSTRESS_AVOID -w "${fsstress_args[@]}" >> $seqres.full
+	_test_cycle_mount
+done
+
 rm -f $sentinel_file
 
 # success, all done
