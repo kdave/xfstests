@@ -43,7 +43,16 @@ get_data_bg_physical()
 	        grep -Eo 'offset [[:digit:]]+'| cut -d ' ' -f 2
 }
 
-_scratch_mkfs >/dev/null 2>&1
+sdev="$(_short_dev $SCRATCH_DEV)"
+zone_size=$(($(cat /sys/block/${sdev}/queue/chunk_sectors) << 9))
+fssize=$((zone_size * 16))
+devsize=$(($(_get_device_size $SCRATCH_DEV) * 1024))
+# Create a minimal FS to kick the reclaim process
+if [[ $devsize -gt $fssize ]]; then
+	_scratch_mkfs_sized $fssize >> $seqres.full 2>&1
+else
+	_scratch_mkfs >> $seqres.full 2>&1
+fi
 _scratch_mount -o commit=1 # 1s commit time to speed up test
 
 uuid=$($BTRFS_UTIL_PROG filesystem show $SCRATCH_DEV |grep uuid: |\
@@ -59,7 +68,15 @@ start_data_bg_phy=$((start_data_bg_phy >> 9))
 size=$(_zone_capacity $start_data_bg_phy)
 
 reclaim_threshold=75
-echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold
+if [[ -f /sys/fs/btrfs/"$uuid"/allocation/data/bg_reclaim_threshold ]]; then
+	fs_fill=1
+	echo $fs_fill > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold ||
+		_notrun "Need CONFIG_BTRFS_DEBUG to lower the reclaim threshold"
+	echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/allocation/data/bg_reclaim_threshold
+else
+	echo $reclaim_threshold > /sys/fs/btrfs/"$uuid"/bg_reclaim_threshold
+fi
+
 fill_percent=$((reclaim_threshold + 2))
 rest_percent=$((90 - fill_percent)) # make sure we're not creating a new BG
 fill_size=$((size * fill_percent / 100))
