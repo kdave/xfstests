@@ -163,13 +163,12 @@ _require_acls()
     [ -n "$CHACL_PROG" ] || _notrun "chacl command not found"
 
     #
-    # Test if chacl is able to list ACLs on the target filesystems.  On really
-    # old kernels the system calls might not be implemented at all, but the
-    # more common case is that the tested filesystem simply doesn't support
-    # ACLs.
+    # Test if chacl is able to set an ACL on a file.  On really old kernels
+    # the system calls might not be implemented at all, but the more common
+    # case is that the tested filesystem simply doesn't support ACLs.
     #
     touch $TEST_DIR/syscalltest
-    chacl -l $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
+    chacl 'u::rw-,g::---,o::---' $TEST_DIR/syscalltest > $TEST_DIR/syscalltest.out 2>&1
     cat $TEST_DIR/syscalltest.out >> $seqres.full
 
     if grep -q 'Function not implemented' $TEST_DIR/syscalltest.out; then
