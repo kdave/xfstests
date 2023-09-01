@@ -29,31 +29,34 @@ _require_xfs_io_command "fiemap"
 _scratch_mkfs > /dev/null 2>&1
 _scratch_mount
 
-blocksize=64k
+blocksize=$(_get_file_block_size $SCRATCH_MNT)
+
 file1="$SCRATCH_MNT/file1"
 file2="$SCRATCH_MNT/file2"
+extmap1="$SCRATCH_MNT/extmap1"
+extmap2="$SCRATCH_MNT/extmap2"
 
 # write the initial file
-_pwrite_byte 0xcdcdcdcd 0 $blocksize $file1 | _filter_xfs_io
+_pwrite_byte 0xcdcdcdcd 0 $blocksize $file1 > /dev/null
 
 # reflink initial file
-_reflink_range $file1 0 $file2 0 $blocksize | _filter_xfs_io
+_reflink_range $file1 0 $file2 0 $blocksize > /dev/null
 
 # check their fiemap to make sure it's correct
-echo "before sync:"
-echo "$file1" | _filter_scratch
-$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags
-echo "$file2" | _filter_scratch
-$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags
+$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags > $extmap1
+$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags > $extmap2
+
+cmp -s $extmap1 $extmap2 || echo "mismatched extent maps before sync"
 
 # sync and recheck, to make sure the fiemap doesn't change just
 # due to sync
 sync
-echo "after sync:"
-echo "$file1" | _filter_scratch
-$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags
-echo "$file2" | _filter_scratch
-$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags
+$XFS_IO_PROG -c "fiemap -v" $file1 | _filter_fiemap_flags > $extmap1
+$XFS_IO_PROG -c "fiemap -v" $file2 | _filter_fiemap_flags > $extmap2
+
+cmp -s $extmap1 $extmap2 || echo "mismatched extent maps after sync"
+
+echo "Silence is golden"
 
 # success, all done
 status=0
