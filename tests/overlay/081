@@ -1,0 +1,128 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 CTERA Networks. All Rights Reserved.
+#
+# FSQA Test No. 081
+#
+# Test persistent (and optionally unique) overlayfs fsid
+# with mount options uuid=null/on introduced in kernel v6.6
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs overlay
+
+_scratch_mkfs >>$seqres.full 2>&1
+
+# Create overlay layer with pre-packaged merge dir
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+mkdir -p $upperdir/test_dir
+mkdir -p $lowerdir/test_dir
+test_dir=$SCRATCH_MNT/test_dir/
+
+# Record base fs fsid
+upper_fsid=$(stat -f -c '%i' $upperdir)
+lower_fsid=$(stat -f -c '%i' $lowerdir)
+
+# Sanity tests
+[[ -n "$upper_fsid" ]] || \
+	echo "invalid upper fs fsid"
+[[ "$lower_fsid" == "$upper_fsid" ]] || \
+	echo "lower fs and upper fs fsid differ"
+
+# Test legacy behavior - ovl fsid inherited from upper fs
+_overlay_scratch_mount_dirs $lowerdir $upperdir $workdir -o uuid=null 2>/dev/null || \
+	_notrun "Overlayfs does not support unique fsid feature"
+
+# Lookup of test_dir marks upper root as "impure", so following (uuid=auto) mounts
+# will NOT behave as first time mount of a new overlayfs
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$upper_fsid" ]] || \
+	echo "Overlayfs (uuid=null) and upper fs fsid differ"
+
+# Keep base fs mounted in case it has a volatile fsid (e.g. tmpfs)
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test legacy behavior is preserved by default for existing "impure" overlayfs
+_scratch_mount
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$upper_fsid" ]] || \
+	echo "Overlayfs (uuid=auto) and upper fs fsid differ"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test unique fsid on explicit opt-in for existing "impure" overlayfs
+_scratch_mount -o uuid=on
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+ovl_unique_fsid=$ovl_fsid
+[[ "$ovl_fsid" != "$upper_fsid" ]] || \
+	echo "Overlayfs (uuid=on) and upper fs fsid are the same"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test unique fsid is persistent by default after it was created
+_scratch_mount
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$ovl_unique_fsid" ]] || \
+	echo "Overlayfs (uuid=auto) unique fsid is not persistent"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test ignore existing persistent fsid on explicit opt-out
+_scratch_mount -o uuid=off
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$upper_fsid" ]] || \
+	echo "Overlayfs (uuid=off) and upper fs fsid differ"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test fallback to uuid=null with non-upper ovelray
+_overlay_scratch_mount_dirs "$upperdir:$lowerdir" "-" "-" -o ro,uuid=on
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$lower_fsid" ]] || \
+	echo "Overlayfs (uuid=null) and lower fs fsid differ"
+
+# Re-create fresh overlay layers, so following (uuid=auto) mounts
+# will behave as first time mount of a new overlayfs
+_scratch_unmount
+_scratch_mkfs >>$seqres.full 2>&1
+mkdir -p $upperdir/test_dir
+mkdir -p $lowerdir/test_dir
+
+# Record new base fs fsid
+upper_fsid=$(stat -f -c '%i' $upperdir)
+
+# Test unique fsid by default for first time mount of new overlayfs
+_scratch_mount
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+ovl_unique_fsid=$ovl_fsid
+[[ "$ovl_fsid" != "$upper_fsid" ]] || \
+	echo "Overlayfs (uuid=auto) and upper fs fsid are the same"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+# Test unique fsid is persistent by default after it was created
+_scratch_mount -o uuid=on
+
+ovl_fsid=$(stat -f -c '%i' $test_dir)
+[[ "$ovl_fsid" == "$ovl_unique_fsid" ]] || \
+	echo "Overlayfs (uuid=on) unique fsid is not persistent"
+
+$UMOUNT_PROG $SCRATCH_MNT
+
+echo "Silence is golden"
+status=0
+exit
