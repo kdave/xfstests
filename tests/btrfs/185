@@ -15,6 +15,7 @@ mnt=$TEST_DIR/$seq.mnt
 # Override the default cleanup function.
 _cleanup()
 {
+	$UMOUNT_PROG $mnt > /dev/null 2>&1
 	rm -rf $mnt > /dev/null 2>&1
 	cd /
 	rm -f $tmp.*
@@ -51,9 +52,9 @@ for sb_bytenr in 65536 67108864; do
 	echo ..:$? >> $seqres.full
 done
 
-# Original device is mounted, scan of its clone should fail
+# Original device is mounted, scan of its clone must not alter the
+# filesystem device path
 $BTRFS_UTIL_PROG device scan $device_2 >> $seqres.full 2>&1
-[[ $? != 1 ]] && _fail "cloned device scan should fail"
 
 [[ $(findmnt $mnt | grep -v TARGET | $AWK_PROG '{print $2}') != $device_1 ]] && \
 						_fail "mounted device changed"
