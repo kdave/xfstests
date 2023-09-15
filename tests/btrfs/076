@@ -28,13 +28,28 @@ _supported_fs btrfs
 _require_test
 _require_scratch
 
+# An extent size can be up to BTRFS_MAX_UNCOMPRESSED
+max_extent_size=$(( 128 * 1024 ))
+if _scratch_btrfs_is_zoned; then
+	zone_append_max=$(cat "/sys/block/$(_short_dev $SCRATCH_DEV)/queue/zone_append_max_bytes")
+	if [[ $zone_append_max -gt 0 && $zone_append_max -lt $max_extent_size ]]; then
+		# Round down to PAGE_SIZE
+		max_extent_size=$(( $zone_append_max / 4096 * 4096 ))
+	fi
+fi
+file_size=$(( 1 * 1024 * 1024 ))
+expect=$(( (file_size + max_extent_size - 1) / max_extent_size ))
+
 _scratch_mkfs >> $seqres.full 2>&1
 _scratch_mount "-o compress=lzo"
 
 $XFS_IO_PROG -f -c "pwrite 0 10M" -c "fsync" \
 	$SCRATCH_MNT/data >> $seqres.full 2>&1
 
-_extent_count $SCRATCH_MNT/data
+res=$(_extent_count $SCRATCH_MNT/data)
+if [[ $res -ne $expect ]]; then
+	_fail "Expected $expect extents, got $res"
+fi
 
 $XFS_IO_PROG -f -c "pwrite 0 $((4096*33))" -c "fsync" \
 	$SCRATCH_MNT/data >> $seqres.full 2>&1
@@ -42,7 +57,11 @@ $XFS_IO_PROG -f -c "pwrite 0 $((4096*33))" -c "fsync" \
 $XFS_IO_PROG -f -c "pwrite 0 10M" -c "fsync" \
 	$SCRATCH_MNT/data >> $seqres.full 2>&1
 
-_extent_count $SCRATCH_MNT/data
+res=$(_extent_count $SCRATCH_MNT/data)
+if [[ $res -ne $expect ]]; then
+	_fail "Expected $expect extents, got $res"
+fi
 
+echo "Silence is golden"
 status=0
 exit
