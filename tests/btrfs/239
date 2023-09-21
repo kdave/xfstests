@@ -83,6 +83,18 @@ done
 #
 mkdir $SCRATCH_MNT/testdir/dira
 
+# This fsync is for the zoned mode. On the zoned mode, we use a dedicated block
+# group for tree-log. That block group is created on-demand or assigned to a
+# metadata block group if there is none. On the first mount of a file system, we
+# need to create one because there is only one metadata block group available
+# for the regular metadata. That creation of a new block group forces tree-log
+# to be a full commit on that transaction, which prevents logging "testdir" and
+# "dira" and screws up the result.
+#
+# Calling fsync here will create the dedicated block group, and let them be
+# logged.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT
+
 # Make sure everything done so far is durably persisted.
 sync
 
