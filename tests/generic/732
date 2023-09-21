@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 732
+#
+# Mount the same export to different mount points and move (rename)
+# files among those mount points.
+# This simple test recently unveils an ancient nfsd bug that is fixed
+# by fdd2630a739819 ("nfsd: fix change_info in NFSv4 RENAME replies").
+#
+. ./common/preamble
+_begin_fstest auto quick rename
+
+# Override the default cleanup function.
+_cleanup()
+{
+	$UMOUNT_PROG $testdir1 2>/dev/null
+	$UMOUNT_PROG $testdir2 2>/dev/null
+	cd /
+	rm -r -f $tmp.*
+}
+
+# real QA test starts here
+_supported_fs generic
+[ "$FSTYP" = "nfs" ] && _fixed_by_kernel_commit fdd2630a739819 \
+	"nfsd: fix change_info in NFSv4 RENAME replies"
+
+_require_test
+_require_scratch
+
+echo "Silence is golden"
+
+_scratch_mkfs >> $seqres.full
+testdir1=$TEST_DIR/mountpoint1-$seq
+testdir2=$TEST_DIR/mountpoint2-$seq
+rm -rf $testdir1 $testdir2
+mkdir -p $testdir1 $testdir2
+
+# Don't share the data and attribute caches among mount points for NFS.
+# This caching behavior is necessary to reproduce this issue as we're
+# checking the alignment of each mount point's own unique cache.
+[ "$FSTYP" = "nfs" ] && MOUNT_OPTIONS="-o nosharecache"
+
+SCRATCH_MNT=$testdir1 _scratch_mount
+SCRATCH_MNT=$testdir2 _scratch_mount
+rm -rf $testdir1/{A,B}
+mkdir $testdir1/{A,B}
+touch $testdir1/A/f
+mv $testdir1/A/f $testdir1/B/
+cat $testdir2/B/f
+mv $testdir2/B/f $testdir2/A/
+cat $testdir1/A/f
+mv $testdir1/A/f $testdir1/B/
+
+# success, all done
+status=0
+exit
