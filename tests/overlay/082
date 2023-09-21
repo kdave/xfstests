@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 082
+#
+# Test for a regression in copy up of symlink that has the noatime inode
+# attribute.
+#
+# kernel commit 72db82115d2b ("ovl: copy up sync/noatime fileattr flags")
+# from v5.15 introduced the regression.
+#
+. ./common/preamble
+_begin_fstest auto quick copyup symlink atime
+
+# real QA test starts here
+_supported_fs overlay
+_fixed_by_kernel_commit ab048302026d \
+	"ovl: fix failed copyup of fileattr on a symlink"
+
+_require_scratch
+_require_chattr A
+
+# remove all files from previous runs
+_scratch_mkfs
+
+# prepare lower test dir with NOATIME flag
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+mkdir -p $lowerdir/testdir
+$CHATTR_PROG +A $lowerdir/testdir >> $seqres.full 2>&1 ||
+	echo "failed to set No_Atime flag on $lowerdir/testdir"
+
+# The NOATIME is inherited to children symlink in ext4/fs2fs
+# (and on tmpfs on recent kernels).
+# The overlayfs test will not fail unless base fs is
+# one of those filesystems.
+#
+# The problem with this inheritence is that the NOATIME flag is inherited
+# to a symlink and the flag does take effect, but there is no way to query
+# the flag (lsattr) or change it (chattr) on a symlink, so overlayfs will
+# fail when trying to copy up NOATIME flag from lower to upper symlink.
+#
+touch $lowerdir/testdir/foo
+ln -sf foo $lowerdir/testdir/lnk
+$LSATTR_PROG -l $lowerdir/testdir/foo >> $seqres.full
+
+before=$(stat -c %x $lowerdir/testdir/lnk)
+echo "symlink atime before readlink: $before" >> $seqres.full 2>&1
+sleep 2s
+cat $lowerdir/testdir/lnk
+after=$(stat -c %x $lowerdir/testdir/lnk)
+echo "symlink atime after readlink: $after" >> $seqres.full 2>&1
+
+[ "$before" == "$after" ] || \
+	_notrun "base fs $OVL_BASE_FSTYP does not inherit No_Atime flag on symlink"
+
+# mounting overlay
+_scratch_mount
+
+# moving symlink will try to copy up lower symlink flags
+# and fails with error ENXIO, if the bug is reproduced
+mv $SCRATCH_MNT/testdir/lnk $SCRATCH_MNT/
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
