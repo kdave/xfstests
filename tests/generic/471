@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 471
+#
+# Test that if names are added to a directory after an opendir(3) call and
+# before a rewinddir(3) call, future readdir(3) calls will return the names.
+# This is mandated by POSIX:
+#
+# https://pubs.opengroup.org/onlinepubs/007904875/functions/rewinddir.html
+#
+. ./common/preamble
+_begin_fstest auto quick dir
+
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $target_dir
+}
+
+_supported_fs generic
+_require_test
+_require_test_program rewinddir-test
+
+[ $FSTYP == "btrfs" ] && _fixed_by_kernel_commit e60aa5da14d0 \
+	"btrfs: refresh dir last index during a rewinddir(3) call"
+
+target_dir="$TEST_DIR/test-$seq"
+rm -fr $target_dir
+mkdir $target_dir
+
+$here/src/rewinddir-test $target_dir
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
