@@ -27,6 +27,15 @@ query_logical_ino()
 	$BTRFS_UTIL_PROG inspect-internal logical-resolve -P $* $SCRATCH_MNT
 }
 
+# The IDs of the snapshots (roots) we create may vary if we are using the free
+# space tree or not for example (mkfs options -R free-space-tree and
+# -R ^free-space-tree). So replace their IDs with names so that we don't get
+# golden output mismatches if we are using features that create other roots.
+filter_snapshot_ids()
+{
+	sed -e "s/root $snap1_id\b/snap1/" -e "s/root $snap2_id\b/snap2/"
+}
+
 _scratch_mkfs >> $seqres.full || _fail "mkfs failed"
 _scratch_mount
 
@@ -107,16 +116,19 @@ $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1 \
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2 \
 	| _filter_scratch
 
+snap1_id=$(_btrfs_get_subvolid $SCRATCH_MNT snap1)
+snap2_id=$(_btrfs_get_subvolid $SCRATCH_MNT snap2)
+
 # Query for the first extent (at offset 0). Should give two entries for each
 # root - default subvolume and the 2 snapshots, for file offsets 8M and 16M.
 echo "resolve first extent:"
-query_logical_ino $first_extent_bytenr
+query_logical_ino $first_extent_bytenr | filter_snapshot_ids
 
 # Query for the first extent (at offset 0) with the ignore offset option.
 # Should give 3 entries for each root - default subvolume and the 2 snapshots,
 # for file offsets 2M, 8M and 16M.
 echo "resolve first extent with ignore offset option:"
-query_logical_ino -o $first_extent_bytenr
+query_logical_ino -o $first_extent_bytenr | filter_snapshot_ids
 
 # Now lets punch a 1M hole at file offset 4M. This changes the second file
 # extent item to point to the second extent with an offset of 1M and a length
@@ -126,14 +138,14 @@ query_logical_ino -o $first_extent_bytenr
 # return file offsets 12M and 20M.
 $XFS_IO_PROG -c "fpunch 4M 1M" $SCRATCH_MNT/foo
 echo "resolve second extent after punching hole at file range [4M, 5M):"
-query_logical_ino $second_extent_bytenr
+query_logical_ino $second_extent_bytenr | filter_snapshot_ids
 
 # Repeat the query but with the ignore offset option. We should get 3 entries
 # for each root. For the snapshot roots, we should get entries for file offsets
 # 4M, 12M and 20M, while for the default subvolume (root 5) we should get for
 # file offsets 5M, 12M and 20M.
 echo "resolve second extent with ignore offset option:"
-query_logical_ino -o $second_extent_bytenr
+query_logical_ino -o $second_extent_bytenr | filter_snapshot_ids
 
 # Now delete the first snapshot and repeat the last 2 queries.
 $BTRFS_UTIL_PROG subvolume delete -C $SCRATCH_MNT/snap1 | _filter_scratch
@@ -142,13 +154,13 @@ $BTRFS_UTIL_PROG subvolume delete -C $SCRATCH_MNT/snap1 | _filter_scratch
 # and 20M for the default subvolume (root 5) and file offsets 4M, 12M and 20M
 # for the second snapshot root.
 echo "resolve second extent:"
-query_logical_ino $second_extent_bytenr
+query_logical_ino $second_extent_bytenr | filter_snapshot_ids
 
 # Query the second extent with the ignore offset option, should return file
 # offsets 5M, 12M and 20M for the default subvolume (root 5) and file offsets
 # 4M, 12M and 20M for the second snapshot root.
 echo "resolve second extent with ignore offset option:"
-query_logical_ino -o $second_extent_bytenr
+query_logical_ino -o $second_extent_bytenr | filter_snapshot_ids
 
 status=0
 exit
