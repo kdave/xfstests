@@ -71,6 +71,17 @@ create_test_file()
 	done
 }
 
+require_larp()
+{
+	touch $SCRATCH_MNT/a
+
+	# Set attribute, being careful not to include the trailing newline
+	# in the attr value.
+	echo -n "attr_value" | ${ATTR_PROG} -s "attr_name" $SCRATCH_MNT/a 2>&1 | \
+		grep 'Operation not supported' && \
+		_notrun 'LARP not supported on this filesystem'
+}
+
 # real QA test starts here
 _supported_fs xfs
 
@@ -111,6 +122,8 @@ _scratch_mount
 
 testdir=$SCRATCH_MNT/testdir
 mkdir $testdir
+
+require_larp
 
 # empty, inline
 create_test_file empty_file1 0
