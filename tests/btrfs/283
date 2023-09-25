@@ -25,6 +25,14 @@ _require_fssum
 _wants_kernel_commit c7499a64dcf6 \
 	     "btrfs: send: optimize clone detection to increase extent sharing"
 
+extent_size=$(( 128 * 1024 ))
+if _scratch_btrfs_is_zoned; then
+	zone_append_max=$(cat "/sys/block/$(_short_dev $SCRATCH_DEV)/queue/zone_append_max_bytes")
+	if [[ $zone_append_max -gt 0 && $zone_append_max -lt $extent_size ]]; then
+		_notrun "zone append max $zone_append_max is smaller than wanted extent size $extent_size"
+	fi
+fi
+
 send_files_dir=$TEST_DIR/btrfs-test-$seq
 send_stream=$send_files_dir/snap.stream
 snap_fssum=$send_files_dir/snap.fssum
