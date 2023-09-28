@@ -1,0 +1,55 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test 298
+#
+#   Check if the device scan registers for a single-device seed and drops
+#  it from the kernel if it is eventually marked as non-seed.
+#
+. ./common/preamble
+_begin_fstest auto quick seed
+
+_supported_fs btrfs
+_require_command "$BTRFS_TUNE_PROG" btrfstune
+_require_command "$WIPEFS_PROG" wipefs
+_require_scratch_dev_pool 2
+_scratch_dev_pool_get 1
+_spare_dev_get
+
+$WIPEFS_PROG -a $SCRATCH_DEV
+$WIPEFS_PROG -a $SPARE_DEV
+
+echo "#setup seed sprout device" >> $seqres.full
+_scratch_mkfs "-b 300M" >> $seqres.full 2>&1 || \
+	_fail "Fail to make SCRATCH_DEV with -b 300M"
+$BTRFS_TUNE_PROG -S 1 $SCRATCH_DEV
+_scratch_mount >> $seqres.full 2>&1
+$BTRFS_UTIL_PROG device add $SPARE_DEV $SCRATCH_MNT
+_scratch_unmount
+$BTRFS_UTIL_PROG device scan --forget
+
+echo "#Scan seed device and check using mount" >> $seqres.full
+$BTRFS_UTIL_PROG device scan $SCRATCH_DEV >> $seqres.full
+_mount $SPARE_DEV $SCRATCH_MNT
+umount $SCRATCH_MNT
+
+echo "#check again, ensures seed device still in kernel" >> $seqres.full
+_mount $SPARE_DEV $SCRATCH_MNT
+umount $SCRATCH_MNT
+
+echo "#Now scan of non-seed device makes kernel forget" >> $seqres.full
+$BTRFS_TUNE_PROG -f -S 0 $SCRATCH_DEV >> $seqres.full 2>&1
+$BTRFS_UTIL_PROG device scan $SCRATCH_DEV >> $seqres.full
+
+echo "#Sprout mount must fail for missing seed device" >> $seqres.full
+_mount $SPARE_DEV $SCRATCH_MNT > /dev/null 2>&1
+[[ $? == 32 ]] || _fail "mount failed to fail"
+
+_spare_dev_put
+_scratch_dev_pool_put
+
+# success, all done
+echo Silence is golden
+status=0
+exit
