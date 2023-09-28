@@ -710,6 +710,29 @@ _check_regular_qgroup()
 	_qgroup_mode "$@" | grep -q 'qgroup'
 }
 
+_qgroup_rescan()
+{
+	local mnt=$1
+	local dev=$(findmnt -n -o SOURCE $mnt)
+
+	_check_regular_qgroup $dev || return 1
+	_run_btrfs_util_prog quota rescan -w $mnt
+}
+
+_require_qgroup_rescan()
+{
+	_scratch_mkfs >>$seqres.full 2>&1
+	_scratch_mount
+	_run_btrfs_util_prog quota enable $SCRATCH_MNT
+	# Wait for the first rescan.
+	$BTRFS_UTIL_PROG quota rescan -W $SCRATCH_MNT || \
+				_notrun "not able to wait on a quota rescan"
+	# Make sure we can start a rescan.
+	$BTRFS_UTIL_PROG quota rescan -w $SCRATCH_MNT >> $seqres.full || \
+					_notrun "not able to run quota rescan"
+	_scratch_unmount
+}
+
 _require_scratch_qgroup()
 {
 	_scratch_mkfs >>$seqres.full 2>&1
