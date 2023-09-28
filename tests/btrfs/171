@@ -35,7 +35,7 @@ $BTRFS_UTIL_PROG subvolume snapshot "$SCRATCH_MNT/subvol" \
 	"$SCRATCH_MNT/snapshot" > /dev/null
 
 $BTRFS_UTIL_PROG quota enable "$SCRATCH_MNT" > /dev/null
-$BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT" > /dev/null
+_qgroup_rescan $SCRATCH_MNT > /dev/null
 
 # Create high level qgroup
 $BTRFS_UTIL_PROG qgroup create 1/0 "$SCRATCH_MNT"
@@ -45,7 +45,7 @@ $BTRFS_UTIL_PROG qgroup assign "$SCRATCH_MNT/snapshot" 1/0 "$SCRATCH_MNT" \
 
 # Above assignment will mark qgroup inconsistent due to the shared extents
 # between subvol/snapshot/high level qgroup, do rescan here.
-$BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT" > /dev/null
+_qgroup_rescan $SCRATCH_MNT > /dev/null
 
 # Now remove the qgroup relationship and make 1/0 childless
 # Due to the shared extent outside of 1/0, we will mark qgroup inconsistent
@@ -54,7 +54,7 @@ $BTRFS_UTIL_PROG qgroup remove "$SCRATCH_MNT/snapshot" 1/0 "$SCRATCH_MNT" \
 	2>&1 | _filter_btrfs_qgroup_assign_warnings
 
 # Above removal also marks qgroup inconsistent, rescan again
-$BTRFS_UTIL_PROG quota rescan -w "$SCRATCH_MNT" > /dev/null
+_qgroup_rescan $SCRATCH_MNT > /dev/null
 
 # After the test, btrfs check will verify qgroup numbers to catch any
 # corruption.
