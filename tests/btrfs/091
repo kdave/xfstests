@@ -19,6 +19,7 @@ _begin_fstest auto quick qgroup
 _supported_fs btrfs
 _require_scratch
 _require_cp_reflink
+_require_scratch_qgroup
 
 # use largest node/leaf size (64K) to allow the test to be run on arch with
 # page size > 4k.
@@ -35,7 +36,7 @@ _run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv2
 _run_btrfs_util_prog subvolume create $SCRATCH_MNT/subv3
 
 _run_btrfs_util_prog quota enable $SCRATCH_MNT
-_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+_qgroup_rescan $SCRATCH_MNT
 
 $XFS_IO_PROG -f -c "pwrite 0 256K" $SCRATCH_MNT/subv1/file1 | _filter_xfs_io
 cp --reflink $SCRATCH_MNT/subv1/file1 $SCRATCH_MNT/subv2/file1
