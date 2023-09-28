@@ -689,3 +689,44 @@ _require_btrfs_scratch_logical_resolve_v2()
 	fi
 	_scratch_unmount
 }
+
+_qgroup_mode()
+{
+	local dev=$1
+
+	if [ ! -b "$dev" ]; then
+		_fail "Usage: _qgroup_mode <mounted_device>"
+	fi
+
+	if _has_fs_sysfs_attr $dev /qgroups/mode; then
+		_get_fs_sysfs_attr $dev qgroups/mode
+	else
+		echo "disabled"
+	fi
+}
+
+_check_regular_qgroup()
+{
+	_qgroup_mode "$@" | grep -q 'qgroup'
+}
+
+_require_scratch_qgroup()
+{
+	_scratch_mkfs >>$seqres.full 2>&1
+	_scratch_mount
+	$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT
+	_check_regular_qgroup $SCRATCH_DEV || \
+					_notrun "not running normal qgroups"
+	_scratch_unmount
+}
+
+_require_scratch_enable_simple_quota()
+{
+	_scratch_mkfs >>$seqres.full 2>&1
+	_scratch_mount
+	_qgroup_mode $SCRATCH_DEV | grep 'squota' && \
+			_notrun "cannot enable simple quota; on by default"
+	$BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT || \
+					_notrun "simple quotas not available"
+	_scratch_unmount
+}
