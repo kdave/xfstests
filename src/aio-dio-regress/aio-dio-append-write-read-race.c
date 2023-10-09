@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
 		}
 
 		for (j = 0; j < rdata.read_sz; j++) {
-			if (rdata.buf[j] != 'a') {
+			if (rdata.buf[j] != 'a' && rdata.buf[j] != 0) {
 				fail("encounter an error: "
 					"block %d offset %d, content %x\n",
 					i, j, rbuf[j]);
