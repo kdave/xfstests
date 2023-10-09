@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 601
+#
+# This is a regression test for the kernel commit noted below.  The stale
+# memory exposure can be exploited by creating a file with shared blocks,
+# evicting the page cache for that file, and then funshareing at least one
+# memory page's worth of data.  iomap will mark the page uptodate and dirty
+# without ever reading the ondisk contents.
+#
+. ./common/preamble
+_begin_fstest auto quick unshare clone
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $testdir
+}
+
+# real QA test starts here
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+_fixed_by_git_commit kernel 35d30c9cf127 \
+	"iomap: don't skip reading in !uptodate folios when unsharing a range"
+
+# real QA test starts here
+_require_test_reflink
+_require_cp_reflink
+_require_xfs_io_command "funshare"
+
+testdir=$TEST_DIR/test-$seq
+rm -rf $testdir
+mkdir $testdir
+
+# Create a file that is at least four pages in size and aligned to the
+# file allocation unit size so that we don't trigger any unnecessary zeroing.
+pagesz=$(_get_page_size)
+alloc_unit=$(_get_file_block_size $TEST_DIR)
+filesz=$(( ( (4 * pagesz) + alloc_unit - 1) / alloc_unit * alloc_unit))
+
+echo "Create the original file and a clone"
+_pwrite_byte 0x61 0 $filesz $testdir/file2.chk >> $seqres.full
+_pwrite_byte 0x61 0 $filesz $testdir/file1 >> $seqres.full
+_cp_reflink $testdir/file1 $testdir/file2
+_cp_reflink $testdir/file1 $testdir/file3
+
+_test_cycle_mount
+
+cat $testdir/file3 > /dev/null
+
+echo "Funshare at least one pagecache page"
+$XFS_IO_PROG -c "funshare 0 $filesz" $testdir/file2
+$XFS_IO_PROG -c "funshare 0 $filesz" $testdir/file3
+_pwrite_byte 0x61 0 $filesz $testdir/file2.chk >> $seqres.full
+
+echo "Check contents"
+
+# file2 wasn't cached when it was unshared, but it should match
+if ! cmp -s $testdir/file2.chk $testdir/file2; then
+	echo "file2.chk does not match file2"
+
+	echo "file2.chk contents" >> $seqres.full
+	od -tx1 -Ad -c $testdir/file2.chk >> $seqres.full
+	echo "file2 contents" >> $seqres.full
+	od -tx1 -Ad -c $testdir/file2 >> $seqres.full
+	echo "end bad contents" >> $seqres.full
+fi
+
+# file3 was cached when it was unshared, and it should match
+if ! cmp -s $testdir/file2.chk $testdir/file3; then
+	echo "file2.chk does not match file3"
+
+	echo "file2.chk contents" >> $seqres.full
+	od -tx1 -Ad -c $testdir/file2.chk >> $seqres.full
+	echo "file3 contents" >> $seqres.full
+	od -tx1 -Ad -c $testdir/file3 >> $seqres.full
+	echo "end bad contents" >> $seqres.full
+fi
+
+# success, all done
+status=0
+exit
