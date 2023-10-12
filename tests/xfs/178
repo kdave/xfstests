@@ -10,13 +10,20 @@
 . ./common/preamble
 _begin_fstest mkfs other auto
 
+filter_repair() {
+	_filter_repair | sed \
+		-e '/unable to verify superblock, continuing/d' \
+		-e '/found candidate secondary superblock/d' \
+		-e '/error reading superblock.*-- seek to offset/d'
+}
+
 # dd the 1st sector then repair
 _dd_repair_check()
 {
 	#dd first sector
 	dd if=/dev/zero of=$1 bs=$2 count=1 2>&1 | _filter_dd
 	#xfs_repair
-	_scratch_xfs_repair 2>&1 | _filter_repair
+	_scratch_xfs_repair 2>&1 | filter_repair
 	#check repair
 	if _check_scratch_fs; then
         	echo "repair passed"
