@@ -1,0 +1,61 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 302
+#
+# Test that snapshotting a new subvolume (created in the current transaction)
+# that has a btree with a height > 1, works and does not result in a filesystem
+# corruption.
+#
+# This exercises a regression introduced in kernel 6.5 by the kernel commit:
+#
+#    1b53e51a4a8f ("btrfs: don't commit transaction for every subvol create")
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot subvol
+
+. ./common/filter
+
+_supported_fs btrfs
+_require_scratch
+_require_fssum
+
+_fixed_by_kernel_commit eb96e221937a \
+	"btrfs: fix unwritten extent buffer after snapshotting a new subvolume"
+
+# Use a filesystem with a 64K node size so that we have the same node size on
+# every machine regardless of its page size (on x86_64 default node size is 16K
+# due to the 4K page size, while on PPC it's 64K by default). This way we can
+# make sure we are able to create a btree for the subvolume with a height of 2.
+_scratch_mkfs -n 64K >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol | _filter_scratch
+
+# Create a few empty files on the subvolume, this bumps its btree height to 2
+# (root node at level 1 and 2 leaves).
+for ((i = 1; i <= 300; i++)); do
+	echo -n > $SCRATCH_MNT/subvol/file_$i
+done
+
+# Create a checksum of the subvolume's content.
+fssum_file="$SCRATCH_MNT/checksum.fssum"
+$FSSUM_PROG -A -f -w $fssum_file $SCRATCH_MNT/subvol
+
+# Now create a snapshot of the subvolume and make it accessible from within the
+# subvolume.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol \
+		 $SCRATCH_MNT/subvol/snap | _filter_scratch
+
+# Now unmount and mount again the fs. We want to verify we are able to read all
+# metadata for the snapshot from disk (no IO failures, etc).
+_scratch_cycle_mount
+
+# The snapshot's content should match the subvolume's content before we created
+# the snapshot.
+$FSSUM_PROG -r $fssum_file $SCRATCH_MNT/subvol/snap
+
+# success, all done
+status=0
+exit
