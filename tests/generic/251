@@ -53,14 +53,46 @@ _fail()
 	kill $mypid 2> /dev/null
 }
 
-_guess_max_minlen()
+# Set FSTRIM_{MIN,MAX}_MINLEN to the lower and upper bounds of the -m(inlen)
+# parameter to fstrim on the scratch filesystem.
+set_minlen_constraints()
 {
-	mmlen=100000
-	while [ $mmlen -gt 1 ]; do
+	local mmlen
+
+	for ((mmlen = 100000; mmlen > 0; mmlen /= 2)); do
 		$FSTRIM_PROG -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
-		mmlen=$(($mmlen/2))
 	done
-	echo $mmlen
+	test $mmlen -gt 0 || \
+		_notrun "could not determine maximum FSTRIM minlen param"
+	FSTRIM_MAX_MINLEN=$mmlen
+
+	for ((mmlen = 1; mmlen < FSTRIM_MAX_MINLEN; mmlen *= 2)); do
+		$FSTRIM_PROG -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
+	done
+	test $mmlen -le $FSTRIM_MAX_MINLEN || \
+		_notrun "could not determine minimum FSTRIM minlen param"
+	FSTRIM_MIN_MINLEN=$mmlen
+}
+
+# Set FSTRIM_{MIN,MAX}_LEN to the lower and upper bounds of the -l(ength)
+# parameter to fstrim on the scratch filesystem.
+set_length_constraints()
+{
+	local mmlen
+
+	for ((mmlen = 100000; mmlen > 0; mmlen /= 2)); do
+		$FSTRIM_PROG -l ${mmlen}k $SCRATCH_MNT &> /dev/null && break
+	done
+	test $mmlen -gt 0 || \
+		_notrun "could not determine maximum FSTRIM length param"
+	FSTRIM_MAX_LEN=$mmlen
+
+	for ((mmlen = 1; mmlen < FSTRIM_MAX_LEN; mmlen *= 2)); do
+		$FSTRIM_PROG -l ${mmlen}k $SCRATCH_MNT &> /dev/null && break
+	done
+	test $mmlen -le $FSTRIM_MAX_LEN || \
+		_notrun "could not determine minimum FSTRIM length param"
+	FSTRIM_MIN_LEN=$mmlen
 }
 
 ##
@@ -70,13 +102,24 @@ _guess_max_minlen()
 ##
 fstrim_loop()
 {
+	set_minlen_constraints
+	set_length_constraints
+	echo "MINLEN max=$FSTRIM_MAX_MINLEN min=$FSTRIM_MIN_MINLEN" >> $seqres.full
+	echo "LENGTH max=$FSTRIM_MAX_LEN min=$FSTRIM_MIN_LEN" >> $seqres.full
+
 	trap "_destroy_fstrim; exit \$status" 2 15
 	fsize=$(_discard_max_offset_kb "$SCRATCH_MNT" "$SCRATCH_DEV")
-	mmlen=$(_guess_max_minlen)
 
 	while true ; do
-		step=$((RANDOM*$RANDOM+4))
-		minlen=$(((RANDOM*($RANDOM%2+1))%$mmlen))
+		while true; do
+			step=$((RANDOM*$RANDOM+4))
+			test "$step" -ge "$FSTRIM_MIN_LEN" && break
+		done
+		while true; do
+			minlen=$(( (RANDOM * (RANDOM % 2 + 1)) % FSTRIM_MAX_MINLEN ))
+			test "$minlen" -ge "$FSTRIM_MIN_MINLEN" && break
+		done
+
 		start=$RANDOM
 		if [ $((RANDOM%10)) -gt 7 ]; then
 			$FSTRIM_PROG $SCRATCH_MNT &
