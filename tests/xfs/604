@@ -1,0 +1,69 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# FS QA Test No. 604
+#
+# Regression test for patch "xfs: fix internal error from AGFL exhaustion".
+#
+. ./common/preamble
+_begin_fstest auto prealloc punch
+
+. ./common/filter
+
+_supported_fs xfs
+_require_scratch
+_require_xfs_io_command "fpunch"
+_require_test_program punch-alternating
+_fixed_by_kernel_commit XXXXXXXXXXXX "xfs: fix internal error from AGFL exhaustion"
+
+# Disable the rmapbt so we only need to worry about splitting the bnobt and
+# cntbt at the same time.
+opts=
+if $MKFS_XFS_PROG |& grep -q rmapbt; then
+	opts="-m rmapbt=0"
+fi
+_scratch_mkfs $opts | _filter_mkfs > /dev/null 2> "$tmp.mkfs"
+. "$tmp.mkfs"
+_scratch_mount
+
+alloc_block_len=$((_fs_has_crcs ? 56 : 16))
+allocbt_leaf_maxrecs=$(((dbsize - alloc_block_len) / 8))
+allocbt_node_maxrecs=$(((dbsize - alloc_block_len) / 12))
+
+# Create a big file with a size such that the punches below create the exact
+# free extents we want.
+num_holes=$((allocbt_leaf_maxrecs * allocbt_node_maxrecs - 1))
+$XFS_IO_PROG -c "falloc 0 $((9 * dbsize + num_holes * dbsize * 2))" -f "$SCRATCH_MNT/big"
+
+# Fill in any small free extents in AG 0. After this, there should be only one,
+# large free extent.
+_scratch_unmount
+mapfile -t gaps < <(_scratch_xfs_db -c 'agf 0' -c 'addr cntroot' -c btdump |
+	$SED_PROG -rn 's/^[0-9]+:\[[0-9]+,([0-9]+)\].*/\1/p' |
+	tac | tail -n +2)
+_scratch_mount
+for gap_i in "${!gaps[@]}"; do
+	gap=${gaps[$gap_i]}
+	$XFS_IO_PROG -c "falloc 0 $((gap * dbsize))" -f "$SCRATCH_MNT/gap$gap_i"
+done
+
+# Create enough free space records to make the bnobt and cntbt both full,
+# 2-level trees, plus one more record to make them split all the way to the
+# root and become 3-level trees. After this, there is a 7-block free extent in
+# the rightmost leaf of the cntbt, and all of the leaves of the cntbt other
+# than the rightmost two are full. Without the fix, the free list is also
+# empty.
+$XFS_IO_PROG -c "fpunch $dbsize $((7 * dbsize))" "$SCRATCH_MNT/big"
+"$here/src/punch-alternating" -o 9 "$SCRATCH_MNT/big"
+
+# Do an arbitrary operation that refills the free list. Without the fix, this
+# will allocate 6 blocks from the 7-block free extent in the rightmost leaf of
+# the cntbt, then try to insert the remaining 1 block free extent in the
+# leftmost leaf of the cntbt. But that leaf is full, so this tries to split the
+# leaf and fails because the free list is empty, returning EFSCORRUPTED.
+$XFS_IO_PROG -c "fpunch 0 $dbsize" "$SCRATCH_MNT/big"
+
+echo "Silence is golden"
+status=0
+exit
