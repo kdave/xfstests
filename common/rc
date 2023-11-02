@@ -4721,6 +4721,7 @@ _require_statx()
 _fs_sysfs_dname()
 {
 	local dev=$1
+	local fsid
 
 	if [ ! -b "$dev" ]; then
 		_fail "Usage: _fs_sysfs_dname <mounted_device>"
@@ -4728,7 +4729,9 @@ _fs_sysfs_dname()
 
 	case "$FSTYP" in
 	btrfs)
-		findmnt -n -o UUID ${dev} ;;
+		fsid=$($BTRFS_UTIL_PROG filesystem show ${dev} | grep uuid: | \
+							$AWK_PROG '{print $NF}')
+		echo $fsid ;;
 	*)
 		_short_dev $dev ;;
 	esac
