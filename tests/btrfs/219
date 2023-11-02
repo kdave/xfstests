@@ -51,6 +51,7 @@ loop_dev2=""
 
 _require_test
 _require_loop
+_require_btrfs_fs_sysfs
 _require_btrfs_forget_or_module_loadable
 _fixed_by_kernel_commit 5f58d783fd78 \
 	"btrfs: free device in btrfs_close_devices for a single device filesystem"
@@ -88,14 +89,16 @@ _mount $loop_dev1 $loop_mnt1 > /dev/null 2>&1 || \
 	_fail "Failed to mount the second time"
 $UMOUNT_PROG $loop_mnt1
 
-# Now we definitely can't mount them at the same time, because we're still tied
-# to the limitation of one fs_devices per fsid.
+# Now try mount them at the same time, if kernel does not support
+# temp-fsid feature then mount will fail.
 _btrfs_forget_or_module_reload
 
 _mount $loop_dev1 $loop_mnt1 > /dev/null 2>&1 || \
 	_fail "Failed to mount the third time"
-_mount $loop_dev2 $loop_mnt2 > /dev/null 2>&1 && \
-	_fail "We were allowed to mount when we should have failed"
+if ! _has_btrfs_sysfs_feature_attr temp_fsid; then
+	_mount $loop_dev2 $loop_mnt2 > /dev/null 2>&1 && \
+		_fail "We were allowed to mount when we should have failed"
+fi
 
 _btrfs_rescan_devices
 # success, all done
