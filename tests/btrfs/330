@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test No. btrfs/330
+#
+# Test mounting one subvolume as ro and another as rw
+#
+. ./common/preamble
+_begin_fstest auto quick subvol
+
+_cleanup()
+{
+	rm -rf $TEST_DIR/$seq
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/filter.btrfs
+
+# real QA test starts here
+_supported_fs btrfs
+_require_scratch
+
+$MOUNT_PROG -V | grep -q 'fd-based-mount'
+[ "$?" -eq 0 ] && _notrun "mount uses the new mount api"
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+# Create our subvolumes to mount
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/foo | _filter_scratch
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/bar | _filter_scratch
+
+_scratch_unmount
+
+mkdir -p $TEST_DIR/$seq/foo
+mkdir -p $TEST_DIR/$seq/bar
+
+_mount -t btrfs -o subvol=foo,ro $SCRATCH_DEV $TEST_DIR/$seq/foo
+_mount -t btrfs -o subvol=bar,rw $SCRATCH_DEV $TEST_DIR/$seq/bar
+
+echo "making sure foo is read only"
+touch $TEST_DIR/$seq/foo/baz > /dev/null 2&>1
+ls $TEST_DIR/$seq/foo
+
+echo "making sure bar allows writes"
+touch $TEST_DIR/$seq/bar/qux
+ls $TEST_DIR/$seq/bar
+
+$UMOUNT_PROG $TEST_DIR/$seq/foo
+$UMOUNT_PROG $TEST_DIR/$seq/bar
+
+status=0 ; exit
