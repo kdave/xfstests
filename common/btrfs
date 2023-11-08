@@ -457,12 +457,22 @@ _scratch_btrfs_is_zoned()
 	return 1
 }
 
+_btrfs_get_fsid()
+{
+	local fsid
+	local mnt=$1
+
+	fsid=$($BTRFS_UTIL_PROG filesystem show $mnt |grep uuid: |\
+	       $AWK_PROG '{print $NF}')
+
+	echo $fsid
+}
+
 _require_btrfs_sysfs_fsid()
 {
 	local fsid
 
-	fsid=$($BTRFS_UTIL_PROG filesystem show $TEST_DIR |grep uuid: |\
-	       $AWK_PROG '{print $NF}')
+	fsid=$(_btrfs_get_fsid $TEST_DIR)
 
 	# Check if the kernel has sysfs fsid support.
 	# Following kernel patch adds it:
