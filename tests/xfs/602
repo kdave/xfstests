@@ -1,0 +1,111 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 602
+#
+# Test using runtime code to fix unlinked inodes on a clean filesystem that
+# never got cleaned up.
+#
+. ./common/preamble
+_begin_fstest auto quick unlink
+
+. ./common/filter
+. ./common/fuzzy
+. ./common/quota
+
+# real QA test starts here
+
+_supported_fs xfs
+_require_xfs_db_command iunlink
+_require_scratch_nocheck	# we'll run repair ourselves
+
+# From the AGI definition
+XFS_AGI_UNLINKED_BUCKETS=64
+
+# Try to make each iunlink bucket have this many inodes in it.
+IUNLINK_BUCKETLEN=5
+
+# Disable quota since quotacheck will break this test
+orig_mount_options="$MOUNT_OPTIONS"
+_qmount_option 'noquota'
+
+format_scratch() {
+	_scratch_mkfs -d agcount=1 | _filter_mkfs 2> "${tmp}.mkfs" >> $seqres.full
+	source "${tmp}.mkfs"
+	test "${agcount}" -eq 1 || _notrun "test requires 1 AG for error injection"
+
+	local nr_iunlinks="$((IUNLINK_BUCKETLEN * XFS_AGI_UNLINKED_BUCKETS))"
+	readarray -t BADINODES < <(_scratch_xfs_db -x -c "iunlink -n $nr_iunlinks" | awk '{print $4}')
+}
+
+__repair_check_scratch() {
+	_scratch_xfs_repair -o force_geometry -n 2>&1 | \
+		tee -a $seqres.full | \
+		grep -E '(disconnected inode.*would move|next_unlinked in inode|unlinked bucket.*is.*in ag)'
+	return "${PIPESTATUS[0]}"
+}
+
+exercise_scratch() {
+	# Create a bunch of files...
+	declare -A inums
+	for ((i = 0; i < (XFS_AGI_UNLINKED_BUCKETS * 2); i++)); do
+		touch "${SCRATCH_MNT}/${i}" || break
+		inums["${i}"]="$(stat -c %i "${SCRATCH_MNT}/${i}")"
+	done
+
+	# ...then delete them to exercise the unlinked buckets
+	for ((i = 0; i < (XFS_AGI_UNLINKED_BUCKETS * 2); i++)); do
+		if ! rm -f "${SCRATCH_MNT}/${i}"; then
+			echo "rm failed on inum ${inums[$i]}"
+			break
+		fi
+	done
+}
+
+# Offline repair should not find anything
+final_check_scratch() {
+	__repair_check_scratch
+	res=$?
+	if [ $res -eq 2 ]; then
+		echo "scratch fs went offline?"
+		_scratch_mount
+		_scratch_unmount
+		__repair_check_scratch
+	fi
+	test "$res" -ne 0 && echo "repair returned $res?"
+}
+
+echo "+ Part 0: See if runtime can recover the unlinked list" | tee -a $seqres.full
+format_scratch
+_kernlog "part 0"
+_scratch_mount
+exercise_scratch
+_scratch_unmount
+final_check_scratch
+
+echo "+ Part 1: See if bulkstat can recover the unlinked list" | tee -a $seqres.full
+format_scratch
+_kernlog "part 1"
+_scratch_mount
+$XFS_IO_PROG -c 'bulkstat' $SCRATCH_MNT > /dev/null
+exercise_scratch
+_scratch_unmount
+final_check_scratch
+
+echo "+ Part 2: See if quotacheck can recover the unlinked list" | tee -a $seqres.full
+if [ -f /proc/fs/xfs/xqmstat ]; then
+	MOUNT_OPTIONS="$orig_mount_options"
+	_qmount_option 'quota'
+	format_scratch
+	_kernlog "part 2"
+	_scratch_mount
+	exercise_scratch
+	_scratch_unmount
+	final_check_scratch
+fi
+
+# success, all done
+echo Silence is golden
+status=0
+exit

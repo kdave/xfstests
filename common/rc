@@ -2668,9 +2668,11 @@ _require_xfs_io_command()
 		param_checked="$pwrite_opts $param"
 		;;
 	"scrub"|"repair")
-		testio=`$XFS_IO_PROG -x -c "$command probe" $TEST_DIR 2>&1`
+		test -z "$param" && param="probe"
+		testio=`$XFS_IO_PROG -x -c "$command $param" $TEST_DIR 2>&1`
 		echo $testio | grep -q "Inappropriate ioctl" && \
 			_notrun "xfs_io $command support is missing"
+		param_checked="$param"
 		;;
 	"startupdate"|"commitupdate"|"cancelupdate")
 		$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 128k -b 128k' $testfile > /dev/null
