@@ -4432,6 +4432,38 @@ _check_dmesg()
 	fi
 }
 
+# Log the arguments to the kernel log with userspace annotation, if possible.
+# Output is not sent to stdout.
+_kernlog()
+{
+	if [ -w /dev/ttyprintk ]; then
+		echo "$*" >> /dev/ttyprintk
+		return
+	fi
+
+	if [ -w /dev/kmsg ]; then
+		echo "[U] $*" >> /dev/kmsg
+		return
+	fi
+}
+
+# Convey stdin to the kernel log with userspace annotation, if possible.
+# Output will be appended to any file paths provided as arguments.
+_tee_kernlog()
+{
+	if [ -w /dev/ttyprintk ]; then
+		tee -a /dev/ttyprintk "$@"
+		return
+	fi
+
+	if [ -w /dev/kmsg ]; then
+		awk '{printf("[U] %s\n", $0) >> "/dev/kmsg"; printf("%s\n", $0);}' | tee -a "$@"
+		return
+	fi
+
+	tee -a "$@"
+}
+
 # Make whatever configuration changes we need ahead of testing fs shutdowns due
 # to unexpected IO errors while updating metadata.  The sole parameter should
 # be the fs device, e.g.  $SCRATCH_DEV.
