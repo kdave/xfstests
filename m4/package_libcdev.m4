@@ -174,3 +174,16 @@ AC_DEFUN([AC_HAVE_FIEXCHANGE],
        AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
     AC_SUBST(have_fiexchange)
   ])
+
+# Check if we have FICLONE
+AC_DEFUN([AC_HAVE_FICLONE],
+  [ AC_MSG_CHECKING([for FICLONE])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+    ]], [[
+	 ioctl(-1, FICLONE, -1);
+    ]])],[have_ficlone=yes
+       AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
+    AC_SUBST(have_ficlone)
+  ])

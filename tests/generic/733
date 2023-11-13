@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023, Oracle and/or its affiliates.  All Rights Reserved.
+#
+# FS QA Test No. 733
+#
+# Race file reads with a very slow reflink operation to see if the reads
+# actually complete while the reflink is ongoing.  This is a functionality
+# test for XFS commit f3ba4762fa56 "xfs: allow read IO and FICLONE to run
+# concurrently".
+#
+. ./common/preamble
+_begin_fstest auto clone punch
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+. ./common/reflink
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch_reflink
+_require_cp_reflink
+_require_xfs_io_command "fpunch"
+_require_test_program "punch-alternating"
+_require_test_program "t_reflink_read_race"
+_require_command "$TIMEOUT_PROG" timeout
+
+rm -f "$seqres.full"
+
+echo "Format and mount"
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount >> "$seqres.full" 2>&1
+
+testdir="$SCRATCH_MNT/test-$seq"
+mkdir "$testdir"
+
+calc_space() {
+	blocks_needed=$(( 2 ** (fnr + 1) ))
+	space_needed=$((blocks_needed * blksz * 5 / 4))
+}
+
+# Figure out the number of blocks that we need to get the reflink runtime above
+# 1 seconds
+echo "Create a many-block file"
+for ((fnr = 1; fnr < 40; fnr++)); do
+	free_blocks=$(stat -f -c '%a' "$testdir")
+	blksz=$(_get_file_block_size "$testdir")
+	space_avail=$((free_blocks * blksz))
+	calc_space
+	test $space_needed -gt $space_avail && \
+		_notrun "Insufficient space for stress test; would only create $blocks_needed extents."
+
+	off=$(( (2 ** fnr) * blksz))
+	$XFS_IO_PROG -f -c "pwrite -S 0x61 -b 4194304 $off $off" "$testdir/file1" >> "$seqres.full"
+	"$here/src/punch-alternating" "$testdir/file1" >> "$seqres.full"
+
+	$TIMEOUT_PROG 1s cp --reflink=always "$testdir/file1" "$testdir/garbage" || break
+done
+echo "fnr=$fnr" >> $seqres.full
+
+echo "Reflink the big file"
+$here/src/t_reflink_read_race "$testdir/file1" "$testdir/file2" \
+	"$testdir/outcome" &>> $seqres.full
+
+if [ ! -e "$testdir/outcome" ]; then
+	echo "Could not set up program"
+elif grep -q "finished read early" "$testdir/outcome"; then
+	echo "test completed successfully"
+else
+	cat "$testdir/outcome"
+fi
+
+# success, all done
+status=0
+exit

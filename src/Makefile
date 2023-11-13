@@ -94,6 +94,10 @@ ifeq ($(HAVE_SEEK_DATA), yes)
  endif
 endif
 
+ifeq ($(HAVE_FICLONE),yes)
+     TARGETS += t_reflink_read_race
+endif
+
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS) fssum
 
