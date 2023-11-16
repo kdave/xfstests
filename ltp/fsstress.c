@@ -2592,8 +2592,8 @@ xchgrange_f(
 	opnum_t			opno,
 	long			r)
 {
-#ifdef FIEXCHANGE_RANGE
-	struct file_xchg_range	fxr = { 0 };
+#ifdef XFS_IOC_EXCHANGE_RANGE
+	struct xfs_exch_range	fxr = { 0 };
 	static __u64		swap_flags = 0;
 	struct pathname		fpath1;
 	struct pathname		fpath2;
@@ -2721,10 +2721,10 @@ xchgrange_f(
 	fxr.flags = swap_flags;
 
 retry:
-	ret = ioctl(fd2, FIEXCHANGE_RANGE, &fxr);
+	ret = ioctl(fd2, XFS_IOC_EXCHANGE_RANGE, &fxr);
 	e = ret < 0 ? errno : 0;
-	if (e == EOPNOTSUPP && !(swap_flags & FILE_XCHG_RANGE_NONATOMIC)) {
-		swap_flags = FILE_XCHG_RANGE_NONATOMIC;
+	if (e == EOPNOTSUPP && !(swap_flags & XFS_EXCH_RANGE_NONATOMIC)) {
+		swap_flags = XFS_EXCH_RANGE_NONATOMIC;
 		fxr.flags |= swap_flags;
 		goto retry;
 	}

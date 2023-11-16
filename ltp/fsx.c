@@ -1389,27 +1389,27 @@ do_insert_range(unsigned offset, unsigned length)
 }
 #endif
 
-#ifdef FIEXCHANGE_RANGE
+#ifdef XFS_IOC_EXCHANGE_RANGE
 static __u64 swap_flags = 0;
 
 int
 test_xchg_range(void)
 {
-	struct file_xchg_range	fsr = {
+	struct xfs_exch_range	fsr = {
 		.file1_fd = fd,
-		.flags = FILE_XCHG_RANGE_DRY_RUN | swap_flags,
+		.flags = XFS_EXCH_RANGE_DRY_RUN | swap_flags,
 	};
 	int ret, e;
 
 retry:
-	ret = ioctl(fd, FIEXCHANGE_RANGE, &fsr);
+	ret = ioctl(fd, XFS_IOC_EXCHANGE_RANGE, &fsr);
 	e = ret < 0 ? errno : 0;
-	if (e == EOPNOTSUPP && !(swap_flags & FILE_XCHG_RANGE_NONATOMIC)) {
+	if (e == EOPNOTSUPP && !(swap_flags & XFS_EXCH_RANGE_NONATOMIC)) {
 		/*
 		 * If the call fails with atomic mode, try again with non
 		 * atomic mode.
 		 */
-		swap_flags = FILE_XCHG_RANGE_NONATOMIC;
+		swap_flags = XFS_EXCH_RANGE_NONATOMIC;
 		fsr.flags |= swap_flags;
 		goto retry;
 	}
@@ -1427,7 +1427,7 @@ retry:
 void
 do_xchg_range(unsigned offset, unsigned length, unsigned dest)
 {
-	struct file_xchg_range	fsr = {
+	struct xfs_exch_range	fsr = {
 		.file1_fd = fd,
 		.file1_offset = offset,
 		.file2_offset = dest,
@@ -1470,10 +1470,10 @@ do_xchg_range(unsigned offset, unsigned length, unsigned dest)
 			testcalls, offset, offset+length, length, dest);
 	}
 
-	if (ioctl(fd, FIEXCHANGE_RANGE, &fsr) == -1) {
+	if (ioctl(fd, XFS_IOC_EXCHANGE_RANGE, &fsr) == -1) {
 		prt("exchange range: 0x%x to 0x%x at 0x%x\n", offset,
 				offset + length, dest);
-		prterr("do_xchg_range: FIEXCHANGE_RANGE");
+		prterr("do_xchg_range: XFS_IOC_EXCHANGE_RANGE");
 		report_failure(161);
 		goto out_free;
 	}
@@ -2452,7 +2452,7 @@ usage(void)
 #ifdef HAVE_COPY_FILE_RANGE
 "	-E: Do not use copy range calls\n"
 #endif
-#ifdef FIEXCHANGE_RANGE
+#ifdef XFS_IOC_EXCHANGE_RANGE
 "	-0: Do not use exchange range calls\n"
 #endif
 "	-K: Do not use keep size\n\

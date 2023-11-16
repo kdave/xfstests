@@ -171,9 +171,7 @@
 #include <sys/mman.h>
 #endif
 
-#ifdef HAVE_FIEXCHANGE
-# include <linux/fiexchange.h>
-#else
+#ifndef HAVE_XFS_IOC_EXCHANGE_RANGE
 # include "fiexchange.h"
 #endif
 

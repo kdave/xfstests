@@ -19,6 +19,10 @@ ifeq ($(HAVE_URING), true)
 LLDLIBS += -luring
 endif
 
+ifeq ($(HAVE_XFS_IOC_EXCHANGE_RANGE),yes)
+LCFLAGS += -DHAVE_XFS_IOC_EXCHANGE_RANGE
+endif
+
 default: depend $(TARGETS)
 
 depend: .dep

@@ -119,3 +119,17 @@ AC_DEFUN([AC_HAVE_BMV_OF_SHARED],
        AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
     AC_SUBST(have_bmv_of_shared)
   ])
+
+# Check if we have XFS_IOC_EXCHANGE_RANGE
+AC_DEFUN([AC_HAVE_XFS_IOC_EXCHANGE_RANGE],
+  [ AC_MSG_CHECKING([for XFS_IOC_EXCHANGE_RANGE])
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE
+#include <xfs/xfs.h>
+    ]], [[
+         struct xfs_exch_range obj;
+         ioctl(-1, XFS_IOC_EXCHANGE_RANGE, &obj);
+    ]])],[have_xfs_ioc_exchange_range=yes
+       AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)])
+    AC_SUBST(have_xfs_ioc_exchange_range)
+  ])

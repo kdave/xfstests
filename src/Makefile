@@ -98,6 +98,10 @@ ifeq ($(HAVE_FICLONE),yes)
      TARGETS += t_reflink_read_race
 endif
 
+ifeq ($(HAVE_XFS_IOC_EXCHANGE_RANGE),yes)
+LCFLAGS += -DHAVE_XFS_IOC_EXCHANGE_RANGE
+endif
+
 CFILES = $(TARGETS:=.c)
 LDIRT = $(TARGETS) fssum
 
