@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 IBM Corporation.  All Rights Reserved.
+#
+# FS QA Test No. 737
+#
+# Integrity test for O_SYNC with buff-io, dio, aio-dio with sudden shutdown.
+# Based on a testcase reported by Gao Xiang <hsiangkao@linux.alibaba.com>
+#
+
+. ./common/preamble
+_begin_fstest auto quick shutdown aio
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+_require_scratch_shutdown
+_require_aiodio aio-dio-write-verify
+
+[[ "$FSTYP" =~ ext[0-9]+ ]] && _fixed_by_kernel_commit 91562895f803 \
+	"ext4: properly sync file size update after O_SYNC direct IO"
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+echo "T-1: Create a 1M file using buff-io & O_SYNC"
+$XFS_IO_PROG -fs -c "pwrite -S 0x5a 0 1M" $SCRATCH_MNT/testfile.t1 > /dev/null 2>&1
+echo "T-1: Shutdown the fs suddenly"
+_scratch_shutdown
+echo "T-1: Cycle mount"
+_scratch_cycle_mount
+echo "T-1: File contents after cycle mount"
+_hexdump $SCRATCH_MNT/testfile.t1
+
+echo "T-2: Create a 1M file using O_DIRECT & O_SYNC"
+$XFS_IO_PROG -fsd -c "pwrite -S 0x5a 0 1M" $SCRATCH_MNT/testfile.t2 > /dev/null 2>&1
+echo "T-2: Shutdown the fs suddenly"
+_scratch_shutdown
+echo "T-2: Cycle mount"
+_scratch_cycle_mount
+echo "T-2: File contents after cycle mount"
+_hexdump $SCRATCH_MNT/testfile.t2
+
+echo "T-3: Create a 1M file using AIO-DIO & O_SYNC"
+$AIO_TEST -a size=1048576 -S -N $SCRATCH_MNT/testfile.t3 > /dev/null 2>&1
+echo "T-3: Shutdown the fs suddenly"
+_scratch_shutdown
+echo "T-3: Cycle mount"
+_scratch_cycle_mount
+echo "T-3: File contents after cycle mount"
+_hexdump $SCRATCH_MNT/testfile.t3
+
+status=0
+exit
