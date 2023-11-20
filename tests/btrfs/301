@@ -166,45 +166,63 @@ enable_quota()
 	$BTRFS_UTIL_PROG quota enable $arg $SCRATCH_MNT
 }
 
+get_subvid()
+{
+	_btrfs_get_subvolid $SCRATCH_MNT subv
+}
+
+get_snapid()
+{
+	_btrfs_get_subvolid $SCRATCH_MNT snap
+}
+
+get_nestedid()
+{
+	_btrfs_get_subvolid $SCRATCH_MNT subv/nested
+}
+
 prepare()
 {
 	_scratch_mkfs >> $seqres.full
 	_scratch_mount
 	enable_quota "s"
 	$BTRFS_UTIL_PROG subvolume create $subv >> $seqres.full
-	set_subvol_limit 256 $limit
-	check_subvol_usage 256 0
+	local subvid=$(get_subvid)
+	set_subvol_limit $subvid $limit
+	check_subvol_usage $subvid 0
 
 	# Create a bunch of little filler files to generate several levels in
 	# the btree, to make snapshotting sharing scenarios complex enough.
 	$FIO_PROG $prep_fio_config --output=$fio_out
-	check_subvol_usage 256 $total_fill
+	check_subvol_usage $subvid $total_fill
 
 	# Create a single file whose extents we will explicitly share/unshare.
 	do_write $subv/f $ext_sz
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 }
 
 prepare_snapshotted()
 {
 	prepare
 	$BTRFS_UTIL_PROG subvolume snapshot $subv $snap >> $seqres.full
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $(get_subvid) $(($total_fill + $ext_sz))
+	check_subvol_usage $(get_snapid) 0
 }
 
 prepare_nested()
 {
 	prepare
+	local subvid=$(get_subvid)
 	$BTRFS_UTIL_PROG qgroup create 1/100 $SCRATCH_MNT
 	$BTRFS_UTIL_PROG qgroup limit $limit 1/100 $SCRATCH_MNT
-	$BTRFS_UTIL_PROG qgroup assign 0/256 1/100 $SCRATCH_MNT >> $seqres.full
+	$BTRFS_UTIL_PROG qgroup assign 0/$subvid 1/100 $SCRATCH_MNT >> $seqres.full
 	$BTRFS_UTIL_PROG subvolume create $nested >> $seqres.full
+	local nestedid=$(get_nestedid)
 	do_write $nested/f $ext_sz
-	check_subvol_usage 257 $ext_sz
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	local subv_usage=$(get_subvol_usage 256)
-	local nested_usage=$(get_subvol_usage 257)
+	check_subvol_usage $nestedid $ext_sz
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	local subv_usage=$(get_subvol_usage $subvid)
+	local nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
 }
 
@@ -213,9 +231,10 @@ basic_accounting()
 {
 	echo "basic accounting"
 	prepare
+	local subvid=$(get_subvid)
 	rm $subv/f
-	check_subvol_usage 256 $total_fill
-	cycle_mount_check_subvol_usage 256 $total_fill
+	check_subvol_usage $subvid $total_fill
+	cycle_mount_check_subvol_usage $subvid $total_fill
 	do_write $subv/tmp 512M
 	rm $subv/tmp
 	do_write $subv/tmp 512M
@@ -244,20 +263,22 @@ snapshot_accounting()
 {
 	echo "snapshot accounting"
 	prepare_snapshotted
+	local subvid=$(get_subvid)
+	local snapid=$(get_snapid)
 	touch $snap/f
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	do_write $snap/f $ext_sz
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 $ext_sz
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid $ext_sz
 	rm $snap/f
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	rm $subv/f
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
-	cycle_mount_check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
+	cycle_mount_check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
 	_scratch_unmount
 }
 
@@ -266,15 +287,17 @@ delete_snapshot_src_ref()
 {
 	echo "delete src ref first"
 	prepare_snapshotted
+	local subvid=$(get_subvid)
+	local snapid=$(get_snapid)
 	rm $subv/f
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	rm $snap/f
 	trigger_cleaner
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
-	cycle_mount_check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
+	cycle_mount_check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
 	_scratch_unmount
 }
 
@@ -283,14 +306,16 @@ delete_snapshot_ref()
 {
 	echo "delete snapshot ref first"
 	prepare_snapshotted
+	local subvid=$(get_subvid)
+	local snapid=$(get_snapid)
 	rm $snap/f
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	rm $subv/f
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
-	cycle_mount_check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
+	cycle_mount_check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
 	_scratch_unmount
 }
 
@@ -299,19 +324,21 @@ delete_snapshot_src()
 {
 	echo "delete snapshot src first"
 	prepare_snapshotted
+	local subvid=$(get_subvid)
+	local snapid=$(get_snapid)
 	$BTRFS_UTIL_PROG subvolume delete $subv >> $seqres.full
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	rm $snap/f
 	trigger_cleaner
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $snapid 0
 	$BTRFS_UTIL_PROG subvolume delete $snap >> $seqres.full
 	trigger_cleaner
-	check_subvol_usage 256 0
-	check_subvol_usage 257 0
-	cycle_mount_check_subvol_usage 256 0
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid 0
+	check_subvol_usage $snapid 0
+	cycle_mount_check_subvol_usage $subvid 0
+	check_subvol_usage $snapid 0
 	_scratch_unmount
 }
 
@@ -320,13 +347,15 @@ delete_snapshot()
 {
 	echo "delete snapshot first"
 	prepare_snapshotted
+	local subvid=$(get_subvid)
+	local snapid=$(get_snapid)
 	$BTRFS_UTIL_PROG subvolume delete $snap >> $seqres.full
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
+	check_subvol_usage $snapid 0
 	$BTRFS_UTIL_PROG subvolume delete $subv >> $seqres.full
 	trigger_cleaner
-	check_subvol_usage 256 0
-	check_subvol_usage 257 0
+	check_subvol_usage $subvid 0
+	check_subvol_usage $snapid 0
 	_scratch_unmount
 }
 
@@ -336,17 +365,19 @@ nested_accounting()
 {
 	echo "nested accounting"
 	prepare_nested
+	local subvid=$(get_subvid)
+	local nestedid=$(get_nestedid)
 	rm $subv/f
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 $ext_sz
-	local subv_usage=$(get_subvol_usage 256)
-	local nested_usage=$(get_subvol_usage 257)
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $nestedid $ext_sz
+	local subv_usage=$(get_subvol_usage $subvid)
+	local nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
 	rm $nested/f
-	check_subvol_usage 256 $total_fill
-	check_subvol_usage 257 0
-	subv_usage=$(get_subvol_usage 256)
-	nested_usage=$(get_subvol_usage 257)
+	check_subvol_usage $subvid $total_fill
+	check_subvol_usage $nestedid 0
+	subv_usage=$(get_subvol_usage $subvid)
+	nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
 	do_enospc_falloc $nested/large_falloc 2G
 	do_enospc_write $nested/large 2G
@@ -360,26 +391,27 @@ enable_mature()
 	_scratch_mkfs >> $seqres.full
 	_scratch_mount
 	$BTRFS_UTIL_PROG subvolume create $subv >> $seqres.full
+	local subvid=$(get_subvid)
 	do_write $subv/f $ext_sz
 	# Sync before enabling squotas to reliably *not* count the writes
 	# we did before enabling.
 	sync
 	enable_quota "s"
-	set_subvol_limit 256 $limit
+	set_subvol_limit $subvid $limit
 	_scratch_cycle_mount
-	usage=$(get_subvol_usage 256)
+	usage=$(get_subvol_usage $subvid)
 	[ $usage -lt $ext_sz ] || \
 		echo "captured usage from before enable $usage >= $ext_sz"
 	do_write $subv/g $ext_sz
-	usage=$(get_subvol_usage 256)
+	usage=$(get_subvol_usage $subvid)
 	[ $usage -lt $ext_sz ] && \
 		echo "failed to capture usage after enable $usage < $ext_sz"
-	check_subvol_usage 256 $ext_sz
+	check_subvol_usage $subvid $ext_sz
 	rm $subv/f
-	check_subvol_usage 256 $ext_sz
+	check_subvol_usage $subvid $ext_sz
 	_scratch_cycle_mount
 	rm $subv/g
-	check_subvol_usage 256 0
+	check_subvol_usage $subvid 0
 	_scratch_unmount
 }
 
@@ -388,13 +420,14 @@ reflink_accounting()
 {
 	echo "reflink"
 	prepare
+	local subvid=$(get_subvid)
 	# Do enough reflinks to prove that they're free. If they counted, then
 	# this wouldn't fit in the limit.
 	for i in $(seq $(($limit_nr * 2))); do
 		_cp_reflink $subv/f $subv/f.i
 	done
 	# Confirm that there is no additional data usage from the reflinks.
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 	_scratch_unmount
 }
 
@@ -403,12 +436,13 @@ delete_reflink_src_ref()
 {
 	echo "delete reflink src ref"
 	prepare
+	local subvid=$(get_subvid)
 	_cp_reflink $subv/f $subv/f.link
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 	rm $subv/f
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 	rm $subv/f.link
-	check_subvol_usage 256 $(($total_fill))
+	check_subvol_usage $subvid $(($total_fill))
 	_scratch_unmount
 }
 
@@ -417,12 +451,13 @@ delete_reflink_ref()
 {
 	echo "delete reflink ref"
 	prepare
+	local subvid=$(get_subvid)
 	_cp_reflink $subv/f $subv/f.link
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 	rm $subv/f.link
-	check_subvol_usage 256 $(($total_fill + $ext_sz))
+	check_subvol_usage $subvid $(($total_fill + $ext_sz))
 	rm $subv/f
-	check_subvol_usage 256 $(($total_fill))
+	check_subvol_usage $subvid $(($total_fill))
 	_scratch_unmount
 }
 
