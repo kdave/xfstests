@@ -7,6 +7,7 @@
 #
 # _require_scratch_encryption [-c CONTENTS_MODE] [-n FILENAMES_MODE]
 #			      [-f POLICY_FLAGS] [-v POLICY_VERSION]
+#			      [-s LOG2_DUSIZE]
 #
 # Require encryption support on the scratch device.
 #
@@ -16,9 +17,17 @@
 #
 _require_scratch_encryption()
 {
-	_require_scratch
+	local arg
 
+	_require_scratch
 	_require_xfs_io_command "set_encpolicy"
+
+	for arg; do
+		if [ "$arg" = "-s" ]; then
+			# -s option was added later.  Make sure it's available.
+			_require_xfs_io_command "set_encpolicy" "-s"
+		fi
+	done
 
 	# The 'test_dummy_encryption' mount option interferes with trying to use
 	# encryption for real, even if we are just trying to get/set policies
@@ -74,9 +83,9 @@ _require_encryption_policy_support()
 	local c
 
 	OPTIND=2
-	while getopts "c:n:f:v:" c; do
+	while getopts "c:n:f:s:v:" c; do
 		case $c in
-		c|n)
+		c|n|s)
 			set_encpolicy_args+=" -$c $OPTARG"
 			;;
 		f)
@@ -88,7 +97,7 @@ _require_encryption_policy_support()
 			policy_version=$OPTARG
 			;;
 		*)
-			_fail "Unrecognized option '$c'"
+			_fail "${FUNCNAME[0]}: unrecognized option '$c'"
 			;;
 		esac
 	done
@@ -763,14 +772,13 @@ _do_verify_ciphertext_for_encryption_policy()
 		nonce=$(_get_encryption_nonce $SCRATCH_DEV $inode)
 		_dump_ciphertext_blocks $SCRATCH_DEV $blocklist > $tmp.actual_contents
 		$crypt_contents_cmd $contents_encryption_mode $raw_key_hex \
-			--file-nonce=$nonce --data-unit-size=$blocksize \
-			--inode-number=$inode < $src > $tmp.expected_contents
+			--file-nonce=$nonce --inode-number=$inode \
+                        < $src > $tmp.expected_contents
 		if ! cmp $tmp.expected_contents $tmp.actual_contents; then
 			_fail "Expected encrypted contents != actual encrypted contents.  File: $f"
 		fi
 		$crypt_contents_cmd $contents_encryption_mode $raw_key_hex \
-			--decrypt --file-nonce=$nonce \
-                        --data-unit-size=$blocksize --inode-number=$inode \
+			--decrypt --file-nonce=$nonce --inode-number=$inode \
 			< $tmp.actual_contents > $tmp.decrypted_contents
 		if ! cmp $src $tmp.decrypted_contents; then
 			_fail "Contents decryption sanity check failed.  File: $f"
@@ -844,6 +852,7 @@ _fscrypt_mode_name_to_num()
 #	'direct':		test the DIRECT_KEY policy flag
 #	'iv_ino_lblk_64':	test the IV_INO_LBLK_64 policy flag
 #	'iv_ino_lblk_32':	test the IV_INO_LBLK_32 policy flag
+#	'log2_dusize=N':        test the log2_data_unit_size field
 #
 _verify_ciphertext_for_encryption_policy()
 {
@@ -852,6 +861,7 @@ _verify_ciphertext_for_encryption_policy()
 	local opt
 	local policy_version=1
 	local policy_flags=0
+	local log2_dusize=0
 	local set_encpolicy_args=""
 	local crypt_util_args=""
 	local crypt_util_contents_args=""
@@ -877,6 +887,9 @@ _verify_ciphertext_for_encryption_policy()
 		iv_ino_lblk_32)
 			(( policy_flags |= FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32 ))
 			;;
+		log2_dusize=*)
+			log2_dusize=$(echo "$opt" | sed 's/^log2_dusize=//')
+			;;
 		*)
 			_fail "Unknown option '$opt' passed to ${FUNCNAME[0]}"
 			;;
@@ -887,6 +900,9 @@ _verify_ciphertext_for_encryption_policy()
 
 	set_encpolicy_args+=" -c $contents_mode_num"
 	set_encpolicy_args+=" -n $filenames_mode_num"
+	if (( log2_dusize != 0 )); then
+		set_encpolicy_args+=" -s $log2_dusize"
+	fi
 	crypt_util_contents_args+=" --mode-num=$contents_mode_num"
 	crypt_util_filename_args+=" --mode-num=$filenames_mode_num"
 
@@ -929,6 +945,12 @@ _verify_ciphertext_for_encryption_policy()
 		_scratch_mkfs_encrypted &>> $seqres.full
 	fi
 	_scratch_mount
+
+	if (( log2_dusize != 0 )); then
+		crypt_util_contents_args+=" --data-unit-size=$((1 << log2_dusize))"
+	else
+		crypt_util_contents_args+=" --data-unit-size=$(_get_block_size $SCRATCH_MNT)"
+	fi
 
 	crypt_util_args+=" --fs-uuid=$(blkid -s UUID -o value $SCRATCH_DEV | tr -d -)"
 
