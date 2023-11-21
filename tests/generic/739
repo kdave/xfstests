@@ -1,0 +1,31 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2023 Google LLC
+#
+# FS QA Test No. 739
+#
+# Verify the on-disk format of encrypted files that use a crypto data unit size
+# that differs from the filesystem block size.  This tests the functionality
+# that was introduced in Linux 6.7 by kernel commit 5b1188847180
+# ("fscrypt: support crypto data unit size less than filesystem block size").
+#
+. ./common/preamble
+_begin_fstest auto quick encrypt
+
+. ./common/filter
+. ./common/encrypt
+
+_supported_fs generic
+_wants_kernel_commit 5b1188847180 \
+	"fscrypt: support crypto data unit size less than filesystem block size"
+
+# For now, just test 512-byte and 1024-byte data units.  Filesystems accept
+# power-of-2 sizes between 512 and the filesystem block size, inclusively.
+# Testing 512 and 1024 ensures this test will run for any FS block size >= 1024
+# (provided that the filesystem supports sub-block data units at all).
+_verify_ciphertext_for_encryption_policy AES-256-XTS AES-256-CTS-CBC v2 log2_dusize=9
+_verify_ciphertext_for_encryption_policy AES-256-XTS AES-256-CTS-CBC v2 log2_dusize=10
+
+# success, all done
+status=0
+exit
