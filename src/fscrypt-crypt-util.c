@@ -61,9 +61,9 @@ static void usage(FILE *fp)
 "WARNING: this program is only meant for testing, not for \"real\" use!\n"
 "\n"
 "Options:\n"
-"  --block-number=BNUM         Starting block number for IV generation.\n"
+"  --data-unit-index=DUIDX     Starting data unit index for IV generation.\n"
 "                                Default: 0\n"
-"  --block-size=BLOCK_SIZE     Encrypt each BLOCK_SIZE bytes independently.\n"
+"  --data-unit-size=DUSIZE     Encrypt each DUSIZE bytes independently.\n"
 "                                Default: 4096 bytes\n"
 "  --decrypt                   Decrypt instead of encrypt\n"
 "  --direct-key                Use the format where the IVs include the file\n"
@@ -86,8 +86,8 @@ static void usage(FILE *fp)
 "                                HKDF-SHA512, or none.  Default: none\n"
 "  --mode-num=NUM              The encryption mode number.  This may be required\n"
 "                                for key derivation, depending on other options.\n"
-"  --padding=PADDING           If last block is partial, zero-pad it to next\n"
-"                                PADDING-byte boundary.  Default: BLOCK_SIZE\n"
+"  --padding=PADDING           If last data unit is partial, zero-pad it to next\n"
+"                                PADDING-byte boundary.  Default: DUSIZE\n"
 	, fp);
 }
 
@@ -1975,8 +1975,8 @@ static const struct fscrypt_cipher *find_fscrypt_cipher(const char *name)
 union fscrypt_iv {
 	/* usual IV format */
 	struct {
-		/* logical block number within the file */
-		__le64 block_number;
+		/* data unit index within the file */
+		__le64 data_unit_index;
 
 		/* per-file nonce; only set in DIRECT_KEY mode */
 		u8 nonce[FILE_NONCE_SIZE];
@@ -1984,11 +1984,11 @@ union fscrypt_iv {
 	/* IV format for IV_INO_LBLK_* modes */
 	struct {
 		/*
-		 * IV_INO_LBLK_64: logical block number within the file
-		 * IV_INO_LBLK_32: hashed inode number + logical block number
-		 *		   within the file, mod 2^32
+		 * IV_INO_LBLK_64: data unit index within the file
+		 * IV_INO_LBLK_32: hashed inode number + data unit index within
+		 *		   the file, mod 2^32
 		 */
-		__le32 block_number32;
+		__le32 data_unit_index32;
 
 		/* IV_INO_LBLK_64: inode number */
 		__le32 inode_number;
@@ -1999,18 +1999,19 @@ union fscrypt_iv {
 
 static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
 		       union fscrypt_iv *iv, bool decrypting,
-		       size_t block_size, size_t padding, bool is_bnum_32bit)
+		       size_t data_unit_size, size_t padding,
+		       bool is_data_unit_index_32bit)
 {
-	u8 *buf = xmalloc(block_size);
+	u8 *buf = xmalloc(data_unit_size);
 	size_t res;
 
-	while ((res = xread(STDIN_FILENO, buf, block_size)) > 0) {
-		size_t crypt_len = block_size;
+	while ((res = xread(STDIN_FILENO, buf, data_unit_size)) > 0) {
+		size_t crypt_len = data_unit_size;
 
 		if (padding > 0) {
 			crypt_len = MAX(res, cipher->min_input_size);
 			crypt_len = ROUND_UP(crypt_len, padding);
-			crypt_len = MIN(crypt_len, block_size);
+			crypt_len = MIN(crypt_len, data_unit_size);
 		}
 		ASSERT(crypt_len >= res);
 		memset(&buf[res], 0, crypt_len - res);
@@ -2022,12 +2023,12 @@ static void crypt_loop(const struct fscrypt_cipher *cipher, const u8 *key,
 
 		full_write(STDOUT_FILENO, buf, crypt_len);
 
-		if (is_bnum_32bit)
-			iv->block_number32 = cpu_to_le32(
-					le32_to_cpu(iv->block_number32) + 1);
+		if (is_data_unit_index_32bit)
+			iv->data_unit_index32 = cpu_to_le32(
+				le32_to_cpu(iv->data_unit_index32) + 1);
 		else
-			iv->block_number = cpu_to_le64(
-					le64_to_cpu(iv->block_number) + 1);
+			iv->data_unit_index = cpu_to_le64(
+				le64_to_cpu(iv->data_unit_index) + 1);
 	}
 	free(buf);
 }
@@ -2070,7 +2071,7 @@ struct key_and_iv_params {
 	bool direct_key;
 	bool iv_ino_lblk_64;
 	bool iv_ino_lblk_32;
-	u64 block_number;
+	u64 data_unit_index;
 	u64 inode_number;
 	u8 fs_uuid[UUID_SIZE];
 	bool fs_uuid_specified;
@@ -2178,26 +2179,26 @@ static void generate_iv(const struct key_and_iv_params *params,
 	if (params->direct_key) {
 		if (!params->file_nonce_specified)
 			die("--direct-key requires --file-nonce");
-		iv->block_number = cpu_to_le64(params->block_number);
+		iv->data_unit_index = cpu_to_le64(params->data_unit_index);
 		memcpy(iv->nonce, params->file_nonce, FILE_NONCE_SIZE);
 	} else if (params->iv_ino_lblk_64) {
-		if (params->block_number > UINT32_MAX)
-			die("iv-ino-lblk-64 can't use --block-number > UINT32_MAX");
+		if (params->data_unit_index > UINT32_MAX)
+			die("iv-ino-lblk-64 can't use --data-unit-index > UINT32_MAX");
 		if (params->inode_number == 0)
 			die("iv-ino-lblk-64 requires --inode-number");
 		if (params->inode_number > UINT32_MAX)
 			die("iv-ino-lblk-64 can't use --inode-number > UINT32_MAX");
-		iv->block_number32 = cpu_to_le32(params->block_number);
+		iv->data_unit_index32 = cpu_to_le32(params->data_unit_index);
 		iv->inode_number = cpu_to_le32(params->inode_number);
 	} else if (params->iv_ino_lblk_32) {
-		if (params->block_number > UINT32_MAX)
-			die("iv-ino-lblk-32 can't use --block-number > UINT32_MAX");
+		if (params->data_unit_index > UINT32_MAX)
+			die("iv-ino-lblk-32 can't use --data-unit-index > UINT32_MAX");
 		if (params->inode_number == 0)
 			die("iv-ino-lblk-32 requires --inode-number");
-		iv->block_number32 = cpu_to_le32(hash_inode_number(params) +
-						 params->block_number);
+		iv->data_unit_index32 = cpu_to_le32(hash_inode_number(params) +
+						    params->data_unit_index);
 	} else {
-		iv->block_number = cpu_to_le64(params->block_number);
+		iv->data_unit_index = cpu_to_le64(params->data_unit_index);
 	}
 }
 
@@ -2252,8 +2253,8 @@ static void parse_master_key(const char *arg, struct key_and_iv_params *params)
 }
 
 enum {
-	OPT_BLOCK_NUMBER,
-	OPT_BLOCK_SIZE,
+	OPT_DATA_UNIT_INDEX,
+	OPT_DATA_UNIT_SIZE,
 	OPT_DECRYPT,
 	OPT_DIRECT_KEY,
 	OPT_DUMP_KEY_IDENTIFIER,
@@ -2269,8 +2270,8 @@ enum {
 };
 
 static const struct option longopts[] = {
-	{ "block-number",    required_argument, NULL, OPT_BLOCK_NUMBER },
-	{ "block-size",      required_argument, NULL, OPT_BLOCK_SIZE },
+	{ "data-unit-index", required_argument, NULL, OPT_DATA_UNIT_INDEX },
+	{ "data-unit-size",  required_argument, NULL, OPT_DATA_UNIT_SIZE },
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
 	{ "direct-key",      no_argument,       NULL, OPT_DIRECT_KEY },
 	{ "dump-key-identifier", no_argument,   NULL, OPT_DUMP_KEY_IDENTIFIER },
@@ -2288,7 +2289,7 @@ static const struct option longopts[] = {
 
 int main(int argc, char *argv[])
 {
-	size_t block_size = 4096;
+	size_t data_unit_size = 4096;
 	bool decrypting = false;
 	bool dump_key_identifier = false;
 	struct key_and_iv_params params;
@@ -2315,17 +2316,17 @@ int main(int argc, char *argv[])
 
 	while ((c = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (c) {
-		case OPT_BLOCK_NUMBER:
+		case OPT_DATA_UNIT_INDEX:
 			errno = 0;
-			params.block_number = strtoull(optarg, &tmp, 10);
+			params.data_unit_index = strtoull(optarg, &tmp, 10);
 			if (*tmp || errno)
-				die("Invalid block number: %s", optarg);
+				die("Invalid data unit index: %s", optarg);
 			break;
-		case OPT_BLOCK_SIZE:
+		case OPT_DATA_UNIT_SIZE:
 			errno = 0;
-			block_size = strtoul(optarg, &tmp, 10);
-			if (block_size <= 0 || *tmp || errno)
-				die("Invalid block size: %s", optarg);
+			data_unit_size = strtoul(optarg, &tmp, 10);
+			if (data_unit_size <= 0 || *tmp || errno)
+				die("Invalid data unit size: %s", optarg);
 			break;
 		case OPT_DECRYPT:
 			decrypting = true;
@@ -2401,9 +2402,9 @@ int main(int argc, char *argv[])
 	if (cipher == NULL)
 		die("Unknown cipher: %s", argv[0]);
 
-	if (block_size < cipher->min_input_size)
-		die("Block size of %zu bytes is too small for cipher %s",
-		    block_size, cipher->name);
+	if (data_unit_size < cipher->min_input_size)
+		die("Data unit size of %zu bytes is too small for cipher %s",
+		    data_unit_size, cipher->name);
 
 	parse_master_key(argv[1], &params);
 
@@ -2412,7 +2413,7 @@ int main(int argc, char *argv[])
 
 	get_key_and_iv(&params, real_key, cipher->keysize, &iv);
 
-	crypt_loop(cipher, real_key, &iv, decrypting, block_size, padding,
+	crypt_loop(cipher, real_key, &iv, decrypting, data_unit_size, padding,
 		   params.iv_ino_lblk_64 || params.iv_ino_lblk_32);
 	return 0;
 }

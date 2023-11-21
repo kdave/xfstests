@@ -763,14 +763,14 @@ _do_verify_ciphertext_for_encryption_policy()
 		nonce=$(_get_encryption_nonce $SCRATCH_DEV $inode)
 		_dump_ciphertext_blocks $SCRATCH_DEV $blocklist > $tmp.actual_contents
 		$crypt_contents_cmd $contents_encryption_mode $raw_key_hex \
-			--file-nonce=$nonce --block-size=$blocksize \
+			--file-nonce=$nonce --data-unit-size=$blocksize \
 			--inode-number=$inode < $src > $tmp.expected_contents
 		if ! cmp $tmp.expected_contents $tmp.actual_contents; then
 			_fail "Expected encrypted contents != actual encrypted contents.  File: $f"
 		fi
 		$crypt_contents_cmd $contents_encryption_mode $raw_key_hex \
-			--decrypt --file-nonce=$nonce --block-size=$blocksize \
-			--inode-number=$inode \
+			--decrypt --file-nonce=$nonce \
+                        --data-unit-size=$blocksize --inode-number=$inode \
 			< $tmp.actual_contents > $tmp.decrypted_contents
 		if ! cmp $src $tmp.decrypted_contents; then
 			_fail "Contents decryption sanity check failed.  File: $f"
@@ -786,14 +786,14 @@ _do_verify_ciphertext_for_encryption_policy()
 		echo -n "$name" | \
 			$crypt_filename_cmd $filenames_encryption_mode \
 			$raw_key_hex --file-nonce=$nonce --padding=$padding \
-			--block-size=255 --inode-number=$dir_inode \
+			--data-unit-size=255 --inode-number=$dir_inode \
 			> $tmp.expected_name
 		if ! cmp $tmp.expected_name $tmp.actual_name; then
 			_fail "Expected encrypted filename != actual encrypted filename.  File: $f"
 		fi
 		$crypt_filename_cmd $filenames_encryption_mode $raw_key_hex \
 			--decrypt --file-nonce=$nonce --padding=$padding \
-			--block-size=255 --inode-number=$dir_inode \
+			--data-unit-size=255 --inode-number=$dir_inode \
 			< $tmp.actual_name > $tmp.decrypted_name
 		decrypted_name=$(tr -d '\0' < $tmp.decrypted_name)
 		if [ "$name" != "$decrypted_name" ]; then

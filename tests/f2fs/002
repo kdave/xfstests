@@ -140,16 +140,16 @@ decrypt_blocks()
 {
 	$here/src/fscrypt-crypt-util "$@"			\
 		--decrypt					\
-		--block-size=$block_size			\
+		--data-unit-size=$block_size			\
 		--file-nonce=$nonce				\
 		--kdf=HKDF-SHA512				\
 		AES-256-XTS					\
 		$TEST_RAW_KEY_HEX
 }
 head -c $num_compressible_bytes $tmp.raw \
-	| decrypt_blocks --block-number=1 > $tmp.decrypted
+	| decrypt_blocks --data-unit-index=1 > $tmp.decrypted
 dd if=$tmp.raw bs=$cluster_bytes skip=$num_compressible_clusters status=none \
-	| decrypt_blocks --block-number=$num_compressible_blocks \
+	| decrypt_blocks --data-unit-index=$num_compressible_blocks \
 	>> $tmp.decrypted
 
 # Decompress the compressed clusters using the lz4 command-line tool.
