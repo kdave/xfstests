@@ -201,6 +201,25 @@ _require_scratch_overlay_features()
 	_scratch_unmount
 }
 
+_check_scratch_overlay_xattr_escapes()
+{
+	local testfile=$1
+
+	touch $testfile
+	! ($GETFATTR_PROG -n trusted.overlay.foo $testfile 2>&1 | grep -E -q "not (permitted|supported)")
+}
+
+_require_scratch_overlay_xattr_escapes()
+{
+	_scratch_mkfs > /dev/null 2>&1
+	_scratch_mount
+
+        _check_scratch_overlay_xattr_escapes $SCRATCH_MNT/file || \
+                  _notrun "xattr escaping is not supported by overlay"
+
+	_scratch_unmount
+}
+
 _require_scratch_overlay_verity()
 {
 	local lowerdirs="$OVL_BASE_SCRATCH_MNT/$OVL_UPPER:$OVL_BASE_SCRATCH_MNT/$OVL_LOWER"

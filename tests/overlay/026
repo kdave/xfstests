@@ -52,26 +52,42 @@ touch $SCRATCH_MNT/testf1
 # getfattr    ok         no attr     ok    ok
 #
 $SETFATTR_PROG -n "trusted.overlayfsrz" -v "n" \
-  $SCRATCH_MNT/testf0 2>&1 | _filter_scratch
+  $SCRATCH_MNT/testf0 2>&1 | tee -a $seqres.full | _filter_scratch
 
 _getfattr --absolute-names -n "trusted.overlayfsrz" \
-  $SCRATCH_MNT/testf0 2>&1 | _filter_scratch
+  $SCRATCH_MNT/testf0 2>&1 | tee -a $seqres.full | _filter_scratch
 
-# {s,g}etfattr of "trusted.overlay.xxx" should fail.
+# {s,g}etfattr of "trusted.overlay.xxx" fail on older kernels
 # The errno returned varies among kernel versions,
-#            v4.3/7   v4.8-rc1    v4.8       v4.10
-# setfattr  not perm  not perm   not perm   not supp
-# getfattr  no attr   no attr    not perm   not supp
+#            v4.3/7   v4.8-rc1    v4.8       v4.10     v6.7
+# setfattr  not perm  not perm   not perm   not supp  ok
+# getfattr  no attr   no attr    not perm   not supp  ok
 #
-# Consider "Operation not {supported,permitted}" pass.
+# Consider "Operation not {supported,permitted}" pass for old kernels.
 #
-$SETFATTR_PROG -n "trusted.overlay.fsz" -v "n" \
-  $SCRATCH_MNT/testf1 2>&1 | _filter_scratch | \
-  sed -e 's/permitted/supported/g'
+if _check_scratch_overlay_xattr_escapes $SCRATCH_MNT/testf0; then
+	setexp=""
+	getexp="No such attribute"
+else
+	setexp="Operation not supported"
+	getexp="Operation not supported"
+fi
 
-_getfattr --absolute-names -n "trusted.overlay.fsz" \
-  $SCRATCH_MNT/testf1 2>&1 | _filter_scratch | \
-  sed -e 's/permitted/supported/g'
+getres=$(_getfattr --absolute-names -n "trusted.overlay.fsz" \
+  $SCRATCH_MNT/testf1 2>&1 | tee -a $seqres.full | _filter_scratch | \
+  sed 's/permitted/supported/')
+
+[[ "$getres" =~ "$getexp" ]] || echo unexpected getattr result: $getres
+
+setres=$($SETFATTR_PROG -n "trusted.overlay.fsz" -v "n" \
+  $SCRATCH_MNT/testf1 2>&1 | tee -a $seqres.full |_filter_scratch | \
+  sed -e 's/permitted/supported/g')
+
+if [ "$setexp" ]; then
+	[[ "$setres" =~ "$expres" ]] || echo unexpected setattr result: $setres
+else
+	[[ "$setres" == "" ]] || echo unexpected setattr result: $setres
+fi
 
 # success, all done
 status=0
