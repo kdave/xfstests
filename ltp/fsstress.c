@@ -3810,7 +3810,7 @@ do_fallocate(opnum_t opno, long r, int mode)
 	mode |= FALLOC_FL_KEEP_SIZE & random();
 	e = fallocate(fd, mode, (loff_t)off, (loff_t)len) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%lld: fallocate(%s) %s %st %lld %lld %d\n",
+		printf("%d/%lld: fallocate(%s) %s%s [%lld,%lld] %d\n",
 		       procid, opno, translate_falloc_flags(mode),
 		       f.path, st, (long long)off, (long long)len, e);
 	free_pathname(&f);
@@ -3932,7 +3932,7 @@ fiemap_f(opnum_t opno, long r)
 
 	e = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 	if (v)
-		printf("%d/%lld: ioctl(FIEMAP) %s%s %lld %lld (%s) %d\n",
+		printf("%d/%lld: ioctl(FIEMAP) %s%s [%lld,%lld,%s] %d\n",
 		       procid, opno, f.path, st, (long long)fiemap->fm_start,
 		       (long long) fiemap->fm_length,
 		       translate_fiemap_flags(fiemap->fm_flags), e);
@@ -4866,7 +4866,7 @@ resvsp_f(opnum_t opno, long r)
 	fl.l_len = (off64_t)(random() % (1024 * 1024));
 	e = xfsctl(f.path, fd, XFS_IOC_RESVSP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%lld: xfsctl(XFS_IOC_RESVSP64) %s%s %lld %lld %d\n",
+		printf("%d/%lld: xfsctl(XFS_IOC_RESVSP64) %s%s [%lld,%lld] %d\n",
 		       procid, opno, f.path, st,
 			(long long)off, (long long)fl.l_len, e);
 	free_pathname(&f);
@@ -5334,7 +5334,7 @@ unresvsp_f(opnum_t opno, long r)
 	fl.l_len = (off64_t)(random() % (1 << 20));
 	e = xfsctl(f.path, fd, XFS_IOC_UNRESVSP64, &fl) < 0 ? errno : 0;
 	if (v)
-		printf("%d/%lld: xfsctl(XFS_IOC_UNRESVSP64) %s%s %lld %lld %d\n",
+		printf("%d/%lld: xfsctl(XFS_IOC_UNRESVSP64) %s%s [%lld,%lld] %d\n",
 		       procid, opno, f.path, st,
 			(long long)off, (long long)fl.l_len, e);
 	free_pathname(&f);
