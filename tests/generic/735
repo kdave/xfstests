@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 HUAWEI.  All Rights Reserved.
+#
+# FS QA Test No. 735
+#
+# Append writes to a file with logical block numbers close to 0xffffffff
+# and observe if a kernel crash is caused by ext4_lblk_t overflow triggering
+# BUG_ON at ext4_mb_new_inode_pa(). This is a regression test for commit
+# bc056e7163ac ("ext4: fix BUG in ext4_mb_new_inode_pa() due to overflow")
+#
+. ./common/preamble
+. ./common/populate
+_begin_fstest auto quick insert prealloc
+
+# real QA test starts here
+[[ "$FSTYP" =~ ext[0-9]+ ]] && _fixed_by_kernel_commit bc056e7163ac \
+	"ext4: fix BUG in ext4_mb_new_inode_pa() due to overflow"
+
+_require_odirect
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "finsert"
+
+dev_size=$((80 * 1024 * 1024))
+_scratch_mkfs_sized $dev_size >>$seqres.full 2>&1 || _fail "mkfs failed"
+
+_scratch_mount
+file_blksz="$(_get_file_block_size ${SCRATCH_MNT})"
+
+# Reserve 1M space
+$XFS_IO_PROG -f -c "falloc 0 1M" "${SCRATCH_MNT}/tmp" >> $seqres.full
+
+# Create a file with logical block numbers close to 0xffffffff
+$XFS_IO_PROG -f -c "falloc 0 10M" "${SCRATCH_MNT}/file" >> $seqres.full
+max_pos=$(( 0xffffffff * file_blksz ))
+finsert_len=$(( max_pos - ((10 + 2) << 20) ))
+$XFS_IO_PROG -f -c "finsert 1M ${finsert_len}" "${SCRATCH_MNT}/file" >> $seqres.full
+
+# Filling up the free space ensures that the pre-allocated space is the reserved space.
+nr_free=$(stat -f -c '%f' ${SCRATCH_MNT})
+_fill_fs $((nr_free * file_blksz)) ${SCRATCH_MNT}/fill $file_blksz 0 >> $seqres.full 2>&1
+sync
+
+# Remove reserved space to gain free space for allocation
+rm -f ${SCRATCH_MNT}/tmp
+
+# Trying to allocate two blocks triggers BUG_ON.
+$XFS_IO_PROG -c "open -ad ${SCRATCH_MNT}/file" -c "pwrite -S 0xff 0 $((2 * file_blksz))" >> $seqres.full
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
