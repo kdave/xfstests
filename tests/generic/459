@@ -57,6 +57,24 @@ origpsize=200
 virtsize=300
 newpsize=300
 
+# Check whether the filesystem has shutdown or remounted read-only. Shutdown
+# behavior can differ based on filesystem and configuration. Some fs' may not
+# have remounted without an additional write while others may have shutdown but
+# do not necessarily reflect read-only state in the mount options. Check both
+# here by first trying a simple write and following with an explicit ro check.
+is_shutdown_or_ro()
+{
+	ro=0
+
+	# if the fs has not shutdown, this may help trigger a remount-ro
+	touch $SCRATCH_MNT/newfile > /dev/null 2>&1 || ro=1
+
+	_fs_options /dev/mapper/$vgname-$snapname | grep -w "ro" > /dev/null
+	[ $? == 0 ] && ro=1
+
+	echo $ro
+}
+
 # Ensure we have enough disk space
 _scratch_mkfs_sized $((350 * 1024 * 1024)) >>$seqres.full 2>&1
 
@@ -113,13 +131,9 @@ ret=$?
 #	- The filesystem stays in Read-Write mode, but can be frozen/thawed
 #	  without getting stuck.
 if [ $ret -ne 0 ]; then
-	# freeze failed, filesystem should reject further writes and remount
-	# as readonly. Sometimes the previous write process won't trigger
-	# ro-remount, e.g. on ext3/4, do additional touch here to make sure
-	# filesystems see the metadata I/O error.
-	touch $SCRATCH_MNT/newfile >/dev/null 2>&1
-	ISRO=$(_fs_options /dev/mapper/$vgname-$snapname | grep -w "ro")
-	if [ -n "$ISRO" ]; then
+	# freeze failed, filesystem should reject further writes
+	ISRO=`is_shutdown_or_ro`
+	if [ $ISRO == 1 ]; then
 		echo "Test OK"
 	else
 		echo "Freeze failed and FS isn't Read-Only. Test Failed"
