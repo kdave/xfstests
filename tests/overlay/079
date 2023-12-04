@@ -139,16 +139,21 @@ check_file_size_contents()
 
 mount_overlay()
 {
-	local _lowerdir=$1
+	local _lowerdir=$1 _datadir2=$2 _datadir=$3
 
-	_overlay_scratch_mount_dirs "$_lowerdir" $upperdir $workdir -o redirect_dir=on,index=on,metacopy=on
+	$MOUNT_PROG -t overlay $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT \
+		-o"lowerdir=$_lowerdir::$_datadir2::$_datadir" \
+		-o"upperdir=$upperdir,workdir=$workdir" \
+		-o redirect_dir=on,metacopy=on
 }
 
 mount_ro_overlay()
 {
-	local _lowerdir=$1
+	local _lowerdir=$1 _datadir2=$2 _datadir=$3
 
-	_overlay_scratch_mount_dirs "$_lowerdir" "-" "-" -o ro,redirect_dir=follow,metacopy=on
+	$MOUNT_PROG -t overlay $OVL_BASE_SCRATCH_MNT $SCRATCH_MNT \
+		-o"lowerdir=$_lowerdir::$_datadir2::$_datadir" \
+		-o redirect_dir=follow,metacopy=on
 }
 
 umount_overlay()
@@ -160,14 +165,14 @@ test_no_access()
 {
 	local _target=$1
 
-	mount_ro_overlay "$lowerdir::$datadir2::$datadir"
+	mount_ro_overlay "$lowerdir" "$datadir2" "$datadir"
 
 	stat $SCRATCH_MNT/$_target >> $seqres.full 2>&1 || \
 		echo "No access to lowerdata layer $_target"
 
 	echo "Unmount and Mount rw"
 	umount_overlay
-	mount_overlay "$lowerdir::$datadir2::$datadir"
+	mount_overlay "$lowerdir" "$datadir2" "$datadir"
 	stat $SCRATCH_MNT/$_target >> $seqres.full 2>&1 || \
 		echo "No access to lowerdata layer $_target"
 	umount_overlay
@@ -175,11 +180,12 @@ test_no_access()
 
 test_common()
 {
-	local _lowerdirs=$1 _target=$2 _size=$3 _blocks=$4 _data="$5"
-	local _redirect=$6
+	local _lowerdir=$1 _datadir2=$2 _datadir=$3
+	local _target=$4 _size=$5 _blocks=$6 _data="$7"
+	local _redirect=$8
 
 	echo "Mount ro"
-	mount_ro_overlay $_lowerdirs
+	mount_ro_overlay $_lowerdir $_datadir2 $_datadir
 
 	# Check redirect xattr to lowerdata
 	[ -n "$_redirect" ] && check_redirect $lowerdir/$_target "$_redirect"
@@ -191,7 +197,7 @@ test_common()
 	# Do a mount cycle and check size and contents again.
 	echo "Unmount and Mount rw"
 	umount_overlay
-	mount_overlay $_lowerdirs
+	mount_overlay $_lowerdir $_datadir2 $_datadir
 	echo "check properties of metadata copied up file $_target"
 	check_file_size_contents $SCRATCH_MNT/$_target $_size "$_data"
 	check_file_blocks $SCRATCH_MNT/$_target $_blocks
@@ -203,7 +209,7 @@ test_common()
 	check_file_size_contents $upperdir/$_target $_size ""
 
 	# Trigger data copy up and check absence of metacopy xattr.
-	mount_overlay $_lowerdirs
+	mount_overlay $_lowerdir $_datadir2 $_datadir
 	$XFS_IO_PROG -c "falloc 0 1" $SCRATCH_MNT/$_target >> $seqres.full
 	echo "check properties of data copied up file $_target"
 	check_file_size_contents $SCRATCH_MNT/$_target $_size "$_data"
@@ -216,7 +222,7 @@ test_lazy()
 {
 	local _target=$1
 
-	mount_overlay "$lowerdir::$datadir2::$datadir"
+	mount_overlay "$lowerdir" "$datadir2" "$datadir"
 
 	# Metadata should be valid
 	check_file_size $SCRATCH_MNT/$_target $datasize
@@ -305,12 +311,12 @@ test_no_access "$sharedname"
 
 echo -e "\n== Check follow to lowerdata layer with absolute redirect =="
 prepare_midlayer "/subdir/$dataname"
-test_common "$lowerdir::$datadir2::$datadir" "$dataname" $datasize $datablocks \
+test_common "$lowerdir" "$datadir2" "$datadir" "$dataname" $datasize $datablocks \
 		"$datacontent" "/subdir/$dataname"
-test_common "$lowerdir::$datadir2::$datadir" "$dataname2" $datasize $datablocks \
+test_common "$lowerdir" "$datadir2" "$datadir" "$dataname2" $datasize $datablocks \
 		"$datacontent2" "/subdir/$dataname.2"
 # Shared file should be picked from upper datadir
-test_common "$lowerdir::$datadir2::$datadir" "$sharedname" $datasize $datablocks \
+test_common "$lowerdir" "$datadir2" "$datadir" "$sharedname" $datasize $datablocks \
 		"$datacontent2" "/subdir/$dataname.shared"
 
 echo -e "\n== Check lazy follow to lowerdata layer =="
