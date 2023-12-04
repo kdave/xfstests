@@ -1,0 +1,81 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test 086
+#
+# Test lowerdir+,datadir+ mount option restrictions.
+#
+
+. ./common/preamble
+_begin_fstest auto quick mount
+
+# Import common functions.
+. ./common/filter
+
+# real QA test starts here
+_supported_fs overlay
+
+# _overlay_check_* helpers do not handle special chars well
+_require_scratch_nocheck
+_require_scratch_overlay_lowerdir_add_layers
+
+# Remove all files from previous tests
+_scratch_mkfs
+
+# Create lowerdirs with special characters
+lowerdir_spaces="$OVL_BASE_SCRATCH_MNT/lower1 with  spaces"
+lowerdir_colons="$OVL_BASE_SCRATCH_MNT/lower2:with::colons"
+lowerdir_colons_esc="$OVL_BASE_SCRATCH_MNT/lower2\:with\:\:colons"
+lowerdir=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
+upperdir=$OVL_BASE_SCRATCH_MNT/$OVL_UPPER
+workdir=$OVL_BASE_SCRATCH_MNT/$OVL_WORK
+mkdir -p "$lowerdir_spaces" "$lowerdir_colons"
+
+# _overlay_mount_* helpers do not handle lowerdir+,datadir+, so execute mount directly.
+
+# check illegal combinations and order of lowerdir,lowerdir+,datadir+
+$MOUNT_PROG -t overlay none $SCRATCH_MNT \
+	-o"lowerdir=$lowerdir,lowerdir+=$lowerdir_colons" \
+	2>> $seqres.full && \
+	echo "ERROR: invalid combination of lowerdir and lowerdir+ mount options"
+
+$UMOUNT_PROG $SCRATCH_MNT 2>/dev/null
+
+$MOUNT_PROG -t overlay none $SCRATCH_MNT \
+	-o"lowerdir=$lowerdir,datadir+=$lowerdir_colons" \
+	-o redirect_dir=follow,metacopy=on 2>> $seqres.full && \
+	echo "ERROR: invalid combination of lowerdir and datadir+ mount options"
+
+$UMOUNT_PROG $SCRATCH_MNT 2>/dev/null
+
+$MOUNT_PROG -t overlay none $SCRATCH_MNT \
+	-o"datadir+=$lowerdir,lowerdir+=$lowerdir_colons" \
+	-o redirect_dir=follow,metacopy=on 2>> $seqres.full && \
+	echo "ERROR: invalid order of lowerdir+ and datadir+ mount options"
+
+$UMOUNT_PROG $SCRATCH_MNT 2>/dev/null
+
+# mount is expected to fail with escaped colons.
+$MOUNT_PROG -t overlay none $SCRATCH_MNT \
+	-o"lowerdir+=$lowerdir_colons_esc" \
+	2>> $seqres.full && \
+	echo "ERROR: incorrect parsing of escaped colons in lowerdir+ mount option"
+
+$UMOUNT_PROG $SCRATCH_MNT 2>/dev/null
+
+# mount is expected to succeed without escaped colons.
+$MOUNT_PROG -t overlay ovl_esc_test $SCRATCH_MNT \
+	-o"lowerdir+=$lowerdir_colons,datadir+=$lowerdir_spaces" \
+	-o redirect_dir=follow,metacopy=on \
+	2>&1 | tee -a $seqres.full
+
+# if spaces are not escaped when showing mount options,
+# mount command will not show the word 'spaces' after the spaces
+$MOUNT_PROG -t overlay | grep ovl_esc_test | tee -a $seqres.full | \
+	grep -q 'datadir+'.*spaces || \
+	echo "ERROR: escaped spaces truncated from datadir+ mount option"
+
+echo "Silence is golden"
+status=0
+exit
