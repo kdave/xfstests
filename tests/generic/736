@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 736
+#
+# Test that on a fairly large directory if we keep renaming files while holding
+# the directory open and doing readdir(3) calls, we don't end up in an infinite
+# loop.
+#
+. ./common/preamble
+_begin_fstest auto quick dir rename
+
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $target_dir
+}
+
+_supported_fs generic
+_require_test
+_require_test_program readdir-while-renames
+
+[ $FSTYP = "btrfs" ] && _fixed_by_kernel_commit 9b378f6ad48c \
+	"btrfs: fix infinite directory reads"
+
+target_dir="$TEST_DIR/test-$seq"
+rm -fr $target_dir
+mkdir $target_dir
+
+$here/src/readdir-while-renames $target_dir
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
