@@ -1,0 +1,171 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2023 Red Hat, Inc. All Rights Reserved.
+# Copyright (C) 2023 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test No. 084
+#
+# Test advanded nesting functionallity
+#
+. ./common/preamble
+_begin_fstest auto quick nested
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	# Unmount nested mounts if things fail
+	$UMOUNT_PROG $OVL_BASE_SCRATCH_MNT/nested  2>/dev/null
+	rm -rf $tmp
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/attr
+
+# real QA test starts here
+_supported_fs overlay
+# We use non-default scratch underlying overlay dirs, we need to check
+# them explicity after test.
+_require_scratch_nocheck
+_require_scratch_overlay_xattr_escapes
+
+# remove all files from previous tests
+_scratch_mkfs
+
+lowerdir=$OVL_BASE_SCRATCH_MNT/lower
+middir=$OVL_BASE_SCRATCH_MNT/mid
+upperdir=$OVL_BASE_SCRATCH_MNT/upper
+workdir=$OVL_BASE_SCRATCH_MNT/workdir
+nesteddir=$OVL_BASE_SCRATCH_MNT/nested
+
+umount_overlay()
+{
+	$UMOUNT_PROG $SCRATCH_MNT
+}
+
+test_escape()
+{
+	local prefix=$1
+
+	echo -e "\n== Check xattr escape $prefix =="
+
+	# index feature would require nfs_export on $nesteddir mount
+	local extra_options="-o index=off"
+	if [ "$prefix" == "user" ]; then
+            extra_options+=",userxattr"
+	fi
+
+	_scratch_mkfs
+	mkdir -p $lowerdir $middir $upperdir $workdir $nesteddir
+
+	_overlay_scratch_mount_dirs $lowerdir $middir $workdir $extra_options
+
+	mkdir -p $SCRATCH_MNT/layer1/dir/ $SCRATCH_MNT/layer2/dir
+
+	touch $SCRATCH_MNT/layer1/dir/file
+
+	# Make layer2/dir an opaque file
+	# Only one of these will be escaped, but both should succeed
+	setfattr -n user.overlay.opaque -v "y" $SCRATCH_MNT/layer2/dir
+	setfattr -n trusted.overlay.opaque -v "y" $SCRATCH_MNT/layer2/dir
+
+	getfattr -m "overlay\\." --absolute-names -d $SCRATCH_MNT/layer2/dir | _filter_scratch
+
+	umount_overlay
+
+	getfattr -m "overlay\\." --absolute-names -d $middir/layer2/dir | _filter_scratch
+
+	# Remount as lower and try again
+	_overlay_scratch_mount_dirs $middir:$lowerdir $upperdir $workdir $extra_options
+
+	getfattr -m "overlay\\." --absolute-names -d $SCRATCH_MNT/layer2/dir | _filter_scratch
+
+	# Recursively mount and ensure the opaque dir is working with both trusted and user xattrs
+	echo "nested xattr mount with trusted.overlay"
+	_overlay_mount_dirs $SCRATCH_MNT/layer2:$SCRATCH_MNT/layer1 - - overlayfs $nesteddir
+	stat $nesteddir/dir/file  2>&1 | _filter_scratch
+	$UMOUNT_PROG $nesteddir
+
+	echo "nested xattr mount with user.overlay"
+	_overlay_mount_dirs $SCRATCH_MNT/layer2:$SCRATCH_MNT/layer1 - - -o userxattr overlayfs $nesteddir
+	stat $nesteddir/dir/file  2>&1 | _filter_scratch
+	$UMOUNT_PROG $nesteddir
+
+	# Also ensure propagate the escaped xattr when we copy-up layer2/dir
+	echo "copy-up of escaped xattrs"
+	touch $SCRATCH_MNT/layer2/dir/other_file
+	getfattr -m "$prefix.overlay\\.overlay" --absolute-names -d $upperdir/layer2/dir | _filter_scratch
+
+	umount_overlay
+}
+
+test_escape trusted
+test_escape user
+
+do_test_xwhiteout()
+{
+	local prefix=$1
+	local basedir=$2
+
+	local extra_options=""
+	if [ "$prefix" == "user" ]; then
+            extra_options="-o userxattr"
+	fi
+
+	mkdir -p $basedir/lower $basedir/upper $basedir/work
+	touch $basedir/lower/regular $basedir/lower/hidden  $basedir/upper/hidden
+	setfattr -n $prefix.overlay.whiteouts -v "y" $basedir/upper
+	setfattr -n $prefix.overlay.whiteout -v "y" $basedir/upper/hidden
+
+	# Test the hidden is invisible
+	_overlay_scratch_mount_dirs $basedir/upper:$basedir/lower - - $extra_options
+	ls $SCRATCH_MNT
+	stat $SCRATCH_MNT/hidden 2>&1 | _filter_scratch
+	umount_overlay
+}
+
+# Validate that xwhiteouts work like whiteouts
+test_xwhiteout()
+{
+	local prefix=$1
+
+	echo -e "\n== Check xwhiteout $prefix =="
+
+	_scratch_mkfs
+
+	do_test_xwhiteout $prefix $OVL_BASE_SCRATCH_MNT
+}
+
+test_xwhiteout trusted
+test_xwhiteout user
+
+# Validate that (escaped) xwhiteouts work inside a nested overlayfs mount
+test_escaped_xwhiteout()
+{
+	local prefix=$1
+
+	echo -e "\n== Check escaped xwhiteout $prefix =="
+
+	# index feature would require nfs_export on $nesteddir mount
+	local extra_options="-o index=off"
+	if [ "$prefix" == "user" ]; then
+            extra_options+=",userxattr"
+	fi
+
+	_scratch_mkfs
+	mkdir -p $lowerdir $upperdir $workdir $nesteddir
+
+	_overlay_mount_dirs $lowerdir $upperdir $workdir $extra_options overlayfs $nesteddir
+
+	do_test_xwhiteout $prefix $nesteddir
+
+	$UMOUNT_PROG $nesteddir
+}
+
+test_escaped_xwhiteout trusted
+test_escaped_xwhiteout user
+
+# success, all done
+status=0
+exit
