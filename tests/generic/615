@@ -21,11 +21,10 @@ _require_odirect
 
 stat_loop()
 {
-	trap "wait; exit" SIGTERM
 	local filepath=$1
 	local blocks
 
-	while :; do
+	while [ -e "$loop_file" ]; do
 		blocks=$(stat -c %b $filepath)
 		if [ $blocks -eq 0 ]; then
 		    echo "error: stat(2) reported zero blocks"
@@ -39,6 +38,8 @@ _scratch_mount
 
 $XFS_IO_PROG -f -s -c "pwrite -b 64K 0 64K" $SCRATCH_MNT/foo > /dev/null
 
+loop_file=$tmp.loopfile
+touch $loop_file
 stat_loop $SCRATCH_MNT/foo &
 loop_pid=$!
 
@@ -64,6 +65,7 @@ for ((i = 0; i < 2000; i++)); do
 	$XFS_IO_PROG -d -c "pwrite -b 64K 0 64K" $SCRATCH_MNT/foo > /dev/null
 done
 
+rm -f $loop_file
 kill $loop_pid &> /dev/null
 wait
 
