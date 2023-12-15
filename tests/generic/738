@@ -1,0 +1,52 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# FS QA Test 738
+#
+# Test possible deadlock of umount and reclaim memory
+# when there are EOF blocks in files.
+#
+. ./common/preamble
+_begin_fstest auto quick freeze
+
+_cleanup()
+{
+	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
+	wait
+	cd /
+	rm -r -f $tmp.*
+}
+
+_supported_fs generic
+_require_scratch
+_require_freeze
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+create_eof_block_file()
+{
+	# Create several EOF blocks in the new file
+	for j in $(seq 1 5); do
+		cat $SCRATCH_MNT/testfile >> $1
+	done
+}
+
+$XFS_IO_PROG -fc "pwrite 0 64k" $SCRATCH_MNT/testfile >> $seqres.full
+# Create enough files to make sure there is enough cache
+for i in $(seq 0 1024); do
+	create_eof_block_file $SCRATCH_MNT/$i
+done
+sync
+xfs_freeze -f $SCRATCH_MNT
+
+# This will hang if bug reproduces
+echo 3 > /proc/sys/vm/drop_caches &
+
+# Wait a while before exiting and unfreezing.
+sleep 3
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
