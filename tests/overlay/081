@@ -5,7 +5,7 @@
 # FSQA Test No. 081
 #
 # Test persistent (and optionally unique) overlayfs fsid
-# with mount options uuid=null/on introduced in kernel v6.6
+# with mount options uuid=null/auto/on introduced in kernel v6.6
 #
 . ./common/preamble
 _begin_fstest auto quick
@@ -55,7 +55,7 @@ _scratch_mount
 
 ovl_fsid=$(stat -f -c '%i' $test_dir)
 [[ "$ovl_fsid" == "$upper_fsid" ]] || \
-	echo "Overlayfs (uuid=auto) and upper fs fsid differ"
+	echo "Overlayfs (after uuid=null) and upper fs fsid differ"
 
 $UMOUNT_PROG $SCRATCH_MNT
 
@@ -74,16 +74,16 @@ _scratch_mount
 
 ovl_fsid=$(stat -f -c '%i' $test_dir)
 [[ "$ovl_fsid" == "$ovl_unique_fsid" ]] || \
-	echo "Overlayfs (uuid=auto) unique fsid is not persistent"
+	echo "Overlayfs (after uuid=on) unique fsid is not persistent"
 
 $UMOUNT_PROG $SCRATCH_MNT
 
 # Test ignore existing persistent fsid on explicit opt-out
-_scratch_mount -o uuid=off
+_scratch_mount -o uuid=null
 
 ovl_fsid=$(stat -f -c '%i' $test_dir)
 [[ "$ovl_fsid" == "$upper_fsid" ]] || \
-	echo "Overlayfs (uuid=off) and upper fs fsid differ"
+	echo "Overlayfs (uuid=null) and upper fs fsid differ"
 
 $UMOUNT_PROG $SCRATCH_MNT
 
@@ -92,7 +92,7 @@ _overlay_scratch_mount_dirs "$upperdir:$lowerdir" "-" "-" -o ro,uuid=on
 
 ovl_fsid=$(stat -f -c '%i' $test_dir)
 [[ "$ovl_fsid" == "$lower_fsid" ]] || \
-	echo "Overlayfs (uuid=null) and lower fs fsid differ"
+	echo "Overlayfs (no upper) and lower fs fsid differ"
 
 # Re-create fresh overlay layers, so following (uuid=auto) mounts
 # will behave as first time mount of a new overlayfs
@@ -110,7 +110,7 @@ _scratch_mount
 ovl_fsid=$(stat -f -c '%i' $test_dir)
 ovl_unique_fsid=$ovl_fsid
 [[ "$ovl_fsid" != "$upper_fsid" ]] || \
-	echo "Overlayfs (uuid=auto) and upper fs fsid are the same"
+	echo "Overlayfs (new) and upper fs fsid are the same"
 
 $UMOUNT_PROG $SCRATCH_MNT
 
