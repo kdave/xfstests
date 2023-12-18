@@ -2870,17 +2870,30 @@ _require_fs_space()
 #
 # Check if the filesystem supports sparse files.
 #
-# Unfortunately there is no better way to do this than a manual black list.
+# Filesystems (such as CIFS mounted from a Windows server) that generally
+# support sparse files but are tricked into creating a non-sparse file by one
+# of the tests are treated here as not supporting sparse files. This special
+# treatment is done due to media wear-out concerns -- e.g., generic/129 would
+# write multiple terabytes of zeros if allowed to run on a filesystem that
+# ignores the request to make a file sparse.
 #
 _require_sparse_files()
 {
-    case $FSTYP in
-    hfsplus|exfat)
-        _notrun "Sparse files not supported by this filesystem type: $FSTYP"
-	;;
-    *)
-        ;;
-    esac
+    local testfile="$TEST_DIR/$$.sparsefiletest"
+    rm -f "$testfile"
+
+    # The write size and offset are specifically chosen to trick the Windows
+    # SMB server implementation into dishonoring the request to create a sparse
+    # file, while still fitting into the 64 kb SMB1 maximum request size.
+    # This also creates a non-sparse file on vfat, exfat, and hfsplus.
+    $XFS_IO_PROG -f -c 'pwrite -b 51200 -S 0x61 1638400 51200' "$testfile" >/dev/null
+
+    resulting_file_size_kb=$( du -sk "$testfile" | cut -f 1 )
+    rm -f "$testfile"
+
+    # The threshold of 1 MB allows for filesystems with such large clusters.
+    [ $resulting_file_size_kb -gt 1024 ] && \
+	_notrun "Sparse files are not supported or do not work as expected"
 }
 
 _require_debugfs()
