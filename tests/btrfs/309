@@ -1,0 +1,27 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# FS QA Test 309
+#
+# Try to snapshot a deleted subvolume.
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot subvol
+
+_supported_fs btrfs
+_require_scratch
+_require_test_program t_snapshot_deleted_subvolume
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: don't abort filesystem when attempting to snapshot deleted subvolume"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+"$here/src/t_snapshot_deleted_subvolume" "$SCRATCH_MNT"
+# Make sure the filesystem didn't go read-only.
+touch "$SCRATCH_MNT/foo"
+
+echo "Silence is golden"
+status=0
+exit
