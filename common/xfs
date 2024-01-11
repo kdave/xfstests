@@ -692,7 +692,8 @@ _xfs_metadump() {
 _xfs_mdrestore() {
 	local metadump="$1"
 	local device="$2"
-	shift; shift
+	local logdev="$3"
+	shift; shift; shift
 	local options="$@"
 
 	# If we're configured for compressed dumps and there isn't already an
@@ -704,6 +705,10 @@ _xfs_mdrestore() {
 		done
 	fi
 	test -r "$metadump" || return 1
+
+	if [ "$logdev" != "none" ]; then
+		options="$options -l $logdev"
+	fi
 
 	$XFS_MDRESTORE_PROG $options "${metadump}" "${device}"
 }
@@ -732,8 +737,18 @@ _scratch_xfs_mdrestore()
 {
 	local metadump=$1
 	shift
+	local logdev=none
+	local options="$@"
 
-	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$@"
+	# $SCRATCH_LOGDEV should have a non-zero length value only when all of
+	# the following conditions are met.
+	# 1. Metadump is in v2 format.
+	# 2. Metadump has contents dumped from an external log device.
+	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ]; then
+		logdev=$SCRATCH_LOGDEV
+	fi
+
+	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$logdev" "$@"
 }
 
 # Do not use xfs_repair (offline fsck) to rebuild the filesystem
