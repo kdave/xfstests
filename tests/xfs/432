@@ -50,6 +50,7 @@ echo "Format and mount"
 # block.  8187 hashes/dablk / 248 dirents/dirblock = ~33 dirblocks per
 # dablock.  33 dirblocks * 64k mean that we can expand a directory by
 # 2112k before we have to allocate another da btree block.
+
 _scratch_mkfs -b size=1k -n size=64k > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
@@ -85,13 +86,29 @@ extlen="$(check_for_long_extent $dir_inum)"
 echo "qualifying extent: $extlen blocks" >> $seqres.full
 test -n "$extlen" || _notrun "could not create dir extent > 1000 blocks"
 
-echo "Try to metadump"
-_scratch_xfs_metadump $metadump_file -a -o -w
-SCRATCH_DEV=$metadump_img _scratch_xfs_mdrestore $metadump_file
+echo "Try to metadump, restore and check restored metadump image"
+max_md_version=1
+_scratch_metadump_v2_supported && max_md_version=2
 
-echo "Check restored metadump image"
-SCRATCH_DEV=$metadump_img _scratch_xfs_repair -n &>> $seqres.full || \
-	echo "xfs_repair on restored fs returned $?"
+for md_version in $(seq 1 $max_md_version); do
+	version=""
+	if [[ $max_md_version == 2 ]]; then
+		version="-v $md_version"
+	fi
+
+	_scratch_xfs_metadump $metadump_file -a -o -w $version
+
+	slogdev=$SCRATCH_LOGDEV
+	if [[ -z $version || $version == "-v 1" ]]; then
+		slogdev=""
+	fi
+
+	SCRATCH_DEV=$metadump_img SCRATCH_LOGDEV=$slogdev \
+		   _scratch_xfs_mdrestore $metadump_file
+
+	SCRATCH_DEV=$metadump_img _scratch_xfs_repair -n &>> $seqres.full || \
+		echo "xfs_repair on restored fs returned $?"
+done
 
 # success, all done
 status=0

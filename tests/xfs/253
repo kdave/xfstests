@@ -27,6 +27,9 @@ _cleanup()
     rm -f $tmp.*
     rm -rf "${OUTPUT_DIR}"
     rm -f "${METADUMP_FILE}"
+    [[ -n $logdev && $logdev != $SCRATCH_LOGDEV ]] && \
+	    _destroy_loop_device $logdev
+    [[ -n $datadev ]] && _destroy_loop_device $datadev
 }
 
 # Import common functions.
@@ -49,21 +52,101 @@ function create_file() {
 	touch $(printf "$@")
 }
 
+verify_metadump_v1()
+{
+	local max_version=$1
+	local version=""
+
+	if [[ $max_version == 2 ]]; then
+		version="-v 1"
+	fi
+
+	_scratch_xfs_metadump $METADUMP_FILE $version
+
+	SCRATCH_DEV=$TEST_DIR/data-image SCRATCH_LOGDEV="" \
+		   _scratch_xfs_mdrestore $METADUMP_FILE
+
+	datadev=$(_create_loop_device $TEST_DIR/data-image)
+
+	SCRATCH_DEV=$datadev _scratch_mount
+
+	cd "${SCRATCH_MNT}"
+
+	# Get a listing of all the files after obfuscation
+	echo "Metadump v1" >> $seqres.full
+	ls -R >> $seqres.full
+	ls -R | od -c >> $seqres.full
+
+	cd /
+
+	SCRATCH_DEV=$datadev _scratch_unmount
+
+	_destroy_loop_device $datadev
+	datadev=""
+	rm -f $TEST_DIR/data-image
+}
+
+verify_metadump_v2()
+{
+	version="-v 2"
+
+	_scratch_xfs_metadump $METADUMP_FILE $version
+
+	# Metadump v2 files can contain contents dumped from an external log
+	# device. Use a temporary file to hold the log device contents restored
+	# from such a metadump file.
+	slogdev=""
+	if [[ -n $SCRATCH_LOGDEV ]]; then
+		slogdev=$TEST_DIR/log-image
+	fi
+
+	SCRATCH_DEV=$TEST_DIR/data-image SCRATCH_LOGDEV=$slogdev \
+		   _scratch_xfs_mdrestore $METADUMP_FILE
+
+	datadev=$(_create_loop_device $TEST_DIR/data-image)
+
+	logdev=${SCRATCH_LOGDEV}
+	if [[ -s $TEST_DIR/log-image ]]; then
+		logdev=$(_create_loop_device $TEST_DIR/log-image)
+	fi
+
+	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_mount
+
+	cd "${SCRATCH_MNT}"
+
+	# Get a listing of all the files after obfuscation
+	echo "Metadump v2" >> $seqres.full
+	ls -R >> $seqres.full
+	ls -R | od -c >> $seqres.full
+
+	cd /
+
+	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_unmount
+
+	if [[ -s $TEST_DIR/log-image ]]; then
+		_destroy_loop_device $logdev
+		logdev=""
+		rm -f $TEST_DIR/log-image
+	fi
+
+	_destroy_loop_device $datadev
+	datadev=""
+	rm -f $TEST_DIR/data-image
+}
+
 echo "Disciplyne of silence is goed."
 
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-# Initialize and mount the scratch filesystem, then create a bunch
-# of files that exercise the original problem.
+# Initialize and mount the scratch filesystem, then create a bunch of
+# files that exercise the original problem.
 #
 # The problem arose when a file name produced a hash that contained
-# either 0x00 (string terminator) or 0x27 ('/' character) in a
-# spot used to determine a character in an obfuscated name.  This
-# occurred in one of 5 spots at the end of the name, at position
-# (last-4), (last-3), (last-2), (last-1), or (last).
-
-rm -f "${METADUMP_FILE}"
+# either 0x00 (string terminator) or 0x27 ('/' character) in a spot used
+# to determine a character in an obfuscated name.  This occurred in one
+# of 5 spots at the end of the name, at position (last-4), (last-3),
+# (last-2), (last-1), or (last).
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -78,8 +161,8 @@ create_file 'lmno'		# hash 0x0d9b776f (4-byte name)
 create_file 'pqrstu'		# hash 0x1e5cf9f2 (6-byte name)
 create_file 'abcdefghijklmnopqrstuvwxyz' # a most remarkable word (0x55004ae3)
 
-# Create a short directory name; it won't be obfuscated.  Populate
-# it with some longer named-files.  The first part of the obfuscated
+# Create a short directory name; it won't be obfuscated.  Populate it
+# with some longer named-files.  The first part of the obfuscated
 # filenames should use printable characters.
 mkdir foo
 create_file 'foo/longer_file_name_1'	# hash 0xe83634ec
@@ -149,22 +232,19 @@ ls -R | od -c >> $seqres.full
 cd $here
 
 _scratch_unmount
-_scratch_xfs_metadump $METADUMP_FILE
 
-# Now restore the obfuscated one back and take a look around
-_scratch_xfs_mdrestore "$METADUMP_FILE"
+max_md_version=1
+_scratch_metadump_v2_supported && max_md_version=2
 
-_scratch_mount
+verify_metadump_v1 $max_md_version
 
-# Get a listing of all the files after obfuscation
-cd ${SCRATCH_MNT}
-ls -R >> $seqres.full
-ls -R | od -c >> $seqres.full
+if [[ $max_md_version == 2 ]]; then
+	verify_metadump_v2
+fi
 
 # Finally, re-make the filesystem since to ensure we don't
 # leave a directory with duplicate entries lying around.
 cd /
-_scratch_unmount
 _scratch_mkfs >/dev/null 2>&1
 
 # all done

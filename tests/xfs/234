@@ -16,7 +16,11 @@ _cleanup()
 {
     cd /
     _scratch_unmount > /dev/null 2>&1
-    rm -rf $tmp.* $metadump_file $TEST_DIR/image
+    [[ -n $logdev && $logdev != "none" && $logdev != $SCRATCH_LOGDEV ]] && \
+	    _destroy_loop_device $logdev
+    [[ -n $datadev ]] && _destroy_loop_device $datadev
+    rm -rf $tmp.* $testdir $metadump_file $TEST_DIR/image \
+       $TEST_DIR/log-image
 }
 
 # Import common functions.
@@ -29,12 +33,86 @@ _require_loop
 _require_xfs_scratch_rmapbt
 _require_xfs_io_command "fpunch"
 
+metadump_file=$TEST_DIR/${seq}_metadump
+
+verify_metadump_v1()
+{
+	local max_version=$1
+	local version=""
+
+	if [[ $max_version == 2 ]]; then
+		version="-v 1"
+	fi
+
+	_scratch_xfs_metadump $metadump_file $version
+
+	SCRATCH_DEV=$TEST_DIR/data-image SCRATCH_LOGDEV="" \
+		   _scratch_xfs_mdrestore $metadump_file
+
+	datadev=$(_create_loop_device $TEST_DIR/data-image)
+
+	SCRATCH_DEV=$datadev _scratch_mount
+	SCRATCH_DEV=$datadev _scratch_unmount
+
+	logdev=$SCRATCH_LOGDEV
+	[[ -z $logdev ]] && logdev=none
+	_check_xfs_filesystem $datadev $logdev none
+
+	_destroy_loop_device $datadev
+	datadev=""
+	rm -f $TEST_DIR/data-image
+}
+
+verify_metadump_v2()
+{
+	version="-v 2"
+
+	_scratch_xfs_metadump $metadump_file $version
+
+	# Metadump v2 files can contain contents dumped from an external log
+	# device. Use a temporary file to hold the log device contents restored
+	# from such a metadump file.
+	slogdev=""
+	if [[ -n $SCRATCH_LOGDEV ]]; then
+		slogdev=$TEST_DIR/log-image
+	fi
+
+	SCRATCH_DEV=$TEST_DIR/data-image SCRATCH_LOGDEV=$slogdev \
+		   _scratch_xfs_mdrestore $metadump_file
+
+	datadev=$(_create_loop_device $TEST_DIR/data-image)
+
+	logdev=${SCRATCH_LOGDEV}
+	if [[ -s $TEST_DIR/log-image ]]; then
+		logdev=$(_create_loop_device $TEST_DIR/log-image)
+	fi
+
+	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_mount
+	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_unmount
+
+	[[ -z $logdev ]] && logdev=none
+	_check_xfs_filesystem $datadev $logdev none
+
+	if [[ -s $TEST_DIR/log-image ]]; then
+		_destroy_loop_device $logdev
+		logdev=""
+		rm -f $TEST_DIR/log-image
+	fi
+
+	_destroy_loop_device $datadev
+	datadev=""
+	rm -f $TEST_DIR/data-image
+}
+
 _scratch_mkfs >/dev/null 2>&1
+
+max_md_version=1
+_scratch_metadump_v2_supported && max_md_version=2
+
 _scratch_mount
 
 testdir=$SCRATCH_MNT/test-$seq
 mkdir $testdir
-metadump_file=$TEST_DIR/${seq}_metadump
 
 echo "Create the original file blocks"
 blksz="$(_get_block_size $testdir)"
@@ -47,18 +125,15 @@ seq 1 2 $((nr_blks - 1)) | while read nr; do
 	$XFS_IO_PROG -c "fpunch $((nr * blksz)) $blksz" $testdir/file1 >> $seqres.full
 done
 
-echo "Create metadump file"
 _scratch_unmount
-_scratch_xfs_metadump $metadump_file
 
-# Now restore the obfuscated one back and take a look around
-echo "Restore metadump"
-SCRATCH_DEV=$TEST_DIR/image _scratch_xfs_mdrestore $metadump_file
-SCRATCH_DEV=$TEST_DIR/image _scratch_mount
-SCRATCH_DEV=$TEST_DIR/image _scratch_unmount
+echo "Create metadump file, restore it and check restored fs"
 
-echo "Check restored fs"
-_check_generic_filesystem $metadump_file
+verify_metadump_v1 $max_md_version
+
+if [[ $max_md_version == 2 ]]; then
+	verify_metadump_v2
+fi
 
 # success, all done
 status=0
