@@ -17,8 +17,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define offsetof(TYPE, MEMBER)	((size_t)&((TYPE *)0)->MEMBER)
-
 int main(int argc, char *argv[])
 {
 	struct sockaddr_un sun;
