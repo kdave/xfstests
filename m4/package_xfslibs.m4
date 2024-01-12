@@ -50,34 +50,6 @@ AC_DEFUN([AC_PACKAGE_NEED_XFS_HANDLE_H],
     fi
   ])
 
-AC_DEFUN([AC_PACKAGE_NEED_LIBXFSINIT_LIBXFS],
-  [ AC_CHECK_LIB(xfs, libxfs_init,, [
-        echo
-        echo 'FATAL ERROR: could not find a valid XFS base library.'
-        echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
-        exit 1
-    ])
-    libxfs="-lxfs"
-    test -f ${libexecdir}${libdirsuffix}/libxfs.la && \
-	libxfs="${libexecdir}${libdirsuffix}/libxfs.la"
-    AC_SUBST(libxfs)
-  ])
-
-AC_DEFUN([AC_PACKAGE_NEED_OPEN_BY_FSHANDLE],
-  [ AC_CHECK_LIB(handle, open_by_fshandle,, [
-        echo
-        echo 'FATAL ERROR: could not find a current XFS handle library.'
-        echo 'Install or upgrade the XFS library package.'
-        echo 'Alternatively, run "make install-dev" from the xfsprogs source.'
-        exit 1
-    ])
-    libhdl="-lhandle"
-    test -f ${libexecdir}${libdirsuffix}/libhandle.la && \
-	libhdl="${libexecdir}${libdirsuffix}/libhandle.la"
-    AC_SUBST(libhdl)
-  ])
-
 AC_DEFUN([AC_PACKAGE_NEED_ATTRLIST_LIBHANDLE],
   [ AC_CHECK_LIB(handle, attr_list_by_handle,, [
         echo
