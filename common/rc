@@ -2916,6 +2916,27 @@ _require_debugfs()
     [ -d "$DEBUGFS_MNT/boot_params" ] || _notrun "Debugfs not mounted"
 }
 
+#
+# Return the version of NFS in use on the mount on $1. Returns 0
+# if it's not NFS.
+#
+_nfs_version()
+{
+	local mountpoint=$1
+	local nfsvers=""
+
+	case "$FSTYP" in
+	nfs*)
+		nfsvers=`_mount | grep $1 | sed -n 's/^.*vers=\([0-9.]*\).*$/\1/p'`
+		;;
+	*)
+		nfsvers="0"
+		;;
+	esac
+
+	echo "$nfsvers"
+}
+
 # The default behavior of SEEK_HOLE is to always return EOF.
 # Filesystems that implement non-default behavior return the offset
 # of holes with SEEK_HOLE. There is no way to query the filesystem
@@ -2939,7 +2960,7 @@ _fstyp_has_non_default_seek_data_hole()
 	nfs*)
 		# NFSv2, NFSv3, and NFSv4.0/4.1 only support default behavior of SEEK_HOLE,
 		# while NFSv4.2 supports non-default behavior
-		local nfsvers=`_mount() | grep $TEST_DEV | sed -n 's/^.*vers=\([0-9.]*\).*$/\1/p'`
+		local nfsvers=$( _nfs_version "$TEST_DIR" )
 		[ "$nfsvers" = "4.2" ]
 		return $?
 		;;
@@ -5142,6 +5163,16 @@ _require_negative_timestamps() {
 	case "$FSTYP" in
 	ceph|exfat)
 		_notrun "$FSTYP does not support negative timestamps"
+		;;
+	nfs*)
+		#
+		# NFSv2/3 timestamps use 32-bit unsigned values, and so
+		# cannot represent values prior to the epoch
+		#
+		local nfsvers=$( _nfs_version "$TEST_DIR" )
+		if [ "$nfsvers" = "2" -o "$nfsvers" = "3" ]; then
+			_notrun "$FSTYP version $nfsvers does not support negative timestamps"
+		fi
 		;;
 	esac
 }
