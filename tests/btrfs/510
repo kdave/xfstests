@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 510
+#
+# Test various race conditions between qgroup deletion and squota writes
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup subvol clone
+
+# Import common functions.
+. ./common/reflink
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch_reflink
+_require_cp_reflink
+_require_scratch_enable_simple_quota
+_require_no_compress
+
+_fixed_by_kernel_commit xxxxxxxxxxxx "btrfs: forbid deleting live subvol qgroup"
+_fixed_by_kernel_commit xxxxxxxxxxxx "btrfs: forbid creating subvol qgroups"
+
+subv1=$SCRATCH_MNT/subv1
+subv2=$SCRATCH_MNT/subv2
+
+prepare()
+{
+    _scratch_mkfs >> $seqres.full
+    _scratch_mount
+    $BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT
+    $BTRFS_UTIL_PROG subvolume create $subv1 >> $seqres.full
+    $BTRFS_UTIL_PROG subvolume create $subv2 >> $seqres.full
+    $XFS_IO_PROG -fc "pwrite -q 0 128K" $subv1/f
+    _cp_reflink $subv1/f $subv2/f
+}
+
+# An extent can long outlive its owner. Test this by deleting the owning
+# subvolume, committing the transaction, then deleting the reflinked copy.
+# Deleting the copy will attempt to free space from the missing owner, which
+# should be a no-op.
+free_from_deleted_owner()
+{
+    echo "free from deleted owner"
+    prepare
+    subvid1=$(_btrfs_get_subvolid $SCRATCH_MNT subv1)
+
+    $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+    $BTRFS_UTIL_PROG subvolume delete $subv1 >> $seqres.full
+    $BTRFS_UTIL_PROG qgroup destroy 0/$subvid1 $SCRATCH_MNT >> $seqres.full
+    $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+    rm $subv2/f
+    _scratch_unmount
+}
+
+# A race where we delete the owner in the same transaction as writing the
+# extent leads to incrementing the squota usage of the missing qgroup.
+# This leaves behind an owner ref with an owner id that cannot exist, so
+# freeing the extent now frees from that qgroup, but there has never
+# been a corresponding usage to free.
+add_to_deleted_owner()
+{
+    echo "add to deleted owner"
+    prepare
+    subvid1=$(_btrfs_get_subvolid $SCRATCH_MNT subv1)
+
+    $BTRFS_UTIL_PROG subvolume delete $subv1 >> $seqres.full
+    $BTRFS_UTIL_PROG qgroup destroy 0/$subvid1 $SCRATCH_MNT >> $seqres.full
+    $BTRFS_UTIL_PROG filesystem sync $SCRATCH_MNT
+    $BTRFS_UTIL_PROG qgroup create 0/$subvid1 $SCRATCH_MNT >> $seqres.full
+    rm $subv2/f
+    _scratch_unmount
+}
+
+free_from_deleted_owner
+add_to_deleted_owner
+
+# success, all done
+status=0
+exit
