@@ -160,16 +160,6 @@ do_enospc_falloc()
 	do_falloc $file $sz
 }
 
-enable_quota()
-{
-	local mode=$1
-
-	[ $mode == "n" ] && return
-	arg=$([ $mode == "s" ] && echo "--simple")
-
-	$BTRFS_UTIL_PROG quota enable $arg $SCRATCH_MNT
-}
-
 get_subvid()
 {
 	_btrfs_get_subvolid $SCRATCH_MNT subv
@@ -189,7 +179,7 @@ prepare()
 {
 	_scratch_mkfs >> $seqres.full
 	_scratch_mount
-	enable_quota "s"
+	$BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT
 	$BTRFS_UTIL_PROG subvolume create $subv >> $seqres.full
 	local subvid=$(get_subvid)
 	set_subvol_limit $subvid $limit
@@ -400,7 +390,7 @@ enable_mature()
 	# Sync before enabling squotas to reliably *not* count the writes
 	# we did before enabling.
 	sync
-	enable_quota "s"
+	$BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT
 	set_subvol_limit $subvid $limit
 	_scratch_cycle_mount
 	usage=$(get_subvol_usage $subvid)
