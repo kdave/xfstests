@@ -16,7 +16,7 @@
 #include <mntent.h>
 #include <limits.h>
 
-#define LOCK_TIMEOUT	10
+#define LOCK_TIMEOUT	120
 #define _(x)		(x)
 
 static char *mounted = "t_mtab";
