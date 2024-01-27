@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 310
+#
+# Make sure reading on an compressed inline extent is behaving correctly
+#
+. ./common/preamble
+_begin_fstest auto quick compress
+
+# Import common functions.
+# . ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_scratch
+
+# This test require inlined compressed extents creation, and all the writes
+# are designed for 4K sector size.
+_require_btrfs_inline_extents_creation
+_require_btrfs_support_sectorsize 4096
+
+_fixed_by_kernel_commit e01a83e12604 \
+	"Revert \"btrfs: zstd: fix and simplify the inline extent decompression\""
+
+# The correct md5 for the correct 4K file filled with "0xcd"
+md5sum_correct="5fed275e7617a806f94c173746a2a723"
+
+workload()
+{
+	local algo="$1"
+
+	echo "=== Testing compression algorithm ${algo} ===" >> $seqres.full
+	_scratch_mkfs >> $seqres.full
+	_scratch_mount -o compress=${algo}
+
+	_pwrite_byte 0xcd 0 4k "$SCRATCH_MNT/inline_file" > /dev/null
+	result=$(_md5_checksum "$SCRATCH_MNT/inline_file")
+	echo "after initial write, md5sum=${result}" >> $seqres.full
+	if [ "$result" != "$md5sum_correct" ]; then
+		_fail "initial write results incorrect content for \"$algo\""
+	fi
+	# Writeback data to get correct fiemap result, or we got FIEMAP_DEALLOC
+	# without compression/inline flags.
+	sync
+
+	$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/inline_file | tail -n 1 > $tmp.fiemap
+	cat $tmp.fiemap >> $seqres.full
+	# Make sure we got an inlined compressed file extent.
+	# 0x200 means inlined, 0x100 means not block aligned, 0x8 means encoded
+	# (compressed in this case), and 0x1 means the last extent.
+	if ! grep -q "0x309" $tmp.fiemap; then
+		rm -f -- $tmp.fiemap
+		_notrun "No compressed inline extent created, maybe subpage?"
+	fi
+	rm -f -- $tmp.fiemap
+
+	# Unmount to clear the page cache.
+	_scratch_cycle_mount
+
+	# For v6.8-rc1 without the revert or the newer fix, this would
+	# lead to VM_BUG_ON() thus crash
+	result=$(_md5_checksum "$SCRATCH_MNT/inline_file")
+	echo "after cycle mount, md5sum=${result}" >> $seqres.full
+	if [ "$result" != "$md5sum_correct" ]; then
+		_fail "read for compressed inline extent failed for \"$algo\""
+	fi
+	_scratch_unmount
+	_check_scratch_fs
+}
+
+algo_list=($(_btrfs_compression_algos))
+for algo in ${algo_list[@]}; do
+	workload $algo
+done
+
+echo "Silence is golden"
+
+status=0
+exit
