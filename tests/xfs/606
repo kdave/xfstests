@@ -1,0 +1,56 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 606
+#
+# Test xfs_growfs with "too-small" size expansion, which lead to a delta of "0"
+# in xfs_growfs_data_private. This's a regression test of 84712492e6da ("xfs:
+# short circuit xfs_growfs_data_private() if delta is zero").
+#
+. ./common/preamble
+_begin_fstest auto quick growfs
+
+_cleanup()
+{
+	local dev
+	$UMOUNT_PROG $LOOP_MNT 2>/dev/null
+	dev=$(losetup -j testfile | cut -d: -f1)
+	losetup -d $dev 2>/dev/null
+	rm -rf $LOOP_IMG $LOOP_MNT
+	cd /
+	rm -f $tmp.*
+}
+
+# real QA test starts here
+_supported_fs xfs
+_fixed_by_kernel_commit 84712492e6da \
+	"xfs: short circuit xfs_growfs_data_private() if delta is zero"
+_require_test
+_require_loop
+_require_xfs_io_command "truncate"
+_require_command "$XFS_GROWFS_PROG" xfs_growfs
+
+LOOP_IMG=$TEST_DIR/$seq.dev
+LOOP_MNT=$TEST_DIR/$seq.mnt
+rm -rf $LOOP_IMG $LOOP_MNT
+mkdir -p $LOOP_MNT
+
+# 1G image
+$XFS_IO_PROG -f -c "truncate 1073741824" $LOOP_IMG
+$MKFS_XFS_PROG -f $LOOP_IMG >$seqres.full
+# Extend by just 8K, expected to start with the last full-size AG ends of
+# above 1G block device.
+$XFS_IO_PROG -f -c "truncate 1073750016" $LOOP_IMG
+_mount -oloop $LOOP_IMG $LOOP_MNT
+# A known bug shows "XFS_IOC_FSGROWFSDATA xfsctl failed: No space left on
+# device" at here, refer to _fixed_by_kernel_commit above
+$XFS_GROWFS_PROG $LOOP_MNT >$seqres.full
+if [ $? -ne 0 ];then
+	echo "xfs_growfs fails!"
+fi
+
+echo "Silence is golden"
+# success, all done
+status=0
+exit
