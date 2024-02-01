@@ -23,6 +23,11 @@ echo "COW file"
 # unset it after the swap file has been created.
 rm -f "$SCRATCH_MNT/swap"
 touch "$SCRATCH_MNT/swap"
+# Make sure we have a COW file if we were mounted with "-o nodatacow".
+if _normalize_mount_options "$MOUNT_OPTIONS" | grep -q "nodatacow"; then
+	_require_chattr C
+	$CHATTR_PROG -C "$SCRATCH_MNT/swap"
+fi
 chmod 0600 "$SCRATCH_MNT/swap"
 _pwrite_byte 0x61 0 $(($(_get_page_size) * 10)) "$SCRATCH_MNT/swap" >> $seqres.full
 $MKSWAP_PROG "$SCRATCH_MNT/swap" >> $seqres.full
