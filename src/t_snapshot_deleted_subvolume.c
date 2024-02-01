@@ -20,11 +20,6 @@
 #define BTRFS_IOCTL_MAGIC 0x94
 #endif
 
-#ifndef BTRFS_IOC_SNAP_DESTROY_V2
-#define BTRFS_IOC_SNAP_DESTROY_V2 \
-	_IOW(BTRFS_IOCTL_MAGIC, 63, struct btrfs_ioctl_vol_args_v2)
-#endif
-
 #ifndef BTRFS_IOC_SNAP_CREATE_V2
 #define BTRFS_IOC_SNAP_CREATE_V2 \
 	_IOW(BTRFS_IOCTL_MAGIC, 23, struct btrfs_ioctl_vol_args_v2)
@@ -56,6 +51,11 @@ struct btrfs_ioctl_vol_args_v2 {
 		__u64 subvolid;
 	};
 };
+#endif
+
+#if !HAVE_DECL_BTRFS_IOC_SNAP_DESTROY_V2
+#define BTRFS_IOC_SNAP_DESTROY_V2 \
+	_IOW(BTRFS_IOCTL_MAGIC, 63, struct btrfs_ioctl_vol_args_v2)
 #endif
 
 int main(int argc, char **argv)
