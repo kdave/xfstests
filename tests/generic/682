@@ -54,6 +54,12 @@ repquota -upn $SCRATCH_MNT >> $seqres.full
 echo $(ls $scratchdir | wc -l) files in $scratchdir  >> $seqres.full
 ls -sld $scratchdir  >> $seqres.full
 
+_filter_mv_output()
+{
+	sed -e "s,cannot move .* to \(.*\):\(.*\),cannot overwrite \1:\2,g" \
+	    -e 's/y[0-9]*/yXXX/g'
+}
+
 # Fail at renaming into the directory as qa_user to ensure quota enforcement
 # works
 chmod a+rwx $stagedir
@@ -62,7 +68,7 @@ for ((i = 0; i < dirents; i++)); do
 	name=$(printf "y%0254d" $i)
 	ln $scratchfile $stagedir/$name
 	su - "$qa_user" -c "mv $stagedir/$name $scratchdir/$name" 2>&1 | \
-		_filter_scratch | sed -e 's/y[0-9]*/yXXX/g'
+		_filter_scratch | _filter_mv_output
 	test "${PIPESTATUS[0]}" -ne 0 && break
 done
 repquota -upn $SCRATCH_MNT >> $seqres.full
