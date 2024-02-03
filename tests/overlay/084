@@ -25,6 +25,11 @@ _cleanup()
 
 # real QA test starts here
 _supported_fs overlay
+# This test does not run on kernels prior ro v6.7 and now it will also make sure
+# that the following on-disk format change was backported to v6.7 based kernels
+_fixed_by_kernel_commit 420332b94119 \
+	"ovl: mark xwhiteouts directory with overlay.opaque='x'"
+
 # We use non-default scratch underlying overlay dirs, we need to check
 # them explicity after test.
 _require_scratch_nocheck
@@ -115,7 +120,8 @@ do_test_xwhiteout()
 
 	mkdir -p $basedir/lower $basedir/upper $basedir/work
 	touch $basedir/lower/regular $basedir/lower/hidden  $basedir/upper/hidden
-	setfattr -n $prefix.overlay.whiteouts -v "y" $basedir/upper
+	# overlay.opaque="x" means directory has xwhiteout children
+	setfattr -n $prefix.overlay.opaque -v "x" $basedir/upper
 	setfattr -n $prefix.overlay.whiteout -v "y" $basedir/upper/hidden
 
 	# Test the hidden is invisible
