@@ -689,12 +689,25 @@ _xfs_metadump() {
 	return $res
 }
 
+# What is the version of this metadump file?
+_xfs_metadumpfile_version() {
+	local file="$1"
+	local magic
+
+	magic="$($XFS_IO_PROG -c 'pread -q -v 0 4' "$file")"
+	case "$magic" in
+	"00000000:  58 4d 44 32  XMD2") echo 2;;
+	"00000000:  58 46 53 4d  XFSM") echo 1;;
+	esac
+}
+
 _xfs_mdrestore() {
 	local metadump="$1"
 	local device="$2"
 	local logdev="$3"
 	shift; shift; shift
 	local options="$@"
+	local dumpfile_ver
 
 	# If we're configured for compressed dumps and there isn't already an
 	# uncompressed dump, see if we can use DUMP_COMPRESSOR to decompress
@@ -705,8 +718,18 @@ _xfs_mdrestore() {
 		done
 	fi
 	test -r "$metadump" || return 1
+	dumpfile_ver="$(_xfs_metadumpfile_version "$metadump")"
 
-	if [ "$logdev" != "none" ]; then
+	if [ "$logdev" != "none" ] && [[ $dumpfile_ver > 1 ]]; then
+		# metadump and mdrestore began capturing and restoring the
+		# contents of external log devices with the addition of the
+		# metadump v2 format.  Hence it only makes sense to specify -l
+		# here if the dump file itself is in v2 format.
+		#
+		# With a v1 metadump, the log device is not changed by the dump
+		# and restore process.  Historically, fstests either didn't
+		# notice or _notrun themselves when external logs were in use.
+		# Don't break that for people testing with xfsprogs < 6.5.
 		options="$options -l $logdev"
 	fi
 
