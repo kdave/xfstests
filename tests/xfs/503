@@ -17,11 +17,13 @@ _cleanup()
 {
 	cd /
 	rm -rf $tmp.* $testdir
+	_xfs_cleanup_verify_metadump
 }
 
 # Import common functions.
 . ./common/filter
 . ./common/populate
+. ./common/metadump
 
 testdir=$TEST_DIR/test-$seq
 
@@ -35,6 +37,7 @@ _require_scratch_nocheck
 _require_populate_commands
 _xfs_skip_online_rebuild
 _xfs_skip_offline_rebuild
+_xfs_setup_verify_metadump
 
 echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
@@ -43,66 +46,17 @@ mkdir -p $testdir
 metadump_file=$testdir/scratch.md
 copy_file=$testdir/copy.img
 
-check_restored_metadump_image()
-{
-	local image=$1
-
-	loop_dev=$(_create_loop_device $image)
-	SCRATCH_DEV=$loop_dev _scratch_mount
-	SCRATCH_DEV=$loop_dev _check_scratch_fs
-	SCRATCH_DEV=$loop_dev _scratch_unmount
-	_destroy_loop_device $loop_dev
-}
-
-max_md_version=$(_xfs_metadump_max_version)
-
 echo "metadump and mdrestore"
-for md_version in $(seq 1 $max_md_version); do
-	version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v $md_version"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -a -o $version >> $seqres.full
-	SCRATCH_DEV=$TEST_DIR/image _scratch_xfs_mdrestore $metadump_file
-	check_restored_metadump_image $TEST_DIR/image
-done
+_xfs_verify_metadumps '-a -o'
 
 echo "metadump a and mdrestore"
-for md_version in $(seq 1 $max_md_version); do
-	version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v $md_version"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -a $version >> $seqres.full
-	SCRATCH_DEV=$TEST_DIR/image _scratch_xfs_mdrestore $metadump_file
-	check_restored_metadump_image $TEST_DIR/image
-done
+_xfs_verify_metadumps '-a'
 
 echo "metadump g and mdrestore"
-for md_version in $(seq 1 $max_md_version); do
-	version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v $md_version"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -g $version >> $seqres.full
-	SCRATCH_DEV=$TEST_DIR/image _scratch_xfs_mdrestore $metadump_file
-	check_restored_metadump_image $TEST_DIR/image
-done
+_xfs_verify_metadumps '-g' >> $seqres.full
 
 echo "metadump ag and mdrestore"
-for md_version in $(seq 1 $max_md_version); do
-	version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v $md_version"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -a -g $version >> $seqres.full
-	SCRATCH_DEV=$TEST_DIR/image _scratch_xfs_mdrestore $metadump_file
-	check_restored_metadump_image $TEST_DIR/image
-done
+_xfs_verify_metadumps '-a -g' >> $seqres.full
 
 echo copy
 $XFS_COPY_PROG $SCRATCH_DEV $copy_file >> $seqres.full

@@ -20,16 +20,19 @@ _begin_fstest auto quick dir metadata metadump
 _cleanup()
 {
 	cd /
-	rm -f "$tmp".* $metadump_file $metadump_img
+	rm -f "$tmp".*
+	_xfs_cleanup_verify_metadump
 }
 
 # Import common functions.
 . ./common/filter
+. ./common/metadump
 
 # real QA test starts here
 _supported_fs xfs
 _require_command "$XFS_MDRESTORE_PROG" "xfs_mdrestore"
 _require_scratch
+_xfs_setup_verify_metadump
 
 rm -f "$seqres.full"
 
@@ -54,9 +57,6 @@ echo "Format and mount"
 _scratch_mkfs -b size=1k -n size=64k > "$seqres.full" 2>&1
 _scratch_mount >> "$seqres.full" 2>&1
 
-metadump_file="$TEST_DIR/meta-$seq"
-metadump_img="$TEST_DIR/img-$seq"
-rm -f $metadump_file $metadump_img
 testdir="$SCRATCH_MNT/test-$seq"
 max_fname_len=255
 blksz=$(_get_block_size $SCRATCH_MNT)
@@ -87,27 +87,7 @@ echo "qualifying extent: $extlen blocks" >> $seqres.full
 test -n "$extlen" || _notrun "could not create dir extent > 1000 blocks"
 
 echo "Try to metadump, restore and check restored metadump image"
-max_md_version=$(_xfs_metadump_max_version)
-
-for md_version in $(seq 1 $max_md_version); do
-	version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v $md_version"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -a -o -w $version
-
-	slogdev=$SCRATCH_LOGDEV
-	if [[ -z $version || $version == "-v 1" ]]; then
-		slogdev=""
-	fi
-
-	SCRATCH_DEV=$metadump_img SCRATCH_LOGDEV=$slogdev \
-		   _scratch_xfs_mdrestore $metadump_file
-
-	SCRATCH_DEV=$metadump_img _scratch_xfs_repair -n &>> $seqres.full || \
-		echo "xfs_repair on restored fs returned $?"
-done
+_xfs_verify_metadumps '-a -o -w'
 
 # success, all done
 status=0

@@ -15,17 +15,13 @@ _cleanup()
 {
 	cd /
 	rm -r -f $tmp.*
-	_scratch_unmount > /dev/null 2>&1
-	[[ -n $logdev && $logdev != "none" && $logdev != $SCRATCH_LOGDEV ]] && \
-		_destroy_loop_device $logdev
-	[[ -n $datadev ]] && _destroy_loop_device $datadev
-	rm -r -f $metadump_file $TEST_DIR/data-image \
-	   $TEST_DIR/log-image
+	_xfs_cleanup_verify_metadump
 }
 
 # Import common functions.
 . ./common/dmflakey
 . ./common/inject
+. ./common/metadump
 
 # real QA test starts here
 _supported_fs xfs
@@ -37,84 +33,21 @@ _require_xfs_io_error_injection log_item_pin
 _require_dm_target flakey
 _require_xfs_io_command "pwrite"
 _require_test_program "punch-alternating"
+_xfs_setup_verify_metadump
 
-metadump_file=${TEST_DIR}/${seq}.md
 testfile=${SCRATCH_MNT}/testfile
 
 echo "Format filesystem on scratch device"
 _scratch_mkfs >> $seqres.full 2>&1
-
-max_md_version=$(_xfs_metadump_max_version)
 
 external_log=0
 if [[ $USE_EXTERNAL = yes && -n "$SCRATCH_LOGDEV" ]]; then
 	external_log=1
 fi
 
-if [[ $max_md_version == 1 && $external_log == 1 ]]; then
+if [[ $MAX_XFS_METADUMP_FORMAT == 1 && $external_log == 1 ]]; then
 	_notrun "metadump v1 does not support external log device"
 fi
-
-verify_metadump_v1()
-{
-	local version=""
-	if [[ $max_md_version == 2 ]]; then
-		version="-v 1"
-	fi
-
-	_scratch_xfs_metadump $metadump_file -a -o $version
-
-	SCRATCH_DEV=$TEST_DIR/data-image _scratch_xfs_mdrestore $metadump_file
-
-	datadev=$(_create_loop_device $TEST_DIR/data-image)
-
-	SCRATCH_DEV=$datadev _scratch_mount
-	SCRATCH_DEV=$datadev _check_scratch_fs
-	SCRATCH_DEV=$datadev _scratch_unmount
-
-	_destroy_loop_device $datadev
-	datadev=""
-	rm -f $TEST_DIR/data-image
-}
-
-verify_metadump_v2()
-{
-	local version="-v 2"
-
-	_scratch_xfs_metadump $metadump_file -a -o $version
-
-	# Metadump v2 files can contain contents dumped from an external log
-	# device. Use a temporary file to hold the log device contents restored
-	# from such a metadump file.
-	slogdev=""
-	if [[ -n $SCRATCH_LOGDEV ]]; then
-		slogdev=$TEST_DIR/log-image
-	fi
-
-	SCRATCH_DEV=$TEST_DIR/data-image SCRATCH_LOGDEV=$slogdev \
-		   _scratch_xfs_mdrestore $metadump_file
-
-	datadev=$(_create_loop_device $TEST_DIR/data-image)
-
-	logdev=""
-	if [[ -s $slogdev ]]; then
-		logdev=$(_create_loop_device $slogdev)
-	fi
-
-	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_mount
-	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _check_scratch_fs
-	SCRATCH_DEV=$datadev SCRATCH_LOGDEV=$logdev _scratch_unmount
-
-	if [[ -s $logdev ]]; then
-		_destroy_loop_device $logdev
-		logdev=""
-		rm -f $slogdev
-	fi
-
-	_destroy_loop_device $datadev
-	datadev=""
-	rm -f $TEST_DIR/data-image
-}
 
 echo "Initialize and mount filesystem on flakey device"
 _init_flakey
@@ -160,14 +93,7 @@ echo -n "Filesystem has a "
 _print_logstate
 
 echo "Create metadump file, restore it and check restored fs"
-
-if [[ $external_log == 0 ]]; then
-	verify_metadump_v1 $max_md_version
-fi
-
-if [[ $max_md_version == 2 ]]; then
-	verify_metadump_v2
-fi
+_xfs_verify_metadumps '-a -o'
 
 # Mount the fs to replay the contents from the dirty log.
 _scratch_mount
