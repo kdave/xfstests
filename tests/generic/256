@@ -44,6 +44,8 @@ _test_full_fs_punch()
 	local file_len=$(( $(( $hole_len + $hole_interval )) * $iterations ))
 	local path=`dirname $file_name`
 	local hole_offset=0
+	local start_time
+	local stop_time
 
 	if [ $# -ne 5 ]
 	then
@@ -57,6 +59,9 @@ _test_full_fs_punch()
 		-c "fsync" $file_name &> /dev/null
 	chmod 666 $file_name
 
+	start_time="$(date +%s)"
+	stop_time=$(( start_time + (30 * TIME_FACTOR) ))
+
 	# All files are created as a non root user to prevent reserved blocks
 	# from being consumed.
 	_fill_fs $(( 1024 * 1024 * 1024 )) $path/fill $block_size 1 \
@@ -64,6 +69,8 @@ _test_full_fs_punch()
 
 	for (( i=0; i<$iterations; i++ ))
 	do
+		test "$(date +%s)" -ge "$stop_time" && break
+
 		# This part must not be done as root in order to
 		# test that reserved blocks are used when needed
 		_user_do "$XFS_IO_PROG -f -c \"fpunch $hole_offset $hole_len\" $file_name"
