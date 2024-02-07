@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (c) 2019 Oracle, Inc.  All Rights Reserved.
 #
-# FS QA Test No. 503
+# FS QA Test No. 601
 #
-# Populate a XFS filesystem and ensure that metadump and mdrestore all work
-# properly.
+# Populate a XFS filesystem and ensure that xfs_copy works properly.
 #
 . ./common/preamble
-_begin_fstest auto metadump
+_begin_fstest auto copy
 
 _register_cleanup "_cleanup" BUS
 
@@ -17,45 +16,38 @@ _cleanup()
 {
 	cd /
 	rm -rf $tmp.* $testdir
-	_xfs_cleanup_verify_metadump
 }
 
 # Import common functions.
 . ./common/filter
 . ./common/populate
-. ./common/metadump
 
 testdir=$TEST_DIR/test-$seq
 
 # real QA test starts here
 _supported_fs xfs
 
-_require_command "$XFS_MDRESTORE_PROG" "xfs_mdrestore"
-_require_loop
+_require_xfs_copy
 _require_scratch_nocheck
 _require_populate_commands
 _xfs_skip_online_rebuild
 _xfs_skip_offline_rebuild
-_xfs_setup_verify_metadump
 
 echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 
 mkdir -p $testdir
-metadump_file=$testdir/scratch.md
 copy_file=$testdir/copy.img
 
-echo "metadump and mdrestore"
-_xfs_verify_metadumps
+echo copy
+$XFS_COPY_PROG $SCRATCH_DEV $copy_file >> $seqres.full
+_check_scratch_fs $copy_file
 
-echo "metadump a and mdrestore"
-_xfs_verify_metadumps '-a'
-
-echo "metadump o and mdrestore"
-_xfs_verify_metadumps '-o'
-
-echo "metadump ao and mdrestore"
-_xfs_verify_metadumps '-a -o'
+echo recopy
+$XFS_COPY_PROG $copy_file $SCRATCH_DEV >> $seqres.full
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
 
 # success, all done
 status=0
