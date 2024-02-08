@@ -12,7 +12,7 @@ default: $(DIRT)
 
 include $(BUILDRULES)
 
-install:
+install: default
 	$(INSTALL) -m 755 -d $(TARGET_DIR)
 	$(INSTALL) -m 755 $(TESTS) $(TARGET_DIR)
 	$(INSTALL) -m 644 group.list $(TARGET_DIR)
