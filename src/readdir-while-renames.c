@@ -55,10 +55,16 @@ int main(int argc, char *argv[])
 
 	/* Now create all files inside the directory. */
 	for (i = 1; i <= NUM_FILES; i++) {
-		char file_name[32];
+		/* 8 characters is enough for NUM_FILES name plus '\0'. */
+		char file_name[8];
 		FILE *f;
 
-		sprintf(file_name, "%s/%d", dir_path, i);
+		ret = snprintf(file_name, sizeof(file_name), "%d", i);
+		if (ret < 0 || ret >= sizeof(file_name)) {
+			fprintf(stderr, "Buffer to small for filename %i\n", i);
+			ret = EOVERFLOW;
+			goto out;
+		}
 		f = fopen(file_name, "w");
 		if (f == NULL) {
 			fprintf(stderr, "Failed to create file number %d: %d\n",
