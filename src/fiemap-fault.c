@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
 
 		ret = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 		if (ret < 0)
-			err(1, "fiemap failed %d", errno);
+			err(1, "fiemap failed %d (%s)", errno, strerror(errno));
 		for (i = 0; i < fiemap->fm_mapped_extents; i++)
 		       last = fiemap->fm_extents[i].fe_logical +
 			       fiemap->fm_extents[i].fe_length;
