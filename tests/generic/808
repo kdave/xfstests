@@ -1,0 +1,41 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 808
+#
+# Test fiemap into an mmaped buffer of the same file
+#
+# Create a reasonably large file, then run a program which mmaps it and uses
+# that as a buffer for an fiemap call.  This is a regression test for btrfs
+# where we used to hold a lock for the duration of the fiemap call which would
+# result in a deadlock if we page faulted.
+#
+. ./common/preamble
+_begin_fstest quick auto fiemap
+[ $FSTYP == "btrfs" ] && \
+	_fixed_by_kernel_commit xxxxxxxxxxxx \
+		"btrfs: fix deadlock with fiemap and extent locking"
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_odirect
+_require_test_program fiemap-fault
+dst=$TEST_DIR/fiemap-fault-$seq
+
+echo "Silence is golden"
+
+for i in $(seq 0 2 1000)
+do
+	$XFS_IO_PROG -d -f -c "pwrite -q $((i * 4096)) 4096" $dst
+done
+
+$here/src/fiemap-fault $dst > /dev/null || _fail "failed doing fiemap"
+
+rm -f $dst
+
+# success, all done
+status=$?
+exit
+
