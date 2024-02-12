@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 
 		ret = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 		if (ret < 0)
-			err(1, "fiemap failed %d", errno);
+			err(1, "fiemap failed %d (%s)", errno, strerror(errno));
 		if (fiemap->fm_mapped_extents == 0) {
 			fprintf(stderr, "%s: fiemap returned 0 extents!\n",
 				argv[0]);
