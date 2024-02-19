@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 314
+#
+# Send and receive functionality test between a normal and
+# tempfsid filesystem.
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot send tempfsid
+
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $tempfsid_mnt 2>/dev/null
+	rm -r -f $tmp.*
+	rm -r -f $sendfile
+	rm -r -f $tempfsid_mnt
+}
+
+. ./common/filter.btrfs
+
+_supported_fs btrfs
+_require_scratch_dev_pool 2
+_require_btrfs_fs_feature temp_fsid
+
+_scratch_dev_pool_get 2
+
+# mount point for the tempfsid device
+tempfsid_mnt=$TEST_DIR/$seq/tempfsid_mnt
+sendfile=$TEST_DIR/$seq/replicate.send
+
+send_receive_tempfsid()
+{
+	local src=$1
+	local dst=$2
+
+	# Use first 2 devices from the SCRATCH_DEV_POOL
+	mkfs_clone ${SCRATCH_DEV} ${SCRATCH_DEV_NAME[1]}
+	_scratch_mount
+	_mount ${SCRATCH_DEV_NAME[1]} ${tempfsid_mnt}
+
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' ${src}/foo | _filter_xfs_io
+	$BTRFS_UTIL_PROG subvolume snapshot -r ${src} ${src}/snap1 | \
+						_filter_testdir_and_scratch
+
+	echo Send ${src} | _filter_testdir_and_scratch
+	$BTRFS_UTIL_PROG send -f ${sendfile} ${src}/snap1 2>&1 | \
+						_filter_testdir_and_scratch
+	echo Receive ${dst} | _filter_testdir_and_scratch
+	$BTRFS_UTIL_PROG receive -f ${sendfile} ${dst} | \
+						_filter_testdir_and_scratch
+	echo -e -n "Send:\t"
+	md5sum  ${src}/foo | _filter_testdir_and_scratch
+	echo -e -n "Recv:\t"
+	md5sum ${dst}/snap1/foo | _filter_testdir_and_scratch
+}
+
+mkdir -p $tempfsid_mnt
+
+echo -e \\nFrom non-tempfsid ${SCRATCH_MNT} to tempfsid ${tempfsid_mnt} | \
+						_filter_testdir_and_scratch
+send_receive_tempfsid $SCRATCH_MNT $tempfsid_mnt
+
+_scratch_unmount
+_cleanup
+mkdir -p $tempfsid_mnt
+
+echo -e \\nFrom tempfsid ${tempfsid_mnt} to non-tempfsid ${SCRATCH_MNT} | \
+						_filter_testdir_and_scratch
+send_receive_tempfsid $tempfsid_mnt $SCRATCH_MNT
+
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
