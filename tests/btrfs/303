@@ -1,0 +1,92 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 303
+#
+# Test that an incremental send does not issue unnecessary writes for a sparse
+# file that got one new extent between its previous extent and the file's size.
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot send fiemap
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	rm -fr $send_files_dir
+}
+
+. ./common/filter
+. ./common/punch  # for _filter_fiemap
+
+_supported_fs btrfs
+_require_test
+_require_scratch
+_require_xfs_io_command "fiemap"
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: send: don't issue unnecessary zero writes for trailing hole"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+$XFS_IO_PROG -f -c "truncate 1G" $SCRATCH_MNT/foobar
+
+# Now create the base snapshot, which is going to be the parent snapshot for
+# a later incremental send.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+		 $SCRATCH_MNT/mysnap1 > /dev/null
+
+# Create send stream (full send) for the first snapshot.
+$BTRFS_UTIL_PROG send -f $send_files_dir/1.snap \
+		 $SCRATCH_MNT/mysnap1 2>&1 1>/dev/null | _filter_scratch
+
+# Now write one extent at the beginning of the file and one somewhere in the
+# middle, leaving a gap between the end of this second extent and the file's
+# size.
+$XFS_IO_PROG -c "pwrite -S 0xab -b 64K 0 64K" \
+	     -c "pwrite -S 0xcd -b 64K 512M 64K" \
+	     $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Now create a second snapshot which is going to be used for an incremental
+# send operation.
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+		 $SCRATCH_MNT/mysnap2 > /dev/null
+
+# Create send stream (incremental send) for the second snapshot.
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+		 $SCRATCH_MNT/mysnap2 2>&1 1>/dev/null | _filter_scratch
+
+# Now recreate the filesystem by receiving both send streams and verify we get
+# the same content that the original filesystem had and file foobar has only two
+# extents with a size of 64K each.
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_files_dir/1.snap $SCRATCH_MNT > /dev/null
+$BTRFS_UTIL_PROG receive -f $send_files_dir/2.snap $SCRATCH_MNT > /dev/null
+
+echo "File content in the new filesystem:"
+_hexdump $SCRATCH_MNT/mysnap2/foobar
+
+echo "File fiemap in the new filesystem:"
+# Should have:
+#
+# 64K extent at file range [0, 64K[
+# hole at file range [64K, 512M[
+# 64K extent at file range [512M, 512M + 64K[
+# hole at file range [512M + 64K, 1G[
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/mysnap2/foobar | _filter_fiemap
+
+# File should be using only 128K of data (two 64K extents).
+echo "Space used by the file: $(du -h $SCRATCH_MNT/mysnap2/foobar | cut -f 1)"
+
+status=0
+exit
