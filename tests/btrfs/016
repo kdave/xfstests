@@ -12,57 +12,47 @@ _begin_fstest auto quick send prealloc
 tmp=`mktemp -d`
 tmp_dir=send_temp_$seq
 
-# Override the default cleanup function.
-_cleanup()
-{
-	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/snap > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/snap1 > /dev/null 2>&1
-	$BTRFS_UTIL_PROG subvolume delete $TEST_DIR/$tmp_dir/send > /dev/null 2>&1
-	rm -rf $TEST_DIR/$tmp_dir
-	rm -f $tmp.*
-}
-
 # Import common functions.
 . ./common/filter
 
 # real QA test starts here
 _supported_fs btrfs
-_require_test
 _require_scratch
 _require_fssum
 _require_xfs_io_command "falloc"
 
 _scratch_mkfs > /dev/null 2>&1
-
-#receive needs to be able to setxattrs, including the selinux context, if we use
-#the normal nfs context thing it screws up our ability to set the
-#security.selinux xattrs so we need to disable this for this test
-export SELINUX_MOUNT_OPTIONS=""
-
 _scratch_mount
 
-mkdir $TEST_DIR/$tmp_dir
-$BTRFS_UTIL_PROG subvolume create $TEST_DIR/$tmp_dir/send \
+mkdir $SCRATCH_MNT/$tmp_dir
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/$tmp_dir/send \
 	> $seqres.full 2>&1 || _fail "failed subvolume create"
 
-_ddt of=$TEST_DIR/$tmp_dir/send/foo bs=1M count=10 >> $seqres.full \
+_ddt of=$SCRATCH_MNT/$tmp_dir/send/foo bs=1M count=10 >> $seqres.full \
 	2>&1 || _fail "dd failed"
-$BTRFS_UTIL_PROG subvolume snapshot -r $TEST_DIR/$tmp_dir/send \
-	$TEST_DIR/$tmp_dir/snap >> $seqres.full 2>&1 || _fail "failed snap"
-$XFS_IO_PROG -c "fpunch 1m 1m" $TEST_DIR/$tmp_dir/send/foo
-$BTRFS_UTIL_PROG subvolume snapshot -r $TEST_DIR/$tmp_dir/send \
-	$TEST_DIR/$tmp_dir/snap1 >> $seqres.full 2>&1 || _fail "failed snap"
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/$tmp_dir/send \
+	$SCRATCH_MNT/$tmp_dir/snap >> $seqres.full 2>&1 || _fail "failed snap"
+$XFS_IO_PROG -c "fpunch 1m 1m" $SCRATCH_MNT/$tmp_dir/send/foo
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/$tmp_dir/send \
+	$SCRATCH_MNT/$tmp_dir/snap1 >> $seqres.full 2>&1 || _fail "failed snap"
 
-$FSSUM_PROG -A -f -w $tmp/fssum.snap $TEST_DIR/$tmp_dir/snap >> $seqres.full \
+# -A disable access time check.
+# And -T disable xattrs to prevent SELinux changes causing false alerts, and the
+# test case only cares about hole punching.
+$FSSUM_PROG -AT -f -w $tmp/fssum.snap $SCRATCH_MNT/$tmp_dir/snap >> $seqres.full \
 	2>&1 || _fail "fssum gen failed"
-$FSSUM_PROG -A -f -w $tmp/fssum.snap1 $TEST_DIR/$tmp_dir/snap1 >> $seqres.full \
+$FSSUM_PROG -AT -f -w $tmp/fssum.snap1 $SCRATCH_MNT/$tmp_dir/snap1 >> $seqres.full \
 	2>&1 || _fail "fssum gen failed"
 
-$BTRFS_UTIL_PROG send -f $tmp/send.snap $TEST_DIR/$tmp_dir/snap >> \
+$BTRFS_UTIL_PROG send -f $tmp/send.snap $SCRATCH_MNT/$tmp_dir/snap >> \
 	$seqres.full 2>&1 || _fail "failed send"
-$BTRFS_UTIL_PROG send -p $TEST_DIR/$tmp_dir/snap \
-	-f $tmp/send.snap1 $TEST_DIR/$tmp_dir/snap1 \
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/$tmp_dir/snap \
+	-f $tmp/send.snap1 $SCRATCH_MNT/$tmp_dir/snap1 \
 	>> $seqres.full 2>&1 || _fail "failed send"
+
+_scratch_unmount
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
 
 $BTRFS_UTIL_PROG receive -f $tmp/send.snap $SCRATCH_MNT >> $seqres.full 2>&1 \
 	|| _fail "failed recv"
@@ -75,4 +65,5 @@ $FSSUM_PROG -r $tmp/fssum.snap1 $SCRATCH_MNT/snap1 >> $seqres.full 2>&1 \
 	|| _fail "fssum failed"
 
 echo "Silence is golden"
-status=0 ; exit
+status=0
+exit
