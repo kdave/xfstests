@@ -1,0 +1,52 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 313
+#
+# Functional test for the tempfsid, clone devices created using the mkfs option.
+#
+. ./common/preamble
+_begin_fstest auto quick clone tempfsid
+
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $mnt1 > /dev/null 2>&1
+	rm -r -f $tmp.*
+	rm -r -f $mnt1
+}
+
+. ./common/filter.btrfs
+. ./common/reflink
+
+_supported_fs btrfs
+_require_cp_reflink
+_require_scratch_dev_pool 2
+_require_btrfs_fs_feature temp_fsid
+
+_scratch_dev_pool_get 2
+
+mnt1=$TEST_DIR/$seq/mnt1
+mkdir -p $mnt1
+
+echo ---- clone_uuids_verify_tempfsid ----
+mkfs_clone ${SCRATCH_DEV_NAME[0]} ${SCRATCH_DEV_NAME[1]}
+
+echo Mounting original device
+_mount ${SCRATCH_DEV_NAME[0]} $SCRATCH_MNT
+check_fsid ${SCRATCH_DEV_NAME[0]}
+
+echo Mounting cloned device
+_mount ${SCRATCH_DEV_NAME[1]} $mnt1
+check_fsid ${SCRATCH_DEV_NAME[1]}
+
+$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | _filter_xfs_io
+echo cp reflink must fail
+_cp_reflink $SCRATCH_MNT/foo $mnt1/bar 2>&1 | _filter_testdir_and_scratch
+
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
