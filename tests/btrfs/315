@@ -1,0 +1,91 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle. All Rights Reserved.
+#
+# FS QA Test 315
+#
+# Verify if the seed and device add to a tempfsid filesystem fails
+# and balance devices is successful.
+#
+. ./common/preamble
+_begin_fstest auto quick volume seed balance tempfsid
+
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $tempfsid_mnt 2>/dev/null
+	rm -r -f $tmp.*
+	rm -r -f $tempfsid_mnt
+}
+
+. ./common/filter.btrfs
+
+_supported_fs btrfs
+_require_scratch_dev_pool 3
+_require_btrfs_fs_feature temp_fsid
+
+_scratch_dev_pool_get 3
+
+# mount point for the tempfsid device
+tempfsid_mnt=$TEST_DIR/$seq/tempfsid_mnt
+
+_filter_mount_error()
+{
+	# There are two different errors that occur at the output when
+	# mounting fails; as shown below, pick out the common part. And,
+	# remove the dmesg line.
+
+	# mount: <mnt-point>: mount(2) system call failed: File exists.
+
+	# mount: <mnt-point>: fsconfig system call failed: File exists.
+	# dmesg(1) may have more information after failed mount system call.
+
+	grep -v dmesg | _filter_test_dir | sed -e "s/mount(2)\|fsconfig//g"
+}
+
+seed_device_must_fail()
+{
+	echo ---- $FUNCNAME ----
+
+	mkfs_clone ${SCRATCH_DEV} ${SCRATCH_DEV_NAME[1]}
+
+	$BTRFS_TUNE_PROG -S 1 ${SCRATCH_DEV}
+	$BTRFS_TUNE_PROG -S 1 ${SCRATCH_DEV_NAME[1]}
+
+	_scratch_mount 2>&1 | _filter_scratch
+	_mount ${SCRATCH_DEV_NAME[1]} ${tempfsid_mnt} 2>&1 | _filter_mount_error
+}
+
+device_add_must_fail()
+{
+	echo ---- $FUNCNAME ----
+
+	mkfs_clone ${SCRATCH_DEV} ${SCRATCH_DEV_NAME[1]}
+	_scratch_mount
+	_mount ${SCRATCH_DEV_NAME[1]} ${tempfsid_mnt}
+
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | \
+							_filter_xfs_io
+
+$BTRFS_UTIL_PROG device add -f ${SCRATCH_DEV_NAME[2]} ${tempfsid_mnt} 2>&1 | \
+		grep -v "Performing full device TRIM" | _filter_scratch_pool
+
+	echo Balance must be successful
+	_run_btrfs_balance_start ${tempfsid_mnt}
+}
+
+mkdir -p $tempfsid_mnt
+
+seed_device_must_fail
+
+_scratch_unmount
+_cleanup
+mkdir -p $tempfsid_mnt
+
+device_add_must_fail
+
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
