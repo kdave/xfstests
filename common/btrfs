@@ -792,3 +792,43 @@ _has_btrfs_sysfs_feature_attr()
 
 	test -e /sys/fs/btrfs/features/$feature_attr
 }
+
+# Print the fsid and metadata uuid replaced with constant strings FSID and
+# METADATA_UUID. Compare temp_fsid with fsid and metadata_uuid, then echo what
+# it matches to or TEMP_FSID. This helps in comparing with the golden output.
+check_fsid()
+{
+	local dev1=$1
+	local fsid
+	local metadata_uuid
+
+	_require_btrfs_fs_sysfs
+	_require_btrfs_fs_feature temp_fsid
+	_require_btrfs_fs_feature metadata_uuid
+	_require_btrfs_command inspect-internal dump-super
+
+	# on disk fsid
+	fsid=$($BTRFS_UTIL_PROG inspect-internal dump-super $dev1 | \
+				grep ^fsid | $AWK_PROG -d" " '{print $2}')
+	echo -e "On disk fsid:\t\t$fsid" | sed -e "s/$fsid/FSID/g"
+
+	# Print FSID even if it is not the same as metadata_uuid because it has
+	# to match in the golden output.
+	metadata_uuid=$(cat /sys/fs/btrfs/$fsid/metadata_uuid)
+	echo -e "Metadata uuid:\t\tFSID"
+
+	# This returns the temp_fsid if set
+	tempfsid=$(_btrfs_get_fsid $dev1)
+	if [[ $tempfsid == $fsid ]]; then
+		echo -e "Temp fsid:\t\tFSID"
+	elif [[ $tempfsid == $metadata_uuid ]]; then
+		# If we are here, it means there is a bug; let it not match with
+		# the golden output.
+		echo -e "Temp fsid:\t\t$metadata_uuid"
+	else
+		echo -e "Temp fsid:\t\tTEMPFSID"
+	fi
+
+	echo -e -n "Tempfsid status:\t"
+	cat /sys/fs/btrfs/$tempfsid/temp_fsid
+}
