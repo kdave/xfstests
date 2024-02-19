@@ -843,3 +843,26 @@ check_fsid()
 	echo -e -n "Tempfsid status:\t"
 	cat /sys/fs/btrfs/$tempfsid/temp_fsid
 }
+
+mkfs_clone()
+{
+	local fsid
+	local uuid
+	local dev1=$1
+	local dev2=$2
+
+	_require_btrfs_command inspect-internal dump-super
+	_require_btrfs_mkfs_uuid_option
+
+	[[ -z $dev1 || -z $dev2 ]] && \
+		_fail "mkfs_clone requires two devices as arguments"
+
+	_mkfs_dev -fq $dev1
+
+	fsid=$($BTRFS_UTIL_PROG inspect-internal dump-super $dev1 | \
+					grep -E ^fsid | $AWK_PROG '{print $2}')
+	uuid=$($BTRFS_UTIL_PROG inspect-internal dump-super $dev1 | \
+				grep -E ^dev_item.uuid | $AWK_PROG '{print $2}')
+
+	_mkfs_dev -fq --uuid $fsid --device-uuid $uuid $dev2
+}
