@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 312
+#
+# On a clone a device check to see if tempfsid is activated.
+#
+. ./common/preamble
+_begin_fstest auto quick clone tempfsid
+
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $mnt1 > /dev/null 2>&1
+	rm -r -f $tmp.*
+	rm -r -f $mnt1
+}
+
+. ./common/filter.btrfs
+. ./common/reflink
+
+_supported_fs btrfs
+_require_scratch_dev_pool 2
+_scratch_dev_pool_get 2
+_require_btrfs_fs_feature temp_fsid
+
+mnt1=$TEST_DIR/$seq/mnt1
+mkdir -p $mnt1
+
+create_cloned_devices()
+{
+	local dev1=$1
+	local dev2=$2
+
+	echo -n Creating cloned device...
+	_mkfs_dev -fq -b $((1024 * 1024 * 300)) $dev1
+
+	_mount $dev1 $SCRATCH_MNT
+
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | \
+								_filter_xfs_io
+	$UMOUNT_PROG $SCRATCH_MNT
+	# device dump of $dev1 to $dev2
+	dd if=$dev1 of=$dev2 bs=300M count=1 conv=fsync status=none || \
+							_fail "dd failed: $?"
+	echo done
+}
+
+mount_cloned_device()
+{
+	echo ---- $FUNCNAME ----
+	create_cloned_devices ${SCRATCH_DEV_NAME[0]} ${SCRATCH_DEV_NAME[1]}
+
+	echo Mounting original device
+	_mount ${SCRATCH_DEV_NAME[0]} $SCRATCH_MNT
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | \
+								_filter_xfs_io
+	check_fsid ${SCRATCH_DEV_NAME[0]}
+
+	echo Mounting cloned device
+	_mount ${SCRATCH_DEV_NAME[1]} $mnt1 || \
+				_fail "mount failed, tempfsid didn't work"
+
+	echo cp reflink must fail
+	_cp_reflink $SCRATCH_MNT/foo $mnt1/bar 2>&1 | \
+						_filter_testdir_and_scratch
+
+	check_fsid ${SCRATCH_DEV_NAME[1]}
+}
+
+mount_cloned_device
+
+_scratch_dev_pool_put
+
+# success, all done
+status=0
+exit
