@@ -1,0 +1,87 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle. All Rights Reserved.
+#
+# FS QA Test 311
+#
+# Mount the device twice check if the reflink works, this helps to
+# ensure device is mounted as the same device.
+#
+. ./common/preamble
+_begin_fstest auto quick subvol tempfsid
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	$UMOUNT_PROG $mnt1 > /dev/null 2>&1
+	rm -r -f $tmp.*
+	rm -r -f $mnt1
+}
+
+. ./common/filter.btrfs
+. ./common/reflink
+
+# Modify as appropriate.
+_supported_fs btrfs
+_require_cp_reflink
+_require_scratch
+_require_btrfs_fs_feature temp_fsid
+
+mnt1=$TEST_DIR/$seq/mnt1
+mkdir -p $mnt1
+
+same_dev_mount()
+{
+	echo ---- $FUNCNAME ----
+
+	_scratch_mkfs >> $seqres.full 2>&1
+
+	_scratch_mount
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/foo | \
+								_filter_xfs_io
+
+	echo Mount the device again to a different mount point
+	_mount $SCRATCH_DEV $mnt1
+
+	_cp_reflink $SCRATCH_MNT/foo $mnt1/bar
+	echo Checksum of reflinked files
+	md5sum $SCRATCH_MNT/foo | _filter_scratch
+	md5sum $mnt1/bar | _filter_test_dir
+
+	check_fsid $SCRATCH_DEV
+}
+
+same_dev_subvol_mount()
+{
+	echo ---- $FUNCNAME ----
+	_scratch_mkfs >> $seqres.full 2>&1
+
+	_scratch_mount
+	$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol | _filter_scratch
+
+	$XFS_IO_PROG -fc 'pwrite -S 0x61 0 9000' $SCRATCH_MNT/subvol/foo | \
+								_filter_xfs_io
+
+	echo Mounting a subvol
+	_mount -o subvol=subvol $SCRATCH_DEV $mnt1
+
+	_cp_reflink $SCRATCH_MNT/subvol/foo $mnt1/bar
+	echo Checksum of reflinked files
+	md5sum $SCRATCH_MNT/subvol/foo | _filter_scratch
+	md5sum $mnt1/bar | _filter_test_dir
+
+	check_fsid $SCRATCH_DEV
+}
+
+same_dev_mount
+
+_scratch_unmount
+_cleanup
+mkdir -p $mnt1
+
+same_dev_subvol_mount
+
+# success, all done
+status=0
+exit
