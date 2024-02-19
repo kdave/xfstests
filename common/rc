@@ -835,8 +835,9 @@ _spare_dev_put()
 # to make sure it has the enough scratch devices including
 # replace-target and spare device. Now arg1 here is the
 # required number of scratch devices by a-test-case excluding
-# the replace-target and spare device. So this function will
-# set SCRATCH_DEV_POOL to the specified number of devices.
+# the replace-target and spare device. So, this function sets
+# SCRATCH_DEV_POOL to the specified number of devices and also
+# sets a SCRATCH_DEV_NAME array with the names of the devices.
 #
 # Usage:
 #  _scratch_dev_pool_get() <ndevs>
@@ -867,19 +868,28 @@ _scratch_dev_pool_get()
 	export SCRATCH_DEV_POOL_SAVED
 	SCRATCH_DEV_POOL=${devs[@]:0:$test_ndevs}
 	export SCRATCH_DEV_POOL
+	SCRATCH_DEV_NAME=( $SCRATCH_DEV_POOL )
+	export SCRATCH_DEV_NAME
 }
 
 _scratch_dev_pool_put()
 {
+	local ret1
+	local ret2
+
 	typeset -p SCRATCH_DEV_POOL_SAVED >/dev/null 2>&1
-	if [ $? -ne 0 ]; then
+	ret1=$?
+	typeset -p SCRATCH_DEV_NAME >/dev/null 2>&1
+	ret2=$?
+	if [[ $ret1 -ne 0 || $ret2 -ne 0 ]]; then
 		_fail "Bug: unset val, must call _scratch_dev_pool_get before _scratch_dev_pool_put"
 	fi
 
-	if [ -z "$SCRATCH_DEV_POOL_SAVED" ]; then
+	if [[ -z "$SCRATCH_DEV_POOL_SAVED" || -z "${SCRATCH_DEV_NAME[@]}" ]]; then
 		_fail "Bug: str empty, must call _scratch_dev_pool_get before _scratch_dev_pool_put"
 	fi
 
+	export SCRATCH_DEV_NAME=()
 	export SCRATCH_DEV_POOL=$SCRATCH_DEV_POOL_SAVED
 	export SCRATCH_DEV_POOL_SAVED=""
 }
