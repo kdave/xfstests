@@ -6,6 +6,22 @@
 
 BC="$(type -P bc)" || BC=
 
+_in_ci() {
+	[ "$CI" == 'true' ]
+}
+
+_ci_warning() {
+	_in_ci && echo "::warning::$@"
+}
+
+_ci_group() {
+	_in_ci  && echo "::group::$@"
+}
+
+_ci_endgroup() {
+	_in_ci && echo "::endgroup::"
+}
+
 _wallclock()
 {
     date "+%s"
@@ -4551,6 +4567,10 @@ _check_dmesg()
 	     $seqres.dmesg
 	if [ $? -eq 0 ]; then
 		_dump_err "_check_dmesg: something found in dmesg (see $seqres.dmesg)"
+		_ci_warning "Check dmesg"
+		_ci_group "$seqres.dmesg"
+		cat $seqres.dmesg
+		_ci_endgroup
 		return 1
 	else
 		if [ "$KEEP_DMESG" != "yes" ]; then
