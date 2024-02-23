@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 316
+#
+# Make sure btrfs qgroup won't leak its reserved data space if qgroup is
+# marked inconsistent.
+#
+# This exercises a regression introduced in v6.1 kernel by the following commit:
+#
+# e15e9f43c7ca ("btrfs: introduce BTRFS_QGROUP_RUNTIME_FLAG_NO_ACCOUNTING to skip qgroup accounting")
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+_supported_fs btrfs
+_require_scratch
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: qgroup: always free reserved space for extent records"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+$BTRFS_UTIL_PROG quota enable $SCRATCH_MNT
+$BTRFS_UTIL_PROG quota rescan -w $SCRATCH_MNT >> $seqres.full
+
+$BTRFS_UTIL_PROG qgroup create 1/0 $SCRATCH_MNT >> $seqres.full
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subv1 >> $seqres.full
+
+# This would mark qgroup inconsistent, as the snapshot belongs to a different
+# higher level qgroup, we have to do full rescan on both source and snapshot.
+# This can be very slow for large subvolumes, so btrfs only marks qgroup
+# inconsistent and let users to determine when to do a full rescan
+$BTRFS_UTIL_PROG subvolume snapshot -i 1/0 $SCRATCH_MNT/subv1 $SCRATCH_MNT/snap1 >> $seqres.full
+
+# This write would lead to a qgroup extent record holding the reserved 128K.
+# And for unpatched kernels, the reserved space would not be freed properly
+# due to qgroup is inconsistent.
+_pwrite_byte 0xcd 0 128K $SCRATCH_MNT/foobar >> $seqres.full
+
+# The qgroup leak detection is only triggered at unmount time.
+_scratch_unmount
+
+# Check the dmesg warning for data rsv leak.
+#
+# If CONFIG_BTRFS_DEBUG is enabled, we would have a kernel warning with
+# backtrace, but for release builds, it's just a warning line.
+# So here we manually check the warning message.
+if _dmesg_since_test_start | grep -q "leak"; then
+	_fail "qgroup data reserved space leaked"
+fi
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
