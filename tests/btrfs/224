@@ -67,7 +67,7 @@ assign_no_shared_test()
 	_check_scratch_fs
 }
 
-# Test snapshot with assigning qgroup for submodule
+# Test snapshot with assigning qgroup for higher level qgroup
 snapshot_test()
 {
 	_scratch_mkfs > /dev/null 2>&1
@@ -78,9 +78,9 @@ snapshot_test()
 	_qgroup_rescan $SCRATCH_MNT >> $seqres.full
 
 	$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/a >> $seqres.full
+	$BTRFS_UTIL_PROG qgroup create 1/0 $SCRATCH_MNT >> $seqres.full
 	_ddt of="$SCRATCH_MNT"/a/file1 bs=1M count=1 >> $seqres.full 2>&1
-	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
-	$BTRFS_UTIL_PROG subvolume snapshot -i 0/$subvolid $SCRATCH_MNT/a $SCRATCH_MNT/b >> $seqres.full
+	$BTRFS_UTIL_PROG subvolume snapshot -i 1/0 $SCRATCH_MNT/a $SCRATCH_MNT/b >> $seqres.full
 
 	_scratch_unmount
 	_check_scratch_fs
