@@ -43,14 +43,13 @@ longname="$(mktemp --dry-run "$(perl -e 'print "X" x 255;')" | tr ' ' 'X')"
 echo "creating $nr_dirents dirents from '$longname'" >> $seqres.full
 _scratch_xfs_db -r -c "hashcoll -n $nr_dirents -p $crash_dir $longname"
 
-# Create enough xattrs to fill two dabtree nodes.  Each attribute leaf block
-# gets its own record in the dabtree, so we have to create enough attr blocks
-# (each full of attrs) to get a dabtree of at least height 2.
+# Create enough xattrs to fill two dabtree nodes.  Each attribute entry gets
+# its own record in the dabtree, so we have to create enough attributes to get
+# a dabtree of at least height 2.
 blksz=$(_get_block_size "$SCRATCH_MNT")
 
-attr_records_per_block=$((blksz / 255))
 da_records_per_block=$((blksz / 8))	# 32-bit hash and 32-bit before
-nr_attrs=$((da_records_per_block * attr_records_per_block * 2))
+nr_attrs=$((da_records_per_block * 2))
 
 longname="$(mktemp --dry-run "$(perl -e 'print "X" x 249;')" | tr ' ' 'X')"
 echo "creating $nr_attrs attrs from '$longname'" >> $seqres.full
