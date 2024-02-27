@@ -1,0 +1,67 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test 317
+#
+# Test that btrfs convert can ony be run to convert to supported profiles on a
+# zoned filesystem
+#
+. ./common/preamble
+_begin_fstest auto volume raid convert
+
+_fixed_by_kernel_commit XXXXXXXXXX \
+	"btrfs: zoned: don't skip block group profile checks on conv zones"
+
+. common/filter.btrfs
+
+_supported_fs btrfs
+_require_scratch_dev_pool 4
+_require_zoned_device "$SCRATCH_DEV"
+
+devs=( $SCRATCH_DEV_POOL )
+
+# Create and mount single device FS
+_scratch_mkfs -msingle -dsingle 2>&1 >> $seqres.full || _fail "mkfs failed"
+_scratch_mount
+
+# Convert FS to metadata/system DUP
+_run_btrfs_balance_start -f -mconvert=dup -sconvert=dup $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert
+
+# Convert FS to data DUP, must fail
+_run_btrfs_balance_start -dconvert=dup $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert
+
+# Add device
+$BTRFS_UTIL_PROG device add ${devs[1]} $SCRATCH_MNT | _filter_device_add
+
+# Convert FS to data RAID1, must fail
+_run_btrfs_balance_start -dconvert=raid1 $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert | head -1
+
+# Convert FS to data RAID0, must fail
+_run_btrfs_balance_start -dconvert=raid0 $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert | head -1
+
+# Add device
+$BTRFS_UTIL_PROG device add ${devs[2]} $SCRATCH_MNT | _filter_device_add
+
+# Convert FS to data RAID5, must fail
+_run_btrfs_balance_start -f -dconvert=raid5 $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert | head -1
+
+# Add device
+$BTRFS_UTIL_PROG device add ${devs[3]} $SCRATCH_MNT | _filter_device_add
+
+# Convert FS to data RAID10, must fail
+_run_btrfs_balance_start -dconvert=raid10 $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert | head -1
+
+# Convert FS to data RAID6, must fail
+_run_btrfs_balance_start -f -dconvert=raid6 $SCRATCH_MNT 2>&1 |\
+	_filter_balance_convert | head -1
+
+# success, all done
+status=0
+exit
