@@ -29,17 +29,27 @@ delay=5
 testfile=$TEST_DIR/testfile
 rm -f $testfile
 
+# Preload every binary used between sampling time1 and time2 so that loading
+# them has minimal overhead even if the root fs is hosted over a slow network.
+# Also don't put pipe and tee creation in that critical section.
+for i in echo stat sleep cat; do
+	$i --help &>/dev/null
+done
+
 echo test >$testfile
-time1=`_access_time $testfile | tee -a $seqres.full`
+time1=`_access_time $testfile`
+echo $time1 >> $seqres.full
 
 echo "sleep for $delay seconds"
 sleep $delay # sleep to allow time to move on for access
 cat $testfile
-time2=`_access_time $testfile | tee -a $seqres.full`
+time2=`_access_time $testfile`
+echo $time2 >> $seqres.full
 
 cd /
 _test_cycle_mount
-time3=`_access_time $testfile | tee -a $seqres.full`
+time3=`_access_time $testfile`
+echo $time3 >> $seqres.full
 
 delta1=`expr $time2 - $time1`
 delta2=`expr $time3 - $time1`
