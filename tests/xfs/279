@@ -26,6 +26,7 @@ _cleanup()
 _supported_fs xfs
 
 _require_scsi_debug
+size=$(_small_fs_size_mb 128)
 
 # Remove xfs signature so -f isn't needed to re-mkfs
 _wipe_device()
@@ -55,7 +56,7 @@ _check_mkfs()
 (
 echo "==================="
 echo "4k physical 512b logical aligned"
-SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 0 128`
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 0 $size`
 test -b "$SCSI_DEBUG_DEV" || _notrun "Could not get scsi_debug device"
 # sector size should default to 4k
 _check_mkfs $SCSI_DEBUG_DEV
@@ -68,7 +69,7 @@ _put_scsi_debug_dev
 (
 echo "==================="
 echo "4k physical 512b logical unaligned"
-SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 1 128`
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 512 1 $size`
 test -b "$SCSI_DEBUG_DEV" || _notrun "Could not get scsi_debug device"
 # should fail on misalignment
 _check_mkfs $SCSI_DEBUG_DEV
@@ -85,7 +86,7 @@ _put_scsi_debug_dev
 (
 echo "==================="
 echo "hard 4k physical / 4k logical"
-SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 4096 0 128`
+SCSI_DEBUG_DEV=`_get_scsi_debug_dev 4096 4096 0 $size`
 test -b "$SCSI_DEBUG_DEV" || _notrun "Could not get scsi_debug device"
 # block size smaller than sector size should fail 
 _check_mkfs -b size=2048 $SCSI_DEBUG_DEV
