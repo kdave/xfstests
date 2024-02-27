@@ -24,10 +24,12 @@ _scratch_mount
 for i in $(seq 0 500); do
 	$XFS_IO_PROG -f -c "pwrite 0 4K" $SCRATCH_MNT/$i >/dev/null
 done
-# For overlayfs, avoid unmouting the base fs after _scratch_mount
-# tries to mount the base fs
+# For overlayfs, avoid unmounting the base fs after _scratch_mount tries to
+# mount the base fs.  Delay the mount attempt by a small amount in the hope
+# that the mount() call will try to lock s_umount /after/ umount has already
+# taken it.
 $UMOUNT_PROG $SCRATCH_MNT &
-_scratch_mount
+sleep 0.01s ; _scratch_mount
 wait
 
 echo "Silence is golden"
