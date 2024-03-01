@@ -48,12 +48,15 @@ _require_loadable_module()
 	modprobe "${module}" || _notrun "${module} load failed"
 }
 
-# Check that the module for FSTYP can be loaded.
-_require_loadable_fs_module()
+# Test if the module for FSTYP can be unloaded and reloaded.
+#
+# If not, returns 1 if $FSTYP is not a loadable module; 2 if the module could
+# not be unloaded; or 3 if loading the module fails.
+_test_loadable_fs_module()
 {
 	local module="$1"
 
-	modinfo "${module}" > /dev/null 2>&1 || _notrun "${module}: must be a module."
+	modinfo "${module}" > /dev/null 2>&1 || return 1
 
 	# Unload test fs, try to reload module, remount
 	local had_testfs=""
@@ -68,8 +71,28 @@ _require_loadable_fs_module()
 	modprobe "${module}" || load_ok=0
 	test -n "${had_scratchfs}" && _scratch_mount 2> /dev/null
 	test -n "${had_testfs}" && _test_mount 2> /dev/null
-	test -z "${unload_ok}" || _notrun "Require module ${module} to be unloadable"
-	test -z "${load_ok}" || _notrun "${module} load failed"
+	test -z "${unload_ok}" || return 2
+	test -z "${load_ok}" || return 3
+	return 0
+}
+
+_require_loadable_fs_module()
+{
+	local module="$1"
+
+	_test_loadable_fs_module "${module}"
+	ret=$?
+	case "$ret" in
+	1)
+		_notrun "${module}: must be a module."
+		;;
+	2)
+		_notrun "${module}: module could not be unloaded"
+		;;
+	3)
+		_notrun "${module}: module reload failed"
+		;;
+	esac
 }
 
 # Print the value of a filesystem module parameter
