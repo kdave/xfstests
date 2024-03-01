@@ -33,6 +33,7 @@ AC_CHECK_HEADERS([	assert.h		\
 			btrfs/ioctl.h		\
 			cifs/ioctl.h		\
 			sys/mman.h		\
+			linux/ext4.h		\
 ])
 
 AC_CHECK_HEADERS([xfs/xfs_log_format.h],,,[

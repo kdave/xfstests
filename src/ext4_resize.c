@@ -13,8 +13,11 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <linux/types.h>
 
-typedef unsigned long long __u64;
+#ifdef HAVE_LINUX_EXT4_H
+#include <linux/ext4.h>
+#endif
 
 #ifndef EXT4_IOC_RESIZE_FS
 #define EXT4_IOC_RESIZE_FS		_IOW('f', 16, __u64)
