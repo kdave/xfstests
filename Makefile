@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2000-2008, 2011 SGI  All Rights Reserved.
-#
+##
 ifeq ("$(origin V)", "command line")
   BUILD_VERBOSE = $(V)
 endif
