@@ -24,8 +24,14 @@ _require_scratch
 _scratch_mkfs >/dev/null
 _scratch_mount
 _run_btrfs_util_prog quota enable $SCRATCH_MNT
-# The qgroup '1/10' does not exist and should be silently ignored
-_run_btrfs_util_prog subvolume snapshot -i 1/10 $SCRATCH_MNT $SCRATCH_MNT/snap1
+# The qgroup '1/10' does not exist. The kernel should either gives an error
+# (newer kernel with invalid qgroup detection) or ignore it (older kernel with
+# above fix).
+# Either way, we just ignore the output completely, and we will check if the fs
+# is still RW later.
+$BTRFS_UTIL_PROG subvolume snapshot -i 1/10 $SCRATCH_MNT $SCRATCH_MNT/snap1 >> $seqres.full 2>&1
+
+touch $SCRATCH_MNT/foobar
 
 echo "Silence is golden"
 
