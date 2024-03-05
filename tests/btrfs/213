@@ -31,23 +31,23 @@ _fixed_by_kernel_commit 1dae7e0e58b4 \
 _scratch_mkfs >> $seqres.full
 _scratch_mount
 
-runtime=8
+max_space=$(_get_total_space $SCRATCH_MNT)
+max_space=$(( max_space / 2 ))
 
-# Create enough IO so that we need around $runtime seconds to relocate it.
-#
-# Here we don't want any wrapper, as we want full control of the process.
-$XFS_IO_PROG -f -c "pwrite -D -b 1M 0 1024T" "$SCRATCH_MNT/file" &> /dev/null &
-write_pid=$!
-sleep $runtime
-kill $write_pid
-wait $write_pid
+# Create enough IO so that we need around 8 seconds to relocate it.
+start_ts=$(_wallclock)
+$TIMEOUT_PROG 8s $XFS_IO_PROG -f -c "pwrite -D -b 1M 0 $max_space" \
+	"$SCRATCH_MNT/file" > /dev/null 2>&1
+stop_ts=$(_wallclock)
+
+runtime=$(( stop_ts - start_ts ))
 
 # Unmount and mount again the fs to clear any cached data and metadata, so that
 # it's less likely balance has already finished when we try to cancel it below.
 _scratch_cycle_mount
 
 # Now balance should take at least $runtime seconds, we can cancel it at
-# $runtime/2 to ensure a success cancel.
+# $runtime/4 to ensure a success cancel.
 _run_btrfs_balance_start -d --bg "$SCRATCH_MNT"
 sleep $(($runtime / 4))
 # It's possible that balance has already completed. It's unlikely but often
