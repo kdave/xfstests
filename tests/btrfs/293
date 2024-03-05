@@ -18,7 +18,7 @@ _cleanup()
 	test -n "$swap_file" && swapoff $swap_file &> /dev/null
 }
 
-. ./common/filter
+. ./common/filter.btrfs
 
 _supported_fs btrfs
 _fixed_by_kernel_commit deccae40e4b3 \
@@ -40,7 +40,7 @@ echo "Activating swap file... (should fail due to snapshots)"
 _swapon_file $swap_file 2>&1 | _filter_scratch
 
 echo "Deleting first snapshot..."
-$BTRFS_UTIL_PROG subvolume delete -c $SCRATCH_MNT/snap1 | _filter_scratch
+$BTRFS_UTIL_PROG subvolume delete -c $SCRATCH_MNT/snap1 | _filter_btrfs_subvol_delete
 
 # We deleted the snapshot and committed the transaction used to delete it (-c),
 # but all its extents are actually only deleted in the background, by the cleaner
@@ -55,7 +55,7 @@ echo "Activating swap file... (should fail due to snapshot)"
 _swapon_file $swap_file 2>&1 | _filter_scratch
 
 echo "Deleting second snapshot..."
-$BTRFS_UTIL_PROG subvolume delete -c $SCRATCH_MNT/snap2 | _filter_scratch
+$BTRFS_UTIL_PROG subvolume delete -c $SCRATCH_MNT/snap2 | _filter_btrfs_subvol_delete
 
 echo "Remounting and waiting for cleaner thread to remove the second snapshot..."
 _scratch_remount commit=1
