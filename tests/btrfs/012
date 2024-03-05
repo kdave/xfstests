@@ -33,6 +33,8 @@ _require_non_zoned_device "${SCRATCH_DEV}"
 _require_loop
 _require_extra_fs ext4
 
+SOURCE_DIR=/etc
+BASENAME=$(basename $SOURCE_DIR)
 BLOCK_SIZE=`_get_block_size $TEST_DIR`
 
 # Create & populate an ext4 filesystem
@@ -41,9 +43,9 @@ $MKFS_EXT4_PROG -F -b $BLOCK_SIZE $SCRATCH_DEV > $seqres.full 2>&1 || \
 # Manual mount so we don't use -t btrfs or selinux context
 mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
 
-_require_fs_space $SCRATCH_MNT $(du -s /lib/modules/`uname -r` | ${AWK_PROG} '{print $1}')
+_require_fs_space $SCRATCH_MNT $(du -s $SOURCE_DIR | ${AWK_PROG} '{print $1}')
 
-cp -aR /lib/modules/`uname -r`/ $SCRATCH_MNT
+$TIMEOUT_PROG 10 cp -aRP $SOURCE_DIR $SCRATCH_MNT
 _scratch_unmount
 
 # Convert it to btrfs, mount it, verify the data
@@ -51,7 +53,7 @@ $BTRFS_CONVERT_PROG $SCRATCH_DEV >> $seqres.full 2>&1 || \
 	_fail "btrfs-convert failed"
 _try_scratch_mount || _fail "Could not mount new btrfs fs"
 # (Ignore the symlinks which may be broken/nonexistent)
-diff -r /lib/modules/`uname -r`/ $SCRATCH_MNT/`uname -r`/ 2>&1 | grep -vw "source\|build"
+diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/$BASENAME/ 2>&1
 
 # Old ext4 image file should exist & be consistent
 $E2FSCK_PROG -fn $SCRATCH_MNT/ext2_saved/image >> $seqres.full 2>&1 || \
@@ -62,12 +64,12 @@ mkdir -p $SCRATCH_MNT/mnt
 mount -o loop $SCRATCH_MNT/ext2_saved/image $SCRATCH_MNT/mnt || \
 	_fail "could not loop mount saved ext4 image"
 # Ignore the symlinks which may be broken/nonexistent
-diff -r /lib/modules/`uname -r`/ $SCRATCH_MNT/mnt/`uname -r`/ 2>&1 | grep -vw "source\|build"
+diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/mnt/$BASENAME/ 2>&1
 umount $SCRATCH_MNT/mnt
 
 # Now put some fresh data on the btrfs fs
 mkdir -p $SCRATCH_MNT/new 
-cp -aR /lib/modules/`uname -r`/ $SCRATCH_MNT/new
+$TIMEOUT_PROG 10 cp -aRP $SOURCE_DIR $SCRATCH_MNT/new
 
 _scratch_unmount
 
@@ -82,7 +84,7 @@ $E2FSCK_PROG -fn $SCRATCH_DEV >> $seqres.full 2>&1 || \
 # Mount the un-converted ext4 device & check the contents
 mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
 # (Ignore the symlinks which may be broken/nonexistent)
-diff -r /lib/modules/`uname -r`/ $SCRATCH_MNT/`uname -r`/ 2>&1 | grep -vw "source\|build"
+diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/$BASENAME/ 2>&1
 
 _scratch_unmount
 
