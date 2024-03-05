@@ -60,6 +60,7 @@ wait_time=1
 fill_scratch()
 {
 	local fssize=$1
+	local with_cancel=$2
 	local filler_pid
 
 	# Fill inline extents.
@@ -88,7 +89,11 @@ fill_scratch()
 	$XFS_IO_PROG -f -d -c "pwrite -b 64k 0 1E" "$SCRATCH_MNT/t_filler" &>\
 		$tmp.filler_result &
 	filler_pid=$!
-	sleep $((2 * $wait_time))
+	if [ "${with_cancel}" = "cancel" ]; then
+		sleep $((10 * $wait_time))
+	else
+		sleep $((2 * $wait_time))
+	fi
 	kill -KILL $filler_pid &> /dev/null
 	wait $filler_pid &> /dev/null
 
@@ -125,7 +130,7 @@ workout()
 	_scratch_mount
 	_require_fs_space $SCRATCH_MNT $((2 * 512 * 1024)) #2.5G
 
-	fill_scratch $fssize
+	fill_scratch $fssize $with_cancel
 	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
 
 	echo -e "Replace from $source_dev to $SPARE_DEV\\n" >> $seqres.full
