@@ -25,10 +25,6 @@ _scratch_mount
 
 dev2=`echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}'`
 
-pagesize=$(_get_page_size)
-blocksize=$(_get_block_size $SCRATCH_MNT)
-sectors_per_page=$(($pagesize / $blocksize))
-
 _allow_fail_make_request
 
 echo "Step 1: writing with one failing mirror:"
@@ -36,9 +32,14 @@ _bdev_fail_make_request $SCRATCH_DEV 1
 $XFS_IO_PROG -f -c "pwrite -W -S 0xaa 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
 _bdev_fail_make_request $SCRATCH_DEV 0
 
+# btrfs counts errors per IO, assuming the data is merged that'll be 1 IO, then
+# the log tree block and then the log root tree block and then the super block.
+# We should see at least 4 failed IO's, but with subpage blocksize we could see
+# more if the log blocks end up on the same page, or if the data IO gets split
+# at all.
 errs=$($BTRFS_UTIL_PROG device stats $SCRATCH_DEV | \
 	$AWK_PROG '/write_io_errs/ { print $2 }')
-if [ $errs -ne $((4 * $sectors_per_page)) ]; then
+if [ $errs -lt 4 ]; then
         _fail "Errors: $errs expected: 4"
 fi
 
