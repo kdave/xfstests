@@ -46,7 +46,11 @@ get_holes()
 	# to established convention which requires the filesystem to be
 	# unmounted while we probe the underlying file.
 	$UMOUNT_PROG $loop_mnt
-	$XFS_IO_PROG -F -c fiemap $1 | grep hole | $SED_PROG 's/.*\[\(.*\)\.\.\(.*\)\].*/\1 \2/'
+
+	# FIEMAP only works on regular files, so call it on the backing file
+	# and not the loop device like everything else
+	$XFS_IO_PROG -F -c fiemap $img_file | grep hole | \
+		$SED_PROG 's/.*\[\(.*\)\.\.\(.*\)\].*/\1 \2/'
 	_mount $loop_dev $loop_mnt
 }
 
@@ -55,7 +59,7 @@ get_free_sectors()
 	case $FSTYP in
 	ext4)
 	$UMOUNT_PROG $loop_mnt
-	$DUMPE2FS_PROG $img_file  2>&1 | grep " Free blocks" | cut -d ":" -f2- | \
+	$DUMPE2FS_PROG $loop_dev  2>&1 | grep " Free blocks" | cut -d ":" -f2- | \
 		tr ',' '\n' | $SED_PROG 's/^ //' | \
 		$AWK_PROG -v spb=$sectors_per_block 'BEGIN{FS="-"};
 		     NF {
@@ -77,15 +81,15 @@ get_free_sectors()
 		local device_size=$($BTRFS_UTIL_PROG filesystem show --raw $loop_mnt 2>&1 \
 			| sed -n "s/^.*size \([0-9]*\).*$/\1/p")
 
-		local nodesize=$($BTRFS_UTIL_PROG inspect-internal dump-super $img_file  \
+		local nodesize=$($BTRFS_UTIL_PROG inspect-internal dump-super $loop_dev \
 			| sed -n 's/nodesize\s*\(.*\)/\1/p')
 
 		# Get holes within block groups
-		$BTRFS_UTIL_PROG inspect-internal dump-tree -t extent $img_file \
+		$BTRFS_UTIL_PROG inspect-internal dump-tree -t extent $loop_dev \
 			| $AWK_PROG -v sectorsize=512 -v nodesize=$nodesize -f $here/src/parse-extent-tree.awk
 
 		# Get holes within unallocated space on disk
-		$BTRFS_UTIL_PROG inspect-internal dump-tree -t dev $img_file \
+		$BTRFS_UTIL_PROG inspect-internal dump-tree -t dev $loop_dev \
 			| $AWK_PROG -v sectorsize=512 -v devsize=$device_size -f $here/src/parse-dev-tree.awk
 
 	;;
@@ -159,7 +163,7 @@ done
 
 # Get reference fiemap, this can contain i.e. uninitialized inode table
 sync
-get_holes $img_file > $fiemap_ref
+get_holes > $fiemap_ref
 
 # Delete some files
 find $loop_mnt -type f -print | $AWK_PROG \
@@ -173,7 +177,7 @@ echo "done."
 echo -n "Detecting interesting holes in image..."
 # Get after-trim fiemap
 sync
-get_holes $img_file > $fiemap_after
+get_holes > $fiemap_after
 echo "done."
 
 echo -n "Comparing holes to the reported space from FS..."
