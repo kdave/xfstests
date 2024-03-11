@@ -232,15 +232,20 @@ check_uring_support(void)
 	int err;
 
 	err = io_uring_queue_init(1, &ring, 0);
-	if (err == 0)
+	switch (err) {
+	case 0:
 		return 0;
-
-	if (err == -ENOSYS) /* CONFIG_IO_URING=n */
+	case -ENOSYS:
+		/* CONFIG_IO_URING=n */
 		return 1;
-
-	fprintf(stderr, "unexpected error from io_uring_queue_init(): %s\n",
-		strerror(-err));
-	return 2;
+	case -EPERM:
+		/* Might be due to sysctl io_uring_disabled isn't 0 */
+		return 2;
+	default:
+		fprintf(stderr, "unexpected error from io_uring_queue_init(): %s\n",
+			strerror(-err));
+		return 100;
+	}
 #else
 	/* liburing is unavailable, assume IO_URING is unsupported */
 	return 1;

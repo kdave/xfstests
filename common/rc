@@ -2334,12 +2334,22 @@ _require_aiodio()
 # this test requires that the kernel supports IO_URING
 _require_io_uring()
 {
+	local n
+
 	$here/src/feature -R
 	case $? in
 	0)
 		;;
 	1)
 		_notrun "kernel does not support IO_URING"
+		;;
+	2)
+		n=$(sysctl -n kernel.io_uring_disabled 2>/dev/null)
+		if [ "$n" != "0" ];then
+			_notrun "io_uring isn't enabled totally by admin"
+		else
+			_fail "unexpected EPERM error, please check selinux or something else"
+		fi
 		;;
 	*)
 		_fail "unexpected error testing for IO_URING support"
