@@ -762,7 +762,12 @@ int main(int argc, char **argv)
 #endif
 #ifdef URING
 			have_io_uring = true;
-			/* If ENOSYS, just ignore uring, other errors are fatal. */
+			/*
+			 * If ENOSYS, just ignore uring, due to kernel doesn't support it.
+			 * If EPERM, maybe due to sysctl kernel.io_uring_disabled isn't 0,
+			 *           or some selinux policies, etc.
+			 * Other errors are fatal.
+			 */
 			c = io_uring_queue_init(URING_ENTRIES, &ring, 0);
 			switch(c){
 			case 0:
@@ -770,9 +775,16 @@ int main(int argc, char **argv)
 				break;
 			case -ENOSYS:
 				have_io_uring = false;
+				if (verbose)
+					printf("io_uring isn't supported by kernel\n");
+				break;
+			case -EPERM:
+				have_io_uring = false;
+				if (verbose)
+					printf("io_uring isn't allowed, check io_uring_disabled sysctl or selinux policy\n");
 				break;
 			default:
-				fprintf(stderr, "io_uring_queue_init failed\n");
+				fprintf(stderr, "io_uring_queue_init failed, errno=%d\n", -c);
 				exit(1);
 			}
 #endif
