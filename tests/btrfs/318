@@ -1,0 +1,107 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 Meta, Inc. All Rights Reserved.
+#
+# FS QA Test No. 318
+#
+# Test an edge case of multi device volume management in btrfs.
+# If a device changes devt between mounts of a multi device fs, we can trick
+# btrfs into mounting the same device twice fully (not as a bind mount). From
+# there, it is trivial to induce corruption.
+#
+. ./common/preamble
+_begin_fstest auto quick volume scrub tempfsid
+
+_fixed_by_kernel_commit 9f7eb8405dcb \
+	"btrfs: validate device maj:min during open"
+
+# real QA test starts here
+_supported_fs btrfs
+_require_test
+_require_command "$PARTED_PROG" parted
+_require_batched_discard "$TEST_DIR"
+
+_cleanup() {
+	cd /
+	$UMOUNT_PROG $MNT
+	$UMOUNT_PROG $BIND
+	losetup -d $DEV0 $DEV1 $DEV2
+	rm -f $IMG0 $IMG1 $IMG2
+	rm -rf $MNT $BIND
+}
+
+IMG0=$TEST_DIR/$$.img0
+IMG1=$TEST_DIR/$$.img1
+IMG2=$TEST_DIR/$$.img2
+truncate -s 1G $IMG0
+truncate -s 1G $IMG1
+truncate -s 1G $IMG2
+DEV0=$(_create_loop_device $IMG0)
+DEV1=$(_create_loop_device $IMG1)
+DEV2=$(_create_loop_device $IMG2)
+D0P1=$DEV0"p1"
+D1P1=$DEV1"p1"
+MNT=$TEST_DIR/mnt-${seq}
+BIND=$TEST_DIR/bind-${seq}
+
+# Setup partition table with one partition on each device.
+$PARTED_PROG $DEV0 'mktable gpt' --script
+$PARTED_PROG $DEV1 'mktable gpt' --script
+$PARTED_PROG $DEV0 'mkpart mypart 1M 100%' --script
+$PARTED_PROG $DEV1 'mkpart mypart 1M 100%' --script
+
+# mkfs with two devices to avoid clearing devices on close
+# single raid to allow removing DEV2.
+$MKFS_BTRFS_PROG -f -msingle -dsingle $D0P1 $DEV2 >>$seqres.full 2>&1 || _fail "failed to mkfs.btrfs"
+
+# Cycle mount the two device fs to populate both devices into the
+# stale device cache.
+rm -rf $MNT
+mkdir -p $MNT
+_mount $D0P1 $MNT
+$UMOUNT_PROG $MNT
+
+# Swap the partition dev_ts. This leaves the dev_t in the cache out of date.
+$PARTED_PROG $DEV0 'rm 1' --script
+$PARTED_PROG $DEV1 'rm 1' --script
+$PARTED_PROG $DEV1 'mkpart mypart 1M 100%' --script
+$PARTED_PROG $DEV0 'mkpart mypart 1M 100%' --script
+
+# Mount with mismatched dev_t!
+_mount $D0P1 $MNT
+
+# Remove the extra device to bring temp-fsid back in the fray.
+$BTRFS_UTIL_PROG device remove $DEV2 $MNT
+
+# Create the would be bind mount.
+rm -rf $BIND
+mkdir -p $BIND
+_mount $D0P1 $BIND
+mount_show=$($BTRFS_UTIL_PROG filesystem show $MNT)
+bind_show=$($BTRFS_UTIL_PROG filesystem show $BIND)
+# If they're different, we are in trouble.
+[ "$mount_show" = "$bind_show" ] || echo "$mount_show != $bind_show"
+
+# Now really prove it by corrupting the first mount with the second.
+for i in $(seq 20); do
+	$XFS_IO_PROG -f -c "pwrite 0 50M" $MNT/foo.$i >>$seqres.full 2>&1
+done
+for i in $(seq 20); do
+	$XFS_IO_PROG -f -c "pwrite 0 50M" $BIND/foo.$i >>$seqres.full 2>&1
+done
+
+# sync so that we really write the large file data out to the shared device
+sync
+
+# now delete from one view of the shared device
+find $BIND -type f -delete
+# sync so that fstrim definitely has deleted data to trim
+sync
+# This should blow up both mounts, if the writes somehow didn't overlap at all.
+$FSTRIM_PROG $BIND
+# drop caches to improve the odds we read from the corrupted device while scrubbing.
+echo 3 > /proc/sys/vm/drop_caches
+$BTRFS_UTIL_PROG scrub start -B $MNT | grep "Error summary:"
+
+status=0
+exit
