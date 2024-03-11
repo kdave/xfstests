@@ -763,13 +763,17 @@ int main(int argc, char **argv)
 #ifdef URING
 			have_io_uring = true;
 			/* If ENOSYS, just ignore uring, other errors are fatal. */
-			if (io_uring_queue_init(URING_ENTRIES, &ring, 0)) {
-				if (errno == ENOSYS) {
-					have_io_uring = false;
-				} else {
-					fprintf(stderr, "io_uring_queue_init failed\n");
-					exit(1);
-				}
+			c = io_uring_queue_init(URING_ENTRIES, &ring, 0);
+			switch(c){
+			case 0:
+				have_io_uring = true;
+				break;
+			case -ENOSYS:
+				have_io_uring = false;
+				break;
+			default:
+				fprintf(stderr, "io_uring_queue_init failed\n");
+				exit(1);
 			}
 #endif
 			for (i = 0; keep_looping(i, loops); i++)
