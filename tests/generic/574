@@ -74,7 +74,8 @@ mread()
 	# shell instance from optimizing out the fork and directly exec'ing
 	# xfs_io.  The easiest way to do that is to append 'true' to the
 	# commands, so that xfs_io is no longer the last command the shell sees.
-	bash -c "trap '' SIGBUS; $XFS_IO_PROG -r $file \
+	# Don't let it write core files to the filesystem.
+	bash -c "trap '' SIGBUS; ulimit -c 0; $XFS_IO_PROG -r $file \
 		-c 'mmap -r 0 $map_len' \
 		-c 'mread -v $offset $length'; true"
 }
