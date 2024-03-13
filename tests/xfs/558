@@ -127,7 +127,12 @@ _scratch_mount >> $seqres.full
 $XFS_IO_PROG -c 'chattr -x' $SCRATCH_MNT &> $seqres.full
 _require_pagecache_access $SCRATCH_MNT
 
-blksz=65536
+min_blksz=65536
+file_blksz=$(_get_file_block_size "$SCRATCH_MNT")
+blksz=$(( 8 * $file_blksz ))
+
+blksz=$(( blksz > min_blksz ? blksz : min_blksz ))
+
 _require_congruent_file_oplen $SCRATCH_MNT $blksz
 
 # Make sure we have sufficient extent size to create speculative CoW
