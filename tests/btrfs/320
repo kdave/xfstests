@@ -15,7 +15,9 @@ _begin_fstest auto qgroup limit
 
 _supported_fs btrfs
 _require_scratch
+_require_qgroup_rescan
 _require_btrfs_qgroup_report
+_require_scratch_qgroup
 
 # Test to make sure we can actually turn it on and it makes sense
 _basic_test()
@@ -23,7 +25,7 @@ _basic_test()
 	echo "=== basic test ===" >> $seqres.full
 	_run_btrfs_util_prog subvolume create $SCRATCH_MNT/a
 	_run_btrfs_util_prog quota enable $SCRATCH_MNT/a
-	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+	_qgroup_rescan $SCRATCH_MNT
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
 	$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid >> \
 		$seqres.full 2>&1
@@ -62,7 +64,7 @@ _rescan_test()
 	echo "qgroup values before rescan: $output" >> $seqres.full
 	refer=$(echo $output | $AWK_PROG '{ print $2 }')
 	excl=$(echo $output | $AWK_PROG '{ print $3 }')
-	_run_btrfs_util_prog quota rescan -w $SCRATCH_MNT
+	_qgroup_rescan $SCRATCH_MNT
 	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	echo "qgroup values after rescan: $output" >> $seqres.full
 	[ $refer -eq $(echo $output | $AWK_PROG '{ print $2 }') ] || \
