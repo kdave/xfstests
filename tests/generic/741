@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 741
+#
+# Attempt to mount both the DM physical device and the DM flakey device.
+# Verify the returned error message.
+#
+. ./common/preamble
+_begin_fstest auto quick volume tempfsid
+
+# Override the default cleanup function.
+_cleanup()
+{
+	umount $extra_mnt &> /dev/null
+	rm -rf $extra_mnt
+	_unmount_flakey
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/filter
+. ./common/dmflakey
+
+# real QA test starts here
+_supported_fs generic
+_require_test
+_require_scratch
+_require_dm_target flakey
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit XXXXXXXXXXXX \
+			"btrfs: return accurate error code on open failure"
+
+_scratch_mkfs >> $seqres.full
+_init_flakey
+_mount_flakey
+
+extra_mnt=$TEST_DIR/extra_mnt
+rm -rf $extra_mnt
+mkdir -p $extra_mnt
+
+# Mount must fail because the physical device has a dm created on it.
+# Filters alter the return code of the mount.
+_mount $SCRATCH_DEV $extra_mnt 2>&1 | \
+			_filter_testdir_and_scratch | _filter_error_mount
+
+# Try again with flakey unmounted, must fail.
+_unmount_flakey
+_mount $SCRATCH_DEV $extra_mnt 2>&1 | \
+			_filter_testdir_and_scratch | _filter_error_mount
+
+# Removing dm should make mount successful.
+_cleanup_flakey
+_scratch_mount
+
+status=0
+exit
