@@ -110,6 +110,15 @@ _require_btrfs_fs_feature()
 	modprobe btrfs > /dev/null 2>&1
 	[ -e /sys/fs/btrfs/features/$feat ] || \
 		_notrun "Feature $feat not supported by the available btrfs version"
+
+	if [ $feat = "raid56" ]; then
+		# Make sure it's in our supported configs as well
+		_btrfs_get_profile_configs
+		if [[ ! "${_btrfs_profile_configs[@]}" =~ "raid5" ]] ||
+		   [[ ! "${_btrfs_profile_configs[@]}" =~ "raid6" ]]; then
+			_notrun "raid56 excluded from profile configs"
+		fi
+	fi
 }
 
 _require_btrfs_fs_sysfs()
