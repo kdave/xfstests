@@ -21,6 +21,9 @@ _require_scratch_dev_pool 4
 # Zoned btrfs only supports SINGLE profile
 _require_non_zoned_device "${SCRATCH_DEV}"
 
+# Load up the available configs
+_btrfs_get_profile_configs
+
 declare -a TEST_VECTORS=(
 # $nr_dev_min:$data:$metadata:$data_convert:$metadata_convert
 "4:single:raid1"
@@ -37,6 +40,11 @@ run_testcase() {
 	num_disks=${args[0]}
 	src_type=${args[1]}
 	dst_type=${args[2]}
+
+	if [[ ! "${_btrfs_profile_configs[@]}" =~ "$dst_type" ]]; then
+		echo "=== Skipping test: $1 ===" >> $seqres.full
+		return
+	fi
 
 	_scratch_dev_pool_get $num_disks
 
