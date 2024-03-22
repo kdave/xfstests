@@ -29,7 +29,8 @@ _require_odirect
 _require_xfs_io_command "falloc"
 _require_xfs_io_command "pread"
 _require_xfs_io_command "pwrite"
-_require_btrfs_corrupt_block
+_require_btrfs_corrupt_block "value"
+_require_btrfs_corrupt_block "offset"
 _disable_fsverity_signatures
 
 get_ino() {
@@ -56,7 +57,7 @@ corrupt_inline() {
 	_scratch_unmount
 	# inline data starts at disk_bytenr
 	# overwrite the first u64 with random bogus junk
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f disk_bytenr $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f disk_bytenr $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -70,7 +71,7 @@ corrupt_prealloc_to_reg() {
 	_scratch_unmount
 	# ensure non-zero at the pre-allocated region on disk
 	# set extent type from prealloc (2) to reg (1)
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f type -v 1 $SCRATCH_DEV >/dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f type --value 1 $SCRATCH_DEV
 	_scratch_mount
 	# now that it's a regular file, reading actually looks at the previously
 	# preallocated region, so ensure that has non-zero contents.
@@ -86,7 +87,7 @@ corrupt_reg_to_prealloc() {
 	_fsv_enable $f
 	_scratch_unmount
 	# set type from reg (1) to prealloc (2)
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f type -v 2 $SCRATCH_DEV >/dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 0 -f type --value 2 $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -102,7 +103,8 @@ corrupt_punch_hole() {
 	_fsv_enable $f
 	_scratch_unmount
 	# change disk_bytenr to 0, representing a hole
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr -v 0 $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr --value 0 \
+								    $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -116,7 +118,8 @@ corrupt_plug_hole() {
 	_fsv_enable $f
 	_scratch_unmount
 	# change disk_bytenr to some value, plugging the hole
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr -v 13639680 $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr \
+						   --value 13639680 $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -130,7 +133,8 @@ corrupt_verity_descriptor() {
 	_scratch_unmount
 	# key for the descriptor item is <inode, BTRFS_VERITY_DESC_ITEM_KEY, 1>,
 	# 88 is X. So we write 5 Xs to the start of the descriptor
-	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,36,1 -v 88 -o 0 -b 5 $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,36,1 --value 88 --offset 0 -b 5 \
+								    $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -142,7 +146,8 @@ corrupt_root_hash() {
 	local ino=$(get_ino $f)
 	_fsv_enable $f
 	_scratch_unmount
-	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,36,1 -v 88 -o 16 -b 1 $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,36,1 --value 88 --offset 16 -b 1 \
+								    $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -157,7 +162,8 @@ corrupt_merkle_tree() {
 	# key for the descriptor item is <inode, BTRFS_VERITY_MERKLE_ITEM_KEY, 0>,
 	# 88 is X. So we write 5 Xs to somewhere in the middle of the first
 	# merkle item
-	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,37,0 -v 88 -o 100 -b 5 $SCRATCH_DEV > /dev/null 2>&1
+	$BTRFS_CORRUPT_BLOCK_PROG -r 5 -I $ino,37,0 --value 88 --offset 100 \
+							       -b 5 $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
