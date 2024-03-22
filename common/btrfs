@@ -759,7 +759,19 @@ _btrfs_buffered_read_on_mirror()
 
 _require_btrfs_corrupt_block()
 {
+	# An optional arg1 argument to also check the option.
+	local opt=$1
+
 	_require_command "$BTRFS_CORRUPT_BLOCK_PROG" btrfs-corrupt-block
+
+	if [ -z "$opt" ]; then
+		return
+	fi
+
+	$BTRFS_CORRUPT_BLOCK_PROG -h 2>&1 | grep -wq -- "--$opt"
+	if [ $? != 0 ]; then
+		_notrun "Require $BTRFS_CORRUPT_BLOCK_PROG option --$opt"
+	fi
 }
 
 _require_btrfs_send_version()
