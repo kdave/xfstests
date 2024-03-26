@@ -6667,7 +6667,7 @@ static int nested_userns(const struct vfstest_info *info)
 	}
 
 	if (sys_mount_setattr(fd_open_tree_level4, "", AT_EMPTY_PATH,
-			      &attr_level4, sizeof(attr_level4))) {
+			      &attr_level4, sizeof(attr_level4)) != -1 || errno != EINVAL) {
 		log_stderr("failure: sys_mount_setattr");
 		goto out;
 	}
@@ -6703,11 +6703,6 @@ static int nested_userns(const struct vfstest_info *info)
 			bret = expected_uid_gid(fd_open_tree_level3, file, 0, id_level3, id_level3);
 		}
 		if (!bret) {
-			log_stderr("failure: check ownership %s", file);
-			goto out;
-		}
-
-		if (!expected_uid_gid(fd_open_tree_level4, file, 0, info->t_overflowuid, info->t_overflowgid)) {
 			log_stderr("failure: check ownership %s", file);
 			goto out;
 		}
