@@ -6556,7 +6556,7 @@ static int nested_userns(const struct vfstest_info *info)
 	}
 
 	/* Don't write a mapping in the 4th userns. */
-	list_empty(&hierarchy[4].id_map);
+	list_empty(&hierarchy[3].id_map);
 
 	/* Create the actual userns hierarchy. */
 	ret = create_userns_hierarchy(hierarchy);
