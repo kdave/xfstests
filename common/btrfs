@@ -485,6 +485,20 @@ _btrfs_stress_replace()
 	done
 }
 
+# Kill a background process running _btrfs_stress_replace()
+_btrfs_kill_stress_replace_pid()
+{
+       local replace_pid=$1
+
+       # Ignore if process already died.
+       kill $replace_pid &> /dev/null
+       wait $replace_pid &> /dev/null
+       # Wait for the replace operation to finish.
+       while ps aux | grep "replace start" | grep -qv grep; do
+               sleep 1
+       done
+}
+
 # find the right option to force output in bytes, older versions of btrfs-progs
 # print that by default, newer print human readable numbers with unit suffix
 _btrfs_qgroup_units()

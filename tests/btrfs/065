@@ -65,12 +65,8 @@ run_test()
 	wait $fsstress_pid
 
 	touch $stop_file
-	kill $replace_pid
-	wait
-	# wait for the replace operation to finish
-	while ps aux | grep "replace start" | grep -qv grep; do
-		sleep 1
-	done
+	wait $subvol_pid
+	_btrfs_kill_stress_replace_pid $replace_pid
 
 	echo "Scrub the filesystem" >>$seqres.full
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1
