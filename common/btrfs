@@ -359,6 +359,20 @@ _btrfs_stress_scrub()
 	done
 }
 
+# Kill a background process running _btrfs_stress_scrub()
+_btrfs_kill_stress_scrub_pid()
+{
+       local scrub_pid=$1
+
+       # Ignore if process already died.
+       kill $scrub_pid &> /dev/null
+       wait $scrub_pid &> /dev/null
+       # Wait for the scrub operation to finish.
+       while ps aux | grep "scrub start" | grep -qv grep; do
+               sleep 1
+       done
+}
+
 # stress btrfs by defragmenting every file/dir in a loop and compress file
 # contents while defragmenting if second argument is not "nocompress"
 _btrfs_stress_defrag()
