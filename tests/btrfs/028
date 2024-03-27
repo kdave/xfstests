@@ -44,12 +44,9 @@ balance_pid=$!
 
 # 30s is enough to trigger bug
 sleep $((30*$TIME_FACTOR))
-kill $fsstress_pid $balance_pid &> /dev/null
-wait
-
-# kill _btrfs_stress_balance can't end balance, so call btrfs balance cancel
-# to cancel running or paused balance.
-$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+kill $fsstress_pid &> /dev/null
+wait $fsstress_pid &> /dev/null
+_btrfs_kill_stress_balance_pid $balance_pid
 
 _run_btrfs_util_prog filesystem sync $SCRATCH_MNT
 
