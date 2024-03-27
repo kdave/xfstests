@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 743
+#
+# This is a regression test for a kernel hang that I saw when creating a memory
+# mapping, injecting EIO errors on the block device, and invoking
+# MADV_POPULATE_READ on the mapping to fault in the pages.
+#
+. ./common/preamble
+_begin_fstest auto rw eio
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -f $tmp.*
+	_dmerror_unmount
+	_dmerror_cleanup
+}
+
+# Import common functions.
+. ./common/dmerror
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"mm/madvise: make MADV_POPULATE_(READ|WRITE) handle VM_FAULT_RETRY properly"
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_xfs_io_command madvise -R
+_require_scratch
+_require_dm_target error
+_require_command "$TIMEOUT_PROG" "timeout"
+
+_scratch_mkfs >> $seqres.full 2>&1
+_dmerror_init
+
+filesz=2m
+
+# Create a file that we'll read, then cycle mount to zap pagecache
+_dmerror_mount
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 $filesz" "$SCRATCH_MNT/a" >> $seqres.full
+_dmerror_unmount
+_dmerror_mount
+
+# Try to read the file data in a regular fashion just to prove that it works.
+echo read with no errors
+$TIMEOUT_PROG -s KILL 10s $XFS_IO_PROG -c "mmap -r 0 $filesz" -c "madvise -R 0 $filesz" "$SCRATCH_MNT/a"
+_dmerror_unmount
+_dmerror_mount
+
+# Load file metadata and induce EIO errors on read.  Try to provoke the kernel;
+# kill the process after 10s so we can clean up.
+stat "$SCRATCH_MNT/a" >> $seqres.full
+echo read with IO errors
+_dmerror_load_error_table
+$TIMEOUT_PROG -s KILL 10s $XFS_IO_PROG -c "mmap -r 0 $filesz" -c "madvise -R 0 $filesz" "$SCRATCH_MNT/a"
+_dmerror_load_working_table
+
+# success, all done
+status=0
+exit
