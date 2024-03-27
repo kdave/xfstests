@@ -58,12 +58,8 @@ run_test()
 	wait $fsstress_pid
 
 	touch $stop_file
-	kill $remount_pid
-	wait
-	# wait for the remount loop process to finish
-	while ps aux | grep "mount.*$SCRATCH_MNT" | grep -qv grep; do
-		sleep 1
-	done
+	wait $subvol_pid
+	_btrfs_kill_stress_remount_compress_pid $remount_pid $SCRATCH_MNT
 
 	echo "Scrub the filesystem" >>$seqres.full
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1

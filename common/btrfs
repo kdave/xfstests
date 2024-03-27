@@ -421,6 +421,21 @@ _btrfs_stress_remount_compress()
 	done
 }
 
+# Kill a background process running _btrfs_stress_remount_compress()
+_btrfs_kill_stress_remount_compress_pid()
+{
+	local remount_pid=$1
+	local btrfs_mnt=$2
+
+	# Ignore if process already died.
+	kill $remount_pid &> /dev/null
+	wait $remount_pid &> /dev/null
+	# Wait for the remount loop to finish.
+	while ps aux | grep "mount.*${btrfs_mnt}" | grep -qv grep; do
+		sleep 1
+	done
+}
+
 # stress btrfs by replacing devices in a loop
 # Note that at least 3 devices are needed in SCRATCH_DEV_POOL and the last
 # device should be free(not used by btrfs)
