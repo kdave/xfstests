@@ -393,6 +393,20 @@ _btrfs_stress_defrag()
 	done
 }
 
+# Kill a background process running _btrfs_stress_defrag()
+_btrfs_kill_stress_defrag_pid()
+{
+       local defrag_pid=$1
+
+       # Ignore if process already died.
+       kill $defrag_pid &> /dev/null
+       wait $defrag_pid &> /dev/null
+       # Wait for the defrag operation to finish.
+       while ps aux | grep "btrfs filesystem defrag" | grep -qv grep; do
+               sleep 1
+       done
+}
+
 # stress btrfs by remounting it with different compression algorithms in a loop
 # run this with fsstress running at background could exercise the compression
 # code path and ensure no race when switching compression algorithm with constant

@@ -58,12 +58,8 @@ run_test()
 	wait $fsstress_pid
 
 	touch $stop_file
-	kill $defrag_pid
-	wait
-	# wait for btrfs defrag process to exit, otherwise it will block umount
-	while ps aux | grep "btrfs filesystem defrag" | grep -qv grep; do
-		sleep 1
-	done
+	wait $subvol_pid
+	_btrfs_kill_stress_defrag_pid $defrag_pid
 
 	echo "Scrub the filesystem" >>$seqres.full
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1
