@@ -51,12 +51,10 @@ run_test()
 
 	echo "Wait for fsstress to exit and kill all background workers" >>$seqres.full
 	wait $fsstress_pid
-	kill $balance_pid $remount_pid
-	wait
-	# wait for the balance and remount loop to finish
-	while ps aux | grep "balance start" | grep -qv grep; do
-		sleep 1
-	done
+	_btrfs_kill_stress_balance_pid $balance_pid
+	kill $remount_pid
+	wait $remount_pid
+	# wait for the remount loop to finish
 	while ps aux | grep "mount.*$SCRATCH_MNT" | grep -qv grep; do
 		sleep 1
 	done

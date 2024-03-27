@@ -318,6 +318,20 @@ _btrfs_stress_balance()
 	done
 }
 
+# Kill a background process running _btrfs_stress_balance()
+_btrfs_kill_stress_balance_pid()
+{
+	local balance_pid=$1
+
+	# Ignore if process already died.
+	kill $balance_pid &> /dev/null
+	wait $balance_pid &> /dev/null
+	# Wait for the balance operation to finish.
+	while ps aux | grep "balance start" | grep -qv grep; do
+		sleep 1
+	done
+}
+
 # stress btrfs by creating/mounting/umounting/deleting subvolume in a loop
 _btrfs_stress_subvolume()
 {
