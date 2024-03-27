@@ -10,6 +10,22 @@
 . ./common/preamble
 _begin_fstest auto balance defrag compress scrub
 
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+	if [ ! -z "$balance_pid" ]; then
+		_btrfs_kill_stress_balance_pid $balance_pid
+	fi
+	if [ ! -z "$defrag_pid" ]; then
+		_btrfs_kill_stress_defrag_pid $defrag_pid
+	fi
+	if [ ! -z "$fsstress_pid" ]; then
+		kill $fsstress_pid &> /dev/null
+		wait $fsstress_pid &> /dev/null
+	fi
+}
+
 # Import common functions.
 . ./common/filter
 
@@ -52,8 +68,11 @@ run_test()
 
 	echo "Wait for fsstress to exit and kill all background workers" >>$seqres.full
 	wait $fsstress_pid
+	unset fsstress_pid
 	_btrfs_kill_stress_balance_pid $balance_pid
+	unset balance_pid
 	_btrfs_kill_stress_defrag_pid $defrag_pid
+	unset defrag_pid
 
 	echo "Scrub the filesystem" >>$seqres.full
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1

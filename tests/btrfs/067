@@ -10,6 +10,22 @@
 . ./common/preamble
 _begin_fstest auto subvol defrag compress scrub
 
+_cleanup()
+{
+	cd /
+	rm -rf $tmp.*
+	if [ ! -z "$stop_file" ] && [ ! -z "$subvol_pid" ]; then
+		_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file
+	fi
+	if [ ! -z "$defrag_pid" ]; then
+		_btrfs_kill_stress_defrag_pid $defrag_pid
+	fi
+	if [ ! -z "$fsstress_pid" ]; then
+		kill $fsstress_pid &> /dev/null
+		wait $fsstress_pid &> /dev/null
+	fi
+}
+
 # Import common functions.
 . ./common/filter
 
@@ -20,12 +36,13 @@ _require_scratch_nocheck
 _require_scratch_dev_pool 4
 _btrfs_get_profile_configs
 
+stop_file=$TEST_DIR/$seq.stop.$$
+
 run_test()
 {
 	local mkfs_opts=$1
 	local with_compress=$2
 	local subvol_mnt=$TEST_DIR/$seq.mnt
-	local stop_file=$TEST_DIR/$seq.stop.$$
 
 	echo "Test $mkfs_opts with $with_compress" >>$seqres.full
 
@@ -54,9 +71,12 @@ run_test()
 
 	echo "Wait for fsstress to exit and kill all background workers" >>$seqres.full
 	wait $fsstress_pid
+	unset fsstress_pid
 
 	_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file
+	unset subvol_pid
 	_btrfs_kill_stress_defrag_pid $defrag_pid
+	unset defrag_pid
 
 	echo "Scrub the filesystem" >>$seqres.full
 	$BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >>$seqres.full 2>&1
