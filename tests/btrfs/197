@@ -30,13 +30,19 @@ _supported_fs btrfs
 _require_test
 _require_scratch
 _require_scratch_dev_pool 5
-# Zoned btrfs only supports SINGLE profile
-_require_non_zoned_device ${SCRATCH_DEV}
+# We require at least one raid setup, raid1 is the easiest, use this to gate on
+# wether or not we run this test
+_require_btrfs_raid_type raid1
 
 workout()
 {
 	raid=$1
 	device_nr=$2
+
+	if ! _check_btrfs_raid_type $raid; then
+		echo "$raid isn't supported, skipping" >> $seqres.full
+		return
+	fi
 
 	echo $raid >> $seqres.full
 	_scratch_dev_pool_get $device_nr

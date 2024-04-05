@@ -18,10 +18,20 @@ _require_scratch_dev_pool 3
 _fixed_by_kernel_commit 486c737f7fdc \
 	"btrfs: raid56: always verify the P/Q contents for scrub"
 
+# If neither raid5 or raid6 are supported do _notrun
+if ! _check_btrfs_raid_type raid5 && ! _check_btrfs_raid_type raid6; then
+	_notrun "requires either raid5 or raid6 support"
+fi
+
 workload()
 {
 	local profile=$1
 	local nr_devs=$2
+
+	if ! _check_btrfs_raid_type $profile; then
+		echo "$profile isn't supported, skipping" >> $seqres.full
+		return
+	fi
 
 	echo "=== Testing $nr_devs devices $profile ===" >> $seqres.full
 	_scratch_dev_pool_get $nr_devs
