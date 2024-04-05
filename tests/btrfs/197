@@ -38,7 +38,7 @@ workout()
 	raid=$1
 	device_nr=$2
 
-	echo $raid
+	echo $raid >> $seqres.full
 	_scratch_dev_pool_get $device_nr
 	_spare_dev_get
 
@@ -62,7 +62,9 @@ workout()
 	_mount -o degraded $device_2 $SCRATCH_MNT
 	# Check if missing device is reported as in the .out
 	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
-						_filter_btrfs_filesystem_show
+		_filter_btrfs_filesystem_show > $tmp.output 2>&1
+	cat $tmp.output >> $seqres.full
+	grep -q "$device_1" $tmp.output && _fail "found stale device"
 
 	$BTRFS_UTIL_PROG device remove "$device_1" "$TEST_DIR/$seq.mnt"
 	$UMOUNT_PROG $TEST_DIR/$seq.mnt
@@ -77,5 +79,6 @@ workout "raid6" "4"
 workout "raid10" "4"
 
 # success, all done
+echo "Silence is golden"
 status=0
 exit
