@@ -109,11 +109,6 @@ _require_btrfs_fs_feature()
 	modprobe btrfs > /dev/null 2>&1
 	[ -e /sys/fs/btrfs/features/$feat ] || \
 		_notrun "Feature $feat not supported by the available btrfs version"
-
-	if [ $feat = "raid56" ]; then
-		# Zoned btrfs only supports SINGLE profile
-		_require_non_zoned_device "${SCRATCH_DEV}"
-	fi
 }
 
 _require_btrfs_fs_sysfs()
@@ -239,6 +234,8 @@ _btrfs_get_profile_configs()
 		return
 	fi
 
+	modprobe btrfs > /dev/null 2>&1
+
 	local unsupported=()
 	if [ "$1" == "replace" ]; then
 		# We can't do replace with these profiles because they
@@ -255,6 +252,14 @@ _btrfs_get_profile_configs()
 			"single"
 			"dup"
 			"raid0"
+		)
+	fi
+
+	if [ ! -e /sys/fs/btrfs/features/raid56 ]; then
+		# We don't have raid56 compiled in, remove them
+		unsupported+=(
+			"raid5"
+			"raid6"
 		)
 	fi
 
@@ -961,4 +966,19 @@ mkfs_clone()
 				grep -E ^dev_item.uuid | $AWK_PROG '{print $2}')
 
 	_mkfs_dev -fq --uuid $fsid --device-uuid $uuid $dev2
+}
+
+_check_btrfs_raid_type()
+{
+	_btrfs_get_profile_configs
+	if [[ ! "${_btrfs_profile_configs[@]}" =~ "$1" ]]; then
+		return 1
+	fi
+	return 0
+}
+
+_require_btrfs_raid_type()
+{
+	_check_btrfs_raid_type $1 || \
+		_notrun "$1 isn't supported by the profile config or scratch device"
 }
