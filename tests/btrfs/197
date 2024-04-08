@@ -22,7 +22,6 @@ _cleanup()
 }
 
 # Import common functions.
-. ./common/filter
 . ./common/filter.btrfs
 
 # real QA test starts here
@@ -55,24 +54,22 @@ workout()
 	_scratch_pool_mkfs "-d$raid -m$raid" >> $seqres.full 2>&1 || \
 							_fail "mkfs failed"
 
-	# Make device_1 an alien btrfs device for the raid created above by
+	# Make device # 2 an alien btrfs device for the raid created above by
 	# adding it to the $TEST_DIR/$seq.mnt
 
 	# don't test with the first device as auto fs check (_check_scratch_fs)
 	# picks the first device
-	device_1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}')
-	$BTRFS_UTIL_PROG device add -f "$device_1" "$TEST_DIR/$seq.mnt" >> \
+	$BTRFS_UTIL_PROG device add -f "${SCRATCH_DEV_NAME[1]}" "$TEST_DIR/$seq.mnt" >> \
 		$seqres.full
 
-	device_2=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $1}')
-	_mount -o degraded $device_2 $SCRATCH_MNT
+	_mount -o degraded ${SCRATCH_DEV_NAME[0]} $SCRATCH_MNT
 	# Check if missing device is reported as in the .out
 	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
 		_filter_btrfs_filesystem_show > $tmp.output 2>&1
 	cat $tmp.output >> $seqres.full
-	grep -q "$device_1" $tmp.output && _fail "found stale device"
+	grep -q "${SCRATCH_DEV_NAME[1]}" $tmp.output && _fail "found stale device"
 
-	$BTRFS_UTIL_PROG device remove "$device_1" "$TEST_DIR/$seq.mnt"
+	$BTRFS_UTIL_PROG device remove "${SCRATCH_DEV_NAME[1]}" "$TEST_DIR/$seq.mnt"
 	$UMOUNT_PROG $TEST_DIR/$seq.mnt
 	_scratch_unmount
 	_spare_dev_put

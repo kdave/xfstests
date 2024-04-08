@@ -40,21 +40,19 @@ workout()
 	_scratch_pool_mkfs "-d$raid -m$raid" >> $seqres.full 2>&1 || \
 							_fail "mkfs failed"
 
-	# Make device_1 a free btrfs device for the raid created above by
-	# clearing its superblock
+	# Make ${SCRATCH_DEV_NAME[1]} a free btrfs device for the raid created
+	# above by clearing its superblock
 
 	# don't test with the first device as auto fs check (_check_scratch_fs)
 	# picks the first device
-	device_1=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $2}')
-	$WIPEFS_PROG -a $device_1 >> $seqres.full 2>&1
+	$WIPEFS_PROG -a ${SCRATCH_DEV_NAME[1]} >> $seqres.full 2>&1
 
-	device_2=$(echo $SCRATCH_DEV_POOL | $AWK_PROG '{print $1}')
-	_mount -o degraded $device_2 $SCRATCH_MNT
+	_mount -o degraded ${SCRATCH_DEV_NAME[0]} $SCRATCH_MNT
 	# Check if missing device is reported as in the 196.out
 	$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT | \
 		_filter_btrfs_filesystem_show > $tmp.output 2>&1
 	cat $tmp.output >> $seqres.full
-	grep -q "$device_1" $tmp.output && _fail "found stale device"
+	grep -q "${SCRATCH_DEV_NAME[1]}" $tmp.output && _fail "found stale device"
 
 	_scratch_unmount
 	_scratch_dev_pool_put
