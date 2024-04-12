@@ -43,14 +43,14 @@ do
 		$SCRATCH_MNT/foo | _filter_xfs_io
 done
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
 $XFS_IO_PROG -c "truncate 3882008" $SCRATCH_MNT/foo
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -f $tmp/2.snap -p $SCRATCH_MNT/mysnap1 \
+_btrfs send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -f $tmp/2.snap -p $SCRATCH_MNT/mysnap1 \
 	$SCRATCH_MNT/mysnap2
 
 md5sum $SCRATCH_MNT/foo | _filter_scratch
@@ -62,10 +62,10 @@ _check_btrfs_filesystem $SCRATCH_DEV
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/1.snap $SCRATCH_MNT
 md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
 
-_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/2.snap $SCRATCH_MNT
 md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
 
 _scratch_unmount

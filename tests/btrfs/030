@@ -81,7 +81,7 @@ echo "ola" > $SCRATCH_MNT/a/b/bar1/bar2/bar3/bar4/hello.txt
 #                      |-- bar4          (ino 275)
 #                           |--hello.txt (ino 276)
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
 echo " world" >> $SCRATCH_MNT/a/b/c/file.txt
 mv $SCRATCH_MNT/a/b/c/d $SCRATCH_MNT/a/b/c2/d2
@@ -135,14 +135,14 @@ mv $SCRATCH_MNT/a/b/bar1 $SCRATCH_MNT/a/b/k44/bar3/bar2/k11
 #                   |-- bar2/               (ino 273)
 #                        |-- k11/           (ino 272)
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
 run_check $FSSUM_PROG -A -f -w $tmp/1.fssum $SCRATCH_MNT/mysnap1
 run_check $FSSUM_PROG -A -f -w $tmp/2.fssum -x $SCRATCH_MNT/mysnap2/mysnap1 \
     $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -f $tmp/2.snap -p $SCRATCH_MNT/mysnap1 \
+_btrfs send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -f $tmp/2.snap -p $SCRATCH_MNT/mysnap1 \
     $SCRATCH_MNT/mysnap2
 
 _scratch_unmount
@@ -150,10 +150,10 @@ _check_btrfs_filesystem $SCRATCH_DEV
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/1.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $tmp/1.fssum $SCRATCH_MNT/mysnap1 2>> $seqres.full
 
-_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/2.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $tmp/2.fssum $SCRATCH_MNT/mysnap2 2>> $seqres.full
 
 _scratch_unmount

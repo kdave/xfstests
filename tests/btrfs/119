@@ -30,7 +30,7 @@ _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
 _mount_flakey
 
-_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_btrfs quota enable $SCRATCH_MNT
 
 # Create 2 directories with one file in one of them.
 # We use these just to trigger a transaction commit later, moving the file from
@@ -51,8 +51,8 @@ $XFS_IO_PROG -f -s -c "pwrite -S 0xaa 0 8K" $SCRATCH_MNT/foobar | _filter_xfs_io
 # power failure happens before the dedicated kernel thread does the snapshot
 # deletion, the next time the filesystem is mounted it resumes the snapshot
 # deletion.
-_run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap
-_run_btrfs_util_prog subvolume delete $SCRATCH_MNT/snap
+_btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap
+_btrfs subvolume delete $SCRATCH_MNT/snap
 
 # Now overwrite half of the extents we wrote before. Because we made a snapshpot
 # before, which isn't really deleted yet (since no transaction commit happened

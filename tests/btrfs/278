@@ -30,7 +30,7 @@ mkdir $send_files_dir
 
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
-_run_btrfs_util_prog subvolume create $SCRATCH_MNT/vol
+_btrfs subvolume create $SCRATCH_MNT/vol
 
 # Creating the first snapshot looks like:
 #
@@ -52,7 +52,7 @@ mkdir $SCRATCH_MNT/vol/changed_subcase1.dir
 touch $SCRATCH_MNT/vol/changed_subcase1.dir/foo
 mkdir $SCRATCH_MNT/vol/changed_subcase2.dir
 touch $SCRATCH_MNT/vol/changed_subcase2.dir/foo
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap1
 
 # Delete the deleted.*, create a new file and a new directory, and then
 # take the second snapshot looks like:
@@ -71,7 +71,7 @@ unlink $SCRATCH_MNT/vol/deleted.file
 rmdir $SCRATCH_MNT/vol/deleted.dir
 touch $SCRATCH_MNT/vol/new.file
 mkdir $SCRATCH_MNT/vol/new.dir
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap2
 
 # Set the snapshot "snap1" to read-write mode and turn several inodes to
 # orphans, so that the snapshot will look like this:
@@ -138,7 +138,7 @@ rmdir $SCRATCH_MNT/snap2/new.dir
 $BTRFS_UTIL_PROG property set $SCRATCH_MNT/snap2 ro true
 
 # Test that a full send operation can handle orphans with no paths
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
 
 # Test that an incremental send operation can handle orphans.
 #
@@ -180,7 +180,7 @@ _run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
 # the receive operation will fail with a wrong unlink on a non-empty
 # directory.
 #
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+_btrfs send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
 		     $SCRATCH_MNT/snap2
 
 $FSSUM_PROG -A -f -w $send_files_dir/1.fssum $SCRATCH_MNT/snap1
@@ -205,10 +205,10 @@ _scratch_mount
 
 # Add the first snapshot to the new filesystem by applying the first send
 # stream.
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
 
 # Test the incremental send stream
-_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 $FSSUM_PROG -r $send_files_dir/1.fssum $SCRATCH_MNT/snap1
 $FSSUM_PROG -r $send_files_dir/2.fssum $SCRATCH_MNT/snap2

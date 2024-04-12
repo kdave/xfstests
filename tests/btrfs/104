@@ -75,7 +75,7 @@ _scratch_mount
 
 # populate the default subvolume and create a snapshot ('snap1')
 _explode_fs_tree 1 $SCRATCH_MNT/files
-_run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap1
+_btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap1
 
 # create new btree nodes in this snapshot. They will become shared
 # with the next snapshot we create.
@@ -86,12 +86,12 @@ _explode_fs_tree 1 $SCRATCH_MNT/snap1/files-snap1
 #
 # As a result of this action, snap2 will get an implied ref to the
 # 128K extent created in the default subvolume.
-_run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2
+_btrfs subvolume snapshot $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2
 _explode_fs_tree 1 $SCRATCH_MNT/snap2/files-snap2
 
 # Enable qgroups now that we have our filesystem prepared. This
 # will kick off a scan which we will have to wait for.
-_run_btrfs_util_prog quota enable $SCRATCH_MNT
+_btrfs quota enable $SCRATCH_MNT
 _qgroup_rescan $SCRATCH_MNT
 
 # Remount to clear cache, force everything to disk
@@ -107,10 +107,10 @@ _scratch_cycle_mount
 # the root finding code in qgroup accounting due to snap1 no longer
 # providing a path to it. This was fixed by the first two patches
 # referenced above.
-_run_btrfs_util_prog subvolume delete $SCRATCH_MNT/snap1
+_btrfs subvolume delete $SCRATCH_MNT/snap1
 
 # "btrfs filesystem sync" will trigger subvolume deletion
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
 # Qgroup will be checked by fstest at _check_scratch_fs()
 

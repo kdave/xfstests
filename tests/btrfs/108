@@ -46,13 +46,13 @@ $XFS_IO_PROG -c "pwrite -S 0xbb 50K 10K" \
 	-c "fpunch 70K 10k" \
 	$SCRATCH_MNT/foo | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
 
 echo "File digests in the original filesystem:"
 md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
 md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
 
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/snap
 
 # Now recreate the filesystem by receiving the send stream and verify we get
 # the same file contents that the original filesystem had.
@@ -60,7 +60,7 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
 
 # We expect the destination filesystem to have exactly the same file data as
 # the original filesystem.

@@ -68,7 +68,7 @@ $XFS_IO_PROG -c "pwrite -S 0xbb $((16 * $BLOCK_SIZE)) $((28 * $BLOCK_SIZE))" \
 $XFS_IO_PROG -c "pwrite -S 0xcc $((45 * $BLOCK_SIZE)) $((3 * $BLOCK_SIZE))" \
 	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io_blocks_modified
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
 # Now clone that same region of the 32 block extent into a new file, so that it
 # gets referenced twice and the incremental send operation below decides to
@@ -77,10 +77,10 @@ touch $SCRATCH_MNT/bar
 $CLONER_PROG -s $((44 * $BLOCK_SIZE)) -d $((44 * $BLOCK_SIZE)) -l $BLOCK_SIZE \
 	$SCRATCH_MNT/foo $SCRATCH_MNT/bar
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
 	$SCRATCH_MNT/mysnap2
 
 echo "File contents in the original filesystem:"
@@ -97,8 +97,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File contents in the new filesystem:"
 echo "mysnap1/foo"

@@ -68,7 +68,7 @@ echo "max_fs_sz=$max_fs_sz count=$count" >> $seqres.full
 echo "-----Initialize -----" >> $seqres.full
 _scratch_pool_mkfs "-mraid1 -draid1" >> $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
+_btrfs filesystem show
 dd if=/dev/zero of="$SCRATCH_MNT"/tf1 bs=$bs count=1 \
 					>>$seqres.full 2>&1
 echo "unmount" >> $seqres.full
@@ -88,7 +88,7 @@ echo "Write data with degraded mount"
 # the device used for mounting.
 
 _mount -o degraded $dev1 $SCRATCH_MNT >>$seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
+_btrfs filesystem show
 dd if=/dev/zero of="$SCRATCH_MNT"/tf2 bs=$bs count=$count \
 					>>$seqres.full 2>&1
 checkpoint1=`md5sum $SCRATCH_MNT/tf2`
@@ -100,9 +100,9 @@ echo >> $seqres.full
 echo "-----Mount normal-----" >> $seqres.full
 echo
 echo "Mount normal and balance"
-_run_btrfs_util_prog device scan
+_btrfs device scan
 _scratch_mount >> $seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
+_btrfs filesystem show
 echo >> $seqres.full
 _run_btrfs_balance_start ${SCRATCH_MNT} >>$seqres.full
 
@@ -117,7 +117,7 @@ _scratch_unmount
 # un-scan the btrfs devices
 _btrfs_forget_or_module_reload
 _mount -o degraded $dev2 $SCRATCH_MNT >>$seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
+_btrfs filesystem show
 checkpoint3=`md5sum $SCRATCH_MNT/tf2`
 echo $checkpoint3 >> $seqres.full 2>&1
 

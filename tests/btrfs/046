@@ -43,7 +43,7 @@ _scratch_mount
 
 $XFS_IO_PROG -f -c "falloc -k 0 268435456" $SCRATCH_MNT/foo
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap0
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap0
 
 $XFS_IO_PROG -c "pwrite -S 0x01 -b 9216 16190218 9216" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
@@ -248,12 +248,12 @@ $XFS_IO_PROG -c "pwrite -S 0xa9 -b 9216 18423680 9216" $SCRATCH_MNT/foo \
 $XFS_IO_PROG -c "pwrite -S 0xb0 -b 1121 165901483 1121" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
 
 $XFS_IO_PROG -c "pwrite -S 0xff -b 10 16190218 10" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
 echo "File digests in the original filesystem:"
 md5sum $SCRATCH_MNT/foo | _filter_scratch
@@ -261,8 +261,8 @@ md5sum $SCRATCH_MNT/mysnap0/foo | _filter_scratch
 md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
 md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
 
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
 	$SCRATCH_MNT/mysnap2
 
 _check_scratch_fs
@@ -270,8 +270,8 @@ _scratch_unmount
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File digests in the replica filesystem:"
 md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch

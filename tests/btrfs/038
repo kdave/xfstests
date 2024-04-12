@@ -37,7 +37,7 @@ $XFS_IO_PROG -f -c "truncate 118811" $SCRATCH_MNT/foo
 $XFS_IO_PROG -c "pwrite -S 0x0d -b 39987 92267 39987" \
 	$SCRATCH_MNT/foo | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT \
+_btrfs subvolume snapshot -r $SCRATCH_MNT \
 	$SCRATCH_MNT/mysnap1
 
 $XFS_IO_PROG -c "pwrite -S 0x3e -b 80000 200000 80000" \
@@ -45,7 +45,7 @@ $XFS_IO_PROG -c "pwrite -S 0x3e -b 80000 200000 80000" \
 
 # Sync to avoid btrfs merging file extent items, which would make the test
 # succeed when it should fail.
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
 $XFS_IO_PROG -c "pwrite -S 0xdc -b 10000 250000 10000" \
 	$SCRATCH_MNT/foo | _filter_xfs_io
@@ -53,10 +53,10 @@ $XFS_IO_PROG -c "pwrite -S 0xff -b 10000 300000 10000" \
 	$SCRATCH_MNT/foo | _filter_xfs_io
 
 # will be used for incremental send to be able to issue clone operations
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT \
+_btrfs subvolume snapshot -r $SCRATCH_MNT \
 	$SCRATCH_MNT/clones_snap
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT \
+_btrfs subvolume snapshot -r $SCRATCH_MNT \
 	$SCRATCH_MNT/mysnap2
 
 run_check $FSSUM_PROG -A -f -w $tmp/1.fssum $SCRATCH_MNT/mysnap1
@@ -65,9 +65,9 @@ run_check $FSSUM_PROG -A -f -w $tmp/2.fssum -x $SCRATCH_MNT/mysnap2/mysnap1 \
 run_check $FSSUM_PROG -A -f -w $tmp/clones.fssum $SCRATCH_MNT/clones_snap \
 	-x $SCRATCH_MNT/clones_snap/mysnap1 -x $SCRATCH_MNT/clones_snap/mysnap2
 
-_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -f $tmp/clones.snap $SCRATCH_MNT/clones_snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 \
+_btrfs send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -f $tmp/clones.snap $SCRATCH_MNT/clones_snap
+_btrfs send -p $SCRATCH_MNT/mysnap1 \
 	-c $SCRATCH_MNT/clones_snap -f $tmp/2.snap $SCRATCH_MNT/mysnap2
 
 _scratch_unmount
@@ -76,13 +76,13 @@ _check_btrfs_filesystem $SCRATCH_DEV
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/1.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $tmp/1.fssum $SCRATCH_MNT/mysnap1 2>> $seqres.full
 
-_run_btrfs_util_prog receive -f $tmp/clones.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/clones.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $tmp/clones.fssum $SCRATCH_MNT/clones_snap 2>> $seqres.full
 
-_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/2.snap $SCRATCH_MNT
 run_check $FSSUM_PROG -r $tmp/2.fssum $SCRATCH_MNT/mysnap2 2>> $seqres.full
 
 _scratch_unmount

@@ -4,6 +4,12 @@
 
 . common/module
 
+# The recommended way to execute simple "btrfs" command.
+_btrfs()
+{
+	run_check $BTRFS_UTIL_PROG $*
+}
+
 _btrfs_get_subvolid()
 {
 	local mnt=$1
@@ -68,11 +74,6 @@ _require_btrfs_dump_super()
 		fi
 		BTRFS_SHOW_SUPER_PROG="$BTRFS_UTIL_PROG inspect-internal dump-super"
 	fi
-}
-
-_run_btrfs_util_prog()
-{
-	run_check $BTRFS_UTIL_PROG $*
 }
 
 _require_btrfs_mkfs_feature()
@@ -855,14 +856,14 @@ _qgroup_rescan()
 	local dev=$(findmnt -n -o SOURCE $mnt)
 
 	_check_regular_qgroup $dev || return 1
-	_run_btrfs_util_prog quota rescan -w $mnt
+	_btrfs quota rescan -w $mnt
 }
 
 _require_qgroup_rescan()
 {
 	_scratch_mkfs >>$seqres.full 2>&1
 	_scratch_mount
-	_run_btrfs_util_prog quota enable $SCRATCH_MNT
+	_btrfs quota enable $SCRATCH_MNT
 	# Wait for the first rescan.
 	$BTRFS_UTIL_PROG quota rescan -W $SCRATCH_MNT || \
 				_notrun "not able to wait on a quota rescan"

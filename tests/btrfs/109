@@ -56,13 +56,13 @@ $XFS_IO_PROG -c "pwrite -S 0xbb 0K 40K"    \
 cp --reflink=always $SCRATCH_MNT/foo $SCRATCH_MNT/bar
 
 # Create our snapshot for the send operation.
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
 
 echo "File digests in the original filesystem:"
 md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
 md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
 
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/snap
 
 # Now recreate the filesystem by receiving the send stream and verify we get
 # the same file contents that the original filesystem had.
@@ -75,7 +75,7 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount "-o compress"
 
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
 
 echo "File digests in the new filesystem:"
 # Must match the digests we got in the original filesystem.

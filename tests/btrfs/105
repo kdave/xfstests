@@ -37,8 +37,8 @@ _scratch_mount
 mkdir -p $SCRATCH_MNT/foo
 $XFS_IO_PROG -f -c "pwrite -S 0xaa 0 64K" $SCRATCH_MNT/foo/bar | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/mysnap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap1
+_btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/mysnap2
 
 echo "File digest before being replaced:"
 md5sum $SCRATCH_MNT/mysnap1/foo/bar | _filter_scratch
@@ -59,11 +59,11 @@ rm -f $SCRATCH_MNT/mysnap2/foo/bar
 $XFS_IO_PROG -f -c "pwrite -S 0xbb 0 96K" \
 	$SCRATCH_MNT/mysnap2/foo/bar | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/mysnap2 \
+_btrfs subvolume snapshot -r $SCRATCH_MNT/mysnap2 \
 	$SCRATCH_MNT/mysnap2_ro
 
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -p $SCRATCH_MNT/mysnap1 -f $send_files_dir/2.snap \
 	$SCRATCH_MNT/mysnap2_ro
 
 echo "File digest in the original filesystem after being replaced:"
@@ -75,8 +75,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File digest in the new filesystem:"
 # Must match the digest from the new file.

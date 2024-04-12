@@ -26,7 +26,7 @@ _scratch_mount
 mkdir -p $SCRATCH_MNT/a/b/c
 $XFS_IO_PROG -f -c "pwrite -S 0xfd 0 128K" $SCRATCH_MNT/a/b/c/x | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
 
 # Create a bunch of small and empty files, this is just to make sure our
 # subvolume's btree gets more than 1 leaf, a condition necessary to trigger a
@@ -44,13 +44,13 @@ $XFS_IO_PROG -c "pwrite -S 0xab 32K 16K" $SCRATCH_MNT/a/b/c/y | _filter_xfs_io
 
 # Will be used as an extra source root for clone operations for the incremental
 # send operation below.
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/clones_snap
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/clones_snap
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
 
-_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/snap1
-_run_btrfs_util_prog send -f $tmp/clones.snap $SCRATCH_MNT/clones_snap
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 \
+_btrfs send -f $tmp/1.snap $SCRATCH_MNT/snap1
+_btrfs send -f $tmp/clones.snap $SCRATCH_MNT/clones_snap
+_btrfs send -p $SCRATCH_MNT/snap1 \
 	-c $SCRATCH_MNT/clones_snap -f $tmp/2.snap $SCRATCH_MNT/snap2
 
 echo "File digests in the original filesystem:"
@@ -62,9 +62,9 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -f $tmp/clones.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/1.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/clones.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/2.snap $SCRATCH_MNT
 
 echo "File digests in the new filesystem:"
 # Should match the digests we had in the original filesystem.

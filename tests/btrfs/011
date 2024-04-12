@@ -129,12 +129,12 @@ workout()
 	_require_fs_space $SCRATCH_MNT $((2 * 512 * 1024)) #2.5G
 
 	fill_scratch $fssize $with_cancel
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 
 	echo -e "Replace from $source_dev to $SPARE_DEV\\n" >> $seqres.full
 	btrfs_replace_test $source_dev $SPARE_DEV "" $with_cancel $quick
 
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 
 	# Skip -r test for configs without mirror OR replace cancel
 	if echo $mkfs_options | grep -E -qv "raid1|raid5|raid6|raid10" || \
@@ -173,7 +173,7 @@ btrfs_replace_test()
 
 	if [ "${with_cancel}Q" = "cancelQ" ]; then
 		# background the replace operation (no '-B' option given)
-		_run_btrfs_util_prog replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT
+		_btrfs replace start -f $replace_options $source_dev $target_dev $SCRATCH_MNT
 		sleep $wait_time
 		$BTRFS_UTIL_PROG replace cancel $SCRATCH_MNT 2>&1 >> $seqres.full
 
@@ -201,7 +201,7 @@ btrfs_replace_test()
 			# replace operation.
 			(sleep $wait_time; sync) > /dev/null 2>&1 &
 		fi
-		_run_btrfs_util_prog replace start -Bf $replace_options $source_dev $target_dev $SCRATCH_MNT
+		_btrfs replace start -Bf $replace_options $source_dev $target_dev $SCRATCH_MNT
 
 		$BTRFS_UTIL_PROG replace status $SCRATCH_MNT > $tmp.tmp 2>&1
 		cat $tmp.tmp >> $seqres.full
@@ -219,7 +219,7 @@ btrfs_replace_test()
 	# exit values != 0, including detected correctable and uncorrectable
 	# errors on the device.
 	sync; sync
-	_run_btrfs_util_prog scrub start -B $SCRATCH_MNT
+	_btrfs scrub start -B $SCRATCH_MNT
 
 	# Two tests are performed, the 1st is to btrfsck the filesystem,
 	# and the 2nd test is to mount the filesystem.

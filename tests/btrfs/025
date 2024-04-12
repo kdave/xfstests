@@ -31,25 +31,25 @@ _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
 run_check $XFS_IO_PROG -f -c "truncate 819200" $SCRATCH_MNT/foo
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
 run_check $XFS_IO_PROG -c "falloc -k 819200 667648" $SCRATCH_MNT/foo
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
 run_check $XFS_IO_PROG -c "pwrite 1482752 2978" $SCRATCH_MNT/foo
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT \
+_btrfs subvolume snapshot -r $SCRATCH_MNT \
     $SCRATCH_MNT/mysnap1
 
 run_check $XFS_IO_PROG -c "truncate 883305" $SCRATCH_MNT/foo
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT
+_btrfs filesystem sync $SCRATCH_MNT
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT \
+_btrfs subvolume snapshot -r $SCRATCH_MNT \
     $SCRATCH_MNT/mysnap2
 
-_run_btrfs_util_prog send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/mysnap1 -f $tmp/2.snap \
+_btrfs send -f $tmp/1.snap $SCRATCH_MNT/mysnap1
+_btrfs send -p $SCRATCH_MNT/mysnap1 -f $tmp/2.snap \
     $SCRATCH_MNT/mysnap2 2>&1
 
 md5sum $SCRATCH_MNT/foo | _filter_scratch
@@ -61,10 +61,10 @@ _check_btrfs_filesystem $SCRATCH_DEV
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -f $tmp/1.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/1.snap $SCRATCH_MNT
 md5sum $SCRATCH_MNT/mysnap1/foo | _filter_scratch
 
-_run_btrfs_util_prog receive -f $tmp/2.snap $SCRATCH_MNT
+_btrfs receive -f $tmp/2.snap $SCRATCH_MNT
 md5sum $SCRATCH_MNT/mysnap2/foo | _filter_scratch
 
 _scratch_unmount

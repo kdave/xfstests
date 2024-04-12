@@ -35,13 +35,13 @@ _scratch_mount
 $XFS_IO_PROG -f -c "pwrite -S 0xaa 0K 32K" $SCRATCH_MNT/foo | _filter_xfs_io
 
 # Create the first snapshot.
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
 
 # Modify our file and create the second snapshot, used later for an incremental
 # send operation.
 $XFS_IO_PROG -c "pwrite -S 0xbb 4K 4K" $SCRATCH_MNT/foo | _filter_xfs_io
 
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
 
 echo "File digests in the first filesystem:"
 md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch
@@ -49,8 +49,8 @@ md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch
 
 # Save send streams for the snapshots. For the first one we use a full send
 # operation and the for the second snapshot we use an incremental send.
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
+_btrfs send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
 	$SCRATCH_MNT/snap2
 
 # Create a new filesystem and receive the snapshots.
@@ -58,8 +58,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -vv -f $send_files_dir/1.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -vv -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -vv -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -vv -f $send_files_dir/2.snap $SCRATCH_MNT
 
 echo "File digests in the second filesystem:"
 # Must match the digests we got in the first filesystem.
@@ -81,8 +81,8 @@ sync
 # Now create send streams for the snapshots from this new filesystem. For the
 # first snapshot we do a full send while for the second snapshot we do an
 # incremental send.
-_run_btrfs_util_prog send -f $send_files_dir/1_2.snap $SCRATCH_MNT/snap1
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2_2.snap \
+_btrfs send -f $send_files_dir/1_2.snap $SCRATCH_MNT/snap1
+_btrfs send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2_2.snap \
 	$SCRATCH_MNT/snap2
 
 # Create a new filesystem and receive the send streams we just created from the
@@ -95,8 +95,8 @@ _scratch_unmount
 _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
-_run_btrfs_util_prog receive -vv -f $send_files_dir/1_2.snap $SCRATCH_MNT
-_run_btrfs_util_prog receive -vv -f $send_files_dir/2_2.snap $SCRATCH_MNT
+_btrfs receive -vv -f $send_files_dir/1_2.snap $SCRATCH_MNT
+_btrfs receive -vv -f $send_files_dir/2_2.snap $SCRATCH_MNT
 
 echo "File digests in the third filesystem:"
 # Must match the digests we got in the first and second filesystems.

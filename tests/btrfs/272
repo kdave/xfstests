@@ -31,15 +31,15 @@ _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
 # Create a file and 2000 hard links to the same inode
-_run_btrfs_util_prog subvolume create $SCRATCH_MNT/vol
+_btrfs subvolume create $SCRATCH_MNT/vol
 touch $SCRATCH_MNT/vol/foo
 for i in {1..2000}; do
 	link $SCRATCH_MNT/vol/foo $SCRATCH_MNT/vol/$i
 done
 
 # Create a snapshot for a full send operation
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap1
-_run_btrfs_util_prog send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
+_btrfs subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap1
+_btrfs send -f $send_files_dir/1.snap $SCRATCH_MNT/snap1
 
 # Remove 2000 hard links and re-create the last 1000 links
 for i in {1..2000}; do
@@ -50,8 +50,8 @@ for i in {1001..2000}; do
 done
 
 # Create another snapshot for an incremental send operation
-_run_btrfs_util_prog subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap2
-_run_btrfs_util_prog send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
+_btrfs subvolume snapshot -r $SCRATCH_MNT/vol $SCRATCH_MNT/snap2
+_btrfs send -p $SCRATCH_MNT/snap1 -f $send_files_dir/2.snap \
 		     $SCRATCH_MNT/snap2
 
 $FSSUM_PROG -A -f -w $send_files_dir/1.fssum $SCRATCH_MNT/snap1
@@ -66,7 +66,7 @@ _scratch_mount
 
 # Add the first snapshot to the new filesystem by applying the first send
 # stream.
-_run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/1.snap $SCRATCH_MNT
 
 # The incremental receive operation below used to fail with the following
 # error:
@@ -78,7 +78,7 @@ _run_btrfs_util_prog receive -f $send_files_dir/1.snap $SCRATCH_MNT
 # operation cannot handle the duplicated paths, which are stored in
 # different ways, well, so it decides to issue a link operation for the
 # existing path. This results in the receiver to fail with the above error.
-_run_btrfs_util_prog receive -f $send_files_dir/2.snap $SCRATCH_MNT
+_btrfs receive -f $send_files_dir/2.snap $SCRATCH_MNT
 
 $FSSUM_PROG -r $send_files_dir/1.fssum $SCRATCH_MNT/snap1
 $FSSUM_PROG -r $send_files_dir/2.fssum $SCRATCH_MNT/snap2

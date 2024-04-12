@@ -75,8 +75,8 @@ _scratch_pool_mkfs "-mraid5 -draid5" >> $seqres.full 2>&1
 _scratch_mount >> $seqres.full 2>&1
 dd if=/dev/zero of="$SCRATCH_MNT"/tf1 bs=$bs count=1 \
 					>>$seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
-_run_btrfs_util_prog filesystem df $SCRATCH_MNT
+_btrfs filesystem show
+_btrfs filesystem df $SCRATCH_MNT
 
 #-------------degraded-init-------------------
 echo >> $seqres.full
@@ -92,8 +92,8 @@ _btrfs_forget_or_module_reload
 _mount -o degraded,device=$dev2 $dev1 $SCRATCH_MNT >>$seqres.full 2>&1
 dd if=/dev/zero of="$SCRATCH_MNT"/tf2 bs=$bs count=$count \
 					>>$seqres.full 2>&1
-_run_btrfs_util_prog filesystem show
-_run_btrfs_util_prog filesystem df $SCRATCH_MNT
+_btrfs filesystem show
+_btrfs filesystem df $SCRATCH_MNT
 checkpoint1=`md5sum $SCRATCH_MNT/tf2`
 echo $checkpoint1 >> $seqres.full 2>&1
 
@@ -104,14 +104,14 @@ echo
 echo "Mount normal and balance"
 
 _scratch_unmount
-_run_btrfs_util_prog device scan
+_btrfs device scan
 _scratch_mount >> $seqres.full 2>&1
 
 echo >> $seqres.full
 _run_btrfs_balance_start $SCRATCH_MNT >> $seqres.full
 
-_run_btrfs_util_prog filesystem show
-_run_btrfs_util_prog filesystem df ${SCRATCH_MNT}
+_btrfs filesystem show
+_btrfs filesystem df ${SCRATCH_MNT}
 
 checkpoint2=`md5sum $SCRATCH_MNT/tf2`
 echo $checkpoint2 >> $seqres.full 2>&1
@@ -128,8 +128,8 @@ _btrfs_forget_or_module_reload
 
 _mount -o degraded,device=${dev2} $dev3 $SCRATCH_MNT >>$seqres.full 2>&1
 
-_run_btrfs_util_prog filesystem show
-_run_btrfs_util_prog filesystem df $SCRATCH_MNT
+_btrfs filesystem show
+_btrfs filesystem df $SCRATCH_MNT
 checkpoint3=`md5sum $SCRATCH_MNT/tf2`
 echo $checkpoint3 >> $seqres.full 2>&1
 

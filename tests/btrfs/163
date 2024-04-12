@@ -46,7 +46,7 @@ create_seed()
 		/dev/null
 	echo -- golden --
 	od -x $SCRATCH_MNT/foobar
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
 	$BTRFS_TUNE_PROG -S 1 $dev_seed
 	run_check _mount $dev_seed $SCRATCH_MNT
@@ -54,9 +54,9 @@ create_seed()
 
 add_sprout()
 {
-	_run_btrfs_util_prog device add -f $dev_sprout $SCRATCH_MNT >>\
+	_btrfs device add -f $dev_sprout $SCRATCH_MNT >>\
 		$seqres.full
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 	_mount -o remount,rw $dev_sprout $SCRATCH_MNT
 	$XFS_IO_PROG -f -c "pwrite -S 0xcd 0 4M" $SCRATCH_MNT/foobar2 >\
 		/dev/null
@@ -64,8 +64,8 @@ add_sprout()
 
 replace_sprout()
 {
-	_run_btrfs_util_prog replace start -fB $dev_sprout $dev_replace_tgt $SCRATCH_MNT
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs replace start -fB $dev_sprout $dev_replace_tgt $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
 	_btrfs_forget_or_module_reload
 	run_check _mount -o device=$dev_seed $dev_replace_tgt $SCRATCH_MNT
@@ -80,7 +80,7 @@ seed_is_mountable()
 {
 	_btrfs_forget_or_module_reload
 	run_check _mount $dev_seed $SCRATCH_MNT
-	_run_btrfs_util_prog filesystem show -m $SCRATCH_MNT
+	_btrfs filesystem show -m $SCRATCH_MNT
 	_scratch_unmount
 }
 

@@ -20,13 +20,13 @@ _scratch_mount
 
 LIMIT_SIZE=$((10 * 1024 * 1024))
 
-_run_btrfs_util_prog quota enable $SCRATCH_MNT
-_run_btrfs_util_prog qgroup create 1/1 $SCRATCH_MNT
-_run_btrfs_util_prog qgroup limit $LIMIT_SIZE 1/1 $SCRATCH_MNT
+_btrfs quota enable $SCRATCH_MNT
+_btrfs qgroup create 1/1 $SCRATCH_MNT
+_btrfs qgroup limit $LIMIT_SIZE 1/1 $SCRATCH_MNT
 
 for i in `seq 10 -1 1`; do
 	#add newly created subvolume qgroup to it's parent qgroup
-	_run_btrfs_util_prog subvolume create -i 1/1 \
+	_btrfs subvolume create -i 1/1 \
 		$SCRATCH_MNT/subv_$i
 done
 
@@ -37,7 +37,7 @@ for i in `seq 10 -1 1`; do
 done
 
 wait
-_run_btrfs_util_prog filesystem sync $SCRATCH_MNT \
+_btrfs filesystem sync $SCRATCH_MNT \
 	>>$seqres.full 2>&1
 
 total_written=0
