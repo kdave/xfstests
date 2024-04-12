@@ -29,10 +29,8 @@ mkdir $SCRATCH_MNT/subvol{1,2}/.snapshots
 touch $SCRATCH_MNT/subvol{1,2}/foo
 
 # Create base snapshots and send them
-$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol1 \
-	$SCRATCH_MNT/subvol1/.snapshots/1 | _filter_scratch
-$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol2 \
-	$SCRATCH_MNT/subvol2/.snapshots/1 | _filter_scratch
+_btrfs subvolume snapshot -r $SCRATCH_MNT/subvol1 $SCRATCH_MNT/subvol1/.snapshots/1
+_btrfs subvolume snapshot -r $SCRATCH_MNT/subvol2 $SCRATCH_MNT/subvol2/.snapshots/1
 for recv in recv1_1 recv1_2 recv2_1 recv2_2; do
 	$BTRFS_UTIL_PROG send $SCRATCH_MNT/subvol1/.snapshots/1 2> /dev/null | \
 		$BTRFS_UTIL_PROG receive $SCRATCH_MNT/${recv} | _filter_scratch
@@ -43,8 +41,8 @@ for i in `seq 1 10`; do
 	prev=$i
 	curr=$((i+1))
 
-	$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol1 \
-		$SCRATCH_MNT/subvol1/.snapshots/${curr} > /dev/null
+	_btrfs subvolume snapshot -r $SCRATCH_MNT/subvol1 \
+		$SCRATCH_MNT/subvol1/.snapshots/${curr}
 	($BTRFS_UTIL_PROG send -p $SCRATCH_MNT/subvol1/.snapshots/${prev} \
 		$SCRATCH_MNT/subvol1/.snapshots/${curr} 2> /dev/null | \
 		$BTRFS_UTIL_PROG receive $SCRATCH_MNT/recv1_1) > /dev/null &
@@ -52,8 +50,8 @@ for i in `seq 1 10`; do
 		$SCRATCH_MNT/subvol1/.snapshots/${curr} 2> /dev/null | \
 		$BTRFS_UTIL_PROG receive $SCRATCH_MNT/recv1_2) > /dev/null &
 
-	$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT/subvol2 \
-		$SCRATCH_MNT/subvol2/.snapshots/${curr} > /dev/null
+	_btrfs subvolume snapshot -r $SCRATCH_MNT/subvol2 \
+		$SCRATCH_MNT/subvol2/.snapshots/${curr}
 	($BTRFS_UTIL_PROG send -p $SCRATCH_MNT/subvol2/.snapshots/${prev} \
 		$SCRATCH_MNT/subvol2/.snapshots/${curr} 2> /dev/null | \
 		$BTRFS_UTIL_PROG receive $SCRATCH_MNT/recv2_1) > /dev/null &

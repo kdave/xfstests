@@ -42,8 +42,7 @@ _scratch_mount
 $XFS_IO_PROG -f -c "pwrite -S 0xab 0 500K" $SCRATCH_MNT/foobar | _filter_xfs_io
 $XFS_IO_PROG -c "falloc -k 1200K 800K" $SCRATCH_MNT/foobar
 
-$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base 2>&1 \
-	| _filter_scratch
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base
 
 $BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
 	| _filter_scratch
@@ -51,8 +50,7 @@ $BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
 # Now punch a hole that drops all the extents within the file's size.
 $XFS_IO_PROG -c "fpunch 0 500K" $SCRATCH_MNT/foobar
 
-$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr 2>&1 \
-	| _filter_scratch
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr
 
 $BTRFS_UTIL_PROG send -p $SCRATCH_MNT/base -f $send_files_dir/2.snap \
 	$SCRATCH_MNT/incr 2>&1 | _filter_scratch
