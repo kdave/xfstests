@@ -1,0 +1,121 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test No. 747
+#
+# Inspired by btrfs/273 and generic/015
+#
+# This test stresses garbage collection in file systems
+# by first filling up a scratch mount to a specific usage point with
+# files of random size, then doing overwrites in parallel with
+# deletes to fragment the backing zones, forcing reclaim.
+
+. ./common/preamble
+_begin_fstest auto
+
+# real QA test starts here
+_supported_fs generic
+_require_scratch
+
+# This test requires specific data space usage, skip if we have compression
+# enabled.
+_require_no_compress
+
+M=$((1024 * 1024))
+min_fsz=$((1 * ${M}))
+max_fsz=$((256 * ${M}))
+bs=${M}
+fill_percent=95
+overwrite_percentage=20
+testseq=0
+
+_create_file() {
+	local file_name=${SCRATCH_MNT}/data_$1
+	local file_sz=$2
+	local dd_extra=$3
+
+	POSIXLY_CORRECT=yes dd if=/dev/zero of=${file_name} \
+		bs=${bs} count=$(( $file_sz / ${bs} )) \
+		status=none $dd_extra  2>&1
+
+	if [ $? -ne 0 ]; then
+		_fail "Failed writing $file_name"
+	fi
+}
+
+_total_M() {
+	local total=$(stat -f -c '%b' ${SCRATCH_MNT})
+	local bs=$(stat -f -c '%S' ${SCRATCH_MNT})
+	echo $(( ${total} * ${bs} / ${M}))
+}
+
+_used_percent() {
+	local available=$(stat -f -c '%a' ${SCRATCH_MNT})
+	local total=$(stat -f -c '%b' ${SCRATCH_MNT})
+	echo $((100 - (100 * ${available}) / ${total} ))
+}
+
+_delete_random_file() {
+	local to_delete=$(find ${SCRATCH_MNT} -type f | shuf | head -1)
+	rm $to_delete
+	sync ${SCRATCH_MNT}
+}
+
+_get_random_fsz() {
+	local r=$RANDOM
+	echo $(( ${min_fsz} + (${max_fsz} - ${min_fsz}) * (${r} % 100) / 100 ))
+}
+
+_direct_fillup () {
+	while [ $(_used_percent) -lt $fill_percent ]; do
+		local fsz=$(_get_random_fsz)
+
+		_create_file $testseq $fsz "oflag=direct conv=fsync"
+		testseq=$((${testseq} + 1))
+	done
+}
+
+_mixed_write_delete() {
+	local dd_extra=$1
+	local total_M=$(_total_M)
+	local to_write_M=$(( ${overwrite_percentage} * ${total_M} / 100 ))
+	local written_M=0
+
+	while [ $written_M -lt $to_write_M ]; do
+		if [ $(_used_percent) -lt $fill_percent ]; then
+			local fsz=$(_get_random_fsz)
+
+			_create_file $testseq $fsz "$dd_extra"
+			written_M=$((${written_M} + ${fsz}/${M}))
+			testseq=$((${testseq} + 1))
+		else
+			_delete_random_file
+		fi
+	done
+}
+
+seed=$RANDOM
+RANDOM=$seed
+echo "Running test with seed=$seed" >>$seqres.full
+
+_scratch_mkfs_sized $((8 * 1024 * 1024 * 1024)) >>$seqres.full
+_scratch_mount
+
+echo "Starting fillup using direct IO"
+_direct_fillup
+
+echo "Starting mixed write/delete test using direct IO"
+_mixed_write_delete "oflag=direct"
+
+echo "Starting mixed write/delete test using buffered IO"
+_mixed_write_delete ""
+
+echo "Syncing"
+sync ${SCRATCH_MNT}/*
+
+echo "Done, all good"
+
+# success, all done
+status=0
+exit
