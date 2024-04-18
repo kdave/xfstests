@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2019 Red Hat, Inc. All Rights Reserved.
 #
-# FS QA Test No. 513
+# FS QA Test No. 613
 #
-# XFS mount options sanity check, refer to 'man 5 xfs'.
+# XFS v4 mount options sanity check, refer to 'man 5 xfs'.
 #
 . ./common/preamble
 _begin_fstest auto mount prealloc
@@ -175,70 +175,14 @@ do_test()
 }
 
 echo "** start xfs mount testing ..."
-# Test allocsize=size
-# Valid values for this option are page size (typically 4KiB) through to 1GiB
-do_mkfs
-pagesz=$(_get_page_size)
-if [ $pagesz -ge 1024 ];then
-	pagesz="$((pagesz / 1024))k"
-fi
-do_test "" pass "allocsize" "false"
-do_test "-o allocsize=$pagesz" pass "allocsize=$pagesz" "true"
-do_test "-o allocsize=1048576k" pass "allocsize=1048576k" "true"
-do_test "-o allocsize=$((dbsize / 2))" fail
-do_test "-o allocsize=2g" fail
-
 # Test attr2
-do_mkfs -m crc=1
+do_mkfs -m crc=0
 do_test "" pass "attr2" "true"
 do_test "-o attr2" pass "attr2" "true"
-do_test "-o noattr2" fail
-
-# Test discard
-do_mkfs
-do_test "" pass "discard" "false"
-do_test "-o discard" pass "discard" "true"
-do_test "-o nodiscard" pass "discard" "false"
-
-# Test grpid|bsdgroups|nogrpid|sysvgroups
-do_test "" pass "grpid" "false"
-do_test "-o grpid" pass "grpid" "true"
-do_test "-o bsdgroups" pass "grpid" "true"
-do_test "-o nogrpid" pass "grpid" "false"
-do_test "-o sysvgroups" pass "grpid" "false"
-
-# Test filestreams
-do_test "" pass "filestreams" "false"
-do_test "-o filestreams" pass "filestreams" "true"
-
-# Test ikeep
-do_test "" pass "ikeep" "false"
-do_test "-o ikeep" pass "ikeep" "true"
-do_test "-o noikeep" pass "ikeep" "false"
-
-# Test inode32|inode64
-do_test "" pass "inode64" "true"
-do_test "-o inode32" pass "inode32" "true"
-do_test "-o inode64" pass "inode64" "true"
-
-# Test largeio
-do_test "" pass "largeio" "false"
-do_test "-o largeio" pass "largeio" "true"
-do_test "-o nolargeio" pass "largeio" "false"
-
-# Test logbufs=value. Valid numbers range from 2–8 inclusive.
-# New kernel (refer to 4f62282a3696 xfs: cleanup xlog_get_iclog_buffer_size)
-# prints "logbufs=N" in /proc/mounts, but old kernel not. So the default
-# 'display' about logbufs can't be expected, disable this test.
-#do_test "" pass "logbufs" "false"
-do_test "-o logbufs=8" pass "logbufs=8" "true"
-do_test "-o logbufs=2" pass "logbufs=2" "true"
-do_test "-o logbufs=1" fail
-do_test "-o logbufs=9" fail
-do_test "-o logbufs=99999999999999" fail
+do_test "-o noattr2" pass "attr2" "false"
 
 # Test logbsize=value.
-do_mkfs -m crc=1 -l version=2
+do_mkfs -m crc=0 -l version=1
 # New kernel (refer to 4f62282a3696 xfs: cleanup xlog_get_iclog_buffer_size)
 # prints "logbsize=N" in /proc/mounts, but old kernel not. So the default
 # 'display' about logbsize can't be expected, disable this test.
@@ -246,74 +190,7 @@ do_mkfs -m crc=1 -l version=2
 do_test "-o logbsize=16384" pass "logbsize=16k" "true"
 do_test "-o logbsize=16k" pass "logbsize=16k" "true"
 do_test "-o logbsize=32k" pass "logbsize=32k" "true"
-do_test "-o logbsize=64k" pass "logbsize=64k" "true"
-do_test "-o logbsize=128k" pass "logbsize=128k" "true"
-do_test "-o logbsize=256k" pass "logbsize=256k" "true"
-do_test "-o logbsize=8k" fail
-do_test "-o logbsize=512k" fail
-
-# Test logdev
-do_mkfs
-do_test "" pass "logdev" "false"
-do_test "-o logdev=$LOOP_SPARE_DEV" fail
-do_mkfs -l logdev=$LOOP_SPARE_DEV
-do_test "-o logdev=$LOOP_SPARE_DEV" pass "logdev=$LOOP_SPARE_DEV" "true"
-do_test "" fail
-
-# Test noalign
-do_mkfs
-do_test "" pass "noalign" "false"
-do_test "-o noalign" pass "noalign" "true"
-
-# Test norecovery
-do_test "" pass "norecovery" "false"
-do_test "-o norecovery,ro" pass "norecovery" "true"
-do_test "-o norecovery" fail
-
-# Test nouuid
-do_test "" pass "nouuid" "false"
-do_test "-o nouuid" pass "nouuid" "true"
-
-# Test noquota
-do_test "" pass "noquota" "true"
-do_test "-o noquota" pass "noquota" "true"
-
-# Test uquota/usrquota/quota/uqnoenforce/qnoenforce
-do_test "" pass "usrquota" "false"
-do_test "-o uquota" pass "usrquota" "true"
-do_test "-o usrquota" pass "usrquota" "true"
-do_test "-o quota" pass "usrquota" "true"
-do_test "-o uqnoenforce" pass "uqnoenforce" "true"
-do_test "-o qnoenforce" pass "uqnoenforce" "true"
-
-# Test gquota/grpquota/gqnoenforce
-do_test "" pass "grpquota" "false"
-do_test "-o gquota" pass "grpquota" "true"
-do_test "-o grpquota" pass "grpquota" "true"
-do_test "-o gqnoenforce" pass "gqnoenforce" "true"
-
-# Test pquota/prjquota/pqnoenforce
-do_test "" pass "prjquota" "false"
-do_test "-o pquota" pass "prjquota" "true"
-do_test "-o prjquota" pass "prjquota" "true"
-do_test "-o pqnoenforce" pass "pqnoenforce" "true"
-
-# Test sunit=value and swidth=value
-do_mkfs -d sunit=128,swidth=128
-do_test "-o sunit=8,swidth=8" pass "sunit=8,swidth=8" "true"
-do_test "-o sunit=8,swidth=64" pass "sunit=8,swidth=64" "true"
-do_test "-o sunit=128,swidth=128" pass "sunit=128,swidth=128" "true"
-do_test "-o sunit=256,swidth=256" pass "sunit=256,swidth=256" "true"
-do_test "-o sunit=2,swidth=2" fail
-
-# Test swalloc
-do_mkfs
-do_test "" pass "swalloc" "false"
-do_test "-o swalloc" pass "swalloc" "true"
-
-# Test wsync
-do_test "" pass "wsync" "false"
-do_test "-o wsync" pass "wsync" "true"
+do_test "-o logbsize=64k" fail
 
 echo "** end of testing"
 # success, all done
