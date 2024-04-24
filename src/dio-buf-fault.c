@@ -79,5 +79,5 @@ int main(int argc, char *argv[]) {
 	c = ((char *)buf)[0];
 	printf("%u\n", c);
 
-	do_dio(argv[2], buf, sz);
+	return do_dio(argv[2], buf, sz);
 }

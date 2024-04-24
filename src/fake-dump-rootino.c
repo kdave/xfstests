@@ -221,4 +221,5 @@ int main(int argc, char *argv[]) {
 
 	munmap(header, GLOBAL_HDR_SZ);
 	close(fd);
+	return 0;
 }
