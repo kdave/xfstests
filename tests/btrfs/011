@@ -255,6 +255,12 @@ for t in "-m single -d single:1 no 64" \
 	workout_option=${t#*:}
 	if [[ "${_btrfs_profile_configs[@]}" =~ "${mkfs_option/ -M}"( |$) ]]; then
 		workout "$mkfs_option" $workout_option
+	else
+		# If we have limited the profile configs we could leave
+		# $SCRATCH_DEV in an inconsistent state (because it was
+		# replaced), so mkfs the scratch device to make sure we don't
+		# trip the fs check at the end.
+		_scratch_mkfs > /dev/null 2>&1
 	fi
 done
 
