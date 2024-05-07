@@ -47,9 +47,17 @@ _require_fio $fio_config
 get_qgroup_usage()
 {
 	local qgroupid=$1
+	local output
 
-	$BTRFS_UTIL_PROG qgroup show --sync --raw $SCRATCH_MNT | \
-				grep "$qgroupid" | $AWK_PROG '{print $3}'
+	output=$($BTRFS_UTIL_PROG qgroup show --sync --raw $SCRATCH_MNT | \
+		 grep "$qgroupid" | $AWK_PROG '{print $3}')
+	# The qgroup is auto-removed, this can only happen if its numbers are
+	# already all zeros, so here we only need to explicitly echo "0".
+	if [ -z "$output" ]; then
+		echo "0"
+	else
+		echo "$output"
+	fi
 }
 
 get_subvol_usage()
