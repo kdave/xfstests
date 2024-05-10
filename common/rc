@@ -2983,8 +2983,14 @@ _require_sparse_files()
 
 _require_debugfs()
 {
-    #boot_params always present in debugfs
-    [ -d "$DEBUGFS_MNT/boot_params" ] || _notrun "Debugfs not mounted"
+	local type
+
+	if [ -d "$DEBUGFS_MNT" ];then
+		type=$(findmnt -rncv -T $DEBUGFS_MNT -S debugfs -o FSTYPE)
+		[ "$type" = "debugfs" ] && return 0
+	fi
+
+	_notrun "Cannot find debugfs on $DEBUGFS_MNT"
 }
 
 #
