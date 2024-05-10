@@ -4,11 +4,16 @@
 #
 # Routines for dealing with ftrace (or any other tracing).
 
-FTRACE_INSTANCES_DIR="/sys/kernel/debug/tracing/instances/"
-
 _require_ftrace() {
-	test -d "$FTRACE_INSTANCES_DIR" || \
-		_notrun "kernel does not support ftrace"
+	if [ -d /sys/kernel/tracing/instances/ ];then
+		FTRACE_ROOT="/sys/kernel/tracing"
+		FTRACE_INSTANCES_DIR="/sys/kernel/tracing/instances"
+	elif [ -d /sys/kernel/debug/tracing/instances/ ];then
+		FTRACE_ROOT="/sys/kernel/debug/tracing"
+		FTRACE_INSTANCES_DIR="/sys/kernel/debug/tracing/instances"
+	else
+		_notrun "The ftrace is not supported, or tracefs is not mounted"
+	fi
 }
 
 _ftrace_cleanup() {
