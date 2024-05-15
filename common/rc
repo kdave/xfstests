@@ -1005,10 +1005,27 @@ _available_memory_bytes()
 	fi
 }
 
+_guess_minimal_fs_size()
+{
+	[ -n "$MIN_FSSIZE" ] && return
+
+	case "$FSTYP" in
+	btrfs)
+		if _scratch_btrfs_is_zoned; then
+			sdev="$(_short_dev $SCRATCH_DEV)"
+			zone_size=$(($(cat /sys/block/${sdev}/queue/chunk_sectors) << 9))
+			# Assumes -d single -m dup for now
+			MIN_FSSIZE=$(( 12 * zone_size ))
+		fi
+		;;
+	esac
+}
+
 _check_minimal_fs_size()
 {
 	local fssize=$1
 
+	_guess_minimal_fs_size
 	if [ -n "$MIN_FSSIZE" ]; then
 		[ $MIN_FSSIZE -gt "$fssize" ] &&
 			_notrun "specified filesystem size is too small"
@@ -1037,6 +1054,7 @@ _small_fs_size_mb()
 	esac
 	(( size < fs_min_size )) && size="$fs_min_size"
 
+	_guess_minimal_fs_size
 	# If the test runner wanted a minimum size, enforce that here.
 	test -n "$MIN_FSSIZE" && runner_min_size=$((MIN_FSSIZE / 1048576))
 	(( size < runner_min_size)) && size="$runner_min_size"
