@@ -74,6 +74,13 @@ devpath=$(get_device_path ${devid})
 
 _scratch_unmount
 
+# Grab the contents of the the area so we can compare to the final part
+orig=$(mktemp)
+$XFS_IO_PROG -d -c "pread -v -b 512 $physical 512" $devpath |\
+	 _filter_xfs_io_offset > $orig
+origcsum=$(_md5_checksum $orig)
+rm -f $orig
+
 echo " corrupt stripe #1, devid $devid devpath $devpath physical $physical" \
 	>> $seqres.full
 $XFS_IO_PROG -d -c "pwrite -S 0xbb -b 64K $physical 64K" $devpath > /dev/null
@@ -88,10 +95,16 @@ _btrfs_direct_read_on_mirror 1 2 "$SCRATCH_MNT/foobar" 0 128K
 _scratch_unmount
 
 # check if the repair works
+final=$(mktemp)
 $XFS_IO_PROG -d -c "pread -v -b 512 $physical 512" $devpath |\
-	_filter_xfs_io_offset
+	_filter_xfs_io_offset > $final
+finalcsum=$(_md5_checksum $final)
+rm -f $final
 
 _scratch_dev_pool_put
+
+[ "$origcsum" == "$finalcsum" ] || _fail "repair failed, csums don't match"
+
 # success, all done
 status=0
 exit
