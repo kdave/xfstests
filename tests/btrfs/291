@@ -15,12 +15,16 @@
 . ./common/preamble
 _begin_fstest auto verity recoveryloop
 
+LVM_PROG() {
+	$LVM_PROG "$@" 2>&1 | grep -v "File descriptor.*leaked"
+}
+
 # Override the default cleanup function.
 _cleanup()
 {
 	cd /
 	_log_writes_cleanup &> /dev/null
-	$LVM_PROG vgremove -f -y $vgname >>$seqres.full 2>&1
+	LVM_PROG vgremove -f -y $vgname >>$seqres.full 2>&1
 	_udev_wait --removed /dev/mapper/$vgname-$lvname
 	losetup -d $loop_dev >>$seqres.full 2>&1
 	rm -f $img
@@ -104,8 +108,8 @@ replay_dev=/dev/mapper/vg_replay-lv_replay
 snapname=lv_snap
 snap_dev=/dev/mapper/vg_replay-$snapname
 
-$LVM_PROG vgcreate -f $vgname $loop_dev >>$seqres.full 2>&1 || _fail "failed to vgcreate $vgname"
-$LVM_PROG lvcreate -L "$replay_bytes"B -n $lvname $vgname -y >>$seqres.full 2>&1 || \
+LVM_PROG vgcreate -f $vgname $loop_dev >>$seqres.full 2>&1 || _fail "failed to vgcreate $vgname"
+LVM_PROG lvcreate -L "$replay_bytes"B -n $lvname $vgname -y >>$seqres.full 2>&1 || \
 	_fail "failed to lvcreate $lvname"
 _udev_wait /dev/mapper/$vgname-$lvname
 
@@ -124,7 +128,7 @@ while [ ! -z "$cur" ];
 do
 	_log_writes_replay_log_range $cur $replay_dev >> $seqres.full
 
-	$LVM_PROG lvcreate -s -L 4M -n $snapname $vgname/$lvname >>$seqres.full 2>&1 || \
+	LVM_PROG lvcreate -s -L 4M -n $snapname $vgname/$lvname >>$seqres.full 2>&1 || \
 		_fail "Failed to create snapshot"
 	_udev_wait /dev/mapper/$vgname-$snapname
 
@@ -153,7 +157,7 @@ do
 			_fail "mount cleared merkle items after verity was enabled $pre_mount vs $post_mount at entry $cur";
 	fi
 
-	$LVM_PROG lvremove $vgname/$snapname -y >>$seqres.full
+	LVM_PROG lvremove $vgname/$snapname -y >>$seqres.full
 
 	prev=$cur
 	cur=$(_log_writes_find_next_fua $(($cur + 1)))
