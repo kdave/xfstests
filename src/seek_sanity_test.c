@@ -541,7 +541,7 @@ static int test16(int fd, int testnum)
 {
 	int ret = 0;
 	char *buf = NULL;
-	int bufsz = sysconf(_SC_PAGE_SIZE);
+	int bufsz = roundup(sysconf(_SC_PAGE_SIZE), alloc_size);
 	int filsz = 4 << 20;
 
 	if (!unwritten_extents) {
@@ -591,7 +591,7 @@ static int test15(int fd, int testnum)
 {
 	int ret = 0;
 	char *buf = NULL;
-	int bufsz = sysconf(_SC_PAGE_SIZE);
+	int bufsz = roundup(sysconf(_SC_PAGE_SIZE), alloc_size);
 	int filsz = 4 << 20;
 
 	if (!unwritten_extents) {
@@ -643,7 +643,7 @@ static int test14(int fd, int testnum)
 {
 	int ret = 0;
 	char *buf = NULL;
-	int bufsz = sysconf(_SC_PAGE_SIZE) * 14;
+	int bufsz = roundup(sysconf(_SC_PAGE_SIZE) * 14, alloc_size);
 	int filsz = 4 << 20;
 
 	if (!unwritten_extents) {
@@ -692,7 +692,7 @@ static int test13(int fd, int testnum)
 {
 	int ret = 0;
 	char *buf = NULL;
-	int bufsz = sysconf(_SC_PAGE_SIZE) * 14;
+	int bufsz = roundup(sysconf(_SC_PAGE_SIZE) * 14, alloc_size);
 	int filsz = 4 << 20;
 
 	if (!unwritten_extents) {
