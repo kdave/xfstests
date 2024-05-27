@@ -38,15 +38,23 @@ _qmount_option "usrquota"
 _scratch_xfs_db -c 'version' -c 'sb 0' -c 'p' >> $seqres.full
 _scratch_mount >> $seqres.full
 
+
+blksz=$(_get_file_block_size "$SCRATCH_MNT")
+# Write more than one block to exceed the soft block quota limit via
+# xfs_quota.
+filesz=$(( 2 * $blksz))
+lim_bsoft=$blksz
+lim_bhard=$(( 100 * blksz ))
+
 # Force the block counters for uid 1 and 2 above zero
-_pwrite_byte 0x61 0 64k $SCRATCH_MNT/a >> $seqres.full
-_pwrite_byte 0x61 0 64k $SCRATCH_MNT/b >> $seqres.full
+_pwrite_byte 0x61 0 $filesz $SCRATCH_MNT/a >> $seqres.full
+_pwrite_byte 0x61 0 $filesz $SCRATCH_MNT/b >> $seqres.full
 sync
 chown 1 $SCRATCH_MNT/a
 chown 2 $SCRATCH_MNT/b
 
 # Set quota limits on uid 1 before upgrading
-$XFS_QUOTA_PROG -x -c 'limit -u bsoft=12k bhard=1m 1' $SCRATCH_MNT
+$XFS_QUOTA_PROG -x -c 'limit -u bsoft='"$lim_bsoft"' bhard='"$lim_bhard"' 1' $SCRATCH_MNT
 
 # Make sure the grace period is at /some/ point in the future.  We have to
 # use bc because not all bashes can handle integer comparisons with 64-bit
@@ -71,7 +79,7 @@ _scratch_mount
 
 # Set a very generous grace period and quota limits on uid 2 after upgrading
 $XFS_QUOTA_PROG -x -c 'timer -u -b -d 2147483647' $SCRATCH_MNT
-$XFS_QUOTA_PROG -x -c 'limit -u bsoft=10000 bhard=150000 2' $SCRATCH_MNT
+$XFS_QUOTA_PROG -x -c 'limit -u bsoft='"$lim_bsoft"' bhard='"$lim_bhard"' 2' $SCRATCH_MNT
 
 # Query the grace periods to see if they got set properly after the upgrade.
 repquota -upn $SCRATCH_MNT > $tmp.repquota
