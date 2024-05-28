@@ -1,0 +1,45 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# FS QA Test 748
+#
+# Repeatedly prealloc beyond i_size, set an xattr, direct write into the
+# prealloc while extending i_size, then fdatasync. This is a regression test
+# for a Btrfs crash.
+#
+. ./common/preamble
+. ./common/attr
+_begin_fstest auto quick log preallocrw dangerous
+
+_supported_fs generic
+_require_scratch
+_require_attrs
+_require_odirect
+_require_xfs_io_command falloc -k
+[ "$FSTYP" = btrfs ] && _fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix crash on racing fsync and size-extending write into prealloc"
+
+# -i slows down xfs_io startup and makes the race much less reliable.
+XFS_IO_PROG="$(echo "$XFS_IO_PROG" | sed 's/ -i\b//')"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+blksz=$(_get_file_block_size "$SCRATCH_MNT")
+
+# On Btrfs, since this is the only file on the filesystem, its metadata is at
+# the end of a B-tree leaf. We want an ordered extent completion to add an
+# extent item at the end of the leaf while we're logging prealloc extents
+# beyond i_size after an xattr was set.
+for ((i = 0; i < 5000; i++)); do
+	$XFS_IO_PROG -ftd -c "falloc -k 0 $((blksz * 3))" -c "pwrite -q -w 0 $blksz" "$SCRATCH_MNT/file"
+	$SETFATTR_PROG -n user.a -v a "$SCRATCH_MNT/file"
+	$XFS_IO_PROG -d -c "pwrite -q -w $blksz $blksz" "$SCRATCH_MNT/file"
+done
+
+# If it didn't crash, we're good.
+
+echo "Silence is golden"
+status=0
+exit
