@@ -29,9 +29,13 @@ echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 echo "${MOUNT_OPTIONS}" | grep -q 'grpquota' || _notrun "group quota disabled"
 
-echo "Fuzz group 0 dquot"
-_scratch_xfs_fuzz_metadata '' 'both'  "dquot -g 0" >> $seqres.full
-echo "Done fuzzing dquot"
+_scratch_xfs_set_quota_fuzz_ids
+
+for id in "${SCRATCH_XFS_QUOTA_FUZZ_IDS[@]}"; do
+	echo "Fuzz group $id dquot"
+	_scratch_xfs_fuzz_metadata '' 'both'  "dquot -g $id" >> $seqres.full
+	echo "Done fuzzing dquot"
+done
 
 # success, all done
 status=0

@@ -360,6 +360,20 @@ _scratch_xfs_populate() {
 	mknod "${SCRATCH_MNT}/S_IFBLK" b 1 1
 	mknod "${SCRATCH_MNT}/S_IFIFO" p
 
+	# non-root dquot
+	local nonroot_id=4242
+	echo "${nonroot_id}" > "${SCRATCH_MNT}/non_root_dquot"
+	chown "${nonroot_id}:${nonroot_id}" "${SCRATCH_MNT}/non_root_dquot"
+	$XFS_IO_PROG -c "chproj ${nonroot_id}" "${SCRATCH_MNT}/non_root_dquot"
+
+	# empty dquot
+	local empty_id=8484
+	echo "${empty_id}" > "${SCRATCH_MNT}/empty_dquot"
+	chown "${empty_id}:${empty_id}" "${SCRATCH_MNT}/empty_dquot"
+	$XFS_IO_PROG -c "chproj ${empty_id}" "${SCRATCH_MNT}/empty_dquot"
+	chown "0:0" "${SCRATCH_MNT}/empty_dquot"
+	$XFS_IO_PROG -c "chproj 0" "${SCRATCH_MNT}/empty_dquot"
+
 	# special file with an xattr
 	setfacl -P -m u:nobody:r ${SCRATCH_MNT}/S_IFCHR
 

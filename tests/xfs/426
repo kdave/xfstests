@@ -27,9 +27,13 @@ echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 echo "${MOUNT_OPTIONS}" | grep -q 'usrquota' || _notrun "user quota disabled"
 
-echo "Fuzz user 0 dquot"
-_scratch_xfs_fuzz_metadata '' 'online'  "dquot -u 0" >> $seqres.full
-echo "Done fuzzing dquot"
+_scratch_xfs_set_quota_fuzz_ids
+
+for id in "${SCRATCH_XFS_QUOTA_FUZZ_IDS[@]}"; do
+	echo "Fuzz user $id dquot"
+	_scratch_xfs_fuzz_metadata '' 'online'  "dquot -u $id" >> $seqres.full
+	echo "Done fuzzing dquot"
+done
 
 # success, all done
 status=0
