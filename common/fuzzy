@@ -6,16 +6,19 @@
 
 # Modify various files after a fuzzing operation
 _scratch_fuzz_modify() {
+	local fsstress_args=(-n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) )
+	test -n "${FUZZ_REWRITE_DURATION}" && fsstress_args+=("--duration=${FUZZ_REWRITE_DURATION}")
+
 	echo "+++ stressing filesystem"
 	mkdir -p $SCRATCH_MNT/data
 	[ "$FSTYP" == "xfs" ] && _xfs_force_bdev data $SCRATCH_MNT/data
-	$FSSTRESS_PROG -n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) -d $SCRATCH_MNT/data
+	$FSSTRESS_PROG "${fsstress_args[@]}" -d $SCRATCH_MNT/data
 
 	if [ "$FSTYP" = "xfs" ]; then
 		if _xfs_has_feature "$SCRATCH_MNT" realtime; then
 			mkdir -p $SCRATCH_MNT/rt
 			_xfs_force_bdev realtime $SCRATCH_MNT/rt
-			$FSSTRESS_PROG -n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) -d $SCRATCH_MNT/rt
+			$FSSTRESS_PROG "${fsstress_args[@]}" -d $SCRATCH_MNT/rt
 		else
 			echo "+++ xfs realtime not configured"
 		fi

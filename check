@@ -376,6 +376,18 @@ if [ -n "$SOAK_DURATION" ]; then
 	fi
 fi
 
+# If the test config specified a fuzz rewrite test duration, see if there are
+# any unit suffixes that need converting to an integer seconds count.
+if [ -n "$FUZZ_REWRITE_DURATION" ]; then
+	FUZZ_REWRITE_DURATION="$(echo "$FUZZ_REWRITE_DURATION" | \
+		sed -e 's/^\([.0-9]*\)\([a-z]\)*/\1 \2/g' | \
+		$AWK_PROG -f $here/src/soak_duration.awk)"
+	if [ $? -ne 0 ]; then
+		status=1
+		exit 1
+	fi
+fi
+
 if [ -n "$subdir_xfile" ]; then
 	for d in $SRC_GROUPS $FSTYP; do
 		[ -f $SRC_DIR/$d/$subdir_xfile ] || continue
