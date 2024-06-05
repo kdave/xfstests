@@ -13,7 +13,7 @@
 # the backref walking code, used by fiemap to determine if an extent is shared.
 #
 . ./common/preamble
-_begin_fstest auto quick compress snapshot fiemap
+_begin_fstest auto quick compress snapshot fiemap defrag
 
 . ./common/filter
 . ./common/punch # for _filter_fiemap_flags
@@ -35,6 +35,14 @@ _scratch_mount -o compress
 # of 2 (root at level 1), so we'll end up with tree block references in the
 # extent tree (if the root was a leaf, we would have only data references).
 $XFS_IO_PROG -f -c "pwrite -b 1M 0 128M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# While writing the file it's possible, but rare, that writeback kicked in due
+# to memory pressure or a concurrent sync call for example, so we may end up
+# with extents smaller than 128K (the maximum size for compressed extents) and
+# therefore make the test expectations fail because we get more extents than
+# what the golden output expects. So run defrag to make sure we get exactly
+# the expected number of 128K extents (1024 extents).
+$BTRFS_UTIL_PROG filesystem defrag "$SCRATCH_MNT/foo" >> $seqres.full
 
 # Create a RW snapshot of the default subvolume.
 _btrfs subvolume snapshot $SCRATCH_MNT $SCRATCH_MNT/snap
