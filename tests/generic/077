@@ -12,13 +12,13 @@ _begin_fstest acl attr auto enospc
 # Something w/ enough data to fill 256M of fs...
 filler=""
 [ -d /lib/modules ] && \
-	[ $(( $(du -h -m /lib/modules | tail -1| cut -f1) * 2 )) -ge 256 ] && \
+	[ $(( $(du -h -m /lib/modules 2>> $seqres.full | tail -1| cut -f1) * 2 )) -ge 256 ] && \
 	filler=/lib/modules
 
 # fall back in case /lib/modules doesn't exist or smaller
 [[ -z $filler ]] && \
 	[ -d /usr ] && \
-	[ $(( $(du -h -m /usr | tail -1| cut -f1) * 2 )) -ge 256 ] && \
+	[ $(( $(du -h -m /usr 2>> $seqres.full | tail -1| cut -f1) * 2 )) -ge 256 ] && \
 	filler=/usr
 
 # Override the default cleanup function.
@@ -58,10 +58,10 @@ echo "*** set default ACL"
 setfacl -R -dm u:fsgqa:rwx,g::rwx,o::r-x,m::rwx $SCRATCH_MNT/subdir
 
 echo "*** populate filesystem, pass #1" | tee -a $seqres.full
-cp -rf $filler $SCRATCH_MNT/subdir >$seqres.full 2>&1
+cp -rf $filler $SCRATCH_MNT/subdir >>$seqres.full 2>&1
 
 echo "*** populate filesystem, pass #2" | tee -a $seqres.full
-cp -rf $filler $SCRATCH_MNT/subdir >$seqres.full 2>&1
+cp -rf $filler $SCRATCH_MNT/subdir >>$seqres.full 2>&1
 
 _check_scratch_fs
 
