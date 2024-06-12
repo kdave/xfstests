@@ -168,6 +168,21 @@ test_block_size()
 	corruption_test $block_size 131072 65536 65536
 	corruption_test $block_size 131072 131067 5
 
+	# Test corrupting a block in files of length 1..4 blocks, and test
+	# corrupting each block of a 4-block file.  This ensures that all code
+	# paths that might exist due to multi-block hashing optimizations the
+	# fsverity implementation may use get covered, assuming no more than 4
+	# blocks are hashed at once.  E.g., consider an fsverity implementation
+	# that verifies sets of blocks but has a bug when given a single block,
+	# or that has a bug that makes it not verify all the blocks of each set.
+	local i
+	for i in $(seq 1 4); do
+		corruption_test $block_size $((i*block_size)) $((block_size/2)) 5
+	done
+	for i in $(seq 0 3); do
+		corruption_test $block_size $((4*block_size)) $((i*block_size)) 5
+	done
+
 	corrupt_eof_block_test $block_size 130999 72
 
 	# Merkle tree corruption.
