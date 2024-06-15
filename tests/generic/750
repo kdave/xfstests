@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Luis Chamberlain.  All Rights Reserved.
+#
+# FS QA Test 750
+#
+# fsstress + memory compaction test
+#
+. ./common/preamble
+_begin_fstest auto rw long_rw stress soak smoketest
+
+_cleanup()
+{
+	cd /
+	rm -f $runfile
+	rm -f $tmp.*
+	kill -9 $trigger_compaction_pid > /dev/null 2>&1
+	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
+
+	wait > /dev/null 2>&1
+}
+
+# Import common functions.
+
+# real QA test starts here
+
+_supported_fs generic
+
+_require_scratch
+_require_vm_compaction
+_require_command "$KILLALL_PROG" "killall"
+
+# We still deadlock with this test on v6.10-rc2, we need more work.
+# but the below makes things better.
+_fixed_by_git_commit kernel d99e3140a4d3 \
+	"mm: turn folio_test_hugetlb into a PageType"
+
+echo "Silence is golden"
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount >> $seqres.full 2>&1
+
+nr_cpus=$((LOAD_FACTOR * 4))
+nr_ops=$((25000 * nr_cpus * TIME_FACTOR))
+fsstress_args=(-w -d $SCRATCH_MNT -n $nr_ops -p $nr_cpus)
+test -n "$SOAK_DURATION" && fsstress_args+=(--duration="$SOAK_DURATION")
+
+# start a background trigger for memory compaction
+runfile="$tmp.compaction"
+touch $runfile
+while [ -e $runfile ]; do
+	echo 1 > /proc/sys/vm/compact_memory
+	sleep 5
+done &
+trigger_compaction_pid=$!
+
+$FSSTRESS_PROG $FSSTRESS_AVOID "${fsstress_args[@]}" >> $seqres.full
+
+rm -f $runfile
+wait > /dev/null 2>&1
+
+status=0
+exit
