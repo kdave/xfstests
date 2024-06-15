@@ -60,12 +60,15 @@ _round_up_to_page_boundary()
 	echo $(( (n + page_size - 1) & ~(page_size - 1) ))
 }
 
+# You can override the $map_len but its optional, by default we use the
+# max allowed size. If you use a length greater than the default you can
+# expect a SIBGUS and test for it.
 _mread()
 {
 	local file=$1
 	local offset=$2
 	local length=$3
-	local map_len=$(_round_up_to_page_boundary $(_get_filesize $file))
+	local map_len=${4:-$(_round_up_to_page_boundary $(_get_filesize $file)) }
 
 	# Some callers expect xfs_io to crash with SIGBUS due to the mread,
 	# causing the shell to print "Bus error" to stderr.  To allow this
