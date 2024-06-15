@@ -52,34 +52,6 @@ setup_zeroed_file()
 	cmp $fsv_orig_file $fsv_file
 }
 
-round_up_to_page_boundary()
-{
-	local n=$1
-	local page_size=$(_get_page_size)
-
-	echo $(( (n + page_size - 1) & ~(page_size - 1) ))
-}
-
-mread()
-{
-	local file=$1
-	local offset=$2
-	local length=$3
-	local map_len=$(round_up_to_page_boundary $(_get_filesize $file))
-
-	# Some callers expect xfs_io to crash with SIGBUS due to the mread,
-	# causing the shell to print "Bus error" to stderr.  To allow this
-	# message to be redirected, execute xfs_io in a new shell instance.
-	# However, for this to work reliably, we also need to prevent the new
-	# shell instance from optimizing out the fork and directly exec'ing
-	# xfs_io.  The easiest way to do that is to append 'true' to the
-	# commands, so that xfs_io is no longer the last command the shell sees.
-	# Don't let it write core files to the filesystem.
-	bash -c "trap '' SIGBUS; ulimit -c 0; $XFS_IO_PROG -r $file \
-		-c 'mmap -r 0 $map_len' \
-		-c 'mread -v $offset $length'; true"
-}
-
 corruption_test()
 {
 	local block_size=$1
@@ -142,7 +114,7 @@ corruption_test()
 	fi
 
 	# Reading the full file via mmap should fail.
-	mread $fsv_file 0 $file_len >/dev/null 2>$tmp.err
+	_mread $fsv_file 0 $file_len >/dev/null 2>$tmp.err
 	if ! grep -q 'Bus error' $tmp.err; then
 		echo "Didn't see SIGBUS when reading file via mmap"
 		cat $tmp.err
@@ -150,7 +122,7 @@ corruption_test()
 
 	# Reading just the corrupted part via mmap should fail.
 	if ! $is_merkle_tree; then
-		mread $fsv_file $zap_offset $zap_len >/dev/null 2>$tmp.err
+		_mread $fsv_file $zap_offset $zap_len >/dev/null 2>$tmp.err
 		if ! grep -q 'Bus error' $tmp.err; then
 			echo "Didn't see SIGBUS when reading corrupted part via mmap"
 			cat $tmp.err
@@ -174,10 +146,10 @@ corrupt_eof_block_test()
 	head -c $zap_len /dev/zero | tr '\0' X \
 		| _fsv_scratch_corrupt_bytes $fsv_file $file_len
 
-	mread $fsv_file $file_len $zap_len >$tmp.out 2>$tmp.err
+	_mread $fsv_file $file_len $zap_len >$tmp.out 2>$tmp.err
 
 	head -c $file_len /dev/zero >$tmp.zeroes
-	mread $tmp.zeroes $file_len $zap_len >$tmp.zeroes_out
+	_mread $tmp.zeroes $file_len $zap_len >$tmp.zeroes_out
 
 	grep -q 'Bus error' $tmp.err || diff $tmp.out $tmp.zeroes_out
 }
