@@ -171,7 +171,7 @@
 #include <sys/mman.h>
 #endif
 
-#ifndef HAVE_XFS_IOC_EXCHANGE_RANGE
+#ifdef NEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE
 # include "fiexchange.h"
 #endif
 
