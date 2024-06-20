@@ -1,0 +1,232 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 617
+#
+# Make sure that the XFS_EXCHANGE_RANGE_FILE1_WRITTEN actually skips holes and
+# unwritten extents on the realtime device when the rextsize is larger than 1
+# fs block.
+#
+. ./common/preamble
+_begin_fstest auto fiexchange
+
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_xfs_io_command "falloc"
+_require_xfs_io_command exchangerange
+_require_realtime
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# This test only deals with the unwritten extents that must be created when
+# the realtime file allocation unit is larger than the fs blocksize.
+file_blksz=$(_get_file_block_size $SCRATCH_MNT)
+fs_blksz=$(_get_block_size $SCRATCH_MNT)
+test "$file_blksz" -ge "$((3 * fs_blksz))" || \
+	_notrun "test requires file alloc unit ($file_blksz) >= 3 * fs block size ($fs_blksz)"
+
+swap_and_check_contents() {
+	local a="$1"
+	local b="$2"
+	local tag="$3"
+
+	sync
+
+	# Test exchangerange.  -w means skip holes in /b
+	echo "swap $tag" >> $seqres.full
+	$XFS_IO_PROG -c 'bmap -elpvvvv' $a $b >> $seqres.full
+	$XFS_IO_PROG -c "exchangerange -f -w $b" $a >> $seqres.full
+	$XFS_IO_PROG -c 'bmap -elpvvvv' $a $b >> $seqres.full
+
+	local a_md5_before=$(md5sum $a | awk '{print $1}')
+	local b_md5_before=$(md5sum $b | awk '{print $1}')
+
+	_scratch_cycle_mount
+
+	local a_md5_check=$(md5sum $a.chk | awk '{print $1}')
+	local b_md5_check=$(md5sum $b.chk | awk '{print $1}')
+
+	local a_md5_after=$(md5sum $a | awk '{print $1}')
+	local b_md5_after=$(md5sum $b | awk '{print $1}')
+
+	test "$a_md5_before" != "$a_md5_after" && \
+		echo "$a: md5 $a_md5_before -> $a_md5_after in $tag"
+
+	test "$b_md5_before" != "$b_md5_after" && \
+		echo "$b: md5 $b_md5_before -> $b_md5_after in $tag"
+
+	if [ "$a_md5_check" != "$a_md5_after" ]; then
+		echo "$a: md5 $a_md5_after, expected $a_md5_check in $tag" | tee -a $seqres.full
+		echo "$a contents" >> $seqres.full
+		od -tx1 -Ad -c $a >> $seqres.full
+		echo "$a.chk contents" >> $seqres.full
+		od -tx1 -Ad -c $a.chk >> $seqres.full
+	fi
+
+	if [ "$b_md5_check" != "$b_md5_after" ]; then
+		echo "$b: md5 $b_md5_after, expected $b_md5_check in $tag" | tee -a $seqres.full
+		echo "$b contents" >> $seqres.full
+		od -tx1 -Ad -c $b >> $seqres.full
+		echo "$b.chk contents" >> $seqres.full
+		od -tx1 -Ad -c $b.chk >> $seqres.full
+	fi
+}
+
+filesz=$((5 * file_blksz))
+
+# first rtblock of the second rtextent is unwritten
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x59 $((file_blksz + fs_blksz)) $((file_blksz - fs_blksz))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x00 $file_blksz $fs_blksz" \
+	-c "pwrite -S 0x59 $((file_blksz + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x58 $((file_blksz * 2)) $((filesz - (file_blksz * 2) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"first rtb of second rtx"
+
+# second rtblock of the second rtextent is unwritten
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x59 $file_blksz $fs_blksz" \
+	-c "pwrite -S 0x59 $((file_blksz + (2 * fs_blksz) )) $((file_blksz - (2 * fs_blksz) ))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x59 $file_blksz $fs_blksz" \
+	-c "pwrite -S 0x00 $((file_blksz + fs_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x59 $((file_blksz + (2 * fs_blksz) )) $((file_blksz - (2 * fs_blksz) ))" \
+	-c "pwrite -S 0x58 $((file_blksz * 2)) $((filesz - (file_blksz * 2) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"second rtb of second rtx"
+
+# last rtblock of the second rtextent is unwritten
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x00 $(( (2 * file_blksz) - fs_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x58 $((file_blksz * 2)) $((filesz - (file_blksz * 2) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"last rtb of second rtx"
+
+# last rtb of the 2nd rtx and first rtb of the 3rd rtx is unwritten
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "falloc $file_blksz $((2 * file_blksz))" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x59 $(( (2 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x00 $(( (2 * file_blksz) - fs_blksz)) $((2 * fs_blksz))" \
+	-c "pwrite -S 0x59 $(( (2 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x58 $((file_blksz * 3)) $((filesz - (file_blksz * 3) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $((2 * file_blksz))" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"last rtb of 2nd rtx and first rtb of 3rd rtx"
+
+# last rtb of the 2nd rtx and first rtb of the 4th rtx is unwritten; 3rd rtx
+# is a hole
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x59 $(( (3 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "fpunch $((2 * file_blksz)) $file_blksz" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x00 $(( (2 * file_blksz) - fs_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x58 $((file_blksz * 2)) $file_blksz" \
+	-c "pwrite -S 0x00 $((3 * file_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x59 $(( (3 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x58 $((file_blksz * 4)) $((filesz - (file_blksz * 4) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $file_blksz" \
+	-c "pwrite -S 0x58 $((file_blksz * 3)) $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"last rtb of 2nd rtx and first rtb of 4th rtx; 3rd rtx is hole"
+
+# last rtb of the 2nd rtx and first rtb of the 4th rtx is unwritten; 3rd rtx
+# is preallocated
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "falloc $file_blksz $((file_blksz * 3))" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x59 $(( (3 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $file_blksz" \
+	-c "pwrite -S 0x59 $file_blksz $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x00 $(( (2 * file_blksz) - fs_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x58 $((file_blksz * 2)) $file_blksz" \
+	-c "pwrite -S 0x00 $((3 * file_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x59 $(( (3 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x58 $((file_blksz * 4)) $((filesz - (file_blksz * 4) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $file_blksz $file_blksz" \
+	-c "pwrite -S 0x58 $((file_blksz * 3)) $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"last rtb of 2nd rtx and first rtb of 4th rtx; 3rd rtx is prealloc"
+
+# 2nd rtx is preallocated and first rtb of 3rd rtx is unwritten
+rm -f $SCRATCH_MNT/da $SCRATCH_MNT/db $SCRATCH_MNT/*.chk
+_pwrite_byte 0x58 0 $filesz $SCRATCH_MNT/da >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "falloc $file_blksz $((file_blksz * 2))" \
+	-c "pwrite -S 0x59 $(( (2 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	$SCRATCH_MNT/db >> $seqres.full
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 0 $((2 * file_blksz))" \
+	-c "pwrite -S 0x00 $((2 * file_blksz)) $fs_blksz" \
+	-c "pwrite -S 0x59 $(( (2 * file_blksz) + fs_blksz)) $((file_blksz - fs_blksz))" \
+	-c "pwrite -S 0x58 $((file_blksz * 3)) $((filesz - (file_blksz * 3) ))" \
+	$SCRATCH_MNT/da.chk >> /dev/null
+$XFS_IO_PROG -f -c "truncate $filesz" \
+	-c "pwrite -S 0x58 $((2 * file_blksz)) $file_blksz" \
+	$SCRATCH_MNT/db.chk >> /dev/null
+swap_and_check_contents $SCRATCH_MNT/da $SCRATCH_MNT/db \
+	"2nd rtx is prealloc and first rtb of 3rd rtx is unwritten"
+
+echo Silence is golden
+status=0
+exit

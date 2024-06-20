@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 616
+#
+# Make sure that the XFS_EXCHANGE_RANGE_FILE1_WRITTEN actually skips holes and
+# unwritten extents on the data device and the rt device when the rextsize
+# is 1 fsblock.
+#
+. ./common/preamble
+_begin_fstest auto fiexchange
+
+. ./common/filter
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs generic
+_require_xfs_io_command "falloc"
+_require_xfs_io_command exchangerange
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# This test doesn't deal with the unwritten extents that must be created when
+# the realtime file allocation unit is larger than the fs blocksize.
+file_blksz=$(_get_file_block_size $SCRATCH_MNT)
+fs_blksz=$(_get_block_size $SCRATCH_MNT)
+test "$file_blksz" -eq "$fs_blksz" || \
+	_notrun "test requires file alloc unit ($file_blksz) == fs block size ($fs_blksz)"
+
+swap_and_check_contents() {
+	local a="$1"
+	local b="$2"
+	local tag="$3"
+
+	local a_md5_before=$(md5sum $a | awk '{print $1}')
+	local b_md5_before=$(md5sum $b | awk '{print $1}')
+
+	# Test exchangerange.  -w means skip holes in /b
+	echo "swap $tag" >> $seqres.full
+	$XFS_IO_PROG -c fsync -c 'bmap -elpvvvv' $a $b >> $seqres.full
+	$XFS_IO_PROG -c "exchangerange -f -w $b" $a >> $seqres.full
+	$XFS_IO_PROG -c 'bmap -elpvvvv' $a $b >> $seqres.full
+	_scratch_cycle_mount
+
+	local a_md5_after=$(md5sum $a | awk '{print $1}')
+	local b_md5_after=$(md5sum $b | awk '{print $1}')
+
+	test "$a_md5_before" != "$a_md5_after" && \
+		echo "$a: md5 $a_md5_before -> $a_md5_after in $tag"
+
+	test "$b_md5_before" != "$b_md5_after" && \
+		echo "$b: md5 $b_md5_before -> $b_md5_after in $tag"
+}
+
+# plain preallocations on the data device
+$XFS_IO_PROG -c 'extsize 0' $SCRATCH_MNT
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/dar >> $seqres.full
+$XFS_IO_PROG -f -c 'truncate 1m' -c "falloc 640k 64k" $SCRATCH_MNT/dbr
+swap_and_check_contents $SCRATCH_MNT/dar $SCRATCH_MNT/dbr "plain prealloc"
+
+# extent size hints on the data device
+$XFS_IO_PROG -c 'extsize 1m' $SCRATCH_MNT
+_pwrite_byte 0x58 0 1m $SCRATCH_MNT/dae >> $seqres.full
+$XFS_IO_PROG -f -c 'truncate 1m' -c "falloc 640k 64k" $SCRATCH_MNT/dbe
+swap_and_check_contents $SCRATCH_MNT/dae $SCRATCH_MNT/dbe "data dev extsize prealloc"
+
+echo Silence is golden
+status=0
+exit
