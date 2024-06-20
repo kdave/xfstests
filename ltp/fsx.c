@@ -1390,29 +1390,17 @@ do_insert_range(unsigned offset, unsigned length)
 #endif
 
 #ifdef XFS_IOC_EXCHANGE_RANGE
-static __u64 swap_flags = 0;
-
 int
 test_exchange_range(void)
 {
-	struct xfs_exch_range	fsr = {
+	struct xfs_exchange_range	fsr = {
 		.file1_fd = fd,
-		.flags = XFS_EXCH_RANGE_DRY_RUN | swap_flags,
+		.flags = XFS_EXCHANGE_RANGE_DRY_RUN,
 	};
 	int ret, e;
 
-retry:
 	ret = ioctl(fd, XFS_IOC_EXCHANGE_RANGE, &fsr);
 	e = ret < 0 ? errno : 0;
-	if (e == EOPNOTSUPP && !(swap_flags & XFS_EXCH_RANGE_NONATOMIC)) {
-		/*
-		 * If the call fails with atomic mode, try again with non
-		 * atomic mode.
-		 */
-		swap_flags = XFS_EXCH_RANGE_NONATOMIC;
-		fsr.flags |= swap_flags;
-		goto retry;
-	}
 	if (e == EOPNOTSUPP || errno == ENOTTY) {
 		if (!quiet)
 			fprintf(stderr,
@@ -1427,12 +1415,11 @@ retry:
 void
 do_exchange_range(unsigned offset, unsigned length, unsigned dest)
 {
-	struct xfs_exch_range	fsr = {
+	struct xfs_exchange_range	fsr = {
 		.file1_fd = fd,
 		.file1_offset = offset,
 		.file2_offset = dest,
 		.length = length,
-		.flags = swap_flags,
 	};
 	void *p;
 

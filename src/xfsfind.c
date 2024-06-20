@@ -10,7 +10,6 @@
 #include <unistd.h>
 #include <ftw.h>
 #include <linux/fs.h>
-#include <xfs/xfs.h>
 
 #include "global.h"
 
