@@ -176,7 +176,7 @@ int	check_file = 0;			/* -X flag enables */
 int	clone_range_calls = 1;		/* -J flag disables */
 int	dedupe_range_calls = 1;		/* -B flag disables */
 int	copy_range_calls = 1;		/* -E flag disables */
-int	xchg_range_calls = 1;		/* -0 flag disables */
+int	exchange_range_calls = 1;	/* -0 flag disables */
 int	integrity = 0;			/* -i flag */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -272,7 +272,7 @@ static const char *op_names[] = {
 	[OP_DEDUPE_RANGE] = "dedupe_range",
 	[OP_COPY_RANGE] = "copy_range",
 	[OP_FSYNC] = "fsync",
-	[OP_EXCHANGE_RANGE] = "xchg_range",
+	[OP_EXCHANGE_RANGE] = "exchange_range",
 };
 
 static const char *op_name(int operation)
@@ -1393,7 +1393,7 @@ do_insert_range(unsigned offset, unsigned length)
 static __u64 swap_flags = 0;
 
 int
-test_xchg_range(void)
+test_exchange_range(void)
 {
 	struct xfs_exch_range	fsr = {
 		.file1_fd = fd,
@@ -1425,7 +1425,7 @@ retry:
 }
 
 void
-do_xchg_range(unsigned offset, unsigned length, unsigned dest)
+do_exchange_range(unsigned offset, unsigned length, unsigned dest)
 {
 	struct xfs_exch_range	fsr = {
 		.file1_fd = fd,
@@ -1473,7 +1473,7 @@ do_xchg_range(unsigned offset, unsigned length, unsigned dest)
 	if (ioctl(fd, XFS_IOC_EXCHANGE_RANGE, &fsr) == -1) {
 		prt("exchange range: 0x%x to 0x%x at 0x%x\n", offset,
 				offset + length, dest);
-		prterr("do_xchg_range: XFS_IOC_EXCHANGE_RANGE");
+		prterr("do_exchange_range: XFS_IOC_EXCHANGE_RANGE");
 		report_failure(161);
 		goto out_free;
 	}
@@ -1487,13 +1487,13 @@ out_free:
 
 #else
 int
-test_xchg_range(void)
+test_exchange_range(void)
 {
 	return 0;
 }
 
 void
-do_xchg_range(unsigned offset, unsigned length, unsigned dest)
+do_exchange_range(unsigned offset, unsigned length, unsigned dest)
 {
 	return;
 }
@@ -2231,7 +2231,7 @@ have_op:
 		}
 		break;
 	case OP_EXCHANGE_RANGE:
-		if (!xchg_range_calls) {
+		if (!exchange_range_calls) {
 			log5(op, offset, size, offset2, FL_SKIPPED);
 			goto out;
 		}
@@ -2330,7 +2330,7 @@ have_op:
 			goto out;
 		}
 
-		do_xchg_range(offset, size, offset2);
+		do_exchange_range(offset, size, offset2);
 		break;
 	case OP_CLONE_RANGE:
 		if (size == 0) {
@@ -2936,7 +2936,7 @@ main(int argc, char **argv)
 			insert_range_calls = 0;
 			break;
 		case '0':
-			xchg_range_calls = 0;
+			exchange_range_calls = 0;
 			break;
 		case 'J':
 			clone_range_calls = 0;
@@ -3199,8 +3199,8 @@ main(int argc, char **argv)
 		dedupe_range_calls = test_dedupe_range();
 	if (copy_range_calls)
 		copy_range_calls = test_copy_range();
-	if (xchg_range_calls)
-		xchg_range_calls = test_xchg_range();
+	if (exchange_range_calls)
+		exchange_range_calls = test_exchange_range();
 
 	while (keep_running())
 		if (!test())
