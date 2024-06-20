@@ -4,17 +4,17 @@
 #
 # FS QA Test No. 709
 #
-# Can we use swapext to make the quota accounting incorrect?
+# Can we use exchangerange to make the quota accounting incorrect?
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext quota
+_begin_fstest auto quick fiexchange quota
 
 # Import common functions.
 . ./common/filter
 . ./common/quota
 
 # real QA test starts here
-_require_xfs_io_command swapext
+_require_xfs_io_command exchangerange
 _require_user
 _require_nobody
 _require_quota
@@ -32,7 +32,7 @@ chown $qa_user $SCRATCH_MNT/a
 $XFS_IO_PROG -f -c 'pwrite -S 0x59 0 64k -b 64k' -c 'truncate 256k' $SCRATCH_MNT/b >> $seqres.full
 chown nobody $SCRATCH_MNT/b
 
-echo before swapext >> $seqres.full
+echo before exchangerange >> $seqres.full
 $XFS_QUOTA_PROG -x -c 'report -a' $SCRATCH_MNT >> $seqres.full
 stat $SCRATCH_MNT/* >> $seqres.full
 
@@ -40,11 +40,11 @@ stat $SCRATCH_MNT/* >> $seqres.full
 # fail with -EINVAL (since that's what the first kernel fix does) or succeed
 # (because subsequent rewrites can handle quota).  Whatever the outcome, the
 # quota usage check at the end should never show a discrepancy.
-$XFS_IO_PROG -c "swapext $SCRATCH_MNT/b" $SCRATCH_MNT/a &> $tmp.swap
+$XFS_IO_PROG -c "exchangerange $SCRATCH_MNT/b" $SCRATCH_MNT/a &> $tmp.swap
 cat $tmp.swap >> $seqres.full
 grep -v 'Invalid argument' $tmp.swap
 
-echo after swapext >> $seqres.full
+echo after exchangerange >> $seqres.full
 $XFS_QUOTA_PROG -x -c 'report -a' $SCRATCH_MNT >> $seqres.full
 stat $SCRATCH_MNT/* >> $seqres.full
 
