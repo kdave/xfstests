@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 754
+#
+# Test that we can add xattrs to a symbolic link, remove all the xattrs, and
+# that the symbolic link doesn't get corrupted.  This is a regression test for
+# some incorrect checks in the xfs inode verifier.
+#
+. ./common/preamble
+_begin_fstest auto
+
+_supported_fs generic
+_require_scratch
+
+test $FSTYP = "xfs" && \
+	_fixed_by_git_commit kernel XXXXXXXXXXXXX \
+			"xfs: allow symlinks with short remote targets"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+SYMLINK_ADD="0123456789ABCDEF01234567890ABCDEF"
+
+# test from 32 to MAXPATHLEN sized symlink. This should make sure that
+# 256-1024 byte version 2 and 3 inodes are covered.
+SYMLINK=""
+for ((SIZE = 32; SIZE < 1024; SIZE += 32)); do
+	SYMLINK_FILE="$SCRATCH_MNT/symlink.$SIZE"
+	SYMLINK="${SYMLINK}${SYMLINK_ADD}"
+	ln -s $SYMLINK $SYMLINK_FILE > /dev/null 2>&1
+
+# add the extended attributes
+	attr  -Rs 1234567890ab $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+	attr  -Rs 1234567890ac $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+	attr  -Rs 1234567890ad $SYMLINK_FILE < /dev/null > /dev/null 2>&1
+# remove the extended attributes
+	attr  -Rr 1234567890ab $SYMLINK_FILE > /dev/null 2>&1
+	attr  -Rr 1234567890ac $SYMLINK_FILE > /dev/null 2>&1
+	attr  -Rr 1234567890ad $SYMLINK_FILE > /dev/null 2>&1
+done
+
+_scratch_cycle_mount
+
+# Now check the symlink target contents
+SYMLINK=""
+for ((SIZE = 32; SIZE < 1024; SIZE += 32)); do
+	SYMLINK_FILE="$SCRATCH_MNT/symlink.$SIZE"
+	SYMLINK="${SYMLINK}${SYMLINK_ADD}"
+
+	target="$(readlink $SYMLINK_FILE)"
+	test "$target" = "$SYMLINK" || echo "$SYMLINK_FILE: target is corrupt"
+done
+
+echo Silence is golden
+status=0
+exit
