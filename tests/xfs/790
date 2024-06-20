@@ -4,11 +4,11 @@
 #
 # FS QA Test No. 790
 #
-# Make sure an atomic swapext actually runs to completion even if we shut
+# Make sure an atomic exchangerange actually runs to completion even if we shut
 # down the filesystem midway through.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -49,9 +49,9 @@ _pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/c >> $seqres.full
 _pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
 sync
 
-# Inject a bmap error and trigger it via swapext.
+# Inject a bmap error and trigger it via exchangerange.
 filesnap "before commit"
-$XFS_IO_PROG -x -c 'inject bmap_finish_one' -c "swapext $dir/b" $dir/a
+$XFS_IO_PROG -x -c 'inject bmap_finish_one' -c "exchangerange $dir/b" $dir/a
 
 # Check the file afterwards.
 _test_cycle_mount

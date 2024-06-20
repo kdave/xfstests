@@ -4,11 +4,11 @@
 #
 # FS QA Test No. 714
 #
-# Test swapext between ranges of two different files, when one of the files
+# Test exchangerange between ranges of two different files, when one of the files
 # is shared.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -35,26 +35,26 @@ filesnap() {
 	fi
 }
 
-test_swapext_once() {
-	filesnap "$1: before swapext" $dir/$3 $dir/$4
+test_exchangerange_once() {
+	filesnap "$1: before exchangerange" $dir/$3 $dir/$4
 	$XFS_IO_PROG -c "exchangerange $2 $dir/$3" $dir/$4
-	filesnap "$1: after swapext" $dir/$3 $dir/$4
+	filesnap "$1: after exchangerange" $dir/$3 $dir/$4
 	_test_cycle_mount
 	filesnap "$1: after cycling mount" $dir/$3 $dir/$4
 	echo
 }
 
-test_swapext_two() {
-	# swapext the same range of two files
-	test_swapext_once "$*: samerange" \
+test_exchangerange_two() {
+	# exchangerange the same range of two files
+	test_exchangerange_once "$*: samerange" \
 		"-s $((blksz * 3)) -d $((blksz * 3)) -l $((blksz * 5))" b a
 
-	# swapext different ranges of two files
-	test_swapext_once "$*: diffrange" \
+	# exchangerange different ranges of two files
+	test_exchangerange_once "$*: diffrange" \
 		"-s $((blksz * 37)) -d $((blksz * 47)) -l $((blksz * 7))" b a
 
-	# swapext overlapping ranges of two files
-	test_swapext_once "$*: overlap" \
+	# exchangerange overlapping ranges of two files
+	test_exchangerange_once "$*: overlap" \
 		"-s $((blksz * 17)) -d $((blksz * 23)) -l $((blksz * 7))" b a
 
 	# Now let's overwrite a entirely to make sure COW works
@@ -79,14 +79,14 @@ rm -f $dir/a $dir/b $dir/sharea
 _pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
 _pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
 _cp_reflink $dir/a $dir/sharea
-test_swapext_two "simple"
+test_exchangerange_two "simple"
 
 # Set up some crazy rainbow files
 rm -f $dir/a $dir/b $dir/sharea
 _weave_file_rainbow $blksz $nrblks $dir/a >> $seqres.full
 _weave_file_rainbow $blksz $nrblks $dir/b >> $seqres.full
 _cp_reflink $dir/a $dir/sharea
-test_swapext_two "rainbow"
+test_exchangerange_two "rainbow"
 
 # Now set up a simple file for testing within the same file
 rm -f $dir/c $dir/sharec
@@ -95,12 +95,12 @@ $XFS_IO_PROG -f -c "pwrite -S 0x58 0 $((blksz * nrblks))" \
 	$dir/c >> $seqres.full
 _cp_reflink $dir/c $dir/sharec
 
-# swapext the same offset into the 'X' and 'Y' regions of the file
-test_swapext_once "single: sameXandY" \
+# exchangerange the same offset into the 'X' and 'Y' regions of the file
+test_exchangerange_once "single: sameXandY" \
 	"-s $((blksz * 3)) -d $((blksz * (nrblks + 3))) -l $((blksz * 5))" c c
 
-# swapext the same offset into the 'X' and 'Y' regions of the file
-test_swapext_once "single: overlap" \
+# exchangerange the same offset into the 'X' and 'Y' regions of the file
+test_exchangerange_once "single: overlap" \
 	"-s $((blksz * 13)) -d $((blksz * 17)) -l $((blksz * 5))" c c
 
 # Now let's overwrite a entirely to make sure COW works

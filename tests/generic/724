@@ -5,11 +5,11 @@
 # FS QA Test No. 724
 #
 # Test scatter-gather atomic file writes.  We create a temporary file, write
-# sparsely to it, then use XFS_EXCH_RANGE_FILE1_WRITTEN flag to swap
+# sparsely to it, then use XFS_EXCHRANGE_FILE1_WRITTEN flag to swap
 # atomicallly only the ranges that we wrote.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -40,9 +40,9 @@ _pwrite_byte 0x57 768k 64k $SCRATCH_MNT/b >> $seqres.full
 md5sum $SCRATCH_MNT/a | _filter_scratch
 md5sum $SCRATCH_MNT/b | _filter_scratch
 
-# Test swapext.  -h means skip holes in /b, and -e means operate to EOF
+# Test exchangerange.  -w means skip holes in /b
 echo swap | tee -a $seqres.full
-$XFS_IO_PROG -c "exchangerange -f -u -h -e $SCRATCH_MNT/b" $SCRATCH_MNT/a
+$XFS_IO_PROG -c "exchangerange -f -w $SCRATCH_MNT/b" $SCRATCH_MNT/a
 _scratch_cycle_mount
 
 md5sum $SCRATCH_MNT/a | _filter_scratch

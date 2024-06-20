@@ -7,7 +7,7 @@
 # Stress testing with a lot of extents.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -31,18 +31,18 @@ nrblks=$((LOAD_FACTOR * 100000))
 
 _require_fs_space $TEST_DIR $(( (2 * blksz * nrblks) / 1024 ))
 
-# Create some big swiss cheese files to test swapext with a lot of extents
+# Create some big swiss cheese files to test exchangerange with a lot of extents
 _pwrite_byte 0x58 0 $((blksz * nrblks)) $dir/a >> $seqres.full
 $here/src/punch-alternating $dir/a
 _pwrite_byte 0x59 0 $((blksz * nrblks)) $dir/b >> $seqres.full
 $here/src/punch-alternating -o 1 $dir/b
 filefrag -v $dir/a $dir/b >> $seqres.full
 
-# Now try to swapext
+# Now try to exchangerange
 md5_a="$(md5sum < $dir/a)"
 md5_b="$(md5sum < $dir/b)"
 date >> $seqres.full
-$XFS_IO_PROG -c "swapext $dir/b" $dir/a
+$XFS_IO_PROG -c "exchangerange $dir/b" $dir/a
 date >> $seqres.full
 
 echo "md5_a=$md5_a" >> $seqres.full

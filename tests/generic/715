@@ -4,10 +4,10 @@
 #
 # FS QA Test No. 715
 #
-# Test swapext between two files of unlike size.
+# Test exchangerange between two files of unlike size.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -33,7 +33,7 @@ filesnap() {
 	fi
 }
 
-test_swapext_once() {
+test_exchangerange_once() {
 	local tag=$1
 	local a_len=$2
 	local b_len=$3
@@ -41,20 +41,22 @@ test_swapext_once() {
 	local b_off=$5
 	local len=$6
 
-	# len is either a block count or -e to swap to EOF
-	if [ "$len" != "-e" ]; then
+	# len is either a block count or "EOF"
+	if [ "$len" = "EOF" ]; then
+		len=""
+	else
 		len="-l $((blksz * len))"
 	fi
 
 	rm -f $dir/a $dir/b
 	_pwrite_byte 0x58 0 $((blksz * a_len)) $dir/a >> $seqres.full
 	_pwrite_byte 0x59 0 $((blksz * b_len)) $dir/b >> $seqres.full
-	filesnap "$tag: before swapext" $dir/a $dir/b
+	filesnap "$tag: before exchangerange" $dir/a $dir/b
 
 	cmd="exchangerange -s $((blksz * a_off)) -d $((blksz * b_off)) $len $dir/a"
 	echo "$cmd" >> $seqres.full
 	$XFS_IO_PROG -c "$cmd" $dir/b
-	filesnap "$tag: after swapext" $dir/a $dir/b
+	filesnap "$tag: after exchangerange" $dir/a $dir/b
 
 	_test_cycle_mount
 	filesnap "$tag: after cycling mount" $dir/a $dir/b
@@ -65,11 +67,11 @@ dir=$TEST_DIR/test-$seq
 mkdir -p $dir
 blksz=65536
 
-test_swapext_once "last 5 blocks" 27 37 22 32 5
+test_exchangerange_once "last 5 blocks" 27 37 22 32 5
 
-test_swapext_once "whole file to eof" 27 37 0 0 -e
+test_exchangerange_once "whole file to eof" 27 37 0 0 EOF
 
-test_swapext_once "blocks 30-40" 27 37 30 30 10
+test_exchangerange_once "blocks 30-40" 27 37 30 30 10
 
 # success, all done
 status=0
