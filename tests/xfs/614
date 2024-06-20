@@ -1,0 +1,55 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 614
+#
+# mkfs concurrency test - ensure the log and agsize scaling works for various
+# concurrency= parameters
+#
+. ./common/preamble
+_begin_fstest log metadata auto quick
+
+# Import common functions.
+. ./common/filter
+. ./common/reflink
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.* $loop_file
+}
+
+# real QA test starts here
+_supported_fs xfs
+
+_require_test
+_require_loop
+$MKFS_XFS_PROG 2>&1 | grep -q concurrency || \
+	_notrun "mkfs does not support concurrency options"
+
+test_dev_lbasize=$(blockdev --getss $TEST_DEV)
+seqfull=$0
+_link_out_file "lba${test_dev_lbasize}"
+
+loop_file=$TEST_DIR/$seq.loop
+
+rm -f "$loop_file"
+for sz in 16M 512M 1G 2G 16G 64G 256G 512G 1T 2T 4T 16T 64T 256T 512T 1P; do
+	for cpus in 2 4 8 16 32 40 64 96 160 512; do
+		truncate -s "$sz" "$loop_file"
+		echo "sz $sz cpus $cpus" >> $seqres.full
+		echo "-----------------" >> $seqres.full
+
+		$MKFS_XFS_PROG -f -N "$loop_file" -d concurrency=$cpus -l concurrency=$cpus &> $tmp.mkfsout
+		cat $tmp.mkfsout >> $seqres.full
+
+		_filter_mkfs > /dev/null 2> $tmp.mkfs < $tmp.mkfsout
+		. $tmp.mkfs
+		echo "sz $sz cpus $cpus agcount $agcount logblocks $lblocks"
+	done
+	echo "-----------------"
+done
+
+status=0
+exit
