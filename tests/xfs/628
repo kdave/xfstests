@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 628
+#
+# Race rename and directory tree structure corruption detector for a while to
+# exercise the dirtree code's directory path invalidation and its ability to
+# handle unlinked directories.
+#
+. ./common/preamble
+_begin_fstest scrub dangerous_fsstress_scrub
+
+# Import common functions.
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+# real QA test starts here
+_supported_fs xfs
+_require_scratch
+_require_xfs_stress_scrub
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+__stress_scrub_check_commands "%dir%" '' '' 'scrub dirtree'
+
+parentA="$SCRATCH_MNT/a"
+parentB="$SCRATCH_MNT/b"
+child="$parentA/c/d/e/f/g/h/i/j/k/l/m/n/o/p"
+unlinked="$SCRATCH_MNT/unlinked"
+
+mkdir -p "$parentA" "$parentB" "$child" "$unlinked"
+
+# Find handle info for the child so that we can scrub by handle
+child_inum="$(stat -c '%i' "$child")"
+_scratch_unmount
+child_gen=$(_scratch_xfs_get_metadata_field core.gen "inode $child_inum")
+_scratch_mount
+
+# Queue up a bunch of scrub requests per invocation
+ioargs=()
+for ((i = 0; i < 100; i++)); do
+	ioargs+=('-c' "scrub dirtree $child_inum $child_gen")
+done
+
+renamer() {
+	# Make sure the scrubber handles unlinked directories correctly
+	# by squatting on an empty directory
+	cd "$unlinked"
+	rm -r -f "$unlinked"
+
+	# Bounce the second level directory between parents to stress the
+	# invalidation detector
+	while [ -e $RUNNING_FILE ]; do
+		mv "$parentA/c" "$parentB/"
+		mv "$parentB/c" "$parentA/"
+	done
+}
+
+RUNNING_FILE="$SCRATCH_MNT/run"
+touch $RUNNING_FILE
+renamer &
+
+# Exercise the directory tree scrubber in two ways -- scrubbing the lowest
+# subdir by handle, and running xfs_scrub on the entire fs.
+while _soak_loop_running $((10 * TIME_FACTOR)); do
+	$XFS_IO_PROG "${ioargs[@]}" "$SCRATCH_MNT"
+	XFS_SCRUB_PHASE=5 _scratch_scrub -n >> $seqres.full
+done
+rm -f $RUNNING_FILE
+wait
+
+# success, all done
+echo Silence is golden
+status=0
+exit

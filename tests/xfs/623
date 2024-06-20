@@ -1,0 +1,122 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 623
+#
+# Functional testing for online fsck of a directory loop that is not accessible
+# from the root directory.
+#
+. ./common/preamble
+_begin_fstest auto online_repair
+
+# Import common functions.
+. ./common/filter
+. ./common/inject
+. ./common/fuzzy
+. ./common/populate
+
+# real QA test starts here
+
+# Modify as appropriate.
+_supported_fs xfs
+_require_xfs_db_command "link"
+_require_xfs_db_command "unlink"
+_require_scratch
+_require_xfs_stress_online_repair
+
+prepare_fs() {
+	_scratch_mkfs >> $seqres.full
+	_scratch_mount
+	__stress_scrub_check_commands "%dir%" '' '' 'scrub dirtree'
+
+	# Begin by creating the following directory tree:
+	# root["A"]->A
+	# A["B"]->B
+	# B["C"]->C
+	mkdir -p "$SCRATCH_MNT/A/B/C"
+
+	root_inum="$(stat -c '%i' "$SCRATCH_MNT/")"
+	a_inum="$(stat -c '%i' "$SCRATCH_MNT/A")"
+	b_inum="$(stat -c '%i' "$SCRATCH_MNT/A/B")"
+	c_inum="$(stat -c '%i' "$SCRATCH_MNT/A/B/C")"
+
+	echo "root: $root_inum; a: $a_inum; b: $b_inum; c: $c_inum" >> $seqres.full
+
+	# Next, we complete the loop by creating C["A"]->A and deleting root["A"]->A.
+	# Directory tree is now:
+	# A["B"]->B
+	# B["C"]->C
+	# C["A"]->A
+	_scratch_unmount
+
+	root_gen=$(_scratch_xfs_get_metadata_field core.gen "inode $root_inum")
+	a_gen=$(_scratch_xfs_get_metadata_field core.gen "inode $a_inum")
+	b_gen=$(_scratch_xfs_get_metadata_field core.gen "inode $b_inum")
+	c_gen=$(_scratch_xfs_get_metadata_field core.gen "inode $c_inum")
+
+	_scratch_xfs_db \
+		-c "echo before root $root_inum" -c "inode $root_inum" -c 'print core.nlinkv2' -c "ls" \
+		-c "echo before C $c_inum" -c "inode $c_inum" -c 'print core.nlinkv2' -c "ls" \
+		-c "echo before A $a_inum" -c "inode $a_inum" -c 'print core.nlinkv2' -c "parent" \
+		>> $seqres.full
+
+	_scratch_xfs_db -x \
+		-c "inode $c_inum" -c "link -i $a_inum A" \
+		-c "inode $root_inum" -c "unlink A" \
+		>> $seqres.full
+
+	_scratch_xfs_db \
+		-c "echo after root $root_inum" -c "inode $root_inum" -c 'print core.nlinkv2' -c "ls" \
+		-c "echo after C $c_inum" -c "inode $c_inum" -c 'print core.nlinkv2' -c "ls" \
+		-c "echo after A $a_inum" -c "inode $a_inum" -c 'print core.nlinkv2' -c "parent" \
+		>> $seqres.full
+}
+
+simple_online_repair() {
+	echo "check root"
+	$XFS_IO_PROG -c "scrub dirtree $root_inum $root_gen" $SCRATCH_MNT
+	echo "check A"
+	$XFS_IO_PROG -c "scrub dirtree $a_inum $a_gen" $SCRATCH_MNT
+	echo "check B"
+	$XFS_IO_PROG -c "scrub dirtree $b_inum $b_gen" $SCRATCH_MNT
+	echo "check C"
+	$XFS_IO_PROG -c "scrub dirtree $c_inum $c_gen" $SCRATCH_MNT
+
+	echo "repair root"
+	$XFS_IO_PROG -x -c "repair dirtree $root_inum $root_gen" $SCRATCH_MNT
+	echo "repair A"
+	$XFS_IO_PROG -x -c "repair dirtree $a_inum $a_gen" $SCRATCH_MNT
+	echo "repair B"
+	$XFS_IO_PROG -x -c "repair dirtree $b_inum $b_gen" $SCRATCH_MNT
+	echo "repair C"
+	$XFS_IO_PROG -x -c "repair dirtree $c_inum $c_gen" $SCRATCH_MNT
+
+	echo "check root"
+	$XFS_IO_PROG -c "scrub dirtree $root_inum $root_gen" $SCRATCH_MNT
+	echo "check A"
+	$XFS_IO_PROG -c "scrub dirtree $a_inum $a_gen" $SCRATCH_MNT
+	echo "check B"
+	$XFS_IO_PROG -c "scrub dirtree $b_inum $b_gen" $SCRATCH_MNT
+	echo "check C"
+	$XFS_IO_PROG -c "scrub dirtree $c_inum $c_gen" $SCRATCH_MNT
+}
+
+# Part 1: Use raw ioctls to detect the loop and fix it.
+prepare_fs
+_scratch_mount
+simple_online_repair
+_check_scratch_fs
+_scratch_unmount
+
+# Part 2: Use xfs_scrub to detect the loop and fix it.
+prepare_fs
+_scratch_mount
+_scratch_scrub &>> $seqres.full
+echo "xfs_scrub returned $?" >> $seqres.full
+_check_scratch_fs
+_scratch_unmount
+
+# success, all done
+status=0
+exit
