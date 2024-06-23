@@ -27,16 +27,21 @@ _cleanup()
 . ./common/dmflakey
 . ./common/attr
 
-# real QA test starts here
+_require_scratch
+_require_dm_target flakey
+_require_attrs
 
 # We create a lot of xattrs for a single file. Only btrfs and xfs are currently
 # able to store such a large mount of xattrs per file, other filesystems such
 # as ext3/4 and f2fs for example, fail with ENOSPC even if we attempt to add
 # less than 1000 xattrs with very small values.
-_supported_fs btrfs xfs
-_require_scratch
-_require_dm_target flakey
-_require_attrs
+case "$FSTYP" in
+btrfs|xfs)
+	;;
+*)
+	_notrun "Requires support for > 1000 xattrs"
+	;;
+esac
 
 _scratch_mkfs >> $seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV
