@@ -12,19 +12,16 @@ _begin_fstest mkfs auto quick
 # Import common functions.
 . ./common/filter
 
-# real QA test starts here
-_supported_fs xfs btrfs
+# a bunch of file systems don't support foreign fs detection
+# ext* do support it, but disable the feature when called non-interactively
+_supported_fs ^ext2 ^ext3 ^ext4 ^jfs ^ocfs2 ^udf
 
-_require_scratch_nocheck
-_require_no_large_scratch_dev
+_require_block_device "${SCRATCH_DEV}"
 # not all the FS support zoned block device
 _require_non_zoned_device "${SCRATCH_DEV}"
 
-# mkfs.btrfs did not have overwrite detection at first
-if [ "$FSTYP" == "btrfs" ]; then
-	grep -q 'force overwrite' `echo $MKFS_BTRFS_PROG | awk '{print $1}'` || \
-		_notrun "Installed mkfs.btrfs does not support -f option"
-fi
+_require_scratch_nocheck
+_require_no_large_scratch_dev
 
 echo "Silence is golden."
 for fs in `echo ${MKFS_PROG}.* | sed -e "s:${MKFS_PROG}.::g"`
