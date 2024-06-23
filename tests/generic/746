@@ -9,23 +9,32 @@
 . ./common/preamble
 _begin_fstest auto trim fiemap
 
-_supported_fs ext4 xfs btrfs
+_supported_fs generic
 _require_test
 _require_loop
 _require_fstrim
 _require_xfs_io_command "fiemap"
-if [ "$FSTYP" = "btrfs" ]; then
+
+_require_fs_space $TEST_DIR 307200
+fssize=$(_small_fs_size_mb 300)           # 200m phys/virt size
+
+case "$FSTYP" in
+btrfs)
+	_require_btrfs_command inspect-internal dump-super
+	_require_btrfs_command inspect-internal dump-tree
+
 	# 3g for btrfs to have distinct bgs
 	_require_fs_space $TEST_DIR 3145728
 	fssize=3000
-else
-	_require_fs_space $TEST_DIR 307200
-	fssize=$(_small_fs_size_mb 300)           # 200m phys/virt size
-fi
-
-[ "$FSTYP" = "ext4" ] && _require_dumpe2fs
-[ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-super
-[ "$FSTYP" = "btrfs" ] && _require_btrfs_command inspect-internal dump-tree
+	;;
+ext4)
+	_require_dumpe2fs
+	;;
+xfs)
+	;;
+*)
+	_notrun "Requires fs-specific way to check discard ranges"
+esac
 
 # Override the default cleanup function.
 _cleanup()
