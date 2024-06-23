@@ -29,27 +29,41 @@ fi
 echo "Silence is golden."
 for fs in `echo ${MKFS_PROG}.* | sed -e "s:${MKFS_PROG}.::g"`
 do
-	preop=""	# for special input needs
+	preop=""	# for special input needs (usually a prompt)
 	preargs=""	# for any special pre-device options
 	postargs=""	# for any special post-device options
 
-	# minix, msdos and vfat mkfs fails for large devices, restrict to 2000 blocks
-	[ $fs = minix ] && postargs=2000
-	[ $fs = msdos ] && postargs=2000
-	[ $fs = vfat ] && postargs=2000
-	# these folks prompt before writing
-	[ $fs = jfs ] && preop="echo Y |"
-	[ $fs = gfs ] && preop="echo y |" && preargs="-p lock_nolock -j 1"
-	[ $fs = gfs2 ] && preop="echo y |" && preargs="-p lock_nolock -j 1"
-	[ $fs = reiserfs ] && preop="echo y |" && preargs="-f"
-	[ $fs = reiser4 ] && preop="echo y |" && preargs="-f"
-	# cramfs mkfs requires a directory argument
-	[ $fs = cramfs ] && preargs=/proc/fs
-	[ $fs = ext2 ] && preargs="-F"
-	[ $fs = ext3 ] && preargs="-F"
-	[ $fs = ext4 ] && preargs="-F"
-	# jffs2 mkfs requires '-r $directory' and '-o $image'
-	[ $fs = jffs2 ] && preargs="-r /proc/fs -o"
+	case "$fs"  in
+	ext2|ext3|ext4)
+		preargs="-F"
+		;;
+	cramfs)
+		# cramfs mkfs requires a directory argument
+		preargs=/proc/fs
+		;;
+	gfs|gfs2)
+		preop="echo y |"
+		preargs="-p lock_nolock -j 1"
+		;;
+	jffs2)
+		# jffs2 mkfs requires '-r $directory' and '-o $image'
+		preargs="-r /proc/fs -o"
+		;;
+	jfs)
+		preop="echo Y |"
+		;;
+	minix|msdos|vfat)
+		# minix, msdos and vfat mkfs fails for large devices,
+		# restrict to 2000 blocks
+		postargs=2000
+		;;
+	reiserfs|reiser4)
+		preop="echo y |"
+		preargs="-f"
+		;;
+	*)
+		;;
+	esac
 
 	# overwite the first few Kb - should blow away superblocks
 	$here/src/devzero -n 20 $SCRATCH_DEV >/dev/null
