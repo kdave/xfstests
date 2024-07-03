@@ -58,6 +58,10 @@ dump_ag0() {
 	_scratch_xfs_db -c 'sb 0' -c 'p' -c 'agf 0' -c 'p' -c 'agfl 0' -c 'p'
 }
 
+# Did we get the kernel warning too?
+warn_str='WARNING: Reset corrupted AGFL'
+saw_agfl_reset_warning=0
+
 runtest() {
 	cmd="$1"
 
@@ -208,6 +212,8 @@ ENDL
 	echo "FS REMOUNT" >> $seqres.full
 	dump_ag0 > $tmp.remount 2> /dev/null
 	diff -u $tmp.repair $tmp.remount >> $seqres.full
+
+	_check_dmesg_for "${warn_str}" && ((saw_agfl_reset_warning++))
 }
 
 runtest fix_end
@@ -221,9 +227,11 @@ runtest bad_start
 runtest no_move
 runtest simple_move
 
-# Did we get the kernel warning too?
-warn_str='WARNING: Reset corrupted AGFL'
-_check_dmesg_for "${warn_str}" || echo "Missing dmesg string \"${warn_str}\"."
+# We must see the AGFL reset warning at least once.  Collectively, the subtests
+# can generate enough kernel log data to overflow the buffer, so we check for
+# the warning after each subtest and summarize the output here.
+((saw_agfl_reset_warning > 0)) || \
+	echo "Missing dmesg string \"${warn_str}\"."
 
 # Now run the regular dmesg check, filtering out the agfl warning
 filter_agfl_reset_printk() {
