@@ -1,0 +1,43 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 331
+#
+# Test that btrfs does not recycle subvolume ids across remounts in a way that
+# breaks squotas.
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup snapshot
+
+_fixed_by_kernel_commit 2b8aa78cf127 \
+	"btrfs: qgroup: fix qgroup id collision across mounts"
+
+_require_scratch_enable_simple_quota
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+$BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT
+
+# Create a gap in the subvolume IDs
+sv=$SCRATCH_MNT/sv
+for i in $(seq 100); do
+	$BTRFS_UTIL_PROG subvolume create $sv.$i >> $seqres.full
+done
+for i in $(seq 50 100); do
+	$BTRFS_UTIL_PROG subvolume delete $sv.$i >> $seqres.full
+done
+
+# Cycle mount triggers reading the tree_root's free objectid.
+_scratch_cycle_mount
+
+# Create snapshots that could go into the used subvolid space.
+$BTRFS_UTIL_PROG subvolume create $sv.BOOM >> $seqres.full
+for i in $(seq 10); do
+	$BTRFS_UTIL_PROG subvolume snapshot $sv.BOOM $sv.BOOM.$i >> $seqres.full
+done
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
