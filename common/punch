@@ -188,7 +188,10 @@ _filter_hole_fiemap()
 	_coalesce_extents
 }
 
-# Column 7 for datadev files and column 5 for rtdev files
+# Column 7 for datadev files and column 5 for rtdev files, To prevent the
+# 5th column in datadev files from being potentially matched incorrectly,
+# we need to match Column 7 for datadev files first, because the rtdev
+# file only has 5 columns in the `bmap -vp` output.
 #     10000 Unwritten preallocated extent
 #     01000 Doesn't begin on stripe unit
 #     00100 Doesn't end   on stripe unit
@@ -201,18 +204,19 @@ _filter_bmap()
 			print $1, $2, $3;
 			next;
 		}
-		$5 ~ /1[01][01][01][01]/ {
-			print $1, $2, "unwritten";
-			next;
-		}
-		$5 ~ /0[01][01][01][01]/ {
-			print $1, $2, "data"
-		}
 		$7 ~ /1[01][01][01][01]/ {
 			print $1, $2, "unwritten";
 			next;
 		}
 		$7 ~ /0[01][01][01][01]/ {
+			print $1, $2, "data"
+			next;
+		}
+		$5 ~ /1[01][01][01][01]/ {
+			print $1, $2, "unwritten";
+			next;
+		}
+		$5 ~ /0[01][01][01][01]/ {
 			print $1, $2, "data"
 		}' |
 	_coalesce_extents
