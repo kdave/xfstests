@@ -777,17 +777,29 @@ _require_btrfs_corrupt_block()
 _require_btrfs_send_version()
 {
 	local version=$1
+	local ret
 
-	# Check first if btrfs-progs supports the v2 stream.
-	_require_btrfs_command send --compressed-data
-
-	# Now check the kernel support. If send_stream_version does not exists,
+	# Check the kernel support. If send_stream_version does not exists,
 	# then it's a kernel that only supports v1.
 	[ -f /sys/fs/btrfs/features/send_stream_version ] || \
 		_notrun "kernel does not support send stream $version"
 
 	[ $(cat /sys/fs/btrfs/features/send_stream_version) -ge $version ] || \
 		_notrun "kernel does not support send stream $version"
+
+	# Now check that btrfs-progs supports the requested stream version.
+	_scratch_mkfs &> /dev/null || \
+		_fail "mkfs failed at _require_btrfs_send_version"
+	_scratch_mount
+	$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
+			 $SCRATCH_MNT/snap &> /dev/null
+	$BTRFS_UTIL_PROG send --proto $version $SCRATCH_MNT/snap &> /dev/null
+	ret=$?
+	_scratch_unmount
+
+	if [ $ret -ne 0 ]; then
+		_notrun "btrfs-progs does not support send stream version $version"
+	fi
 }
 
 # Get the bytenr associated to a file extent item at a given file offset.
