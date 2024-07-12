@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test No. btrfs/332
+#
+# Test tune enabling and removing squotas on a live filesystem
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+# Import common functions.
+. ./common/filter.btrfs
+
+# real QA test starts here
+_require_scratch_enable_simple_quota
+_require_no_compress
+_require_command "$BTRFS_TUNE_PROG" btrfstune
+_require_fssum
+_require_btrfs_dump_super
+_require_btrfs_command inspect-internal dump-tree
+$BTRFS_TUNE_PROG --help 2>&1 | grep -wq -- '--enable-simple-quota' || \
+	_notrun "$BTRFS_TUNE_PROG too old (must support --enable-simple-quota)"
+$BTRFS_TUNE_PROG --help 2>&1 | grep -wq -- '--remove-simple-quota' || \
+	_notrun "$BTRFS_TUNE_PROG too old (must support --remove-simple-quota)"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# do some stuff
+d1=$SCRATCH_MNT/d1
+d2=$SCRATCH_MNT/d2
+mkdir $d1
+mkdir $d2
+run_check $FSSTRESS_PROG -d $d1 -w -n 2000 $FSSTRESS_AVOID
+fssum_pre=$($FSSUM_PROG -A $SCRATCH_MNT)
+
+# enable squotas
+_scratch_unmount
+$BTRFS_TUNE_PROG --enable-simple-quota $SCRATCH_DEV >> $seqres.full
+_check_btrfs_filesystem $SCRATCH_DEV
+_scratch_mount
+fssum_post=$($FSSUM_PROG -A $SCRATCH_MNT)
+[ "$fssum_pre" == "$fssum_post" ] \
+	|| echo "fssum $fssum_pre does not match $fssum_post after enabling squota"
+
+# do some more stuff
+run_check $FSSTRESS_PROG -d $d2 -w -n 2000 $FSSTRESS_AVOID
+fssum_pre=$($FSSUM_PROG -A $SCRATCH_MNT)
+_scratch_unmount
+_check_btrfs_filesystem $SCRATCH_DEV
+
+$BTRFS_TUNE_PROG --remove-simple-quota $SCRATCH_DEV >> $seqres.full
+_check_btrfs_filesystem $SCRATCH_DEV
+$BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | grep 'SIMPLE_QUOTA'
+$BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV  | grep -e 'QUOTA' -e 'QGROUP'
+
+_scratch_mount
+fssum_post=$($FSSUM_PROG -A $SCRATCH_MNT)
+_scratch_unmount
+[ "$fssum_pre" == "$fssum_post" ] \
+	|| echo "fssum $fssum_pre does not match $fssum_post after disabling squota"
+
+echo Silence is golden
+status=0
+exit
