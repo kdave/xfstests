@@ -1,0 +1,115 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 312
+#
+# Test a scenario of a compressed send stream that triggered a bug in the extent
+# map merging code introduced in the merge window for 6.11.
+#
+. ./common/preamble
+_begin_fstest auto quick send compress
+
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $send_files_dir
+}
+
+. ./common/filter
+
+_require_btrfs_send_version 2
+_require_test
+_require_scratch
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix corrupt read due to bad offset of a compressed extent map"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+first_stream="$send_files_dir/1.send"
+second_stream="$send_files_dir/2.send"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "first mkfs failed"
+_scratch_mount -o compress
+
+# Create a compressed extent for the range [108K, 144K[. Since it's a
+# non-aligned start offset, the first 3K of the extent are filled with zeroes.
+# The i_size is set to 141K.
+$XFS_IO_PROG -f -c "pwrite -S 0xab 111K 30K" $SCRATCH_MNT/foo >> $seqres.full
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1 >> $seqres.full
+
+# Overwrite a part of the extent we created before.
+# This will make the send stream include an encoded write (compressed) for the
+# file range [120K, 128K[.
+$XFS_IO_PROG -c "pwrite -S 0xcd 120K 8K" $SCRATCH_MNT/foo >> $seqres.full
+
+# Now do write after those extents and leaving a hole in between.
+# This results in expanding the last block of the extent we first created, that
+# is, in filling with zeroes the file range [141K, 144K[ (3072 bytes), which
+# belongs to the block in the range [140K, 144K[.
+#
+# When the destination filesystem receives from the send stream a write for that
+# range ([140K, 144K[) it does a btrfs_get_extent() call to find the extent map
+# containing the offset 140K. There's no loaded extent map covering that range
+# so it will lookg at the subvolume tree to find a file extent item covering the
+# range and then finds the file extent item covering the range [108K, 144K[ which
+# corresponds to the first extent written to the file, before snapshoting.
+#
+# Note that at this point in time the destination filesystem processed an encoded
+# write for the range [120K, 128K[, which created a compressed extent map for
+# that range and a corresponding ordered extent, which has not yet completed when
+# it received the write command for the [140K, 144K[ range, so the corresponding
+# file extent item is not yet in the subvolume tree - that only happens when the
+# ordered extent completes, at btrfs_finish_one_ordered().
+#
+# So having found a file extent item for the range [108K, 144K[ where 140K falls
+# into, it tries to add a compressed extent map for that range to the inode's
+# extent map tree with a call to btrfs_add_extent_mapping() done at
+# btrfs_get_extent(). That finds there's a loaded overlapping extent map for the
+# range [120K, 128K[ (the extent from the previous encoded write) and then calls
+# into merge_extent_mapping().
+#
+# The merging ended adjusting the extent map we attempted to insert, covering
+# the range [108K, 144K[, to cover instead the range [128K, 144K[ (length 16K)
+# instead, since there's an existing extent map for the range [120K, 128K[ and
+# we are looking for a range starting at 140K (and ending at 144K). However it
+# didn't adjust the extent map's offset from 0 to 20K, resulting in future reads
+# reading the incorrect range from the underlying extent (108K to 124K, 16K of
+# length, instead of the 128K to 144K range).
+#
+# Note that for the incorrect extent map, and therefore read corruption, to
+# happen, we depend on specific timings - the ordered extent for the encoded
+# write for the range [120K, 128K[ must not complete before the destination
+# of the send stream receives the write command for the range [140K, 144K[.
+#
+$XFS_IO_PROG -c "pwrite -S 0xef 160K 4K" $SCRATCH_MNT/foo >> $seqres.full
+
+$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2 >> $seqres.full
+
+echo "Checksums in the original filesystem:"
+echo "$(md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch)"
+echo "$(md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch)"
+
+$BTRFS_UTIL_PROG send --compressed-data -q -f $first_stream $SCRATCH_MNT/snap1
+$BTRFS_UTIL_PROG send --compressed-data -q -f $second_stream \
+		 -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2
+
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "second mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -q -f $first_stream $SCRATCH_MNT
+$BTRFS_UTIL_PROG receive -q -f $second_stream $SCRATCH_MNT
+
+echo "Checksums in the new filesystem:"
+echo "$(md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch)"
+echo "$(md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch)"
+
+# success, all done
+status=0
+exit
