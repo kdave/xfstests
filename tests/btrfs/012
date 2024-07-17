@@ -23,13 +23,13 @@ _require_scratch_nocheck
 _require_command "$BTRFS_CONVERT_PROG" btrfs-convert
 _require_command "$MKFS_EXT4_PROG" mkfs.ext4
 _require_command "$E2FSCK_PROG" e2fsck
+_require_fssum
 # ext4 does not support zoned block device
 _require_non_zoned_device "${SCRATCH_DEV}"
 _require_loop
 _require_extra_fs ext4
 
-SOURCE_DIR=/etc
-BASENAME=$(basename $SOURCE_DIR)
+BASENAME="stressdir"
 BLOCK_SIZE=`_get_block_size $TEST_DIR`
 
 # Create & populate an ext4 filesystem
@@ -38,17 +38,21 @@ $MKFS_EXT4_PROG -F -b $BLOCK_SIZE $SCRATCH_DEV > $seqres.full 2>&1 || \
 # Manual mount so we don't use -t btrfs or selinux context
 mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
 
-_require_fs_space $SCRATCH_MNT $(du -s $SOURCE_DIR | ${AWK_PROG} '{print $1}')
+echo "populating the initial ext fs:" >> $seqres.full
+mkdir "$SCRATCH_MNT/$BASENAME"
+$FSSTRESS_PROG -w -d "$SCRATCH_MNT/$BASENAME" -n 20 -p 500 >> $seqres.full
 
-$TIMEOUT_PROG 10 cp -aRP $SOURCE_DIR $SCRATCH_MNT
+# Create the checksum to verify later.
+$FSSUM_PROG -A -f -w $tmp.original "$SCRATCH_MNT/$BASENAME"
 _scratch_unmount
 
 # Convert it to btrfs, mount it, verify the data
 $BTRFS_CONVERT_PROG $SCRATCH_DEV >> $seqres.full 2>&1 || \
 	_fail "btrfs-convert failed"
 _try_scratch_mount || _fail "Could not mount new btrfs fs"
-# (Ignore the symlinks which may be broken/nonexistent)
-diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/$BASENAME/ 2>&1
+
+echo "Checking converted btrfs against the original one:"
+$FSSUM_PROG -r $tmp.original $SCRATCH_MNT/$BASENAME
 
 # Old ext4 image file should exist & be consistent
 $E2FSCK_PROG -fn $SCRATCH_MNT/ext2_saved/image >> $seqres.full 2>&1 || \
@@ -58,13 +62,14 @@ $E2FSCK_PROG -fn $SCRATCH_MNT/ext2_saved/image >> $seqres.full 2>&1 || \
 mkdir -p $SCRATCH_MNT/mnt
 mount -o loop $SCRATCH_MNT/ext2_saved/image $SCRATCH_MNT/mnt || \
 	_fail "could not loop mount saved ext4 image"
-# Ignore the symlinks which may be broken/nonexistent
-diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/mnt/$BASENAME/ 2>&1
+
+echo "Checking saved ext2 image against the original one:"
+$FSSUM_PROG -r $tmp.original $SCRATCH_MNT/mnt/$BASENAME
 umount $SCRATCH_MNT/mnt
 
-# Now put some fresh data on the btrfs fs
+echo "Generating new data on the converted btrfs" >> $seqres.full
 mkdir -p $SCRATCH_MNT/new 
-$TIMEOUT_PROG 10 cp -aRP $SOURCE_DIR $SCRATCH_MNT/new
+$FSSTRESS_PROG -w -d "$SCRATCH_MNT/new" -n 20 -p 500 >> $seqres.full
 
 _scratch_unmount
 
@@ -78,8 +83,8 @@ $E2FSCK_PROG -fn $SCRATCH_DEV >> $seqres.full 2>&1 || \
 
 # Mount the un-converted ext4 device & check the contents
 mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
-# (Ignore the symlinks which may be broken/nonexistent)
-diff --no-dereference -r $SOURCE_DIR $SCRATCH_MNT/$BASENAME/ 2>&1
+echo "Checking rolled back ext2 against the original one:"
+$FSSUM_PROG -r $tmp.original $SCRATCH_MNT/$BASENAME
 
 _scratch_unmount
 
