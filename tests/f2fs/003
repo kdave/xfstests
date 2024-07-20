@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oppo.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/003
+#
+# Test that we will simulate sqlite atomic write logic w/ below steps:
+# 1. create a regular file, and initialize it w/ 0xff data
+# 2. start transaction (via F2FS_IOC_START_ATOMIC_WRITE) on it
+# 3. write transaction data
+# 4. trigger foreground GC to migrate data block of the file
+# 5. commit and end the transaction (via F2FS_IOC_COMMIT_ATOMIC_WRITE)
+# 6. check consistency of transaction w/ in-memory and on-disk data
+# This is a regression test to check handling of race condition in
+# between atomic_write and GC.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_cleanup()
+{
+	kill -9 $atomic_write_pid > /dev/null 2>&1
+	wait
+	cd /
+	rm -r -f $tmp.*
+}
+
+_require_scratch
+_require_xfs_io_command "fpunch"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+dbfile=$SCRATCH_MNT/dbfile
+foo=$SCRATCH_MNT/foo
+bar=$SCRATCH_MNT/bar
+
+$XFS_IO_PROG -c "pwrite 0 512k -S 0xff" -c "fsync" -f $dbfile >> $seqres.full
+$XFS_IO_PROG -c "pwrite 0 2m" -c "fsync" -f $foo >> $seqres.full
+sync
+
+# start atomic_write on dbfile & write data to dbfile
+$F2FS_IO_PROG write 1 0 32 zero atomic_commit $dbfile 3000 >> $seqres.full &
+atomic_write_pid=$!
+
+$XFS_IO_PROG -c "fpunch 0 2m" $foo >> $seqres.full
+$XFS_IO_PROG -c "pwrite 0 2m" -c "fsync" -f $bar >> $seqres.full
+
+# persist all dirty data
+sync
+echo 3 > /proc/sys/vm/drop_caches
+
+# trigger foreground GC to migrate data block of atomic_file
+$F2FS_IO_PROG gc 1 $SCRATCH_MNT > /dev/null 2>&1
+
+# wait for atomic_write commit completion
+sleep 5
+# print in-memory data
+_hexdump $dbfile
+echo 3 > /proc/sys/vm/drop_caches
+# print on-disk data
+_hexdump $dbfile
+
+status=0
+exit
