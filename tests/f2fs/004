@@ -1,0 +1,48 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oppo.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/004
+#
+# Test that we will simulate race case in between sqlite atomic write
+# and direct IO w/ below steps:
+# 1. create a regular file, and initialize it w/ 0xff data
+# 2. start transaction (via F2FS_IOC_START_ATOMIC_WRITE) on it
+# 3. write transaction data
+# 4. trigger direct read/write IO to check whether it fails or not
+# 5. commit and end the transaction (via F2FS_IOC_COMMIT_ATOMIC_WRITE)
+# This is a regression test to check handling of race condition in
+# between atomic_write and direct IO.
+#
+. ./common/preamble
+_begin_fstest auto quick punch
+
+_cleanup()
+{
+	kill -9 $atomic_write_pid > /dev/null 2>&1
+	wait
+	cd /
+	rm -r -f $tmp.*
+}
+
+_require_scratch
+_require_odirect
+_scratch_mkfs >> $seqres.full
+_scratch_mount >> $seqres.full
+
+dbfile=$SCRATCH_MNT/dbfile
+
+# start atomic_write on dbfile & write data to dbfile
+touch $dbfile
+$F2FS_IO_PROG write 1 0 32 zero atomic_commit $dbfile 3000 >> $seqres.full &
+atomic_write_pid=$!
+
+# simulate concurrent direct read/write IO
+$XFS_IO_PROG -d -c "pread 0 128k" $dbfile
+$XFS_IO_PROG -d -c "pwrite 0 128k" $dbfile
+
+# wait for atomic_write commit completion
+sleep 5
+
+status=0
+exit
