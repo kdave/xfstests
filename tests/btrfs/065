@@ -14,8 +14,9 @@ _cleanup()
 {
 	cd /
 	rm -rf $tmp.*
-	if [ ! -z "$stop_file" ] && [ ! -z "$subvol_pid" ]; then
-		_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file
+	if [ ! -z "$stop_file" ] && [ ! -z "$subvol_pid" ] && \
+		   [ ! -z "$subvol_mnt" ]; then
+		_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file $subvol_mnt
 	fi
 	if [ ! -z "$replace_pid" ]; then
 		_btrfs_kill_stress_replace_pid $replace_pid
@@ -35,12 +36,12 @@ _require_scratch_dev_pool_equal_size
 _btrfs_get_profile_configs replace
 
 stop_file=$TEST_DIR/$seq.stop.$$
+subvol_mnt=$TEST_DIR/$seq.mnt
 
 run_test()
 {
 	local mkfs_opts=$1
 	local saved_scratch_dev_pool=$SCRATCH_DEV_POOL
-	local subvol_mnt=$TEST_DIR/$seq.mnt
 
 	echo "Test $mkfs_opts" >>$seqres.full
 
@@ -77,7 +78,7 @@ run_test()
 	wait $fsstress_pid
 	unset fsstress_pid
 
-	_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file
+	_btrfs_kill_stress_subvolume_pid $subvol_pid $stop_file $subvol_mnt
 	unset subvol_pid
 	_btrfs_kill_stress_replace_pid $replace_pid
 	unset replace_pid
