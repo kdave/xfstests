@@ -1,0 +1,28 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 362
+#
+# Test that doing a direct IO append write to a file when the input buffer was
+# not yet faulted in, does not result in an incorrect file size.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_test
+_require_odirect
+_require_test_program dio-append-buf-fault
+
+[ $FSTYP == "btrfs" ] && \
+	_fixed_by_kernel_commit 939b656bc8ab \
+	"btrfs: fix corruption after buffer fault in during direct IO append write"
+
+# On error the test program writes messages to stderr, causing a golden output
+# mismatch and making the test fail.
+$here/src/dio-append-buf-fault $TEST_DIR/dio-append-buf-fault
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
