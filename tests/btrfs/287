@@ -147,6 +147,27 @@ query_logical_ino -o $second_extent_bytenr | filter_snapshot_ids
 # Now delete the first snapshot and repeat the last 2 queries.
 $BTRFS_UTIL_PROG subvolume delete -C $SCRATCH_MNT/snap1 | _filter_btrfs_subvol_delete
 
+# Remount with a commit interval of 1s so that we wake up the cleaner kthread
+# (which does the actual subvolume tree deletion) and the transaction used by
+# the cleaner kthread to delete the tree gets committed sooner and we wait less
+# in the subvolume sync command below.
+_scratch_remount commit=1
+
+# The subvolume delete only made the subvolume not accessible anymore, but its
+# tree and references to data extents are only deleted when the cleaner kthread
+# runs, so wait for the cleaner to finish. It isn't enough to pass -C/-c (commit
+# transaction) because the cleaner may run only after the transaction commit.
+# Most of the time we don't need this because the transaction kthread wakes up
+# the cleaner kthread, which deletes the subvolume before we query the extents
+# below, as this is a very small filesystem and therefore very fast.
+# Nevertheless it's racy and on slower machines it may fail often as well as on
+# kernels without the reworked async transaction commit (kernel commit
+# fdfbf020664b ("btrfs: rework async transaction committing"), which landed in
+# kernel 5.17) which changes timing and substantially increases the chances that
+# the cleaner already ran and deleted the subvolume tree by the time we do the
+# queries below.
+$BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >> $seqres.full
+
 # Query the second extent with an offset of 0, should return file offsets 12M
 # and 20M for the default subvolume (root 5) and file offsets 4M, 12M and 20M
 # for the second snapshot root.
