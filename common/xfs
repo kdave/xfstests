@@ -270,43 +270,6 @@ _xfs_get_fsxattr()
 	echo ${value##fsxattr.${field} = }
 }
 
-# xfs_check script is planned to be deprecated. But, we want to
-# be able to invoke "xfs_check" behavior in xfstests in order to
-# maintain the current verification levels.
-_xfs_check()
-{
-	OPTS=" "
-	DBOPTS=" "
-	USAGE="Usage: xfs_check [-fsvV] [-l logdev] [-i ino]... [-b bno]... special"
-
-	OPTIND=1
-	while getopts "b:fi:l:stvV" c; do
-		case $c in
-			s) OPTS=$OPTS"-s ";;
-			t) OPTS=$OPTS"-t ";;
-			v) OPTS=$OPTS"-v ";;
-			i) OPTS=$OPTS"-i "$OPTARG" ";;
-			b) OPTS=$OPTS"-b "$OPTARG" ";;
-			f) DBOPTS=$DBOPTS" -f";;
-			l) DBOPTS=$DBOPTS" -l "$OPTARG" ";;
-			V) $XFS_DB_PROG -p xfs_check -V
-			   return $?
-			   ;;
-		esac
-	done
-	set -- extra $@
-	shift $OPTIND
-	case $# in
-		1) ${XFS_DB_PROG}${DBOPTS} -F -i -p xfs_check -c "check$OPTS" $1
-		   status=$?
-		   ;;
-		2) echo $USAGE 1>&1
-		   status=2
-		   ;;
-	esac
-	return $status
-}
-
 _scratch_xfs_options()
 {
     local type=$1
@@ -390,16 +353,6 @@ _test_xfs_logprint()
 	[ "$USE_EXTERNAL" = yes -a ! -z "$TEST_LOGDEV" ] && \
 		TEST_OPTIONS="-l$TEST_LOGDEV"
 	$XFS_LOGPRINT_PROG $TEST_OPTIONS $* $TEST_DEV
-}
-
-_scratch_xfs_check()
-{
-	SCRATCH_OPTIONS=""
-	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
-		SCRATCH_OPTIONS="-l $SCRATCH_LOGDEV"
-	[ "$LARGE_SCRATCH_DEV" = yes ] && \
-		SCRATCH_OPTIONS=$SCRATCH_OPTIONS" -t"
-	_xfs_check $SCRATCH_OPTIONS $* $SCRATCH_DEV
 }
 
 # Check for secret debugging hooks in xfs_repair
@@ -765,7 +718,7 @@ _xfs_skip_online_rebuild() {
 	touch "$RESULT_DIR/.skip_orebuild"
 }
 
-# run xfs_check and friends on a FS.
+# run xfs_repair and xfs_scrub on a FS.
 _check_xfs_filesystem()
 {
 	local can_scrub=
@@ -856,24 +809,8 @@ _check_xfs_filesystem()
 		ok=0
 	fi
 
-	# xfs_check runs out of memory on large files, so even providing the
-	# test option (-t) to avoid indexing the free space trees doesn't make
-	# it pass on large filesystems. Avoid it.
-	#
-	# As of August 2021, xfs_repair completely supersedes xfs_check's
-	# ability to find corruptions, so we no longer run xfs_check unless
-	# forced to run it.
-	if [ "$LARGE_SCRATCH_DEV" != yes ] && [ "$FORCE_XFS_CHECK_PROG" = "yes" ]; then
-		_xfs_check $extra_log_options $device 2>&1 > $tmp.fs_check
-	fi
-	if [ -s $tmp.fs_check ]; then
-		_log_err "_check_xfs_filesystem: filesystem on $device is inconsistent (c)"
-		echo "*** xfs_check output ***"		>>$seqres.full
-		cat $tmp.fs_check			>>$seqres.full
-		echo "*** end xfs_check output"		>>$seqres.full
-
-		ok=0
-	fi
+	# xfs_check used to run here, but was removed as of July 2024 because
+	# xfs_repair can detect more corruptions than xfs_check ever did.
 
 	$XFS_REPAIR_PROG -n $extra_options $extra_log_options $extra_rt_options $device >$tmp.repair 2>&1
 	if [ $? -ne 0 ]; then
