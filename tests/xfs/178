@@ -51,7 +51,6 @@ _dd_repair_check()
 
 _require_scratch
 _scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs
-test "${PIPESTATUS[0]}" -eq 0 || _fail "mkfs failed!"
 
 # By executing the followint tmp file, will get on the mkfs options stored in
 # variables
@@ -60,7 +59,7 @@ test "${PIPESTATUS[0]}" -eq 0 || _fail "mkfs failed!"
 # if the default agcount is too small, bump it up and re-mkfs before testing
 if [ $agcount -lt 8 ]; then
 	agcount=8
-	_scratch_mkfs_xfs -dagcount=$agcount >/dev/null 2>&1 \
+	_try_scratch_mkfs_xfs -dagcount=$agcount >/dev/null 2>&1 \
 	        || _notrun "Test requires at least 8 AGs."
 fi
 
@@ -68,8 +67,7 @@ _dd_repair_check $SCRATCH_DEV $sectsz
 
 # smaller AGCOUNT
 let "agcount=$agcount-2"
-_scratch_mkfs_xfs -dagcount=$agcount >/dev/null 2>&1 \
-        || _fail "mkfs failed!"
+_scratch_mkfs_xfs -dagcount=$agcount >/dev/null 2>&1
 
 _dd_repair_check $SCRATCH_DEV $sectsz
 

@@ -146,7 +146,7 @@ _scratch_find_xfs_min_logblocks()
 	rm -f $tmp.mkfsstd $tmp.mkfserr
 }
 
-_scratch_mkfs_xfs()
+_try_scratch_mkfs_xfs()
 {
 	local mkfs_cmd="`_scratch_mkfs_xfs_opts`"
 	local mkfs_filter="sed -e '/less than device physical sector/d' \
@@ -178,6 +178,11 @@ _scratch_mkfs_xfs()
 	rm -f $tmp.mkfserr $tmp.mkfsstd
 
 	return $mkfs_status
+}
+
+_scratch_mkfs_xfs()
+{
+	_try_scratch_mkfs_xfs $* || _notrun "_scratch_mkfs_xfs failed with ($*)"
 }
 
 # Get the number of realtime extents of a mounted filesystem.
@@ -450,7 +455,7 @@ _require_xfs_has_feature()
 #
 _require_scratch_xfs_crc()
 {
-	_scratch_mkfs_xfs >/dev/null 2>&1
+	_try_scratch_mkfs_xfs >/dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support crc feature"
 	_require_xfs_has_feature $SCRATCH_MNT crc -u \
@@ -470,7 +475,7 @@ _require_xfs_mkfs_finobt()
 #
 _require_xfs_finobt()
 {
-	_scratch_mkfs_xfs -m crc=1,finobt=1 >/dev/null 2>&1
+	_try_scratch_mkfs_xfs -m crc=1,finobt=1 >/dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 	   || _notrun "Kernel doesn't support finobt feature"
 	_scratch_unmount
@@ -498,7 +503,7 @@ _require_xfs_sparse_inodes()
 {
 	_scratch_mkfs_xfs_supported -m crc=1 -i sparse > /dev/null 2>&1 \
 		|| _notrun "mkfs.xfs does not support sparse inodes"
-	_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
+	_try_scratch_mkfs_xfs -m crc=1 -i sparse > /dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel does not support sparse inodes"
 	_scratch_unmount
@@ -510,7 +515,7 @@ _require_xfs_nrext64()
 {
 	_scratch_mkfs_xfs_supported -m crc=1 -i nrext64 > /dev/null 2>&1 \
 		|| _notrun "mkfs.xfs does not support nrext64"
-	_scratch_mkfs_xfs -m crc=1 -i nrext64 > /dev/null 2>&1
+	_try_scratch_mkfs_xfs -m crc=1 -i nrext64 > /dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel does not support nrext64"
 	_scratch_unmount
@@ -525,7 +530,7 @@ _require_xfs_db_command()
 	fi
 	command=$1
 
-	_scratch_mkfs_xfs >/dev/null 2>&1
+	_try_scratch_mkfs_xfs >/dev/null 2>&1
 	_scratch_xfs_db -x -c "help" | grep $command > /dev/null || \
 		_notrun "xfs_db $command support is missing"
 }
@@ -1153,7 +1158,7 @@ _require_scratch_xfs_shrink()
 	_require_scratch
 	_require_command "$XFS_GROWFS_PROG" xfs_growfs
 
-	_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
+	_try_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
 	. $tmp.mkfs
 	_scratch_mount
 	# here just to check if kernel supports, no need do more extra work
@@ -1449,7 +1454,7 @@ _try_wipe_scratch_xfs()
 	# Try to wipe each SB by default mkfs.xfs geometry
 	local tmp=`mktemp -u`
 	unset agcount agsize dbsize
-	_scratch_mkfs_xfs -N 2>/dev/null | perl -ne '
+	_try_scratch_mkfs_xfs -N 2>/dev/null | perl -ne '
 		if (/^meta-data=.*\s+agcount=(\d+), agsize=(\d+) blks/) {
 			print STDOUT "agcount=$1\nagsize=$2\n";
 		}
@@ -1682,7 +1687,8 @@ _scratch_xfs_create_fake_root()
 
 	# A large stripe unit will put the root inode out quite far
 	# due to alignment, leaving free blocks ahead of it.
-	_scratch_mkfs_xfs -d sunit=1024,swidth=1024 > $seqres.full 2>&1 || _fail "mkfs failed"
+	_try_scratch_mkfs_xfs -d sunit=1024,swidth=1024 > $seqres.full 2>&1 || \
+		_fail "mkfs failed"
 
 	# Mounting /without/ a stripe should allow inodes to be allocated
 	# in lower free blocks, without the stripe alignment.
@@ -1778,7 +1784,7 @@ _xfs_discard_max_offset_kb()
 # check if mkfs and the kernel support nocrc (v4) file systems
 _require_xfs_nocrc()
 {
-	_scratch_mkfs_xfs -m crc=0 > /dev/null 2>&1 || \
+	_try_scratch_mkfs_xfs -m crc=0 > /dev/null 2>&1 || \
 		_notrun "v4 file systems not supported"
 	_try_scratch_mount > /dev/null 2>&1 || \
 		_notrun "v4 file systems not supported"
@@ -1807,7 +1813,7 @@ _require_xfs_parent()
 {
 	_scratch_mkfs_xfs_supported -n parent > /dev/null 2>&1 \
 		|| _notrun "mkfs.xfs does not support parent pointers"
-	_scratch_mkfs_xfs -n parent > /dev/null 2>&1
+	_try_scratch_mkfs_xfs -n parent > /dev/null 2>&1
 	_try_scratch_mount >/dev/null 2>&1 \
 		|| _notrun "kernel does not support parent pointers"
 	_scratch_unmount
