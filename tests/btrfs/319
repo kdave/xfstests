@@ -1,0 +1,80 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 319
+#
+# Test that a send operation will issue a clone operation for a shared extent
+# of a file if the extent ends at the i_size of the file and the i_size is not
+# sector size aligned.
+#
+. ./common/preamble
+_begin_fstest auto quick send clone fiemap
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $send_files_dir
+}
+
+. ./common/filter
+. ./common/reflink
+. ./common/punch # for _filter_fiemap_flags
+
+_require_test
+_require_scratch_reflink
+_require_cp_reflink
+_require_xfs_io_command "fiemap"
+_require_odirect
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: send: allow cloning non-aligned extent if it ends at i_size"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+send_stream=$send_files_dir/snap.stream
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "first mkfs failed"
+_scratch_mount
+
+# Use a file size that is not aligned to any possible sector size (1M + 5 bytes).
+file_size=$((1024 * 1024 + 5))
+# Use O_DIRECT to guarantee a single extent.
+$XFS_IO_PROG -f -d -c "pwrite -S 0xab -b $file_size 0 $file_size" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Clone the file.
+_cp_reflink $SCRATCH_MNT/foo $SCRATCH_MNT/bar
+
+echo "Creating snapshot and a send stream for it..."
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
+$BTRFS_UTIL_PROG send -f $send_stream $SCRATCH_MNT/snap >> $seqres.full 2>&1
+
+echo "File digests in the original filesystem:"
+md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
+
+echo "File bar fiemap in the original filesystem:"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags
+
+echo "Creating a new filesystem to receive the send stream..."
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "second mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $send_stream $SCRATCH_MNT
+
+echo "File digests in the new filesystem:"
+md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
+
+echo "File bar fiemap in the new filesystem:"
+$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags
+
+# success, all done
+status=0
+exit
