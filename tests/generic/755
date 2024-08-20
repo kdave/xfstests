@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024, Jeff Layton <jlayton@kernel.org>
+#
+# FS QA Test No. 755
+#
+# Create a file, stat it and then unlink it. Does the ctime of the
+# target inode change?
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_test
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit 3bc2ac2f8f0b \
+	"btrfs: update target inode's ctime on unlink"
+
+testfile="$TEST_DIR/unlink-ctime1.$$"
+testlink="$TEST_DIR/unlink-ctime2.$$"
+
+rm -f $testfile $testlink
+touch $testfile
+ln $testfile $testlink
+
+time1=$(stat -c "%Z" $testfile)
+
+sleep 2
+unlink $testlink
+
+time2=$(stat -c "%Z" $testfile)
+
+unlink $testfile
+
+if [ $time1 -eq $time2 ]; then
+	echo "Target's ctime did not change after unlink!"
+fi
+
+echo Silence is golden
+status=0
+exit
