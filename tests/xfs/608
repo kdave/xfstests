@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 608
+#
+# Regression test for V1 inodes that have di_onlink and di_nlink set to 1.
+#
+. ./common/preamble
+_begin_fstest auto
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"xfs: fix di_onlink checking for V1/V2 inodes",
+
+_require_scratch_nocheck	# we'll do our own checking
+_require_xfs_nocrc
+
+_scratch_mkfs -m crc=0 >> $seqres.full
+_scratch_xfs_db -x \
+	-c 'sb' \
+	-c 'addr rbmino' \
+	-c 'print core.nlinkv2 core.onlink' \
+	-c 'write -d core.version 1' \
+	-c 'write -d core.nlinkv1 1' \
+	-c 'print core.version core.nlinkv1'
+
+# repair doesn't flag this combination
+_scratch_xfs_repair -n &>> $seqres.full || echo "xfs_repair -n failed??"
+
+# Prior to kernel commit 40cb8613d612 ("xfs: check unused nlink fields in the
+# ondisk inode"), the kernel accepted V1 format inode where both the new and
+# old nlink fields are set to 1.  With that commit applied, it stopped
+# accepting that combination and will refuse to mount.  Hence we need the fix
+# mentioned above.
+_scratch_mount
+
+# success, all done
+status=0
+exit
