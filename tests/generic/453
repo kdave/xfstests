@@ -148,6 +148,10 @@ setf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
 setd ".\xe2\x80\x8d" "zero width joiners in dot entry"
 setd "..\xe2\x80\x8d" "zero width joiners in dotdot entry"
 
+# utf8 sequence mapping to a u32 unicode codepoint that can be confused
+setf "toilet_bowl.\xf0\x9f\x9a\xbd" "toilet emoji"
+setf "toilet_bow\xe2\x80\x8dl.\xf0\x9f\x9a\xbd" "toilet emoji with zero width joiner"
+
 ls -la $testdir >> $seqres.full
 
 echo "Test files"
@@ -198,6 +202,9 @@ testf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
 testd ".\xe2\x80\x8d" "zero width joiners in dot entry"
 testd "..\xe2\x80\x8d" "zero width joiners in dotdot entry"
 
+testf "toilet_bowl.\xf0\x9f\x9a\xbd" "toilet emoji"
+testf "toilet_bow\xe2\x80\x8dl.\xf0\x9f\x9a\xbd" "toilet emoji with zero width joiner"
+
 echo "Uniqueness of inodes?"
 stat -c '%i' "${testdir}/"* | sort | uniq -c | while read nr inum; do
 	if [ "${nr}" -gt 1 ]; then
@@ -208,18 +215,21 @@ done
 echo "Test XFS online scrub, if applicable"
 
 if _check_xfs_scrub_does_unicode "$SCRATCH_MNT" "$SCRATCH_DEV"; then
-	output="$(LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -v -n "${SCRATCH_MNT}" 2>&1 | filter_scrub)"
-	echo "${output}" | grep -q "french_" || echo "No complaints about french e accent?"
-	echo "${output}" | grep -q "greek_" || echo "No complaints about greek letter mess?"
-	echo "${output}" | grep -q "arabic_" || echo "No complaints about arabic expanded string?"
-	echo "${output}" | grep -q "mixed_" || echo "No complaints about mixed script confusables?"
-	echo "${output}" | grep -q "hyphens_" || echo "No complaints about hyphenation confusables?"
-	echo "${output}" | grep -q "dz_digraph_" || echo "No complaints about single script confusables?"
-	echo "${output}" | grep -q "inadequate_" || echo "No complaints about inadequate rendering confusables?"
-	echo "${output}" | grep -q "prohibition_" || echo "No complaints about prohibited sequence confusables?"
-	echo "${output}" | grep -q "zerojoin_" || echo "No complaints about zero-width join confusables?"
+	LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -v -n "${SCRATCH_MNT}" 2>&1 | filter_scrub > $tmp.scrub
+
+	grep -q "french_" $tmp.scrub || echo "No complaints about french e accent?"
+	grep -q "greek_" $tmp.scrub || echo "No complaints about greek letter mess?"
+	grep -q "arabic_" $tmp.scrub || echo "No complaints about arabic expanded string?"
+	grep -q "mixed_" $tmp.scrub || echo "No complaints about mixed script confusables?"
+	grep -q "hyphens_" $tmp.scrub || echo "No complaints about hyphenation confusables?"
+	grep -q "dz_digraph_" $tmp.scrub || echo "No complaints about single script confusables?"
+	grep -q "inadequate_" $tmp.scrub || echo "No complaints about inadequate rendering confusables?"
+	grep -q "prohibition_" $tmp.scrub || echo "No complaints about prohibited sequence confusables?"
+	grep -q "zerojoin_" $tmp.scrub || echo "No complaints about zero-width join confusables?"
+	grep -q "toilet_" $tmp.scrub || echo "No complaints about zero-width join confusables with emoji?"
+
 	echo "Actual xfs_scrub output:" >> $seqres.full
-	echo "${output}" >> $seqres.full
+	cat $tmp.scrub >> $seqres.full
 fi
 
 # success, all done
