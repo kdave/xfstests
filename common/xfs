@@ -1777,8 +1777,44 @@ _require_xfs_scratch_atomicswap()
 # of 1024 byte blocks.
 _xfs_discard_max_offset_kb()
 {
-	$XFS_IO_PROG -c 'statfs' "$1" | \
-		awk '{g[$1] = $3} END {print (g["geom.bsize"] * g["geom.datablocks"] / 1024)}'
+	local statfs
+
+	# Use awk to read the statfs output for the XFS filesystem, compute
+	# the two possible FITRIM offset maximums, and then use some horrid
+	# bash magic to import the five numbers as an indexed array.  There's
+	# no better way to do this in bash since you can't readarray to build
+	# an associative array.  Elements are as follows:
+	#
+	# 0: fsblock size in bytes
+	# 1: Data volume size in fsblocks.
+	# 2: Realtime volume size in fsblocks.
+	# 3: Max FITRIM offset if we can only trim the data volume
+	# 4: Max FITRIM offset if we can trim the data and rt volumes
+	readarray -t statfs < <($XFS_IO_PROG -c 'statfs' "$1" | \
+		awk '{g[$1] = $3} END {printf("%d\n%d\n%d\n%d\n%d\n",
+			g["geom.bsize"],
+			g["geom.datablocks"],
+			g["geom.rtblocks"],
+			g["geom.bsize"] * g["geom.datablocks"] / 1024,
+			g["geom.bsize"] * (g["geom.datablocks"] + g["geom.rtblocks"]) / 1024);}')
+
+	# If the kernel supports discarding the realtime volume, then it will
+	# not reject a FITRIM for fsblock dblks+1, even if the len/minlen
+	# arguments are absurd.
+	if [ "${statfs[2]}" -gt 0 ]; then
+		if $FSTRIM_PROG -o "$((statfs[0] * statfs[1]))" \
+				-l "${statfs[0]}" \
+				-m "$((statfs[0] * 2))" "$1" &>/dev/null; then
+			# The kernel supports discarding the rt volume, so
+			# print out the second answer from above.
+			echo "${statfs[4]}"
+			return
+		fi
+	fi
+
+	# The kernel does not support discarding the rt volume or there is no
+	# rt volume.  Print out the first answer from above.
+	echo "${statfs[3]}"
 }
 
 # check if mkfs and the kernel support nocrc (v4) file systems
