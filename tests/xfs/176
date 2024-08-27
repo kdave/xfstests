@@ -47,7 +47,7 @@ fi
 
 _scratch_mount
 _xfs_force_bdev data $SCRATCH_MNT
-old_dblocks=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.datablocks)
+old_dblocks=$(_xfs_statfs_field "$SCRATCH_MNT" geom.datablocks)
 
 mkdir $SCRATCH_MNT/save/ $SCRATCH_MNT/urk/
 sino=$(stat -c '%i' $SCRATCH_MNT/save)
@@ -170,7 +170,7 @@ for ((ino = target_ino; ino >= icluster_ino; ino--)); do
 	res=$?
 
 	# Make sure shrink did not work
-	new_dblocks=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.datablocks)
+	new_dblocks=$(_xfs_statfs_field "$SCRATCH_MNT" geom.datablocks)
 	if [ "$new_dblocks" != "$old_dblocks" ]; then
 		echo "should not have shrank $old_dblocks -> $new_dblocks"
 		break

@@ -77,8 +77,8 @@ _xfs_force_bdev realtime $SCRATCH_MNT
 
 # Set the extent size hint larger than the realtime extent size.  This is
 # necessary to exercise the minlen constraints on the realtime allocator.
-fsbsize=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.bsize | awk '{print $3}')
-rtextsize_blks=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep geom.rtextsize | awk '{print $3}')
+fsbsize=$(_xfs_statfs_field "$SCRATCH_MNT" geom.bsize)
+rtextsize_blks=$(_xfs_statfs_field "$SCRATCH_MNT" geom.rtextsize)
 extsize=$((2 * rtextsize_blks * fsbsize))
 
 echo "rtextsize_blks=$rtextsize_blks extsize=$extsize" >> $seqres.full
@@ -133,7 +133,7 @@ punch_off=$((bigfile_sz - frag_sz))
 $here/src/punch-alternating $SCRATCH_MNT/bigfile -o $((punch_off / fsbsize)) -i $((rtextsize_blks * 2)) -s $rtextsize_blks
 
 # Make sure we have some free rtextents.
-free_rtx=$($XFS_IO_PROG -c 'statfs' $SCRATCH_MNT | grep statfs.f_bavail | awk '{print $3}')
+free_rtx=$(_xfs_statfs_field "$SCRATCH_MNT" statfs.f_bavail)
 if [ $free_rtx -eq 0 ]; then
 	echo "Expected fragmented free rt space, found none."
 fi
