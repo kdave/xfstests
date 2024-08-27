@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 321
+#
+# Make sure there are no use-after-free, crashes, deadlocks etc, when reading data
+# which has its data checksums in a corrupted csum tree block.
+#
+. ./common/preamble
+_begin_fstest auto quick raid dangerous
+
+_require_scratch_nocheck
+_require_scratch_dev_pool 2
+
+# Use RAID0 for data to get bio split according to stripe boundary.
+# This is required to trigger the bug.
+_require_btrfs_raid_type raid0
+
+# This test goes 4K sectorsize and 4K nodesize, so that we easily create
+# higher level of csum tree.
+_require_btrfs_support_sectorsize 4096
+_require_btrfs_command inspect-internal dump-tree
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix a use-after-free bug when hitting errors inside btrfs_submit_chunk()"
+
+# The bug itself has a race window, run this many times to ensure triggering.
+# On an x86_64 VM with KASAN enabled, normally it is triggered before the 10th run.
+iterations=32
+
+_scratch_pool_mkfs "-d raid0 -m single -n 4k -s 4k" >> $seqres.full 2>&1
+# This test requires data checksum to trigger the bug.
+_scratch_mount -o datasum,datacow
+
+# For the smallest csum size (CRC32C) it's 4 bytes per 4K, writing 32M data
+# will need 32K data checksum at minimal, which is at least 8 leaves.
+_pwrite_byte 0xef 0 32m "$SCRATCH_MNT/foobar" > /dev/null
+_scratch_unmount
+
+
+# Search for the last leaf of the csum tree, that will be the target to destroy.
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t 7 $SCRATCH_DEV >> $seqres.full
+target_bytenr=$($BTRFS_UTIL_PROG inspect-internal dump-tree -t 7 $SCRATCH_DEV | grep "leaf.*flags" | sort | tail -n1 | cut -f2 -d\ )
+
+if [ -z "$target_bytenr" ]; then
+	_fail "unable to locate the last csum tree leaf"
+fi
+
+echo "bytenr of csum tree leaf to corrupt: $target_bytenr" >> $seqres.full
+
+# Corrupt that csum tree block.
+physical=$(_btrfs_get_physical "$target_bytenr" 1)
+dev=$(_btrfs_get_device_path "$target_bytenr" 1)
+
+echo "physical bytenr: $physical" >> $seqres.full
+echo "physical device: $dev" >> $seqres.full
+
+_pwrite_byte 0x00 "$physical" 4 "$dev" > /dev/null
+
+for (( i = 0; i < $iterations; i++ )); do
+	echo "=== run $i/$iterations ===" >> $seqres.full
+	_scratch_mount -o ro
+	# Since the data is on RAID0, read bios will be split at the stripe
+	# (64K sized) boundary. If csum lookup failed due to corrupted csum
+	# tree, there is a race window that can lead to double bio freeing
+	# (triggering KASAN at least).
+	cat "$SCRATCH_MNT/foobar" &> /dev/null
+	_scratch_unmount
+
+	# Instead of relying on the final _check_dmesg() to find errors,
+	# error out immediately if KASAN is triggered.
+	# As non-triggering runs will generate quite some error messages,
+	# making investigation much harder.
+	if _check_dmesg_for "BUG" ; then
+		_fail "Critical error(s) found in dmesg"
+	fi
+done
+
+echo "Silence is golden"
+
+status=0
+exit
