@@ -1,0 +1,140 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 802
+#
+# Check that the online fsck systemd services find and check the scratch
+# filesystem, and that we can read the health reports after the fact.  IOWs,
+# this is basic testing for the systemd background services.
+#
+. ./common/preamble
+_begin_fstest auto scrub
+
+_cleanup()
+{
+	cd /
+	if [ -n "$new_svcfile" ]; then
+		rm -f "$new_svcfile"
+		systemctl daemon-reload
+	fi
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+. ./common/systemd
+
+_require_systemd_is_running
+_require_systemd_unit_defined xfs_scrub@.service
+_require_systemd_unit_defined xfs_scrub_all.service
+_require_scratch
+_require_scrub
+_require_xfs_io_command "scrub"
+_require_xfs_spaceman_command "health"
+_require_populate_commands
+
+# xfs_scrub_all requires the python3-dbus library, which is a separate package
+_require_command $PYTHON3_PROG python3
+$PYTHON3_PROG -c 'import dbus' &>/dev/null || \
+	_notrun "test requires python3-dbus"
+
+_require_command $ATTR_PROG "attr"
+
+_xfs_skip_online_rebuild
+_xfs_skip_offline_rebuild
+
+# Back when xfs_scrub was really experimental, the systemd service definitions
+# contained various bugs that resulted in weird problems such as logging
+# messages sometimes dropping slashes from paths, and the xfs_scrub@ service
+# being logged as completing long after the process actually stopped.  These
+# problems were all fixed by the time the --auto-media-scan-stamp option was
+# added to xfs_scrub_all, so turn off this test for such old codebases.
+scruball_exe="$(systemctl cat xfs_scrub_all | grep '^ExecStart=' | \
+	sed -e 's/ExecStart=//g' -e 's/ .*$//g')"
+grep -q -- '--auto-media-scan-stamp' "$scruball_exe" || \
+	_notrun "xfs_scrub service too old, skipping test"
+
+orig_svcfile="$(_systemd_unit_path "xfs_scrub_all.service")"
+test -f "$orig_svcfile" || \
+	_notrun "cannot find xfs_scrub_all service file"
+
+new_svcdir="$(_systemd_runtime_dir)"
+test -d "$new_svcdir" || \
+	_notrun "cannot find runtime systemd service dir"
+
+# We need to make some local mods to the xfs_scrub_all service definition
+# so we fork it and create a new service just for this test.
+new_scruball_svc="xfs_scrub_all_fstest.service"
+_systemd_unit_status "$new_scruball_svc" 2>&1 | \
+	grep -E -q '(could not be found|Loaded: not-found)' || \
+	_notrun "systemd service \"$new_scruball_svc\" found, will not mess with this"
+
+find_scrub_trace() {
+	local path="$1"
+
+	$XFS_SPACEMAN_PROG -c "health" "$path" | grep -q ": ok$" || \
+		echo "cannot find evidence that $path was scrubbed"
+}
+
+echo "Format and populate"
+_scratch_populate_cached nofill > $seqres.full 2>&1
+_scratch_mount
+
+# Configure the filesystem for background checks of the filesystem.
+$ATTR_PROG -R -s xfs:autofsck -V check $SCRATCH_MNT >> $seqres.full
+
+run_scrub_service() {
+	systemctl start --wait "$1"
+
+	# Sometimes systemctl start --wait returns early due to some external
+	# event, such as somebody else reloading the daemon, which closes the
+	# socket.  The CLI has no way to resume waiting for the service once
+	# the connection breaks, so we'll pgrep for up to 30 seconds until
+	# there are no xfs_scrub processes running on the system.
+	for ((i = 0; i < 30; i++)); do
+		pgrep -f 'xfs_scrub*' > /dev/null 2>&1 || break
+		sleep 1
+	done
+}
+
+echo "Scrub Scratch FS"
+scratch_path=$(systemd-escape --path "$SCRATCH_MNT")
+run_scrub_service xfs_scrub@$scratch_path
+find_scrub_trace "$SCRATCH_MNT"
+
+# Remove the xfs_scrub_all media scan stamp directory (if specified) because we
+# want to leave the regular system's stamp file alone.
+mkdir -p $tmp/stamp
+
+new_svcfile="$new_svcdir/$new_scruball_svc"
+cp "$orig_svcfile" "$new_svcfile"
+
+execstart="$(grep '^ExecStart=' $new_svcfile | \
+	sed -e 's/--auto-media-scan-interval[[:space:]]*[0-9]*[a-z]*//g')"
+sed -e '/ExecStart=/d' -e '/BindPaths=/d' -i $new_svcfile
+cat >> "$new_svcfile" << ENDL
+[Service]
+$execstart
+ENDL
+_systemd_reload
+
+# Emit the results of our editing to the full log.
+systemctl cat "$new_scruball_svc" >> $seqres.full
+
+# Cycle mounts to clear all the incore CHECKED bits.
+_scratch_cycle_mount
+
+echo "Scrub Everything"
+run_scrub_service "$new_scruball_svc"
+
+sleep 2 # give systemd a chance to tear down the service container mount tree
+
+find_scrub_trace "$SCRATCH_MNT"
+
+echo "Scrub Done" | tee -a $seqres.full
+
+# success, all done
+status=0
+exit

@@ -1,0 +1,73 @@
+##/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# Routines for managing systemd units
+
+# Is systemd installed?
+_systemd_installed() {
+	_have_program systemctl
+}
+
+_require_systemd_installed() {
+	_require_program systemctl systemd
+}
+
+# Is systemd running on this system?
+_systemd_is_running() {
+	_systemd_installed || return 1
+	systemctl show-environment &>/dev/null
+}
+
+_require_systemd_is_running() {
+	_systemd_is_running || \
+		_notrun "systemd is not active"
+}
+
+# Is this unit defined, as according to systemd?
+_systemd_unit_defined() {
+	_systemd_installed || return 1
+	systemctl cat "$1" >/dev/null
+}
+
+_require_systemd_unit_defined() {
+	_require_systemd_installed
+	_systemd_unit_defined "$1" || \
+		_notrun "systemd unit \"$1\" not found"
+}
+
+# Is this unit active, as according to systemd?
+_systemd_unit_active() {
+	_systemd_installed || return 1
+	_systemd_unit_defined "$1" || return 1
+
+	test "$(systemctl is-active "$1")" = "active"
+}
+
+_require_systemd_unit_active() {
+	_require_systemd_unit_defined "$1"
+	_systemd_unit_active "$1" || \
+		_notrun "systemd unit \"$1\" not active"
+}
+
+# Find the path to a systemd unit
+_systemd_unit_path() {
+	systemctl show "$1" | grep FragmentPath= | cut -d '=' -f 2
+}
+
+# Make systemd reload itself after changing unit files or generator sources
+# such as /etc/fstab
+_systemd_reload() {
+	systemctl daemon-reload
+}
+
+# Where is the systemd runtime directory?
+_systemd_runtime_dir() {
+	echo "/run/systemd/system/"
+}
+
+# What is the status of this systemd unit?
+_systemd_unit_status() {
+	_systemd_installed || return 1
+	systemctl status "$1"
+}
