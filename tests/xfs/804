@@ -1,0 +1,122 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 804
+#
+# Functional testing for xfs_property the wrapper script.
+#
+. ./common/preamble
+_begin_fstest auto fsproperties
+
+. ./common/filter
+. ./common/attr
+
+_require_test
+_require_attrs
+_require_command "$XFS_PROPERTY_PROG" xfs_property
+_require_xfs_io_command listfsprops	# actually detect support
+
+_cleanup()
+
+{
+	cd /
+	rm -r -f $tmp.*
+	rm -f $TEST_DIR/$seq.somefile
+	rm -r -f $TEST_DIR/$seq.somedir
+	test -n "$propname" && $ATTR_PROG -R -r $propname $TEST_DEV &>/dev/null
+}
+
+filter_inum()
+{
+	sed -e 's/inode [0-9]*/inode XXX/g'
+}
+
+propname="fakeproperty"	# must not be an actual property
+propval="1721943742"
+longpropname="$(perl -e 'print "x" x 300;')"
+longpropval="$(perl -e 'print "x" x 80000;')"
+
+echo "*** OFFLINE XFS_PROPERTY TEST ***"
+
+_test_unmount
+
+echo empty get property
+$XFS_PROPERTY_PROG $TEST_DEV get "$propname" 2>&1 | filter_inum
+
+echo pointless remove property
+$XFS_PROPERTY_PROG $TEST_DEV remove "$propname" 2>&1 | filter_inum
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DEV list | grep $propname
+
+echo set property
+$XFS_PROPERTY_PROG $TEST_DEV set "$propname=$propval"
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DEV list | grep $propname
+
+echo dump xattrs
+$ATTR_PROG -R -l $TEST_DEV | grep $propname | _filter_test_dir
+
+echo get property
+$XFS_PROPERTY_PROG $TEST_DEV get "$propname"
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DEV list | grep $propname
+
+echo remove property
+$XFS_PROPERTY_PROG $TEST_DEV remove "$propname"
+
+echo pointless remove property
+$XFS_PROPERTY_PROG $TEST_DEV remove "$propname" 2>&1 | filter_inum
+
+echo set too long name
+$XFS_PROPERTY_PROG $TEST_DEV set "$longpropname=$propval"
+
+echo set too long value
+$XFS_PROPERTY_PROG $TEST_DEV set "$propname=$longpropval"
+
+echo "*** ONLINE XFS_PROPERTY TEST ***"
+
+propval=$((propval+1))
+_test_mount
+
+echo empty get property
+$XFS_PROPERTY_PROG $TEST_DIR get "$propname"
+
+echo pointless remove property
+$XFS_PROPERTY_PROG $TEST_DIR remove "$propname"
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DIR list | grep $propname
+
+echo set property
+$XFS_PROPERTY_PROG $TEST_DIR set "$propname=$propval"
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DIR list | grep $propname
+
+echo dump xattrs
+$ATTR_PROG -R -l $TEST_DIR | grep $propname | _filter_test_dir
+
+echo get property
+$XFS_PROPERTY_PROG $TEST_DIR get "$propname"
+
+echo list property
+$XFS_PROPERTY_PROG $TEST_DIR list | grep $propname
+
+echo remove property
+$XFS_PROPERTY_PROG $TEST_DIR remove "$propname"
+
+echo pointless remove property
+$XFS_PROPERTY_PROG $TEST_DIR remove "$propname"
+
+echo set too long name
+$XFS_PROPERTY_PROG $TEST_DIR set "$longpropname=$propval"
+
+echo set too long value
+$XFS_PROPERTY_PROG $TEST_DIR set "$propname=$longpropval"
+
+status=0
+exit

@@ -1,0 +1,137 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 803
+#
+# Functional testing for low level filesystem property manipulation by
+# xfs_{spaceman,db}.
+#
+. ./common/preamble
+_begin_fstest auto fsproperties
+
+. ./common/filter
+. ./common/attr
+
+_require_test
+_require_user fsgqa
+_require_attrs
+_require_xfs_io_command listfsprops
+_require_xfs_db_command attr_list
+
+_cleanup()
+
+{
+	cd /
+	rm -r -f $tmp.*
+	rm -f $TEST_DIR/$seq.somefile
+	rm -r -f $TEST_DIR/$seq.somedir
+	test -n "$propname" && $ATTR_PROG -R -r $propname $TEST_DEV &>/dev/null
+}
+
+filter_inum()
+{
+	sed -e 's/inode [0-9]*/inode XXX/g'
+}
+
+propname="fakeproperty"	# must not be an actual property
+propval="1721943740"
+longpropname="$(perl -e 'print "x" x 300;')"
+longpropval="$(perl -e 'print "x" x 80000;')"
+
+echo "*** IO TEST ***"
+
+echo empty get property
+$XFS_IO_PROG -c "getfsprops $propname" $TEST_DIR
+
+echo pointless remove property
+$XFS_IO_PROG -c "removefsprops $propname" $TEST_DIR
+
+echo list property
+$XFS_IO_PROG -c "listfsprops" $TEST_DIR | grep $propname
+
+echo set property
+$XFS_IO_PROG -c "setfsprops $propname=$propval" $TEST_DIR
+
+echo list property
+$XFS_IO_PROG -c "listfsprops" $TEST_DIR | grep $propname
+
+echo dump xattrs
+$ATTR_PROG -R -l $TEST_DIR | grep $propname | _filter_test_dir
+
+echo get property
+$XFS_IO_PROG -c "getfsprops $propname" $TEST_DIR
+
+echo list property
+$XFS_IO_PROG -c "listfsprops" $TEST_DIR | grep $propname
+
+echo child file rejected
+touch $TEST_DIR/$seq.somefile
+$XFS_IO_PROG -c "listfsprops $propname" $TEST_DIR/$seq.somefile 2>&1 | \
+	_filter_test_dir
+
+echo child dir rejected
+mkdir -p $TEST_DIR/$seq.somedir
+$XFS_IO_PROG -c "listfsprops $propname" $TEST_DIR/$seq.somedir 2>&1 | \
+	_filter_test_dir
+
+echo remove property
+$XFS_IO_PROG -c "removefsprops $propname" $TEST_DIR
+
+echo pointless remove property
+$XFS_IO_PROG -c "removefsprops $propname" $TEST_DIR
+
+echo set too long name
+$XFS_IO_PROG -c "setfsprops $longpropname=$propval" $TEST_DIR
+
+echo set too long value
+$XFS_IO_PROG -c "setfsprops $propname=$longpropval" $TEST_DIR
+
+echo not enough permissions
+su - "$qa_user" -c "$XFS_IO_PROG -c \"setfsprops $propname=$propval\" $TEST_DIR" 2>&1 | _filter_test_dir
+
+echo "*** DB TEST ***"
+
+propval=$((propval + 1))
+_test_unmount
+
+echo empty get property
+_test_xfs_db -x -c 'path /' -c "attr_get -Z $propname" 2>&1 | filter_inum
+
+echo pointless remove property
+_test_xfs_db -x -c 'path /' -c "attr_remove -Z $propname" 2>&1 | filter_inum
+
+echo list property
+_test_xfs_db -x -c 'path /' -c "attr_list -Z" | grep $propname
+
+echo set property
+_test_xfs_db -x -c 'path /' -c "attr_set -Z $propname $propval"
+
+echo list property
+_test_xfs_db -x -c 'path /' -c "attr_list -Z" | grep $propname
+
+echo dump xattrs
+_test_mount
+$ATTR_PROG -R -l $TEST_DIR | grep $propname | _filter_test_dir
+_test_unmount
+
+echo get property
+_test_xfs_db -x -c 'path /' -c "attr_get -Z $propname"
+
+echo list property
+_test_xfs_db -x -c 'path /' -c "attr_list -Z" | grep $propname
+
+echo remove property
+_test_xfs_db -x -c 'path /' -c "attr_remove -Z $propname"
+
+echo pointless remove property
+_test_xfs_db -x -c 'path /' -c "attr_remove -Z $propname" 2>&1 | filter_inum
+
+echo set too long name
+_test_xfs_db -x -c 'path /' -c "attr_set -Z $longpropname $propval"
+
+echo set too long value
+_test_xfs_db -x -c 'path /' -c "attr_set -Z $propname $longpropval"
+
+status=0
+exit

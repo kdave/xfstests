@@ -1323,8 +1323,8 @@ _require_xfs_spaceman_command()
 	testfile=$TEST_DIR/$$.xfs_spaceman
 	touch $testfile
 	case $command in
-	"health")
-		testio=`$XFS_SPACEMAN_PROG -c "health $param" $TEST_DIR 2>&1`
+	"health"|"listfsprops")
+		testio=`$XFS_SPACEMAN_PROG -c "$command $param" $TEST_DIR 2>&1`
 		param_checked=1
 		;;
 	*)
@@ -1859,4 +1859,14 @@ _require_xfs_parent()
 _xfs_statfs_field()
 {
 	$XFS_IO_PROG -c 'statfs' "$1" | grep -E "$2" | cut -d ' ' -f 3
+}
+
+# Wipe all filesystem properties from an xfs filesystem.  The sole argument
+# must be the root directory of a filesystem.
+_wipe_xfs_properties()
+{
+	getfattr --match="^trusted.xfs:" --absolute-names --dump --encoding=hex "$1" | \
+			grep '=' | sed -e 's/=.*$//g' | while read name; do
+		setfattr --remove="$name" "$1"
+	done
 }

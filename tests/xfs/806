@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 806
+#
+# Functional testing for mkfs applying autofsck fs property and xfs_scrub
+# changing its behavior accordingly.  Or at least claiming to.
+#
+. ./common/preamble
+_begin_fstest auto fsproperties
+
+. ./common/filter
+. ./common/fuzzy
+
+_require_test
+_require_xfs_io_command listfsprops	# needed for fs props
+_require_xfs_db_command attr_get
+_require_scrub
+
+_cleanup()
+
+{
+	cd /
+	rm -r -f $tmp.*
+	umount $dummymnt &>/dev/null
+	rmdir $dummymnt &>/dev/null
+	rm -f $dummyfile
+}
+
+dummyfile=$TEST_DIR/$seq.somefile
+dummymnt=$TEST_DIR/$seq.mount
+
+truncate -s 10g $dummyfile
+mkdir -p $dummymnt
+
+testme() {
+	local mkfs_args=('-f' '-m' "$1")
+
+	echo "testing ${mkfs_args[*]}" >> $seqres.full
+
+	$MKFS_XFS_PROG "${mkfs_args[@]}" $dummyfile >> $seqres.full || \
+		echo "mkfs.xfs ${mkfs_args[*]} failed?"
+
+	_mount -o loop $dummyfile $dummymnt
+	XFS_SCRUB_PHASE=7 $XFS_SCRUB_PROG -d -o autofsck $dummymnt 2>&1 | \
+		grep autofsck | _filter_test_dir | \
+		sed -e 's/\(directive.\).*$/\1/g'
+	umount $dummymnt
+}
+
+# We don't test the absence of an autofsck directive because xfs_scrub behaves
+# differently depending on whether or not mkfs adds rmapbt/pptrs to the fs.
+testme 'autofsck'
+testme 'autofsck=none'
+testme 'autofsck=check'
+testme 'autofsck=optimize'
+testme 'autofsck=repair'
+testme 'autofsck=0'
+testme 'autofsck=1'
+
+status=0
+exit

@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 805
+#
+# Functional testing for mkfs applying autofsck fs property.
+#
+. ./common/preamble
+_begin_fstest auto fsproperties
+
+. ./common/filter
+. ./common/attr
+
+_require_test
+_require_xfs_io_command listfsprops	# needed for fs props
+_require_xfs_db_command attr_get
+
+_cleanup()
+
+{
+	cd /
+	rm -r -f $tmp.*
+	rm -f $dummyfile
+	rmdir $dummymnt &>/dev/null
+}
+
+dummyfile=$TEST_DIR/$seq.somefile
+dummymnt=$TEST_DIR/$seq.mount
+
+truncate -s 10g $dummyfile
+mkdir -p $dummymnt
+
+filter_inum()
+{
+	sed -e 's/inode [0-9]*/inode XXX/g'
+}
+
+testme() {
+	local mkfs_args=('-f')
+	local value="$1"
+	test -n "$value" && value="=$value"
+
+	if [ $# -gt 0 ]; then
+		mkfs_args+=('-m' "autofsck$value")
+	fi
+
+	echo "testing ${mkfs_args[*]}" >> $seqres.full
+
+	$MKFS_XFS_PROG "${mkfs_args[@]}" $dummyfile >> $seqres.full || \
+		_notrun "mkfs.xfs ${mkfs_args[*]} failed?"
+
+	$XFS_DB_PROG -x -c 'path /' -c "attr_get -Z autofsck" $dummyfile 2>&1 | filter_inum
+}
+
+testme ''
+testme
+testme none
+testme check
+testme optimize
+testme repair
+testme 0
+testme 1
+
+status=0
+exit
