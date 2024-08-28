@@ -1247,6 +1247,17 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	log4(OP_ZERO_RANGE, offset, length,
 	     keep_size ? FL_KEEP_SIZE : FL_NONE);
 
+	if (!keep_size && end_offset > file_size) {
+		/*
+		 * If there's a gap between the old file size and the offset of
+		 * the zero range operation, fill the gap with zeroes.
+		 */
+		if (offset > file_size)
+			memset(good_buf + file_size, '\0', offset - file_size);
+
+		file_size = end_offset;
+	}
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1263,17 +1274,6 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	}
 
 	memset(good_buf + offset, '\0', length);
-
-	if (!keep_size && end_offset > file_size) {
-		/*
-		 * If there's a gap between the old file size and the offset of
-		 * the zero range operation, fill the gap with zeroes.
-		 */
-		if (offset > file_size)
-			memset(good_buf + file_size, '\0', offset - file_size);
-
-		file_size = end_offset;
-	}
 }
 
 #else
@@ -1538,6 +1538,11 @@ do_clone_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_CLONE_RANGE, offset, length, dest, FL_NONE);
 
+	if (dest > file_size)
+		memset(good_buf + file_size, '\0', dest - file_size);
+	if (dest + length > file_size)
+		file_size = dest + length;
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1556,10 +1561,6 @@ do_clone_range(unsigned offset, unsigned length, unsigned dest)
 	}
 
 	memcpy(good_buf + dest, good_buf + offset, length);
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
-	if (dest + length > file_size)
-		file_size = dest + length;
 }
 
 #else
@@ -1756,6 +1757,11 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_COPY_RANGE, offset, length, dest, FL_NONE);
 
+	if (dest > file_size)
+		memset(good_buf + file_size, '\0', dest - file_size);
+	if (dest + length > file_size)
+		file_size = dest + length;
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1792,10 +1798,6 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 	}
 
 	memcpy(good_buf + dest, good_buf + offset, length);
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
-	if (dest + length > file_size)
-		file_size = dest + length;
 }
 
 #else
