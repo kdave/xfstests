@@ -983,6 +983,17 @@ gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 	}
 }
 
+/*
+ * Helper to update the tracked file size. If the offset begins beyond current
+ * EOF, zero the range from EOF to offset in the good buffer.
+ */
+void
+update_file_size(unsigned offset, unsigned size)
+{
+	if (offset > file_size)
+		memset(good_buf + file_size, '\0', offset - file_size);
+	file_size = offset + size;
+}
 
 void
 dowrite(unsigned offset, unsigned size)
@@ -1003,10 +1014,8 @@ dowrite(unsigned offset, unsigned size)
 	log4(OP_WRITE, offset, size, FL_NONE);
 
 	gendata(original_buf, good_buf, offset, size);
-	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
+	if (offset + size > file_size) {
+		update_file_size(offset, size);
 		if (lite) {
 			warn("Lite file size bug in fsx!");
 			report_failure(149);
@@ -1070,10 +1079,8 @@ domapwrite(unsigned offset, unsigned size)
 	log4(OP_MAPWRITE, offset, size, FL_NONE);
 
 	gendata(original_buf, good_buf, offset, size);
-	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
+	if (offset + size > file_size) {
+		update_file_size(offset, size);
 		if (lite) {
 			warn("Lite file size bug in fsx!");
 			report_failure(200);
@@ -1136,9 +1143,7 @@ dotruncate(unsigned size)
 
 	log4(OP_TRUNCATE, 0, size, FL_NONE);
 
-	if (size > file_size)
-		memset(good_buf + file_size, '\0', size - file_size);
-	file_size = size;
+	update_file_size(size, 0);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1247,16 +1252,8 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	log4(OP_ZERO_RANGE, offset, length,
 	     keep_size ? FL_KEEP_SIZE : FL_NONE);
 
-	if (!keep_size && end_offset > file_size) {
-		/*
-		 * If there's a gap between the old file size and the offset of
-		 * the zero range operation, fill the gap with zeroes.
-		 */
-		if (offset > file_size)
-			memset(good_buf + file_size, '\0', offset - file_size);
-
-		file_size = end_offset;
-	}
+	if (!keep_size && end_offset > file_size)
+		update_file_size(offset, length);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1538,10 +1535,8 @@ do_clone_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_CLONE_RANGE, offset, length, dest, FL_NONE);
 
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
 	if (dest + length > file_size)
-		file_size = dest + length;
+		update_file_size(dest, length);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1757,10 +1752,8 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_COPY_RANGE, offset, length, dest, FL_NONE);
 
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
 	if (dest + length > file_size)
-		file_size = dest + length;
+		update_file_size(dest, length);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1848,7 +1841,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 
 	if (end_offset > file_size) {
 		memset(good_buf + file_size, '\0', end_offset - file_size);
-		file_size = end_offset;
+		update_file_size(offset, length);
 	}
 
 	if (testcalls <= simulatedopcount)
