@@ -1,0 +1,31 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 364
+#
+# Test that a program that has 2 threads using the same file descriptor and
+# concurrently doing direct IO writes and fsync doesn't trigger any crash or
+# deadlock.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_test
+_require_odirect
+_require_test_program dio-write-fsync-same-fd
+_require_command "$TIMEOUT_PROG" timeout
+
+# Triggers very frequently with kernel config CONFIG_BTRFS_ASSERT=y.
+[ $FSTYP == "btrfs" ] && \
+	_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix race between direct IO write and fsync when using same fd"
+
+# On error the test program writes messages to stderr, causing a golden output
+# mismatch and making the test fail.
+$TIMEOUT_PROG 10s $here/src/dio-write-fsync-same-fd $TEST_DIR/dio-write-fsync-same-fd
+
+# success, all done
+echo "Silence is golden"
+status=0
+exit
