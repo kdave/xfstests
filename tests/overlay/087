@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2022 Oracle.  All Rights Reserved.
+# Copyright (c) 2024 CTERA Networks.  All Rights Reserved.
+#
+# FS QA Test No. 087
+#
+# This is a variant of test xfs/546 for overlayfs
+# with and without the "volatile" mount option.
+# It only works over xfs underlying fs.
+#
+# Regression test for kernel commits:
+#
+# 5679897eb104 ("vfs: make sync_filesystem return errors from ->sync_fs")
+# 2d86293c7075 ("xfs: return errors in xfs_fs_sync_fs")
+#
+# During a code inspection, I noticed that sync_filesystem ignores the return
+# value of the ->sync_fs calls that it makes.  sync_filesystem, in turn is used
+# by the syncfs(2) syscall to persist filesystem changes to disk.  This means
+# that syncfs(2) does not capture internal filesystem errors that are neither
+# visible from the block device (e.g. media error) nor recorded in s_wb_err.
+# XFS historically returned 0 from ->sync_fs even if there were log failures,
+# so that had to be corrected as well.
+#
+# The kernel commits above fix this problem, so this test tries to trigger the
+# bug by using the shutdown ioctl on a clean, freshly mounted filesystem in the
+# hope that the EIO generated as a result of the filesystem being shut down is
+# only visible via ->sync_fs.
+#
+. ./common/preamble
+_begin_fstest auto quick mount shutdown
+
+
+# Modify as appropriate.
+_require_xfs_io_command syncfs
+_require_scratch_nocheck
+_require_scratch_shutdown
+
+[ "$OVL_BASE_FSTYP" == "xfs" ] || \
+	_notrun "base fs $OVL_BASE_FSTYP has unknown behavior with syncfs after shutdown"
+
+# Reuse the fs formatted when we checked for the shutdown ioctl, and don't
+# bother checking the filesystem afterwards since we never wrote anything.
+echo "=== syncfs after shutdown"
+_scratch_mount
+# This command is complicated a bit because in the case of overlayfs the
+# syncfs fd needs to be opened before shutdown and it is different from the
+# shutdown fd, so we cannot use the _scratch_shutdown() helper.
+# Filter out xfs_io output of active fds.
+$XFS_IO_PROG -x -c "open $(_scratch_shutdown_handle)" -c 'shutdown -f ' -c close -c syncfs $SCRATCH_MNT | \
+	grep -vF '[00'
+
+# Now repeat the same test with a volatile overlayfs mount and expect no error
+_scratch_unmount
+echo "=== syncfs after shutdown (volatile)"
+_scratch_mount -o volatile
+$XFS_IO_PROG -x -c "open $(_scratch_shutdown_handle)" -c 'shutdown -f ' -c close -c syncfs $SCRATCH_MNT | \
+	grep -vF '[00'
+
+# success, all done
+status=0
+exit
