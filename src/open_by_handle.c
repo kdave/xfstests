@@ -87,6 +87,15 @@ Examples:
 #include <errno.h>
 #include <linux/limits.h>
 #include <libgen.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#include <sys/stat.h>
+#include "statx.h"
+
+#ifndef AT_HANDLE_MNT_ID_UNIQUE
+#	define AT_HANDLE_MNT_ID_UNIQUE 0x001
+#endif
 
 #define MAXFILES 1024
 
@@ -118,6 +127,94 @@ void usage(void)
 	exit(EXIT_FAILURE);
 }
 
+static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
+				int bufsz)
+{
+	int ret;
+	int mntid_short;
+
+	static bool skip_mntid, skip_mntid_unique;
+
+	uint64_t statx_mntid_short = 0, statx_mntid_unique = 0;
+	struct statx statxbuf;
+
+	/* Get both the short and unique mount id. */
+	if (!skip_mntid) {
+		if (xfstests_statx(AT_FDCWD, fname, 0, STATX_MNT_ID, &statxbuf) < 0) {
+			fprintf(stderr, "%s: statx(STATX_MNT_ID): %m\n", fname);
+			return EXIT_FAILURE;
+		}
+		if (!(statxbuf.stx_mask & STATX_MNT_ID))
+			skip_mntid = true;
+		else
+			statx_mntid_short = statxbuf.stx_mnt_id;
+	}
+
+	if (!skip_mntid_unique) {
+		if (xfstests_statx(AT_FDCWD, fname, 0, STATX_MNT_ID_UNIQUE, &statxbuf) < 0) {
+			fprintf(stderr, "%s: statx(STATX_MNT_ID_UNIQUE): %m\n", fname);
+			return EXIT_FAILURE;
+		}
+		/*
+		 * STATX_MNT_ID_UNIQUE was added fairly recently in Linux 6.8, so if the
+		 * kernel doesn't give us a unique mount ID just skip it.
+		 */
+		if (!(statxbuf.stx_mask & STATX_MNT_ID_UNIQUE))
+			skip_mntid_unique = true;
+		else
+			statx_mntid_unique = statxbuf.stx_mnt_id;
+	}
+
+	fh->handle_bytes = bufsz;
+	ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, 0);
+	if (bufsz < fh->handle_bytes) {
+		/* Query the filesystem required bufsz and the file handle */
+		if (ret != -1 || errno != EOVERFLOW) {
+			fprintf(stderr, "%s: unexpected result from name_to_handle_at: %d (%m)\n", fname, ret);
+			return EXIT_FAILURE;
+		}
+		ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, 0);
+	}
+	if (ret < 0) {
+		fprintf(stderr, "%s: name_to_handle: %m\n", fname);
+		return EXIT_FAILURE;
+	}
+
+	if (!skip_mntid) {
+		if (mntid_short != (int) statx_mntid_short) {
+			fprintf(stderr, "%s: name_to_handle_at returned a different mount ID to STATX_MNT_ID: %u != %lu\n", fname, mntid_short, statx_mntid_short);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (!skip_mntid_unique) {
+		struct handle dummy_fh;
+		uint64_t mntid_unique = 0;
+
+		/*
+		 * Get the unique mount ID. We don't need to get another copy of the
+		 * handle so store it in a dummy struct.
+		 */
+		dummy_fh.fh.handle_bytes = fh->handle_bytes;
+		ret = name_to_handle_at(AT_FDCWD, fname, &dummy_fh.fh, (int *) &mntid_unique, AT_HANDLE_MNT_ID_UNIQUE);
+		if (ret < 0) {
+			if (errno != EINVAL) {
+				fprintf(stderr, "%s: name_to_handle_at(AT_HANDLE_MNT_ID_UNIQUE): %m\n", fname);
+				return EXIT_FAILURE;
+			}
+			/* EINVAL means AT_HANDLE_MNT_ID_UNIQUE is not supported */
+			skip_mntid_unique = true;
+		} else {
+			if (mntid_unique != statx_mntid_unique) {
+				fprintf(stderr, "%s: name_to_handle_at(AT_HANDLE_MNT_ID_UNIQUE) returned a different mount ID to STATX_MNT_ID_UNIQUE: %lu != %lu\n", fname, mntid_unique, statx_mntid_unique);
+				return EXIT_FAILURE;
+			}
+		}
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int	i, c;
@@ -130,7 +227,7 @@ int main(int argc, char **argv)
 	char	fname2[PATH_MAX];
 	char	*test_dir;
 	char	*mount_dir;
-	int	mount_fd, mount_id;
+	int	mount_fd;
 	char	*infile = NULL, *outfile = NULL;
 	int	in_fd = 0, out_fd = 0;
 	int	numfiles = 1;
@@ -305,21 +402,9 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			handle[i].fh.handle_bytes = bufsz;
-			ret = name_to_handle_at(AT_FDCWD, fname, &handle[i].fh, &mount_id, 0);
-			if (bufsz < handle[i].fh.handle_bytes) {
-				/* Query the filesystem required bufsz and the file handle */
-				if (ret != -1 || errno != EOVERFLOW) {
-					fprintf(stderr, "Unexpected result from name_to_handle_at(%s)\n", fname);
-					return EXIT_FAILURE;
-				}
-				ret = name_to_handle_at(AT_FDCWD, fname, &handle[i].fh, &mount_id, 0);
-			}
-			if (ret < 0) {
-				strcat(fname, ": name_to_handle");
-				perror(fname);
+			ret = do_name_to_handle_at(fname, &handle[i].fh, bufsz);
+			if (ret)
 				return EXIT_FAILURE;
-			}
 		}
 		if (keepopen) {
 			/* Open without close to keep unlinked files around */
@@ -347,21 +432,9 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			dir_handle.fh.handle_bytes = bufsz;
-			ret = name_to_handle_at(AT_FDCWD, test_dir, &dir_handle.fh, &mount_id, 0);
-			if (bufsz < dir_handle.fh.handle_bytes) {
-				/* Query the filesystem required bufsz and the file handle */
-				if (ret != -1 || errno != EOVERFLOW) {
-					fprintf(stderr, "Unexpected result from name_to_handle_at(%s)\n", dname);
-					return EXIT_FAILURE;
-				}
-				ret = name_to_handle_at(AT_FDCWD, test_dir, &dir_handle.fh, &mount_id, 0);
-			}
-			if (ret < 0) {
-				strcat(dname, ": name_to_handle");
-				perror(dname);
+			ret = do_name_to_handle_at(test_dir, &dir_handle.fh, bufsz);
+			if (ret)
 				return EXIT_FAILURE;
-			}
 		}
 		if (out_fd) {
 			ret = write(out_fd, (char *)&dir_handle, sizeof(*handle));
