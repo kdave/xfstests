@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2017 CTERA Networks. All Rights Reserved.
+# Copyright (C) 2024 Aleksa Sarai <cyphar@cyphar.com>
+#
+# FS QA Test No. 756
+#
+# Check stale handles pointing to unlinked files and non-stale handles pointing
+# to linked files while verifying that u64 mount IDs are correctly returned.
+#
+. ./common/preamble
+_begin_fstest auto quick exportfs
+
+# Import common functions.
+. ./common/filter
+
+
+# Modify as appropriate.
+_require_test
+# _require_exportfs and  already requires open_by_handle, but let's not count on it
+_require_test_program "open_by_handle"
+_require_exportfs
+# We need both STATX_MNT_ID_UNIQUE and AT_HANDLE_MNT_ID_UNIQUE.
+_require_statx_unique_mountid
+_require_open_by_handle_unique_mountid
+
+NUMFILES=1024
+testdir=$TEST_DIR/$seq-dir
+mkdir -p $testdir
+
+# Create empty test files in test dir
+create_test_files()
+{
+	local dir=$1
+
+	mkdir -p $dir
+	rm -f $dir/*
+	$here/src/open_by_handle -c $dir $NUMFILES
+}
+
+# Test encode/decode file handles
+test_file_handles()
+{
+	local dir=$1
+	local opt=$2
+
+	echo test_file_handles $* | _filter_test_dir
+	$here/src/open_by_handle $opt $dir $NUMFILES
+}
+
+# Check stale handles to deleted files
+create_test_files $testdir
+test_file_handles $testdir -Md
+
+# Check non-stale handles to linked files
+create_test_files $testdir
+test_file_handles $testdir -M
+
+# Check non-stale handles to files that were hardlinked and original deleted
+create_test_files $testdir
+test_file_handles $testdir -Ml
+test_file_handles $testdir -Mu
+
+status=0
+exit

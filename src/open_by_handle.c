@@ -106,7 +106,8 @@ struct handle {
 
 void usage(void)
 {
-	fprintf(stderr, "usage: open_by_handle [-cludmrwapknhs] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
+	fprintf(stderr, "usage: open_by_handle [-cludmMrwapknhs] [<-i|-o> <handles_file>] <test_dir> [num_files]\n");
+	fprintf(stderr, "       open_by_handle -C <feature>\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "open_by_handle -c <test_dir> [N] - create N test files under test_dir, try to get file handles and exit\n");
 	fprintf(stderr, "open_by_handle    <test_dir> [N] - get file handles of test files, drop caches and try to open by handle\n");
@@ -119,16 +120,21 @@ void usage(void)
 	fprintf(stderr, "open_by_handle -u <test_dir> [N] - unlink (hardlinked) test files, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -d <test_dir> [N] - unlink test files and hardlinks, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -m <test_dir> [N] - rename test files, drop caches and try to open by handle\n");
+	fprintf(stderr, "open_by_handle -M <test_dir> [N] - do not silently skip the mount ID verifications\n");
 	fprintf(stderr, "open_by_handle -p <test_dir>     - create/delete and try to open by handle also test_dir itself\n");
 	fprintf(stderr, "open_by_handle -i <handles_file> <test_dir> [N] - read test files handles from file and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -o <handles_file> <test_dir> [N] - get file handles of test files and write handles to file\n");
 	fprintf(stderr, "open_by_handle -s <test_dir> [N] - wait in sleep loop after opening files by handle to keep them open\n");
 	fprintf(stderr, "open_by_handle -z <test_dir> [N] - query filesystem required buffer size\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "open_by_handle -C <feature>      - check if <feature> is supported by the kernel.\n");
+	fprintf(stderr, "  <feature> can be any of the following values:\n");
+	fprintf(stderr, "  - AT_HANDLE_MNT_ID_UNIQUE\n");
 	exit(EXIT_FAILURE);
 }
 
 static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
-				int bufsz)
+				int bufsz, bool force_check_mountid)
 {
 	int ret;
 	int mntid_short;
@@ -144,10 +150,15 @@ static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
 			fprintf(stderr, "%s: statx(STATX_MNT_ID): %m\n", fname);
 			return EXIT_FAILURE;
 		}
-		if (!(statxbuf.stx_mask & STATX_MNT_ID))
+		if (!(statxbuf.stx_mask & STATX_MNT_ID)) {
+			if (force_check_mountid) {
+				fprintf(stderr, "%s: statx(STATX_MNT_ID) not supported by running kernel\n", fname);
+				return EXIT_FAILURE;
+			}
 			skip_mntid = true;
-		else
+		} else {
 			statx_mntid_short = statxbuf.stx_mnt_id;
+		}
 	}
 
 	if (!skip_mntid_unique) {
@@ -159,10 +170,15 @@ static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
 		 * STATX_MNT_ID_UNIQUE was added fairly recently in Linux 6.8, so if the
 		 * kernel doesn't give us a unique mount ID just skip it.
 		 */
-		if (!(statxbuf.stx_mask & STATX_MNT_ID_UNIQUE))
+		if (!(statxbuf.stx_mask & STATX_MNT_ID_UNIQUE)) {
+			if (force_check_mountid) {
+				fprintf(stderr, "%s: statx(STATX_MNT_ID_UNIQUE) not supported by running kernel\n", fname);
+				return EXIT_FAILURE;
+			}
 			skip_mntid_unique = true;
-		else
+		} else {
 			statx_mntid_unique = statxbuf.stx_mnt_id;
+		}
 	}
 
 	fh->handle_bytes = bufsz;
@@ -203,6 +219,10 @@ static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
 				return EXIT_FAILURE;
 			}
 			/* EINVAL means AT_HANDLE_MNT_ID_UNIQUE is not supported */
+			if (force_check_mountid) {
+				fprintf(stderr, "%s: name_to_handle_at(AT_HANDLE_MNT_ID_UNIQUE) not supported by running kernel\n", fname);
+				return EXIT_FAILURE;
+			}
 			skip_mntid_unique = true;
 		} else {
 			if (mntid_unique != statx_mntid_unique) {
@@ -213,6 +233,22 @@ static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
 	}
 
 	return 0;
+}
+
+static int check_feature(const char *feature)
+{
+	if (!strcmp(feature, "AT_HANDLE_MNT_ID_UNIQUE")) {
+		int ret = name_to_handle_at(AT_FDCWD, ".", NULL, NULL, AT_HANDLE_MNT_ID_UNIQUE);
+		/* If AT_HANDLE_MNT_ID_UNIQUE is supported, we get EFAULT. */
+		if (ret < 0 && errno == EINVAL) {
+			fprintf(stderr, "name_to_handle_at(AT_HANDLE_MNT_ID_UNIQUE) not supported by running kernel\n");
+			return EXIT_FAILURE;
+		}
+		return 0;
+	}
+
+	fprintf(stderr, "unknown feature name '%s'\n", feature);
+	return EXIT_FAILURE;
 }
 
 int main(int argc, char **argv)
@@ -234,16 +270,20 @@ int main(int argc, char **argv)
 	int	create = 0, delete = 0, nlink = 1, move = 0;
 	int	rd = 0, wr = 0, wrafter = 0, parent = 0;
 	int	keepopen = 0, drop_caches = 1, sleep_loop = 0;
+	int	force_check_mountid = 0;
 	int	bufsz = MAX_HANDLE_SZ;
 
 	if (argc < 2)
 		usage();
 
-	while ((c = getopt(argc, argv, "cludmrwapknhi:o:sz")) != -1) {
+	while ((c = getopt(argc, argv, "cC:ludmMrwapknhi:o:sz")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
 			break;
+		case 'C':
+			/* Check kernel feature support. */
+			return check_feature(optarg);
 		case 'w':
 			/* Write data before open_by_handle_at() */
 			wr = 1;
@@ -269,6 +309,9 @@ int main(int argc, char **argv)
 			break;
 		case 'm':
 			move = 1;
+			break;
+		case 'M':
+			force_check_mountid = 1;
 			break;
 		case 'p':
 			parent = 1;
@@ -402,7 +445,7 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			ret = do_name_to_handle_at(fname, &handle[i].fh, bufsz);
+			ret = do_name_to_handle_at(fname, &handle[i].fh, bufsz, force_check_mountid);
 			if (ret)
 				return EXIT_FAILURE;
 		}
@@ -432,7 +475,7 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			ret = do_name_to_handle_at(test_dir, &dir_handle.fh, bufsz);
+			ret = do_name_to_handle_at(test_dir, &dir_handle.fh, bufsz, force_check_mountid);
 			if (ret)
 				return EXIT_FAILURE;
 		}

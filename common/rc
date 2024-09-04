@@ -5178,6 +5178,30 @@ _require_fibmap()
 	rm -f $file
 }
 
+_require_statx_unique_mountid()
+{
+	# statx(STATX_MNT_ID=0x1000) was added in Linux 5.8.
+	# statx(STATX_MNT_ID_UNIQUE=0x4000) was added in Linux 6.9.
+	# We only need to check the latter.
+
+	export STATX_MNT_ID_UNIQUE=0x4000
+	local statx_mask=$(
+		${XFS_IO_PROG} -c "statx -m $STATX_MNT_ID_UNIQUE -r" "$TEST_DIR" |
+		sed -En 's/stat\.mask = (0x[0-9a-f]+)/\1/p'
+	)
+
+	[[ $(( statx_mask & STATX_MNT_ID_UNIQUE )) == $((STATX_MNT_ID_UNIQUE)) ]] ||
+		_notrun "statx does not support STATX_MNT_ID_UNIQUE on this kernel"
+}
+
+_require_open_by_handle_unique_mountid()
+{
+	_require_test_program "open_by_handle"
+
+	$here/src/open_by_handle -C AT_HANDLE_MNT_ID_UNIQUE 2>&1 \
+		|| _notrun "name_to_handle_at does not support AT_HANDLE_MNT_ID_UNIQUE"
+}
+
 _try_wipe_scratch_devs()
 {
 	test -x "$WIPEFS_PROG" || return 0
