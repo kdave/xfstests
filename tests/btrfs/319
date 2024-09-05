@@ -32,6 +32,19 @@ _require_odirect
 _fixed_by_kernel_commit 46a6e10a1ab1 \
 	"btrfs: send: allow cloning non-aligned extent if it ends at i_size"
 
+check_all_extents_shared()
+{
+	local file=$1
+	local fiemap_output
+
+	fiemap_output=$($XFS_IO_PROG -r -c "fiemap -v" $file | _filter_fiemap_flags)
+	echo "$fiemap_output" | grep -qv 'shared'
+	if [ $? -eq 0 ]; then
+		echo -e "Found non-shared extents for file $file:\n"
+		echo "$fiemap_output"
+	fi
+}
+
 send_files_dir=$TEST_DIR/btrfs-test-$seq
 send_stream=$send_files_dir/snap.stream
 
@@ -58,8 +71,7 @@ echo "File digests in the original filesystem:"
 md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
 md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
 
-echo "File bar fiemap in the original filesystem:"
-$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags
+check_all_extents_shared "$SCRATCH_MNT/snap/bar"
 
 echo "Creating a new filesystem to receive the send stream..."
 _scratch_unmount
@@ -72,8 +84,7 @@ echo "File digests in the new filesystem:"
 md5sum $SCRATCH_MNT/snap/foo | _filter_scratch
 md5sum $SCRATCH_MNT/snap/bar | _filter_scratch
 
-echo "File bar fiemap in the new filesystem:"
-$XFS_IO_PROG -r -c "fiemap -v" $SCRATCH_MNT/snap/bar | _filter_fiemap_flags
+check_all_extents_shared "$SCRATCH_MNT/snap/bar"
 
 # success, all done
 status=0
