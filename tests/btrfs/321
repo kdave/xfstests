@@ -33,9 +33,11 @@ _scratch_pool_mkfs "-d raid0 -m single -n 4k -s 4k" >> $seqres.full 2>&1
 # This test requires data checksum to trigger the bug.
 _scratch_mount -o datasum,datacow
 
-# For the smallest csum size (CRC32C) it's 4 bytes per 4K, writing 32M data
-# will need 32K data checksum at minimal, which is at least 8 leaves.
-_pwrite_byte 0xef 0 32m "$SCRATCH_MNT/foobar" > /dev/null
+# For the smallest csum size (CRC32C) it's 4 bytes per 4K, writing 128M of data
+# will need 128K data checksum at minimal, which is at least 34 leaves when
+# running without compression and a leaf size of 64K. With compression enabled
+# and a 64K leaf size, it will be 2 leaves.
+_pwrite_byte 0xef 0 128m "$SCRATCH_MNT/foobar" > /dev/null
 _scratch_unmount
 
 
