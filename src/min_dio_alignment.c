@@ -42,7 +42,7 @@ static int min_dio_alignment(const char *mntpnt, const char *devname)
 		if (dev_fd > 0 &&
 		    fstat(dev_fd, &st) == 0 &&
 		    S_ISBLK(st.st_mode) &&
-		    ioctl(dev_fd, BLKSSZGET, &logical_block_size)) {
+		    ioctl(dev_fd, BLKSSZGET, &logical_block_size) == 0) {
 			return logical_block_size;
 		}
 	}
