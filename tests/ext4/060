@@ -1,0 +1,45 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test 060
+#
+# This test ensures that kernel avoids FS corruption while online
+# resizing an ext4 filesystem with disabled resize_inode feature.
+#
+# The commit a6b3bfe176e8 ("ext4: fix corruption during on-line resize")
+# stops the corruption.
+#
+
+. ./common/preamble
+_begin_fstest auto resize quick
+
+_supported_fs ext4
+_fixed_by_kernel_commit a6b3bfe176e8 \
+	"ext4: fix corruption during on-line resize"
+
+_require_command "$RESIZE2FS_PROG" resize2fs
+_require_command "$E2FSCK_PROG" e2fsck
+_require_scratch_size_nocheck $((9* 1024 * 1024))
+
+# Initialize an EXT4 filesystem with the resize_inode feature disabled,
+# and a size of 128MiB less than 8GiB, i.e., short of 1 block group in
+# an 8GiB filesystem.
+
+dev_size=$((8* 1024 * 1024 * 1024 - 128 * 1024 * 1024))
+MKFS_OPTIONS="-O ^resize_inode" _scratch_mkfs_sized $dev_size \
+	>>$seqres.full 2>&1
+
+_scratch_mount
+
+# Perform online-resize
+$RESIZE2FS_PROG $SCRATCH_DEV 9G >> $seqres.full 2>&1
+
+_scratch_unmount
+
+$E2FSCK_PROG -fn $SCRATCH_DEV >> $seqres.full 2>&1 || _fail "Filesystem corrupted"
+
+echo "Silence is golden"
+
+status=0
+exit
