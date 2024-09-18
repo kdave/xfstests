@@ -1,0 +1,79 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 365
+#
+# Regression test for sub-fsblock key handling errors in GETFSMAP.
+#
+. ./common/preamble
+_begin_fstest auto rmap fsmap
+
+_fixed_by_kernel_commit 68415b349f3f \
+	"xfs: Fix the owner setting issue for rmap query in xfs fsmap"
+_fixed_by_kernel_commit ca6448aed4f1 \
+	"xfs: Fix missing interval for missing_owner in xfs fsmap"
+
+. ./common/filter
+
+_require_xfs_io_command "fsmap"
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+blksz=$(_get_block_size "$SCRATCH_MNT")
+if ((blksz < 2048)); then
+	_notrun "test requires at least 4 bblocks per fsblock"
+fi
+
+$XFS_IO_PROG -c 'fsmap' $SCRATCH_MNT >> $seqres.full
+
+find_freesp() {
+	$XFS_IO_PROG -c 'fsmap -d' $SCRATCH_MNT | tr '.[]:' '    ' | \
+		grep 'free space' | awk '{printf("%s:%s\n", $4, $5);}' | \
+		head -n 1
+}
+
+filter_fsmap() {
+	_filter_xfs_io_numbers | sed \
+		-e 's/inode XXXX data XXXX..XXXX/inode data/g' \
+		-e 's/inode XXXX attr XXXX..XXXX/inode attr/g' \
+		-e 's/: free space XXXX/: FREE XXXX/g' \
+		-e 's/: [a-z].*XXXX/: USED XXXX/g'
+}
+
+$XFS_IO_PROG -c 'fsmap -d' $SCRATCH_MNT | filter_fsmap >> $seqres.full
+
+freesp="$(find_freesp)"
+
+freesp_start="$(echo "$freesp" | cut -d ':' -f 1)"
+freesp_end="$(echo "$freesp" | cut -d ':' -f 2)"
+echo "$freesp:$freesp_start:$freesp_end" >> $seqres.full
+
+echo "test incorrect setting of high key"
+$XFS_IO_PROG -c 'fsmap -d 0 3' $SCRATCH_MNT | filter_fsmap
+
+echo "test missing free space extent"
+$XFS_IO_PROG -c "fsmap -d $((freesp_start + 1)) $((freesp_start + 2))" $SCRATCH_MNT | \
+	filter_fsmap
+
+echo "test whatever came before freesp"
+$XFS_IO_PROG -c "fsmap -d $((freesp_start - 3)) $((freesp_start - 2))" $SCRATCH_MNT | \
+	filter_fsmap
+
+echo "test whatever came after freesp"
+$XFS_IO_PROG -c "fsmap -d $((freesp_end + 2)) $((freesp_end + 3))" $SCRATCH_MNT | \
+	filter_fsmap
+
+echo "test crossing start of freesp"
+$XFS_IO_PROG -c "fsmap -d $((freesp_start - 2)) $((freesp_start + 1))" $SCRATCH_MNT | \
+	filter_fsmap
+
+echo "test crossing end of freesp"
+$XFS_IO_PROG -c "fsmap -d $((freesp_end - 1)) $((freesp_end + 2))" $SCRATCH_MNT | \
+	filter_fsmap
+
+# success, all done
+status=0
+exit
