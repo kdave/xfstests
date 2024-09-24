@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 631
+#
+# Post-EOF preallocation defeat test for direct I/O with extent size hints.
+#
+
+. ./common/preamble
+_begin_fstest auto quick prealloc rw
+
+. ./common/filter
+
+_require_scratch
+# _count_extents() needs the fiemap command
+_require_xfs_io_command "fiemap"
+_require_xfs_io_command "extsize"
+
+_cleanup()
+{
+	# try to kill all background processes
+	wait
+	cd /
+	rm -r -f $tmp.*
+}
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+# Write multiple files in parallel using O_DIRECT writes w/ extent size hints.
+# Aim is to interleave allocations to fragment the files. O_DIRECT writes defeat
+# the open/write/close heuristics in xfs_file_release() that prevent EOF block
+# removal, so this should fragment badly. Typical problematic behaviour shows
+# per-file extent counts of ~1000 (worst case) whilst fixed behaviour typically
+# shows extent counts in the low single digits (almost best case)
+#
+# Failure is determined by golden output mismatch from _within_tolerance().
+
+workfile=$SCRATCH_MNT/file
+nfiles=8
+wsize=4096
+wcnt=1000
+extent_size=16m
+
+write_direct_file()
+{
+	idx=$1
+
+	$XFS_IO_PROG -f -c "extsize $extent_size" $workfile.$idx
+	for ((cnt=0; cnt<wcnt; cnt++)); do
+		$XFS_IO_PROG -f -d -c "pwrite $((cnt * wsize)) $wsize" $workfile.$idx
+	done
+}
+
+rm -f $workfile.*
+for ((n=0; n<nfiles; n++)); do
+	write_direct_file $n > /dev/null 2>&1 &
+done
+wait
+sync
+
+for ((n=0; n<nfiles; n++)); do
+	count=$(_count_extents $workfile.$n)
+	# Acceptible extent count range is 1-10
+	_within_tolerance "file.$n extent count" $count 2 1 8 -v
+done
+
+status=0
+exit

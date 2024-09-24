@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2019 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 632
+#
+# Post-EOF preallocation defeat test with O_SYNC buffered I/O that repeatedly
+# closes and reopens the files.
+#
+
+. ./common/preamble
+_begin_fstest auto prealloc rw
+
+. ./common/filter
+
+_require_scratch
+# _count_extents() needs the fiemap command
+_require_xfs_io_command "fiemap"
+
+_cleanup()
+{
+	# wait all background processes done
+	wait
+	cd /
+	rm -r -f $tmp.*
+}
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+
+# Write multiple files in parallel using synchronous buffered writes that
+# repeatedly close and reopen the fails. Aim is to interleave allocations to
+# fragment the files. Assuming we've fixed the synchronous write defeat, we can
+# still trigger the same issue with a open/read/close on O_RDONLY files. We
+# should not be triggering EOF preallocation removal on files we don't have
+# permission to write, so until this is fixed it should fragment badly.  Typical
+# problematic behaviour shows per-file extent counts of 50-350 whilst fixed
+# behaviour typically demonstrates post-eof speculative delalloc growth in
+# extent size (~6 extents for 50MB file).
+#
+# Failure is determined by golden output mismatch from _within_tolerance().
+
+workfile=$SCRATCH_MNT/file
+nfiles=32
+wsize=4096
+wcnt=1000
+
+write_file()
+{
+	idx=$1
+
+	$XFS_IO_PROG -f -s -c "pwrite -b 64k 0 50m" $workfile.$idx
+}
+
+read_file()
+{
+	idx=$1
+
+	for ((cnt=0; cnt<wcnt; cnt++)); do
+		$XFS_IO_PROG -f -r -c "pread 0 28" $workfile.$idx
+	done
+}
+
+rm -f $workfile.*
+for ((n=0; n<nfiles; n++)); do
+	write_file $n > /dev/null 2>&1 &
+	read_file $n > /dev/null 2>&1 &
+done
+wait
+
+for ((n=0; n<nfiles; n++)); do
+	count=$(_count_extents $workfile.$n)
+	# Acceptible extent count range is 1-40
+	_within_tolerance "file.$n extent count" $count 6 5 10 -v
+done
+
+status=0
+exit
