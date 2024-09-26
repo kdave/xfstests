@@ -45,9 +45,14 @@
 
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
-/* Operation flags */
-
-enum opflags { FL_NONE = 0, FL_SKIPPED = 1, FL_CLOSE_OPEN = 2, FL_KEEP_SIZE = 4 };
+/* Operation flags (bitmask) */
+enum opflags {
+	FL_NONE = 0,
+	FL_SKIPPED = 1,
+	FL_CLOSE_OPEN = 2,
+	FL_KEEP_SIZE = 4,
+	FL_UNSHARE = 8
+};
 
 /*
  *	A log entry is an operation and a bunch of arguments.
@@ -167,6 +172,7 @@ int	seed = 1;			/* -S flag */
 int     mapped_writes = 1;              /* -W flag disables */
 int     fallocate_calls = 1;            /* -F flag disables */
 int     keep_size_calls = 1;            /* -K flag disables */
+int     unshare_range_calls = 1;        /* -u flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int     zero_range_calls = 1;           /* -z flag disables */
 int	collapse_range_calls = 1;	/* -C flag disables */
@@ -543,6 +549,8 @@ logdump(void)
 				fprintf(logopsf, " keep_size");
 			if (lp->flags & FL_CLOSE_OPEN)
 				fprintf(logopsf, " close_open");
+			if (lp->flags & FL_UNSHARE)
+				fprintf(logopsf, " unshare");
 			if (overlap)
 				fprintf(logopsf, " *");
 			fprintf(logopsf, "\n");
@@ -1879,15 +1887,27 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 #ifdef HAVE_LINUX_FALLOC_H
 /* fallocate is basically a no-op unless extending, then a lot like a truncate */
 void
-do_preallocate(unsigned offset, unsigned length, int keep_size)
+do_preallocate(unsigned offset, unsigned length, int keep_size, int unshare)
 {
 	unsigned end_offset;
+	enum opflags opflags = FL_NONE;
+	int mode = 0;
+
+	if (keep_size) {
+		opflags |= FL_KEEP_SIZE;
+		mode |= FALLOC_FL_KEEP_SIZE;
+	}
+#ifdef FALLOC_FL_UNSHARE_RANGE
+	if (unshare) {
+		opflags |= FL_UNSHARE;
+		mode |= FALLOC_FL_UNSHARE_RANGE;
+	}
+#endif
 
         if (length == 0) {
                 if (!quiet && testcalls > simulatedopcount)
                         prt("skipping zero length fallocate\n");
-                log4(OP_FALLOCATE, offset, length, FL_SKIPPED |
-		     (keep_size ? FL_KEEP_SIZE : FL_NONE));
+                log4(OP_FALLOCATE, offset, length, FL_SKIPPED | opflags);
                 return;
         }
 
@@ -1905,8 +1925,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 	 * 	1: extending prealloc
 	 * 	2: interior prealloc
 	 */
-	log4(OP_FALLOCATE, offset, length,
-	     keep_size ? FL_KEEP_SIZE : FL_NONE);
+	log4(OP_FALLOCATE, offset, length, opflags);
 
 	if (end_offset > file_size) {
 		memset(good_buf + file_size, '\0', end_offset - file_size);
@@ -1921,7 +1940,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 		      end_offset <= monitorend)))
 		prt("%lld falloc\tfrom 0x%x to 0x%x (0x%x bytes)\n", testcalls,
 				offset, offset + length, length);
-	if (fallocate(fd, keep_size ? FALLOC_FL_KEEP_SIZE : 0, (loff_t)offset, (loff_t)length) == -1) {
+	if (fallocate(fd, mode, (loff_t)offset, (loff_t)length) == -1) {
 	        prt("fallocate: 0x%x to 0x%x\n", offset, offset + length);
 		prterr("do_preallocate: fallocate");
 		report_failure(161);
@@ -1929,7 +1948,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 }
 #else
 void
-do_preallocate(unsigned offset, unsigned length, int keep_size)
+do_preallocate(unsigned offset, unsigned length, int keep_size, int unshare)
 {
 	return;
 }
@@ -2095,6 +2114,8 @@ read_op(struct log_entry *log_entry)
 				log_entry->flags |= FL_KEEP_SIZE;
 			else if (strcmp(str, "close_open") == 0)
 				log_entry->flags |= FL_CLOSE_OPEN;
+			else if (strcmp(str, "unshare") == 0)
+				log_entry->flags |= FL_UNSHARE;
 			else if (strcmp(str, "*") == 0)
 				;  /* overlap marker; ignore */
 			else
@@ -2161,6 +2182,7 @@ test(void)
 	unsigned long	rv;
 	unsigned long	op;
 	int		keep_size = 0;
+	int		unshare = 0;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
 		writefileimage();
@@ -2190,6 +2212,7 @@ test(void)
 			offset2 = log_entry.args[2];
 			closeopen = !!(log_entry.flags & FL_CLOSE_OPEN);
 			keep_size = !!(log_entry.flags & FL_KEEP_SIZE);
+			unshare = !!(log_entry.flags & FL_UNSHARE);
 			goto have_op;
 		}
 		return 0;
@@ -2219,8 +2242,12 @@ test(void)
 			size = random() % maxfilelen;
 		break;
 	case OP_FALLOCATE:
-		if (fallocate_calls && size && keep_size_calls)
-			keep_size = random() % 2;
+		if (fallocate_calls && size) {
+			if (keep_size_calls)
+				keep_size = random() % 2;
+			if (unshare_range_calls)
+				unshare = random() % 2;
+		}
 		break;
 	case OP_ZERO_RANGE:
 		if (zero_range_calls && size && keep_size_calls)
@@ -2334,7 +2361,7 @@ have_op:
 
 	case OP_FALLOCATE:
 		TRIM_OFF_LEN(offset, size, maxfilelen);
-		do_preallocate(offset, size, keep_size);
+		do_preallocate(offset, size, keep_size, unshare);
 		break;
 
 	case OP_PUNCH_HOLE:
@@ -2468,8 +2495,11 @@ usage(void)
 	-q: quieter operation\n\
 	-r readbdy: 4096 would make reads page aligned (default 1)\n\
 	-s style: 1 gives smaller truncates (default 0)\n\
-	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
-	-w writebdy: 4096 would make writes page aligned (default 1)\n\
+	-t truncbdy: 4096 would make truncates page aligned (default 1)\n"
+#ifdef FALLOC_FL_UNSHARE_RANGE
+"	-u Do not use unshare range\n"
+#endif
+"	-w writebdy: 4096 would make writes page aligned (default 1)\n\
 	-x: preallocate file space before starting, XFS only\n\
 	-y: synchronize changes to a file\n"
 
@@ -2853,7 +2883,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "0b:c:de:fg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:UWXZ",
+				 "0b:c:de:fg:i:j:kl:m:no:p:qr:s:t:uw:xyABD:EFJKHzCILN:OP:RS:UWXZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -2951,6 +2981,9 @@ main(int argc, char **argv)
 			truncbdy = getnum(optarg, &endp);
 			if (truncbdy <= 0)
 				usage();
+			break;
+		case 'u':
+			unshare_range_calls = 0;
 			break;
 		case 'w':
 			writebdy = getnum(optarg, &endp);
@@ -3242,6 +3275,8 @@ main(int argc, char **argv)
 		fallocate_calls = test_fallocate(0);
 	if (keep_size_calls)
 		keep_size_calls = test_fallocate(FALLOC_FL_KEEP_SIZE);
+	if (unshare_range_calls)
+		unshare_range_calls = test_fallocate(FALLOC_FL_UNSHARE_RANGE);
 	if (punch_hole_calls)
 		punch_hole_calls = test_fallocate(FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE);
 	if (zero_range_calls)
