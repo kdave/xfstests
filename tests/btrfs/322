@@ -1,0 +1,109 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 322
+#
+# Test that doing an incremental send with a file that had its size decreased
+# and became the destination for a clone operation of an extent with an
+# unaligned end offset that matches the new file size, works correctly.
+#
+. ./common/preamble
+_begin_fstest auto quick send clone fiemap
+
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $send_files_dir
+}
+
+. ./common/filter
+. ./common/reflink
+. ./common/punch # for _filter_fiemap_flags
+
+_require_test
+_require_scratch_reflink
+_require_xfs_io_command "fiemap"
+_require_xfs_io_command "reflink"
+_require_odirect
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: send: fix invalid clone operation for file that got its size decreased"
+
+check_all_extents_shared()
+{
+	local file=$1
+	local fiemap_output
+
+	fiemap_output=$($XFS_IO_PROG -r -c "fiemap -v" $file | _filter_fiemap_flags)
+	echo "$fiemap_output" | grep -qv 'shared'
+	if [ $? -eq 0 ]; then
+		echo -e "Found non-shared extents for file $file:\n"
+		echo "$fiemap_output"
+	fi
+}
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+full_send_stream=$send_files_dir/full_snap.stream
+inc_send_stream=$send_files_dir/inc_snap.stream
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "first mkfs failed"
+_scratch_mount
+
+# Create a file with a size of 256K + 5 bytes, having two extents, the first one
+# with a size of 128K and the second one with a size of 128K + 5 bytes.
+last_extent_size=$((128 * 1024 + 5))
+$XFS_IO_PROG -f -d -c "pwrite -S 0xab -b 128K 0 128K" \
+             -c "pwrite -S 0xcd -b $last_extent_size 128K $last_extent_size" \
+             $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Another file which we will later clone foo into, but initially with
+# a larger size than foo.
+$XFS_IO_PROG -f -c "pwrite -b 0xef 0 1M" $SCRATCH_MNT/bar | _filter_xfs_io
+
+echo "Creating snapshot and the full send stream for it..."
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
+$BTRFS_UTIL_PROG send -f $full_send_stream $SCRATCH_MNT/snap1 >> $seqres.full 2>&1
+
+# Now resize bar and clone foo into it.
+$XFS_IO_PROG -c "truncate 0" \
+	     -c "reflink $SCRATCH_MNT/foo" $SCRATCH_MNT/bar | _filter_xfs_io
+
+echo "Creating another snapshot and the incremental send stream for it..."
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
+$BTRFS_UTIL_PROG send -p $SCRATCH_MNT/snap1 -f $inc_send_stream \
+		 $SCRATCH_MNT/snap2 >> $seqres.full 2>&1
+
+echo "File digests in the original filesystem:"
+md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap1/bar | _filter_scratch
+md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap2/bar | _filter_scratch
+
+check_all_extents_shared "$SCRATCH_MNT/snap2/bar"
+check_all_extents_shared "$SCRATCH_MNT/snap1/foo"
+
+echo "Creating a new filesystem to receive the send streams..."
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "second mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG receive -f $full_send_stream $SCRATCH_MNT
+$BTRFS_UTIL_PROG receive -f $inc_send_stream $SCRATCH_MNT
+
+echo "File digests in the new filesystem:"
+md5sum $SCRATCH_MNT/snap1/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap1/bar | _filter_scratch
+md5sum $SCRATCH_MNT/snap2/foo | _filter_scratch
+md5sum $SCRATCH_MNT/snap2/bar | _filter_scratch
+
+check_all_extents_shared "$SCRATCH_MNT/snap2/bar"
+check_all_extents_shared "$SCRATCH_MNT/snap1/foo"
+
+# success, all done
+status=0
+exit
