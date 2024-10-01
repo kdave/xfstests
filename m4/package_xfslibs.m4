@@ -100,7 +100,9 @@ AC_DEFUN([AC_NEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE],
 #include <xfs/xfs.h>
     ]], [[
          struct xfs_exchange_range obj;
+         struct xfs_commit_range obj2;
          ioctl(-1, XFS_IOC_EXCHANGE_RANGE, &obj);
+         ioctl(-1, XFS_IOC_COMMIT_RANGE, &obj2);
     ]])],[AC_MSG_RESULT(yes)],
          [need_internal_xfs_ioc_exchange_range=yes
           AC_MSG_RESULT(no)])

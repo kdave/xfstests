@@ -12,6 +12,7 @@
 #ifdef NEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE
 /* Override struct xfs_exchange_range in xfslibs */
 # define xfs_exchange_range		sys_xfs_exchange_range
+# define xfs_commit_range		sys_xfs_commit_range
 #endif
 
 #ifdef HAVE_XFS_XFS_H
@@ -20,7 +21,10 @@
 
 #ifdef NEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE
 # undef xfs_exchange_range
+# undef xfs_commit_range
 # undef XFS_IOC_EXCHANGE_RANGE
+# undef XFS_IOC_START_COMMIT
+# undef XFS_IOC_COMMIT_RANGE
 #endif
 
 #ifdef HAVE_XFS_LIBXFS_H
