@@ -34,18 +34,21 @@ _require_test
 _require_scratch_nocheck
 _require_command "$XFS_ADMIN_PROG" "xfs_admin"
 
+
 # Create some fake sparse files for testing external devices and whatnot
+fs_size=$((500 * 1024 * 1024))
+
 fake_datafile=$TEST_DIR/$seq.scratch.data
 rm -f $fake_datafile
-truncate -s 500m $fake_datafile
+truncate -s $fs_size $fake_datafile
 
 fake_logfile=$TEST_DIR/$seq.scratch.log
 rm -f $fake_logfile
-truncate -s 500m $fake_logfile
+truncate -s $fs_size $fake_logfile
 
 fake_rtfile=$TEST_DIR/$seq.scratch.rt
 rm -f $fake_rtfile
-truncate -s 500m $fake_rtfile
+truncate -s $fs_size $fake_rtfile
 
 # Save the original variables
 orig_ddev=$SCRATCH_DEV
@@ -63,7 +66,8 @@ scenario() {
 }
 
 check_label() {
-	_scratch_mkfs -L oldlabel >> $seqres.full
+	MKFS_OPTIONS="-L oldlabel $MKFS_OPTIONS" _scratch_mkfs_sized $fs_size \
+		>> $seqres.full
 	_scratch_xfs_db -c label
 	_scratch_xfs_admin -L newlabel "$@" >> $seqres.full
 	_scratch_xfs_db -c label
