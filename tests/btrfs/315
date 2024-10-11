@@ -39,7 +39,12 @@ _filter_mount_error()
 	# mount: <mnt-point>: fsconfig system call failed: File exists.
 	# dmesg(1) may have more information after failed mount system call.
 
-	grep -v dmesg | _filter_test_dir | sed -e "s/mount(2)\|fsconfig//g"
+	# For util-linux v2.4 and later:
+	# mount: <mountpoint>: mount system call failed: File exists.
+
+	grep -v dmesg | _filter_test_dir | \
+		sed -e "s/mount(2)\|fsconfig//g" \
+		    -e "s/mount\( system call failed:\)/\1/"
 }
 
 seed_device_must_fail()
