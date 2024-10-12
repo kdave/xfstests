@@ -70,19 +70,14 @@ _read_modify_write()
 _fill_blk()
 {
 	local FSIZE
-	local BLKS
-	local NBLK
-	local FALLOC
-	local WS
+	local NEWSIZE
 
 	for i in `find /$1 -type f`
 	do
 		FSIZE=`stat -t $i | cut -d" " -f2`
-		BLKS=`stat -c "%B" $i`
-		NBLK=`stat -c "%b" $i`
-		FALLOC=$(($BLKS * $NBLK))
-		WS=$(($FALLOC - $FSIZE))
-		_ddt of=$i oseek=$FSIZE obs=$WS count=1 status=noxfer 2>/dev/null &
+		NEWSIZE=$(( ($FSIZE + $blksize -1 ) / $blksize * $blksize ))
+
+		$XFS_IO_PROG -c "pwrite -i /dev/urandom $FSIZE $(( $NEWSIZE - $FSIZE ))" $i > /dev/null &
 	done
 	wait $!
 }
@@ -118,6 +113,7 @@ $BTRFS_UTIL_PROG subvolume create $firstvol > /dev/null || _fail "btrfs subvolum
 dirp=`mktemp -duq $firstvol/dir.XXXXXX`
 _populate_fs -n 1 -f 20 -d 10 -r $dirp -s 10 -c
 SNAPNAME=0
+blksize=$(_get_block_size $SCRATCH_MNT)
 _create_snap $firstvol
 _save_checksum $firstvol $tmp.sv1.sum
 _verify_checksum $SNAPNAME $tmp.sv1.sum
