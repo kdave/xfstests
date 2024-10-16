@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test 323
+#
+# Test that remounted seed/sprout device FS is fully functional. For example, that it can purge stale subvolumes.
+#
+. ./common/preamble
+_begin_fstest auto quick seed remount volume
+
+. ./common/filter
+_require_command "$BTRFS_TUNE_PROG" btrfstune
+_require_scratch_dev_pool 2
+
+_fixed_by_kernel_commit XXXXXXXX \
+	"btrfs: do not clear read-only when adding sprout device"
+
+_scratch_dev_pool_get 1
+_spare_dev_get
+
+# create a read-only fs based off a read-only seed device
+_scratch_mkfs >>$seqres.full
+$BTRFS_TUNE_PROG -S 1 $SCRATCH_DEV
+_scratch_mount 2>&1 | _filter_scratch
+_btrfs device add -f $SPARE_DEV $SCRATCH_MNT >>$seqres.full
+
+# switch ro to rw, checking that it was ro before and rw after
+findmnt -n -O ro -o TARGET $SCRATCH_MNT | _filter_scratch
+_mount -o remount,rw $SCRATCH_MNT
+findmnt -n -O rw -o TARGET $SCRATCH_MNT | _filter_scratch
+
+# do stuff in the seed/sprout fs
+_btrfs subvolume create $SCRATCH_MNT/subv
+_btrfs subvolume delete $SCRATCH_MNT/subv
+
+# trigger cleaner thread without remounting
+_btrfs filesystem sync $SCRATCH_MNT
+
+# expect no deleted subvolumes remaining
+$BTRFS_UTIL_PROG subvolume list -d $SCRATCH_MNT
+
+_spare_dev_put
+
+# success, all done
+status=0
+exit
