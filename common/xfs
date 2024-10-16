@@ -172,6 +172,11 @@ _try_scratch_mkfs_xfs()
 		mkfs_status=$?
 	fi
 
+	if [ $mkfs_status -ne 0 ] && grep -q '^block size [0-9]* cannot be smaller than sector size' "$tmp.mkfserr"; then
+		errormsg="$(grep '^block size [0-9]* cannot be smaller than sector size' "$tmp.mkfserr" | head -n 1)"
+		_notrun "_scratch_mkfs_xfs: $errormsg"
+	fi
+
 	# output mkfs stdout and stderr
 	cat $tmp.mkfsstd
 	cat $tmp.mkfserr >&2
