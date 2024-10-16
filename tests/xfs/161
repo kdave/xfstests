@@ -37,7 +37,11 @@ _scratch_xfs_db -c 'version' -c 'sb 0' -c 'p' >> $seqres.full
 _scratch_mount >> $seqres.full
 
 
-blksz=$(_get_file_block_size "$SCRATCH_MNT")
+min_blksz=65536
+file_blksz=$(_get_file_block_size "$SCRATCH_MNT")
+blksz=$(( 2 * $file_blksz))
+
+blksz=$(( blksz > min_blksz ? blksz : min_blksz ))
 # Write more than one block to exceed the soft block quota limit via
 # xfs_quota.
 filesz=$(( 2 * $blksz))
