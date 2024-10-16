@@ -120,6 +120,10 @@ setf "zerojoin_moo\xe2\x80\x8ccow.txt" "zero width joiners"
 setf "combmark_\xe1\x80\x9c\xe1\x80\xad\xe1\x80\xaf.txt" "combining marks"
 setf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
 
+# encoding hidden tag characters in attrnames to create confusing xattrs
+setf "llamapirate\xf3\xa0\x80\x81\xf3\xa0\x81\x94\xf3\xa0\x81\xa8\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\xb3\xf3\xa0\x81\xa1\xf3\xa0\x81\xac\xf3\xa0\x81\xa5\xf3\xa0\x81\xb3\xf3\xa0\x80\xa0\xf3\xa0\x81\xa6\xf3\xa0\x81\xaf\xf3\xa0\x81\xb2\xf3\xa0\x80\xa0\xf3\xa0\x81\x93\xf3\xa0\x81\xa5\xf3\xa0\x81\xa1\xf3\xa0\x81\xb4\xf3\xa0\x81\xb4\xf3\xa0\x81\xac\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\xb7\xf3\xa0\x81\xa5\xf3\xa0\x81\xb2\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\x95\xf3\xa0\x81\x93\xf3\xa0\x81\x84\xf3\xa0\x80\xa0\xf3\xa0\x80\xb1\xf3\xa0\x80\xb2\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x81\xbf"
+setf "llamapirate"
+
 _getfattr --absolute-names -d "${testfile}" >> $seqres.full
 
 echo "Test files"
@@ -167,6 +171,9 @@ testf "zerojoin_moo\xe2\x80\x8ccow.txt" "zero width joiners"
 testf "combmark_\xe1\x80\x9c\xe1\x80\xad\xe1\x80\xaf.txt" "combining marks"
 testf "combmark_\xe1\x80\x9c\xe1\x80\xaf\xe1\x80\xad.txt" "combining marks"
 
+testf "llamapirate\xf3\xa0\x80\x81\xf3\xa0\x81\x94\xf3\xa0\x81\xa8\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\xb3\xf3\xa0\x81\xa1\xf3\xa0\x81\xac\xf3\xa0\x81\xa5\xf3\xa0\x81\xb3\xf3\xa0\x80\xa0\xf3\xa0\x81\xa6\xf3\xa0\x81\xaf\xf3\xa0\x81\xb2\xf3\xa0\x80\xa0\xf3\xa0\x81\x93\xf3\xa0\x81\xa5\xf3\xa0\x81\xa1\xf3\xa0\x81\xb4\xf3\xa0\x81\xb4\xf3\xa0\x81\xac\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\xb7\xf3\xa0\x81\xa5\xf3\xa0\x81\xb2\xf3\xa0\x81\xa5\xf3\xa0\x80\xa0\xf3\xa0\x81\x95\xf3\xa0\x81\x93\xf3\xa0\x81\x84\xf3\xa0\x80\xa0\xf3\xa0\x80\xb1\xf3\xa0\x80\xb2\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x80\xb0\xf3\xa0\x81\xbf"
+testf "llamapirate"
+
 echo "Uniqueness of keys?"
 crazy_keys="$(_getfattr --absolute-names -d "${testfile}" | grep -E -c '(french_|chinese_|greek_|arabic_|urk)')"
 expected_keys=11
@@ -175,16 +182,18 @@ test "${crazy_keys}" -ne "${expected_keys}" && echo "Expected ${expected_keys} k
 echo "Test XFS online scrub, if applicable"
 
 if _check_xfs_scrub_does_unicode "$SCRATCH_MNT" "$SCRATCH_DEV"; then
-	output="$(LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -v -n "${SCRATCH_MNT}" 2>&1 | filter_scrub)"
-	echo "${output}" | grep -q "french_" || echo "No complaints about french e accent?"
-	echo "${output}" | grep -q "greek_" || echo "No complaints about greek letter mess?"
-	echo "${output}" | grep -q "arabic_" || echo "No complaints about arabic expanded string?"
-	echo "${output}" | grep -q "mixed_" || echo "No complaints about mixed script confusables?"
-	echo "${output}" | grep -q "hyphens_" || echo "No complaints about hyphenation confusables?"
-	echo "${output}" | grep -q "dz_digraph_" || echo "No complaints about single script confusables?"
-	echo "${output}" | grep -q "inadequate_" || echo "No complaints about inadequate rendering confusables?"
-	echo "${output}" | grep -q "prohibition_" || echo "No complaints about prohibited sequence confusables?"
-	echo "${output}" | grep -q "zerojoin_" || echo "No complaints about zero-width join confusables?"
+	LC_ALL="C.UTF-8" ${XFS_SCRUB_PROG} -v -n "${SCRATCH_MNT}" 2>&1 | filter_scrub > $tmp.scrub
+
+	grep -q "french_" $tmp.scrub || echo "No complaints about french e accent?"
+	grep -q "greek_" $tmp.scrub || echo "No complaints about greek letter mess?"
+	grep -q "arabic_" $tmp.scrub || echo "No complaints about arabic expanded string?"
+	grep -q "mixed_" $tmp.scrub || echo "No complaints about mixed script confusables?"
+	grep -q "hyphens_" $tmp.scrub || echo "No complaints about hyphenation confusables?"
+	grep -q "dz_digraph_" $tmp.scrub || echo "No complaints about single script confusables?"
+	grep -q "inadequate_" $tmp.scrub || echo "No complaints about inadequate rendering confusables?"
+	grep -q "prohibition_" $tmp.scrub || echo "No complaints about prohibited sequence confusables?"
+	grep -q "zerojoin_" $tmp.scrub || echo "No complaints about zero-width join confusables?"
+	grep -q "llamapirate" $tmp.scrub || echo "No complaints about hidden llm instructions in filenames?"
 	echo "Actual xfs_scrub output:" >> $seqres.full
 	echo "${output}" >> $seqres.full
 fi
