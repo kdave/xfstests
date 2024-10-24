@@ -17,10 +17,13 @@ _cleanup()
 # Import common functions.
 . ./common/filter.btrfs
 
-_require_scratch
-
 $MOUNT_PROG -V | grep -q 'fd-based-mount'
-[ "$?" -eq 0 ] && _notrun "mount uses the new mount api"
+if [ "$?" -eq 0 ]; then
+	_fixed_by_kernel_commit xxxxxxxxxxxx \
+		"btrfs: fix per-subvolume RO/RW flags with new mount API"
+fi
+
+_require_scratch
 
 _scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount
