@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# Test that remounting with the "compress" mount option clears the
+# "compress-force" mount option previously specified.
+#
+. ./common/preamble
+_begin_fstest auto quick mount remount compress
+
+_require_scratch
+
+_fixed_by_kernel_commit 3510e684b8f6 \
+	"btrfs: clear force-compress on remount when compress mount option is given"
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount -o compress-force=zlib:9
+
+# Confirm we have compress-force with zlib:9
+grep -wq 'compress-force=zlib:9' <(findmnt -rncv -S $SCRATCH_DEV -o OPTIONS)
+if [ $? -ne 0 ]; then
+	echo "compress-force not set to zlib:9 after initial mount:"
+	findmnt -rncv -S $SCRATCH_DEV -o OPTIONS
+fi
+
+# Remount with compress=zlib:4, which should clear compress-force and set the
+# algorithm to zlib:4.
+_scratch_remount compress=zlib:4
+
+grep -wq 'compress=zlib:4' <(findmnt -rncv -S $SCRATCH_DEV -o OPTIONS)
+if [ $? -ne 0 ]; then
+	echo "compress not set to zlib:4 after remount:"
+	findmnt -rncv -S $SCRATCH_DEV -o OPTIONS
+fi
+
+echo "Silence is golden"
+
+status=0
+exit
