@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Oppo.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/005
+#
+# This is a regression test to check whether f2fs handles dirty
+# inode correctly when checkpoint is disabled, it may hang umount
+# before the bug is fixed.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"f2fs: fix f2fs_bug_on when uninstalling filesystem call f2fs_evict_inode."
+
+_require_scratch
+_scratch_mkfs_sized $((1024*1024*50)) >> $seqres.full
+
+# use mode=lfs to let f2fs always triggers OPU
+_scratch_mount -o mode=lfs,checkpoint=disable:10%,noinline_dentry >> $seqres.full
+
+testfile=$SCRATCH_MNT/testfile
+tmpfile=$SCRATCH_MNT/tmpfile
+tmpdir=$SCRATCH_MNT/tmpdir
+
+dd if=/dev/zero of=$testfile bs=1M count=5 2>/dev/null
+mkdir $tmpdir
+touch $tmpfile
+sync
+
+# it dirties tmpdir inode by updating ctime,
+# but it doesn't moving the inode to gdirty_list.
+mv $tmpfile $tmpdir
+
+# it runs out of free segment
+dd if=/dev/zero of=$testfile bs=1M count=5 conv=notrunc conv=fsync 2>/dev/null
+
+_scratch_mount -o remount,checkpoint=enable
+
+# it may hang umount if tmpdir is still dirty during evict()
+_scratch_unmount
+
+echo "Silence is golden"
+
+status=0
+exit
