@@ -1,0 +1,106 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 366
+#
+# Test if mixed direct read, direct write and buffered write on the same file will
+# hang the filesystem.
+#
+# This is exposed by an incoming btrfs feature, which allows a folio to be
+# partial uptodate if the buffered write range is block aligned but not yet
+# full folio aligned.
+#
+# Such behavior makes btrfs to hang reliably under generic/095.
+# This is the extracted minimal reproducer for 4k block size and 64K page size.
+#
+. ./common/preamble
+_begin_fstest auto quick rw
+
+. ./common/filter
+
+_require_scratch
+_require_odirect
+_require_aio
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: avoid deadlock when reading a partial uptodate folio"
+
+iterations=$((32 * LOAD_FACTOR))
+
+fio_config=$tmp.fio
+fio_out=$tmp.fio.out
+blksz=`$here/src/min_dio_alignment $SCRATCH_MNT $SCRATCH_DEV`
+cat >$fio_config <<EOF
+[global]
+bs=8k
+iodepth=1
+randrepeat=1
+size=256k
+directory=$SCRATCH_MNT
+numjobs=1
+[job1]
+ioengine=sync
+bs=512
+direct=1
+rw=randread
+filename=file1
+[job2]
+ioengine=libaio
+rw=randwrite
+direct=1
+filename=file1
+[job3]
+ioengine=posixaio
+rw=randwrite
+filename=file1
+EOF
+_require_fio $fio_config
+
+for (( i = 0; i < $iterations; i++)); do
+	_scratch_mkfs >>$seqres.full 2>&1
+	_scratch_mount
+	# There's a known EIO failure to report collisions between directio and buffered
+	# writes to userspace, refer to upstream linux 5a9d929d6e13. So ignore EIO error
+	# at here.
+	#
+	# And for btrfs if sector size < page size, if we have a partial
+	# uptodate folio caused by a buffered write, e.g:
+	#
+	#    0          16K         32K          48K         64K
+	#    |                                   |///////////|
+	#					     \- sector Uptodate|Dirty
+	#
+	# Then writeback happens and finished, but btrfs' ordered extent not
+	# yet finished.
+	# In that case, the folio can be released from the page cache (since
+	# the folio is not under IO/lock).
+	#
+	# Then new buffered writes into the folio happened, re-dirty the folio:
+	#   0          16K         32K          48K         64K
+	#   |//////////|                        |///////////|
+	#      \- sector Uptodate|Dirty              \- No sector flags
+	#                                               extent map PINNED
+	#                                               OE still here
+	#
+	# Now read is triggered on that folio.
+	# Btrfs will need to wait for any existing ordered extents in the folio range,
+	# that wait will also trigger writeback if the folio is dirty.
+	# That writeback will happen for range [48K, 64K), but since the whole folio
+	# is locked for read, writeback will also try to lock the same folio, causing
+	# a deadlock.
+	$FIO_PROG $fio_config --ignore_error=,EIO --output=$fio_out
+	# umount before checking dmesg in case umount triggers any WARNING or Oops
+	_scratch_unmount
+
+	_check_dmesg _filter_aiodio_dmesg
+
+	echo "=== fio $i/$iterations ===" >> $seqres.full
+	cat $fio_out >> $seqres.full
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
