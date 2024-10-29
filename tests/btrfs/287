@@ -7,13 +7,14 @@
 # Test btrfs' logical to inode ioctls (v1 and v2).
 #
 . ./common/preamble
-_begin_fstest auto quick snapshot clone punch logical_resolve
+_begin_fstest auto quick snapshot clone prealloc punch logical_resolve
 
 . ./common/filter.btrfs
 . ./common/reflink
 
 _require_btrfs_scratch_logical_resolve_v2
 _require_scratch_reflink
+_require_xfs_io_command "falloc"
 _require_xfs_io_command "fpunch"
 
 # This is a test case to test the logical to ino ioctl in general but it also
@@ -42,10 +43,9 @@ _scratch_mount
 #
 # 1) One 4M extent covering the file range [0, 4M)
 # 2) Another 4M extent covering the file range [4M, 8M)
-$XFS_IO_PROG -f -c "pwrite -S 0xab -b 4M 0 4M" \
-	     -c "fsync" \
-	     -c "pwrite -S 0xcd -b 4M 4M 8M" \
-	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "falloc 0 4M" \
+                -c "falloc 4M 4M" \
+                $SCRATCH_MNT/foo
 
 echo "resolve first extent:"
 first_extent_bytenr=$(_btrfs_get_file_extent_item_bytenr "$SCRATCH_MNT/foo" 0)
