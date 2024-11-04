@@ -1,0 +1,83 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 325
+#
+# Test that defrag merges adjacent extents that are contiguous.
+#
+. ./common/preamble
+_begin_fstest auto quick preallocrw defrag
+
+. ./common/filter
+
+_require_scratch
+_require_btrfs_command inspect-internal dump-tree
+_require_xfs_io_command "falloc"
+# We want to test getting a 256K extent after defrag, so skip the test if
+# compression is enabled (with compression the maximum extent size is 128K).
+_require_no_compress
+
+_fixed_by_kernel_commit a0f062539085 \
+	"btrfs: fix extent map merging not happening for adjacent extents"
+_fixed_by_kernel_commit 77b0d113eec4 \
+	"btrfs: fix defrag not merging contiguous extents due to merged extent maps"
+
+count_file_extent_items()
+{
+	# We count file extent extent items through dump-tree instead of using
+	# fiemap because fiemap merges adjacent extent items when they are
+	# contiguous.
+	# We unmount because all metadata must be ondisk for dump-tree to see
+	# it and work correctly.
+	_scratch_unmount
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t 5 $SCRATCH_DEV | \
+		grep EXTENT_DATA | wc -l
+	_scratch_mount
+}
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# Create a file with a size of 256K and 4 written extents of 64K each.
+# We fallocate to guarantee exact extent size, even if compression mount
+# option is give, and write to them because defrag skips prealloc extents.
+$XFS_IO_PROG -f -c "falloc 0 64K" \
+	     -c "pwrite -S 0xab 0 64K" \
+	     -c "falloc 64K 64K" \
+	     -c "pwrite -S 0xcd 64K 64K" \
+	     -c "falloc 128K 64K" \
+	     -c "pwrite -S 0xef 128K 64K" \
+	     -c "falloc 192K 64K" \
+	     -c "pwrite -S 0x73 192K 64K" \
+	     $SCRATCH_MNT/foo | _filter_xfs_io
+
+echo -n "Initial number of file extent items: "
+count_file_extent_items
+
+# Read the whole file in order to load extent maps and merge them.
+cat $SCRATCH_MNT/foo > /dev/null
+
+# Now defragment with a threshold of 128K. After this we expect to get a file
+# with 1 file extent item - the threshold is 128K but since all the extents are
+# contiguous, they should be merged into a single one of 256K.
+$BTRFS_UTIL_PROG filesystem defragment -t 128K $SCRATCH_MNT/foo
+echo -n "Number of file extent items after defrag with 128K threshold: "
+count_file_extent_items
+
+# Read the whole file in order to load extent maps and merge them.
+cat $SCRATCH_MNT/foo > /dev/null
+
+# Now defragment with a threshold of 256K. After this we expect to get a file
+# with only 1 file extent item.
+$BTRFS_UTIL_PROG filesystem defragment -t 256K $SCRATCH_MNT/foo
+echo -n "Number of file extent items after defrag with 256K threshold: "
+count_file_extent_items
+
+# Check that the file has the expected data, that defrag didn't cause any data
+# loss or corruption.
+echo "File data after defrag:"
+_hexdump $SCRATCH_MNT/foo
+
+status=0
+exit
