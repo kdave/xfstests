@@ -1,0 +1,107 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test No. 326
+#
+# Test that mounting a subvolume read-write will success, with another
+# subvolume being remounted RO/RW at background
+#
+. ./common/preamble
+_begin_fstest auto quick mount remount
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix mount failure due to remount races"
+
+_cleanup()
+{
+	cd /
+	rm -rf -- $tmp.*
+	[ -n "$mount_pid" ] && kill $mount_pid &> /dev/null
+	[ -n "$remount_pid" ] && kill $remount_pid &> /dev/null
+	wait
+	$UMOUNT_PROG "$subv1_mount" &> /dev/null
+	$UMOUNT_PROG "$subv2_mount" &> /dev/null
+	rm -rf -- "$subv1_mount" "$subv2_mount"
+}
+
+# For the extra mount points
+_require_test
+_require_scratch
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol1 >> $seqres.full
+$BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/subvol2 >> $seqres.full
+_scratch_unmount
+
+subv1_mount="$TEST_DIR/subvol1_mount"
+subv2_mount="$TEST_DIR/subvol2_mount"
+rm -rf "$subv1_mount" "$subv2_mount"
+mkdir -p "$subv1_mount"
+mkdir -p "$subv2_mount"
+_mount "$SCRATCH_DEV" "$subv1_mount" -o subvol=subvol1
+
+# Subv1 remount workload, mount the subv1 and switching it between
+# RO and RW.
+remount_workload()
+{
+	trap "wait; exit" SIGTERM
+	while true; do
+		_mount -o remount,ro "$subv1_mount"
+		_mount -o remount,rw "$subv1_mount"
+	done
+}
+
+remount_workload &
+remount_pid=$!
+
+# Subv2 rw mount workload
+# For unpatched kernel, this will fail with -EBUSY.
+#
+# To maintain the per-subvolume RO/RW mount, if the existing btrfs is
+# mounted RO, unpatched btrfs will retry with its RO flag reverted,
+# then reconfigure the fs to RW.
+#
+# But such retry has no super block lock hold, thus if another remount
+# process has already remounted the fs RW, the attempt will fail and
+# return -EBUSY.
+#
+# Patched kernel will allow the superblock and mount point RO flags
+# to differ, and then hold the s_umount to reconfigure the super block
+# to RW, preventing any possible race.
+mount_workload()
+{
+	trap "wait; exit" SIGTERM
+	while true; do
+		_mount "$SCRATCH_DEV" "$subv2_mount"
+		$UMOUNT_PROG "$subv2_mount"
+	done
+}
+
+mount_workload &
+mount_pid=$!
+
+sleep $(( 10 * $TIME_FACTOR ))
+
+kill "$remount_pid" "$mount_pid"
+wait
+unset remount_pid mount_pid
+
+# Subv1 is always mounted, thus the umount should never fail.
+$UMOUNT_PROG "$subv1_mount"
+
+# Subv2 may have already been unmounted, so here we ignore all output.
+# This may hide some errors like -EBUSY, but the next rm line would
+# detect any still mounted subvolume so we're still safe.
+$UMOUNT_PROG "$subv2_mount" &> /dev/null
+
+# If above unmount, especially subv2 is not properly unmounted,
+# the rm should fail with some error message
+rm -r -- "$subv1_mount" "$subv2_mount"
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
