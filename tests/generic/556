@@ -18,7 +18,11 @@ _require_symlinks
 _require_check_dmesg
 _require_attrs
 
-sdev=$(_short_dev ${SCRATCH_DEV})
+if [ "$FSTYP" == "tmpfs" ]; then
+	sdev="tmpfs"
+else
+	sdev="\($(_short_dev ${SCRATCH_DEV})\)"
+fi
 
 filename1="file.txt"
 filename2="FILE.TXT"
@@ -485,10 +489,10 @@ test_strict_mode_invalid_filename()
 
 _scratch_mkfs_casefold >>$seqres.full 2>&1
 
-_scratch_mount
+_scratch_mount_casefold
 
 _check_dmesg_for \
-	"\(${sdev}\): Using encoding defined by superblock: utf8" || \
+	"(${sdev}): Using encoding" || \
 	_fail "Could not mount with encoding: utf8"
 
 test_casefold_flag_basic
@@ -517,7 +521,7 @@ _check_scratch_fs
 
 # Test Strict Mode
 _scratch_mkfs_casefold_strict >>$seqres.full 2>&1
-_scratch_mount
+_scratch_mount_casefold_strict
 
 test_strict_mode_invalid_filename
 

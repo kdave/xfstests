@@ -12,6 +12,9 @@ _has_casefold_kernel_support()
 	f2fs)
 		test -f '/sys/fs/f2fs/features/casefold'
 		;;
+	tmpfs)
+		test -f '/sys/fs/tmpfs/features/casefold'
+		;;
 	*)
 		# defaults to unsupported
 		false
@@ -52,6 +55,9 @@ _scratch_mkfs_casefold()
 	f2fs)
 		_scratch_mkfs -C utf8 $*
 		;;
+	tmpfs)
+		# there's no mkfs for tmpfs, just return
+		;;
 	*)
 		_notrun "Don't know how to mkfs with casefold support on $FSTYP"
 		;;
@@ -67,11 +73,51 @@ _scratch_mkfs_casefold_strict()
 	f2fs)
 		_scratch_mkfs -C utf8:strict
 		;;
+	tmpfs)
+		# there's no mkfs for tmpfs, just return
+		;;
 	*)
 		_notrun "Don't know how to mkfs with casefold-strict support on $FSTYP"
 		;;
 	esac
 }
+
+_scratch_mount_casefold()
+{
+	case $FSTYP in
+	ext4)
+		_scratch_mount
+		;;
+	f2fs)
+		_scratch_mount
+		;;
+	tmpfs)
+		mount -t tmpfs -o casefold tmpfs $SCRATCH_MNT
+		;;
+	*)
+		_notrun "Don't know how to mount with casefold support on $FSTYP"
+		;;
+	esac
+}
+
+_scratch_mount_casefold_strict()
+{
+	case $FSTYP in
+	ext4)
+		_scratch_mount
+		;;
+	f2fs)
+		_scratch_mount
+		;;
+	tmpfs)
+		mount -t tmpfs -o casefold,strict_encoding tmpfs $SCRATCH_MNT
+		;;
+	*)
+		_notrun "Don't know how to mount with casefold support on $FSTYP"
+		;;
+	esac
+}
+
 
 # To get the exact disk name, we need some method that does a
 # getdents() on the parent directory, such that we don't get
