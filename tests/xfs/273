@@ -24,6 +24,8 @@ _require_scratch
 _require_populate_commands
 _require_xfs_io_command "fsmap"
 
+_fixed_by_kernel_commit XXXXXXXXXXXXXX "xfs: fix off-by-one error in fsmap"
+
 rm -f "$seqres.full"
 
 echo "Format and mount"
@@ -36,6 +38,51 @@ $XFS_IO_PROG -c 'fsmap -v -n 1' $SCRATCH_MNT | grep -v 'EXT:' > $TEST_DIR/b
 cat $TEST_DIR/a $TEST_DIR/b >> $seqres.full
 
 diff -uw $TEST_DIR/a $TEST_DIR/b
+
+# Do we have mappings for every sector on the device?
+ddev_fsblocks=$(_xfs_statfs_field "$SCRATCH_MNT" geom.datablocks)
+rtdev_fsblocks=$(_xfs_statfs_field "$SCRATCH_MNT" geom.rtblocks)
+fsblock_bytes=$(_xfs_statfs_field "$SCRATCH_MNT" geom.bsize)
+
+ddev_daddrs=$((ddev_fsblocks * fsblock_bytes / 512))
+rtdev_daddrs=$((rtdev_fsblocks * fsblock_bytes / 512))
+
+ddev_devno=$(stat -c '%t:%T' $SCRATCH_DEV)
+if [ "$USE_EXTERNAL" = "yes" ] && [ -n "$SCRATCH_RTDEV" ]; then
+	rtdev_devno=$(stat -c '%t:%T' $SCRATCH_RTDEV)
+fi
+
+$XFS_IO_PROG -c 'fsmap -m -n 65536' $SCRATCH_MNT | awk -F ',' \
+	-v data_devno=$ddev_devno \
+	-v rt_devno=$rtdev_devno \
+	-v data_daddrs=$ddev_daddrs \
+	-v rt_daddrs=$rtdev_daddrs \
+'BEGIN {
+	next_daddr[data_devno] = 0;
+	next_daddr[rt_devno] = 0;
+}
+{
+	if ($1 == "EXT")
+		next
+	devno = sprintf("%x:%x", $2, $3);
+	if (devno != data_devno && devno != rt_devno)
+		next
+
+	if (next_daddr[devno] < $4)
+		printf("%sh: expected daddr %d, saw \"%s\"\n", devno,
+				next_daddr[devno], $0);
+		n = $5 + 1;
+		if (n > next_daddr[devno])
+		       next_daddr[devno] = n;
+}
+END {
+	if (data_daddrs != next_daddr[data_devno])
+		printf("%sh: fsmap stops at %d, expected %d\n",
+				data_devno, next_daddr[data_devno], data_daddrs);
+	if (rt_devno != "" && rt_daddrs != next_daddr[rt_devno])
+		printf("%sh: fsmap stops at %d, expected %d\n",
+				rt_devno, next_daddr[rt_devno], rt_daddrs);
+}'
 
 # success, all done
 status=0
