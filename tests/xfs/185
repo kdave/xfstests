@@ -156,7 +156,9 @@ fsmap() {
 
 # Check the fsmap output contains a record for the realtime device at a
 # physical offset higher than end of the data device and corresponding to the
-# beginning of the non-punched area.
+# beginning of the non-punched area.  The "found_end" check uses >= because
+# rtfile can be larger than the number of rtextents if the size of the rtfile
+# is not congruent with the rt extent size.
 fsmap | $AWK_PROG -v dev="$rtmajor:$rtminor" -v offset=$expected_offset -v end=$expected_end '
 BEGIN {
 	found_start = 0;
@@ -165,7 +167,7 @@ BEGIN {
 {
 	if ($1 == dev && $2 >= offset) {
 		found_start = 1;
-		if ($3 == end) {
+		if ($3 >= end) {
 			found_end = 1;
 		}
 	}
