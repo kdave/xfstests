@@ -1,0 +1,56 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2024 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 327
+#
+# Make sure reading inlined extents doesn't cause any corruption.
+#
+# This is a preventive test case inspired by btrfs/149, which can cause
+# data corruption when the following out-of-tree patches are applied and
+# the sector size is smaller than page size:
+#
+#  btrfs: allow inline data extents creation if sector size < page size
+#  btrfs: allow buffered write to skip full page if it's sector aligned
+#
+# Thankfully no upstream kernel is affected.
+
+. ./common/preamble
+_begin_fstest auto quick compress
+
+_require_scratch
+
+# We need 4K sector size support, especially this case can only be triggered
+# with sector size < page size for now.
+#
+# We do not check the page size and not_run so far, as in the long term btrfs
+# will support larger folios, then in that future 4K page size should be enough
+# to trigger the bug.
+_require_btrfs_support_sectorsize 4096
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount "-o compress,max_inline=4095"
+
+# Create one inlined data extent, only when using compression we can
+# create an inlined data extent up to sectorsize.
+# And for sector size < page size cases, we need the out-of-tree patch
+# "btrfs: allow inline data extents creation if sector size < page size" to
+# create such extent.
+$XFS_IO_PROG -f -c "pwrite 0 4k" "$SCRATCH_MNT/foobar" > /dev/null
+
+# Drop the cache, we need to read out the above inlined data extent.
+echo 3 > /proc/sys/vm/drop_caches
+
+# Write into range [8k, 12k), with the out-of-tree patch "btrfs: allow
+# buffered write to skip full page if it's sector aligned", such write will not
+# trigger the read on the folio.
+$XFS_IO_PROG -f -c "pwrite 8k 4k" "$SCRATCH_MNT/foobar" > /dev/null
+
+# Verify the checksum, for the affected devel branch, the read of inline extent
+# will zero out all the remaining range of the folio, screwing up the content
+# at [8K, 12k).
+_md5_checksum "$SCRATCH_MNT/foobar"
+
+# success, all done
+status=0
+exit
