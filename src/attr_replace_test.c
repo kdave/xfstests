@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 	if (ret < 0) die();
 	size = sbuf.st_blksize * 3 / 4;
 	if (!size)
-		fail("Invalid st_blksize(%ld)\n", sbuf.st_blksize);
+		fail("Invalid st_blksize(%ld)\n", (long)sbuf.st_blksize);
 	size = MIN(size, maxsize);
 	value = malloc(size);
 	if (!value)

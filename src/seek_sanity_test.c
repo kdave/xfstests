@@ -107,7 +107,7 @@ static int get_io_sizes(int fd)
 		offset += pos ? 0 : 1;
 	alloc_size = offset;
 done:
-	fprintf(stdout, "Allocation size: %ld\n", alloc_size);
+	fprintf(stdout, "Allocation size: %ld\n", (long)alloc_size);
 	return 0;
 
 fail:
