@@ -430,6 +430,10 @@ _filter_ro_mount() {
 # v2.38 and later:
 # dmesg(1) may have more information after failed mount mount system call
 #
+# Kernels post 6.x may have CONFIG_BLK_DEV_WRITE_MOUNTED=y which prevents mount
+# from opening the block device on a mounted filesytsem:
+# mount: <dev>: Can't open blockdev
+#
 # This is also true for ESTALE error. So let's remove all the changing parts
 # and keep the 'prior to v2.21' format:
 # mount: Structure needs cleaning
@@ -437,7 +441,9 @@ _filter_ro_mount() {
 _filter_error_mount()
 {
 	grep -v "dmesg(1) may have more information after failed mount" | \
-		sed -e "s/mount:\(.*failed:\)/mount:/" | _filter_ending_dot
+		sed -e "s/mount:\(.*failed:\)/mount:/" \
+		    -e "s/mount: SCRATCH_DEV: Can't open blockdev/mount: TEST_DIR\/extra_mnt: SCRATCH_DEV already mounted or mount point busy/" |\
+		    _filter_ending_dot
 }
 
 # Similar to _filter_error_mount, filter a busy mount output.
