@@ -41,7 +41,7 @@ fragment_freespace()
 	# allocate inode space
 	mkdir -p $_dir
 	for i in `seq 0 1 1000`; do
-		touch $_file.$i
+		echo -n > $_file.$i
 	done
 	for i in `seq 0 63 1000`; do
 		mv $_file.$i $_dir
@@ -68,19 +68,23 @@ fragment_freespace()
 
 create_attrs()
 {
-	for foo in `seq 0 1 $1`; do
-		$SETFATTR_PROG -n user.$foo -v 0xbabe $2
-	done
+	( echo "# file: $2"
+	for i in `seq 0 1 $1`; do
+		echo "user.$foo=\"0xbabe\""
+	done ) > $tmp.$1.attrs
+	$SETFATTR_PROG --restore=$tmp.$1.attrs $2
 }
 
 create_data()
 {
-	size=`expr \( $1 + 1 \) \* 4096`
-	$XFS_IO_PROG -f -c "truncate $size" $2 > /dev/null 2>&1
-	for foo in `seq $1 -1 0`; do
-		let offset=$foo*4096
-		$XFS_IO_PROG -f -c "resvsp $offset 4096" $2 > /dev/null 2>&1
+	local blocks=$1
+	local cmd_str
+
+	for off in `seq $blocks -1 0`; do
+		cmd_str="-c \"resvsp $((off * 4096)) 4096\" $cmd_str"
 	done
+	$XFS_IO_PROG -f -c "truncate $((($blocks + 1) * 4096))" \
+			$cmd_str $2 >> seqres.full 2>&1
 }
 
 # create the designated file with a certain number of attributes and a certain
@@ -119,6 +123,27 @@ create_target_attr_last()
 	create_attrs $nattrs $target
 }
 
+do_fsr()
+{
+	local n=$1
+	local i=$2
+	local j
+
+	for j in `seq 5 1 20`; do
+		create_target_attr_first $i $j $targ.$i.$j >> $seqres.full 2>&1
+	done
+	xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+	FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
+	xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+	for j in `seq 5 1 20`; do
+		create_target_attr_last $i $j $targ.$i.$j >> $seqres.full 2>&1
+	done
+	xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+	FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
+	xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+}
+
+
 # use a small filesystem so we can control freespace easily
 _scratch_mkfs_sized $((50 * 1024 * 1024)) >> $seqres.full 2>&1
 _scratch_mount
@@ -154,19 +179,9 @@ targ=$SCRATCH_MNT/fsr_test_file.$$
 for n in `seq 4 1 12`; do
 	echo "*** n == $n ***" >> $seqres.full
 	for i in `seq 5 1 15`; do
-		for j in `seq 5 1 20`; do
-			create_target_attr_first $i $j $targ.$i.$j >> $seqres.full 2>&1
-		done
-		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
-		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
-		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
-		for j in `seq 5 1 20`; do
-			create_target_attr_last $i $j $targ.$i.$j >> $seqres.full 2>&1
-		done
-		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
-		FSRXFSTEST=true xfs_fsr -d -v -C $n $targ.$i.* >> $seqres.full 2>&1
-		xfs_bmap -vp $targ.$i.* >> $seqres.full 2>&1
+		do_fsr $n $i &
 	done
+	wait
 done
 
 _scratch_unmount
