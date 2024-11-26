@@ -236,18 +236,30 @@ export BTRFS_MAP_LOGICAL_PROG=$(type -P btrfs-map-logical)
 export PARTED_PROG="$(type -P parted)"
 export XFS_PROPERTY_PROG="$(type -P xfs_property)"
 
-# use 'udevadm settle' or 'udevsettle' to wait for lv to be settled.
-# newer systems have udevadm command but older systems like RHEL5 don't.
-# But if neither one is available, just set it to "sleep 1" to wait for lv to
-# be settled
-UDEV_SETTLE_PROG="$(type -P udevadm)"
-if [ "$UDEV_SETTLE_PROG" == "" ]; then
-	# try udevsettle command
+# udev wait functions.
+#
+# This is how we wait for udev to create or remove device nodes after running a
+# device create/remove command for logical volumes (e.g. lvm or dm).
+#
+# We can wait for the udev queue to empty via "settling". This, however, has
+# major issues when running tests in parallel - the udev queue takes a long time
+# to reach empty state. Hence if we have udev > 2.51 installed we use device
+# waiting instead. This waits for the device node to appear/disappear rather
+# than waiting for the udev queue to empty.
+#
+# If none of these methods are available, fall back to a simple delay (sleep 1)
+# and hope this is sufficient.
+UDEVADM_PROG="$(type -P udevadm)"
+if [ -z "$UDEVADM_PROG" ]; then
 	UDEV_SETTLE_PROG="$(type -P udevsettle)"
 else
-	# udevadm is available, add 'settle' as subcommand
-	UDEV_SETTLE_PROG="$UDEV_SETTLE_PROG settle"
+	UDEV_SETTLE_PROG="$UDEVADM_PROG settle"
+	$UDEVADM_PROG help | grep -q "Wait for device or device symlink"
+	if [ $? -eq 0 ]; then
+		UDEV_WAIT_PROG="$UDEVADM_PROG wait"
+	fi
 fi
+
 # neither command is available, use sleep 1
 #
 # Udev events are sent via netlink to userspace through
@@ -258,8 +270,11 @@ fi
 # exist or always be 0. We check for /proc/net to see CONFIG_NET was enabled.
 if [[ "$UDEV_SETTLE_PROG" == "" || ! -d /proc/net ]]; then
 	UDEV_SETTLE_PROG="sleep 1"
+	unset UDEV_WAIT_PROG
 fi
 export UDEV_SETTLE_PROG
+export UDEVADM_PROG
+export UDEV_WAIT_PROG
 
 # Set MODPROBE_PATIENT_RM_TIMEOUT_SECONDS to "forever" if you want the patient
 # modprobe removal to run forever trying to remove a module.

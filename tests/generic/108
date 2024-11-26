@@ -20,8 +20,8 @@ _cleanup()
 	echo running > /sys/block/`_short_dev $SCSI_DEBUG_DEV`/device/state
 	_unmount $SCRATCH_MNT >>$seqres.full 2>&1
 	$LVM_PROG vgremove -f $vgname >>$seqres.full 2>&1
-	$LVM_PROG pvremove -f $SCRATCH_DEV $SCSI_DEBUG_DEV >>$seqres.full 2>&1
-	$UDEV_SETTLE_PROG
+	 pvremove -f $SCRATCH_DEV $SCSI_DEBUG_DEV >>$seqres.full 2>&1
+	_udev_wait --removed /dev/mapper/$vgname-$lvname
 	_put_scsi_debug_dev
 	rm -f $tmp.*
 }
@@ -57,8 +57,7 @@ $LVM_PROG vgcreate -f $vgname $SCSI_DEBUG_DEV $SCRATCH_DEV >>$seqres.full 2>&1
 # (like 2.02.95 in RHEL6) don't support --yes option
 yes | $LVM_PROG lvcreate -i 2 -I 4m -L ${lvsize}m -n $lvname $vgname \
 	>>$seqres.full 2>&1
-# wait for lv creation to fully complete
-$UDEV_SETTLE_PROG >>$seqres.full 2>&1
+_udev_wait /dev/mapper/$vgname-$lvname
 
 # _mkfs_dev exits the test on failure, this makes sure test lv is created by
 # above vgcreate/lvcreate operations

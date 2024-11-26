@@ -21,6 +21,7 @@ _cleanup()
 	cd /
 	_log_writes_cleanup &> /dev/null
 	$LVM_PROG vgremove -f -y $vgname >>$seqres.full 2>&1
+	_udev_wait --removed /dev/mapper/$vgname-$lvname
 	losetup -d $loop_dev >>$seqres.full 2>&1
 	rm -f $img
 	_restore_fsverity_signatures
@@ -106,7 +107,7 @@ snap_dev=/dev/mapper/vg_replay-$snapname
 $LVM_PROG vgcreate -f $vgname $loop_dev >>$seqres.full 2>&1 || _fail "failed to vgcreate $vgname"
 $LVM_PROG lvcreate -L "$replay_bytes"B -n $lvname $vgname -y >>$seqres.full 2>&1 || \
 	_fail "failed to lvcreate $lvname"
-$UDEV_SETTLE_PROG >>$seqres.full 2>&1
+_udev_wait /dev/mapper/$vgname-$lvname
 
 replay_log_prog=$here/src/log-writes/replay-log
 num_entries=$($replay_log_prog --log $LOGWRITES_DEV --num-entries)
@@ -125,7 +126,7 @@ do
 
 	$LVM_PROG lvcreate -s -L 4M -n $snapname $vgname/$lvname >>$seqres.full 2>&1 || \
 		_fail "Failed to create snapshot"
-	$UDEV_SETTLE_PROG >>$seqres.full 2>&1
+	_udev_wait /dev/mapper/$vgname-$snapname
 
 	orphan=$(count_item $snap_dev ORPHAN)
 	[ $state -eq 0 ] && [ $orphan -gt 0 ] && state=1

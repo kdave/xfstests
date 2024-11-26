@@ -31,7 +31,7 @@ _cleanup()
 	_unmount $SCRATCH_MNT >>$seqres.full 2>&1
 	$LVM_PROG vgremove -ff $vgname >>$seqres.full 2>&1
 	$LVM_PROG pvremove -ff $SCRATCH_DEV >>$seqres.full 2>&1
-	$UDEV_SETTLE_PROG
+	_udev_wait --removed /dev/mapper/$vgname-$lvname
 }
 
 # Import common functions.
@@ -95,8 +95,7 @@ $LVM_PROG lvcreate  --thinpool $poolname  --errorwhenfull y \
 $LVM_PROG lvcreate  --virtualsize $virtsize \
 		    -T $vgname/$poolname \
 		    -n $lvname >>$seqres.full 2>&1
-
-$UDEV_SETTLE_PROG &>/dev/null
+_udev_wait /dev/mapper/$vgname-$lvname
 _mkfs_dev /dev/mapper/$vgname-$lvname >>$seqres.full 2>&1
 
 # Running the test over the original volume doesn't reproduce the problem
@@ -104,6 +103,7 @@ _mkfs_dev /dev/mapper/$vgname-$lvname >>$seqres.full 2>&1
 # reproducible, so, create a snapshot and run the test over it.
 $LVM_PROG lvcreate  -k n -s $vgname/$lvname \
 		    -n $snapname >>$seqres.full 2>&1
+_udev_wait /dev/mapper/$vgname-$snapname
 
 # Catch mount failure so we don't blindly go an freeze the root filesystem
 # instead of lvm volume.

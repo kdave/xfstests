@@ -38,7 +38,7 @@ _cleanup()
 		$LVM_PROG vgremove -f $vgname >>$seqres.full 2>&1
 		$LVM_PROG pvremove -f $SCRATCH_DEV >>$seqres.full 2>&1
 		pv_ret=$?
-		$UDEV_SETTLE_PROG
+		_udev_wait --removed /dev/mapper/$vgname-$lvname
 		test $pv_ret -eq 0 && break
 		sleep 2
 	done
@@ -70,8 +70,8 @@ $LVM_PROG vgcreate -f $vgname $SCRATCH_DEV >>$seqres.full 2>&1
 # We use yes pipe instead of 'lvcreate --yes' because old version of lvm
 # (like 2.02.95 in RHEL6) don't support --yes option
 yes | $LVM_PROG lvcreate -L ${lvsize}M -n $lvname $vgname >>$seqres.full 2>&1
-# wait for lvcreation to fully complete
-$UDEV_SETTLE_PROG >>$seqres.full 2>&1
+_udev_wait /dev/mapper/$vgname-$lvname
+
 
 # _mkfs_dev exits the test on failure, this can make sure lv is created in
 # above vgcreate/lvcreate steps

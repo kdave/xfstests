@@ -5218,22 +5218,29 @@ _require_label_get_max()
 	dummy=$(_label_get_max)
 }
 
+_udev_wait()
+{
+	local args="$*"
+
+	if [ -z "$UDEV_WAIT_PROG" ]; then
+		$UDEV_SETTLE_PROG >/dev/null 2>&1
+	else
+		$UDEV_WAIT_PROG $args
+	fi
+}
+
 _dmsetup_remove()
 {
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
-	$DMSETUP_PROG remove --retry "$@" >>$seqres.full 2>&1
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
+	[ $# -le 0 ] && return
+
+	$DMSETUP_PROG remove --deferred "$@" >>$seqres.full 2>&1
+	_udev_wait --removed /dev/mapper/$1
 }
 
 _dmsetup_create()
 {
-	# Wait for udev to settle so that the dm creation doesn't fail because
-	# some udev subprogram opened one of the block devices mentioned in the
-	# table string w/ O_EXCL.  Do it again at the end so that an immediate
-	# device open won't also fail.
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
 	$DMSETUP_PROG create "$@" >>$seqres.full 2>&1 || return 1
-	$UDEV_SETTLE_PROG >/dev/null 2>&1
+	_udev_wait /dev/mapper/$1
 }
 
 _require_btime()
