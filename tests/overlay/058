@@ -21,8 +21,10 @@ _begin_fstest auto quick exportfs
 # Override the default cleanup function.
 _cleanup()
 {
-	$KILLALL_PROG -9 open_by_handle >/dev/null 2>&1
-	wait
+	if [ -n "$pids" ]; then
+		kill -9 $pids >/dev/null 2>&1
+		wait
+	fi
 	cd /
 	rm -f $tmp.*
 }
@@ -36,7 +38,6 @@ _require_test_program "open_by_handle"
 # We need to require all features together, because nfs_export cannot
 # be enabled when index is disabled
 _require_scratch_overlay_features index nfs_export
-_require_command "$KILLALL_PROG" killall
 
 # All overlay dirs are on scratch partition
 lower=$OVL_BASE_SCRATCH_MNT/$OVL_LOWER
@@ -89,9 +90,11 @@ test_file_handles $SCRATCH_MNT -rnp -i $tmp.lower_file_handles
 # overlay dentries in cache
 _scratch_cycle_mount "index=on,nfs_export=on"
 test_file_handles $SCRATCH_MNT -rnps -i $tmp.upper_file_handles &
+pids=$!
 # Give the above 1 second to get to sleep loop
 sleep 1
 test_file_handles $SCRATCH_MNT -rnps -i $tmp.lower_file_handles &
+pids="$pids $!"
 # Give the above 1 second to get to sleep loop
 sleep 1
 
@@ -105,8 +108,9 @@ test_file_handles $SCRATCH_MNT -rnp -i $tmp.upper_file_handles
 test_file_handles $SCRATCH_MNT -rnp -i $tmp.lower_file_handles
 
 # SIGPIPE avoids Terminated/Killed message from bash
-$KILLALL_PROG -q -13 open_by_handle
+kill -13 $pids > /dev/null 2>&1
 wait
+unset pids
 
 status=0
 exit

@@ -24,10 +24,10 @@ _begin_fstest auto quick repair
 # Override the default cleanup function.
 _cleanup()
 {
+	[ -n "$repair_pid" ] && kill -9 $repair_pid > /dev/null 2>&1
+	wait > /dev/null 2>&1
 	cd /
 	rm -f $tmp.*
-	$KILLALL_PROG -9 $XFS_REPAIR_PROG > /dev/null 2>&1
-	wait > /dev/null 2>&1
 }
 
 # Start and monitor an xfs_repair of the scratch device. This test can induce a
@@ -45,7 +45,8 @@ _xfs_repair_noscan()
 	repair_pid=$!
 
 	# monitor progress for as long as it is running
-	while [ `pgrep xfs_repair` ]; do
+	running=`pgrep xfs_repair`
+	while [ -n "$running" ]; do
 		grep "couldn't verify primary superblock" $tmp.repair \
 			> /dev/null 2>&1
 		if [ $? == 0 ]; then
@@ -58,6 +59,7 @@ _xfs_repair_noscan()
 		fi
 
 		sleep 1
+		running=`pgrep xfs_repair`
 	done
 
 	wait
@@ -72,7 +74,6 @@ _xfs_repair_noscan()
 
 # Modify as appropriate.
 _require_scratch_nocheck
-_require_command "$KILLALL_PROG" killall
 
 _scratch_mkfs | _filter_mkfs > /dev/null 2> $tmp.mkfs
 
