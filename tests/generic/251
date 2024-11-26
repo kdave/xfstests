@@ -173,13 +173,11 @@ function run_process() {
 
 nproc=$((4 * LOAD_FACTOR))
 
-# Copy $here to the scratch fs and make coipes of the replica.  The fstests
-# output (and hence $seqres.full) could be in $here, so we need to snapshot
-# $here before computing file checksums.
+# Use fsstress to create a directory tree with some variability
 content=$SCRATCH_MNT/orig
 mkdir -p $content
-cp -axT $here/ $content/
-
+FSSTRESS_ARGS=$(_scale_fsstress_args -p 4 -d $content -n 1000 $FSSTRESS_AVOID)
+$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full
 mkdir -p $tmp
 
 (
