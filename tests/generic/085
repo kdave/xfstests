@@ -16,18 +16,20 @@ _begin_fstest auto freeze mount
 # Override the default cleanup function.
 _cleanup()
 {
+	cleanup_dmdev
 	cd /
 	rm -f $tmp.*
-	cleanup_dmdev
 }
 
 cleanup_dmdev()
 {
+	if [ -n "$pid" ]; then
+		kill -9 $pid 2>> $seqres.full
+		wait $pid 2>> $seqres.full
+	fi
 	# in case it's still suspended and/or mounted
-	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
-	[ -n "$pid" ] && kill -9 $pid 2>/dev/null
-	wait $pid
-	_unmount $lvdev >/dev/null 2>&1
+	$DMSETUP_PROG resume $lvdev >> $seqres.full 2>&1
+	_unmount -q $SCRATCH_MNT
 	_dmsetup_remove $node
 }
 
@@ -64,18 +66,19 @@ setup_dmdev
 # important, as long as they're racing with each other. So just throw away the
 # outputs and ignore the results.
 for ((i=0; i<100; i++)); do
-	$DMSETUP_PROG suspend $lvdev >/dev/null 2>&1
-	$DMSETUP_PROG resume $lvdev >/dev/null 2>&1
+	$DMSETUP_PROG suspend $lvdev >> $seqres.full 2>&1
+	$DMSETUP_PROG resume $lvdev >> $seqres.full 2>&1
 done &
 pid=$!
 for ((i=0; i<100; i++)); do
-	_mount $lvdev $SCRATCH_MNT >/dev/null 2>&1
-	_unmount $lvdev >/dev/null 2>&1
+	_mount $lvdev $SCRATCH_MNT >> $seqres.full 2>&1
+	_unmount $lvdev >> $seqres.full 2>&1
 done &
 pid="$pid $!"
 
 wait $pid
 unset pid
 
+cleanup_dmdev
 status=0
 exit
