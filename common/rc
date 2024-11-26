@@ -4617,6 +4617,7 @@ _check_dmesg_filter()
 
 	grep -E -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
 		-e "BUG: MAX_STACK_TRACE_ENTRIES too low" \
+		-e "WARNING: Reset corrupted AGFL" \
 		$extra_filter
 }
 
@@ -4639,18 +4640,18 @@ _check_dmesg()
 	fi
 	rm -f ${RESULT_DIR}/check_dmesg
 
-	# default filter is a simple cat command, caller could provide a
-	# customized filter and pass the name through the first argument, to
-	# filter out intentional WARNINGs or Oopses
-	local filter=${1:-_check_dmesg_filter}
+	# we always filter dmesg for global things that should not cause
+	# test failures. Custom filters are then applied afterwards.
+	_dmesg_since_test_start | _check_dmesg_filter > $seqres.dmesg
+	if [ -n "$1" ]; then
+		cat $seqres.dmesg | $1 > $seqres.dmesg
+	fi
 
-	_dmesg_since_test_start | $filter >$seqres.dmesg
 	grep -E -q -e "kernel BUG at" \
 	     -e "WARNING:" \
 	     -e "\bBUG:" \
 	     -e "Oops:" \
 	     -e "possible recursive locking detected" \
-	     -e "Internal error" \
 	     -e "(INFO|ERR): suspicious RCU usage" \
 	     -e "INFO: possible circular locking dependency detected" \
 	     -e "general protection fault:" \
