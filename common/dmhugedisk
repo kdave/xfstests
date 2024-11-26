@@ -4,6 +4,9 @@
 #
 # Routines for creating huge (fake) disks
 
+export DMHUGE_TEST="huge-test.$seq"
+export DMHUGE_TEST_ZERO="huge-test-zero.$seq"
+
 _require_dmhugedisk()
 {
 	_require_dm_target zero
@@ -20,26 +23,26 @@ _dmhugedisk_init()
 		chunk_size=512
 	fi
 
-	_dmsetup_remove huge-test
-	_dmsetup_remove huge-test-zero
+	_dmsetup_remove $DMHUGE_TEST
+	_dmsetup_remove $DMHUGE_TEST_ZERO
 
 	local blk_dev_size=$1
 
-	DMHUGEDISK_ZERO='/dev/mapper/huge-test-zero'
-	DMHUGEDISK_DEV='/dev/mapper/huge-test'
+	DMHUGEDISK_ZERO="/dev/mapper/$DMHUGE_TEST_ZERO"
+	DMHUGEDISK_DEV="/dev/mapper/$DMHUGE_TEST"
 
 	DMHUGEDISK_ZERO_TABLE="0 $blk_dev_size zero"
 	DMHUGEDISK_DEV_TABLE="0 $blk_dev_size snapshot $DMHUGEDISK_ZERO $SCRATCH_DEV N $chunk_size"
 
-	_dmsetup_create huge-test-zero --table "$DMHUGEDISK_ZERO_TABLE" || \
+	_dmsetup_create $DMHUGE_TEST_ZERO --table "$DMHUGEDISK_ZERO_TABLE" || \
 		_fatal "failed to create dm huge zero device"
-	_dmsetup_create huge-test --table "$DMHUGEDISK_DEV_TABLE" || \
+	_dmsetup_create $DMHUGE_TEST --table "$DMHUGEDISK_DEV_TABLE" || \
 		_fatal "failed to create dm huge device"
 }
 
 _dmhugedisk_cleanup()
 {
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	_dmsetup_remove huge-test
-	_dmsetup_remove huge-test-zero
+	_dmsetup_remove $DMHUGE_TEST
+	_dmsetup_remove $DMHUGE_TEST_ZERO
 }
