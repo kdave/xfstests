@@ -19,7 +19,7 @@ _cleanup()
 	echo $$ > $cgdir/cgroup.procs
 	rmdir $cgdir/$seq-cg* > /dev/null 2>&1
 	_unmount $SCRATCH_MNT > /dev/null 2>&1
-	_destroy_loop_device $LOOP_DEV > /dev/null 2>&1
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev > /dev/null 2>&1
 	cd /
 	rm -f $tmp.*
 
@@ -81,18 +81,18 @@ reset()
 	$XFS_IO_PROG -fc "pwrite 0 $iosize" $SCRATCH_MNT/file \
 		>> $seqres.full 2>&1
 	_unmount $SCRATCH_MNT || _fail "umount failed"
-	_mount $LOOP_DEV $SCRATCH_MNT || _fail "mount failed"
+	_mount $loop_dev $SCRATCH_MNT || _fail "mount failed"
 	stat $SCRATCH_MNT/file > /dev/null
 }
 
 # cgroup I/O accounting doesn't work on partitions. Use a loop device to rule
 # that out.
-LOOP_DEV=$(_create_loop_device $SCRATCH_DEV)
-smajor=$((0x`stat -L -c %t $LOOP_DEV`))
-sminor=$((0x`stat -L -c %T $LOOP_DEV`))
+loop_dev=$(_create_loop_device $SCRATCH_DEV)
+smajor=$((0x`stat -L -c %t $loop_dev`))
+sminor=$((0x`stat -L -c %T $loop_dev`))
 
-_mkfs_dev $LOOP_DEV >> $seqres.full 2>&1
-_mount $LOOP_DEV $SCRATCH_MNT || _fail "mount failed"
+_mkfs_dev $loop_dev >> $seqres.full 2>&1
+_mount $loop_dev $SCRATCH_MNT || _fail "mount failed"
 
 blksize=$(_get_block_size "$SCRATCH_MNT")
 
@@ -146,6 +146,10 @@ check_cg $cgdir/$seq-cg-2 0 0 0 0
 if [ "$drop_io_cgroup" = 1 ]; then
 	echo "-io" > $cgdir/cgroup.subtree_control || _fail "subtree control"
 fi
+
+_unmount $SCRATCH_MNT
+_destroy_loop_device $loop_dev
+unset loop_dev
 
 # success, all done
 status=0

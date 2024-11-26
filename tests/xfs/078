@@ -17,7 +17,7 @@ _cleanup()
 	cd /
 	rm -f $tmp.*
 	_unmount $LOOP_MNT 2>/dev/null
-	[ -n "$LOOP_DEV" ] && _destroy_loop_device $LOOP_DEV 2>/dev/null
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev 2>/dev/null
 	# try to keep the image file if test fails
 	[ $status -eq 0 ] && rm -f $LOOP_IMG
 	rmdir $LOOP_MNT
@@ -55,7 +55,7 @@ _grow_loop()
 	agsize=$5
 
 	$XFS_IO_PROG -f -c "truncate $original" $LOOP_IMG
-	LOOP_DEV=`_create_loop_device $LOOP_IMG`
+	loop_dev=`_create_loop_device $LOOP_IMG`
 
 	dparam=""
 	if [ -n "$agsize" ]; then
@@ -67,15 +67,15 @@ _grow_loop()
 	echo
 
 	echo "*** mkfs loop file (size=$original)"
-	$MKFS_XFS_PROG -b size=$bsize $dparam $LOOP_DEV | \
+	$MKFS_XFS_PROG -b size=$bsize $dparam $loop_dev | \
 		_filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
-	_destroy_loop_device $LOOP_DEV
+	_destroy_loop_device $loop_dev
 	$XFS_IO_PROG -c "pwrite $new_size $bsize" $LOOP_IMG | _filter_io
-	LOOP_DEV=`_create_loop_device $LOOP_IMG`
+	loop_dev=`_create_loop_device $LOOP_IMG`
 	echo "*** mount loop filesystem"
-	_mount -t xfs $LOOP_DEV $LOOP_MNT
+	_mount $loop_dev $LOOP_MNT
 
 	echo "*** grow loop filesystem"
 	$XFS_GROWFS_PROG $LOOP_MNT 2>&1 |  _filter_growfs 2>&1
@@ -87,9 +87,11 @@ _grow_loop()
 	if [ "$check" -gt "0" ]
 	then
 		echo "*** check"
-		_check_xfs_filesystem $LOOP_IMG none none
+		_check_xfs_filesystem $loop_dev none none
 	fi
 
+	_destroy_loop_device $loop_dev
+	unset loop_dev
 	rm -f $LOOP_IMG
 }
 

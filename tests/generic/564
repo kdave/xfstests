@@ -19,7 +19,7 @@ _cleanup()
 {
 	cd /
 	rm -rf $tmp.*
-	[ -z "$loopdev" ] || _destroy_loop_device $loopdev
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
 }
 
 # Import common functions.
@@ -72,11 +72,11 @@ $XFS_IO_PROG -f -c "copy_range -l 32k $testdir" $testdir/copy
 echo
 echo source/destination as blkdev returns EINVAL
 $XFS_IO_PROG -f -c "truncate 128k" $testdir/img >> $seqres.full 2>&1
-loopdev=`_create_loop_device $testdir/img`
-$XFS_IO_PROG -c "copy_range -l 32k $testdir/file" $loopdev
-$XFS_IO_PROG -f -c "copy_range -l 32k $loopdev" $testdir/copy
-_destroy_loop_device $loopdev
-loopdev=
+loop_dev=`_create_loop_device $testdir/img`
+$XFS_IO_PROG -c "copy_range -l 32k $testdir/file" $loop_dev
+$XFS_IO_PROG -f -c "copy_range -l 32k $loop_dev" $testdir/copy
+_destroy_loop_device $loop_dev
+unset loop_dev
 
 echo
 echo source/destination as chardev returns EINVAL

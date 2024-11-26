@@ -12,6 +12,12 @@ _begin_fstest log metadata auto
 # Import common functions.
 . ./common/filter
 
+_cleanup()
+{
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
+	cd /
+	rm -f $tmp.*
+}
 
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
@@ -20,7 +26,7 @@ _scratch_mount
 _require_fs_space $SCRATCH_MNT 2202000
 
 _require_loop
-LOOP_DEV=$SCRATCH_MNT/test_fs
+LOOP_IMG=$SCRATCH_MNT/test_fs
 LOOP_MNT=$SCRATCH_MNT/test_fs_dir
 
 _do_mkfs()
@@ -28,27 +34,29 @@ _do_mkfs()
 	for i in $*; do
 		echo -n "fssize=${i}g "
 		$MKFS_XFS_PROG -f -b size=4096 -l version=2 \
-			-d name=$LOOP_DEV,size=${i}g |grep log
-		_mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
+			-d size=${i}g $loop_dev |grep log
+		_mount $loop_dev $LOOP_MNT
 		echo "test write" > $LOOP_MNT/test
 		_unmount $LOOP_MNT > /dev/null 2>&1
 
 		# punch out the previous blocks so that we keep the amount of
 		# disk space the test requires down to a minimum.
-		$XFS_IO_PROG -f -c "unresvsp 0 16383g" $LOOP_DEV
+		$XFS_IO_PROG -f -c "unresvsp 0 16383g" $LOOP_IMG
 	done
 }
 # make large holey file
-$XFS_IO_PROG -f -c "truncate 16383g" $LOOP_DEV
+$XFS_IO_PROG -f -c "truncate 16383g" $LOOP_IMG
 
 #make loopback mount dir
 mkdir $LOOP_MNT
 
 # test if large logs are supported
-$MKFS_XFS_PROG -f -l size=256m -d name=$LOOP_DEV,size=10g > /dev/null 2>&1
+$MKFS_XFS_PROG -f -l size=256m -d name=$LOOP_IMG,size=10g > /dev/null 2>&1
 if [ $? -ne 0 ]; then
 	_notrun "large log sizes not supported by mkfs"
 fi
+
+loop_dev=$(_create_loop_device $LOOP_IMG)
 
 #
 # walk over "new" sizes supported by recent xfsprogs.
@@ -57,5 +65,7 @@ fi
 #
 _do_mkfs 512 1024 2048 4096 8192 16383
 
+_destroy_loop_device $loop_dev
+unset loop_dev
 status=0
 exit

@@ -15,7 +15,7 @@ _cleanup()
 {
 	cd /
 	_scratch_unmount >> $seqres.full 2>&1
-	test -e "$rtdev" && losetup -d $rtdev >> $seqres.full 2>&1
+	[ -n "$rt_loop_dev" ] && _destroy_loop_device $rt_loop_dev
 	rm -f $tmp.* $TEST_DIR/$seq.rtvol
 }
 
@@ -52,12 +52,12 @@ fi
 
 rtdevsz=$((nr_bits * rtextsz))
 truncate -s $rtdevsz $TEST_DIR/$seq.rtvol
-rtdev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
+rt_loop_dev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
 
 echo "Format and mount rt volume"
 
 export USE_EXTERNAL=yes
-export SCRATCH_RTDEV=$rtdev
+export SCRATCH_RTDEV=$rt_loop_dev
 _scratch_mkfs -d size=$((1024 * 1024 * 1024)) \
 	      -r size=${rtextsz},extsize=${rtextsz} >> $seqres.full
 _try_scratch_mount || _notrun "Couldn't mount fs with synthetic rt volume"
@@ -116,8 +116,9 @@ done
 echo "Check filesystem"
 _check_scratch_fs
 
-losetup -d $rtdev
-rm -f $TEST_DIR/$seq.rtvol
+_scratch_unmount
+_destroy_loop_device $rt_loop_dev
+unset rt_loop_dev
 
 # success, all done
 status=0

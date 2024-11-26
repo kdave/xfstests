@@ -23,6 +23,7 @@ _cleanup()
 {
 	cd /
 	_unmount $LOOP_MNT 2>/dev/null
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
@@ -166,19 +167,21 @@ LOOP_FILE=$SCRATCH_MNT/$seq.fs
 LOOP_MNT=$SCRATCH_MNT/$seq.mnt
 
 $MKFS_XFS_PROG -d "file=1,name=$LOOP_FILE,size=10g" >> $seqres.full 2>&1
+loop_dev=$(_create_loop_device $LOOP_FILE)
 
 mkdir -p $LOOP_MNT
-_mount -o uquota,gquota $LOOP_FILE $LOOP_MNT || \
+_mount -o uquota,gquota $loop_dev $LOOP_MNT || \
 	_fail "Failed to mount loop fs."
 
 _test_enospc $LOOP_MNT
 _test_edquot $LOOP_MNT
 
 _unmount $LOOP_MNT
+_destroy_loop_device $loop_dev
+unset loop_dev
 
 echo $orig_sp_time > /proc/sys/fs/xfs/speculative_prealloc_lifetime
 
 _scratch_unmount
-
 status=0
 exit

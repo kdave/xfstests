@@ -15,6 +15,7 @@ _begin_fstest log metadata auto quick
 _cleanup()
 {
 	_unmount $LOOP_MNT > /dev/null 2>&1
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
 	cd /
 	rm -f $tmp.*
 }
@@ -24,7 +25,7 @@ _scratch_mkfs_xfs >/dev/null 2>&1
 _scratch_mount
 
 _require_loop
-LOOP_DEV=$SCRATCH_MNT/test_fs
+LOOP_IMG=$SCRATCH_MNT/test_fs
 LOOP_MNT=$SCRATCH_MNT/test_fs_dir
 
 loop_mkfs_opts=
@@ -55,22 +56,26 @@ _do_mkfs()
 	for i in $*; do
 		echo -n "fssize=${i}g "
 		$MKFS_XFS_PROG -f -b size=4096 -l version=2 \
-			-d name=$LOOP_DEV,size=${i}g $loop_mkfs_opts |grep log
-		_mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
+			-d size=${i}g $loop_mkfs_opts $loop_dev |grep log
+		_mount $loop_dev $LOOP_MNT
 		echo "test write" > $LOOP_MNT/test
 		_unmount $LOOP_MNT > /dev/null 2>&1
 	done
 }
 # make large holey file
-$XFS_IO_PROG -f -c "truncate 256g" $LOOP_DEV
+$XFS_IO_PROG -f -c "truncate 256g" $LOOP_IMG
 
-choose_golden_output $0 $LOOP_DEV
+choose_golden_output $0 $LOOP_IMG
 
 #make loopback mount dir
 mkdir $LOOP_MNT
 
+loop_dev=$(_create_loop_device $LOOP_IMG)
+
 # walk over standard sizes (up to 256GB)
 _do_mkfs 1 2 4 8 16 32 64 128 256
 
+_destroy_loop_device $loop_dev
+unset loop_dev
 status=0
 exit

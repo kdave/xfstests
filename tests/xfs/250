@@ -14,7 +14,8 @@ _cleanup()
 {
 	cd /
 	_unmount $LOOP_MNT 2>/dev/null
-	rm -f $LOOP_DEV
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
+	rm -f $LOOP_IMG
 	rmdir $LOOP_MNT
 	rm -f $tmp.*
 }
@@ -26,7 +27,7 @@ _require_test
 _require_loop
 _require_xfs_io_command "falloc"
 
-LOOP_DEV=$TEST_DIR/$seq.fs
+LOOP_IMG=$TEST_DIR/$seq.fs
 LOOP_MNT=$TEST_DIR/$seq.mnt
 
 _filter_io()
@@ -45,7 +46,7 @@ _test_loop()
 	agsize=$2
 	fsize=$3
 
-	dparam="file,name=$LOOP_DEV,size=$size"
+	dparam="file,name=$LOOP_IMG,size=$size"
 	if [ -n "$agsize" ]; then
 		dparam="$dparam,agsize=$agsize"
 	fi
@@ -55,7 +56,8 @@ _test_loop()
 		| _filter_mkfs 2>/dev/null
 
 	echo "*** mount loop filesystem"
-	_mount -t xfs -o loop $LOOP_DEV $LOOP_MNT
+	loop_dev=$(_create_loop_device $LOOP_IMG)
+	mount $loop_dev $LOOP_MNT
 
 	echo "*** preallocate large file"
 	$XFS_IO_PROG -f -c "resvsp 0 $fsize" $LOOP_MNT/foo | _filter_io
@@ -64,7 +66,9 @@ _test_loop()
 	_unmount $LOOP_MNT > /dev/null 2>&1
 
 	echo "*** check loop filesystem"
-	 _check_xfs_filesystem $LOOP_DEV none none
+	_check_xfs_filesystem $loop_dev none none
+	_destroy_loop_device $loop_dev
+	unset loop_dev
 }
 
 _test_loop 50g 16m 40G

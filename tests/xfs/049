@@ -12,16 +12,17 @@ _begin_fstest rw auto quick
 # Override the default cleanup function.
 _cleanup()
 {
-    cd /
-    umount $SCRATCH_MNT/test2 > /dev/null 2>&1
-    umount $SCRATCH_MNT/test > /dev/null 2>&1
-    rm -f $tmp.*
+	cd /
+	_unmount $SCRATCH_MNT/test2 > /dev/null 2>&1
+	_unmount $SCRATCH_MNT/test > /dev/null 2>&1
+	[ -n "$loop_dev2" ] && _destroy_loop_device $loop_dev2
+	[ -n "$loop_dev1" ] && _destroy_loop_device $loop_dev1
+	rm -f $tmp.*
 
-    if [ -w $seqres.full ]
-    then
-        echo "--- mounts at end (after cleanup)" >> $seqres.full
-        mount >> $seqres.full
-    fi
+	if [ -w $seqres.full ]; then
+		echo "--- mounts at end (after cleanup)" >> $seqres.full
+		mount >> $seqres.full
+	fi
 }
 
 # Import common functions.
@@ -64,7 +65,8 @@ mkdir $SCRATCH_MNT/test $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to make mount points"
 
 _log "Mount xfs via loop"
-mount -t xfs -o loop $SCRATCH_MNT/test.xfs $SCRATCH_MNT/test >> $seqres.full 2>&1 \
+loop_dev1=$(_create_loop_device $SCRATCH_MNT/test.xfs)
+_mount $loop_dev1 $SCRATCH_MNT/test >> $seqres.full 2>&1 \
     || _fail "!!! failed to loop mount xfs"
 
 _log "stress"
@@ -80,11 +82,12 @@ dd if=/dev/zero of=$SCRATCH_MNT/test/test.ext2 bs=1024 count=10240 >> $seqres.fu
     || _fail "!!! create file failed"
 
 _log "Create ext2 fs in file on looped xfs"
-echo y | mkfs -t ext2 $SCRATCH_MNT/test/test.ext2 >> $seqres.full 2>&1 \
+loop_dev2=$(_create_loop_device $SCRATCH_MNT/test/test.ext2)
+echo y | mkfs -t ext2 $loop_dev2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to mkfs ext2 on xfs"
 
 _log "Mount ext2 on xfs via loop"
-mount -t ext2 -o loop $SCRATCH_MNT/test/test.ext2 $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
+_mount $loop_dev2 $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to loop mount xfs"
 
 _log "stress ext2 on xfs via loop"
@@ -96,12 +99,16 @@ rm -rf $SCRATCH_MNT/test/* >> $seqres.full 2>&1 \
     || _fail "!!! clean failed"
 
 _log "umount ext2 on xfs"
-umount $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
+_unmount $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! umount ext2 failed"
+_destroy_loop_device $loop_dev2
+unset loop_dev2
 
 _log "umount xfs"
-umount $SCRATCH_MNT/test >> $seqres.full 2>&1 \
+_unmount $SCRATCH_MNT/test >> $seqres.full 2>&1 \
     || _fail "!!! umount xfs failed"
+_destroy_loop_device $loop_dev1
+unset loop_dev1
 
 echo "--- mounts at end (before cleanup)" >> $seqres.full
 mount >> $seqres.full

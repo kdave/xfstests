@@ -25,12 +25,8 @@ _xfs_cleanup_verify_metadump()
 	test -n "$XFS_METADUMP_FILE" && rm -f "$XFS_METADUMP_FILE"
 
 	if [ -n "$XFS_METADUMP_IMG" ]; then
-		losetup -n -a -O BACK-FILE,NAME | grep "^$XFS_METADUMP_IMG" | while read backing ldev; do
-			losetup -d "$ldev"
-		done
-
-		# Don't call rm directly with a globbed argument here to avoid
-		# issues issues with variable expansions.
+		[ -b "$md_data_loop_dev" ] && _destroy_loop_device $md_data_loop_dev
+		[ -b "$md_log_loop_dev" ] && _destroy_loop_device $md_log_loop_dev
 		for img in "$XFS_METADUMP_IMG"*; do
 			test -e "$img" && rm -f "$img"
 		done
@@ -122,25 +118,27 @@ _xfs_verify_metadump_v2()
 		_scratch_xfs_mdrestore $metadump_file
 
 	# Create loopdev for data device so we can mount the fs
-	data_loop=$(_create_loop_device $data_img)
+	md_data_loop_dev=$(_create_loop_device $data_img)
 
 	# Create loopdev for log device if we recovered anything
-	test -s "$log_img" && log_loop=$(_create_loop_device $log_img)
+	test -s "$log_img" && md_log_loop_dev=$(_create_loop_device $log_img)
 
 	# Mount fs, run an extra test, fsck, and unmount
-	SCRATCH_DEV=$data_loop SCRATCH_LOGDEV=$log_loop _scratch_mount
+	SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev _scratch_mount
 	if [ -n "$extra_test" ]; then
-		SCRATCH_DEV=$data_loop SCRATCH_LOGDEV=$log_loop $extra_test
+		SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev $extra_test
 	fi
-	SCRATCH_DEV=$data_loop SCRATCH_LOGDEV=$log_loop _check_xfs_scratch_fs
-	SCRATCH_DEV=$data_loop _scratch_unmount
+	SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev _check_xfs_scratch_fs
+	_unmount $md_data_loop_dev
 
 	# Tear down what we created
-	if [ -b "$log_loop" ]; then
-		_destroy_loop_device $log_loop
+	if [ -b "$md_log_loop_dev" ]; then
+		_destroy_loop_device $md_log_loop_dev
+		unset md_log_loop_dev
 		rm -f $log_img
 	fi
-	_destroy_loop_device $data_loop
+	_destroy_loop_device $md_data_loop_dev
+	unset md_data_loop_dev
 	rm -f $data_img
 }
 

@@ -37,13 +37,18 @@ mount_nonexistent_mnt()
 	$MOUNT_PROG $SCRATCH_DEV $TEST_DIR/nosuchdir >>$seqres.full 2>&1
 }
 
-# fs driver should be able to handle mounting a free loop device gracefully
-# xfs ever hung, "ec53d1d xfs: don't block on buffer read errors" fixed it
+# fs driver should be able to handle mounting a free loop device gracefully xfs
+# ever hung, "ec53d1d xfs: don't block on buffer read errors" fixed it
+#
+# Using 'losetup -f' like this is racy. We might end up mounting a real loop dev
+# here, so unmount $SCRATCH_MNT (not the loop dev we might not own!) and ignore
+# any error it might return.
 mount_free_loopdev()
 {
 	echo "# mount a free loop device" >>$seqres.full
 	loopdev=`losetup -f`
-	$MOUNT_PROG -t $FSTYP $loopdev $SCRATCH_MNT >>$seqres.full 2>&1
+	_mount $loopdev $SCRATCH_MNT >>$seqres.full 2>&1
+	_unmount $SCRATCH_MNT >> /dev/null 2>&1
 }
 
 # mount with wrong fs type specified.

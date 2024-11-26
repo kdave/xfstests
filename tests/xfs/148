@@ -15,7 +15,7 @@ _cleanup()
 {
 	cd /
 	_unmount $mntpt > /dev/null 2>&1
-	_destroy_loop_device $loopdev > /dev/null 2>&1
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
 	rm -r -f $tmp.*
 }
 
@@ -48,12 +48,12 @@ rm -f $imgfile $imgfile.old
 # even when security xattrs are present so we are always doing name matches on
 # lookup and not name hash compares as leaf/node forms will do.
 $XFS_IO_PROG -f -c 'truncate 40m' $imgfile
-loopdev=$(_create_loop_device $imgfile)
-MKFS_OPTIONS="-m crc=0 -i size=512" _mkfs_dev $loopdev >> $seqres.full
+loop_dev=$(_create_loop_device $imgfile)
+MKFS_OPTIONS="-m crc=0 -i size=512" _mkfs_dev $loop_dev >> $seqres.full
 
 # Mount image file
 mkdir -p $mntpt
-_mount $loopdev $mntpt
+_mount $loop_dev $mntpt
 
 echo "creating entries" >> $seqres.full
 
@@ -91,7 +91,8 @@ cat $tmp.log | _filter_test_dir
 
 # Corrupt the entries
 _unmount $mntpt
-_destroy_loop_device $loopdev
+_destroy_loop_device $loop_dev
+unset loop_dev
 cp $imgfile $imgfile.old
 sed -b \
 	-e "s/$nullstr/too_many\x00beans/g" \
@@ -99,8 +100,9 @@ sed -b \
 	-i $imgfile
 test "$(md5sum < $imgfile)" != "$(md5sum < $imgfile.old)" ||
 	_fail "sed failed to change the image file?"
-loopdev=$(_create_loop_device $imgfile)
-_mount $loopdev $mntpt
+
+loop_dev=$(_create_loop_device $imgfile)
+_mount $loop_dev $mntpt
 
 # Try to access the corrupt metadata
 echo "++ ACCESSING BAD METADATA" | tee -a $seqres.full
@@ -111,7 +113,7 @@ cat $tmp.log | _filter_test_dir | sed -e '/Could not list/d'
 echo "does scrub complain?" >> $seqres.full
 
 # Does scrub complain about this?
-if _supports_xfs_scrub $mntpt $loopdev; then
+if _supports_xfs_scrub $mntpt $loop_dev; then
 	$XFS_SCRUB_PROG -n $mntpt >> $seqres.full 2>&1
 	res=$?
 	test $((res & 1)) -eq 0 && \
@@ -122,10 +124,13 @@ echo "does repair complain?" >> $seqres.full
 
 # Does repair complain about this?
 _unmount $mntpt
-$XFS_REPAIR_PROG -n $loopdev >> $seqres.full 2>&1
+$XFS_REPAIR_PROG -n $loop_dev >> $seqres.full 2>&1
 res=$?
 test $res -eq 1 || \
 	echo "repair failed to report corruption ($res)"
+
+_destroy_loop_device $loop_dev
+unset loop_dev
 
 # success, all done
 status=0

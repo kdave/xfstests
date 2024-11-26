@@ -21,7 +21,7 @@ _cleanup()
 {
 	cd /
 	_scratch_unmount >> $seqres.full 2>&1
-	test -e "$rtdev" && losetup -d $rtdev >> $seqres.full 2>&1
+	[ -n "$rt_loop_dev" ] && _destroy_loop_device $rt_loop_dev
 	rm -f $tmp.* $TEST_DIR/$seq.rtvol
 }
 
@@ -35,7 +35,7 @@ _require_no_large_scratch_dev
 
 echo "Create fake rt volume"
 truncate -s 400m $TEST_DIR/$seq.rtvol
-rtdev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
+rt_loop_dev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
 
 echo "Format and mount 100m rt volume"
 export USE_EXTERNAL=yes
@@ -68,6 +68,10 @@ cp -p $testdir/original $testdir/copy3
 
 echo "Check filesystem"
 _check_scratch_fs
+
+_scratch_unmount
+_destroy_loop_device $rt_loop_dev
+unset rt_loop_dev
 
 # success, all done
 status=0
