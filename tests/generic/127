@@ -16,7 +16,10 @@ _begin_fstest rw auto
 # Override the default cleanup function.
 _cleanup()
 {
-    rm -f $tmp.output
+	[ -n "$fsx_pids" ] && kill $fsx_pids 2> /dev/null
+	wait
+	cd /
+	rm -f $tmp.*
 }
 
 # Import common functions.
@@ -27,7 +30,6 @@ FSX_ARGS="-q -l $FSX_FILE_SIZE -o 65536 -S 191110531 -N 100000"
 
 _fsx_lite_nommap()
 {
-    echo "=== FSX Light Mode, No Memory Mapping ==="
     dd if=/dev/zero of=$TEST_DIR/fsx_lite_nommap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
     if ! ltp/fsx $FSX_ARGS -L -R -W $FSX_AVOID $TEST_DIR/fsx_lite_nommap > $tmp.output 2>&1
     then
@@ -41,7 +43,6 @@ _fsx_lite_nommap()
 
 _fsx_lite_mmap()
 {
-    echo "=== FSX Light Mode, Memory Mapping ==="
     dd if=/dev/zero of=$TEST_DIR/fsx_lite_mmap bs=${FSX_FILE_SIZE} count=1 > /dev/null 2>&1
     if ! ltp/fsx $FSX_ARGS -L $FSX_AVOID $TEST_DIR/fsx_lite_mmap > $tmp.output 2>&1
     then
@@ -55,42 +56,56 @@ _fsx_lite_mmap()
 
 _fsx_std_nommap()
 {
-    echo "=== FSX Standard Mode, No Memory Mapping ==="
-    if ! ltp/fsx $FSX_ARGS -R -W $FSX_AVOID $TEST_DIR/fsx_std_nommap > $tmp.output 2>&1
-    then
-        echo "ltp/fsx $FSX_ARGS -R -W fsx_std_nommap"
-        cat $tmp.output
-        return 1
-    fi
-    cat $tmp.output
-    return 0
+	local fname="$TEST_DIR/$1"
+
+	if ! ltp/fsx $FSX_ARGS -R -W $FSX_AVOID $fname > $tmp.output 2>&1
+	then
+		echo "ltp/fsx $FSX_ARGS -R -W fsx_std_nommap"
+		cat $tmp.output
+		return 1
+	fi
+	cat $tmp.output
+	return 0
 }
 
 _fsx_std_mmap()
 {
-    echo "=== FSX Standard Mode, Memory Mapping ==="
-    if ! ltp/fsx $FSX_ARGS $FSX_AVOID $TEST_DIR/fsx_std_mmap > $tmp.output 2>&1
-    then
-    	echo "ltp/fsx $FSX_ARGS fsx_std_mmap"
+	local fname="$TEST_DIR/$1"
+
+	if ! ltp/fsx $FSX_ARGS $FSX_AVOID $fname > $tmp.output 2>&1
+	then
+		echo "ltp/fsx $FSX_ARGS fsx_std_mmap"
+		cat $tmp.output
+		return 1
+	fi
 	cat $tmp.output
-	return 1
-    fi
-    cat $tmp.output
-    return 0
+	return 0
 }
 
 _require_test
 
-_fsx_lite_nommap || exit
-_fsx_lite_mmap || exit
+_fsx_lite_nommap &
+fsx_pids=$!
 
-_fsx_std_nommap || exit
-_fsx_std_mmap || exit
+_fsx_lite_mmap &
+fsx_pids="$! $fsx_pids"
+
+_fsx_std_nommap fsx_std_nommap &
+fsx_pids="$! $fsx_pids"
+
+_fsx_std_mmap fsx_std_mmap &
+fsx_pids="$! $fsx_pids"
 
 #flush cache after write
 FSX_ARGS="-f $FSX_ARGS"
-_fsx_std_nommap || exit
-_fsx_std_mmap || exit
+_fsx_std_nommap fsx_std_nommap_flush &
+fsx_pids="$! $fsx_pids"
+
+_fsx_std_mmap fsx_std_mmap_flush &
+fsx_pids="$! $fsx_pids"
+
+wait $fsx_pids
+unset fsx_pids
 
 status=0
 _cleanup
