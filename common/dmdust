@@ -4,12 +4,14 @@
 #
 # common functions for setting up and tearing down a dmdust device
 
+export DUST_NAME="dust-test.$seq"
+
 _init_dust()
 {
 	local DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
-	DUST_DEV=/dev/mapper/dust-test
+	DUST_DEV=/dev/mapper/$DUST_NAME
 	DUST_TABLE="0 $DEV_SIZE dust $SCRATCH_DEV 0 512"
-	_dmsetup_create dust-test --table "$DUST_TABLE" || \
+	_dmsetup_create $DUST_NAME --table "$DUST_TABLE" || \
 		_fatal "failed to create dust device"
 }
 
@@ -29,7 +31,7 @@ _cleanup_dust()
 {
 	# If dmsetup load fails then we need to make sure to do resume here
 	# otherwise the umount will hang
-	$DMSETUP_PROG resume dust-test > /dev/null 2>&1
+	$DMSETUP_PROG resume $DUST_NAME > /dev/null 2>&1
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	_dmsetup_remove dust-test
+	_dmsetup_remove $DUST_NAME
 }
