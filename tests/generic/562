@@ -15,6 +15,9 @@ _begin_fstest auto clone punch
 . ./common/filter
 . ./common/reflink
 
+test "$FSTYP" = "xfs" && \
+	_fixed_by_kernel_commit XXXXXXXXXX "xfs: don't drop errno values when we fail to ficlone the entire range"
+
 _require_scratch_reflink
 _require_test_program "punch-alternating"
 _require_xfs_io_command "fpunch"
@@ -48,8 +51,11 @@ while true; do
 done
 
 # Now clone file bar into file foo. This is supposed to succeed and not fail
-# with ENOSPC for example.
-_reflink $SCRATCH_MNT/bar $SCRATCH_MNT/foo >>$seqres.full
+# with ENOSPC for example.  However, XFS will sometimes run out of space.
+_reflink $SCRATCH_MNT/bar $SCRATCH_MNT/foo >>$seqres.full 2> $tmp.err
+cat $tmp.err
+test "$FSTYP" = "xfs" && grep -q 'No space left on device' $tmp.err && \
+	_notrun "ran out of space while cloning"
 
 # Unmount and mount the filesystem again to verify the operation was durably
 # persisted.
