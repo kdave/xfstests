@@ -42,7 +42,7 @@ create_files()
 	# We use slightly longer file name to make directory grow faster and
 	# hopefully convert between various types
 	for (( i = 0; i < $files; i++ )); do
-		touch somewhatlongerfilename$i
+		echo -n > somewhatlongerfilename$i
 	done
 }
 
@@ -50,12 +50,13 @@ for (( i = 0; i <= $moves; i++ )); do
 	mkdir $SCRATCH_MNT/dir$i
 done
 
+start_dir=$PWD
 for (( l = 0; l < $loops; l++ )); do
 	mkdir $SCRATCH_MNT/dir0/dir
-	pushd $SCRATCH_MNT/dir0/dir &>/dev/null
+	cd $SCRATCH_MNT/dir0/dir
 	create_files &
 	BGPID=$!
-	popd &>/dev/null
+	cd $start_dir
 	for (( i = 0; i < $moves; i++ )); do
 		mv $SCRATCH_MNT/dir$i/dir $SCRATCH_MNT/dir$((i+1))/dir
 	done
