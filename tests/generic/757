@@ -8,12 +8,13 @@
 # This can be seen on subpage FSes on Linux 6.4.
 #
 . ./common/preamble
-_begin_fstest auto quick metadata log recoveryloop aio
+_begin_fstest auto quick metadata log recoveryloop aio thin
 
 _cleanup()
 {
 	cd /
 	_log_writes_cleanup &> /dev/null
+	_dmthin_cleanup
 	rm -f $tmp.*
 }
 
@@ -23,11 +24,14 @@ _cleanup()
 
 fio_config=$tmp.fio
 
+. ./common/dmthin
 . ./common/dmlogwrites
 
-_require_scratch
+# Use thin device as replay device, which requires $SCRATCH_DEV
+_require_scratch_nocheck
 _require_aiodio
 _require_log_writes
+_require_dm_target thin-pool
 
 cat >$fio_config <<EOF
 [global]
@@ -47,7 +51,13 @@ _require_fio $fio_config
 
 cat $fio_config >> $seqres.full
 
-_log_writes_init $SCRATCH_DEV
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
+_test_unmount
+sectors=$(blockdev --getsz $SCRATCH_DEV)
+sectors=$((sectors * 90 / 100))
+_dmthin_init $sectors $sectors
+_log_writes_init $DMTHIN_VOL_DEV
 _log_writes_mkfs >> $seqres.full 2>&1
 _log_writes_mark mkfs
 
@@ -64,14 +74,13 @@ cur=$(_log_writes_find_next_fua $prev)
 [ -z "$cur" ] && _fail "failed to locate next FUA write"
 
 while _soak_loop_running $((100 * TIME_FACTOR)); do
-	_log_writes_replay_log_range $cur $SCRATCH_DEV >> $seqres.full
+	_log_writes_replay_log_range $cur $DMTHIN_VOL_DEV >> $seqres.full
 
 	# xfs_repair won't run if the log is dirty
 	if [ $FSTYP = "xfs" ]; then
-		_scratch_mount
-		_scratch_unmount
+		_dmthin_mount
 	fi
-	_check_scratch_fs
+	_dmthin_check_fs
 
 	prev=$cur
 	cur=$(_log_writes_find_next_fua $(($cur + 1)))
