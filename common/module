@@ -214,3 +214,14 @@ _patient_rmmod()
 
 	return $mod_ret
 }
+
+# Try to reload a filesystem driver.  Don't wait if we can't remove the module,
+# and don't let failures related to removing the module escape.  The caller
+# doesn't care if removal doesn't work.
+_optional_reload_fs_module()
+{
+	MODPROBE_PATIENT_RM_TIMEOUT_SECONDS=0 \
+		MODPROBE_REMOVE_PATIENT="" \
+		_test_loadable_fs_module "$@" 2>&1 | \
+		sed -e '/patient module removal/d'
+}
