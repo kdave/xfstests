@@ -36,19 +36,24 @@ do_copy()
 		_fail "xfs_copy $opts corrupted for Sector size $SECTORSIZE Block size $BLOCKSIZE"
 }
 
-while [ $SECTORSIZE -le $PAGESIZE ]; do
-	BLOCKSIZE=$SECTORSIZE;
-
-	while [ $BLOCKSIZE -le $PAGESIZE ]; do
-
+for ((; SECTORSIZE <= 65536; SECTORSIZE *= 2)); do
+	for ((BLOCKSIZE = SECTORSIZE; BLOCKSIZE <= 65536; BLOCKSIZE *= 2)); do
 		echo "=== Sector size $SECTORSIZE Block size $BLOCKSIZE ==" >> $seqres.full
 		_scratch_mkfs -s size=$SECTORSIZE -b size=$BLOCKSIZE -d size=1g >> $seqres.full 2>&1
 		# Maybe return error at here, e.g: mkfs.xfs -m crc=1 -b size=512
 		if [ $? -ne 0 ]; then
-			BLOCKSIZE=$(($BLOCKSIZE * 2))
 			continue
 		fi
-		_scratch_mount
+		if ! _try_scratch_mount; then
+			if [ $BLOCKSIZE -le $PAGESIZE ]; then
+				_fail "mount $(_scratch_mount_options $*) failed"
+			fi
+
+			# Not all kernels support blocksize > pagesize
+			# filesystems, so we move on to the next sector size if
+			# mount fails.
+			break
+		fi
 		# light population of the fs
 		_run_fsstress -n 100 -d $SCRATCH_MNT
 		_scratch_unmount
@@ -58,10 +63,7 @@ while [ $SECTORSIZE -le $PAGESIZE ]; do
 			do_copy -d
 		fi
 		do_copy
-
-		BLOCKSIZE=$(($BLOCKSIZE * 2));
 	done
-	SECTORSIZE=$(($SECTORSIZE * 2));
 done
 
 # success, all done
