@@ -17,12 +17,19 @@ _begin_fstest auto quick growfs shrinkfs
 
 test_shrink()
 {
-	$XFS_GROWFS_PROG -D"$1" $SCRATCH_MNT >> $seqres.full 2>&1
+	$XFS_GROWFS_PROG -D"$1" $SCRATCH_MNT &> $tmp.growfs
 	ret=$?
 
 	_scratch_unmount
 	_check_scratch_fs
 	_scratch_mount
+
+	# If we couldn't shrink the filesystem due to lack of space, we're
+	# done with this test.
+	[ $1 -ne $dblocks ] && \
+		grep -q 'No space left on device' $tmp.growfs && \
+		_notrun "Could not shrink due to lack of space"
+	cat $tmp.growfs >> $seqres.full
 
 	$XFS_INFO_PROG $SCRATCH_MNT 2>&1 | _filter_mkfs 2>$tmp.growfs >/dev/null
 	. $tmp.growfs
