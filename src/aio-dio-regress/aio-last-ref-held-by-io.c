@@ -85,11 +85,14 @@ aio_test_thread(void *data)
 	/*
 	 * Problems have been easier to trigger when spreading the
 	 * workload over the available CPUs.
+	 *
+	 * If CPU hotplug is active, this can randomly fail so dump the error
+	 * to stderror so it can be filtered out easily by the caller.
 	 */
 	CPU_ZERO(&cpuset);
 	CPU_SET(mycpu, &cpuset);
 	if (sched_setaffinity(mytid, sizeof(cpuset), &cpuset)) {
-		printf("FAILED to set thread %d to run on cpu %ld\n",
+		fprintf(stderr, "FAILED to set thread %d to run on cpu %ld\n",
 		       mytid, mycpu);
 	}
 

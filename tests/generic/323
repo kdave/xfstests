@@ -23,12 +23,15 @@ _require_aiodio aio-last-ref-held-by-io
 testfile=$TEST_DIR/aio-testfile
 $XFS_IO_PROG -ftc "pwrite 0 10m" $testfile | _filter_xfs_io
 
-$AIO_TEST 0 100 $testfile
+# This can emit cpu affinity setting failures that aren't considered test
+# failures but cause golden image failures. Redirect the test output to
+# $seqres.full so that it is captured but doesn't directly cause test failures.
+$AIO_TEST 0 100 $testfile 2>> $seqres.full
 if [ $? -ne 0 ]; then
 	exit $status
 fi
 
-$AIO_TEST 1 100 $testfile
+$AIO_TEST 1 100 $testfile 2>> $seqres.full
 if [ $? -ne 0 ]; then
 	exit $status
 fi

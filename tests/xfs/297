@@ -34,7 +34,9 @@ _scratch_mount
 STRESS_DIR="$SCRATCH_MNT/testdir"
 mkdir -p $STRESS_DIR
 
-_run_fsstress_bg -d $STRESS_DIR -n 1000 -p 1000 $FSSTRESS_AVOID
+# turn off sync as this can lead to near deadlock conditions due to every
+# fsstress process lockstepping against freeze on large CPU count machines
+_run_fsstress_bg -d $STRESS_DIR -f sync=0 -n 1000 -p 1000 $FSSTRESS_AVOID
 
 # Freeze/unfreeze file system randomly
 echo "Start freeze/unfreeze randomly" | tee -a $seqres.full

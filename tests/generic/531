@@ -21,7 +21,13 @@ _require_scratch
 _require_xfs_io_command "-T"
 _require_test_program "t_open_tmpfiles"
 
-_scratch_mkfs >> $seqres.full 2>&1
+# On high CPU count machines, this runs a -lot- of create and unlink
+# concurrency. Set the filesytsem up to handle this.
+if [ $FSTYP = "xfs" ]; then
+	_scratch_mkfs "-d agcount=32" >> $seqres.full 2>&1
+else
+	_scratch_mkfs >> $seqres.full 2>&1
+fi
 _scratch_mount
 
 # Try to load up all the CPUs, two threads per CPU.
