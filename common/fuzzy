@@ -1145,7 +1145,6 @@ __stress_scrub_fsstress_loop() {
 _require_xfs_stress_scrub() {
 	_require_xfs_io_command "scrub"
 	_require_test_program "xfsfind"
-	_require_command "$KILLALL_PROG" killall
 	_require_freeze
 	command -v _filter_scratch &>/dev/null || \
 		_notrun 'xfs scrub stress test requires common/filter'
@@ -1178,7 +1177,9 @@ _scratch_xfs_stress_scrub_cleanup() {
 	# distorts the golden output.
 	echo "Killing stressor processes at $(date)" >> $seqres.full
 	_kill_fsstress
-	$KILLALL_PROG -INT xfs_io fsx xfs_scrub >> $seqres.full 2>&1
+	pkill -INT --parent $$ xfs_io >> $seqres.full 2>&1
+	pkill -INT --parent $$ fsx >> $seqres.full 2>&1
+	pkill -INT --parent $$ xfs_scrub >> $seqres.full 2>&1
 
 	# Tests are not allowed to exit with the scratch fs frozen.  If we
 	# started a fs freeze/thaw background loop, wait for that loop to exit
