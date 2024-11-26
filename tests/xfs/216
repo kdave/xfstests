@@ -12,6 +12,12 @@ _begin_fstest log metadata auto quick
 # Import common functions.
 . ./common/filter
 
+_cleanup()
+{
+	_unmount $LOOP_MNT > /dev/null 2>&1
+	cd /
+	rm -f $tmp.*
+}
 
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
@@ -50,9 +56,9 @@ _do_mkfs()
 		echo -n "fssize=${i}g "
 		$MKFS_XFS_PROG -f -b size=4096 -l version=2 \
 			-d name=$LOOP_DEV,size=${i}g $loop_mkfs_opts |grep log
-		mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
+		_mount -o loop -t xfs $LOOP_DEV $LOOP_MNT
 		echo "test write" > $LOOP_MNT/test
-		umount $LOOP_MNT > /dev/null 2>&1
+		_unmount $LOOP_MNT > /dev/null 2>&1
 	done
 }
 # make large holey file

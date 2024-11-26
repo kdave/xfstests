@@ -38,7 +38,7 @@ esac
 # Override the default cleanup function.
 _cleanup()
 {
-	$UMOUNT_PROG $loop_dev &> /dev/null
+	_unmount $loop_mnt &> /dev/null
 	_destroy_loop_device $loop_dev
 	if [ $status -eq 0 ]; then
 		rm -rf $tmp
@@ -53,7 +53,7 @@ get_holes()
 	# in-core state that will perturb the free space map on umount.  Stick
 	# to established convention which requires the filesystem to be
 	# unmounted while we probe the underlying file.
-	$UMOUNT_PROG $loop_mnt
+	_unmount $loop_mnt
 
 	# FIEMAP only works on regular files, so call it on the backing file
 	# and not the loop device like everything else
@@ -66,7 +66,7 @@ get_free_sectors()
 {
 	case $FSTYP in
 	ext4)
-	$UMOUNT_PROG $loop_mnt
+	_unmount $loop_mnt
 	$DUMPE2FS_PROG $loop_dev  2>&1 | grep " Free blocks" | cut -d ":" -f2- | \
 		tr ',' '\n' | $SED_PROG 's/^ //' | \
 		$AWK_PROG -v spb=$sectors_per_block 'BEGIN{FS="-"};
@@ -80,7 +80,7 @@ get_free_sectors()
 	xfs)
 	agsize=`$XFS_INFO_PROG $loop_mnt | $SED_PROG -n 's/.*agsize=\(.*\) blks.*/\1/p'`
 	# Convert free space (agno, block, length) to (start sector, end sector)
-	$UMOUNT_PROG $loop_mnt
+	_unmount $loop_mnt
 	$XFS_DB_PROG -r -c "freesp -d" $loop_dev | $SED_PROG '/^.*from/,$d'| \
 		 $AWK_PROG -v spb=$sectors_per_block -v agsize=$agsize \
 		'{ print spb * ($1 * agsize + $2), spb * ($1 * agsize + $2 + $3) - 1 }'

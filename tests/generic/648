@@ -18,7 +18,7 @@ _cleanup()
 {
 	_kill_fsstress
 	if [ -n "$loopmnt" ]; then
-		$UMOUNT_PROG $loopmnt 2>/dev/null
+		_unmount $loopmnt 2>/dev/null
 		rm -r -f $loopmnt
 	fi
 	_dmerror_unmount
@@ -102,7 +102,7 @@ while _soak_loop_running $((25 * TIME_FACTOR)); do
 
 	# Mount again to replay log after loading working table, so we have a
 	# consistent fs after test.
-	$UMOUNT_PROG $loopmnt
+	_unmount $loopmnt
 	is_unmounted=1
 	# We must unmount dmerror at here, or whole later testing will crash.
 	# So try to umount enough times, before we have no choice.
@@ -128,7 +128,7 @@ done
 # Make sure the fs image file is ok
 if [ -f "$loopimg" ]; then
 	if _mount $loopimg $loopmnt -o loop; then
-		$UMOUNT_PROG $loopmnt &> /dev/null
+		_unmount $loopmnt &> /dev/null
 	else
 		_metadump_dev $DMERROR_DEV $seqres.scratch.final.md
 		echo "final scratch mount failed"

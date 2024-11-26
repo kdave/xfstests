@@ -325,7 +325,7 @@ _put_mount()
 	local last_mnt=`echo $MOUNTED_POINT_STACK | awk '{print $1}'`
 
 	if [ -n "$last_mnt" ]; then
-		$UMOUNT_PROG $last_mnt
+		_unmount $last_mnt
 	fi
 	MOUNTED_POINT_STACK=`echo $MOUNTED_POINT_STACK | cut -d\  -f2-`
 }
@@ -334,7 +334,7 @@ _put_mount()
 _clear_mount_stack()
 {
 	if [ -n "$MOUNTED_POINT_STACK" ]; then
-		$UMOUNT_PROG $MOUNTED_POINT_STACK
+		_unmount -R $MOUNTED_POINT_STACK
 	fi
 	MOUNTED_POINT_STACK=""
 }
@@ -472,6 +472,14 @@ _scratch_mount_idmapped()
 	fi
 }
 
+# Unmount the filesystem based on the directory or device passed.
+_unmount()
+{
+	local args="$*"
+
+	$UMOUNT_PROG $args >> $seqres.full 2>&1
+}
+
 _scratch_unmount()
 {
 	case "$FSTYP" in
@@ -479,20 +487,20 @@ _scratch_unmount()
 		_overlay_scratch_unmount
 		;;
 	btrfs)
-		$UMOUNT_PROG $SCRATCH_MNT
+		_unmount $SCRATCH_MNT
 		;;
 	tmpfs)
-		$UMOUNT_PROG $SCRATCH_MNT
+		_unmount $SCRATCH_MNT
 		;;
 	*)
-		$UMOUNT_PROG $SCRATCH_DEV
+		_unmount $SCRATCH_DEV
 		;;
 	esac
 }
 
 _scratch_umount_idmapped()
 {
-	$UMOUNT_PROG $SCRATCH_MNT
+	_unmount $SCRATCH_MNT
 }
 
 _scratch_remount()
@@ -516,7 +524,7 @@ _scratch_cycle_mount()
         ;;
     overlay)
         if [ "$OVL_BASE_FSTYP" = tmpfs ]; then
-            $UMOUNT_PROG $SCRATCH_MNT
+            _unmount $SCRATCH_MNT
             unmounted=true
         fi
         ;;
@@ -564,9 +572,9 @@ _move_mount()
 
 	# Replace $mnt with $tmp. Use a temporary bind-mount because
 	# mount --move will fail with certain mount propagation layouts.
-	$UMOUNT_PROG $mnt || _fail "Failed to unmount $mnt"
+	_unmount $mnt || _fail "Failed to unmount $mnt"
 	_mount --bind $tmp $mnt || _fail "Failed to bind-mount $tmp to $mnt"
-	$UMOUNT_PROG $tmp || _fail "Failed to unmount $tmp"
+	_unmount $tmp || _fail "Failed to unmount $tmp"
 	rmdir $tmp
 }
 
@@ -632,7 +640,7 @@ _test_unmount()
 	if [ "$FSTYP" == "overlay" ]; then
 		_overlay_test_unmount
 	else
-		$UMOUNT_PROG $TEST_DEV
+		_unmount $TEST_DEV
 	fi
 }
 
@@ -646,7 +654,7 @@ _test_cycle_mount()
         ;;
     overlay)
         if [ "$OVL_BASE_FSTYP" = tmpfs ]; then
-            $UMOUNT_PROG $TEST_DIR
+            _unmount $TEST_DIR
             unmounted=true
         fi
         ;;
@@ -1402,7 +1410,7 @@ _repair_scratch_fs()
 			_scratch_xfs_repair -L 2>&1
 			echo "log zap returns $?"
 		else
-			umount "$SCRATCH_MNT"
+			_unmount "$SCRATCH_MNT"
 		fi
 		_scratch_xfs_repair "$@" 2>&1
 		res=$?
@@ -1434,7 +1442,7 @@ _repair_scratch_fs()
 		# Fall through to repair base fs
 		dev=$OVL_BASE_SCRATCH_DEV
 		fstyp=$OVL_BASE_FSTYP
-		$UMOUNT_PROG $OVL_BASE_SCRATCH_MNT
+		_unmount $OVL_BASE_SCRATCH_MNT
 	fi
 	# Let's hope fsck -y suffices...
 	fsck -t $fstyp -y $dev 2>&1
@@ -1467,7 +1475,7 @@ _repair_test_fs()
 				_test_xfs_repair -L >>$tmp.repair 2>&1
 				echo "log zap returns $?" >> $tmp.repair
 			else
-				umount "$TEST_DEV"
+				_unmount "$TEST_DEV"
 			fi
 			_test_xfs_repair "$@" >>$tmp.repair 2>&1
 			res=$?
@@ -2248,7 +2256,7 @@ _require_logdev()
         _notrun "This test requires USE_EXTERNAL to be enabled"
 
     # ensure its not mounted
-    $UMOUNT_PROG $SCRATCH_LOGDEV 2>/dev/null
+    _unmount $SCRATCH_LOGDEV 2>/dev/null
 }
 
 # This test requires that an external log device is not in use
@@ -3335,7 +3343,7 @@ _umount_or_remount_ro()
     local mountpoint=`_is_dev_mounted $device`
 
     if [ $USE_REMOUNT -eq 0 ]; then
-        $UMOUNT_PROG $device
+	_unmount $device
     else
         _remount $device ro
     fi
@@ -3852,7 +3860,7 @@ _require_scratch_dev_pool()
 			_notrun "$i is part of TEST_DEV, this test requires unique disks"
 		fi
 		if _mount | grep -q $i; then
-			if ! $UMOUNT_PROG $i; then
+			if ! _unmount $i; then
 		            echo "failed to unmount $i - aborting"
 		            exit 1
 		        fi

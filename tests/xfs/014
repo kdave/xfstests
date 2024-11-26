@@ -22,7 +22,7 @@ _begin_fstest auto enospc quick quota prealloc
 _cleanup()
 {
 	cd /
-	umount $LOOP_MNT 2>/dev/null
+	_unmount $LOOP_MNT 2>/dev/null
 	_scratch_unmount 2>/dev/null
 	rm -f $tmp.*
 }
@@ -168,13 +168,13 @@ LOOP_MNT=$SCRATCH_MNT/$seq.mnt
 $MKFS_XFS_PROG -d "file=1,name=$LOOP_FILE,size=10g" >> $seqres.full 2>&1
 
 mkdir -p $LOOP_MNT
-mount -t xfs -o loop,uquota,gquota $LOOP_FILE $LOOP_MNT || \
+_mount -o uquota,gquota $LOOP_FILE $LOOP_MNT || \
 	_fail "Failed to mount loop fs."
 
 _test_enospc $LOOP_MNT
 _test_edquot $LOOP_MNT
 
-umount $LOOP_MNT
+_unmount $LOOP_MNT
 
 echo $orig_sp_time > /proc/sys/fs/xfs/speculative_prealloc_lifetime
 

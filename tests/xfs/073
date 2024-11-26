@@ -21,9 +21,9 @@ _cleanup()
 {
 	cd /
 	_scratch_unmount 2>/dev/null
-	umount $imgs.loop 2>/dev/null
+	_unmount $imgs.loop 2>/dev/null
+	_unmount $imgs.source_dir 2>/dev/null
 	[ -d $imgs.loop ] && rmdir $imgs.loop
-	umount $imgs.source_dir 2>/dev/null
 	[ -d $imgs.source_dir ] && rm -rf $imgs.source_dir
 	rm -f $imgs.* $tmp.* /var/tmp/xfs_copy.log.*
 }
@@ -65,10 +65,10 @@ _verify_copy()
 	rmdir $target_dir 2>/dev/null
 	mkdir $target_dir
 
-	mount -t xfs -o loop $target $target_dir 2>/dev/null
+	_mount -t xfs -o loop $target $target_dir 2>/dev/null
 	if [ $? -ne 0 ]; then
 		echo retrying mount with nouuid option >>$seqres.full
-		mount -t xfs -o loop -o nouuid $target $target_dir
+		_mount -t xfs -o loop -o nouuid $target $target_dir
 		if [ $? -ne 0 ]; then
 			echo mount failed - evil!
 			return
@@ -87,19 +87,19 @@ _verify_copy()
 
 	echo comparing new image geometry to old
 	$XFS_INFO_PROG $source_dir \
-		| _filter_copy $source $source_dir '/dev/loop.' '#' \
+		| _filter_copy $source $source_dir '/dev/loop[0-9]\+' '#' \
 		| tr -s ' ' \
 		> $tmp.geometry1
 	$XFS_INFO_PROG $target_dir \
-		| _filter_copy $target $target_dir '/dev/loop.' '#' \
+		| _filter_copy $target $target_dir '/dev/loop[0-9]\+' '#' \
 		| tr -s ' ' \
 		> $tmp.geometry2
 	[ -s $tmp.geometry1 ] || echo no geometry output
 	diff -u $tmp.geometry1 $tmp.geometry2
 
 	echo unmounting and removing new image
-	umount $source_dir
-	umount $target_dir > /dev/null 2>&1
+	_unmount $source_dir
+	_unmount $target_dir > /dev/null 2>&1
 	rm -f $target
 }
 
@@ -134,10 +134,10 @@ ${MKFS_XFS_PROG} -dfile,name=$imgs.source,size=100g \
 rmdir $imgs.source_dir 2>/dev/null
 mkdir $imgs.source_dir
 
-mount -t xfs -o loop $imgs.source $imgs.source_dir
+_mount -t xfs -o loop $imgs.source $imgs.source_dir
 loop2=`mount | grep $imgs.source | grep -o -e 'loop=.*[^),]' | grep -o -e '/.*$'`
 cp -a $here $imgs.source_dir
-mount -t xfs -o remount,ro $imgs.source $imgs.source_dir
+_mount -t xfs -o remount,ro $imgs.source $imgs.source_dir
 $XFS_COPY_PROG $imgs.source $imgs.image | _filter_copy '#' $imgs.image '#' '#'
 _verify_copy $imgs.image $imgs.source $imgs.source_dir
 
