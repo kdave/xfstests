@@ -49,13 +49,26 @@ _filesize()
 _block_filter()
 {
 	$AWK_PROG -v bsize="$bsize" '
+	BEGIN {
+		br_pos = 0
+		br_len = 0
+	}
+	function dump_blockrange() {
+		if (br_len == 0)
+			return
+		printf("        [%d,%d]: BLOCKRANGE\n", br_pos, br_len)
+		br_pos = 0
+		br_len = 0
+	}
 	/blocksize/ {
+		dump_blockrange()
 		printf("    blocksize BSIZE\n")
 
 		next
 	}
 
 	/CMD/ {
+		dump_blockrange()
 		split($3, off, "=")
 		offset = strtonum(off[2])
 		if (offset != -1)
@@ -72,6 +85,7 @@ _block_filter()
 	}
 
 	/MAP/ {
+		dump_blockrange()
 		split($2, off, "=")
 		offset = strtonum(off[2])
 		if (offset != -1)
@@ -90,6 +104,7 @@ _block_filter()
 	}
 
 	/TRUNCATE/ {
+		dump_blockrange()
 		split($2, off, "=")
 		offset = strtonum(off[2]) / bsize
 
@@ -99,15 +114,27 @@ _block_filter()
 	}
 
 	/\[[0-9]+,[0-9]+\]:/ {
-		printf("        %s BLOCKRANGE\n", $1)
+		rangestr = gensub(/\[([0-9]+),([0-9]+)\]:/, "\\1,\\2", "g", $1);
+		split(rangestr, off, ",")
+		if (br_pos + br_len == off[1]) {
+			br_len += off[2];
+		} else {
+			dump_blockrange()
+			br_pos = off[1];
+			br_len = off[2];
+		}
 
 		next
 	}
 
 	{
+		dump_blockrange()
 		print
 
 		next
+	}
+	END {
+		dump_blockrange()
 	}
 	'
 }
