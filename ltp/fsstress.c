@@ -5241,6 +5241,18 @@ symlink_f(opnum_t opno, long r)
 void
 sync_f(opnum_t opno, long r)
 {
+	int	fd;
+
+	fd = open(homedir, O_RDONLY|O_DIRECTORY);
+	if (fd < 0)
+		goto use_sync;
+	syncfs(fd);
+	close(fd);
+	if (verbose)
+		printf("%d/%lld: syncfs\n", procid, opno);
+	return;
+
+use_sync:
 	sync();
 	if (verbose)
 		printf("%d/%lld: sync\n", procid, opno);

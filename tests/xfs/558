@@ -140,13 +140,13 @@ $XFS_IO_PROG -c 'cowextsize 1m' $SCRATCH_MNT
 # Write out a file with the first two blocks unshared and the rest shared.
 _pwrite_byte 0x59 0 $((160 * blksz)) $SCRATCH_MNT/file >> $seqres.full
 _pwrite_byte 0x59 0 $((160 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
-sync
+_scratch_sync
 
 _cp_reflink $SCRATCH_MNT/file $SCRATCH_MNT/file.reflink
 
 _pwrite_byte 0x58 0 $((2 * blksz)) $SCRATCH_MNT/file >> $seqres.full
 _pwrite_byte 0x58 0 $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
-sync
+_scratch_sync
 
 # Avoid creation of large folios on newer kernels by cycling the mount and
 # immediately writing to the page cache.
@@ -156,7 +156,7 @@ _scratch_cycle_mount
 # before slowing down writeback to avoid unnecessary delay.
 _pwrite_byte 0x57 0 $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
 _pwrite_byte 0x56 $((2 * blksz)) $((2 * blksz)) $SCRATCH_MNT/file.compare >> $seqres.full
-sync
+_scratch_sync
 
 # Introduce a half-second wait to each writeback block mapping call.  This
 # gives us a chance to race speculative cow prealloc with writeback.

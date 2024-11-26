@@ -6,6 +6,30 @@
 
 BC="$(type -P bc)" || BC=
 
+# Don't use sync(1) directly if at all possible. In most cases we only need to
+# sync the fs under test, so we use syncfs if it is supported to prevent
+# disturbance of other tests that may be running concurrently.
+_sync_fs()
+{
+	local dir=$1
+
+	if [ -e $dir ]; then
+		$XFS_IO_PROG -rxc "syncfs" $dir > /dev/null 2>&1
+		return
+	fi
+	sync
+}
+
+_scratch_sync()
+{
+	_sync_fs $SCRATCH_MNT
+}
+
+_test_sync()
+{
+	_sync_fs $TEST_DIR
+}
+
 # Common execution handling for fsstress invocation.
 #
 # We need per-test fsstress binaries because of the way fsstress forks and

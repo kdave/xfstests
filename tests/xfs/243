@@ -66,7 +66,7 @@ seq 3 5 $nr | while read f; do
 	_pwrite_byte 0x71 $((blksz * f)) $blksz $testdir/file3 >> $seqres.full
 	_pwrite_byte 0x71 $((blksz * f)) $blksz $testdir/file3.chk >> $seqres.full
 done
-sync
+_scratch_sync
 # 4 blocks are delalloc (do later)
 seq 4 5 $nr | while read f; do
 	_pwrite_byte 0x62 $((blksz * f)) $blksz $testdir/file3 >> $seqres.full
@@ -102,7 +102,7 @@ echo "Regular data extents:"
 test $(_xfs_bmapx_find data $testdir/file3 -E '00[01]{4}$') -gt 0 || \
 	echo "Expected to find a regular data extent"
 
-sync
+_scratch_sync
 
 echo "Dump extents after sync"
 $XFS_IO_PROG -c "cowextsize" $testdir/file3 | _filter_scratch
