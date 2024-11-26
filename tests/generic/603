@@ -10,10 +10,12 @@
 . ./common/preamble
 _begin_fstest auto quick quota
 
+projid=$seq
+
 # Override the default cleanup function.
 _cleanup()
 {
-	_restore_project_quota
+	_restore_project_quota $projid
 	cd /
 	rm -f $tmp.*
 }
@@ -122,8 +124,8 @@ _require_prjquota $SCRATCH_DEV
 BLOCK_SIZE=$(_get_file_block_size $SCRATCH_MNT)
 rm -rf $SCRATCH_MNT/t
 mkdir $SCRATCH_MNT/t
-$XFS_IO_PROG -r -c "chproj 100" -c "chattr +P" $SCRATCH_MNT/t
-_create_project_quota $SCRATCH_MNT/t 100 $qa_user
+$XFS_IO_PROG -r -c "chproj $projid" -c "chattr +P" $SCRATCH_MNT/t
+_create_project_quota $SCRATCH_MNT/t $projid $qa_user
 
 echo "### Set up different grace timers to each type of quota"
 UBGRACE=12

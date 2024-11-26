@@ -274,7 +274,7 @@ _choose_prid()
 
 _qmount()
 {
-    _scratch_unmount >/dev/null 2>&1
+    _scratch_unmount
     _try_scratch_mount || _fail "qmount failed"
     # xfs doesn't need these setups and quotacheck even fails on xfs
     # redirect the output to $seqres.full for debug purpose and ignore results
@@ -432,39 +432,18 @@ _create_project_quota()
 	mkdir $prjdir
 	chmod ugo+rwx $prjdir
 
-	if [ -f /etc/projects -a ! -f $tmp.projects.bk ];then
-		cat /etc/projects > $tmp.projects.bk
-		echo >/etc/projects
-	fi
-	if [ -f /etc/projid -a ! -f $tmp.projid.bk ];then
-		cat /etc/projid > $tmp.projid.bk
-		echo >/etc/projid
-	fi
-
-	cat >>/etc/projects <<EOF
-$id:$prjdir
-EOF
-	cat >>/etc/projid <<EOF
-$name:$id
-EOF
+	echo "$id:$prjdir" >> /etc/project
+	echo "$name:$id" >> /etc/projid
 	$XFS_IO_PROG -r -c "chproj $id" -c "chattr +P" $prjdir
 }
 
 # If you've called _create_project_quota, then use this function in _cleanup
 _restore_project_quota()
 {
-	if [ -f $tmp.projects.bk ];then
-		cat $tmp.projects.bk > /etc/projects && \
-			rm -f $tmp.projects.bk
-	else
-		rm -f /etc/projects
-	fi
-	if [ -f $tmp.projid.bk ];then
-		cat $tmp.projid.bk > /etc/projid && \
-			rm -f $tmp.projid.bk
-	else
-		rm -f /etc/projid
-	fi
+	local id=$1
+
+	sed -i "/^$id:/d" /etc/project
+	sed -i "/:$id$/d" /etc/projid
 }
 
 # make sure this script returns success
