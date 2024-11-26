@@ -125,12 +125,15 @@ fstrim_loop()
 			wait $fpid
 		fi
 		while [ $start -lt $fsize ] ; do
+			test -s $tmp.fstrim_loop || break
 			$FSTRIM_PROG -m ${minlen}k -o ${start}k -l ${step}k $SCRATCH_MNT &
 			fpid=$!
 			wait $fpid
 			start=$(( $start + $step ))
 		done
+		test -s $tmp.fstrim_loop || break
 	done
+	rm -f $tmp.fstrim_loop
 }
 
 function check_sums() {
@@ -188,6 +191,7 @@ find -P . -xdev -type f -print0 | xargs -0 md5sum | sort -o $tmp/content.sums
 
 echo -n "Running the test: "
 pids=""
+echo run > $tmp.fstrim_loop
 fstrim_loop &
 fstrim_pid=$!
 p=1
@@ -199,8 +203,10 @@ done
 echo "done."
 
 wait $pids
-kill $fstrim_pid
-wait $fstrim_pid
+truncate -s 0 $tmp.fstrim_loop
+while test -e $tmp.fstrim_loop; do
+	sleep 1
+done
 
 status=0
 
