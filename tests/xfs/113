@@ -52,13 +52,34 @@ _scratch_xfs_repair -n >> $seqres.full 2>&1 || _fail "xfs_repair should not fail
 echo "+ check dir"
 __populate_check_xfs_dir "${inode}" btree
 
+dir_data_offsets() {
+	_scratch_xfs_db -c "inode ${inode}" -c 'bmap' | \
+		awk -v leaf_lblk=$leaf_lblk \
+		'{
+			if ($3 >= leaf_lblk)
+				exit;
+			for (i = 0; i < $8; i++)
+				printf("%d\n", $3 + i);
+		}'
+}
+
 echo "+ corrupt dir"
-loff=0
-while true; do
-	_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${loff}" -c "stack" | grep -q 'file data block is unmapped' && break
-	_scratch_xfs_db -x -c "inode ${inode}" -c "dblock ${loff}" -c "stack" -c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}" >> $seqres.full
-	loff="$((loff + 1))"
-done
+subcommands=()
+while read loff; do
+	# run 100 commands at a time
+	if [ "${#subcommands[@]}" -lt 600 ]; then
+		subcommands+=(-c "inode ${inode}")
+		subcommands+=(-c "dblock ${loff}")
+		subcommands+=(-c "blocktrash -x 32 -y $((blksz * 8)) -z ${FUZZ_ARGS}")
+		continue
+	fi
+
+	_scratch_xfs_db -x "${subcommands[@]}" >> $seqres.full
+	subcommands=()
+done < <(dir_data_offsets)
+if [ "${#subcommands[@]}" -gt 0 ]; then
+	_scratch_xfs_db -x "${subcommands[@]}" >> $seqres.full
+fi
 
 echo "+ mount image && modify dir"
 if _try_scratch_mount >> $seqres.full 2>&1; then
