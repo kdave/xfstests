@@ -47,10 +47,17 @@ _require_command "$THIN_CHECK_PROG" thin_check
 _require_freeze
 _require_odirect
 
-vgname=vg_$seq
-lvname=lv_$seq
-poolname=pool_$seq
-snapname=snap_$seq
+# Create all the LVM names with the hostname and pid so that we don't have any
+# collisions between VMs running from a shared pool of disks.  Hyphens become
+# underscores because LVM turns those into double hyphens, which messes with
+# accessing /dev/mapper/$vg-$lv (which you're not supposed to do but this test
+# does anyway).
+lvmsuffix="${seq}_$(hostname -s | tr '-' '_')_$$"
+
+vgname=vg_$lvmsuffix
+lvname=lv_$lvmsuffix
+poolname=pool_$lvmsuffix
+snapname=snap_$lvmsuffix
 origpsize=200
 virtsize=300
 newpsize=300
