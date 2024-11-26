@@ -77,7 +77,7 @@ test_grace()
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
 	# Reset grace time here, make below grace time test more accurate
-	setquota -$type $qa_user -T $bgrace $igrace $SCRATCH_MNT 2>/dev/null
+	setquota -$type $qa_user -T $bgrace $igrace $SCRATCH_MNT >>$seqres.full 2>&1
 	# Now sleep enough grace time and check that softlimit got enforced
 	sleep $((bgrace + 1))
 	echo "Try to write 1 one more block after grace..."
@@ -89,13 +89,13 @@ test_grace()
 	# And now the softlimit test for inodes
 	# First reset space limits so that we don't have problems with
 	# space reservations on XFS
-	setquota -$type $qa_user 0 0 3 100 $SCRATCH_MNT
+	setquota -$type $qa_user 0 0 3 100 $SCRATCH_MNT 
 	echo "Create 2 more files, over the inode softlimit..."
 	su $qa_user -c "touch $dir/file3 $dir/file4" 2>&1 >>$seqres.full | \
 		_filter_scratch | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Reset grace time here, make below grace time test more accurate
-	setquota -$type $qa_user -T $bgrace $igrace $SCRATCH_MNT 2>/dev/null
+	setquota -$type $qa_user -T $bgrace $igrace $SCRATCH_MNT >>$seqres.full 2>&1
 	# Wait and check grace time enforcement
 	sleep $((igrace+1))
 	echo "Try to create one more inode after grace..."
