@@ -63,9 +63,14 @@ prev=$(_log_writes_mark_to_entry_number mkfs)
 cur=$(_log_writes_find_next_fua $prev)
 [ -z "$cur" ] && _fail "failed to locate next FUA write"
 
-while [ ! -z "$cur" ]; do
+while _soak_loop_running $((100 * TIME_FACTOR)); do
 	_log_writes_replay_log_range $cur $SCRATCH_DEV >> $seqres.full
 
+	# xfs_repair won't run if the log is dirty
+	if [ $FSTYP = "xfs" ]; then
+		_scratch_mount
+		_scratch_unmount
+	fi
 	_check_scratch_fs
 
 	prev=$cur
