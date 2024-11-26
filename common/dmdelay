@@ -7,13 +7,15 @@
 DELAY_NONE=0
 DELAY_READ=1
 
+export DELAY_NAME="delay-test.$seq"
+
 _init_delay()
 {
 	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
-	DELAY_DEV=/dev/mapper/delay-test
+	DELAY_DEV=/dev/mapper/$DELAY_NAME
 	DELAY_TABLE="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 0"
 	DELAY_TABLE_RDELAY="0 $BLK_DEV_SIZE delay $SCRATCH_DEV 0 10000 $SCRATCH_DEV 0 0"
-	_dmsetup_create delay-test --table "$DELAY_TABLE" || \
+	_dmsetup_create $DELAY_NAME --table "$DELAY_TABLE" || \
 		_fatal "failed to create delay device"
 }
 
@@ -33,9 +35,9 @@ _cleanup_delay()
 {
 	# If dmsetup load fails then we need to make sure to do resume here
 	# otherwise the umount will hang
-	$DMSETUP_PROG resume delay-test > /dev/null 2>&1
+	$DMSETUP_PROG resume $DELAY_NAME > /dev/null 2>&1
 	$UMOUNT_PROG $SCRATCH_MNT > /dev/null 2>&1
-	_dmsetup_remove delay-test
+	_dmsetup_remove $DELAY_NAME
 }
 
 # _load_delay_table <table> [lockfs]
@@ -52,15 +54,15 @@ _load_delay_table()
 
 	# run a suspend/resume cycle to avoid excessive resume delays once a
 	# delay is introduced below
-	$DMSETUP_PROG suspend $suspend_opt delay-test
-	$DMSETUP_PROG resume $suspend_opt delay-test
+	$DMSETUP_PROG suspend $suspend_opt $DELAY_NAME
+	$DMSETUP_PROG resume $suspend_opt $DELAY_NAME
 
-	$DMSETUP_PROG suspend $suspend_opt delay-test
+	$DMSETUP_PROG suspend $suspend_opt $DELAY_NAME
 	[ $? -ne 0 ] && _fatal "failed to suspend delay-test"
 
-	$DMSETUP_PROG load delay-test --table "$table"
+	$DMSETUP_PROG load $DELAY_NAME --table "$table"
 	[ $? -ne 0 ] && _fatal "failed to load table into delay-test"
 
-	$DMSETUP_PROG resume delay-test
+	$DMSETUP_PROG resume $DELAY_NAME
 	[ $? -ne 0 ] && _fatal  "failed to resume delay-test"
 }
