@@ -21,6 +21,7 @@ _cleanup()
 }
 
 # Import common functions.
+. ./common/filter
 . ./common/dmerror
 
 _fixed_by_kernel_commit 631426ba1d45 \
@@ -55,7 +56,8 @@ _dmerror_mount
 stat "$SCRATCH_MNT/a" >> $seqres.full
 echo read with IO errors
 _dmerror_load_error_table
-$TIMEOUT_PROG -s KILL 10s $XFS_IO_PROG -c "mmap -r 0 $filesz" -c "madvise -R 0 $filesz" "$SCRATCH_MNT/a"
+$TIMEOUT_PROG -s KILL 10s $XFS_IO_PROG -c "mmap -r 0 $filesz" -c "madvise -R 0 $filesz" "$SCRATCH_MNT/a" |& \
+		_filter_flakey_EIO "madvise: Bad address"
 _dmerror_load_working_table
 
 # success, all done
