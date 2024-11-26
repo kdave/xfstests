@@ -52,8 +52,6 @@ nr_hotplug_cpus="${#hotplug_cpus[@]}"
 test "$nr_hotplug_cpus" -gt 0 || _notrun "CPU hotplugging not supported"
 
 stress_dir="$TEST_DIR/$seq"
-rm -r -f "$stress_dir"
-mkdir -p "$stress_dir"
 
 echo "Silence is golden."
 
@@ -79,12 +77,14 @@ fsstress_args+=(--duration="$((SOAK_DURATION / 10))")
 nr_ops=$((2500 * TIME_FACTOR))
 fsstress_args+=(-n $nr_ops)
 for ((i = 0; i < 10; i++)); do
-	_run_fsstress_bg -w "${fsstress_args[@]}"
-	_wait_for_fsstress
+	rm -rf "$stress_dir"
+	mkdir -p "$stress_dir"
+	_run_fsstress "${fsstress_args[@]}"
 	_test_cycle_mount
 done
 
 rm -f $sentinel_file
+wait
 
 # success, all done
 status=0

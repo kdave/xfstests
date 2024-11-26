@@ -12,6 +12,15 @@
 . ./common/preamble
 _begin_fstest auto metadata quick
 
+_cleanup()
+{
+	[ -n "$link_pids" ] && kill $link_pids
+	[ -n "$open_pid" ] && kill $open_pid
+	wait
+	cd /
+	rm -f $tmp.*
+}
+
 # Import common functions.
 . ./common/filter
 
@@ -56,9 +65,6 @@ while true; do
 done &
 sleep 5
 kill $! >/dev/null 2>&1
-
-kill $open_pid $link_pids >/dev/null 2>&1
-wait $open_pid $link_pids
 
 # all done, no oops/hang expected, _check_filesystems checks SCRATCH_DEV after test
 status=0
