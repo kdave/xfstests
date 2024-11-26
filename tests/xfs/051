@@ -11,15 +11,6 @@
 . ./common/preamble
 _begin_fstest shutdown auto log metadata
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 $FSSTRESS_PROG > /dev/null 2>&1
-	_scratch_unmount > /dev/null 2>&1
-}
-
 # Import common functions.
 . ./common/dmflakey
 
@@ -37,11 +28,10 @@ _scratch_mount
 
 # Start a workload and shutdown the fs. The subsequent mount will require log
 # recovery.
-$FSSTRESS_PROG -n 9999 -p 2 -w -d $SCRATCH_MNT &>> $seqres.full &
+_run_fsstress_bg -n 9999 -p 2 -w -d $SCRATCH_MNT
 sleep 5
 _scratch_shutdown -f
-$KILLALL_PROG -q $FSSTRESS_PROG
-wait
+_kill_fsstress
 _scratch_unmount
 
 # Initialize a dm-flakey device that will pass I/Os for 5s and fail thereafter.

@@ -10,20 +10,7 @@
 . ./common/preamble
 _begin_fstest auto rw long_rw stress soak smoketest
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-}
-
-# Import common functions.
-
-# Modify as appropriate.
-
 _require_scratch
-_require_command "$KILLALL_PROG" "killall"
 
 echo "Silence is golden."
 
@@ -35,7 +22,7 @@ nr_ops=$((25000 * nr_cpus * TIME_FACTOR))
 fsstress_args=(-w -d $SCRATCH_MNT -n $nr_ops -p $nr_cpus)
 test -n "$SOAK_DURATION" && fsstress_args+=(--duration="$SOAK_DURATION")
 
-$FSSTRESS_PROG $FSSTRESS_AVOID "${fsstress_args[@]}" >> $seqres.full
+_run_fsstress_bg "${fsstress_args[@]}"
 
 # success, all done
 status=0

@@ -6,6 +6,65 @@
 
 BC="$(type -P bc)" || BC=
 
+# Common execution handling for fsstress invocation.
+#
+# We need per-test fsstress binaries because of the way fsstress forks and
+# tests run it in the background and/or nest it. Trying to kill fsstress
+# tasks is unreliable because killing parent fsstress task does not guarantee
+# that the children get killed. Hence the historic use of killall for stopping
+# execution.
+#
+# However, we can't just kill all fsstress binaries as multiple tests might be
+# running fsstress at the same time. Hence copy the fsstress binary to a test
+# specific binary on the test device and use pkill to select that only that
+# task name to kill.
+#
+# If tasks want to start fsstress themselves (e.g. under a different uid) then
+# they can set up _FSSTRESS_BIN and record _FSSTRESS_PID themselves. Then if the
+# test is killed then it will get cleaned up automatically.
+
+_FSSTRESS_BIN="$seq.fsstress"
+_FSSTRESS_PROG="$TEST_DIR/$seq.fsstress"
+_FSSTRESS_PID=""
+_wait_for_fsstress()
+{
+	local ret=0
+
+	if [ -n "$_FSSTRESS_PID" ]; then
+		wait $_FSSTRESS_PID >> $seqres.full 2>&1
+		ret=$?
+		unset _FSSTRESS_PID
+	fi
+	rm -f $_FSSTRESS_PROG
+	return $ret
+}
+
+# Standard fsstress cleanup function. Individual tests can override this.
+_kill_fsstress()
+{
+	if [ -n "$_FSSTRESS_PID" ]; then
+		# use SIGPIPE to avoid "Killed" messages from bash
+		echo "killing $_FSSTRESS_BIN" >> $seqres.full
+		pkill -PIPE $_FSSTRESS_BIN >> $seqres.full 2>&1
+		_wait_for_fsstress
+		return $?
+	fi
+}
+
+_run_fsstress_bg()
+{
+	cp -f $FSSTRESS_PROG $_FSSTRESS_PROG
+	$_FSSTRESS_PROG $FSSTRESS_AVOID $* >> $seqres.full 2>&1 &
+	_FSSTRESS_PID=$!
+}
+
+_run_fsstress()
+{
+	_run_fsstress_bg $*
+	_wait_for_fsstress
+	return $?
+}
+
 _wallclock()
 {
     date "+%s"

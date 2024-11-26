@@ -13,6 +13,7 @@ _begin_fstest auto replace volume eio
 # Override the default cleanup function.
 _cleanup()
 {
+	_kill_fsstress
 	_dmerror_cleanup
 	rm -f $tmp.*
 }
@@ -39,8 +40,7 @@ error_devid=`$BTRFS_UTIL_PROG filesystem show -m $SCRATCH_MNT |\
 
 snapshot_cmd="$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT"
 snapshot_cmd="$snapshot_cmd $SCRATCH_MNT/snap_\`date +'%H_%M_%S_%N'\`"
-run_check $FSSTRESS_PROG -d $SCRATCH_MNT -n 200 -p 8 $FSSTRESS_AVOID -x \
-							"$snapshot_cmd" -X 50
+_run_fsstress -d $SCRATCH_MNT -n 200 -p 8 -x "$snapshot_cmd" -X 50
 
 # now load the error into the DMERROR_DEV
 _dmerror_load_error_table

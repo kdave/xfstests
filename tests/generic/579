@@ -16,7 +16,7 @@ _begin_fstest auto stress verity
 _cleanup()
 {
 	# Stop all subprocesses.
-	$KILLALL_PROG -q $FSSTRESS_PROG
+	_kill_fsstress
 	touch $tmp.done
 	wait
 
@@ -29,7 +29,6 @@ _cleanup()
 . ./common/verity
 
 _require_scratch_verity
-_require_command "$KILLALL_PROG" killall
 _disable_fsverity_signatures
 
 _scratch_mkfs_verity &>> $seqres.full
@@ -92,8 +91,7 @@ done
 ) &
 
 # Start the fsstress processes.
-$FSSTRESS_PROG $FSSTRESS_AVOID -p $nproc_stress -l 0 -d $SCRATCH_MNT/stressdir \
-	>> $seqres.full 2>&1 &
+_run_fsstress_bg -p $nproc_stress -l 0 -d $SCRATCH_MNT/stressdir
 
 # Run for a while.
 sleep $runtime

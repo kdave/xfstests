@@ -16,16 +16,15 @@ _begin_fstest shutdown auto log metadata eio recoveryloop
 
 _cleanup()
 {
-	cd /
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-	wait
+	_kill_fsstress
 	if [ -n "$loopmnt" ]; then
 		$UMOUNT_PROG $loopmnt 2>/dev/null
 		rm -r -f $loopmnt
 	fi
-	rm -f $tmp.*
 	_dmerror_unmount
 	_dmerror_cleanup
+	cd /
+	rm -f $tmp.*
 }
 
 # Import common functions.
@@ -37,7 +36,6 @@ _cleanup()
 _require_scratch_reflink
 _require_cp_reflink
 _require_dm_target error
-_require_command "$KILLALL_PROG" "killall"
 _require_loop
 
 echo "Silence is golden."
@@ -71,8 +69,6 @@ snap_loop_fs() {
 	rm -f "$snap_aliveflag"
 }
 
-fsstress=($FSSTRESS_PROG $FSSTRESS_AVOID -d "$loopmnt" -n 999999 -p "$((LOAD_FACTOR * 4))")
-
 while _soak_loop_running $((25 * TIME_FACTOR)); do
 	touch $scratch_aliveflag
 	snap_loop_fs >> $seqres.full 2>&1 &
@@ -84,7 +80,7 @@ while _soak_loop_running $((25 * TIME_FACTOR)); do
 		break
 	fi
 
-	("${fsstress[@]}" >> $seqres.full &) > /dev/null 2>&1
+	_run_fsstress_bg -d "$loopmnt" -n 999999 -p "$((LOAD_FACTOR * 4))"
 
 	# purposely include 0 second sleeps to test shutdown immediately after
 	# recovery
@@ -98,12 +94,7 @@ while _soak_loop_running $((25 * TIME_FACTOR)); do
 	# error table helper *without* 'lockfs'.
 	_dmerror_load_error_table
 
-	ps -e | grep fsstress > /dev/null 2>&1
-	while [ $? -eq 0 ]; do
-		$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-		wait > /dev/null 2>&1
-		ps -e | grep fsstress > /dev/null 2>&1
-	done
+	_kill_fsstress
 	for ((j = 0; j < 10; j++)); do
 		test -e "$snap_aliveflag" || break
 		sleep 1

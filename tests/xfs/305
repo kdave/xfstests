@@ -4,7 +4,7 @@
 #
 # FS QA Test No. 305
 #
-# Test to verify that turn group/project quotas off while fstress and
+# Test to verify that turn group/project quotas off while fsstress and
 # user quotas are left on.
 #
 . ./common/preamble
@@ -18,7 +18,6 @@ _begin_fstest auto quota
 
 _require_scratch
 _require_xfs_quota
-_require_command "$KILLALL_PROG" killall
 
 _scratch_mkfs_xfs -m crc=1 >/dev/null 2>&1
 
@@ -33,12 +32,11 @@ _exercise()
 	_qmount
 	mkdir -p $QUOTA_DIR
 
-	$FSSTRESS_PROG -d $QUOTA_DIR -n 1000000 -p 100 $FSSTRESS_AVOID >>$seqres.full &
+	_run_fsstress_bg -d $QUOTA_DIR -n 1000000 -p 100
 	sleep 10
 	$XFS_QUOTA_PROG -x -c "disable -$type" $SCRATCH_DEV
 	sleep 5
-	$KILLALL_PROG -q $FSSTRESS_PROG
-	wait
+	_kill_fsstress
 }
 
 echo "*** turn off group quotas"

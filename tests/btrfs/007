@@ -18,6 +18,7 @@ _begin_fstest auto quick rw metadata send seek
 # Override the default cleanup function.
 _cleanup()
 {
+	_kill_fsstress
 	cd /
 	rm -f $tmp.*
 	rm -fr $send_files_dir
@@ -45,7 +46,7 @@ workout()
 	_scratch_mkfs_sized $fsz >>$seqres.full 2>&1
 	_scratch_mount "-o noatime"
 
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -n $ops $FSSTRESS_AVOID -x \
+	_run_fsstress -d $SCRATCH_MNT -n $ops -x \
 		"$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base"
 
 	_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr

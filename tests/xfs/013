@@ -16,16 +16,6 @@ _begin_fstest auto metadata stress
 # Import common functions.
 . ./common/filter
 
-# Override the default cleanup function.
-_cleanup()
-{
-	$KILLALL_PROG -9 fsstress 2>/dev/null
-	wait
-	cd /
-	_scratch_unmount 2>/dev/null
-	rm -f $tmp.*
-}
-
 filter_enospc() {
 	sed -e '/^.*No space left on device.*/d'
 }
@@ -103,8 +93,7 @@ _create $SCRATCH_MNT/dir1 $COUNT
 _cleaner $SCRATCH_MNT $LOOPS $MINDIRS &
 
 # start a background stress workload on the fs
-$FSSTRESS_PROG -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t \
-	>> $seqres.full 2>&1 &
+_run_fsstress_bg -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t
 
 # Each cycle clones the current directory and makes a random file replacement
 # pass on the new directory. The directory is copied to the next using hard
@@ -127,8 +116,7 @@ do
 	_rand_replace $SCRATCH_MNT/dir$((i+1)) $COUNT
 done
 
-$KILLALL_PROG fsstress
-wait
+_kill_fsstress
 
 # clean out the competing fsstress allocations, then everything else
 rm -rf $SCRATCH_MNT/fsstress

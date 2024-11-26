@@ -17,18 +17,8 @@
 . ./common/preamble
 _begin_fstest shutdown auto log quick
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-	wait > /dev/null 2>&1
-}
-
 # Import common functions.
 . ./common/log
-
 
 # Modify as appropriate.
 _require_scratch
@@ -43,10 +33,10 @@ _scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
 _scratch_mount "-o logbsize=32k"
 
 # Run a workload to dirty the log, wait a bit and shutdown the fs.
-$FSSTRESS_PROG -d $SCRATCH_MNT -p 4 -n 99999999 >> $seqres.full 2>&1 &
+_run_fsstress_bg -d $SCRATCH_MNT -p 4 -n 99999999
 sleep 10
 _scratch_shutdown -f
-wait
+_wait_for_fsstress
 
 # Remount with a different log buffer size. Going from 32k to 64k increases the
 # log record extended header count, as the log record header can only handle 32k

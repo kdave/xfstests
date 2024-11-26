@@ -14,18 +14,8 @@
 . ./common/preamble
 _begin_fstest auto log metadata
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-	wait > /dev/null 2>&1
-}
-
 # Import common functions.
 . ./common/inject
-
 
 # Modify as appropriate.
 _require_xfs_io_error_injection "log_bad_crc"
@@ -49,7 +39,7 @@ while [ $nr_times -gt 0 ]; do
 
 	# Run fsstress until the filesystem shuts down. It will shut down
 	# automatically when error injection triggers.
-	$FSSTRESS_PROG -d $SCRATCH_MNT -p 4 -n 999999 >> $seqres.full 2>&1
+	_run_fsstress -d $SCRATCH_MNT -p 4 -n 999999
 
 	# Verify that we can remount the fs. Log recovery should handle the torn
 	# write.

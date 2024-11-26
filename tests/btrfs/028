@@ -20,10 +20,7 @@ _cleanup()
 	if [ ! -z "$balance_pid" ]; then
 		_btrfs_kill_stress_balance_pid $balance_pid
 	fi
-	if [ ! -z "$fsstress_pid" ]; then
-		kill $fsstress_pid &> /dev/null
-		wait $fsstress_pid &> /dev/null
-	fi
+	_kill_fsstress
 }
 
 . ./common/filter
@@ -45,8 +42,7 @@ args=`_scale_fsstress_args -z \
 	-f fsync=10 -n 100000 -p 2 \
 	-d $SCRATCH_MNT/stress_dir`
 echo "Run fsstress $args" >>$seqres.full
-$FSSTRESS_PROG $args >>$seqres.full &
-fsstress_pid=$!
+_run_fsstress_bg $args
 
 echo "Start balance" >>$seqres.full
 _btrfs_stress_balance -d $SCRATCH_MNT >/dev/null 2>&1 &
@@ -54,10 +50,9 @@ balance_pid=$!
 
 # 30s is enough to trigger bug
 sleep $((30*$TIME_FACTOR))
-kill $fsstress_pid &> /dev/null
-wait $fsstress_pid &> /dev/null
+_kill_fsstress
 _btrfs_kill_stress_balance_pid $balance_pid
-unset fsstress_pid balance_pid
+unset balance_pid
 
 # The qgroups accounting will be checked by 'btrfs check' (fsck) after the
 # fstests framework unmounts the filesystem.

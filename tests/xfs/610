@@ -18,22 +18,13 @@ _stress_scratch()
 	nops=999999
 	# -w ensures that the only ops are ones which cause write I/O
 	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs \
-	    -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full 2>&1 &
+	    -n $nops`
+	_run_fsstress_bg $FSSTRESS_ARGS >> $seqres.full 2>&1
 }
 
 _require_scratch
 _require_realtime
 _require_command "$XFS_GROWFS_PROG" xfs_growfs
-_require_command "$KILLALL_PROG" killall
-
-_cleanup()
-{
-	$KILLALL_ALL fsstress > /dev/null 2>&1
-	wait
-	cd /
-	rm -f $tmp.*
-}
 
 _scratch_mkfs_xfs | _filter_mkfs >$seqres.full 2>$tmp.mkfs
 . $tmp.mkfs	# extract blocksize and data size for scratch device
@@ -65,12 +56,7 @@ while [ $size -le $endsize ]; do
 
 	sleep $((RANDOM % 3))
 	_scratch_shutdown
-	ps -e | grep fsstress > /dev/null 2>&1
-	while [ $? -eq 0 ]; do
-		$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-		wait > /dev/null 2>&1
-		ps -e | grep fsstress > /dev/null 2>&1
-	done
+	_kill_fsstress
 	_scratch_cycle_mount
 done > /dev/null 2>&1
 wait	# stop for any remaining stress processes

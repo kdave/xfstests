@@ -28,8 +28,7 @@ _basic_test()
 	$BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep $subvolid >> \
 		$seqres.full 2>&1
 	[ $? -eq 0 ] || _fail "couldn't find our subvols quota group"
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
-		$FSSTRESS_AVOID
+	_run_fsstress -d $SCRATCH_MNT/a -w -p 1 -n 2000
 	_btrfs subvolume snapshot $SCRATCH_MNT/a \
 		$SCRATCH_MNT/b
 
@@ -55,8 +54,7 @@ _rescan_test()
 	_btrfs subvolume create $SCRATCH_MNT/a
 	_btrfs quota enable $SCRATCH_MNT/a
 	subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT a)
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT/a -w -p 1 -n 2000 \
-		$FSSTRESS_AVOID
+	_run_fsstress -d $SCRATCH_MNT/a -w -p 1 -n 2000
 	sync
 	output=$($BTRFS_UTIL_PROG qgroup show $units $SCRATCH_MNT | grep "0/$subvolid")
 	echo "qgroup values before rescan: $output" >> $seqres.full

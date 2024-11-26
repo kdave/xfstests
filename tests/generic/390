@@ -18,8 +18,7 @@ _cleanup()
 	[ -n "$freeze_pids" ] && kill -9 $freeze_pids 2>/dev/null
 	wait $freeze_pids
 	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
-	[ -n "$fsstress_pid" ] && kill -9 $fsstress_pid 2>/dev/null
-	wait $fsstress_pid
+	_kill_fsstress
 	rm -f $tmp.*
 }
 
@@ -49,9 +48,8 @@ fi
 nops=1000
 stress_dir="$SCRATCH_MNT/fsstress_test_dir"
 mkdir "$stress_dir"
-fsstress_args=`_scale_fsstress_args -d $stress_dir -p $procs -n $nops $FSSTRESS_AVOID`
-$FSSTRESS_PROG $fsstress_args >>$seqres.full 2>&1 &
-fsstress_pid=$!
+fsstress_args=`_scale_fsstress_args -d $stress_dir -p $procs -n $nops`
+_run_fsstress_bg $fsstress_args
 
 # Start multi-threads freeze/unfreeze
 for ((i=0; i<$procs; i++)); do
@@ -62,9 +60,8 @@ for ((i=0; i<$procs; i++)); do
 	freeze_pids="$! $freeze_pids"
 done
 
-wait $fsstress_pid
+_wait_for_fsstress
 result=$?
-unset fsstress_pid
 wait $freeze_pids
 unset freeze_pids
 

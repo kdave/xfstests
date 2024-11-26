@@ -26,8 +26,7 @@ _cleanup()
 {
 	# Make sure $SCRATCH_MNT is unfreezed
 	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
-	$KILLALL_PROG -9 fsstress 2>/dev/null
-	wait
+	_kill_fsstress
 	cd /
 	rm -f $tmp.*
 }
@@ -102,8 +101,7 @@ _scratch_mount
 
 _check_scratch_log_state
 
-$FSSTRESS_PROG -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t \
-	>> $seqres.full 2>&1 &
+_run_fsstress_bg -d $SCRATCH_MNT/fsstress -n 9999999 -p 2 -S t
 
 iters=5
 while [ $iters -gt 0 ]; do
@@ -112,9 +110,7 @@ while [ $iters -gt 0 ]; do
 	iters=$((iters - 1))
 done
 
-$KILLALL_PROG $FSSTRESS_PROG
-wait
-
+_kill_fsstress
 _scratch_unmount
 
 status=0

@@ -9,18 +9,6 @@
 . ./common/preamble
 _begin_fstest other ioctl udf auto quick
 
-status=0	# success is the default!
-
-# Override the default cleanup function.
-_cleanup()
-{
-    cd /
-    # we might get here with a RO FS
-    _test_cycle_mount
-    # now remove fsstress directory.
-    rm -rf $TEST_DIR/fsstress.$$.*
-}
-
 # Import common functions.
 . ./common/filter
 
@@ -30,7 +18,7 @@ _do_test()
     _param="$2"
     _count="$3"
 
-    out=$TEST_DIR/fsstress.$$.$_n
+    out=$TEST_DIR/fsstress.$seq.$_n
     rm -rf $out
     if ! mkdir $out
     then
@@ -44,9 +32,8 @@ _do_test()
     echo "fsstress.$_n : $_param"
     echo "-----------------------------------------------"
     # -m limits number of users/groups so check doesn't fail (malloc) later
-    dbgoutfile=$seqres.full
-    if ! $FSSTRESS_PROG $_param $FSSTRESS_AVOID -v -m 8 -n $_count -d $out >>$dbgoutfile 2>&1
-    then
+    _run_fsstress $_param -v -m 8 -n $_count -d $out
+    if [ $? -ne 0 ]; then
         echo "    fsstress (count=$_count) returned $? - see $seqres.full"
         echo "--------------------------------------"       >>$seqres.full
         echo "$_n - output from fsstress:"                  >>$seqres.full
@@ -62,6 +49,7 @@ _do_test()
 _require_test
 
 echo "brevity is wit..."
+status=0
 
 count=1000
 procs=20
@@ -80,7 +68,7 @@ _do_test 2 "-p $procs -r" $count
 
 _do_test 3 "-p 4 -z -f rmdir=10 -f link=10 -f creat=10 -f mkdir=10 -f rename=30 -f stat=30 -f unlink=30 -f truncate=20" $count
 
-# if all ok by here then probably don't need $seqres.full
+rm -rf $TEST_DIR/fsstress.$seq.*
 
 exit
 

@@ -11,13 +11,12 @@ _begin_fstest auto rw long_rw stress soak smoketest
 
 _cleanup()
 {
-	cd /
+	_kill_fsstress
 	rm -f $runfile
-	rm -f $tmp.*
 	kill -9 $trigger_compaction_pid > /dev/null 2>&1
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-
 	wait > /dev/null 2>&1
+	rm -f $tmp.*
+	cd /
 }
 
 # Import common functions.
@@ -26,7 +25,6 @@ _cleanup()
 
 _require_scratch
 _require_vm_compaction
-_require_command "$KILLALL_PROG" "killall"
 
 # We still deadlock with this test on v6.10-rc2, we need more work.
 # but the below makes things better.
@@ -52,7 +50,7 @@ while [ -e $runfile ]; do
 done &
 trigger_compaction_pid=$!
 
-$FSSTRESS_PROG $FSSTRESS_AVOID "${fsstress_args[@]}" >> $seqres.full
+_run_fsstress "${fsstress_args[@]}"
 
 rm -f $runfile
 wait > /dev/null 2>&1

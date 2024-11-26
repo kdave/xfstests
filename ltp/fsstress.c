@@ -444,6 +444,7 @@ void sg_handler(int signum)
 {
 	switch (signum) {
 	case SIGTERM:
+	case SIGPIPE:
 		should_stop = 1;
 		break;
 	case SIGBUS:
@@ -468,6 +469,9 @@ bool
 keep_looping(int i, int loops)
 {
 	int ret;
+
+	if (should_stop)
+		return false;
 
 	if (deadline.tv_nsec) {
 		struct timespec now;
@@ -732,14 +736,17 @@ int main(int argc, char **argv)
 		perror("sigaction failed");
 		exit(1);
 	}
+	if (sigaction(SIGPIPE, &action, 0)) {
+		perror("sigaction failed");
+		exit(1);
+	}
 
 	for (i = 0; i < nproc; i++) {
 		if (fork() == 0) {
 			sigemptyset(&action.sa_mask);
-			action.sa_handler = SIG_DFL;
+			action.sa_handler = sg_handler;
 			if (sigaction(SIGTERM, &action, 0))
 				return 1;
-			action.sa_handler = sg_handler;
 			if (sigaction(SIGBUS, &action, 0))
 				return 1;
 #ifdef HAVE_SYS_PRCTL_H
@@ -1195,6 +1202,9 @@ bool
 keep_running(opnum_t opno, opnum_t operations)
 {
 	int ret;
+
+	if (should_stop)
+		return false;
 
 	if (deadline.tv_nsec) {
 		struct timespec now;

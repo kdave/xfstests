@@ -16,8 +16,7 @@ _cleanup()
 {
 	# Make sure $SCRATCH_MNT is unfreezed
 	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
-	$KILLALL_PROG -q -9 $FSSTRESS_PROG
-	wait
+	_kill_fsstress
 	cd /
 	rm -f $tmp.*
 }
@@ -37,7 +36,7 @@ _scratch_mount
 STRESS_DIR="$SCRATCH_MNT/testdir"
 mkdir -p $STRESS_DIR
 
-$FSSTRESS_PROG -d $STRESS_DIR -n 100 -p 1000 $FSSTRESS_AVOID >>$seqres.full &
+_run_fsstress_bg -d $STRESS_DIR -n 1000 -p 1000 $FSSTRESS_AVOID
 
 # Freeze/unfreeze file system randomly
 echo "Start freeze/unfreeze randomly" | tee -a $seqres.full
@@ -60,8 +59,7 @@ while [ $LOOP -gt 0 ];do
 	let LOOP=$LOOP-1
 done
 echo "Test done" | tee -a $seqres.full
-$KILLALL_PROG -q $FSSTRESS_PROG
-wait
+_kill_fsstress
 
 status=0
 exit

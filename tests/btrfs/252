@@ -24,6 +24,7 @@ _begin_fstest auto send balance stress
 
 _cleanup()
 {
+	_kill_fsstress
 	if [ ! -z $balance_pid ]; then
 		kill $balance_pid &> /dev/null
 		wait $balance_pid
@@ -79,10 +80,10 @@ snapshot_cmd="$snapshot_cmd \"$snapshots_dir/snap_\`date +'%s%N'\`\""
 # it's pointless to have them.
 #
 echo "Running fsstress..." >> $seqres.full
-$FSSTRESS_PROG $FSSTRESS_AVOID -d "$data_subvol" -p 1 -w \
+_run_fsstress -d "$data_subvol" -p 1 -w \
 	       -f subvol_create=0 -f subvol_delete=0 -f snapshot=0 \
 	       -x "$snapshot_cmd" -X $num_snapshots \
-	       -n $total_fsstress_ops >> $seqres.full
+	       -n $total_fsstress_ops
 
 snapshots=(`IFS=$'\n' ls -1 "$snapshots_dir"`)
 

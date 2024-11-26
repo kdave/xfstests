@@ -30,8 +30,8 @@ function iterate_dedup_verify()
 		find $dest -type f -exec md5sum {} \; \
 			> $md5file$index
 		# Make some noise
-		$FSSTRESS_PROG $fsstress_opts -d $noisedir \
-			       -n 200 -p $((5 * LOAD_FACTOR)) >/dev/null 2>&1
+		_run_fsstress $fsstress_opts -d $noisedir \
+			       -n 200 -p $((5 * LOAD_FACTOR))
 		# Too many output, so only save error output
 		$DUPEREMOVE_PROG -dr --dedupe-options=same $dupdir \
 			>/dev/null 2>$seqres.full
@@ -51,8 +51,7 @@ md5file=${tmp}.md5sum
 
 fsstress_opts="-w -r"
 # Create some files to be original data
-$FSSTRESS_PROG $fsstress_opts -d $srcdir \
-	       -n 500 -p $((5 * LOAD_FACTOR)) >/dev/null 2>&1
+_run_fsstress $fsstress_opts -d $srcdir -n 500 -p $((5 * LOAD_FACTOR))
 
 # Calculate how many test cycles will be run
 src_size=`du -ks $srcdir | awk '{print $1}'`

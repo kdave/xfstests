@@ -13,13 +13,13 @@ _begin_fstest auto balance dangerous
 # Override the default cleanup function.
 _cleanup()
 {
-	cd /
-	rm -f $tmp.*
+	_kill_fsstress
 	kill $balance_pid &> /dev/null
 	kill $cancel_pid &> /dev/null
-	"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
-	$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
 	wait
+	$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
+	cd /
+	rm -f $tmp.*
 }
 
 . ./common/filter
@@ -49,7 +49,7 @@ cancel_workload()
 	done
 }
 
-$FSSTRESS_PROG -d $SCRATCH_MNT -w -n 100000  >> $seqres.full 2>/dev/null &
+_run_fsstress_bg -d $SCRATCH_MNT -w -n 100000
 balance_workload &
 balance_pid=$!
 
@@ -58,11 +58,11 @@ cancel_pid=$!
 
 sleep $runtime
 
+_kill_fsstress
 kill $balance_pid
 kill $cancel_pid
-"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
-$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
 wait
+$BTRFS_UTIL_PROG balance cancel $SCRATCH_MNT &> /dev/null
 
 echo "Silence is golden"
 # success, all done

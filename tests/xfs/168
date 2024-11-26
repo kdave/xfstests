@@ -38,9 +38,8 @@ stress_scratch()
 	local procs=3
 	local nops=1000
 	# -w ensures that the only ops are ones which cause write I/O
-	local FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w \
-		-p $procs -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full 2>&1
+	local args=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs -n $nops`
+	_run_fsstress_bg $args
 }
 
 _require_scratch_xfs_shrink
@@ -73,7 +72,7 @@ while [ $totalcount -gt 0 ]; do
 	decsize=`expr  41 \* 1048576 + 1 + $RANDOM \* $RANDOM % 1048576`
 
 	while [ $size -gt $endsize ]; do
-		stress_scratch &
+		stress_scratch
 		sleep 1
 
 		decb=`expr $decsize / $dbsize`    # in data blocks
@@ -95,6 +94,7 @@ while [ $totalcount -gt 0 ]; do
 		. $tmp.growfs
 
 		size=`expr $dblocks \* $dbsize`
+		_kill_fsstress
 		_scratch_unmount
 		_scratch_xfs_repair -n >> $seqres.full 2>&1 || \
 			_fail "xfs_repair failed with shrinking $sizeb"

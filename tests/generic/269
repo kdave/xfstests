@@ -21,10 +21,9 @@ _workout()
 	num_iterations=10
 	enospc_time=2
 	out=$SCRATCH_MNT/fsstress.$$
-	args=`_scale_fsstress_args -p128 -n999999999 -f setattr=1 $FSSTRESS_AVOID -d $out`
+	args=`_scale_fsstress_args -p128 -n999999999 -f setattr=1 -d $out`
 	echo "fsstress $args" >> $seqres.full
-	$FSSTRESS_PROG $args &>> $seqres.full &
-	pid=$!
+	_run_fsstress_bg $args
 	echo "Run dd writers in parallel"
 	for ((i=0; i < num_iterations; i++))
 	do
@@ -34,8 +33,7 @@ _workout()
 		sleep $enospc_time
 	done
 	echo "Killing fsstress process..." >> $seqres.full
-	kill $pid >> $seqres.full 2>&1
-	wait $pid
+	_kill_fsstress
 }
 
 _require_scratch

@@ -9,6 +9,22 @@
 . ./common/preamble
 _begin_fstest auto stress
 
+# This nests multiple background fsstress instances, so we have to
+# do some magic with _FSSTRESS_PID here.
+_cleanup()
+{
+	if [ -n "$fsstress_pid_1" ]; then
+		 FSTRESS_PID=$fsstress_pid_1
+		_kill_fsstress
+	fi
+	if [ -n "$fsstress_pid_2" ]; then
+		 FSTRESS_PID=$fsstress_pid_2
+		_kill_fsstress
+	fi
+	cd /
+	rm -f tmp.*
+}
+
 # Import common functions.
 . ./common/filter
 
@@ -28,29 +44,31 @@ d_low=$lowerdir/fsstress
 d_top=$SCRATCH_MNT/fsstress
 mkdir -p $d_low $d_top
 
-echo $FSSTRESS_PROG -s 42 -d $d_low -p 4 -n 1000 -l100 -v > $seqres.full.1
-$FSSTRESS_PROG -s 42 -d $d_low -p 4 -n 1000 -l100 -v >> $seqres.full.1 2>&1 &
+echo fsstress -s 42 -d $d_low -p 4 -n 1000 -l100 -v >> $seqres.full
+_run_fsstress_bg -s 42 -d $d_low -p 4 -n 1000 -l100 -v
+fsstress_pid_1=$_FSSTRESS_PID
 
-echo $FSSTRESS_PROG -s 42 -d $d_top -p 4 -n 1000 -l100 -v > $seqres.full.2
-$FSSTRESS_PROG -s 42 -d $d_top -p 4 -n 1000 -l100 -v >> $seqres.full.2 2>&1 &
+echo fsstress -s 42 -d $d_top -p 4 -n 1000 -l100 -v >> $seqres.full
+_run_fsstress_bg -s 42 -d $d_top -p 4 -n 1000 -l100 -v
+fsstress_pid_2=$_FSTRESS_PID
+unset _FSSTRESS_PID
 
 ret=0
-if ! wait %1; then
-	echo "--------------------------------------"       >>$seqres.full.1
-	echo "fsstress on lower directory returned $? - see $seqres.full.1"
-	echo "--------------------------------------"       >>$seqres.full.1
+if ! wait $fsstress_pid_1; then
+	echo "--------------------------------------"       >>$seqres.full
+	echo "fsstress on lower directory returned $? - see $seqres.full"
+	echo "--------------------------------------"       >>$seqres.full
 	ret=1
 fi
+unset fsstress_pid_1
 
-if ! wait %2; then
-	echo "--------------------------------------"       >>$seqres.full.2
-	echo "fsstress on overlay directory returned $? - see $seqres.full.2"
-	echo "--------------------------------------"       >>$seqres.full.2
+if ! wait $fsstress_pid_2; then
+	echo "--------------------------------------"       >>$seqres.full
+	echo "fsstress on overlay directory returned $? - see $seqres.full"
+	echo "--------------------------------------"       >>$seqres.full
 	ret=1
 fi
-
-cat $seqres.full.1 $seqres.full.2 > $seqres.full
-rm $seqres.full.1 $seqres.full.2
+unset fsstress_pid_2
 
 if [ "$ret" -eq 1 ]; then
 	status=1

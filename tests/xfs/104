@@ -40,9 +40,8 @@ _stress_scratch()
 	procs=3
 	nops=1000
 	# -w ensures that the only ops are ones which cause write I/O
-	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs \
-	    -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full 2>&1 &
+	args=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs -n $nops`
+	_run_fsstress_bg $args
 }
 
 _require_scratch
@@ -73,14 +72,11 @@ for i in `seq 125 -1 90`; do
 	break
 done
 
-#
 # Grow the filesystem while actively stressing it...
-# Kick off more stress threads on each iteration, grow; repeat.
-#
 while [ $size -le $endsize ]; do
 	echo "*** stressing filesystem"
 	echo "*** stressing a ${sizeb} block filesystem" >> $seqres.full
-	_stress_scratch
+	_stress_scratch 
 	sleep 1
 	size=`expr $size + $incsize`
 	sizeb=`expr $size / $dbsize`	# in data blocks
@@ -92,10 +88,8 @@ while [ $size -le $endsize ]; do
 	[ `expr $size % $modsize` -eq 0 ] && wait	# every 4th iteration
 	echo AGCOUNT=$agcount | tee -a $seqres.full
 	echo && echo >> $seqres.full
+	_wait_for_fsstress
 done
-wait	# stop for any remaining stress processes
-
-_scratch_unmount
 
 status=0
 exit

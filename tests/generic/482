@@ -18,10 +18,10 @@ _begin_fstest auto metadata replay thin recoveryloop
 # failure leaves the corpse intact for post-mortem failure analysis.
 _cleanup()
 {
-	cd /
-	$KILLALL_PROG -KILL -q $FSSTRESS_PROG &> /dev/null
+	_kill_fsstress
 	_log_writes_cleanup &> /dev/null
 	_dmthin_cleanup
+	cd /
 	rm -f $tmp.*
 }
 
@@ -29,7 +29,7 @@ _cleanup()
 #_cleanup()
 #{
 #	cd /
-#	$KILLALL_PROG -KILL -q $FSSTRESS_PROG &> /dev/null
+#	[ -n "$fsstress_pid" ] && kill $fsstress_pid
 #	if [ $status -eq 0 ]; then
 #		_log_writes_cleanup &> /dev/null
 #		_dmthin_cleanup
@@ -48,7 +48,6 @@ _cleanup()
 # Modify as appropriate.
 
 _require_no_logdev
-_require_command "$KILLALL_PROG" killall
 # Use thin device as replay device, which requires $SCRATCH_DEV
 _require_scratch_nocheck
 # and we need extra device as log device
@@ -60,8 +59,7 @@ nr_cpus=$("$here/src/feature" -o)
 if [ $nr_cpus -gt 8 ]; then
 	nr_cpus=8
 fi
-fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 512 -p $nr_cpus \
-		$FSSTRESS_AVOID)
+fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 512 -p $nr_cpus)
 
 size=$(_small_fs_size_mb 200)           # 200m phys/virt size
 devsize=$((1024*1024*size / 512))
@@ -77,7 +75,7 @@ _log_writes_mkfs >> $seqres.full 2>&1
 _log_writes_mark mkfs
 
 _log_writes_mount
-run_check $FSSTRESS_PROG $fsstress_args
+_run_fsstress $fsstress_args
 _log_writes_unmount
 
 _log_writes_remove

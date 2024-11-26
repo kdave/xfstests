@@ -9,20 +9,12 @@
 . ./common/preamble
 _begin_fstest rw metadata auto stress prealloc
 
-# Override the default cleanup function.
-_cleanup()
-{
-	$KILLALL_PROG -r -q -TERM fsstress 2> /dev/null
-	wait	# ensures all fsstress processes died
-}
-
 workout()
 {
 	procs=100
 	nops=15000
-	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -p $procs -n $nops \
-	    $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full &
+	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -p $procs -n $nops`
+	_run_fsstress_bg $FSSTRESS_ARGS
 	sleep 2
 }
 
@@ -51,6 +43,8 @@ echo "*** test unwritten extent conversion under heavy I/O"
 rm -f $TEST_FILE
 workout
 $TEST_PROG $LOOPS $TEST_FILE
+
+_kill_fsstress
 
 echo "     *** test done"
 

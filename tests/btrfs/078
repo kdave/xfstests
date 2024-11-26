@@ -16,14 +16,6 @@
 . ./common/preamble
 _begin_fstest auto snapshot
 
-tmp=`mktemp -d`
-
-# Override the default cleanup function.
-_cleanup()
-{
-	rm -fr $tmp
-}
-
 . ./common/filter
 
 _require_scratch
@@ -39,8 +31,8 @@ workout()
 
 	snapshot_cmd="$BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT"
 	snapshot_cmd="$snapshot_cmd $SCRATCH_MNT/snap_\`date +'%H_%M_%S_%N'\`"
-	run_check $FSSTRESS_PROG -p $procs \
-	    -x "$snapshot_cmd" -X $num_snapshots -d $SCRATCH_MNT -n $ops
+	_run_fsstress -p $procs -x "$snapshot_cmd" -X $num_snapshots \
+			-d $SCRATCH_MNT -n $ops
 }
 
 ops=8000

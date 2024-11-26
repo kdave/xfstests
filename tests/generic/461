@@ -14,18 +14,8 @@ _begin_fstest auto shutdown stress
 # Import common functions.
 . ./common/filter
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	_scratch_unmount 2>/dev/null
-	rm -f $tmp.*
-}
-
-
 _require_scratch_nocheck
 _require_scratch_shutdown
-_require_command "$KILLALL_PROG" killall
 
 _scratch_mkfs > $seqres.full 2>&1
 _scratch_mount
@@ -35,15 +25,14 @@ PROCS=$((4 * LOAD_FACTOR))
 
 load_dir=$SCRATCH_MNT/test
 
-$FSSTRESS_PROG $FSSTRESS_AVOID -n10000000 -p $PROCS -d $load_dir >> $seqres.full 2>&1 &
+_run_fsstress_bg -n10000000 -p $PROCS -d $load_dir
 sleep $SLEEP_TIME
 sync
 
 # now shutdown and unmount
 sleep 5
 _scratch_shutdown
-$KILLALL_PROG -q $FSSTRESS_PROG
-wait
+_kill_fsstress
 
 # for some reason fsstress processes manage to live on beyond the wait?
 sleep 5

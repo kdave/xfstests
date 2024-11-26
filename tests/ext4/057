@@ -8,15 +8,6 @@
 . ./common/preamble
 _begin_fstest auto ioctl
 
-# Override the default cleanup function.
-_cleanup()
-{
-        cd /
-        rm -r -f $tmp.*
-        kill -9 $fsstress_pid 2>/dev/null;
-        wait > /dev/null 2>&1
-}
-
 # Import common functions.
 . ./common/filter
 
@@ -41,8 +32,7 @@ _scratch_mount
 
 # Begin fsstress while modifying UUID
 fsstress_args=$(_scale_fsstress_args -d $SCRATCH_MNT -p 15 -n 999999)
-$FSSTRESS_PROG $fsstress_args >> $seqres.full &
-fsstress_pid=$!
+_run_fsstress_bg $fsstress_args
 
 for n in $(seq 1 20); do
         new_uuid=$($UUIDGEN_PROG)
@@ -56,6 +46,8 @@ for n in $(seq 1 20); do
                 echo "Current UUID ($current_uuid) does not equal what was sent with the ioctl ($new_uuid)"
         fi
 done
+
+_kill_fsstress
 
 # success, all done
 echo "Silence is golden"

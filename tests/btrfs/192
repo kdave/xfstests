@@ -13,12 +13,12 @@ _begin_fstest auto replay snapshot stress recoveryloop
 # Override the default cleanup function.
 _cleanup()
 {
-	cd /
+	_kill_fsstress
 	kill -q $pid1 &> /dev/null
 	kill -q $pid2 &> /dev/null
-	"$KILLALL_PROG" -q $FSSTRESS_PROG &> /dev/null
 	wait
 	_log_writes_cleanup &> /dev/null
+	cd /
 	rm -f $tmp.*
 }
 
@@ -46,8 +46,7 @@ nr_cpus=$("$here/src/feature" -o)
 if [ $nr_cpus -gt 8 ]; then
 	nr_cpus=8
 fi
-fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 99999 -p $nr_cpus \
-		$FSSTRESS_AVOID)
+fsstress_args=$(_scale_fsstress_args -w -d $SCRATCH_MNT -n 99999 -p $nr_cpus )
 _log_writes_init $SCRATCH_DEV
 
 # Discard the whole devices so when some tree pointer is wrong, it won't point
@@ -135,10 +134,10 @@ pid1=$!
 delete_workload &
 pid2=$!
 
-"$FSSTRESS_PROG" $fsstress_args >> $seqres.full &
+_run_fsstress_bg $fsstress_args
 sleep $runtime
 
-"$KILLALL_PROG" -q "$FSSTRESS_PROG" &> /dev/null
+_kill_fsstress
 kill $pid1 &> /dev/null
 kill $pid2 &> /dev/null
 wait

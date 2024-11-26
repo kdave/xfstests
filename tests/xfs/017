@@ -9,15 +9,6 @@
 . ./common/preamble
 _begin_fstest mount auto quick stress
 
-_register_cleanup "_cleanup; rm -f $tmp.*"
-
-# Override the default cleanup function.
-_cleanup()
-{
-    echo "*** unmount"
-    _scratch_unmount 2>/dev/null
-}
-
 # Import common functions.
 . ./common/filter
 
@@ -41,8 +32,8 @@ echo "*** test"
 for l in 0 1 2 3 4
 do
         echo "    *** test $l"
-	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -n 1000 $FSSTRESS_AVOID`
-        $FSSTRESS_PROG  $FSSTRESS_ARGS >>$seqres.full
+	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -n 1000`
+        _run_fsstress $FSSTRESS_ARGS
 
         _try_scratch_mount -o remount,ro \
             || _fail "remount ro failed"

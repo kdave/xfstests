@@ -12,14 +12,6 @@
 . ./common/preamble
 _begin_fstest auto stress clone quota
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-}
-
 # Import common functions.
 . ./common/quota
 . ./common/filter
@@ -72,7 +64,7 @@ _scratch_mount >> $seqres.full 2>&1
 
 nr_cpus=$((LOAD_FACTOR * 4))
 nr_ops=$((25000 * nr_cpus * TIME_FACTOR))
-$FSSTRESS_PROG $FSSTRESS_AVOID -w -d $SCRATCH_MNT -n $nr_ops -p $nr_cpus >> $seqres.full
+_run_fsstress -w -d $SCRATCH_MNT -n $nr_ops -p $nr_cpus
 
 echo "Check quota before remount"
 check_quota_du_blocks

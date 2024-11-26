@@ -22,7 +22,9 @@ _require_fail_make_request
 # Override the default cleanup function.
 _cleanup()
 {
-	kill $fs_pid $fio_pid &> /dev/null
+	_kill_fsstress
+	kill $fio_pid &> /dev/null
+	wait
 	_disallow_fail_make_request
 	cd /
 	rm -r -f $tmp.*
@@ -85,13 +87,12 @@ FSSTRESS_AVOID="$FSSTRESS_AVOID -ffsync=0 -fsync=0 -ffdatasync=0 -f setattr=1"
 _workout()
 {
 	out=$SCRATCH_MNT/fsstress.$$
-	args=`_scale_fsstress_args -p 1 -n999999999 -f setattr=0 $FSSTRESS_AVOID -d $out`
+	args=`_scale_fsstress_args -p 1 -n999999999 -f setattr=0 -d $out`
 	echo ""
 	echo "Start fsstress.."
 	echo ""
 	echo "fsstress $args" >> $seqres.full
-	$FSSTRESS_PROG $args >> $seqres.full 2>&1 &
-	fs_pid=$!
+	_run_fsstress_bg $args
 	echo "Start fio.."
 	cat $fio_config >>  $seqres.full
 	$FIO_PROG $fio_config >> $seqres.full 2>&1 &
@@ -107,10 +108,8 @@ _workout()
 	    >> $seqres.full 2>&1 && \
 	    _fail "failed: still able to perform integrity fsync on $SCRATCH_MNT"
 
-	kill $fs_pid &> /dev/null
-	wait $fs_pid
+	_kill_fsstress
 	wait $fio_pid
-	unset fs_pid
 	unset fio_pid
 
 	# We expect that broken FS still can be umounted

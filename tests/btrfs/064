@@ -22,10 +22,7 @@ _cleanup()
 	if [ ! -z "$replace_pid" ]; then
 		_btrfs_kill_stress_replace_pid $replace_pid
 	fi
-	if [ ! -z "$fsstress_pid" ]; then
-		kill $fsstress_pid &> /dev/null
-		wait $fsstress_pid &> /dev/null
-	fi
+	_kill_fsstress
 }
 
 . ./common/filter
@@ -57,10 +54,9 @@ run_test()
 	_scratch_mount >>$seqres.full 2>&1
 	SCRATCH_DEV_POOL=$saved_scratch_dev_pool
 
-	args=`_scale_fsstress_args -p 20 -n 100 $FSSTRESS_AVOID -d $SCRATCH_MNT/stressdir`
+	args=`_scale_fsstress_args -p 20 -n 100 -d $SCRATCH_MNT/stressdir`
 	echo "Run fsstress $args" >>$seqres.full
-	$FSSTRESS_PROG $args >>$seqres.full &
-	fsstress_pid=$!
+	_run_fsstress_bg $args
 
 	# Start both balance and replace in the background.
 	# Either balance or replace shall run, the other fails.
@@ -75,8 +71,7 @@ run_test()
 	echo "$replace_pid" >>$seqres.full
 
 	echo "Wait for fsstress to exit and kill all background workers" >>$seqres.full
-	wait $fsstress_pid
-	unset fsstress_pid
+	_wait_for_fsstress
 	_btrfs_kill_stress_balance_pid $balance_pid
 	unset balance_pid
 	_btrfs_kill_stress_replace_pid $replace_pid

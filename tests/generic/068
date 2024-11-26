@@ -19,8 +19,7 @@ _cleanup()
 {
 	# Make sure $SCRATCH_MNT is unfreezed
 	xfs_freeze -u $SCRATCH_MNT 2>/dev/null
-	[ -n "$pid" ] && kill -9 $pid 2>/dev/null
-	wait $pid
+	_kill_fsstress
 	cd /
 	rm -f $tmp.*
 }
@@ -54,8 +53,8 @@ touch $tmp.running
       do
       # We do both read & write IO - not only is this more realistic,
       # but it also potentially tests atime updates
-      FSSTRESS_ARGS=`_scale_fsstress_args -d $STRESS_DIR -p $procs -n $nops $FSSTRESS_AVOID`
-      $FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full
+      FSSTRESS_ARGS=`_scale_fsstress_args -d $STRESS_DIR -p $procs -n $nops`
+      _run_fsstress $FSSTRESS_ARGS >>$seqres.full
     done
 
     rm -r $STRESS_DIR/*

@@ -14,6 +14,7 @@ _begin_fstest auto quick log
 # Override the default cleanup function.
 _cleanup()
 {
+	_kill_fsstress
 	_cleanup_flakey
 	cd /
 	rm -f $tmp.*
@@ -38,10 +39,10 @@ _init_flakey
 _mount_flakey
 
 mkdir $SCRATCH_MNT/test
-args=`_scale_fsstress_args -p 4 -n 100 $FSSTRESS_AVOID -d $SCRATCH_MNT/test`
+args=`_scale_fsstress_args -p 4 -n 100 -d $SCRATCH_MNT/test`
 args="$args -f mknod=0 -f symlink=0"
 echo "Running fsstress with arguments: $args" >>$seqres.full
-$FSSTRESS_PROG $args >>$seqres.full
+_run_fsstress $args
 
 # Fsync every file and directory.
 find $SCRATCH_MNT/test \( -type f -o -type d \) -exec $XFS_IO_PROG -c fsync {} \;

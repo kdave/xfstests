@@ -21,15 +21,13 @@ _lets_get_pidst()
 # Override the default cleanup function.
 _cleanup()
 {
-	echo "*** unmount"
-	_scratch_unmount 2>/dev/null
 	_lets_get_pidst
+	cd /
+	rm -f $tmp.*
 }
-_register_cleanup "_cleanup; rm -f $tmp.*"
 
 # Import common functions.
 . ./common/filter
-
 
 _require_scratch
 _require_local_device $SCRATCH_DEV
@@ -48,9 +46,9 @@ echo "*** test concurrent block/fs access"
 cat $SCRATCH_DEV >/dev/null &
 pid=$!
 
-FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -p 2 -n 2000 $FSSTRESS_AVOID`
+FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -p 2 -n 2000`
 echo "run fsstress with args: $FSSTRESS_ARGS" >>$seqres.full
-$FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full
+_run_fsstress $FSSTRESS_ARGS
 _lets_get_pidst
 
 echo "*** done"

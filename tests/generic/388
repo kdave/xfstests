@@ -17,23 +17,9 @@
 . ./common/preamble
 _begin_fstest shutdown auto log metadata recoveryloop
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-	_scratch_unmount > /dev/null 2>&1
-}
-
-# Import common functions.
-
-# Modify as appropriate.
-
 _require_scratch
 _require_local_device $SCRATCH_DEV
 _require_scratch_shutdown
-_require_command "$KILLALL_PROG" "killall"
 
 echo "Silence is golden."
 
@@ -42,20 +28,14 @@ _require_metadata_journaling $SCRATCH_DEV
 _scratch_mount
 
 while _soak_loop_running $((50 * TIME_FACTOR)); do
-	($FSSTRESS_PROG $FSSTRESS_AVOID -d $SCRATCH_MNT -n 999999 -p 4 >> $seqres.full &) \
-		> /dev/null 2>&1
+	_run_fsstress_bg -d $SCRATCH_MNT -n 999999 -p 4
 
 	# purposely include 0 second sleeps to test shutdown immediately after
 	# recovery
 	sleep $((RANDOM % 3))
 	_scratch_shutdown
 
-	ps -e | grep fsstress > /dev/null 2>&1
-	while [ $? -eq 0 ]; do
-		$KILLALL_PROG -9 fsstress > /dev/null 2>&1
-		wait > /dev/null 2>&1
-		ps -e | grep fsstress > /dev/null 2>&1
-	done
+	_kill_fsstress
 
 	# Toggle between rw and ro mounts for recovery. Quit if any mount
 	# attempt fails so we don't shutdown the host fs.

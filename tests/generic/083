@@ -18,17 +18,8 @@
 . ./common/preamble
 _begin_fstest rw auto enospc stress
 
-# Override the default cleanup function.
-_cleanup()
-{
-	echo "*** unmount"
-	_scratch_unmount 2>/dev/null
-	rm -f $tmp.*
-}
-
 # Import common functions.
 . ./common/filter
-
 
 _require_scratch
 _require_no_large_scratch_dev
@@ -52,8 +43,8 @@ workout()
 	_scratch_mount
 
 	# -w ensures that the only ops are ones which cause write I/O
-	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs -n $nops $FSSTRESS_AVOID`
-	$FSSTRESS_PROG $FSSTRESS_ARGS >>$seqres.full
+	FSSTRESS_ARGS=`_scale_fsstress_args -d $SCRATCH_MNT -w -p $procs -n $nops`
+	_run_fsstress $FSSTRESS_ARGS >>$seqres.full
 }
 
 echo "*** test out-of-space handling for random write operations"

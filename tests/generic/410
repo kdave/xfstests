@@ -33,11 +33,12 @@ _begin_fstest auto quick mount
 # Override the default cleanup function.
 _cleanup()
 {
-	cd /
-	rm -f $tmp.*
+	_kill_fsstress
 	_clear_mount_stack
 	# make sure there's no bug cause dentry isn't be freed
 	rm -rf $MNTHEAD
+	cd /
+	rm -f $tmp.*
 }
 
 # Import common functions.
@@ -51,7 +52,7 @@ fs_stress()
 {
 	local target=$1
 
-	$FSSTRESS_PROG -z -n 50 -p 3 \
+	_run_fsstress -z -n 50 -p 3 \
 		       -f creat=5 \
 		       -f mkdir=5 \
 		       -f link=2 \
@@ -64,7 +65,7 @@ fs_stress()
 		       -f chown=1 \
 		       -f getdents=1 \
 		       -f fiemap=1 \
-		       -d $target >>$seqres.full
+		       -d $target
 	sync
 }
 

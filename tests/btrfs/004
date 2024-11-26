@@ -17,6 +17,7 @@ noise_pid=0
 # Override the default cleanup function.
 _cleanup()
 {
+	_kill_fsstress
 	rm $tmp.running
 	wait
 	rm -f $tmp.*
@@ -159,8 +160,7 @@ workout()
 	_scratch_mkfs_sized $fsz >>$seqres.full 2>&1
 	_scratch_mount
 	# -w ensures that the only ops are ones which cause write I/O
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -w -p $procs -n 2000 \
-		$FSSTRESS_AVOID
+	_run_fsstress -d $SCRATCH_MNT -w -p $procs -n 2000
 
 	_btrfs subvolume snapshot $SCRATCH_MNT \
 		$SCRATCH_MNT/$snap_name
@@ -170,15 +170,14 @@ workout()
 
 	# make some noise but ensure we're not touching existing data
 	# extents.
-	run_check $FSSTRESS_PROG -d $SCRATCH_MNT -p $procs -n 4000 \
+	_run_fsstress -d $SCRATCH_MNT -p $procs -n 4000 \
 		-z -f chown=3 -f link=1 -f mkdir=2 -f mknod=2 \
 		-f rename=2 -f setxattr=1 -f symlink=2
 
 	clean_dir="$SCRATCH_MNT/next"
 	mkdir $clean_dir
 	# now make more files to get a higher tree
-	run_check $FSSTRESS_PROG -d $clean_dir -w -p $procs -n 2000 \
-		$FSSTRESS_AVOID
+	_run_fsstress -d $clean_dir -w -p $procs -n 2000
 	run_check _scratch_unmount
 	_scratch_mount "-o atime"
 
@@ -186,7 +185,7 @@ workout()
 		# make background noise while backrefs are being walked
 		while [ -f "$tmp.running" ]; do
 			echo background fsstress >>$seqres.full
-			run_check $FSSTRESS_PROG -d $SCRATCH_MNT/bgnoise -n 999
+			_run_fsstress -d $SCRATCH_MNT/bgnoise -n 999
 			echo background rm >>$seqres.full
 			rm -rf $SCRATCH_MNT/bgnoise/
 		done &
