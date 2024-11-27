@@ -48,6 +48,23 @@ _test_fsxattr_xflag()
 	grep -q "fsxattr.xflags.*\[.*$2.*\]" <($XFS_IO_PROG -c "stat -v" "$1")
 }
 
+# This test requires extsize support on the  filesystem
+_require_scratch_extsize()
+{
+	_require_scratch
+	_require_xfs_io_command "extsize"
+	_scratch_mkfs > /dev/null
+	_scratch_mount
+	local filename=$SCRATCH_MNT/$RANDOM
+	local blksz=$(_get_block_size $SCRATCH_MNT)
+	local extsz=$(( blksz*2 ))
+	local res=$($XFS_IO_PROG -c "open -f $filename" -c "extsize $extsz" \
+		-c "extsize")
+	_scratch_unmount
+	grep -q "\[$extsz\] $filename" <(echo $res) || \
+		_notrun "this test requires extsize support on the filesystem"
+}
+
 # Write a byte into a range of a file
 _pwrite_byte() {
 	local pattern="$1"
