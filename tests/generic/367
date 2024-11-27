@@ -1,0 +1,174 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Nirjhar Roy (nirjhar@linux.ibm.com).  All Rights Reserved.
+#
+# FS QA Test 367
+#
+# This test verifies that extent allocation hint setting works correctly on
+# files with no extents allocated and non-empty files which are truncated.
+# It also checks that the  extent hints setting fails with non-empty file
+# i.e, with any file with allocated extents or delayed allocation. We also
+# check if the extsize value and the xflag bit actually got reflected after
+# setting/re-setting the extsize value.
+
+. ./common/config
+. ./common/filter
+. ./common/preamble
+
+_begin_fstest ioctl quick
+
+_fixed_by_kernel_commit 2a492ff66673 \
+	"xfs: Check for delayed allocations before setting extsize"
+
+_require_scratch_extsize
+
+FILE_DATA_SIZE=1M
+
+get_default_extsize()
+{
+    if [ -z $1 ] || [ ! -d $1 ]; then
+        echo "Missing mount point argument for get_default_extsize"
+        exit 1
+    fi
+    $XFS_IO_PROG -c "extsize" "$1" | sed 's/^\[\([0-9]\+\)\].*/\1/'
+}
+
+filter_extsz()
+{
+    sed "s/\[$1\]/\[EXTSIZE\]/g"
+}
+
+setup()
+{
+    _scratch_mkfs >> "$seqres.full"  2>&1
+    _scratch_mount >> "$seqres.full" 2>&1
+    BLKSZ=`_get_block_size $SCRATCH_MNT`
+    DEFAULT_EXTSIZE=`get_default_extsize $SCRATCH_MNT`
+    EXTSIZE=$(( BLKSZ*2 ))
+    # Make sure the new extsize is not the same as the default
+    # extsize so that we can observe it changing
+    [[ "$DEFAULT_EXTSIZE" -eq "$EXTSIZE" ]] && EXTSIZE=$(( BLKSZ*4 ))
+}
+
+read_file_extsize()
+{
+    $XFS_IO_PROG -c "extsize" $1 | _filter_scratch | filter_extsz $2
+}
+
+check_extsz_and_xflag()
+{
+    local filename=$1
+    local extsize=$2
+    read_file_extsize $filename $extsize
+    _test_fsxattr_xflag $filename "extsize" && echo "e flag set" || \
+	    echo "e flag unset"
+}
+
+check_extsz_xflag_across_remount()
+{
+    local filename=$1
+    local extsize=$2
+    _scratch_cycle_mount
+    check_extsz_and_xflag $filename $extsize
+}
+
+# Extsize flag should be cleared when extsize is reset, so this function
+# checks that this behavior is followed.
+reset_extsz_and_recheck_extsz_xflag()
+{
+    local filename=$1
+    echo "Re-setting extsize hint to 0"
+    $XFS_IO_PROG -c "extsize 0" $filename
+    check_extsz_xflag_across_remount $filename "0"
+}
+
+check_extsz_xflag_before_and_after_reset()
+{
+    local filename=$1
+    local extsize=$2
+    check_extsz_xflag_across_remount $filename $extsize
+    reset_extsz_and_recheck_extsz_xflag $filename
+}
+
+test_empty_file()
+{
+    echo "TEST: Set extsize on empty file"
+    local filename=$1
+    $XFS_IO_PROG \
+        -c "open -f $filename" \
+        -c "extsize $EXTSIZE" \
+
+    check_extsz_xflag_before_and_after_reset $filename $EXTSIZE
+    echo
+}
+
+test_data_delayed()
+{
+    echo "TEST: Set extsize on non-empty file with delayed allocation"
+    local filename=$1
+    $XFS_IO_PROG \
+        -c "open -f $filename" \
+        -c "pwrite -q  0 $FILE_DATA_SIZE" \
+        -c "extsize $EXTSIZE" | _filter_scratch
+
+    echo "test for default extsize setting if any"
+    read_file_extsize $filename $DEFAULT_EXTSIZE
+    echo
+}
+
+test_data_allocated()
+{
+    echo "TEST: Set extsize on non-empty file with allocated extents"
+    local filename=$1
+    $XFS_IO_PROG \
+        -c "open -f $filename" \
+        -c "pwrite -qW  0 $FILE_DATA_SIZE" \
+        -c "extsize $EXTSIZE" | _filter_scratch
+
+    echo "test for default extsize setting if any"
+    read_file_extsize $filename $DEFAULT_EXTSIZE
+    echo
+}
+
+test_truncate_allocated()
+{
+    echo "TEST: Set extsize after truncating a file with allocated extents"
+    local filename=$1
+    $XFS_IO_PROG \
+        -c "open -f $filename" \
+        -c "pwrite -qW  0 $FILE_DATA_SIZE" \
+        -c "truncate 0" \
+        -c "extsize $EXTSIZE" \
+
+    check_extsz_xflag_across_remount $filename $EXTSIZE
+    echo
+}
+
+test_truncate_delayed()
+{
+    echo "TEST: Set extsize after truncating a file with delayed allocation"
+    local filename=$1
+    $XFS_IO_PROG \
+        -c "open -f $filename" \
+        -c "pwrite -q  0 $FILE_DATA_SIZE" \
+        -c "truncate 0" \
+        -c "extsize $EXTSIZE" \
+
+    check_extsz_xflag_across_remount $filename $EXTSIZE
+    echo
+}
+
+setup
+echo -e "EXTSIZE = $EXTSIZE DEFAULT_EXTSIZE = $DEFAULT_EXTSIZE \
+	BLOCKSIZE = $BLKSZ\n" >> "$seqres.full"
+
+NEW_FILE_NAME_PREFIX=$SCRATCH_MNT/new-file-
+
+test_empty_file "$NEW_FILE_NAME_PREFIX"00
+test_data_delayed "$NEW_FILE_NAME_PREFIX"01
+test_data_allocated "$NEW_FILE_NAME_PREFIX"02
+test_truncate_allocated "$NEW_FILE_NAME_PREFIX"03
+test_truncate_delayed "$NEW_FILE_NAME_PREFIX"04
+
+status=0
+exit
