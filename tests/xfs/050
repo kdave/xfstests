@@ -115,6 +115,11 @@ _exercise()
 	echo
 	echo "*** push past the soft block limit" | tee -a $seqres.full
 	_file_as_id $SCRATCH_MNT/softie $id $type $bsize 300
+
+	# sync so that the data is actually allocated as soft limit timers
+	# are not started until block allocation is done. This means the test
+	# will work even if remount sliently fails due to busy mounts
+	_scratch_sync
 	_qmount
 	$XFS_QUOTA_PROG -D $tmp.projects -P $tmp.projid -x \
 		-c "repquota -birnN -$type" $SCRATCH_DEV |
