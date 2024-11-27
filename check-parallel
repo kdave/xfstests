@@ -1,0 +1,205 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Red Hat, Inc.  All Rights Reserved.
+#
+# Run all tests in parallel
+#
+# This is a massive resource bomb script. For every test, it creates a
+# pair of sparse loop devices for test and scratch devices, then mount points
+# for them and runs the test in the background. When it completes, it tears down
+# the loop devices.
+
+export SRC_DIR="tests"
+basedir=$1
+shift
+check_args="$*"
+runners=64
+runner_list=()
+runtimes=()
+
+
+# tests in auto group
+test_list=$(awk '/^[0-9].*auto/ { print "generic/" $1 }' tests/generic/group.list)
+test_list+=$(awk '/^[0-9].*auto/ { print "xfs/" $1 }' tests/xfs/group.list)
+
+# grab all previously run tests and order them from highest runtime to lowest
+# We are going to try to run the longer tests first, hopefully so we can avoid
+# massive thundering herds trying to run lots of really short tests in parallel
+# right off the bat. This will also tend to vary the order of tests from run to
+# run somewhat.
+#
+# If we have tests in the test list that don't have runtimes recorded, then
+# append them to be run last.
+
+build_runner_list()
+{
+	local runtimes
+	local run_list=()
+	local prev_results=`ls -tr $basedir/runner-0/ | grep results | tail -1`
+
+	runtimes=$(cat $basedir/*/$prev_results/check.time | sort -k 2 -nr | cut -d " " -f 1)
+
+	# Iterate the timed list first. For every timed list entry that
+	# is found in the test_list, add it to the local runner list.
+	local -a _list=( $runtimes )
+	local -a _tlist=( $test_list )
+	local rx=0
+	local ix
+	local jx
+	#set -x
+	for ((ix = 0; ix < ${#_list[*]}; ix++)); do
+		echo $test_list | grep -q ${_list[$ix]}
+		if [ $? == 0 ]; then
+			# add the test to the new run list and remove
+			# it from the remaining test list.
+			run_list[rx++]=${_list[$ix]}
+			_tlist=( ${_tlist[*]/${_list[$ix]}/} )
+		fi
+
+	done
+
+	# The final test list is all the time ordered tests followed by
+	# all the tests we didn't find time records for.
+	test_list="${run_list[*]} ${_tlist[*]}"
+}
+
+if [ -f $basedir/runner-0/results/check.time ]; then
+	build_runner_list
+fi
+
+# split the list amongst N runners
+
+split_runner_list()
+{
+	local ix
+	local rx
+	local -a _list=( $test_list )
+	for ((ix = 0; ix < ${#_list[*]}; ix++)); do
+		seq="${_list[$ix]}"
+		rx=$((ix % $runners))
+		runner_list[$rx]+="${_list[$ix]} "
+		#echo $seq
+	done
+}
+
+_create_loop_device()
+{
+        local file=$1 dev
+
+        dev=`losetup -f --show $file` || _fail "Cannot assign $file to a loop device"
+
+	# Using buffered IO for the loop devices seems to run quite a bit
+	# faster.  There are a lot of tests that hit the same regions of the
+	# filesystems, so avoiding read IO seems to really help. Results can
+	# vary, though, because many tests drop all caches unconditionally.
+	# Uncomment to use AIO+DIO loop devices instead.
+	#test -b "$dev" && losetup --direct-io=on $dev 2> /dev/null
+
+        echo $dev
+}
+
+_destroy_loop_device()
+{
+        local dev=$1
+	blockdev --flushbufs $dev
+	umount $dev > /dev/null 2>&1
+        losetup -d $dev || _fail "Cannot destroy loop device $dev"
+}
+
+runner_go()
+{
+	local id=$1
+	local me=$basedir/runner-$id
+	local _test=$me/test.img
+	local _scratch=$me/scratch.img
+	local _results=$me/results-$2
+
+	mkdir -p $me
+
+	xfs_io -f -c 'truncate 2g' $_test
+	xfs_io -f -c 'truncate 8g' $_scratch
+
+	mkfs.xfs -f $_test > /dev/null 2>&1
+
+	export TEST_DEV=$(_create_loop_device $_test)
+	export TEST_DIR=$me/test
+	export SCRATCH_DEV=$(_create_loop_device $_scratch)
+	export SCRATCH_MNT=$me/scratch
+	export FSTYP=xfs
+	export RESULT_BASE=$_results
+
+	mkdir -p $TEST_DIR
+	mkdir -p $SCRATCH_MNT
+	mkdir -p $RESULT_BASE
+	rm -f $RESULT_BASE/check.*
+
+#	export DUMP_CORRUPT_FS=1
+
+	# Run the tests in it's own mount namespace, as per the comment below
+	# that precedes making the basedir a private mount.
+	./src/nsexec -m ./check $check_args -x unreliable_in_parallel --exact-order ${runner_list[$id]} > $me/log 2>&1
+
+	wait
+	sleep 1
+	umount -R $TEST_DIR 2> /dev/null
+	umount -R $SCRATCH_MNT 2> /dev/null
+	_destroy_loop_device $TEST_DEV
+	_destroy_loop_device $SCRATCH_DEV
+
+	grep -q Failures: $me/log
+	if [ $? -eq 0 ]; then
+		echo -n "Runner $id Failures: "
+		grep Failures: $me/log | uniq | sed -e "s/^.*Failures://"
+	fi
+
+}
+
+cleanup()
+{
+	killall -INT -q check
+	wait
+	umount -R $basedir/*/test 2> /dev/null
+	umount -R $basedir/*/scratch 2> /dev/null
+	losetup --detach-all
+}
+
+trap "cleanup; exit" HUP INT QUIT TERM
+
+
+# Each parallel test runner needs to only see it's own mount points. If we
+# leave the basedir as shared, then all tests see all mounts and then we get
+# mount propagation issues cropping up. For example, cloning a new mount
+# namespace will take a reference to all visible shared mounts and hold them
+# while the mount names space is active. This can cause unmount in the test that
+# controls the mount to succeed without actually unmounting the filesytsem
+# because a mount namespace still holds a reference to it. This causes other
+# operations on the block device to fail as it is still busy (e.g. fsck, mkfs,
+# etc). Hence we make the basedir private here and then run each check instance
+# in it's own mount namespace so that they cannot see mounts that other tests
+# are performing.
+mount --make-private $basedir
+split_runner_list
+now=`date +%Y-%m-%d-%H:%M:%S`
+for ((i = 0; i < $runners; i++)); do
+
+	runner_go $i $now &
+
+done;
+wait
+
+echo -n "Tests run: "
+grep Ran /mnt/xfs/*/log | sed -e 's,^.*:,,' -e 's, ,\n,g' | sort | uniq | wc -l
+
+echo -n "Failure count: "
+grep Failures: $basedir/*/log | uniq | sed -e "s/^.*Failures://" -e "s,\([0-9]\) \([gx]\),\1\n \2,g" |wc -l
+echo
+
+echo Ten slowest tests - runtime in seconds:
+cat $basedir/*/results/check.time | sort -k 2 -nr | head -10
+
+echo
+echo Cleanup on Aisle 5?
+echo
+losetup --list
+ls -l /dev/mapper
+df -h |grep xfs
