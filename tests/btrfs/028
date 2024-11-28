@@ -13,6 +13,19 @@
 . ./common/preamble
 _begin_fstest auto qgroup balance
 
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	if [ ! -z "$balance_pid" ]; then
+		_btrfs_kill_stress_balance_pid $balance_pid
+	fi
+	if [ ! -z "$fsstress_pid" ]; then
+		kill $fsstress_pid &> /dev/null
+		wait $fsstress_pid &> /dev/null
+	fi
+}
+
 . ./common/filter
 
 _require_scratch
@@ -44,6 +57,7 @@ sleep $((30*$TIME_FACTOR))
 kill $fsstress_pid &> /dev/null
 wait $fsstress_pid &> /dev/null
 _btrfs_kill_stress_balance_pid $balance_pid
+unset fsstress_pid balance_pid
 
 # The qgroups accounting will be checked by 'btrfs check' (fsck) after the
 # fstests framework unmounts the filesystem.
