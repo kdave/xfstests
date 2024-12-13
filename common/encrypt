@@ -152,6 +152,42 @@ _require_encryption_policy_support()
 	rm -r $dir
 }
 
+# Require that the scratch filesystem accepts the "inlinecrypt" mount option.
+#
+# This does not check whether the scratch block device has any specific inline
+# encryption capabilities.
+_require_scratch_inlinecrypt()
+{
+	_require_scratch
+	_scratch_mkfs &>> $seqres.full
+	if ! _try_scratch_mount -o inlinecrypt &>> $seqres.full; then
+		_notrun "filesystem doesn't support -o inlinecrypt"
+	fi
+}
+
+# Require that the given block device supports hardware-wrapped inline
+# encryption keys, and require that a command-line tool that supports
+# importing/generating/preparing them is available.
+_require_hw_wrapped_key_support()
+{
+	local dev=$1
+
+	echo "Checking for HW-wrapped key support on $dev" >> $seqres.full
+	local sysfs_dir=$(_sysfs_dev $dev)
+	if [ ! -e $sysfs_dir/queue ]; then
+		sysfs_dir=$sysfs_dir/..
+	fi
+	if [ ! -e $sysfs_dir/queue/crypto/hw_wrapped_keys ]; then
+		_notrun "$dev doesn't support hardware-wrapped inline encryption keys"
+	fi
+
+	echo "Checking for fscryptctl support for HW-wrapped keys" >> $seqres.full
+	_require_command "$FSCRYPTCTL_PROG" fscryptctl
+	if ! "$FSCRYPTCTL_PROG" --help | grep -q "import_hw_wrapped_key"; then
+		_notrun "fscryptctl too old; doesn't support hardware-wrapped inline encryption keys"
+	fi
+}
+
 _scratch_mkfs_encrypted()
 {
 	case $FSTYP in
@@ -251,13 +287,16 @@ _generate_key_descriptor()
 # Generate a raw encryption key, but don't add it to any keyring yet.
 _generate_raw_encryption_key()
 {
+	local size=${1:-64}
 	local raw=""
 	local i
-	for ((i = 0; i < 64; i++)); do
+	for ((i = 0; i < $size; i++)); do
 		raw="${raw}\\x$(printf "%02x" $(( $RANDOM % 256 )))"
 	done
 	echo $raw
 }
+
+RAW_HW_KEY_SIZE=32
 
 # Serialize an integer into a CPU-endian bytestring of the given length, and
 # print it as a string where each byte is hex-escaped.  For example,
@@ -405,6 +444,21 @@ _add_enckey()
 	shift 2
 
 	echo -ne "$raw_key" | $XFS_IO_PROG -c "add_enckey $*" "$mnt"
+}
+
+# Create a hardware-wrapped key from the given raw key using the given block
+# device, add it to the given filesystem, and print the resulting key
+# identifier.
+_add_hw_wrapped_key()
+{
+	local dev=$1
+	local mnt=$2
+	local raw_key=$3
+
+	echo -ne "$raw_key" | \
+		$FSCRYPTCTL_PROG import_hw_wrapped_key "$dev" | \
+		$FSCRYPTCTL_PROG prepare_hw_wrapped_key "$dev" | \
+		$FSCRYPTCTL_PROG add_key --hw-wrapped-key "$mnt"
 }
 
 _user_do_add_enckey()
@@ -853,6 +907,7 @@ _fscrypt_mode_name_to_num()
 #	'iv_ino_lblk_64':	test the IV_INO_LBLK_64 policy flag
 #	'iv_ino_lblk_32':	test the IV_INO_LBLK_32 policy flag
 #	'log2_dusize=N':        test the log2_data_unit_size field
+#	'hw_wrapped_key':	use a hardware-wrapped inline encryption key
 #
 _verify_ciphertext_for_encryption_policy()
 {
@@ -862,6 +917,7 @@ _verify_ciphertext_for_encryption_policy()
 	local policy_version=1
 	local policy_flags=0
 	local log2_dusize=0
+	local hw_wrapped_key=false
 	local set_encpolicy_args=""
 	local crypt_util_args=""
 	local crypt_util_contents_args=""
@@ -889,6 +945,11 @@ _verify_ciphertext_for_encryption_policy()
 			;;
 		log2_dusize=*)
 			log2_dusize=$(echo "$opt" | sed 's/^log2_dusize=//')
+			;;
+		hw_wrapped_key)
+			hw_wrapped_key=true
+			crypt_util_args+=" --enable-hw-kdf"
+			crypt_util_contents_args+=" --use-inlinecrypt-key"
 			;;
 		*)
 			_fail "Unknown option '$opt' passed to ${FUNCNAME[0]}"
@@ -929,6 +990,9 @@ _verify_ciphertext_for_encryption_policy()
 	set_encpolicy_args=${set_encpolicy_args# }
 
 	_require_scratch_encryption $set_encpolicy_args -f $policy_flags
+	if $hw_wrapped_key; then
+		_require_hw_wrapped_key_support $SCRATCH_DEV
+	fi
 	_require_test_program "fscrypt-crypt-util"
 	_require_xfs_io_command "fiemap"
 	_require_get_encryption_nonce_support
@@ -958,11 +1022,19 @@ _verify_ciphertext_for_encryption_policy()
 	crypt_util_filename_args+="$crypt_util_args"
 
 	echo "Generating encryption key" >> $seqres.full
-	local raw_key=$(_generate_raw_encryption_key)
 	if (( policy_version > 1 )); then
-		local keyspec=$(_add_enckey $SCRATCH_MNT "$raw_key" \
-				| awk '{print $NF}')
+		if $hw_wrapped_key; then
+			local raw_key=$(_generate_raw_encryption_key \
+					$RAW_HW_KEY_SIZE)
+			local keyspec=$(_add_hw_wrapped_key $SCRATCH_DEV \
+					$SCRATCH_MNT "$raw_key")
+		else
+			local raw_key=$(_generate_raw_encryption_key)
+			local keyspec=$(_add_enckey $SCRATCH_MNT "$raw_key" | \
+					awk '{print $NF}')
+		fi
 	else
+		local raw_key=$(_generate_raw_encryption_key)
 		local keyspec=$(_generate_key_descriptor)
 		_init_session_keyring
 		_add_session_encryption_key $keyspec $raw_key
