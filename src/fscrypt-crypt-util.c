@@ -70,6 +70,10 @@ static void usage(FILE *fp)
 "                                nonce and the same key is shared across files.\n"
 "  --dump-key-identifier       Instead of encrypting/decrypting data, just\n"
 "                                compute and dump the key identifier.\n"
+"  --enable-hw-kdf             Apply the hardware KDF (replicated in software)\n"
+"                                to the key before using it.  Use this to\n"
+"                                replicate the en/decryption that is done when\n"
+"                                the filesystem is given a hardware-wrapped key.\n"
 "  --file-nonce=NONCE          File's nonce as a 32-character hex string\n"
 "  --fs-uuid=UUID              The filesystem UUID as a 32-character hex string.\n"
 "                                Required for --iv-ino-lblk-32 and\n"
@@ -88,6 +92,10 @@ static void usage(FILE *fp)
 "                                for key derivation, depending on other options.\n"
 "  --padding=PADDING           If last data unit is partial, zero-pad it to next\n"
 "                                PADDING-byte boundary.  Default: DUSIZE\n"
+"  --use-inlinecrypt-key       In combination with --enable-hw-kdf, this causes\n"
+"                                the en/decryption to be done with the \"inline\n"
+"                                encryption key\" rather than with a key derived\n"
+"                                from the \"software secret\".\n"
 	, fp);
 }
 
@@ -349,6 +357,11 @@ typedef struct {
 	__le64 hi;
 } ble128;
 
+typedef struct {
+	__be64 hi;
+	__be64 lo;
+} bbe128;
+
 /* Multiply a GF(2^128) element by the polynomial 'x' */
 static inline void gf2_128_mul_x_xts(ble128 *t)
 {
@@ -368,6 +381,15 @@ static inline void gf2_128_mul_x_polyval(ble128 *t)
 
 	t->hi = cpu_to_le64(((hi << 1) | (lo >> 63)) ^ hi_reducer);
 	t->lo = cpu_to_le64((lo << 1) ^ lo_reducer);
+}
+
+static inline void gf2_128_mul_x_cmac(bbe128 *t)
+{
+	u64 lo = be64_to_cpu(t->lo);
+	u64 hi = be64_to_cpu(t->hi);
+
+	t->hi = cpu_to_be64((hi << 1) | (lo >> 63));
+	t->lo = cpu_to_be64((lo << 1) ^ ((hi & (1ULL << 63)) ? 0x87 : 0));
 }
 
 static void gf2_128_mul_polyval(ble128 *r, const ble128 *b)
@@ -1496,6 +1518,67 @@ static void test_aes_256_hctr2(void)
 }
 #endif /* ENABLE_ALG_TESTS */
 
+static void aes_256_cmac(const u8 key[AES_256_KEY_SIZE],
+			 const u8 *msg, size_t msglen, u8 mac[AES_BLOCK_SIZE])
+{
+	const size_t partial = msglen % AES_BLOCK_SIZE;
+	const size_t full_blocks = msglen ? (msglen - 1) / AES_BLOCK_SIZE : 0;
+	struct aes_key k;
+	bbe128 subkey;
+	size_t i;
+
+	aes_setkey(&k, key, AES_256_KEY_SIZE);
+	memset(&subkey, 0, sizeof(subkey));
+	aes_encrypt(&k, (u8 *)&subkey, (u8 *)&subkey);
+	gf2_128_mul_x_cmac(&subkey);
+
+	memset(mac, 0, AES_BLOCK_SIZE);
+	for (i = 0; i < full_blocks * AES_BLOCK_SIZE; i += AES_BLOCK_SIZE) {
+		xor(mac, mac, &msg[i], AES_BLOCK_SIZE);
+		aes_encrypt(&k, mac, mac);
+	}
+	xor(mac, mac, &msg[i], msglen - i);
+	if (partial != 0 || msglen == 0) {
+		mac[msglen - i] ^= 0x80;
+		gf2_128_mul_x_cmac(&subkey);
+	}
+	xor(mac, mac, (u8 *)&subkey, AES_BLOCK_SIZE);
+	aes_encrypt(&k, mac, mac);
+}
+
+#ifdef ENABLE_ALG_TESTS
+#include <openssl/cmac.h>
+static void test_aes_256_cmac(void)
+{
+	unsigned long num_tests = NUM_ALG_TEST_ITERATIONS;
+	CMAC_CTX *ctx = CMAC_CTX_new();
+
+	ASSERT(ctx != NULL);
+	while (num_tests--) {
+		u8 key[AES_256_KEY_SIZE];
+		u8 msg[128];
+		u8 mac[AES_BLOCK_SIZE];
+		u8 ref_mac[sizeof(mac)];
+		const size_t msglen = 1 + (rand() % sizeof(msg));
+		size_t out_len = 0;
+
+		rand_bytes(key, sizeof(key));
+		rand_bytes(msg, msglen);
+
+		aes_256_cmac(key, msg, msglen, mac);
+
+		ASSERT(ctx != NULL);
+		ASSERT(CMAC_Init(ctx, key, sizeof(key), EVP_aes_256_cbc(),
+				 NULL) == 1);
+		ASSERT(CMAC_Update(ctx, msg, msglen) == 1);
+		ASSERT(CMAC_Final(ctx, ref_mac, &out_len));
+		ASSERT(out_len == sizeof(mac));
+		ASSERT(memcmp(mac, ref_mac, sizeof(mac)) == 0);
+	}
+	CMAC_CTX_free(ctx);
+}
+#endif /* ENABLE_ALG_TESTS */
+
 /*----------------------------------------------------------------------------*
  *                           XChaCha12 stream cipher                          *
  *----------------------------------------------------------------------------*/
@@ -2062,9 +2145,17 @@ static u8 parse_mode_number(const char *arg)
 }
 
 struct key_and_iv_params {
+	/*
+	 * If enable_hw_kdf=true, then master_key and sw_secret will differ.
+	 * Otherwise they will be the same.
+	 */
 	u8 master_key[MAX_KEY_SIZE];
 	int master_key_size;
+	u8 sw_secret[MAX_KEY_SIZE];
+	int sw_secret_size;
 	enum kdf_algorithm kdf;
+	bool enable_hw_kdf;
+	bool use_inlinecrypt_key;
 	u8 mode_num;
 	u8 file_nonce[FILE_NONCE_SIZE];
 	bool file_nonce_specified;
@@ -2077,13 +2168,14 @@ struct key_and_iv_params {
 	bool fs_uuid_specified;
 };
 
-#define HKDF_CONTEXT_KEY_IDENTIFIER	1
+#define HKDF_CONTEXT_KEY_IDENTIFIER_FOR_RAW_KEY 1
 #define HKDF_CONTEXT_PER_FILE_ENC_KEY	2
 #define HKDF_CONTEXT_DIRECT_KEY		3
 #define HKDF_CONTEXT_IV_INO_LBLK_64_KEY	4
 #define HKDF_CONTEXT_DIRHASH_KEY	5
 #define HKDF_CONTEXT_IV_INO_LBLK_32_KEY	6
 #define HKDF_CONTEXT_INODE_HASH_KEY	7
+#define HKDF_CONTEXT_KEY_IDENTIFIER_FOR_HW_WRAPPED_KEY 8
 
 /* Hash the file's inode number using SipHash keyed by a derived key */
 static u32 hash_inode_number(const struct key_and_iv_params *params)
@@ -2098,7 +2190,7 @@ static u32 hash_inode_number(const struct key_and_iv_params *params)
 
 	if (params->kdf != KDF_HKDF_SHA512)
 		die("--iv-ino-lblk-32 requires --kdf=HKDF-SHA512");
-	hkdf_sha512(params->master_key, params->master_key_size,
+	hkdf_sha512(params->sw_secret, params->sw_secret_size,
 		    NULL, 0, info, sizeof(info),
 		    hash_key.bytes, sizeof(hash_key));
 
@@ -2106,6 +2198,102 @@ static u32 hash_inode_number(const struct key_and_iv_params *params)
 	hash_key.words[1] = get_unaligned_le64(&hash_key.bytes[8]);
 
 	return (u32)siphash_1u64(hash_key.words, params->inode_number);
+}
+
+/*
+ * Replicate the hardware KDF, given the raw master key and the context
+ * indicating which type of key to derive.
+ *
+ * Detailed explanation:
+ *
+ * With hardware-wrapped keys, an extra level is inserted into fscrypt's key
+ * hierarchy, above what was previously the root:
+ *
+ *                           master_key
+ *                               |
+ *                         -------------
+ *                         |            |
+ *                         |            |
+ *                inlinecrypt_key    sw_secret
+ *                                      |
+ *                                      |
+ *                                (everything else)
+ *
+ * From the master key, the "inline encryption key" (inlinecrypt_key) and
+ * "software secret" (sw_secret) are derived.  The inlinecrypt_key is used to
+ * encrypt file contents.  The sw_secret is used just like the old master key,
+ * except that it isn't used to derive the file contents key.  (I.e., it's used
+ * to derive filenames encryption keys, key identifiers, inode hash keys, etc.)
+ *
+ * Normally, software only sees master_key in "wrapped" form, and can never see
+ * inlinecrypt_key at all.  Only specialized hardware can access the raw
+ * master_key to derive the subkeys, in a step we call the "HW KDF".
+ *
+ * However, the HW KDF is a well-specified algorithm, and when a
+ * hardware-wrapped key is initially created, software can choose to import a
+ * raw key.  This allows software to test the feature by replicating the HW KDF.
+ *
+ * This is what this function does; it will derive either the inlinecrypt_key
+ * key or the sw_secret, depending on the KDF context passed.
+ */
+static void hw_kdf(const u8 *master_key, size_t master_key_size,
+		   const u8 *ctx, size_t ctx_size,
+		   u8 *derived_key, size_t derived_key_size)
+{
+	static const u8 label[11] = "\0\0\x40\0\0\0\0\0\0\0\x20";
+	u8 info[128];
+	size_t i;
+
+	if (master_key_size != AES_256_KEY_SIZE)
+		die("--hw-kdf requires a 32-byte master key");
+	ASSERT(derived_key_size % AES_BLOCK_SIZE == 0);
+
+	/*
+	 * This is NIST SP 800-108 "KDF in Counter Mode" with AES-256-CMAC as
+	 * the PRF and a particular choice of labels and contexts.
+	 */
+	for (i = 0; i < derived_key_size; i += AES_BLOCK_SIZE) {
+		u8 *p = info;
+
+		ASSERT(sizeof(__be32) + sizeof(label) + 1 + ctx_size +
+		       sizeof(__be32) <= sizeof(info));
+
+		put_unaligned_be32(1 + (i / AES_BLOCK_SIZE), p);
+		p += sizeof(__be32);
+		memcpy(p, label, sizeof(label));
+		p += sizeof(label);
+		*p++ = 0;
+		memcpy(p, ctx, ctx_size);
+		p += ctx_size;
+		put_unaligned_be32(derived_key_size * 8, p);
+		p += sizeof(__be32);
+
+		aes_256_cmac(master_key, info, p - info, &derived_key[i]);
+	}
+}
+
+#define INLINECRYPT_KEY_SIZE 64
+#define SW_SECRET_SIZE 32
+
+static void derive_inline_encryption_key(const u8 *master_key,
+					 size_t master_key_size,
+					 u8 inlinecrypt_key[INLINECRYPT_KEY_SIZE])
+{
+	static const u8 ctx[36] =
+		"inline encryption key\0\0\0\0\0\0\x03\x43\0\x82\x50\0\0\0\0";
+
+	hw_kdf(master_key, master_key_size, ctx, sizeof(ctx),
+	       inlinecrypt_key, INLINECRYPT_KEY_SIZE);
+}
+
+static void derive_sw_secret(const u8 *master_key, size_t master_key_size,
+			     u8 sw_secret[SW_SECRET_SIZE])
+{
+	static const u8 ctx[28] =
+		"raw secret\0\0\0\0\0\0\0\0\0\x03\x17\0\x80\x50\0\0\0\0";
+
+	hw_kdf(master_key, master_key_size, ctx, sizeof(ctx),
+	       sw_secret, SW_SECRET_SIZE);
 }
 
 static void derive_real_key(const struct key_and_iv_params *params,
@@ -2116,11 +2304,30 @@ static void derive_real_key(const struct key_and_iv_params *params,
 	size_t infolen = 8;
 	size_t i;
 
-	ASSERT(real_key_size <= params->master_key_size);
+	if (params->use_inlinecrypt_key) {
+		/*
+		 * With --use-inlinecrypt-key, we need to use the "hardware KDF"
+		 * rather than the normal fscrypt KDF.  Note that the fscrypt
+		 * KDF might still be used elsewhere, e.g. hash_inode_number()
+		 * -- it just won't be used for the actual encryption key.
+		 */
+		if (!params->enable_hw_kdf)
+			die("--use-inlinecrypt-key requires --enable-hw-kdf");
+		if (!params->iv_ino_lblk_64 && !params->iv_ino_lblk_32)
+			die("--use-inlinecrypt-key requires one of --iv-ino-lblk-{64,32}");
+		if (real_key_size != INLINECRYPT_KEY_SIZE)
+			die("cipher not compatible with --use-inlinecrypt-key");
+		derive_inline_encryption_key(params->master_key,
+					     params->master_key_size, real_key);
+		return;
+	}
+
+	if (params->sw_secret_size < real_key_size)
+		die("Master key is too short for cipher");
 
 	switch (params->kdf) {
 	case KDF_NONE:
-		memcpy(real_key, params->master_key, real_key_size);
+		memcpy(real_key, params->sw_secret, real_key_size);
 		break;
 	case KDF_AES_128_ECB:
 		if (!params->file_nonce_specified)
@@ -2129,7 +2336,7 @@ static void derive_real_key(const struct key_and_iv_params *params,
 		ASSERT(real_key_size % AES_BLOCK_SIZE == 0);
 		aes_setkey(&aes_key, params->file_nonce, AES_128_KEY_SIZE);
 		for (i = 0; i < real_key_size; i += AES_BLOCK_SIZE)
-			aes_encrypt(&aes_key, &params->master_key[i],
+			aes_encrypt(&aes_key, &params->sw_secret[i],
 				    &real_key[i]);
 		break;
 	case KDF_HKDF_SHA512:
@@ -2164,7 +2371,7 @@ static void derive_real_key(const struct key_and_iv_params *params,
 			       FILE_NONCE_SIZE);
 			infolen += FILE_NONCE_SIZE;
 		}
-		hkdf_sha512(params->master_key, params->master_key_size,
+		hkdf_sha512(params->sw_secret, params->sw_secret_size,
 			    NULL, 0, info, infolen, real_key, real_key_size);
 		break;
 	default:
@@ -2232,11 +2439,14 @@ static void do_dump_key_identifier(const struct key_and_iv_params *params)
 	u8 key_identifier[16];
 	int i;
 
-	info[8] = HKDF_CONTEXT_KEY_IDENTIFIER;
+	if (params->enable_hw_kdf)
+		info[8] = HKDF_CONTEXT_KEY_IDENTIFIER_FOR_HW_WRAPPED_KEY;
+	else
+		info[8] = HKDF_CONTEXT_KEY_IDENTIFIER_FOR_RAW_KEY;
 
 	if (params->kdf != KDF_HKDF_SHA512)
 		die("--dump-key-identifier requires --kdf=HKDF-SHA512");
-	hkdf_sha512(params->master_key, params->master_key_size,
+	hkdf_sha512(params->sw_secret, params->sw_secret_size,
 		    NULL, 0, info, sizeof(info),
 		    key_identifier, sizeof(key_identifier));
 
@@ -2250,6 +2460,17 @@ static void parse_master_key(const char *arg, struct key_and_iv_params *params)
 					  MAX_KEY_SIZE);
 	if (params->master_key_size < 0)
 		die("Invalid master_key: %s", arg);
+
+	/* Derive sw_secret from master_key, if needed. */
+	if (params->enable_hw_kdf) {
+		derive_sw_secret(params->master_key, params->master_key_size,
+				 params->sw_secret);
+		params->sw_secret_size = SW_SECRET_SIZE;
+	} else {
+		memcpy(params->sw_secret, params->master_key,
+		       params->master_key_size);
+		params->sw_secret_size = params->master_key_size;
+	}
 }
 
 enum {
@@ -2258,6 +2479,7 @@ enum {
 	OPT_DECRYPT,
 	OPT_DIRECT_KEY,
 	OPT_DUMP_KEY_IDENTIFIER,
+	OPT_ENABLE_HW_KDF,
 	OPT_FILE_NONCE,
 	OPT_FS_UUID,
 	OPT_HELP,
@@ -2267,6 +2489,7 @@ enum {
 	OPT_KDF,
 	OPT_MODE_NUM,
 	OPT_PADDING,
+	OPT_USE_INLINECRYPT_KEY,
 };
 
 static const struct option longopts[] = {
@@ -2275,6 +2498,7 @@ static const struct option longopts[] = {
 	{ "decrypt",         no_argument,       NULL, OPT_DECRYPT },
 	{ "direct-key",      no_argument,       NULL, OPT_DIRECT_KEY },
 	{ "dump-key-identifier", no_argument,   NULL, OPT_DUMP_KEY_IDENTIFIER },
+	{ "enable-hw-kdf",   no_argument,       NULL, OPT_ENABLE_HW_KDF },
 	{ "file-nonce",      required_argument, NULL, OPT_FILE_NONCE },
 	{ "fs-uuid",         required_argument, NULL, OPT_FS_UUID },
 	{ "help",            no_argument,       NULL, OPT_HELP },
@@ -2284,6 +2508,7 @@ static const struct option longopts[] = {
 	{ "kdf",             required_argument, NULL, OPT_KDF },
 	{ "mode-num",        required_argument, NULL, OPT_MODE_NUM },
 	{ "padding",         required_argument, NULL, OPT_PADDING },
+	{ "use-inlinecrypt-key", no_argument,   NULL, OPT_USE_INLINECRYPT_KEY },
 	{ NULL, 0, NULL, 0 },
 };
 
@@ -2310,6 +2535,7 @@ int main(int argc, char *argv[])
 	test_hkdf_sha512();
 	test_aes_256_xts();
 	test_aes_256_cts_cbc();
+	test_aes_256_cmac();
 	test_adiantum();
 	test_aes_256_hctr2();
 #endif
@@ -2336,6 +2562,9 @@ int main(int argc, char *argv[])
 			break;
 		case OPT_DUMP_KEY_IDENTIFIER:
 			dump_key_identifier = true;
+			break;
+		case OPT_ENABLE_HW_KDF:
+			params.enable_hw_kdf = true;
 			break;
 		case OPT_FILE_NONCE:
 			if (hex2bin(optarg, params.file_nonce, FILE_NONCE_SIZE)
@@ -2376,6 +2605,9 @@ int main(int argc, char *argv[])
 			    padding > INT_MAX)
 				die("Invalid padding amount: %s", optarg);
 			break;
+		case OPT_USE_INLINECRYPT_KEY:
+			params.use_inlinecrypt_key = true;
+			break;
 		default:
 			usage(stderr);
 			return 2;
@@ -2407,9 +2639,6 @@ int main(int argc, char *argv[])
 		    data_unit_size, cipher->name);
 
 	parse_master_key(argv[1], &params);
-
-	if (params.master_key_size < cipher->keysize)
-		die("Master key is too short for cipher %s", cipher->name);
 
 	get_key_and_iv(&params, real_key, cipher->keysize, &iv);
 
