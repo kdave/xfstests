@@ -1,0 +1,24 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright 2024 Google LLC
+#
+# FS QA Test No. 369
+#
+# Verify the ciphertext for encryption policies that use a hardware-wrapped
+# inline encryption key, the IV_INO_LBLK_32 flag, and AES-256-XTS.
+#
+. ./common/preamble
+_begin_fstest auto quick encrypt
+
+. ./common/filter
+. ./common/encrypt
+
+# Hardware-wrapped keys require the inlinecrypt mount option.
+_require_scratch_inlinecrypt
+export MOUNT_OPTIONS="$MOUNT_OPTIONS -o inlinecrypt"
+
+_verify_ciphertext_for_encryption_policy AES-256-XTS AES-256-CTS-CBC \
+	v2 iv_ino_lblk_32 hw_wrapped_key
+
+status=0
+exit
