@@ -1009,3 +1009,35 @@ _require_btrfs_raid_type()
 	_check_btrfs_raid_type $1 || \
 		_notrun "$1 isn't supported by the profile config or scratch device"
 }
+
+_require_btrfs_iouring_encoded_read()
+{
+	local fn
+	local tmpfile
+	local ret
+
+	_require_command src/btrfs_encoded_read
+
+	_scratch_mkfs &> /dev/null
+	_scratch_mount
+
+	fn=`mktemp -p $SCRATCH_MNT`
+	tmpfile=`mktemp`
+
+	src/btrfs_encoded_read io_uring $fn 0 > $tmpfile
+	ret=$?
+
+	_scratch_unmount
+
+	if [[ $ret -ne 0 ]]; then
+		rm $tmpfile
+		_fail "btrfs_encoded_read failed" >>$seqres.full
+	fi
+
+	read ret < $tmpfile
+	rm $tmpfile
+
+	if [[ $ret == -95 ]]; then
+		_notrun "btrfs io_uring encoded read failed with -EOPNOTSUPP"
+	fi
+}

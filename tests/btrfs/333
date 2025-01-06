@@ -1,0 +1,230 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Meta Platforms, Inc.  All Rights Reserved.
+#
+# FS QA Test No. btrfs/333
+#
+# Test btrfs encoded reads
+
+. ./common/preamble
+_begin_fstest auto quick compress rw io_uring ioctl
+
+. ./common/filter
+
+_require_command src/btrfs_encoded_read
+_require_command src/btrfs_encoded_write
+_require_btrfs_iouring_encoded_read
+
+do_encoded_read()
+{
+	local fn=$1
+	local type=$2
+	local exp_ret=$3
+	local exp_len=$4
+	local exp_unencoded_len=$5
+	local exp_unencoded_offset=$6
+	local exp_compression=$7
+	local exp_md5=$8
+
+	local tmpfile=`mktemp`
+
+	echo "running btrfs_encoded_read $type $fn 0 > $tmpfile" >>$seqres.full
+	src/btrfs_encoded_read $type $fn 0 > $tmpfile
+
+	if [[ $? -ne 0 ]]; then
+		echo "btrfs_encoded_read failed" >>$seqres.full
+		rm $tmpfile
+		return 1
+	fi
+
+	exec {FD}< $tmpfile
+
+	read -u ${FD} ret
+
+	if [[ $ret == -1 ]]; then
+	echo "btrfs encoded read failed with -EPERM; are you running as root?" \
+		>>$seqres.full
+		exec {FD}<&-
+		return 1
+	elif [[ $ret -lt 0 ]]; then
+		echo "btrfs encoded read failed (errno $ret)" >>$seqres.full
+		exec {FD}<&-
+		return 1
+	fi
+
+	local status=0
+
+	if [[ $ret -ne $exp_ret ]]; then
+	echo "$fn: btrfs encoded read returned $ret, expected $exp_ret" >> \
+		$seqres.full
+		status=1
+	fi
+
+	read -u ${FD} len
+	read -u ${FD} unencoded_len
+	read -u ${FD} unencoded_offset
+	read -u ${FD} compression
+	read -u ${FD} encryption
+
+	local filesize=`stat -c%s $tmpfile`
+	local datafile=`mktemp`
+
+	tail -c +$((1+$filesize-$ret)) $tmpfile > $datafile
+
+	exec {FD}<&-
+	rm $tmpfile
+
+	local md5=`md5sum $datafile | cut -d ' ' -f 1`
+	rm $datafile
+
+	if [[ $len -ne $exp_len ]]; then
+	echo "$fn: btrfs encoded read had len of $len, expected $exp_len" \
+		>>$seqres.full
+		status=1
+	fi
+
+	if [[ $unencoded_len -ne $exp_unencoded_len ]]; then
+echo "$fn: btrfs encoded read had unencoded_len of $unencoded_len, expected $exp_unencoded_len" \
+		>>$seqres.full
+		status=1
+	fi
+
+	if [[ $unencoded_offset -ne $exp_unencoded_offset ]]; then
+echo "$fn: btrfs encoded read had unencoded_offset of $unencoded_offset, expected $exp_unencoded_offset" \
+		>>$seqres.full
+		status=1
+	fi
+
+	if [[ $compression -ne $exp_compression ]]; then
+echo "$fn: btrfs encoded read had compression of $compression, expected $exp_compression" \
+		>>$seqres.full
+		status=1
+	fi
+
+	if [[ $encryption -ne 0 ]]; then
+echo "$fn: btrfs encoded read had encryption of $encryption, expected 0" \
+		>>$seqres.full
+		status=1
+	fi
+
+	if [[ $md5 != $exp_md5 ]]; then
+	echo "$fn: data returned had hash of $md5, expected $exp_md5" \
+		>>$seqres.full
+		status=1
+	fi
+
+	return $status
+}
+
+do_encoded_write()
+{
+	local fn=$1
+	local exp_ret=$2
+	local len=$3
+	local unencoded_len=$4
+	local unencoded_offset=$5
+	local compression=$6
+	local data_file=$7
+
+	local tmpfile=`mktemp`
+
+echo "running btrfs_encoded_write ioctl $fn 0 $len $unencoded_len $unencoded_offset $compression < $data_file > $tmpfile" \
+	>>$seqres.full
+	src/btrfs_encoded_write ioctl $fn 0 $len $unencoded_len \
+		$unencoded_offset $compression < $data_file > $tmpfile
+
+	if [[ $? -ne 0 ]]; then
+		echo "btrfs_encoded_write failed" >>$seqres.full
+		rm $tmpfile
+		return 1
+	fi
+
+	exec {FD}< $tmpfile
+
+	read -u ${FD} ret
+
+	if [[ $ret == -1 ]]; then
+echo "btrfs encoded write failed with -EPERM; are you running as root?" \
+		>>$seqres.full
+		exec {FD}<&-
+		return 1
+	elif [[ $ret -lt 0 ]]; then
+		echo "btrfs encoded write failed (errno $ret)" >>$seqres.full
+		exec {FD}<&-
+		return 1
+	fi
+
+	exec {FD}<&-
+	rm $tmpfile
+
+	return 0
+}
+
+test_file()
+{
+	local size=$1
+	local len=$2
+	local unencoded_len=$3
+	local unencoded_offset=$4
+	local compression=$5
+
+	local tmpfile=`mktemp -p $SCRATCH_MNT`
+	local randfile=`mktemp`
+
+	dd if=/dev/urandom of=$randfile bs=$size count=1 status=none
+	local md5=`md5sum $randfile | cut -d ' ' -f 1`
+
+	do_encoded_write $tmpfile $size $len $unencoded_len $unencoded_offset \
+		$compression $randfile \
+		|| _fail "encoded write ioctl failed"
+
+	rm $randfile
+
+	do_encoded_read $tmpfile ioctl $size $len $unencoded_len \
+		$unencoded_offset $compression $md5 \
+		|| _fail "encoded read ioctl failed"
+	do_encoded_read $tmpfile io_uring $size $len $unencoded_len \
+		$unencoded_offset $compression $md5 \
+		|| _fail "encoded read io_uring failed"
+
+	rm $tmpfile
+}
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+sector_size=$(_scratch_btrfs_sectorsize)
+
+# force max_inline to be the default of 2048, so that our inline test files
+# do actually get created inline
+_scratch_mount "-o max_inline=2048"
+
+if [[ $sector_size -eq 4096 ]]; then
+	test_file 40960 97966 98304 0 1 # zlib
+	test_file 40960 97966 98304 0 2 # zstd
+	test_file 40960 97966 98304 0 3 # lzo 4k
+	test_file 40960 97966 110592 4096 1 # bookended zlib
+	test_file 40960 97966 110592 4096 2 # bookended zstd
+	test_file 40960 97966 110592 4096 3 # bookended lzo 4k
+elif [[ $sector_size -eq 65536 ]]; then
+	test_file 65536 97966 131072 0 1 # zlib
+	test_file 65536 97966 131072 0 2 # zstd
+	test_file 65536 97966 131072 0 7 # lzo 64k
+	# can't test bookended extents on 64k, as max is only 2 sectors long
+else
+	_notrun "sector size $sector_size not supported by this test"
+fi
+
+# btrfs won't create inline files unless PAGE_SIZE == sector size
+if [[ "$(_get_page_size)" -eq $sector_size ]]; then
+	test_file 892 1931 1931 0 1 # inline zlib
+	test_file 892 1931 1931 0 2 # inline zstd
+
+	if [[ $sector_size -eq 4096 ]]; then
+		test_file 892 1931 1931 0 3 # inline lzo 4k
+	elif [[ $sector_size -eq 65536 ]]; then
+		test_file 892 1931 1931 0 7 # inline lzo 64k
+	fi
+fi
+
+echo Silence is golden
+status=0
+exit

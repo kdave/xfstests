@@ -76,6 +76,7 @@ LLDLIBS += -laio
 endif
 
 ifeq ($(HAVE_URING), true)
+LINUX_TARGETS += btrfs_encoded_read btrfs_encoded_write
 TARGETS += uring_read_fault
 LLDLIBS += -luring
 endif
