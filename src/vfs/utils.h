@@ -25,7 +25,7 @@
 #include <sys/capability.h>
 #endif
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 #include <liburing.h>
 #endif
 
@@ -349,11 +349,11 @@ static inline bool switch_fsids(uid_t fsuid, gid_t fsgid)
 	return true;
 }
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 extern int io_uring_openat_with_creds(struct io_uring *ring, int dfd,
 				      const char *path, int cred_id,
 				      bool with_link, int *ret_cqe);
-#endif /* HAVE_LIBURING_H */
+#endif /* HAVE_LIBURING */
 
 extern int chown_r(int fd, const char *path, uid_t uid, gid_t gid);
 extern int rm_r(int fd, const char *path);

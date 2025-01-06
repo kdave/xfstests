@@ -5,7 +5,7 @@
 
 . ./VERSION
 
-version=${PKG_MAJOR}.${PKG_MINOR}.${PKG_REVISION}
+version=${PACKAGE_MAJOR}.${PACKAGE_MINOR}.${PACKAGE_REVISION}
 date=`date +"%-d %B %Y"`
 
 echo "Cleaning up"

@@ -167,7 +167,7 @@ static int tmpfs_hardlink_from_idmapped_mount_in_userns(const struct vfstest_inf
 	return tmpfs_nested_mount_setup(info, tcore_hardlink_from_idmapped_mount_in_userns);
 }
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 static int tmpfs_io_uring_idmapped(const struct vfstest_info *info)
 {
 	return tmpfs_nested_mount_setup(info, tcore_io_uring_idmapped);
@@ -184,7 +184,7 @@ static int tmpfs_io_uring_idmapped_unmapped_userns(const struct vfstest_info *in
 {
 	return tmpfs_nested_mount_setup(info, tcore_io_uring_idmapped_unmapped_userns);
 }
-#endif /* HAVE_LIBURING_H */
+#endif /* HAVE_LIBURING */
 
 static int tmpfs_protected_symlinks_idmapped_mounts(const struct vfstest_info *info)
 {
@@ -272,7 +272,7 @@ static const struct test_struct t_tmpfs[] = {
 	{ tmpfs_hardlink_crossing_idmapped_mounts,				T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs cross idmapped mount hardlink",								},
 	{ tmpfs_hardlink_from_idmapped_mount,					T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs hardlinks from idmapped mounts",								},
 	{ tmpfs_hardlink_from_idmapped_mount_in_userns,				T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs hardlinks from idmapped mounts in user namespace",						},
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 	{ tmpfs_io_uring_idmapped,						T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs io_uring from idmapped mounts",								      },
 	{ tmpfs_io_uring_idmapped_userns,					T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs io_uring from idmapped mounts in user namespace",					      },
 	{ tmpfs_io_uring_idmapped_unmapped,					T_REQUIRE_USERNS | T_REQUIRE_IDMAPPED_MOUNTS,	"tmpfs io_uring from idmapped mounts with unmapped ids",					      },

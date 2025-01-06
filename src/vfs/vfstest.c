@@ -1222,7 +1222,7 @@ out:
 	return fret;
 }
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 static int io_uring(const struct vfstest_info *info)
 {
 	int fret = -1;
@@ -1495,7 +1495,7 @@ out_unmap:
 
 	return fret;
 }
-#endif /* HAVE_LIBURING_H */
+#endif /* HAVE_LIBURING */
 
 /* The following tests are concerned with setgid inheritance. These can be
  * filesystem type specific. For xfs, if a new file or directory or node is
@@ -2349,7 +2349,7 @@ static const struct option longopts[] = {
 static const struct test_struct t_basic[] = {
 	{ fscaps,							T_REQUIRE_USERNS,	"fscaps on regular mounts",									},
 	{ hardlink_crossing_mounts,					0,			"cross mount hardlink",										},
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 	{ io_uring,							0,			"io_uring",											},
 	{ io_uring_userns,						T_REQUIRE_USERNS,	"io_uring in user namespace",									},
 #endif

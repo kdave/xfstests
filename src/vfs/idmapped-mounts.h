@@ -30,7 +30,7 @@ int tcore_fscaps_idmapped_mounts_in_userns_separate_userns(const struct vfstest_
 int tcore_hardlink_crossing_idmapped_mounts(const struct vfstest_info *info);
 int tcore_hardlink_from_idmapped_mount(const struct vfstest_info *info);
 int tcore_hardlink_from_idmapped_mount_in_userns(const struct vfstest_info *info);
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 int tcore_io_uring_idmapped(const struct vfstest_info *info);
 int tcore_io_uring_idmapped_userns(const struct vfstest_info *info);
 int tcore_io_uring_idmapped_unmapped(const struct vfstest_info *info);

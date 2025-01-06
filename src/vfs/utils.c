@@ -502,7 +502,7 @@ out:
 	return fret;
 }
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 int io_uring_openat_with_creds(struct io_uring *ring, int dfd, const char *path,
 			       int cred_id, bool with_link, int *ret_cqe)
 {
@@ -555,7 +555,7 @@ int io_uring_openat_with_creds(struct io_uring *ring, int dfd, const char *path,
 out:
 	return ret;
 }
-#endif /* HAVE_LIBURING_H */
+#endif /* HAVE_LIBURING */
 
 /* caps_up - raise all permitted caps */
 int caps_up(void)

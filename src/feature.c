@@ -42,7 +42,7 @@
 #include <libaio.h>
 #endif
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 #include <liburing.h>
 #endif
 
@@ -227,7 +227,7 @@ check_aio_support(void)
 static int
 check_uring_support(void)
 {
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 	struct io_uring ring;
 	int err;
 

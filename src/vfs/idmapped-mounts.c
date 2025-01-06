@@ -2206,7 +2206,7 @@ out:
 }
 
 
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 int tcore_io_uring_idmapped(const struct vfstest_info *info)
 {
 	int fret = -1;
@@ -2743,7 +2743,7 @@ out_unmap:
 
 	return fret;
 }
-#endif /* HAVE_LIBURING_H */
+#endif /* HAVE_LIBURING */
 
 /* Validate that protected symlinks work correctly on idmapped mounts. */
 int tcore_protected_symlinks_idmapped_mounts(const struct vfstest_info *info)
@@ -8859,7 +8859,7 @@ static const struct test_struct t_idmapped_mounts[] = {
 	{ tcore_hardlink_crossing_idmapped_mounts,				true,	"cross idmapped mount hardlink",								},
 	{ tcore_hardlink_from_idmapped_mount,					true,	"hardlinks from idmapped mounts",								},
 	{ tcore_hardlink_from_idmapped_mount_in_userns,			true,	"hardlinks from idmapped mounts in user namespace",						},
-#ifdef HAVE_LIBURING_H
+#ifdef HAVE_LIBURING
 	{ tcore_io_uring_idmapped,						true,	"io_uring from idmapped mounts",								},
 	{ tcore_io_uring_idmapped_userns,					true,	"io_uring from idmapped mounts in user namespace",						},
 	{ tcore_io_uring_idmapped_unmapped,					true,	"io_uring from idmapped mounts with unmapped ids",						},
