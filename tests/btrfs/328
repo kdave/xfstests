@@ -1,0 +1,31 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 328
+#
+# Test that if we enable simple quotas on a filesystem and unmount it right
+# after without doing any other changes to the filesystem, we are able to mount
+# again the filesystem.
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+_fixed_by_kernel_commit f2363e6fcc79 \
+	"btrfs: fix transaction atomicity bug when enabling simple quotas"
+
+_require_scratch_enable_simple_quota
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+$BTRFS_UTIL_PROG quota enable --simple $SCRATCH_MNT
+
+# Without doing any other change to the filesystem, unmount it and mount it
+# again. This should work - we had a bug where it crashed due to an assertion
+# failure (when kernel config has CONFIG_BTRFS_ASSERT=y).
+_scratch_cycle_mount
+
+echo "Silence is golden"
+status=0
+exit
