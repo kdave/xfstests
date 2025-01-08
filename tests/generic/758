@@ -1,0 +1,68 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Huawei.  All Rights Reserved.
+#
+# FS QA Test No. 758
+#
+# Test mapped writes against zero-range to ensure we get the data
+# correctly written. This can expose data corruption bugs on filesystems
+# where the block size is smaller than the page size.
+#
+# (generic/567 is a similar test but for punch hole.)
+#
+. ./common/preamble
+_begin_fstest auto quick rw zero
+
+# Import common functions.
+. ./common/filter
+
+_require_scratch
+_require_xfs_io_command "fzero"
+
+verifyfile=$SCRATCH_MNT/verifyfile
+testfile=$SCRATCH_MNT/testfile
+
+pagesz=$(_get_page_size)
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+_dump_files()
+{
+	echo "---- testfile ----"
+	_hexdump $testfile
+	echo "---- verifyfile --"
+	_hexdump $verifyfile
+}
+
+# Build verify file, the data in this file should be consistent with
+# that in the test file.
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 $((pagesz * 3))" \
+		-c "pwrite -S 0x59 $((pagesz / 2)) $((pagesz * 2))" \
+		$verifyfile | _filter_xfs_io >> $seqres.full
+
+# Zero out straddling two pages to check that the mapped write after the
+# range-zeroing are correctly handled.
+$XFS_IO_PROG -t -f \
+	-c "pwrite -S 0x58 0 $((pagesz * 3))" \
+	-c "mmap -rw 0 $((pagesz * 3))" \
+	-c "mwrite -S 0x5a $((pagesz / 2)) $((pagesz * 2))" \
+	-c "fzero $((pagesz / 2)) $((pagesz * 2))" \
+	-c "mwrite -S 0x59 $((pagesz / 2)) $((pagesz * 2))" \
+	-c "close"      \
+$testfile | _filter_xfs_io >> $seqres.full
+
+echo "==== Pre-Remount ==="
+if ! cmp -s $testfile $verifyfile; then
+	echo "Data does not match pre-remount."
+	_dump_files
+fi
+_scratch_cycle_mount
+echo "==== Post-Remount =="
+if ! cmp -s $testfile $verifyfile; then
+	echo "Data does not match post-remount."
+	_dump_files
+fi
+
+status=0
+exit
