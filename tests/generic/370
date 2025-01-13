@@ -1,0 +1,109 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 370
+#
+# Test that we are able to create and activate a swap file on a file that used
+# to have its extents shared multiple times.
+#
+. ./common/preamble
+_begin_fstest auto quick clone swap
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	test -n "$swap_file" && swapoff $swap_file &> /dev/null
+}
+
+. ./common/reflink
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit 03018e5d8508 \
+    "btrfs: fix swap file activation failure due to extents that used to be shared"
+
+# Skip XFS for now because this exposes an issue that is hard to fix.
+# See the following threads for details about it:
+#
+# https://lore.kernel.org/linux-xfs/CAL3q7H7cURmnkJfUUx44HM3q=xKmqHb80eRdisErD_x8rU4+0Q@mail.gmail.com/
+# https://lore.kernel.org/fstests/dca49a16a7aacdab831b8895bdecbbb52c0e609c.1733928765.git.fdmanana@suse.com/
+#
+_supported_fs ^xfs
+
+_require_scratch_swapfile
+_require_scratch_reflink
+_require_cp_reflink
+
+run_test()
+{
+	local sync_after_add_reflinks=$1
+	local sync_after_remove_reflinks=$2
+	local first_swap_file="$SCRATCH_MNT/swap"
+	local swap_size=$(($(_get_page_size) * 32))
+	local num_clones=50
+	local swap_file="$SCRATCH_MNT/clone_${num_clones}"
+
+	_scratch_mkfs >> $seqres.full 2>&1 || _fail "failed to mkfs"
+	_scratch_mount
+
+	echo "Creating swap file..."
+	_format_swapfile $first_swap_file $swap_size >> $seqres.full
+
+	echo "Cloning swap file..."
+	# Create a large number of clones so that on btrfs we get external ref
+	# items in the extent tree and not just inline refs (33 is currently the
+	# treshold after which external refs are created).
+	for ((i = 1; i <= $num_clones; i++)); do
+		# Create the destination file and set +C (NOCOW) on it before
+		# copying into it with reflink. This is because when cp needs to
+		# create the destination file, it first copies/clones the data
+		# and then sets the +C attribute, and on btrfs we can't clone a
+		# NOCOW file into a COW file, both must be NOCOW or both COW.
+		touch $SCRATCH_MNT/clone_$i
+		# 0600 is required for swap files, do the same as _format_swapfile.
+		chmod 0600 $SCRATCH_MNT/clone_$i
+		$CHATTR_PROG +C $SCRATCH_MNT/clone_$i > /dev/null 2>&1
+		_cp_reflink $first_swap_file $SCRATCH_MNT/clone_$i
+	done
+
+	if [ $sync_after_add_reflinks -ne 0 ]; then
+		# Force a transaction commit on btrfs to flush all delayed
+		# references and commit the current transaction.
+		_scratch_sync
+	fi
+
+	echo "Deleting original file and all clones except the last..."
+	rm -f $first_swap_file
+	for ((i = 1; i < $num_clones; i++)); do
+		rm -f $SCRATCH_MNT/clone_$i
+	done
+
+	if [ $sync_after_remove_reflinks -ne 0 ]; then
+		# Force a transaction commit on btrfs to flush all delayed
+		# references and commit the current transaction.
+		_scratch_sync
+	fi
+
+	# Now use the last clone as a swap file.
+	echo "Activating swap file..."
+	_swapon_file $swap_file
+	swapoff $swap_file
+
+	_scratch_unmount
+}
+
+echo -e "\nTest without sync after creating and removing clones"
+run_test 0 0
+
+echo -e "\nTest with sync after creating clones"
+run_test 1 0
+
+echo -e "\nTest with sync after removing clones"
+run_test 0 1
+
+echo -e "\nTest with sync after creating and removing clones"
+run_test 1 1
+
+# success, all done
+status=0
+exit
