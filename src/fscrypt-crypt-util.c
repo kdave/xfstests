@@ -2280,7 +2280,7 @@ static void derive_inline_encryption_key(const u8 *master_key,
 					 u8 inlinecrypt_key[INLINECRYPT_KEY_SIZE])
 {
 	static const u8 ctx[36] =
-		"inline encryption key\0\0\0\0\0\0\x03\x43\0\x82\x50\0\0\0\0";
+		"inline encryption key\0\0\0\0\0\0\x02\x43\0\x82\x50\0\0\0\0";
 
 	hw_kdf(master_key, master_key_size, ctx, sizeof(ctx),
 	       inlinecrypt_key, INLINECRYPT_KEY_SIZE);
@@ -2290,7 +2290,7 @@ static void derive_sw_secret(const u8 *master_key, size_t master_key_size,
 			     u8 sw_secret[SW_SECRET_SIZE])
 {
 	static const u8 ctx[28] =
-		"raw secret\0\0\0\0\0\0\0\0\0\x03\x17\0\x80\x50\0\0\0\0";
+		"raw secret\0\0\0\0\0\0\0\0\0\x02\x17\0\x80\x50\0\0\0\0";
 
 	hw_kdf(master_key, master_key_size, ctx, sizeof(ctx),
 	       sw_secret, SW_SECRET_SIZE);
