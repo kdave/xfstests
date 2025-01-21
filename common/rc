@@ -3022,6 +3022,19 @@ _require_xfs_io_command()
 	fi
 }
 
+# check that the system supports transparent hugepages
+_require_thp()
+{
+	if [ ! -e /sys/kernel/mm/transparent_hugepage/enabled ]; then
+		_notrun "system doesn't support transparent hugepages"
+	fi
+
+	thp_status=$(cat /sys/kernel/mm/transparent_hugepage/enabled)
+	if [[ $thp_status == *"[never]"* ]]; then
+		_notrun "system doesn't have transparent hugepages enabled"
+	fi
+}
+
 # check that kernel and filesystem support direct I/O, and check if "$1" size
 # aligned (optional) is supported
 _require_odirect()
