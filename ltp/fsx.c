@@ -198,6 +198,16 @@ int	aio = 0;
 int	uring = 0;
 int	mark_nr = 0;
 int	dontcache_io = 1;
+int	hugepages = 0;                  /* -h flag */
+
+/* Stores info needed to periodically collapse hugepages */
+struct hugepages_collapse_info {
+	void *orig_good_buf;
+	long good_buf_size;
+	void *orig_temp_buf;
+	long temp_buf_size;
+};
+struct hugepages_collapse_info hugepages_info;
 
 int page_size;
 int page_mask;
@@ -2500,7 +2510,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dfknqxyzBEFHIJKLORWXZ0]\n\
+		"fsx [-dfhknqxyzBEFHIJKLORWXZ0]\n\
 	   [-b opnum] [-c Prob] [-g filldata] [-i logdev] [-j logid]\n\
 	   [-l flen] [-m start:end] [-o oplen] [-p progressinterval]\n\
 	   [-r readbdy] [-s style] [-t truncbdy] [-w writebdy]\n\
@@ -2512,8 +2522,11 @@ usage(void)
 	-d: debug output for all operations\n\
 	-e: pollute post-eof on size changes (default 0)\n\
 	-f: flush and invalidate cache after I/O\n\
-	-g X: write character X instead of random generated data\n\
-	-i logdev: do integrity testing, logdev is the dm log writes device\n\
+	-g X: write character X instead of random generated data\n"
+#ifdef MADV_COLLAPSE
+"	-h hugepages: use buffers backed by hugepages for reads/writes\n"
+#endif
+"	-i logdev: do integrity testing, logdev is the dm log writes device\n\
 	-j logid: prefix debug log messsages with this id\n\
 	-k: do not truncate existing file and use its size as upper bound on file size\n\
 	-l flen: the upper bound on file size (default 262144)\n\
@@ -2866,10 +2879,40 @@ __test_fallocate(int mode, const char *mode_str)
 #endif
 }
 
+/*
+ * Reclaim may break up hugepages, so do a best-effort collapse every once in
+ * a while.
+ */
+static void
+collapse_hugepages(void)
+{
+#ifdef MADV_COLLAPSE
+	int ret;
+
+	/* re-collapse every 16k fsxops after we start */
+	if (!numops || (numops & ((1U << 14) - 1)))
+		return;
+
+	ret = madvise(hugepages_info.orig_good_buf,
+		      hugepages_info.good_buf_size, MADV_COLLAPSE);
+	if (ret)
+		prt("collapsing hugepages for good_buf failed (numops=%llu): %s\n",
+		     numops, strerror(errno));
+	ret = madvise(hugepages_info.orig_temp_buf,
+		      hugepages_info.temp_buf_size, MADV_COLLAPSE);
+	if (ret)
+		prt("collapsing hugepages for temp_buf failed (numops=%llu): %s\n",
+		     numops, strerror(errno));
+#endif
+}
+
 bool
 keep_running(void)
 {
 	int ret;
+
+	if (hugepages)
+	        collapse_hugepages();
 
 	if (deadline.tv_nsec) {
 		struct timespec now;
@@ -2887,6 +2930,103 @@ keep_running(void)
 		return true;
 
 	return numops-- != 0;
+}
+
+static long
+get_hugepage_size(void)
+{
+	const char str[] = "Hugepagesize:";
+	size_t str_len =  sizeof(str) - 1;
+	unsigned int hugepage_size = 0;
+	char buffer[64];
+	FILE *file;
+
+	file = fopen("/proc/meminfo", "r");
+	if (!file) {
+		prterr("get_hugepage_size: fopen /proc/meminfo");
+		return -1;
+	}
+	while (fgets(buffer, sizeof(buffer), file)) {
+		if (strncmp(buffer, str, str_len) == 0) {
+			sscanf(buffer + str_len, "%u", &hugepage_size);
+			break;
+		}
+	}
+	fclose(file);
+	if (!hugepage_size) {
+		prterr("get_hugepage_size: failed to find "
+			"hugepage size in /proc/meminfo\n");
+		return -1;
+	}
+
+	/* convert from KiB to bytes */
+	return hugepage_size << 10;
+}
+
+static void *
+init_hugepages_buf(unsigned len, int hugepage_size, int alignment, long *buf_size)
+{
+	void *buf = NULL;
+#ifdef MADV_COLLAPSE
+	int ret;
+	long size = roundup(len, hugepage_size) + alignment;
+
+	ret = posix_memalign(&buf, hugepage_size, size);
+	if (ret) {
+		prterr("posix_memalign for buf");
+		return NULL;
+	}
+	memset(buf, '\0', size);
+	ret = madvise(buf, size, MADV_COLLAPSE);
+	if (ret) {
+		prterr("madvise collapse for buf");
+		free(buf);
+		return NULL;
+	}
+
+	*buf_size = size;
+#endif
+	return buf;
+}
+
+static void
+init_buffers(void)
+{
+	int i;
+
+	original_buf = (char *) malloc(maxfilelen);
+	for (i = 0; i < maxfilelen; i++)
+		original_buf[i] = random() % 256;
+	if (hugepages) {
+		long hugepage_size = get_hugepage_size();
+		if (hugepage_size == -1) {
+			prterr("get_hugepage_size()");
+			exit(102);
+		}
+		good_buf = init_hugepages_buf(maxfilelen, hugepage_size, writebdy,
+					      &hugepages_info.good_buf_size);
+		if (!good_buf) {
+			prterr("init_hugepages_buf failed for good_buf");
+			exit(103);
+		}
+		hugepages_info.orig_good_buf = good_buf;
+
+		temp_buf = init_hugepages_buf(maxoplen, hugepage_size, readbdy,
+					      &hugepages_info.temp_buf_size);
+		if (!temp_buf) {
+			prterr("init_hugepages_buf failed for temp_buf");
+			exit(103);
+		}
+		hugepages_info.orig_temp_buf = temp_buf;
+	} else {
+		unsigned long good_buf_len = maxfilelen + writebdy;
+		unsigned long temp_buf_len = maxoplen + readbdy;
+
+		good_buf = calloc(1, good_buf_len);
+		temp_buf = calloc(1, temp_buf_len);
+	}
+	good_buf = round_ptr_up(good_buf, writebdy, 0);
+	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
 }
 
 static struct option longopts[] = {
@@ -2916,7 +3056,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "0b:c:de:fg:i:j:kl:m:no:p:qr:s:t:uw:xyABD:EFJKHzCILN:OP:RS:UWXZ",
+				 "0b:c:de:fg:hi:j:kl:m:no:p:qr:s:t:uw:xyABD:EFJKHzCILN:OP:RS:UWXZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -2948,6 +3088,14 @@ main(int argc, char **argv)
 			break;
 		case 'g':
 			filldata = *optarg;
+			break;
+		case 'h':
+#ifndef MADV_COLLAPSE
+			fprintf(stderr, "MADV_COLLAPSE not supported. "
+				"Can't support -h\n");
+			exit(86);
+#endif
+			hugepages = 1;
 			break;
 		case 'i':
 			integrity = 1;
@@ -3266,15 +3414,7 @@ main(int argc, char **argv)
 			exit(95);
 		}
 	}
-	original_buf = (char *) malloc(maxfilelen);
-	for (i = 0; i < maxfilelen; i++)
-		original_buf[i] = random() % 256;
-	good_buf = (char *) malloc(maxfilelen + writebdy);
-	good_buf = round_ptr_up(good_buf, writebdy, 0);
-	memset(good_buf, '\0', maxfilelen);
-	temp_buf = (char *) malloc(maxoplen + readbdy);
-	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
-	memset(temp_buf, '\0', maxoplen);
+	init_buffers();
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
 
