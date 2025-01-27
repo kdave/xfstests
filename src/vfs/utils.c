@@ -650,7 +650,7 @@ bool expected_dummy_vfs_caps_uid(int fd, uid_t expected_uid)
 	if (ret < 0 || ret == 0)
 		return false;
 
-	if (ns_xattr.magic_etc & VFS_CAP_REVISION_3) {
+	if (le32_to_cpu(ns_xattr.magic_etc) & VFS_CAP_REVISION_3) {
 
 		if (le32_to_cpu(ns_xattr.rootid) != expected_uid) {
 			errno = EINVAL;
@@ -673,10 +673,12 @@ int set_dummy_vfs_caps(int fd, int flags, int rootuid)
 	ns_cap_data.data[(x) >> 5].permitted |= (1 << ((x)&31))
 
 	struct vfs_ns_cap_data ns_xattr;
+	__le32 magic_etc;
 
 	memset(&ns_xattr, 0, sizeof(ns_xattr));
 	__raise_cap_permitted(CAP_NET_RAW, ns_xattr);
-	ns_xattr.magic_etc |= VFS_CAP_REVISION_3 | VFS_CAP_FLAGS_EFFECTIVE;
+	magic_etc = (VFS_CAP_REVISION_3 | VFS_CAP_FLAGS_EFFECTIVE);
+	ns_xattr.magic_etc |= cpu_to_le32(magic_etc);
 	ns_xattr.rootid = cpu_to_le32(rootuid);
 
 	return fsetxattr(fd, "security.capability",
