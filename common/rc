@@ -1769,30 +1769,16 @@ _fail()
     exit 1
 }
 
-# tests whether $FSTYP is one of the supported filesystems for a test
 #
-_check_supported_fs()
+# Tests whether $FSTYP should be exclude from this test.
+#
+# In general this should be avoided in favor of feature tests, and when this
+# helper has to be used, it should include a comment on why a specific file
+# system is excluded.
+#
+_exclude_fs()
 {
-	local res=1
-	local f
-
-	for f; do
-		# ^FS means black listed fs
-		if [ "$f" = "^$FSTYP" ]; then
-			return 1
-		elif [ "$f" = "generic" ] || [[ "$f" == "^"* ]]; then
-			# ^FS implies "generic ^FS"
-			res=0
-		elif [ "$f" = "$FSTYP" ]; then
-			return 0
-		fi
-	done
-	return $res
-}
-
-_supported_fs()
-{
-	_check_supported_fs $* || \
+	[ "$1" = "$FSTYP" ] && \
 		_notrun "not suitable for this filesystem type: $FSTYP"
 }
 
