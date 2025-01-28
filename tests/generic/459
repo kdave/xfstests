@@ -84,7 +84,11 @@ is_shutdown_or_ro()
 _scratch_mkfs_sized $((350 * 1024 * 1024)) >>$seqres.full 2>&1
 
 # Create a 200MB dm-thin POOL
-$LVM_PROG pvcreate -f $SCRATCH_DEV >>$seqres.full 2>&1
+#
+# lvm has a hardcoded list of valid devices and fails with
+# "device type is unknown" for those not in the list like null_blk
+$LVM_PROG pvcreate -f $SCRATCH_DEV >>$seqres.full 2>&1 || \
+	_notrun "LVM is too stupid for this device"
 $LVM_PROG vgcreate -f $vgname $SCRATCH_DEV >>$seqres.full 2>&1
 
 $LVM_PROG lvcreate  --thinpool $poolname  --errorwhenfull y \
