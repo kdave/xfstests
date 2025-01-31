@@ -1,0 +1,145 @@
+##/bin/bash
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (c) 2025 Oracle.  All Rights Reserved.
+#
+# Common/sysfs file for the sysfs related helper functions.
+
+# Test for the existence of a policy at /sys/fs/$FSTYP/$DEV/$ATTR
+#
+# All arguments are necessary, and in this order:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#  - attr: path name under /sys/fs/$FSTYP/$dev
+#  - policy: policy within /sys/fs/$FSTYP/$dev
+#
+# Usage example:
+#   _has_fs_sysfs_attr_policy /dev/mapper/scratch-dev read_policy round-robin
+_has_fs_sysfs_attr_policy()
+{
+	local dev=$1
+	local attr=$2
+	local policy=$3
+
+	if [ ! -b "$dev" -o -z "$attr" -o -z "$policy" ]; then
+		_fail \
+	     "Usage: _has_fs_sysfs_attr_policy <mounted_device> <attr> <policy>"
+	fi
+
+	local dname=$(_fs_sysfs_dname $dev)
+	if ! test -e /sys/fs/${FSTYP}/${dname}/${attr}; then
+		return 1
+	fi
+
+	cat /sys/fs/${FSTYP}/${dname}/${attr} | grep -q ${policy}
+}
+
+# Require the existence of a sysfs entry at /sys/fs/$FSTYP/$DEV/$ATTR
+# and value in it contains $policy
+# All arguments are necessary, and in this order:
+#  - dev: device name, e.g. $SCRATCH_DEV
+#  - attr: path name under /sys/fs/$FSTYP/$dev
+#  - policy: mentioned in /sys/fs/$FSTYP/$dev/$attr
+#
+# Usage example:
+#   _require_fs_sysfs_attr_policy /dev/mapper/scratch-dev read_policy round-robin
+_require_fs_sysfs_attr_policy()
+{
+	_has_fs_sysfs_attr_policy "$@" && return
+
+	local dev=$1
+	local attr=$2
+	local policy=$3
+	local dname=$(_fs_sysfs_dname $dev)
+
+	_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr} ${policy}"
+}
+
+_set_sysfs_policy()
+{
+	local dev=$1
+	local attr=$2
+	shift
+	shift
+	local policy=$@
+
+	_set_fs_sysfs_attr $dev $attr ${policy}
+
+	case "$FSTYP" in
+	btrfs)
+		_get_fs_sysfs_attr $dev $attr | grep -q "[${policy}]"
+		if [[ $? != 0 ]]; then
+			echo "Setting sysfs $attr $policy failed"
+		fi
+		;;
+	*)
+		_fail \
+"sysfs syntax verification for '${attr}' '${policy}' for '${FSTYP}' is not implemented"
+		;;
+	esac
+}
+
+_set_sysfs_policy_must_fail()
+{
+	local dev=$1
+	local attr=$2
+	shift
+	shift
+	local policy=$@
+
+	_set_fs_sysfs_attr $dev $attr ${policy} | _filter_sysfs_error \
+							   | tee -a $seqres.full
+}
+
+# Verify sysfs attribute rejects invalid input.
+# Usage syntax:
+#   _verify_sysfs_syntax <$dev> <$attr> <$policy> [$value]
+# Examples:
+#   _verify_sysfs_syntax $TEST_DEV read_policy pid
+#   _verify_sysfs_syntax $TEST_DEV read_policy round-robin 4k
+# Note:
+#  Testcase must include
+#      . ./common/filter
+# Prerequisite checks are kept outside this function
+# to make them clear to the test case, rather than hiding
+# them deep inside another function.
+#      _require_fs_sysfs_attr_policy $TEST_DEV $attr $policy
+_verify_sysfs_syntax()
+{
+	local dev=$1
+	local attr=$2
+	local policy=$3
+	local value=$4
+
+	# Test policy specified wrongly. Must fail.
+	_set_sysfs_policy_must_fail $dev $attr "'$policy $policy'"
+	_set_sysfs_policy_must_fail $dev $attr "'$policy t'"
+	_set_sysfs_policy_must_fail $dev $attr "' '"
+	_set_sysfs_policy_must_fail $dev $attr "'${policy} n'"
+	_set_sysfs_policy_must_fail $dev $attr "'n ${policy}'"
+	_set_sysfs_policy_must_fail $dev $attr "' ${policy}'"
+	_set_sysfs_policy_must_fail $dev $attr "' ${policy} '"
+	_set_sysfs_policy_must_fail $dev $attr "'${policy} '"
+	_set_sysfs_policy_must_fail $dev $attr _${policy}
+	_set_sysfs_policy_must_fail $dev $attr ${policy}_
+	_set_sysfs_policy_must_fail $dev $attr _${policy}_
+	_set_sysfs_policy_must_fail $dev $attr ${policy}:
+	# Test policy longer than 32 chars fails stable.
+	_set_sysfs_policy_must_fail $dev $attr 'jfdkkkkjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjffjfjfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+	# Test policy specified correctly. Must pass.
+	_set_sysfs_policy $dev $attr $policy
+
+	# If the policy has no value return
+	if [[ -z $value ]]; then
+		return
+	fi
+
+	# Test value specified wrongly. Must fail.
+	_set_sysfs_policy_must_fail $dev $attr "'$policy: $value'"
+	_set_sysfs_policy_must_fail $dev $attr "'$policy:$value '"
+	_set_sysfs_policy_must_fail $dev $attr "'$policy:$value typo'"
+	_set_sysfs_policy_must_fail $dev $attr "'$policy:${value}typo'"
+	_set_sysfs_policy_must_fail $dev $attr "'$policy :$value'"
+
+	# Test policy and value all specified correctly. Must pass.
+	_set_sysfs_policy $dev $attr $policy:$value
+}
