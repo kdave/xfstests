@@ -66,13 +66,13 @@ test_grace()
 	echo "--- Test block quota ---"
 	# Firstly fit below block soft limit
 	echo "Write 225 blocks..."
-	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((225 * $BLOCK_SIZE))' \
+	_su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((225 * $BLOCK_SIZE))' \
 		-c fsync $dir/file1" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
 	# Secondly overcome block soft limit
 	echo "Rewrite 250 blocks plus 1 byte, over the block softlimit..."
-	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE + 1))' \
+	_su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE + 1))' \
 		-c fsync $dir/file1" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
@@ -81,7 +81,7 @@ test_grace()
 	# Now sleep enough grace time and check that softlimit got enforced
 	sleep $((bgrace + 1))
 	echo "Try to write 1 one more block after grace..."
-	su $qa_user -c "$XFS_IO_PROG -c 'truncate 0' -c 'pwrite 0 $BLOCK_SIZE' \
+	_su $qa_user -c "$XFS_IO_PROG -c 'truncate 0' -c 'pwrite 0 $BLOCK_SIZE' \
 		$dir/file2" 2>&1 >>$seqres.full | _filter_xfs_io_error | \
 		filter_enospc_edquot $type | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
@@ -91,7 +91,7 @@ test_grace()
 	# space reservations on XFS
 	setquota -$type $qa_user 0 0 3 100 $SCRATCH_MNT 
 	echo "Create 2 more files, over the inode softlimit..."
-	su $qa_user -c "touch $dir/file3 $dir/file4" 2>&1 >>$seqres.full | \
+	_su $qa_user -c "touch $dir/file3 $dir/file4" 2>&1 >>$seqres.full | \
 		_filter_scratch | tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Reset grace time here, make below grace time test more accurate
@@ -99,7 +99,7 @@ test_grace()
 	# Wait and check grace time enforcement
 	sleep $((igrace+1))
 	echo "Try to create one more inode after grace..."
-	su $qa_user -c "touch $dir/file5" 2>&1 >>$seqres.full | \
+	_su $qa_user -c "touch $dir/file5" 2>&1 >>$seqres.full | \
 		filter_enospc_edquot $type | _filter_scratch | \
 		tee -a $seqres.full
 	repquota -v -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1

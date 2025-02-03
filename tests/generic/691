@@ -75,11 +75,11 @@ exercise()
 	setquota -${type} -t 86400 86400 $SCRATCH_MNT
 	repquota -v -${type} $SCRATCH_MNT | grep -v "^root" >>$seqres.full 2>&1
 	# Exceed the soft quota limit a bit at first
-	su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 2m' -c fsync ${file}.0" >>$seqres.full
+	_su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 2m' -c fsync ${file}.0" >>$seqres.full
 	# Write more data more times under soft quota limit exhausted condition,
 	# but not reach hard limit. To make sure each write won't trigger EDQUOT.
 	for ((i=1; i<=100; i++));do
-		su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.$i" >>$seqres.full
+		_su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.$i" >>$seqres.full
 		if [ $? -ne 0 ];then
 			echo "Unexpected error (type=$type)!"
 			break
@@ -89,9 +89,9 @@ exercise()
 
 	# As we've tested soft limit, now exceed the hard limit and give it a
 	# test in passing.
-	su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 100m' -c fsync ${file}.hard.0" 2>&1 >/dev/null | filter_quota $type
+	_su $qa_user -c "$XFS_IO_PROG -f -t -c 'pwrite 0 100m' -c fsync ${file}.hard.0" 2>&1 >/dev/null | filter_quota $type
 	for ((i=1; i<=10; i++));do
-		su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.hard.$i" 2>&1 | filter_quota $type
+		_su "$qa_user" -c "$XFS_IO_PROG -f -c 'pwrite 0 1m' -c fsync ${file}.hard.$i" 2>&1 | filter_quota $type
 	done
 }
 

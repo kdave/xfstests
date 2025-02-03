@@ -33,13 +33,13 @@ test_enforcement()
 	echo "--- initiating IO..." >>$seqres.full
 	# Firstly fit below block soft limit
 	echo "Write 225 blocks..."
-	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((225 * $BLOCK_SIZE))' -c fsync \
+	_su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((225 * $BLOCK_SIZE))' -c fsync \
 		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Secondly overcome block soft limit
 	echo "Rewrite 250 blocks plus 1 byte..."
-	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE + 1))' -c fsync \
+	_su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE + 1))' -c fsync \
 		$SCRATCH_MNT/file1" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
@@ -49,14 +49,14 @@ test_enforcement()
 	# scratch device that may leed to grace time exceed.
 	setquota -$type $qa_user -T $grace $grace $SCRATCH_MNT 2>/dev/null
 	echo "Write 250 blocks..."
-	su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE))' -c fsync \
+	_su $qa_user -c "$XFS_IO_PROG -c 'pwrite 0 $((250 * $BLOCK_SIZE))' -c fsync \
 		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Now sleep for grace time and check that softlimit got enforced
 	sleep $((grace+1))
 	echo "Write 1 block..."
-	su $qa_user -c "$XFS_IO_PROG -c 'truncate 0' -c 'pwrite 0 $BLOCK_SIZE' \
+	_su $qa_user -c "$XFS_IO_PROG -c 'truncate 0' -c 'pwrite 0 $BLOCK_SIZE' \
 		$SCRATCH_MNT/file2" 2>&1 >>$seqres.full | \
 		_filter_xfs_io_error | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
@@ -65,7 +65,7 @@ test_enforcement()
 	# space reservations on XFS
 	setquota -$type $qa_user 0 0 3 5 $SCRATCH_MNT
 	echo "Touch 3+4"
-	su $qa_user -c "touch $SCRATCH_MNT/file3 $SCRATCH_MNT/file4" \
+	_su $qa_user -c "touch $SCRATCH_MNT/file3 $SCRATCH_MNT/file4" \
 		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Try to exceed inode hardlimit
@@ -74,14 +74,14 @@ test_enforcement()
 	# scratch device that may leed to grace time exceed.
 	setquota -$type $qa_user -T $grace $grace $SCRATCH_MNT 2>/dev/null
 	echo "Touch 5+6"
-	su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
+	_su $qa_user -c "touch $SCRATCH_MNT/file5 $SCRATCH_MNT/file6" \
 		2>&1 >>$seqres.full | _filter_scratch | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	# Wait and check grace time enforcement
 	rm -f $SCRATCH_MNT/file5 >>$seqres.full 2>&1
 	sleep $((grace+1))
 	echo "Touch 5"
-	su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seqres.full |
+	_su $qa_user -c "touch $SCRATCH_MNT/file5" 2>&1 >>$seqres.full |
 		_filter_scratch | tee -a $seqres.full
 	repquota -$type $SCRATCH_MNT  | grep -v "^root" >>$seqres.full 2>&1
 	echo "--- completed IO ($type)" >>$seqres.full
