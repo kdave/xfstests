@@ -942,6 +942,7 @@ __stress_scrub_fsx_loop() {
 	local remount_period="$3"
 	local stress_tgt="$4"	# ignored
 	local focus=(-q -X)	# quiet, validate file contents
+	local res
 
 	# As of November 2022, 2 million fsx ops should be enough to keep
 	# any filesystem busy for a couple of hours.
@@ -993,7 +994,9 @@ __stress_scrub_fsx_loop() {
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
 		$here/ltp/fsx $args >> $seqres.full
-		echo "fsx exits with $? at $(date)" >> $seqres.full
+		res=$?
+		echo "fsx exits with $res at $(date)" >> $seqres.full
+		test "$res" -ne 0 && break
 	done
 	rm -f "$runningfile"
 }
