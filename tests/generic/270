@@ -28,8 +28,8 @@ _workout()
 	args=`_scale_fsstress_args -p128 -n999999999 -f setattr=1 $FSSTRESS_AVOID -d $out`
 	echo "fsstress $args" >> $seqres.full
 	# Grant chown capability 
-	cp $FSSTRESS_PROG $_FSSTRESS_PROG
-	$SETCAP_PROG cap_chown=epi $_FSSTRESS_PROG
+	cp $FSSTRESS_PROG $tmp.fsstress.bin
+	$SETCAP_PROG cap_chown=epi $tmp.fsstress.bin
 
 	# io_uring accounts memory it needs under the rlimit memlocked option,
 	# which can be quite low on some setups (especially 64K pagesize). root
@@ -37,7 +37,7 @@ _workout()
 	# io_uring_queue_init fail on ENOMEM, set max locked memory to unlimited
 	# temporarily.
 	ulimit -l unlimited
-	_su $qa_user -c "$_FSSTRESS_PROG $args" > /dev/null 2>&1 &
+	_su $qa_user -c "$tmp.fsstress.bin $args" > /dev/null 2>&1 &
 	_FSSTRESS_PID=$!
 
 	echo "Run dd writers in parallel"
@@ -50,7 +50,9 @@ _workout()
 		sleep $enospc_time
 	done
 
-	_kill_fsstress
+	_pkill -PIPE -f fsstress
+	pidwait $_FSSTRESS_PID
+	return 0
 }
 
 _require_quota

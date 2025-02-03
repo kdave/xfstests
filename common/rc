@@ -54,11 +54,9 @@ _pkill()
 # task name to kill.
 #
 # If tasks want to start fsstress themselves (e.g. under a different uid) then
-# they can set up _FSSTRESS_BIN and record _FSSTRESS_PID themselves. Then if the
-# test is killed then it will get cleaned up automatically.
+# they can record _FSSTRESS_PID themselves. Then if the test is killed then it
+# will get cleaned up automatically.
 
-_FSSTRESS_BIN="$seq.fsstress"
-_FSSTRESS_PROG="$TEST_DIR/$seq.fsstress"
 _FSSTRESS_PID=""
 _wait_for_fsstress()
 {
@@ -69,7 +67,6 @@ _wait_for_fsstress()
 		ret=$?
 		unset _FSSTRESS_PID
 	fi
-	rm -f $_FSSTRESS_PROG
 	return $ret
 }
 
@@ -78,8 +75,7 @@ _kill_fsstress()
 {
 	if [ -n "$_FSSTRESS_PID" ]; then
 		# use SIGPIPE to avoid "Killed" messages from bash
-		echo "killing $_FSSTRESS_BIN" >> $seqres.full
-		_pkill -PIPE $_FSSTRESS_BIN >> $seqres.full 2>&1
+		_pkill --echo -PIPE fsstress >> $seqres.full 2>&1
 		_wait_for_fsstress
 		return $?
 	fi
@@ -87,8 +83,7 @@ _kill_fsstress()
 
 _run_fsstress_bg()
 {
-	cp -f $FSSTRESS_PROG $_FSSTRESS_PROG
-	$_FSSTRESS_PROG $FSSTRESS_AVOID "$@" >> $seqres.full 2>&1 &
+	$FSSTRESS_PROG $FSSTRESS_AVOID "$@" >> $seqres.full 2>&1 &
 	_FSSTRESS_PID=$!
 }
 
