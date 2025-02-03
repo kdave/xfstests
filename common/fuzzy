@@ -939,6 +939,22 @@ __stress_scrub_clean_scratch() {
 	return 0
 }
 
+# Compute a --duration= interval for fsx and fsstress
+___stress_scrub_duration()
+{
+	local end="$1"
+	local remount_period="$2"
+	local now="$(date +%s)"
+	local delta="$((end - now))"
+
+	test "$delta" -lt 0 && delta=0
+
+	test -n "$remount_period" && test "$remount_period" -lt "$delta" && \
+		delta="$remount_period"
+
+	echo "--duration=$delta"
+}
+
 # Run fsx while we're testing online fsck.
 __stress_scrub_fsx_loop() {
 	local end="$1"
@@ -946,11 +962,9 @@ __stress_scrub_fsx_loop() {
 	local remount_period="$3"
 	local stress_tgt="$4"	# ignored
 	local focus=(-q -X)	# quiet, validate file contents
+	local duration
 	local res
 
-	# As of November 2022, 2 million fsx ops should be enough to keep
-	# any filesystem busy for a couple of hours.
-	focus+=(-N 2000000)
 	focus+=(-o $((128000 * LOAD_FACTOR)) )
 	focus+=(-l $((600000 * LOAD_FACTOR)) )
 
@@ -965,17 +979,12 @@ __stress_scrub_fsx_loop() {
 			# anything.
 			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
 
-			timeout -s TERM "$remount_period" $here/ltp/fsx \
-					$args $rw_arg >> $seqres.full
+			duration=$(___stress_scrub_duration "$end" "$remount_period")
+			$here/ltp/fsx $duration $args $rw_arg >> $seqres.full
 			res=$?
 			echo "$mode fsx exits with $res at $(date)" >> $seqres.full
-			if [ "$res" -ne 0 ] && [ "$res" -ne 124 ]; then
-				# Stop if fsx returns error.  Mask off
-				# the magic code 124 because that is how the
-				# timeout(1) program communicates that we ran
-				# out of time.
-				break;
-			fi
+			test "$res" -ne 0 && break
+
 			if [ "$mode" = "rw" ]; then
 				mode="ro"
 				rw_arg="-t 0 -w 0 -FHzCIJBE0"
@@ -997,7 +1006,8 @@ __stress_scrub_fsx_loop() {
 	while __stress_scrub_running "$end" "$runningfile"; do
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
-		$here/ltp/fsx $args >> $seqres.full
+		duration=$(___stress_scrub_duration "$end" "$remount_period")
+		$here/ltp/fsx $duration $args >> $seqres.full
 		res=$?
 		echo "fsx exits with $res at $(date)" >> $seqres.full
 		test "$res" -ne 0 && break
@@ -1013,6 +1023,7 @@ __stress_scrub_fsstress_loop() {
 	local stress_tgt="$4"
 	local focus=()
 	local res
+	local duration
 
 	case "$stress_tgt" in
 	"parent")
@@ -1102,9 +1113,7 @@ __stress_scrub_fsstress_loop() {
 		;;
 	esac
 
-	# As of March 2022, 2 million fsstress ops should be enough to keep
-	# any filesystem busy for a couple of hours.
-	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT -n 2000000 "${focus[@]}")
+	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT "${focus[@]}")
 	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
 
 	if [ -n "$remount_period" ]; then
@@ -1115,9 +1124,8 @@ __stress_scrub_fsstress_loop() {
 			# anything.
 			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
 
-			_run_fsstress_bg $args $rw_arg >> $seqres.full
-			sleep $remount_period
-			_kill_fsstress
+			duration=$(___stress_scrub_duration "$end" "$remount_period")
+			_run_fsstress $duration $args $rw_arg >> $seqres.full
 			res=$?
 			echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
 			[ "$res" -ne 0 ] && break;
@@ -1143,7 +1151,8 @@ __stress_scrub_fsstress_loop() {
 	while __stress_scrub_running "$end" "$runningfile"; do
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
-		_run_fsstress $args >> $seqres.full
+		duration=$(___stress_scrub_duration "$end" "$remount_period")
+		_run_fsstress $duration $args >> $seqres.full
 		res=$?
 		echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
 		[ "$res" -ne 0 ] && break;
