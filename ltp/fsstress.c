@@ -4652,6 +4652,7 @@ readv_f(opnum_t opno, long r)
 	}
 
 	e = readv(fd, iov, iovcnt) < 0 ? errno : 0;
+	free(iov);
 	free(buf);
 	if (v)
 		printf("%d/%lld: readv %s%s [%lld,%d,%d] %d\n",
