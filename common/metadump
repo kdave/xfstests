@@ -25,8 +25,8 @@ _xfs_cleanup_verify_metadump()
 	test -n "$XFS_METADUMP_FILE" && rm -f "$XFS_METADUMP_FILE"
 
 	if [ -n "$XFS_METADUMP_IMG" ]; then
-		[ -b "$md_data_loop_dev" ] && _destroy_loop_device $md_data_loop_dev
-		[ -b "$md_log_loop_dev" ] && _destroy_loop_device $md_log_loop_dev
+		[ -b "$METADUMP_DATA_LOOP_DEV" ] && _destroy_loop_device $METADUMP_DATA_LOOP_DEV
+		[ -b "$METADUMP_LOG_LOOP_DEV" ] && _destroy_loop_device $METADUMP_LOG_LOOP_DEV
 		for img in "$XFS_METADUMP_IMG"*; do
 			test -e "$img" && rm -f "$img"
 		done
@@ -100,9 +100,7 @@ _xfs_verify_metadump_v2()
 	local metadump_file="$XFS_METADUMP_FILE"
 	local version="-v 2"
 	local data_img="$XFS_METADUMP_IMG.data"
-	local data_loop
 	local log_img=""
-	local log_loop
 
 	# Capture metadump, which creates metadump_file
 	_scratch_xfs_metadump $metadump_file $metadump_args $version
@@ -118,27 +116,27 @@ _xfs_verify_metadump_v2()
 		_scratch_xfs_mdrestore $metadump_file
 
 	# Create loopdev for data device so we can mount the fs
-	md_data_loop_dev=$(_create_loop_device $data_img)
+	METADUMP_DATA_LOOP_DEV=$(_create_loop_device $data_img)
 
 	# Create loopdev for log device if we recovered anything
-	test -s "$log_img" && md_log_loop_dev=$(_create_loop_device $log_img)
+	test -s "$log_img" && METADUMP_LOG_LOOP_DEV=$(_create_loop_device $log_img)
 
 	# Mount fs, run an extra test, fsck, and unmount
-	SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev _scratch_mount
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV _scratch_mount
 	if [ -n "$extra_test" ]; then
-		SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev $extra_test
+		SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV $extra_test
 	fi
-	SCRATCH_DEV=$md_data_loop_dev SCRATCH_LOGDEV=$md_log_loop_dev _check_xfs_scratch_fs
-	_unmount $md_data_loop_dev
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV _check_xfs_scratch_fs
+	_unmount $METADUMP_DATA_LOOP_DEV
 
 	# Tear down what we created
-	if [ -b "$md_log_loop_dev" ]; then
-		_destroy_loop_device $md_log_loop_dev
-		unset md_log_loop_dev
+	if [ -b "$METADUMP_LOG_LOOP_DEV" ]; then
+		_destroy_loop_device $METADUMP_LOG_LOOP_DEV
+		unset METADUMP_LOG_LOOP_DEV
 		rm -f $log_img
 	fi
-	_destroy_loop_device $md_data_loop_dev
-	unset md_data_loop_dev
+	_destroy_loop_device $METADUMP_DATA_LOOP_DEV
+	unset METADUMP_DATA_LOOP_DEV
 	rm -f $data_img
 }
 
