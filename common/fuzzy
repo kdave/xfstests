@@ -1392,7 +1392,11 @@ _scratch_xfs_stress_scrub() {
 
 	"__stress_scrub_${exerciser}_loop" "$end" "$runningfile" \
 			"$remount_period" "$stress_tgt" &
-	_FSSTRESS_PID=$!
+	# The loop is a background process, so _FSSTRESS_PID is set in that
+	# child.  Unfortunately, this process doesn't know about it.  Therefore
+	# we need to set _FSSTRESS_PID ourselves so that cleanup tries to kill
+	# fsstress.
+	test "${exerciser}" = "fsstress" && _FSSTRESS_PID=$!
 
 	if [ -n "$freeze" ]; then
 		__stress_scrub_freeze_loop "$end" "$runningfile" &
