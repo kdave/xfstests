@@ -61,7 +61,6 @@ _xfs_verify_metadump_v1()
 	local metadump_file="$XFS_METADUMP_FILE"
 	local version=""
 	local data_img="$XFS_METADUMP_IMG.data"
-	local data_loop
 
 	# Force v1 if we detect v2 support
 	if [[ $MAX_XFS_METADUMP_FORMAT > 1 ]]; then
@@ -75,18 +74,19 @@ _xfs_verify_metadump_v1()
 	SCRATCH_DEV=$data_img _scratch_xfs_mdrestore $metadump_file
 
 	# Create loopdev for data device so we can mount the fs
-	data_loop=$(_create_loop_device $data_img)
+	METADUMP_DATA_LOOP_DEV=$(_create_loop_device $data_img)
 
 	# Mount fs, run an extra test, fsck, and unmount
-	SCRATCH_DEV=$data_loop _scratch_mount
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV _scratch_mount
 	if [ -n "$extra_test" ]; then
-		SCRATCH_DEV=$data_loop $extra_test
+		SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV $extra_test
 	fi
-	SCRATCH_DEV=$data_loop _check_xfs_scratch_fs
-	SCRATCH_DEV=$data_loop _scratch_unmount
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV _check_xfs_scratch_fs
+	_unmount $METADUMP_DATA_LOOP_DEV
 
 	# Tear down what we created
-	_destroy_loop_device $data_loop
+	_destroy_loop_device $METADUMP_DATA_LOOP_DEV
+	unset METADUMP_DATA_LOOP_DEV
 	rm -f $data_img
 }
 
