@@ -861,14 +861,14 @@ __stress_one_scrub_loop() {
 		;;
 	esac
 
-	local target_cmd=(echo "$scrub_tgt")
+	local target_cmd=(echo -en "$scrub_tgt\0")
 	case "$scrub_tgt" in
-	"%file%")	target_cmd=($here/src/xfsfind -q  "$SCRATCH_MNT");;
-	"%attrfile%")	target_cmd=($here/src/xfsfind -qa "$SCRATCH_MNT");;
-	"%datafile%")	target_cmd=($here/src/xfsfind -qb "$SCRATCH_MNT");;
-	"%dir%")	target_cmd=($here/src/xfsfind -qd "$SCRATCH_MNT");;
-	"%regfile%")	target_cmd=($here/src/xfsfind -qr "$SCRATCH_MNT");;
-	"%cowfile%")	target_cmd=($here/src/xfsfind -qs "$SCRATCH_MNT");;
+	"%file%")	target_cmd=($here/src/xfsfind -0q  "$SCRATCH_MNT");;
+	"%attrfile%")	target_cmd=($here/src/xfsfind -0qa "$SCRATCH_MNT");;
+	"%datafile%")	target_cmd=($here/src/xfsfind -0qb "$SCRATCH_MNT");;
+	"%dir%")	target_cmd=($here/src/xfsfind -0qd "$SCRATCH_MNT");;
+	"%regfile%")	target_cmd=($here/src/xfsfind -0qr "$SCRATCH_MNT");;
+	"%cowfile%")	target_cmd=($here/src/xfsfind -0qs "$SCRATCH_MNT");;
 	esac
 
 	while __stress_scrub_running "$scrub_startat" "$runningfile"; do
@@ -876,12 +876,16 @@ __stress_one_scrub_loop() {
 	done
 
 	while __stress_scrub_running "$end" "$runningfile"; do
-		readarray -t fnames < <("${target_cmd[@]}" 2>> $seqres.full)
-		for fname in "${fnames[@]}"; do
+		# Attach the stdout of xfsfind to fd 77 so that we can read
+		# pathnames from that file descriptor without passing the pipe
+		# to the loop body as stdin.
+		exec 77< <("${target_cmd[@]}" 2>> $seqres.full)
+		while read -u 77 -d '' fname; do
 			$XFS_IO_PROG -x "${xfs_io_args[@]}" "$fname" 2>&1 | \
 				__stress_scrub_filter_output "${extra_filters[@]}"
 			__stress_scrub_running "$end" "$runningfile" || break
 		done
+		exec 77<&-
 	done
 }
 

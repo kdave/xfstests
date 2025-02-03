@@ -20,6 +20,7 @@ static int want_dir;
 static int want_regfile;
 static int want_sharedfile;
 static int report_errors = 1;
+static int print0;
 
 static int
 check_datafile(
@@ -115,6 +116,7 @@ print_help(
 	printf("\n");
 	printf("Print all file paths matching any of the given predicates.\n");
 	printf("\n");
+	printf("-0	Print nulls between paths instead of newlines.\n");
 	printf("-a	Match files with xattrs.\n");
 	printf("-b	Match files with data blocks.\n");
 	printf("-d	Match directories.\n");
@@ -208,8 +210,13 @@ visit(
 out_fd:
 	close(fd);
 out:
-	if (printme)
-		printf("%s\n", path);
+	if (printme) {
+		if (print0)
+			printf("%s%c", path, 0);
+		else
+			printf("%s\n", path);
+		fflush(stdout);
+	}
 	return retval;
 }
 
@@ -236,8 +243,9 @@ main(
 	int			c;
 	int			ret;
 
-	while ((c = getopt(argc, argv, "abdqrs")) >= 0) {
+	while ((c = getopt(argc, argv, "0abdqrs")) >= 0) {
 		switch (c) {
+		case '0':	print0 = 1;          break;
 		case 'a':	want_attrfile = 1;   break;
 		case 'b':	want_datafile = 1;   break;
 		case 'd':	want_dir = 1;        break;
