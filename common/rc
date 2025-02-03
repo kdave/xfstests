@@ -30,6 +30,12 @@ _test_sync()
 	_sync_fs $TEST_DIR
 }
 
+# Kill only the processes started by this test.
+_pkill()
+{
+	pkill "$@"
+}
+
 # Common execution handling for fsstress invocation.
 #
 # We need per-test fsstress binaries because of the way fsstress forks and
@@ -69,7 +75,7 @@ _kill_fsstress()
 	if [ -n "$_FSSTRESS_PID" ]; then
 		# use SIGPIPE to avoid "Killed" messages from bash
 		echo "killing $_FSSTRESS_BIN" >> $seqres.full
-		pkill -PIPE $_FSSTRESS_BIN >> $seqres.full 2>&1
+		_pkill -PIPE $_FSSTRESS_BIN >> $seqres.full 2>&1
 		_wait_for_fsstress
 		return $?
 	fi
