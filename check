@@ -1048,8 +1048,8 @@ function run_section()
 
 		if [ $sts -ne 0 ]; then
 			_dump_err_cont "[failed, exit status $sts]"
-			_test_unmount 2>> $seqres.full
-			_scratch_unmount 2>> $seqres.full
+			_test_unmount 2> /dev/null
+			_scratch_unmount 2> /dev/null
 			rm -f ${RESULT_DIR}/require_test*
 			rm -f ${RESULT_DIR}/require_scratch*
 			# Even though we failed, there may be something interesting in
@@ -1134,6 +1134,12 @@ function run_section()
 		fi
 		_stash_test_status "$seqnum" "$tc_status"
 	done
+
+	# Reset these three variables so that unmount output doesn't get
+	# written to $seqres.full of the last test to run.
+	seq="check.$$"
+	check="$RESULT_BASE/check"
+	seqres="$check"
 
 	sect_stop=`_wallclock`
 	interrupt=false
