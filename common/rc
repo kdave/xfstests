@@ -33,7 +33,11 @@ _test_sync()
 # Kill only the processes started by this test.
 _pkill()
 {
-	pkill --session 0 "$@"
+	if [ "$FSTESTS_ISOL" = "setsid" ]; then
+		pkill --session 0 "$@"
+	else
+		pkill "$@"
+	fi
 }
 
 # Common execution handling for fsstress invocation.
@@ -2736,7 +2740,11 @@ _require_user_exists()
 # not, passing $SHELL in this manner works both for "su" and "su -c cmd".
 _su()
 {
-	su --session-command $SHELL "$@"
+	if [ "$FSTESTS_ISOL" = "setsid" ]; then
+		su --session-command $SHELL "$@"
+	else
+		su "$@"
+	fi
 }
 
 # check if a user exists and is able to execute commands.

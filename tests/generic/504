@@ -18,7 +18,7 @@ _cleanup()
 {
 	exec {test_fd}<&-
 	cd /
-	rm -f $tmp.*
+	rm -r -f $tmp.*
 }
 
 # Import common functions.
@@ -35,12 +35,23 @@ echo inode $tf_inode >> $seqres.full
 
 # Create new fd by exec
 exec {test_fd}> $testfile
-# flock locks the fd then exits, we should see the lock info even the owner is dead
+# flock locks the fd then exits, we should see the lock info even though the
+# owner is dead.  If we're using pid namespace isolation we have to move /proc
+# so that we can access the /proc/locks from the init_pid_ns.
+if [ "$FSTESTS_ISOL" = "privatens" ]; then
+	move_proc="$tmp.procdir"
+	mkdir -p "$move_proc"
+	mount --move /proc "$move_proc"
+fi
 flock -x $test_fd
 cat /proc/locks >> $seqres.full
 
 # Checking
 grep -q ":$tf_inode " /proc/locks || echo "lock info not found"
+
+if [ -n "$move_proc" ]; then
+	mount --move "$move_proc" /proc
+fi
 
 # success, all done
 status=0

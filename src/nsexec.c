@@ -54,6 +54,7 @@ usage(char *pname)
     fpe("            If -M or -G is specified, -U is required\n");
     fpe("-s          Set uid/gid to 0 in the new user namespace\n");
     fpe("-v          Display verbose messages\n");
+    fpe("-z          Return child's return value\n");
     fpe("\n");
     fpe("Map strings for -M and -G consist of records of the form:\n");
     fpe("\n");
@@ -144,6 +145,8 @@ int
 main(int argc, char *argv[])
 {
     int flags, opt;
+    int return_child_status = 0;
+    int child_status = 0;
     pid_t child_pid;
     struct child_args args;
     char *uid_map, *gid_map;
@@ -161,7 +164,7 @@ main(int argc, char *argv[])
     setid = 0;
     gid_map = NULL;
     uid_map = NULL;
-    while ((opt = getopt(argc, argv, "+imnpuUM:G:vs")) != -1) {
+    while ((opt = getopt(argc, argv, "+imnpuUM:G:vsz")) != -1) {
         switch (opt) {
         case 'i': flags |= CLONE_NEWIPC;        break;
         case 'm': flags |= CLONE_NEWNS;         break;
@@ -173,6 +176,7 @@ main(int argc, char *argv[])
         case 'G': gid_map = optarg;             break;
         case 'U': flags |= CLONE_NEWUSER;       break;
         case 's': setid = 1;                    break;
+        case 'z': return_child_status = 1;      break;
         default:  usage(argv[0]);
         }
     }
@@ -229,11 +233,19 @@ main(int argc, char *argv[])
 
     close(args.pipe_fd[1]);
 
-    if (waitpid(child_pid, NULL, 0) == -1)      /* Wait for child */
+    if (waitpid(child_pid, &child_status, 0) == -1)      /* Wait for child */
         errExit("waitpid");
 
     if (verbose)
-        printf("%s: terminating\n", argv[0]);
+        printf("%s: terminating %d\n", argv[0], WEXITSTATUS(child_status));
+
+    if (return_child_status) {
+        if (WIFEXITED(child_status))
+            exit(WEXITSTATUS(child_status));
+        if (WIFSIGNALED(child_status))
+            exit(WTERMSIG(child_status) + 128); /* like sh */
+	exit(EXIT_FAILURE);
+    }
 
     exit(EXIT_SUCCESS);
 }
