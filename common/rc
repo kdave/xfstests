@@ -688,6 +688,33 @@ _test_cycle_mount()
     _test_mount
 }
 
+# Are there mkfs options to try to improve concurrency?
+_scratch_mkfs_concurrency_options()
+{
+	local nr_cpus=$(getconf _NPROCESSORS_CONF)
+
+	case "$FSTYP" in
+	xfs)
+		# If any concurrency options are already specified, don't
+		# compute our own conflicting ones.
+		echo "$SCRATCH_OPTIONS $MKFS_OPTIONS" | \
+			grep -q 'concurrency=' &&
+			return
+
+		local sections=(d r)
+
+		# -l concurrency does not work with external logs
+		test _has_logdev || sections+=(l)
+
+		for section in "${sections[@]}"; do
+			$MKFS_XFS_PROG -$section concurrency=$nr_cpus 2>&1 | \
+				grep -q "unknown option -$section" ||
+				echo "-$section concurrency=$nr_cpus "
+		done
+		;;
+	esac
+}
+
 _scratch_mkfs_options()
 {
     _scratch_options mkfs
