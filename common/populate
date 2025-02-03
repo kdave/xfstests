@@ -473,13 +473,18 @@ _scratch_xfs_populate() {
 		__populate_create_dir "${SCRATCH_MNT}/PPTRS" 1 '' \
 			--hardlink --format "two_%d"
 
-		# Create one xattr leaf block of parent pointers
-		nr="$((blksz * 2 / 16))"
+		# Create one xattr leaf block of parent pointers.  The name is
+		# 8 bytes and, the handle is 12 bytes, which rounds up to 24
+		# bytes per record, plus xattr structure overhead.
+		nr="$((blksz / 24))"
 		__populate_create_dir "${SCRATCH_MNT}/PPTRS" ${nr} '' \
 			--hardlink --format "many%04d"
 
-		# Create multiple xattr leaf blocks of large parent pointers
-		nr="$((blksz * 16 / 16))"
+		# Create multiple xattr leaf blocks of large parent pointers.
+		# The name is 256 bytes and the handle is 12 bytes, which
+		# rounds up to 272 bytes per record, plus xattr structure
+		# overhead.
+		nr="$((blksz * 2 / 272))"
 		__populate_create_dir "${SCRATCH_MNT}/PPTRS" ${nr} '' \
 			--hardlink --format "y%0254d"
 
