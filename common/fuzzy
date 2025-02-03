@@ -1012,6 +1012,7 @@ __stress_scrub_fsstress_loop() {
 	local remount_period="$3"
 	local stress_tgt="$4"
 	local focus=()
+	local res
 
 	case "$stress_tgt" in
 	"parent")
@@ -1143,7 +1144,9 @@ __stress_scrub_fsstress_loop() {
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
 		_run_fsstress $args >> $seqres.full
-		echo "fsstress exits with $? at $(date)" >> $seqres.full
+		res=$?
+		echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
+		[ "$res" -ne 0 ] && break;
 	done
 	rm -f "$runningfile"
 }
