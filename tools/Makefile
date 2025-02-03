@@ -6,12 +6,15 @@ TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
 TOOLS_DIR = tools
+helpers=\
+	run_setsid
 
 include $(BUILDRULES)
 
-default:
+default: $(helpers)
 
 install: default
 	$(INSTALL) -m 755 -d $(PKG_LIB_DIR)/$(TOOLS_DIR)
+	$(INSTALL) -m 755 $(helpers) $(PKG_LIB_DIR)/$(TOOLS_DIR)
 
 install-dev install-lib:
