@@ -2974,13 +2974,15 @@ init_hugepages_buf(unsigned len, int hugepage_size, int alignment, long *buf_siz
 
 	ret = posix_memalign(&buf, hugepage_size, size);
 	if (ret) {
-		prterr("posix_memalign for buf");
+		/* common/rc greps this error message */
+		prterr("posix_memalign for hugebuf");
 		return NULL;
 	}
 	memset(buf, '\0', size);
 	ret = madvise(buf, size, MADV_COLLAPSE);
 	if (ret) {
-		prterr("madvise collapse for buf");
+		/* common/rc greps this error message */
+		prterr("madvise collapse for hugebuf");
 		free(buf);
 		return NULL;
 	}

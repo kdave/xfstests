@@ -4982,20 +4982,46 @@ _require_hugepage_fsx()
 		_notrun "fsx binary does not support MADV_COLLAPSE"
 }
 
-run_fsx()
+_run_fsx()
 {
-	echo fsx $@
+	echo "fsx $*"
 	local args=`echo $@ | sed -e "s/ BSIZE / $bsize /g" -e "s/ PSIZE / $psize /g"`
 	set -- $here/ltp/fsx $args $FSX_AVOID $TEST_DIR/junk
 	echo "$@" >>$seqres.full
 	rm -f $TEST_DIR/junk
 	"$@" 2>&1 | tee -a $seqres.full >$tmp.fsx
-	if [ ${PIPESTATUS[0]} -ne 0 ]; then
+	local res=${PIPESTATUS[0]}
+	if [ $res -ne 0 ]; then
 		cat $tmp.fsx
 		rm -f $tmp.fsx
-		exit 1
+		return $res
 	fi
 	rm -f $tmp.fsx
+	return 0
+}
+
+# Run fsx with -h(ugepage buffers).  If we can't set up a hugepage then skip
+# the test, but if any other error occurs then exit the test.
+_run_hugepage_fsx() {
+	_run_fsx "$@" -h &> $tmp.hugepage_fsx
+	local res=$?
+	if [ $res -eq 103 ]; then
+		# According to the MADV_COLLAPSE manpage, these three errors
+		# can happen if the kernel could not collapse a collection of
+		# pages into a single huge page.
+		grep -q -E ' for hugebuf: (Cannot allocate memory|Device or resource busy|Resource temporarily unavailable)' $tmp.hugepage_fsx && \
+			_notrun "Could not set up huge page for test"
+	fi
+	cat $tmp.hugepage_fsx
+	rm -f $tmp.hugepage_fsx
+	test $res -ne 0 && exit 1
+	return 0
+}
+
+# run fsx or exit the test
+run_fsx()
+{
+	_run_fsx "$@" || exit 1
 }
 
 _require_statx()
