@@ -22,10 +22,8 @@ _require_xfs_io_command fpunch
 
 _scratch_mkfs >>$seqres.full 2>&1
 
-# This test involves RWF_NOWAIT direct IOs, but for inodes with data checksum,
-# btrfs will fall back to buffered IO unconditionally to prevent data checksum
-# mimsatch, and that will break RWF_NOWAIT with -EAGAIN.
-# So here we have to go with nodatasum mount option.
+# RWF_NOWAIT only works with direct IO, which requires an inode with
+# nodatasum (otherwise it falls back to buffered IO).
 _scratch_mount -o nodatasum
 
 # Test a write against COW file/extent - should fail with -EAGAIN. Disable the
