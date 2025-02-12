@@ -1,0 +1,41 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 761
+#
+# Making sure direct IO (O_DIRECT) writes won't cause any data checksum mismatch,
+# even if the contents of the buffer changes during writeback.
+#
+# This is mostly for filesystems with data checksum support, which should fallback
+# to buffer IO to avoid inconsistency.
+# For filesystems without data checksum support, nothing needs to be bothered.
+#
+
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_scratch
+_require_odirect
+_require_test_program dio-writeback-race
+_fixed_by_kernel_commit XXXXXXXX \
+	"btrfs: always fallback to buffered write if the inode requires checksum"
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+blocksize=$(_get_file_block_size $SCRATCH_MNT)
+filesize=$(( 64 * 1024 * 1024))
+
+echo "blocksize=$blocksize filesize=$filesize" >> $seqres.full
+
+$here/src/dio-writeback-race -b $blocksize -s $filesize $SCRATCH_MNT/foobar
+
+# Read out the file, which should trigger checksum verification
+cat $SCRATCH_MNT/foobar > /dev/null
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
