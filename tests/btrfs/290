@@ -30,6 +30,18 @@ _require_xfs_io_command "pread"
 _require_xfs_io_command "pwrite"
 _require_btrfs_corrupt_block "value"
 _require_btrfs_corrupt_block "offset"
+# We exercise corrupting an inline extent and inline extents can't be created
+# with nodatacow, we get instead a regular file extent item and if we attempt
+# to corrupt its disk_bytenr field with btrfs-corrupt-block we fail tree-checker
+# validation at mount time resulting in failure to mount and the following in
+# dmesg:
+#
+# [514127.759739] BTRFS critical (device sdc): corrupt leaf: root=5 \
+#         block=30408704 slot=8 ino=257 file_offset=0, invalid disk_bytenr for \
+#         file extent, have 7416089308958521981, should be aligned to 4096
+# [514127.762715] BTRFS error (device sdc): read time tree block corruption \
+#         detected on logical 30408704 mirror 1
+_require_btrfs_no_nodatacow
 _disable_fsverity_signatures
 
 get_ino() {
