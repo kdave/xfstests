@@ -40,7 +40,7 @@ LDIRT += $(SRCTAR)
 endif
 
 LIB_SUBDIRS = include lib
-TOOL_SUBDIRS = ltp src m4 common
+TOOL_SUBDIRS = ltp src m4 common tools
 
 SUBDIRS = $(LIB_SUBDIRS) $(TOOL_SUBDIRS) $(TESTS_DIR)
 
