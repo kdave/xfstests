@@ -44,8 +44,11 @@ _scratch_dev_pool_get 3
 
 setup_dmdev()
 {
-	# Some small size.
-	size=$((1024 * 1024 * 1024))
+	# On filesystems up to 50G the metadata chunk size is 256M, but on
+	# larger ones it's 1G, so use 2G to ensure the test doesn't fail with
+	# -ENOSPC when running mkfs against $lvdev and $scratch_dev2 in case
+	# the device at $scratch_dev2 has more capacity than 50G.
+	size=$((2 * 1024 * 1024 * 1024))
 	size_in_sector=$((size / 512))
 
 	table="0 $size_in_sector linear $SCRATCH_DEV 0"
