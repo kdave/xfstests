@@ -211,7 +211,7 @@ lio_set_debug(int level)
  * Only the first character of the string is used.
  *
  * This function does not provide for meaningful option arguments,
- * but it supports current growfiles/btlk interface.
+ * but it supports current btlk interface.
  *
  *  (rrl 04/96)
  ***********************************************************************/

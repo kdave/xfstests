@@ -5,7 +5,7 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-TARGETS = doio fsstress fsx growfiles iogen
+TARGETS = doio fsstress fsx iogen
 SCRIPTS = rwtest.sh
 CFILES = $(TARGETS:=.c)
 HFILES = doio.h
