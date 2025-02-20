@@ -107,7 +107,7 @@ int main (int argc, char *argv[])
 		fprintf(stderr, "failed to allocate aligned memory\n");
 		exit(EXIT_FAILURE);
 	}
-	fd = open(argv[optind], O_DIRECT | O_WRONLY | O_CREAT);
+	fd = open(argv[optind], O_DIRECT | O_WRONLY | O_CREAT, 0600);
 	if (fd < 0) {
 		fprintf(stderr, "failed to open file '%s': %m\n", argv[optind]);
 		goto error;
