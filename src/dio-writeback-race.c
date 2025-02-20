@@ -102,7 +102,7 @@ int main (int argc, char *argv[])
 		fprintf(stderr, "missing argument\n");
 		goto error;
 	}
-	ret = posix_memalign(&buf, blocksize, blocksize);
+	ret = posix_memalign(&buf, sysconf(_SC_PAGESIZE), blocksize);
 	if (!buf) {
 		fprintf(stderr, "failed to allocate aligned memory\n");
 		exit(EXIT_FAILURE);
