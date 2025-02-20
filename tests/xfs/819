@@ -1,0 +1,146 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024-2025 Oracle.  All Rights Reserved.
+# Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 819
+#
+# mkfs protofile with xattrs test
+#
+. ./common/preamble
+_begin_fstest mkfs auto quick
+
+seqfull="$seqres.full"
+rm -f $seqfull
+
+. ./common/filter
+
+_cleanup()
+{
+	echo "*** unmount"
+	_scratch_unmount 2>/dev/null
+	rm -f $tmp.*
+	rm -f $TEST_DIR/$seq.file
+}
+
+_full()
+{
+	echo ""            >>$seqfull
+	echo "*** $* ***"  >>$seqfull
+	echo ""            >>$seqfull
+}
+
+_filter_stat()
+{
+	sed '
+		/^Access:/d;
+		/^Modify:/d;
+		/^Change:/d;
+		s/Device: *[0-9][0-9]*,[0-9][0-9]*/Device: <DEVICE>/;
+		s/Inode: *[0-9][0-9]*/Inode: <INODE>/;
+		s/Size: *[0-9][0-9]* *Filetype: Dir/Size: <DSIZE> Filetype: Dir/;
+	' | tr -s ' '
+}
+
+_require_command $ATTR_PROG "attr"
+_require_scratch
+
+# mkfs cannot create a filesystem with protofiles if realtime is enabled, so
+# don't run this test if the rtinherit is anywhere in the mkfs options.
+echo "$MKFS_OPTIONS" | grep -q "rtinherit" && \
+	_notrun "Cannot mkfs with a protofile and -d rtinherit."
+
+protofile=$tmp.proto
+tempfile=$TEST_DIR/$seq.file
+
+$XFS_IO_PROG -f -c 'pwrite 64k 28k' -c 'pwrite 1280k 37960' $tempfile >> $seqres.full
+$here/src/devzero -b 2048 -n 2 -c -v 44 $tempfile.2 
+
+$ATTR_PROG -R -s rootdata -V 0test $tempfile &>> $seqres.full
+$ATTR_PROG -S -s acldata -V 1test $tempfile &>> $seqres.full
+$ATTR_PROG -s userdata -V 2test $tempfile &>> $seqres.full
+perl -e 'print "x" x 37960;' | $ATTR_PROG -s bigdata $tempfile &>> $seqres.full
+
+cat >$protofile <<EOF
+DUMMY1
+0 0
+: root directory
+d--777 3 1
+: a directory
+directory d--755 3 1 
+test ---755 3 1 $tempfile
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_0 ---755 3 1 $tempfile
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_1 ---755 3 1 $tempfile
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_2 ---755 3 1 $tempfile
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_3 ---755 3 1 $tempfile
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_4 ---755 3 1 $tempfile
+$
+: back in the root
+setuid -u-666 0 0 $tempfile
+setgid --g666 0 0 $tempfile
+setugid -ug666 0 0 $tempfile
+directory_setgid d-g755 3 2
+file_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_5 ---755 3 1 $tempfile
+$
+: back in the root
+block_device b--012 3 1 161 162 
+char_device c--345 3 1 177 178
+pipe p--670 0 0
+symlink l--123 0 0 bigfile
+: a file we actually read
+bigfile ---666 3 0 $tempfile.2
+: done
+$
+EOF
+
+if [ $? -ne 0 ]
+then
+	_fail "failed to create test protofile"
+fi
+
+_verify_fs()
+{
+	echo "*** create FS version $1"
+	VERSION="-n version=$1"
+
+	_scratch_unmount >/dev/null 2>&1
+
+	_full "mkfs"
+	_scratch_mkfs_xfs $VERSION -p $protofile >>$seqfull 2>&1
+
+	echo "*** check FS"
+	_check_scratch_fs
+
+	echo "*** mount FS"
+	_full " mount"
+	_try_scratch_mount >>$seqfull 2>&1 \
+		|| _fail "mount failed"
+
+	$ATTR_PROG -l $SCRATCH_MNT/directory/test | \
+		grep -q 'Attribute.*has a ' || \
+		_notrun "mkfs.xfs protofile does not support xattrs"
+
+	echo "*** verify FS"
+	(cd $SCRATCH_MNT ; find . | LC_COLLATE=POSIX sort \
+		| grep -v ".use_space" \
+		| xargs $here/src/lstat64 | _filter_stat)
+	diff -q $SCRATCH_MNT/bigfile $tempfile.2 \
+		|| _fail "bigfile corrupted"
+	diff -q $SCRATCH_MNT/symlink $tempfile.2 \
+		|| _fail "symlink broken"
+
+	$ATTR_PROG -l $SCRATCH_MNT/directory/test | \
+		sed -e '/Attribute..selinux..has/d' | \
+		_filter_scratch
+
+	echo "*** unmount FS"
+	_full "umount"
+	_scratch_unmount >>$seqfull 2>&1 \
+		|| _fail "umount failed"
+}
+
+_verify_fs 2
+
+echo "*** done"
+status=0
+exit
