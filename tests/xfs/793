@@ -32,13 +32,13 @@ _scratch_mount
 _require_xfs_has_feature "$SCRATCH_MNT" realtime
 _xfs_force_bdev realtime $SCRATCH_MNT
 
-# XXX the realtime summary scrubber isn't currently implemented upstream.
-# Don't bother trying to fix it on those kernels
-$XFS_IO_PROG -c 'scrub rtsummary' -c 'scrub rtsummary' "$SCRATCH_MNT" 2>&1 | \
-	grep -q 'Scan was not complete' && \
-	_notrun "rtsummary scrub is incomplete"
-
-_scratch_xfs_stress_online_repair -s "repair rtsummary"
+if _xfs_has_feature "$SCRATCH_MNT" rtgroups; then
+	_scratch_xfs_stress_online_repair -s "repair rtsummary %rgno%"
+elif xfs_io -c 'help scrub' | grep -q rgsuper; then
+	_scratch_xfs_stress_online_repair -s "repair rtsummary 0"
+else
+	_scratch_xfs_stress_online_repair -s "repair rtsummary"
+fi
 
 # success, all done
 echo Silence is golden

@@ -30,7 +30,14 @@ _require_xfs_stress_scrub
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount
 _require_xfs_has_feature "$SCRATCH_MNT" realtime
-_scratch_xfs_stress_scrub -s "scrub rtbitmap"  -s "scrub rgbitmap %rgno%"
+
+if _xfs_has_feature "$SCRATCH_MNT" rtgroups; then
+	_scratch_xfs_stress_scrub -s "scrub rtbitmap %rgno%"
+elif xfs_io -c 'help scrub' | grep -q rgsuper; then
+	_scratch_xfs_stress_scrub -s "scrub rtbitmap 0"
+else
+	_scratch_xfs_stress_scrub -s "scrub rtbitmap"
+fi
 
 # success, all done
 echo Silence is golden

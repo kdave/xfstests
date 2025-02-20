@@ -1950,6 +1950,25 @@ _scratch_xfs_find_metafile()
 	local metafile="$1"
 	local sb_field
 
+	# With metadir=1, the realtime volume is sharded into allocation
+	# groups.  Each rtgroup has its own bitmap and summary file.  Tests
+	# should pick a particular file, but this compatibility shim still
+	# exists to keep old tests working.
+	case "$metafile" in
+	"rbmino")
+		if _xfs_has_feature "$SCRATCH_DEV" rtgroups; then
+			echo "path -m /rtgroups/0.bitmap"
+			return 0
+		fi
+		;;
+	"rsumino")
+		if _xfs_has_feature "$SCRATCH_DEV" rtgroups; then
+			echo "path -m /rtgroups/0.summary"
+			return 0
+		fi
+		;;
+	esac
+
 	sb_field="$(_scratch_xfs_get_sb_field "$metafile")"
 	if echo "$sb_field" | grep -q -w 'not found'; then
 		return 1

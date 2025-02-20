@@ -26,7 +26,11 @@ echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 
 echo "Fuzz rtsummary"
-path="$(_scratch_xfs_find_metafile rsumino)"
+if _xfs_has_feature "$SCRATCH_DEV" rtgroups; then
+	path="path -m /rtgroups/0.summary"
+else
+	path="$(_scratch_xfs_find_metafile rsumino)"
+fi
 _scratch_xfs_fuzz_metadata '' 'both' "$path" 'dblock 0' >> $seqres.full
 echo "Done fuzzing rtsummary"
 
