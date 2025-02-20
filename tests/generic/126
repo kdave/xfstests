@@ -13,6 +13,8 @@ _begin_fstest perms auto quick
 _cleanup()
 {
     cd /
+    rm -r -f $tmp.*
+    test -n "$testdir" && rm -rf "$testdir"
 }
 
 # Import common functions.
@@ -20,10 +22,21 @@ _cleanup()
 
 _require_test
 _require_chown
+_require_chmod
 
 QA_FS_PERMS=$here/src/fs_perms
 
-cd $TEST_DIR
+
+# This test is testing filesystem permissions. If the sticky bit is set on
+# the directory, that can affect the outcome. Create a new directory with
+# known permissions in which to run this test.
+testdir="$TEST_DIR/generic-${seq}.$$"
+rm -rf $testdir
+mkdir $testdir
+chown 0:0 $testdir
+chmod 0755 $testdir
+cd $testdir
+
 cp $here/src/testx ./testx.file
 
 # file_perm owner_uid owner_gid tester_uid tester_gid perm_to_test expected_result pass=1
@@ -45,8 +58,6 @@ $QA_FS_PERMS 020 99 99 99 500 w 1
 $QA_FS_PERMS 200 99 99 200 99 w 1
 $QA_FS_PERMS 040 99 99 99 500 r 1
 $QA_FS_PERMS 400 99 99 200 99 r 1
-
-rm -f ./testx.file
 
 status=0
 exit
