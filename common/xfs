@@ -213,6 +213,8 @@ _xfs_get_file_block_size()
 {
 	local path="$1"
 
+	# If rtinherit or realtime are not set on the path, then all files
+	# will be created on the data device.
 	if ! ($XFS_IO_PROG -c "stat -v" "$path" 2>&1 | grep -E -q '(rt-inherit|realtime)'); then
 		_get_block_size "$path"
 		return
@@ -223,6 +225,15 @@ _xfs_get_file_block_size()
 	while ! $XFS_INFO_PROG "$path" &>/dev/null && [ "$path" != "/" ]; do
 		path="$(dirname "$path")"
 	done
+
+	# If there's no realtime section, the rtinherit and rextsize settings
+	# are irrelevant -- all files are created on the data device.
+	if $XFS_INFO_PROG "$path" | grep -q 'realtime =none'; then
+		_get_block_size "$path"
+		return
+	fi
+
+	# Otherwise, report the rt extent size.
 	_xfs_get_rtextsize "$path"
 }
 
