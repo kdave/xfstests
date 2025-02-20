@@ -4,7 +4,7 @@
 #
 # FS QA Test No. 482
 #
-# Populate a XFS filesystem and fuzz every rtrmapbt keyptr field.
+# Populate a XFS filesystem and fuzz every rtrmapbt key/pointer field.
 # Do not fix the filesystem, to test metadata verifiers.
 
 . ./common/preamble
@@ -25,8 +25,11 @@ _disable_dmesg_check
 echo "Format and populate"
 _scratch_populate_cached nofill > $seqres.full 2>&1
 
+path="$(_scratch_xfs_find_rgbtree_height 'rmap' 2)" || \
+	_fail "could not find two-level rtrmapbt"
+
 echo "Fuzz rtrmapbt keyptrs"
-_scratch_xfs_fuzz_metadata '(rtrmapbt)' 'offline' 'sb 0' 'addr rrmapino' >> $seqres.full
+_scratch_xfs_fuzz_metadata '(rtrmapbt)' 'offline' "path -m $path" >> $seqres.full
 echo "Done fuzzing rtrmapbt keyptrs"
 
 # success, all done

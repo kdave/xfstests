@@ -1827,6 +1827,39 @@ _scratch_xfs_find_agbtree_height() {
 	return 1
 }
 
+# Find us the path to the inode containing a realtime btree with a specific
+# height.
+_scratch_xfs_find_rgbtree_height() {
+	local bt_type="$1"
+	local bt_height="$2"
+	local rgcount=$(_xfs_mount_rgcount $SCRATCH_DEV)
+	local path
+	local path_format
+	local bt_prefix
+
+	case "${bt_type}" in
+	"rmap")
+		path_format="/rtgroups/%u.rmap"
+		bt_prefix="u3.rtrmapbt"
+		;;
+	*)
+		_fail "Don't know about rt btree ${bt_type}"
+		;;
+	esac
+
+	for ((rgno = 0; rgno < rgcount; rgno++)); do
+		path="$(printf "${path_format}" "${rgno}")"
+		bt_level=$(_scratch_xfs_db -c "path -m ${path}" -c "p ${bt_prefix}.level" | awk '{print $3}')
+		# "level" is the actual level within the btree
+		if [ "${bt_level}" -eq "$((bt_height - 1))" ]; then
+			echo "${path}"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
 _require_xfs_mkfs_atomicswap()
 {
 	# atomicswap can be activated on rmap or reflink filesystems.
