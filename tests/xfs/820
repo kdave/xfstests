@@ -1,0 +1,128 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 820
+#
+# Functionality test for persistent quota accounting and enforcement flags in
+# XFS when metadata directories are enabled.
+#
+. ./common/preamble
+_begin_fstest auto quick quota
+
+. ./common/filter
+. ./common/quota
+
+$MKFS_XFS_PROG 2>&1 | grep -q 'uquota' || \
+	_notrun "mkfs does not support uquota option"
+
+_require_scratch
+_require_xfs_quota
+
+filter_quota_state() {
+	sed -e 's/Inode: #[0-9]\+/Inode #XXX/g' \
+	    -e '/max warnings:/d' \
+	    -e '/Blocks grace time:/d' \
+	    -e '/Inodes grace time:/d' \
+		| _filter_scratch
+}
+
+qerase_mkfs_options() {
+	echo "$MKFS_OPTIONS" | sed \
+		-e 's/uquota//g' \
+		-e 's/gquota//g' \
+		-e 's/pquota//g' \
+		-e 's/uqnoenforce//g' \
+		-e 's/gqnoenforce//g' \
+		-e 's/pqnoenforce//g' \
+		-e 's/,,*/,/g'
+}
+
+confirm() {
+	echo "$MOUNT_OPTIONS" | grep -E -q '(qnoenforce|quota)' && \
+		echo "saw quota mount options"
+	_scratch_mount
+	$XFS_QUOTA_PROG -x -c "state -ugp" $SCRATCH_MNT | filter_quota_state
+	_check_xfs_scratch_fs
+	_scratch_unmount
+}
+
+ORIG_MOUNT_OPTIONS="$MOUNT_OPTIONS"
+MKFS_OPTIONS="$(qerase_mkfs_options)"
+
+echo "Test 0: formatting a subset"
+_scratch_mkfs -m uquota,gqnoenforce &>> $seqres.full
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+confirm
+
+echo "Test 1: formatting"
+_scratch_mkfs -m uquota,gquota,pquota &>> $seqres.full
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+confirm
+
+echo "Test 2: only grpquota"
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option grpquota
+confirm
+
+echo "Test 3: repair"
+_scratch_xfs_repair &>> $seqres.full || echo "repair failed?"
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+confirm
+
+echo "Test 4: weird options"
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option pqnoenforce,uquota
+confirm
+
+echo "Test 5: simple recovery"
+_scratch_mkfs -m uquota,gquota,pquota &>> $seqres.full
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+echo "$MOUNT_OPTIONS" | grep -E -q '(qnoenforce|quota)' && \
+	echo "saw quota mount options"
+_scratch_mount
+$XFS_QUOTA_PROG -x -c "state -ugp" $SCRATCH_MNT | filter_quota_state
+touch $SCRATCH_MNT/a
+_scratch_shutdown -v -f >> $seqres.full
+echo shutdown
+_scratch_unmount
+confirm
+
+echo "Test 6: simple recovery with mount options"
+_scratch_mkfs -m uquota,gquota,pquota &>> $seqres.full
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+echo "$MOUNT_OPTIONS" | grep -E -q '(qnoenforce|quota)' && \
+	echo "saw quota mount options"
+_scratch_mount
+$XFS_QUOTA_PROG -x -c "state -ugp" $SCRATCH_MNT | filter_quota_state
+touch $SCRATCH_MNT/a
+_scratch_shutdown -v -f >> $seqres.full
+echo shutdown
+_scratch_unmount
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option gqnoenforce
+confirm
+
+echo "Test 7: user quotaoff recovery"
+_scratch_mkfs -m uquota,gquota,pquota &>> $seqres.full
+MOUNT_OPTIONS="$ORIG_MOUNT_OPTIONS"
+_qmount_option	# blank out quota options
+echo "$MOUNT_OPTIONS" | grep -E -q '(qnoenforce|quota)' && \
+	echo "saw quota mount options"
+_scratch_mount
+$XFS_QUOTA_PROG -x -c "state -ugp" $SCRATCH_MNT | filter_quota_state
+touch $SCRATCH_MNT/a
+$XFS_QUOTA_PROG -x -c 'off -u' $SCRATCH_MNT
+_scratch_shutdown -v -f >> $seqres.full
+echo shutdown
+_scratch_unmount
+confirm
+
+# success, all done
+status=0
+exit

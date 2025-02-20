@@ -96,7 +96,13 @@ smajor=$((0x`stat -L -c %t $loop_dev`))
 sminor=$((0x`stat -L -c %T $loop_dev`))
 
 _mkfs_dev $loop_dev >> $seqres.full 2>&1
-_mount $loop_dev $SCRATCH_MNT || _fail "mount failed"
+if [ $FSTYP = "xfs" ]; then
+	# Writes to the quota file are captured in cgroup metrics on XFS, so
+	# we require that quota is not enabled at all.
+	_mount $loop_dev -o noquota $SCRATCH_MNT || _fail "mount failed"
+else
+	_mount $loop_dev $SCRATCH_MNT || _fail "mount failed"
+fi
 
 blksize=$(_get_block_size "$SCRATCH_MNT")
 
