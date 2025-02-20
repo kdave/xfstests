@@ -1400,7 +1400,7 @@ _scratch_get_bmx_prefix() {
 
 _scratch_get_iext_count()
 {
-	local ino=$1
+	local selector=$1
 	local whichfork=$2
 	local field=""
 
@@ -1415,7 +1415,7 @@ _scratch_get_iext_count()
 			return 1
 	esac
 
-	_scratch_xfs_get_metadata_field $field "inode $ino"
+	_scratch_xfs_get_metadata_field $field "$selector"
 }
 
 #
@@ -1884,4 +1884,21 @@ _wipe_xfs_properties()
 			grep '=' | sed -e 's/=.*$//g' | while read name; do
 		setfattr --remove="$name" "$1"
 	done
+}
+
+# Return the xfs_db selector for a superblock-rooted metadata file on the
+# scratch filesystem.  The sole argument is the name of the field within the
+# superblock.  This helper cannot be used to find files under the metadata
+# directory tree.
+_scratch_xfs_find_metafile()
+{
+	local metafile="$1"
+	local sb_field
+
+	sb_field="$(_scratch_xfs_get_sb_field "$metafile")"
+	if echo "$sb_field" | grep -q -w 'not found'; then
+		return 1
+	fi
+	echo "inode $sb_field"
+	return 0
 }
