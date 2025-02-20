@@ -23,12 +23,7 @@ _require_quota()
 	if [ ! -f /proc/fs/xfs/xqmstat ]; then
 	    _notrun "Installed kernel does not support XFS quotas"
         fi
-	if [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ]; then
-	    _notrun "Quotas not supported on realtime test device"
-	fi
-	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ]; then
-	    _notrun "Quotas not supported on realtime scratch device"
-	fi
+	_require_xfs_rtquota_if_rtdev
 	;;
     *)
 	_notrun "disk quotas not supported by this filesystem type: $FSTYP"
@@ -44,12 +39,7 @@ _require_xfs_quota()
 {
     $here/src/feature -q $TEST_DEV
     [ $? -ne 0 ] && _notrun "Installed kernel does not support XFS quota"
-    if [ "$USE_EXTERNAL" = yes -a ! -z "$TEST_RTDEV" ]; then
-	_notrun "Quotas not supported on realtime test device"
-    fi
-    if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ]; then
-	_notrun "Quotas not supported on realtime scratch device"
-    fi
+    _require_xfs_rtquota_if_rtdev
     [ -n "$XFS_QUOTA_PROG" ] || _notrun "XFS quota user tools not installed"
 }
 
@@ -153,11 +143,7 @@ _require_prjquota()
     fi
     $here/src/feature -P $_dev
     [ $? -ne 0 ] && _notrun "Installed kernel does not support project quotas"
-    if [ "$USE_EXTERNAL" = yes ]; then
-	if [ -n "$TEST_RTDEV" -o -n "$SCRATCH_RTDEV" ]; then
-	    _notrun "Project quotas not supported on realtime filesystem"
-	fi
-    fi
+    test "$FSTYP" = "xfs" && _require_xfs_rtquota_if_rtdev
 }
 
 #

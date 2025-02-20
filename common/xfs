@@ -2073,3 +2073,65 @@ _require_xfs_scratch_metadir()
 		_scratch_unmount
 	fi
 }
+
+# Does the xfs kernel module support realtime quota?
+_xfs_kmod_supports_rtquota() {
+	local xqmfile="/proc/fs/xfs/xqm"
+
+	test -e "$xqmfile" || modprobe xfs
+	test -e "$xqmfile" || return 1
+
+	grep -q -w rtquota "$xqmfile"
+}
+
+# Does this mounted filesystem support realtime quota?  This is the only way
+# to check that the fs really supports it because the kernel ignores quota
+# mount options for pre-rtgroups realtime filesystems.
+_xfs_fs_supports_rtquota() {
+	local mntpt="$1"
+	local dev="$2"
+	local rtdev="$3"
+
+	test -d "$mntpt" || \
+		echo "_xfs_fs_supports_rtquota needs a mountpoint"
+	test "$USE_EXTERNAL" == "yes" || \
+		echo "_xfs_fs_supports_rtquota needs USE_EXTERNAL=yes"
+	test -n "$rtdev" || \
+		echo "_xfs_fs_supports_rtquota needs an rtdev"
+
+	$here/src/feature -U $dev || \
+		$here/src/feature -G $dev || \
+		$here/src/feature -P $dev
+}
+
+# Do we support realtime quotas on the (mounted) test filesystem?
+_xfs_test_supports_rtquota() {
+	_xfs_fs_supports_rtquota "$TEST_DIR" "$TEST_DEV" "$TEST_RTDEV"
+}
+
+# Do we support realtime quotas on the (mounted) scratch filesystem?
+_xfs_scratch_supports_rtquota() {
+	_xfs_fs_supports_rtquota "$SCRATCH_MNT" "$SCRATCH_DEV" "$SCRATCH_RTDEV"
+}
+
+# Make sure that we're set up for realtime quotas if external rt devices are
+# configured.  The test filesystem has to be mounted before each test, so we
+# can check that quickly, and we make the bold assumption that the same will
+# apply to any scratch fs that might be created.
+_require_xfs_rtquota_if_rtdev() {
+	test "$USE_EXTERNAL" = "yes" || return
+
+	if [ -n "$TEST_RTDEV$SCRATCH_RTDEV" ]; then
+		_xfs_kmod_supports_rtquota || \
+			_notrun "Kernel driver does not support rt quota"
+	fi
+
+	if [ -n "$TEST_RTDEV" ]; then
+		_xfs_test_supports_rtquota || \
+			_notrun "Quotas not supported on realtime device"
+	fi
+
+	if [ -n "$SCRATCH_RTDEV" ] && [ -z "$TEST_RTDEV" ]; then
+		_notrun "Quotas probably not supported on realtime scratch device; set TEST_RTDEV"
+	fi
+}

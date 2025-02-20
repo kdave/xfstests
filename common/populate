@@ -245,9 +245,13 @@ _populate_xfs_qmount_option()
 	if [ ! -f /proc/fs/xfs/xqmstat ]; then
 		# No quota support
 		return
-	elif [ "${USE_EXTERNAL}" = "yes" ] && [ ! -z "${SCRATCH_RTDEV}" ]; then
-		# Quotas not supported on rt filesystems
-		return
+	elif [ "${USE_EXTERNAL}" = "yes" ] && [ -n "${SCRATCH_RTDEV}" ]; then
+		# We have not mounted the scratch fs, so we can only check
+		# rtquota support from the test fs.  Skip the quota options if
+		# the test fs does not have an rt section.
+		test -n "${TEST_RTDEV}" || return
+		_xfs_kmod_supports_rtquota || return
+		_xfs_test_supports_rtquota || return
 	elif [ -z "${XFS_QUOTA_PROG}" ]; then
 		# xfs quota tools not installed
 		return
