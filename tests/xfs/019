@@ -82,6 +82,7 @@ pipe p--670 0 0
 symlink l--123 0 0 bigfile
 : a file we actually read
 bigfile ---666 3 0 $tempfile.2
+rsvfile r--666 3 0 1234567
 : done
 $
 EOF
@@ -116,6 +117,10 @@ _verify_fs()
 		|| echo "bigfile corrupted"
 	diff -q $SCRATCH_MNT/symlink $tempfile.2 \
 		|| echo "symlink broken"
+
+	rsvblocks=$(stat -c '%b' $SCRATCH_MNT/rsvfile)
+	test $rsvblocks -gt 0 \
+		|| echo "rsvfile broken"
 
 	echo "*** unmount FS"
 	_full "umount"
