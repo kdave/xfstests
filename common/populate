@@ -766,6 +766,37 @@ __populate_check_xfs_agbtree_height() {
 	return 1
 }
 
+# Check that there's at least one rt btree with multiple levels
+__populate_check_xfs_rgbtree_height() {
+	local bt_type="$1"
+	local rgcount=$(_scratch_xfs_db -c 'sb 0' -c 'p rgcount' | awk '{print $3}')
+	local path
+	local path_format
+	local bt_prefix
+
+	case "${bt_type}" in
+	"rmap")
+		path_format="/rtgroups/%u.rmap"
+		bt_prefix="u3.rtrmapbt"
+		;;
+	*)
+		_fail "Don't know about rt btree ${bt_type}"
+		;;
+	esac
+
+	for ((rgno = 0; rgno < rgcount; rgno++)); do
+		path="$(printf "${path_format}" "${rgno}")"
+		bt_level=$(_scratch_xfs_db -c "path -m ${path}" -c "p ${bt_prefix}.level" | awk '{print $3}')
+		# "level" is the actual level within the btree
+		if [ "${bt_level}" -gt 0 ]; then
+			return 0
+		fi
+	done
+
+	__populate_fail "Failed to create rt ${bt_type} of sufficient height!"
+	return 1
+}
+
 # Check that populate created all the types of files we wanted
 _scratch_xfs_populate_check() {
 	_scratch_mount
@@ -789,6 +820,7 @@ _scratch_xfs_populate_check() {
 	is_finobt=$(_xfs_has_feature "$SCRATCH_MNT" finobt -v)
 	is_rmapbt=$(_xfs_has_feature "$SCRATCH_MNT" rmapbt -v)
 	is_reflink=$(_xfs_has_feature "$SCRATCH_MNT" reflink -v)
+	is_rt="$(_xfs_get_rtextents "$SCRATCH_MNT")"
 
 	blksz="$(stat -f -c '%s' "${SCRATCH_MNT}")"
 	dblksz="$(_xfs_get_dir_blocksize "$SCRATCH_MNT")"
@@ -819,6 +851,8 @@ _scratch_xfs_populate_check() {
 	test $is_finobt -ne 0 && __populate_check_xfs_agbtree_height "fino"
 	test $is_rmapbt -ne 0 && __populate_check_xfs_agbtree_height "rmap"
 	test $is_reflink -ne 0 && __populate_check_xfs_agbtree_height "refcnt"
+	test $is_rmapbt -ne 0 && test $is_rt -gt 0 && \
+		__populate_check_xfs_rgbtree_height "rmap"
 }
 
 # Check data fork format of ext4 file
