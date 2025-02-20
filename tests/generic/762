@@ -1,0 +1,114 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 762
+#
+# Make sure that statfs reporting works when project quotas are set on a
+# directory tree.
+#
+. ./common/preamble
+_begin_fstest auto quota prealloc
+
+_fixed_by_git_commit kernel XXXXXXXXXXXXXX \
+	"xfs: don't over-report free space or inodes in statvfs"
+
+. ./common/filter
+. ./common/quota
+
+_require_quota
+_require_scratch
+_require_xfs_io_command 'chproj'
+_require_xfs_io_command "falloc"
+
+_scratch_mkfs >$seqres.full 2>&1
+_scratch_enable_pquota
+_qmount_option "prjquota"
+_qmount
+_force_vfs_quota_testing $SCRATCH_MNT
+_require_prjquota $SCRATCH_DEV
+
+mkdir $SCRATCH_MNT/dir
+
+bsize() {
+	$XFS_IO_PROG -c 'statfs' $1 | grep f_bsize | awk '{print $3}'
+}
+
+blocks() {
+	$XFS_IO_PROG -c 'statfs' $1 | grep f_blocks | awk '{print $3}'
+}
+
+bavail() {
+	$XFS_IO_PROG -c 'statfs' $1 | grep f_bavail | awk '{print $3}'
+}
+
+bsize=$(bsize $SCRATCH_MNT)
+orig_bavail=$(bavail $SCRATCH_MNT)
+orig_blocks=$(blocks $SCRATCH_MNT)
+
+# Set a project quota limit of half the free space, make sure both report the
+# same number of blocks
+pquot_limit=$(( orig_bavail / 2 ))
+setquota -P 55 0 $((pquot_limit * bsize / 1024))K 0 0 $SCRATCH_DEV
+$XFS_IO_PROG -c 'chproj 55' -c 'chattr +P' $SCRATCH_MNT/dir
+
+# check statfs reporting
+fs_blocks=$(blocks $SCRATCH_MNT)
+dir_blocks=$(blocks $SCRATCH_MNT/dir)
+
+_within_tolerance "root blocks1" $fs_blocks $orig_blocks 1% -v
+_within_tolerance "dir blocks1" $dir_blocks $pquot_limit 1% -v
+
+fs_bavail=$(bavail $SCRATCH_MNT)
+expected_dir_bavail=$pquot_limit
+dir_bavail=$(bavail $SCRATCH_MNT/dir)
+
+_within_tolerance "root bavail1" $fs_bavail $orig_bavail 1% -v
+_within_tolerance "dir bavail1" $dir_bavail $expected_dir_bavail 1% -v
+
+# use up most of the free space in the filesystem
+rem_free=$(( orig_bavail / 10 ))	# bsize blocks
+fallocate -l $(( (orig_bavail - rem_free) * bsize )) $SCRATCH_MNT/a
+
+if [ $rem_free -gt $pquot_limit ]; then
+	echo "rem_free $rem_free greater than pquot_limit $pquot_limit??"
+fi
+
+# check statfs reporting
+fs_blocks=$(blocks $SCRATCH_MNT)
+dir_blocks=$(blocks $SCRATCH_MNT/dir)
+
+_within_tolerance "root blocks2" $fs_blocks $orig_blocks 1% -v
+_within_tolerance "dir blocks2" $dir_blocks $pquot_limit 1% -v
+
+fs_bavail=$(bavail $SCRATCH_MNT)
+dir_bavail=$(bavail $SCRATCH_MNT/dir)
+
+_within_tolerance "root bavail2" $fs_bavail $rem_free 1% -v
+_within_tolerance "dir bavail2" $dir_bavail $rem_free 1% -v
+
+# use up 10 blocks of project quota
+$XFS_IO_PROG -f -c "pwrite -S 0x99 0 $((bsize * 10))" -c fsync $SCRATCH_MNT/dir/a >> $seqres.full
+
+# check statfs reporting
+fs_blocks=$(blocks $SCRATCH_MNT)
+dir_blocks=$(blocks $SCRATCH_MNT/dir)
+
+_within_tolerance "root blocks3" $fs_blocks $orig_blocks 1% -v
+_within_tolerance "dir blocks3" $dir_blocks $pquot_limit 1% -v
+
+fs_bavail=$(bavail $SCRATCH_MNT)
+dir_bavail=$(bavail $SCRATCH_MNT/dir)
+
+_within_tolerance "root bavail3" $fs_bavail $rem_free 1% -v
+_within_tolerance "dir bavail3" $dir_bavail $((rem_free - 10)) 1% -v
+
+# final state diagnostics
+$XFS_IO_PROG -c 'statfs' $SCRATCH_MNT $SCRATCH_MNT/dir | grep statfs >> $seqres.full
+repquota -P $SCRATCH_DEV >> $seqres.full
+df $SCRATCH_MNT >> $seqres.full
+ls -laR $SCRATCH_MNT/ >> $seqres.full
+
+# success, all done
+status=0
+exit
