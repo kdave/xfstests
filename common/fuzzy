@@ -1015,15 +1015,28 @@ __stress_scrub_fsx_loop() {
 	rm -f "$runningfile"
 }
 
+# Run fsstress and record outcome
+___scrub_run_fsstress() {
+	_run_fsstress "$@"
+	local res=$?
+	echo "fsstress $* exits with $res at $(date)" >> $seqres.full
+	test "$res" -ne 0 && touch "$tmp.killstress"
+}
+
 # Run fsstress while we're testing online fsck.
 __stress_scrub_fsstress_loop() {
 	local end="$1"
 	local runningfile="$2"
 	local remount_period="$3"
 	local stress_tgt="$4"
-	local focus=()
-	local res
+	local focus=(-p 4)
+	local res res2
 	local duration
+	local has_rt
+	local d_args r_args
+
+	test $FSTYP = "xfs" && _xfs_has_feature "$SCRATCH_MNT" realtime && \
+		has_rt=1
 
 	case "$stress_tgt" in
 	"parent")
@@ -1113,9 +1126,24 @@ __stress_scrub_fsstress_loop() {
 		;;
 	esac
 
-	local args=$(_scale_fsstress_args -p 4 -d $SCRATCH_MNT "${focus[@]}")
-	echo "Running $FSSTRESS_PROG $args" >> $seqres.full
+	if [ -n "$has_rt" ]; then
+		local rdir="$SCRATCH_MNT/rt"
+		local ddir="$SCRATCH_MNT/data"
 
+		mkdir -p "$rdir" "$ddir"
+		$XFS_IO_PROG -c 'chattr +rt' "$rdir"
+		$XFS_IO_PROG -c 'chattr -rt' "$ddir"
+
+		r_args=$(_scale_fsstress_args -d "$rdir" "${focus[@]}")
+		d_args=$(_scale_fsstress_args -d "$ddir" "${focus[@]}")
+		echo "Running $FSSTRESS_PROG $d_args" >> $seqres.full
+		echo "Running $FSSTRESS_PROG $r_args" >> $seqres.full
+	else
+		d_args=$(_scale_fsstress_args -d $SCRATCH_MNT "${focus[@]}")
+		echo "Running $FSSTRESS_PROG $d_args" >> $seqres.full
+	fi
+
+	rm -f "$tmp.killstress"
 	if [ -n "$remount_period" ]; then
 		local mode="rw"
 		local rw_arg=""
@@ -1125,10 +1153,10 @@ __stress_scrub_fsstress_loop() {
 			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
 
 			duration=$(___stress_scrub_duration "$end" "$remount_period")
-			_run_fsstress $duration $args $rw_arg >> $seqres.full
-			res=$?
-			echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
-			[ "$res" -ne 0 ] && break;
+			___scrub_run_fsstress $duration $d_args $rw_arg &
+			test -n "$has_rt" && ___scrub_run_fsstress $duration $r_args $rw_arg &
+			wait
+			test -e "$tmp.killstress" && break
 
 			if [ "$mode" = "rw" ]; then
 				mode="ro"
@@ -1144,7 +1172,7 @@ __stress_scrub_fsstress_loop() {
 				sleep 0.2
 			done
 		done
-		rm -f "$runningfile"
+		rm -f "$runningfile" "$tmp.killstress"
 		return 0
 	fi
 
@@ -1152,12 +1180,12 @@ __stress_scrub_fsstress_loop() {
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
 		duration=$(___stress_scrub_duration "$end" "$remount_period")
-		_run_fsstress $duration $args >> $seqres.full
-		res=$?
-		echo "$mode fsstress exits with $res at $(date)" >> $seqres.full
-		[ "$res" -ne 0 ] && break;
+		___scrub_run_fsstress $duration $d_args &
+		test -n "$has_rt" && ___scrub_run_fsstress $duration $r_args &
+		wait
+		test -e "$tmp.killstress" && break
 	done
-	rm -f "$runningfile"
+	rm -f "$runningfile" "$tmp.killstress"
 }
 
 # Make sure we have everything we need to run stress and scrub
