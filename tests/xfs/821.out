@@ -1,0 +1,47 @@
+QA output created by 821
+Format filesystem
+
+Write 128rx to root
+0[real] 128 0 0 0 ---
+
+Write 64rx to root, 4444, and 5555.
+0[real] 192 0 0 0 ---
+4444[real] 64 0 0 0 ---
+5555[real] 64 0 0 0 ---
+
+Move 64rx from root to 5555
+0[real] 128 0 0 0 ---
+4444[real] 64 0 0 0 ---
+5555[real] 128 0 0 0 ---
+
+Move 64rx from 5555 to 4444
+0[real] 128 0 0 0 ---
+4444[real] 128 0 0 0 ---
+5555[real] 64 0 0 0 ---
+
+Set hard limit of 1024rx and check enforcement
+pwrite: Disk quota exceeded
+fsgqa[real] 1024 0 1024 0 ---
+
+Set soft limit of 512rx and check timelimit enforcement
+fsgqa[real] 512 512 0 0 ---
+fsgqa[real] 513 512 0 0 ---
+
+Try again after 3s
+fsgqa[real] 514 512 0 0 ---
+
+Try again after another 6s
+pwrite: Disk quota exceeded
+fsgqa[real] 514 512 0 0 ---
+
+Extend time limits and warnings
+fsgqa[real] 512 512 0 0 [--------]
+
+Try to trip a 2 day grace period
+fsgqa[real] 513 512 0 0 [2_days]
+
+Try to trip a 3 day grace period
+fsgqa[real] 514 512 0 0 [3_days]
+
+Test quota applied to bmbt
+SCRATCH_MNT/file2: Disk quota exceeded

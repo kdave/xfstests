@@ -1,0 +1,174 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 821
+#
+# Functional testing for realtime quotas.
+
+. ./common/preamble
+_begin_fstest auto quick quota realtime
+
+. ./common/quota
+. ./common/filter
+
+_require_test_program "punch-alternating"
+_require_scratch
+_require_user
+
+echo "Format filesystem" | tee -a $seqres.full
+_scratch_mkfs > $seqres.full
+_try_scratch_mount -o usrquota || \
+	_notrun "Can't mount with realtime quota enabled"
+
+_require_xfs_has_feature "$SCRATCH_MNT" realtime
+_scratch_supports_rtquota || _notrun "Requires realtime quota"
+
+# Make sure all our files are on the rt device
+_xfs_force_bdev realtime $SCRATCH_MNT
+chmod a+rwx $SCRATCH_MNT
+
+# Record rt geometry
+bmbt_blksz=$(_get_block_size $SCRATCH_MNT)
+file_blksz=$(_get_file_block_size $SCRATCH_MNT)
+rextsize=$((file_blksz / bmbt_blksz))
+echo "bmbt_blksz $bmbt_blksz" >> $seqres.full
+echo "file_blksz $file_blksz" >> $seqres.full
+echo "rextsize $rextsize" >> $seqres.full
+
+note() {
+	echo -e "\n$*" | tee -a $seqres.full
+}
+
+# Report on the user's block and rt block usage, soft limit, hard limit, and
+# warning count for rt volumes
+report_rtusage() {
+	local user="$1"
+	local timeout_arg="$2"
+	local print_timeout=0
+
+	test -z "$user" && user=$qa_user
+	test -n "$timeout_arg" && print_timeout=1
+
+	$XFS_QUOTA_PROG -c "quota -u -r -n -N $user" $SCRATCH_MNT | \
+		sed -e 's/ days/_days/g' >> $seqres.full
+
+	$XFS_QUOTA_PROG -c "quota -u -r -n -N $user" $SCRATCH_MNT | \
+		sed -e 's/ days/_days/g' | \
+		awk -v user=$user -v print_timeout=$print_timeout -v file_blksz=$file_blksz \
+			'{printf("%s[real] %d %d %d %d %s\n", user, $2 * 1024 / file_blksz, $3 * 1024 / file_blksz, $4 * 1024 / file_blksz, $5, print_timeout ? $6 : "---");}'
+}
+
+note "Write 128rx to root"
+$XFS_IO_PROG -f -c "pwrite 0 $((128 * file_blksz))" $SCRATCH_MNT/file1 > /dev/null
+chmod a+r $SCRATCH_MNT/file1
+_scratch_sync
+report_rtusage 0
+
+note "Write 64rx to root, 4444, and 5555."
+$XFS_IO_PROG -f -c "pwrite 0 $((64 * file_blksz))" $SCRATCH_MNT/file3.5555 > /dev/null
+chown 5555 $SCRATCH_MNT/file3.5555
+$XFS_IO_PROG -f -c "pwrite 0 $((64 * file_blksz))" $SCRATCH_MNT/file3.4444 > /dev/null
+chown 4444 $SCRATCH_MNT/file3.4444
+$XFS_IO_PROG -f -c "pwrite 0 $((64 * file_blksz))" $SCRATCH_MNT/file3 > /dev/null
+_scratch_sync
+report_rtusage 0
+report_rtusage 4444
+report_rtusage 5555
+
+note "Move 64rx from root to 5555"
+chown 5555 $SCRATCH_MNT/file3
+report_rtusage 0
+report_rtusage 4444
+report_rtusage 5555
+
+note "Move 64rx from 5555 to 4444"
+chown 4444 $SCRATCH_MNT/file3
+report_rtusage 0
+report_rtusage 4444
+report_rtusage 5555
+
+note "Set hard limit of 1024rx and check enforcement"
+$XFS_QUOTA_PROG -x -c "limit -u rtbhard=$((1024 * file_blksz)) $qa_user" $SCRATCH_MNT
+# fsync (-w) after pwrite because enforcement only begins when space usage is
+# committed.  If delalloc is enabled, this doesn't happen until writeback.
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w 0 $((2048 * file_blksz))' $SCRATCH_MNT/file2"
+report_rtusage
+
+note "Set soft limit of 512rx and check timelimit enforcement"
+rm -f $SCRATCH_MNT/file2 $SCRATCH_MNT/file2.1
+period=6	# seconds
+$XFS_QUOTA_PROG -x \
+	-c "limit -u rtbsoft=$((512 * file_blksz)) rtbhard=0 $qa_user" \
+	-c "timer -u -r -d $period" \
+	-c 'state -u' $SCRATCH_MNT >> $seqres.full
+
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w 0 $((512 * file_blksz))' $SCRATCH_MNT/file2" > /dev/null
+report_rtusage
+
+overflow=$(date +%s)
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w -b $file_blksz 0 $file_blksz' $SCRATCH_MNT/file2.1" > /dev/null
+report_rtusage
+sleep $((period / 2))
+note "Try again after $((period / 2))s"
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w -b $file_blksz $file_blksz $file_blksz' $SCRATCH_MNT/file2.1" > /dev/null
+report_rtusage
+sleep $period
+note "Try again after another ${period}s"
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w -b $file_blksz $((2 * file_blksz)) $file_blksz' $SCRATCH_MNT/file2.1" > /dev/null
+report_rtusage
+
+note "Extend time limits and warnings"
+rm -f $SCRATCH_MNT/file2 $SCRATCH_MNT/file2.1
+$XFS_QUOTA_PROG -x \
+	-c "limit -u rtbsoft=$((512 * file_blksz)) rtbhard=0 $qa_user" \
+	-c "timer -u -r -d 49h" $SCRATCH_MNT \
+	-c 'state -u' $SCRATCH_MNT >> $seqres.full
+
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w 0 $((512 * file_blksz))' $SCRATCH_MNT/file2" > /dev/null
+report_rtusage $qa_user want_timeout
+
+note "Try to trip a 2 day grace period"
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w -b $file_blksz 0 $file_blksz' $SCRATCH_MNT/file2.1" > /dev/null
+report_rtusage $qa_user want_timeout
+
+$XFS_QUOTA_PROG -x -c "timer -u -r 73h $qa_user" $SCRATCH_MNT
+
+note "Try to trip a 3 day grace period"
+_su $qa_user -c "$XFS_IO_PROG -f -c 'pwrite -w -b $file_blksz $file_blksz $file_blksz' $SCRATCH_MNT/file2.1" > /dev/null
+report_rtusage $qa_user want_timeout
+
+note "Test quota applied to bmbt"
+
+# Testing quota enforcement for bmbt shape changes is tricky.  The block
+# reservation will be for enough blocks to handle the maximal btree split.
+# This is (approximately) 9 blocks no matter the size of the existing extent
+# map structure, so we set the hard limit to one more than this quantity.
+#
+# However, that means that we need to make a file of at least twice that size
+# to ensure that we create enough extent records even in the rextsize==1 case
+# where punching doesn't just create unwritten records.
+#
+# Unfortunately, it's very difficult to predict when exactly the EDQUOT will
+# come down, so we just look for the error message.
+extent_records=$(( (25 * bmbt_blksz) / 16))
+echo "extent_records $extent_records" >> $seqres.full
+
+rm -f $SCRATCH_MNT/file2
+$XFS_QUOTA_PROG -x \
+	-c "limit -u rtbsoft=0 rtbhard=0 $qa_user" \
+	-c "limit -u bhard=$((bmbt_blksz * 10)) bsoft=0 $qa_user" \
+	-c 'state -u' $SCRATCH_MNT >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x58 -b 64m 0 $((extent_records * file_blksz))" $SCRATCH_MNT/file2 > /dev/null
+_scratch_sync
+chown $qa_user $SCRATCH_MNT/file2
+$here/src/punch-alternating $SCRATCH_MNT/file2 2>&1 | _filter_scratch
+
+$XFS_QUOTA_PROG -c "quota -u -r -n -N $qa_user" -c "quota -u -b -n -N $qa_user" $SCRATCH_MNT >> $seqres.full
+$XFS_IO_PROG -c "bmap -e -l -p -v" $SCRATCH_MNT/file2 >> $seqres.full
+
+# success, all done
+$XFS_QUOTA_PROG -x -c 'report -a -u' -c 'report -a -u -r' $SCRATCH_MNT >> $seqres.full
+ls -latr $SCRATCH_MNT >> $seqres.full
+status=0
+exit
