@@ -64,9 +64,17 @@ $XFS_IO_PROG -f -c "pwrite -S 0x63 $bufsize 1" $testdir/file2 >> $seqres.full
 $XFS_IO_PROG -f -c "pwrite -S 0x63 -b $bufsize 0 $filesize" $TEST_DIR/moo >> $seqres.full
 _scratch_sync
 _dmerror_load_error_table
-$AIO_TEST -b $bufsize $TEST_DIR/moo $testdir/file2 >> $seqres.full 2>&1
+# If the filesystem supports delalloc, then the fdatasync will report an IO
+# error.  If the write goes directly to disk, then aiocp will return nonzero.
+unset write_failed
+$AIO_TEST -b $bufsize $TEST_DIR/moo $testdir/file2 >> $seqres.full 2>&1 || \
+	write_failed=1
 $XFS_IO_PROG -c "fdatasync" $testdir/file2 |& \
-		_filter_flakey_EIO "fdatasync: Input/output error"
+		_filter_flakey_EIO "fdatasync: Input/output error" | \
+		grep -q 'Input.output error' && \
+		write_failed=1
+test -n $write_failed && echo "write failed"
+
 _dmerror_load_working_table
 _dmerror_unmount
 _dmerror_mount
