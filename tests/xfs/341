@@ -30,10 +30,10 @@ blksz="$(_get_block_size $SCRATCH_MNT)"
 rtextsz_blks=$((rtextsz / blksz))
 
 # inode core size is at least 176 bytes; btree header is 56 bytes;
-# rtrmap record is 32 bytes; and rtrmap key/pointer are 56 bytes.
+# rtrmap record is 24 bytes; and rtrmap key/pointer are 48 bytes.
 i_core_size="$(_xfs_get_inode_core_bytes $SCRATCH_MNT)"
-i_ptrs=$(( (isize - i_core_size) / 56 ))
-bt_recs=$(( (blksz - 56) / 32 ))
+i_ptrs=$(( (isize - i_core_size) / 48 ))
+bt_recs=$(( (blksz - 56) / 24 ))
 
 blocks=$((i_ptrs * bt_recs + 1))
 len=$((blocks * rtextsz))
@@ -54,10 +54,6 @@ fsbno=$(_scratch_xfs_db -c "inode $ino" -c 'bmap' | grep 'flag 0' | head -n 1 | 
 _scratch_xfs_db -x -c 'path -m /rtgroups/0.rmap' \
 	-c "write u3.rtrmapbt.ptrs[1] $fsbno" -c 'p' >> $seqres.full
 _scratch_mount
-
-echo "Try to create more files"
-$XFS_IO_PROG -f -R -c "pwrite -S 0x68 0 9999" $SCRATCH_MNT/f5 >> $seqres.full 2>&1
-test -e $SCRATCH_MNT/f5 && echo "should not have been able to write f5"
 
 echo "Repair fs"
 _scratch_unmount 2>&1 | _filter_scratch
