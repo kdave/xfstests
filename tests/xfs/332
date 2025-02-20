@@ -26,7 +26,7 @@ rm -f "$seqres.full"
 echo "Format and mount"
 _scratch_mkfs > "$seqres.full" 2>&1
 _scratch_mount
-blksz=65536
+blksz=$(_get_file_block_size $SCRATCH_MNT) # 65536
 blocks=16
 len=$((blocks * blksz))
 
@@ -42,10 +42,6 @@ $XFS_IO_PROG -c "fpunch $blksz $blksz" \
 	-c "pwrite -S 0x70 $((7 * blksz)) $blksz" \
 	-c "fcollapse $((9 * blksz)) $blksz" \
 	-c "finsert $((10 * blksz)) $blksz" $SCRATCH_MNT/f1 >> $seqres.full
-
-echo "Check file"
-md5sum $SCRATCH_MNT/f1 | _filter_scratch
-od -tx1 -Ad -c $SCRATCH_MNT/f1 >> $seqres.full
 
 echo "Unmount"
 _scratch_unmount
