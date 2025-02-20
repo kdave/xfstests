@@ -1902,3 +1902,28 @@ _scratch_xfs_find_metafile()
 	echo "inode $sb_field"
 	return 0
 }
+
+# Force metadata directories off.
+_scratch_xfs_force_no_metadir()
+{
+	# Remove any mkfs-time quota options because those are only supported
+	# with metadir=1
+	for opt in uquota gquota pquota; do
+		echo "$MKFS_OPTIONS" | grep -q -w "$opt" || continue
+
+		MKFS_OPTIONS="$(echo "$MKFS_OPTIONS" | sed -e "s/,$opt//g" -e "s/ $opt/ /g")"
+		MOUNT_OPTIONS="$MOUNT_OPTIONS -o $opt"
+	done
+
+	# Replace any explicit metadir option with metadir=0
+	if echo "$MKFS_OPTIONS" | grep -q 'metadir='; then
+		MKFS_OPTIONS="$(echo "$MKFS_OPTIONS" | sed -e 's/metadir=[0-9]*/metadir=0/g' -e 's/metadir\([, ]\)/metadir=0\1/g')"
+		return
+	fi
+
+	# Inject metadir=0 if there isn't one in MKFS_OPTIONS and mkfs supports
+	# that option.
+	if grep -q 'metadir=' $MKFS_XFS_PROG; then
+		MKFS_OPTIONS="-m metadir=0 $MKFS_OPTIONS"
+	fi
+}
