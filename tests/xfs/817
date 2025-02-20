@@ -1,0 +1,119 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 817
+#
+# Functional test of using online repair to fix metadir paths.
+#
+. ./common/preamble
+_begin_fstest auto online_repair
+
+. ./common/filter
+. ./common/inject
+. ./common/fuzzy
+. ./common/quota
+
+_require_xfs_db_command "link"
+_require_xfs_db_command "unlink"
+_require_scratch
+_require_xfs_stress_online_repair
+
+prepare_fs() {
+	# Format filesystem
+	_scratch_mkfs | _filter_mkfs 2> $tmp.mkfs >> $seqres.full
+	_scratch_mount
+
+	_require_xfs_has_feature "$SCRATCH_MNT" rmapbt
+	_require_xfs_has_feature "$SCRATCH_MNT" realtime
+	_require_xfs_has_feature "$SCRATCH_MNT" metadir
+	_require_xfs_has_feature "$SCRATCH_MNT" parent
+
+	root_inum="$(stat -c '%i' $SCRATCH_MNT)"
+	__stress_scrub_check_commands "%dir%" '' '' 'scrub metapath'
+	_scratch_unmount
+
+	# Stash the /rtgroups inode number and gen
+	rt_metadir_inum=$(_scratch_xfs_get_metadata_field v3.inumber 'path -m /rtgroups')
+	rt_metadir_gen=$(_scratch_xfs_get_metadata_field core.gen 'path -m /rtgroups')
+
+	# Stash the /rtgroups/0.rmap inode number and gen
+	rbm_inum=$(_scratch_xfs_get_metadata_field v3.inumber 'path -m /rtgroups/0.rmap')
+	rbm_gen=$(_scratch_xfs_get_metadata_field core.gen 'path -m /rtgroups/0.rmap')
+
+	# Fuzz parent pointer in rtgroup 0 rmap file
+	_scratch_xfs_db -x \
+		-c 'path -m /rtgroups/0.rmap' \
+		-c "write -d a.sfattr.list[0].parent_dir.inumber $root_inum" >> $seqres.full
+}
+
+simple_online_repair() {
+	echo "check /rtgroups dir" | _tee_kernlog
+	$XFS_IO_PROG -c "scrub directory $rt_metadir_inum $rt_metadir_gen" $SCRATCH_MNT
+
+	echo "check /rtgroups/0.rmap pptr" | _tee_kernlog
+	$XFS_IO_PROG -c "scrub parent $rbm_inum $rbm_gen" $SCRATCH_MNT
+
+	echo "check /rtgroups/0.rmap metapath" | _tee_kernlog
+	$XFS_IO_PROG -c "scrub metapath rtrmapbt 0" $SCRATCH_MNT
+
+	echo "check nlinks" | _tee_kernlog
+	$XFS_IO_PROG -c "scrub nlinks" $SCRATCH_MNT
+
+	# Destroying a metadir path (e.g. /rtgroups/0.rmap) cannot be done
+	# offline because then the mount will fail.  Hence we must use a
+	# specific sequence of online repairs to remove the metadir path link.
+	# Only then can we use the metapath scrubber to restore the link.
+
+	# Force repair the parent directory.  Since /rtgroups/0.rmap has a bad
+	# parent pointer, the "0.rmap" entry in /rtgroups will not be created.
+	echo "fix /rtgroups dir" | _tee_kernlog
+	$XFS_IO_PROG -x -c "repair -R directory $rt_metadir_inum $rt_metadir_gen" $SCRATCH_MNT
+
+	# Force repair the parent pointer.  Since the "0.rmap" entry in
+	# /rtgroups no longer exists and no other directories count the
+	# rtgroup 0 rmap as a parent, this will fail cross-referencing after
+	# the repair.
+	echo "fix /rtgroups/0.rmap pptr" | _tee_kernlog
+	$XFS_IO_PROG -x -c "repair -R parent $rbm_inum $rbm_gen" $SCRATCH_MNT
+
+	# Now that we've completely erased the /rtgroups/0.rmap path, check
+	# that the link is indeed lost, and restore the link.
+	echo "fix /rtgroups/0.rmap metapath" | _tee_kernlog
+	$XFS_IO_PROG -x -c "repair metapath rtrmapbt 0" $SCRATCH_MNT
+
+	# Make sure we're not missing any link count
+	echo "fix nlinks" | _tee_kernlog
+	$XFS_IO_PROG -x -c "repair nlinks" $SCRATCH_MNT
+}
+
+echo Part 1: Use raw ioctls to detect the error and fix it.
+prepare_fs
+_scratch_mount
+simple_online_repair
+_check_scratch_fs
+_scratch_unmount
+
+echo Part 2: Use xfs_scrub to detect the error and fix it.
+prepare_fs
+_scratch_mount
+echo "fix with xfs_scrub" | _tee_kernlog
+_scratch_scrub &>> $seqres.full
+echo "xfs_scrub returned $?" >> $seqres.full
+_check_scratch_fs
+_scratch_unmount
+
+echo Part 3: Use xfs_repair to detect the error and fix it.
+prepare_fs
+echo "fix with xfs_repair" | _tee_kernlog
+echo repair?? >> $seqres.full
+_scratch_xfs_repair &>> $seqres.full
+echo "xfs_repair returned $?" >> $seqres.full
+_scratch_mount
+_check_scratch_fs
+_scratch_unmount
+
+echo "done with test" | _tee_kernlog
+# success, all done
+status=0
+exit
