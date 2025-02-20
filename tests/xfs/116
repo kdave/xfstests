@@ -23,7 +23,18 @@ _require_xfs_quota
 # Only mount with the quota options we specify below
 _qmount_option "defaults"
 
-_scratch_mkfs >/dev/null 2>&1
+_scratch_mkfs_xfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
+. $tmp.mkfs
+cat $tmp.mkfs >> $seqres.full
+
+# link correct .out file, see $seqfull.cfg
+seqfull=$0
+if [ "$metadir" = 1 ]; then
+	_link_out_file_named $seqfull.out "metadir"
+else
+	_link_out_file_named $seqfull.out
+fi
+
 _scratch_mount "-o uquota"
 _scratch_unmount
 _scratch_xfs_db -r -c sb -c print  | grep qflags
