@@ -1,0 +1,115 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Oracle, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 818
+#
+# Populate a XFS filesystem, use xfs_protofile to recreate the filesystem, and
+# compare the contents.
+#
+. ./common/preamble
+_begin_fstest auto scrub
+
+_cleanup()
+{
+	command -v _kill_fsstress &>/dev/null && _kill_fsstress
+	cd /
+	test -e "$testfiles" && _unmount $testfiles/mount &>/dev/null
+	test -e "$testfiles" && rm -r -f $testfiles
+}
+
+_register_cleanup "_cleanup" BUS
+
+# Import common functions.
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+
+_require_command "$XFS_PROTOFILE_PROG" xfs_protofile
+_require_test
+_require_scratch
+_require_scrub
+_require_populate_commands
+
+make_md5()
+{
+	(cd $1 ; find . -type f -print0 | xargs -0 md5sum) > $tmp.md5.$2
+}
+
+cmp_md5()
+{
+	(cd $1 ; md5sum --quiet -c $tmp.md5.$2)
+}
+
+make_stat()
+{
+	# columns:	raw mode in hex,
+	# 		major rdev for special
+	# 		minor rdev for special
+	# 		uid of owner
+	# 		gid of owner
+	# 		file type
+	# 		total size
+	# 		name
+	# We can't directly control directory sizes so filter them.
+	(cd $1 ; find . -print0 |
+		xargs -0 stat -c '%f %t:%T %u %g %F %s %n' |
+		sed -e 's/ directory [1-9][0-9]* / directory SIZE /g' |
+		sort) > $tmp.stat.$2
+}
+
+cmp_stat()
+{
+	diff -u $tmp.stat.$1 $tmp.stat.$2
+}
+
+testfiles=$TEST_DIR/$seq
+mkdir -p $testfiles/mount
+
+echo "Format and populate"
+_scratch_populate_cached nofill >> $seqres.full 2>&1
+_scratch_mount
+
+_run_fsstress -n 1000 -d $SCRATCH_MNT/newfiles
+
+make_stat $SCRATCH_MNT before
+make_md5 $SCRATCH_MNT before
+
+kb_needed=$(du -k -s $SCRATCH_MNT | awk '{print $1}')
+img_size=$((kb_needed * 2))
+test "$img_size" -lt $((300 * 1024)) && img_size=$((300 * 1024))
+
+echo "Clone image with protofile"
+$XFS_PROTOFILE_PROG $SCRATCH_MNT > $testfiles/protofile
+
+truncate -s "${img_size}k" $testfiles/image
+if ! _try_mkfs_dev -p $testfiles/protofile $testfiles/image &> $tmp.mkfs; then
+	cat $tmp.mkfs >> $seqres.full
+
+	# mkfs.xfs' protofile parser has some limitations in what it can copy
+	# in from the prototype files.  If a source file has more than 64k
+	# worth of xattr names then formatting will fail because listxattr
+	# cannot return that much information.
+	if grep -q 'Argument list too long' $tmp.mkfs; then
+		_notrun "source filesystem was too large"
+	fi
+
+	# The protofile parser does not preserve cloned reflinked space, so
+	# the new filesystem can run out of space.
+	if grep -q 'No space left on device' $tmp.mkfs; then
+		_notrun "not enough space in filesystem"
+	fi
+	cat $tmp.mkfs
+fi
+
+_mount $testfiles/image $testfiles/mount
+
+echo "Check file contents"
+make_stat $testfiles/mount after
+cmp_stat before after
+cmp_md5 $testfiles/mount before
+_unmount $testfiles/mount
+
+# success, all done
+status=0
+exit
