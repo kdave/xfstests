@@ -38,14 +38,15 @@ _scratch_mount
 
 file1=$SCRATCH_MNT/file1
 file2=$SCRATCH_MNT/file2
+file_blksz=$(_get_file_block_size $SCRATCH_MNT)
 
 # The goal is run an extent swap where one of the associated files has the
 # minimum number of extents to remain in btree format. First, create a couple
 # files with large enough extent counts (200 or so should be plenty) to ensure
 # btree format on the largest possible inode size filesystems.
-$XFS_IO_PROG -fc "falloc 0 $((400 * dbsize))" $file1
+$XFS_IO_PROG -fc "falloc 0 $((400 * file_blksz))" $file1
 $here/src/punch-alternating $file1
-$XFS_IO_PROG -fc "falloc 0 $((400 * dbsize))" $file2
+$XFS_IO_PROG -fc "falloc 0 $((400 * file_blksz))" $file2
 $here/src/punch-alternating $file2
 
 # Now run an extent swap at every possible extent count down to 0. Depending on
@@ -53,12 +54,12 @@ $here/src/punch-alternating $file2
 # btree format.
 for i in $(seq 1 2 399); do
 	# punch one extent from the tmpfile and swap
-	$XFS_IO_PROG -c "fpunch $((i * dbsize)) $dbsize" $file2
+	$XFS_IO_PROG -c "fpunch $((i * file_blksz)) $file_blksz" $file2
 	$XFS_IO_PROG -c "exchangerange $file2" $file1
 
 	# punch the same extent from the old fork (now in file2) to resync the
 	# extent counts and repeat
-	$XFS_IO_PROG -c "fpunch $((i * dbsize)) $dbsize" $file2
+	$XFS_IO_PROG -c "fpunch $((i * file_blksz)) $file_blksz" $file2
 done
 
 # sanity check that no extents are left over
