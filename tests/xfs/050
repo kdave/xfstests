@@ -30,9 +30,14 @@ _require_scratch
 _require_xfs_quota
 
 _scratch_mkfs >/dev/null 2>&1
+orig_mntopts="$MOUNT_OPTIONS"
+_qmount_option "uquota"
 _scratch_mount
 bsize=$(_get_file_block_size $SCRATCH_MNT)
+# needs quota enabled to compute the number of metadata dir files
+HIDDEN_QUOTA_FILES=$(_xfs_calc_hidden_quota_files $SCRATCH_MNT)
 _scratch_unmount
+MOUNT_OPTIONS="$orig_mntopts"
 
 bsoft=$(( 200 * $bsize ))
 bhard=$(( 1000 * $bsize ))
