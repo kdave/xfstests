@@ -55,7 +55,12 @@ __populate_fail() {
 	case "$FSTYP" in
 	xfs)
 		_scratch_unmount
-		_scratch_xfs_metadump "$metadump" -a -o
+
+		mdargs=('-a' '-o')
+		test "$(_xfs_metadump_max_version)" -gt 1 && \
+			mdargs+=('-v' '2')
+
+		_scratch_xfs_metadump "$metadump" "${mdargs[@]}"
 		;;
 	ext4)
 		_scratch_unmount
@@ -1056,8 +1061,12 @@ _scratch_populate_save_metadump()
 		[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 			logdev=$SCRATCH_LOGDEV
 
+		mdargs=('-a' '-o')
+		test "$(_xfs_metadump_max_version)" -gt 1 && \
+			mdargs+=('-v' '2')
+
 		_xfs_metadump "$metadump_file" "$SCRATCH_DEV" "$logdev" \
-				compress -a -o
+				compress "${mdargs[@]}"
 		res=$?
 		;;
 	"ext2"|"ext3"|"ext4")
