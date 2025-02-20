@@ -106,22 +106,21 @@ _verify_fs()
 
 	echo "*** mount FS"
 	_full " mount"
-	_try_scratch_mount >>$seqfull 2>&1 \
-		|| _fail "mount failed"
+	_scratch_mount >>$seqfull 2>&1
 
 	echo "*** verify FS"
 	(cd $SCRATCH_MNT ; find . | LC_COLLATE=POSIX sort \
 		| grep -v ".use_space" \
 		| xargs $here/src/lstat64 | _filter_stat)
 	diff -q $SCRATCH_MNT/bigfile $tempfile.2 \
-		|| _fail "bigfile corrupted"
+		|| echo "bigfile corrupted"
 	diff -q $SCRATCH_MNT/symlink $tempfile.2 \
-		|| _fail "symlink broken"
+		|| echo "symlink broken"
 
 	echo "*** unmount FS"
 	_full "umount"
 	_scratch_unmount >>$seqfull 2>&1 \
-		|| _fail "umount failed"
+		|| echo "umount failed"
 }
 
 #_verify_fs 1
