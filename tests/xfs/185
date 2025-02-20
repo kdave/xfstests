@@ -97,10 +97,17 @@ test "$ddbytes" -lt "$((rtbytes + (10 * rtextsize) ))" || \
 # higher than the size of the data device.  For realtime files this is really
 # easy because fallocate for the first rt file always starts allocating at
 # physical offset zero.
-alloc_rtx="$((rtbytes / rtextsize))"
+rtfreebytes="$(stat -f -c '%S * %a' $rtfile | bc)"
+alloc_rtx="$((rtfreebytes / rtextsize))"
 $XFS_IO_PROG -c "falloc 0 $((alloc_rtx * rtextsize))" $rtfile
 
-expected_end="$(( (alloc_rtx * rtextsize - 1) / 512 ))"
+# log a bunch of geometry data to the full file for debugging
+echo "rtbytes $rtbytes rtfreebytes $rtfreebytes rtextsize $rtextsize" >> $seqres.full
+echo "allocrtx $alloc_rtx falloc $((alloc_rtx * rtextsize))" >> $seqres.full
+$XFS_IO_PROG -c statfs $SCRATCH_MNT >> $seqres.full
+
+total_rtx=$(_xfs_statfs_field $SCRATCH_MNT geom.rtextents)
+expected_end="$(( (total_rtx * rtextsize - 1) / 512 ))"
 
 # Print extent mapping of rtfile in format:
 # file_offset file_end physical_offset physical_end
@@ -113,13 +120,28 @@ rtfile_exts() {
 		done
 }
 
-# Make sure that we actually got the entire device.
-rtfile_exts | $AWK_PROG -v end=$expected_end '
+# Make sure that fallocate actually managed to map the entire rt device.  The
+# realtime superblock may consume the first rtx, so we allow for that here.
+# Allow for multiple contiguous mappings if the rtgroups are very small.
+allowed_start=$((rtextsize / 512))
+rtfile_exts | $AWK_PROG -v exp_start=$allowed_start -v exp_end=$expected_end '
+BEGIN {
+	start = -1;
+	end = -1;
+}
 {
-	if ($3 != 0)
-		printf("%s: unexpected physical offset %s, wanted 0\n", $0, $3);
-	if ($4 != end)
-		printf("%s: unexpected physical end %s, wanted %d\n", $0, $4, end);
+	if (end >= 0 && ($3 != end + 1))
+		printf("%s: non-contiguous allocation should have started at %s\n", $0, end + 1);
+	if (start < 0 || $3 < start)
+		start = $3;
+	if (end < 0 || $4 > end)
+		end = $4;
+}
+END {
+	if (start > exp_start)
+		printf("%s: unexpected physical offset %d, wanted <= %d\n", $0, start, exp_start);
+	if (end != exp_end)
+		printf("%s: unexpected physical end %d, wanted %d\n", $0, end, exp_end);
 }'
 
 # Now punch out a range that is slightly larger than the size of the data
@@ -132,14 +154,27 @@ expected_offset="$((punch_rtx * rtextsize / 512))"
 
 echo "rtfile should have physical extent from $expected_offset to $expected_end sectors" >> $seqres.full
 
-# Make sure that the realtime file now has only one extent at the end of the
-# realtime device
-rtfile_exts | $AWK_PROG -v offset=$expected_offset -v end=$expected_end '
+# Make sure that the realtime file now maps one large extent at the end of the
+# realtime device.  Due to rtgroups boundary rules, there may be multiple
+# contiguous mappings.
+rtfile_exts | $AWK_PROG -v exp_start=$expected_offset -v exp_end=$expected_end '
+BEGIN {
+	start = -1;
+	end = -1;
+}
 {
-	if ($3 != offset)
-		printf("%s: unexpected physical offset %s, wanted %d\n", $0, $3, offset);
-	if ($4 != end)
-		printf("%s: unexpected physical end %s, wanted %d\n", $0, $4, end);
+	if (end >= 0 && ($3 != end + 1))
+		printf("%s: non-contiguous allocation should have started at %s\n", $0, end + 1);
+	if (start < 0 || $3 < start)
+		start = $3;
+	if (end < 0 || $4 > end)
+		end = $4;
+}
+END {
+	if (start < exp_start)
+		printf("%s: unexpected physical offset %d, wanted >= %d\n", $0, start, exp_start);
+	if (end != exp_end)
+		printf("%s: unexpected physical end %d, wanted %d\n", $0, end, exp_end);
 }'
 
 $XFS_IO_PROG -c 'bmap -elpv' $rtfile >> $seqres.full
