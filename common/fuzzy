@@ -955,6 +955,14 @@ ___stress_scrub_duration()
 	echo "--duration=$delta"
 }
 
+# Run fsx and record outcome
+___scrub_run_fsx() {
+	$FSX_PROG "$@" >> $seqres.full
+	local res=$?
+	echo "fsx $* exits with $res at $(date)" >> $seqres.full
+	test "$res" -ne 0 && touch "$tmp.killfsx"
+}
+
 # Run fsx while we're testing online fsck.
 __stress_scrub_fsx_loop() {
 	local end="$1"
@@ -963,14 +971,33 @@ __stress_scrub_fsx_loop() {
 	local stress_tgt="$4"	# ignored
 	local focus=(-q -X)	# quiet, validate file contents
 	local duration
-	local res
+	local has_rt
+	local d_args r_args
+
+	test $FSTYP = "xfs" && _xfs_has_feature "$SCRATCH_MNT" realtime && \
+		has_rt=1
 
 	focus+=(-o $((128000 * LOAD_FACTOR)) )
 	focus+=(-l $((600000 * LOAD_FACTOR)) )
 
-	local args="$FSX_AVOID ${focus[@]} ${SCRATCH_MNT}/fsx.$seq"
-	echo "Running $FSX_PROG $args" >> $seqres.full
+	if [ -n "$has_rt" ]; then
+		local rdir="$SCRATCH_MNT/rt"
+		local ddir="$SCRATCH_MNT/data"
 
+		mkdir -p "$rdir" "$ddir"
+		$XFS_IO_PROG -c 'chattr +rt' "$rdir"
+		$XFS_IO_PROG -c 'chattr -rt' "$ddir"
+
+		r_args="$FSX_AVOID ${focus[*]} $rdir/fsx"
+		d_args="$FSX_AVOID ${focus[*]} $ddir/fsx"
+		echo "Running $FSX_PROG $d_args" >> $seqres.full
+		echo "Running $FSX_PROG $r_args" >> $seqres.full
+	else
+		d_args="$FSX_AVOID ${focus[*]} $SCRATCH_MNT/fsx"
+		echo "Running $FSX_PROG $d_args" >> $seqres.full
+	fi
+
+	rm -f "$tmp.killfsx"
 	if [ -n "$remount_period" ]; then
 		local mode="rw"
 		local rw_arg=""
@@ -980,10 +1007,10 @@ __stress_scrub_fsx_loop() {
 			test "$mode" = "rw" && __stress_scrub_clean_scratch && continue
 
 			duration=$(___stress_scrub_duration "$end" "$remount_period")
-			$FSX_PROG $duration $args $rw_arg >> $seqres.full
-			res=$?
-			echo "$mode fsx exits with $res at $(date)" >> $seqres.full
-			test "$res" -ne 0 && break
+			___scrub_run_fsx $duration $d_args $rw_arg &
+			test -n "$has_rt" && ___scrub_run_fsx $duration $r_args $rw_arg &
+			wait
+			test -e "$tmp.killfsx" && break
 
 			if [ "$mode" = "rw" ]; then
 				mode="ro"
@@ -999,7 +1026,7 @@ __stress_scrub_fsx_loop() {
 				sleep 0.2
 			done
 		done
-		rm -f "$runningfile"
+		rm -f "$runningfile" "$tmp.killfsx"
 		return 0
 	fi
 
@@ -1007,12 +1034,12 @@ __stress_scrub_fsx_loop() {
 		# Need to recheck running conditions if we cleared anything
 		__stress_scrub_clean_scratch && continue
 		duration=$(___stress_scrub_duration "$end" "$remount_period")
-		$FSX_PROG $duration $args >> $seqres.full
-		res=$?
-		echo "fsx exits with $res at $(date)" >> $seqres.full
-		test "$res" -ne 0 && break
+		___scrub_run_fsx $duration $d_args &
+		test -n "$has_rt" && ___scrub_run_fsx $duration $r_args &
+		wait
+		test -e "$tmp.killfsx" && break
 	done
-	rm -f "$runningfile"
+	rm -f "$runningfile" "$tmp.killfsx"
 }
 
 # Run fsstress and record outcome
