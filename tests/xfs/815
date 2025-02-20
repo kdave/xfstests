@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 815
+#
+# Race fsstress and metadata directory tree path corruption detector for a
+# while to see if we crash or livelock.
+#
+. ./common/preamble
+_begin_fstest scrub fsstress_scrub
+
+_cleanup() {
+	_scratch_xfs_stress_scrub_cleanup &> /dev/null
+	cd /
+	rm -r -f $tmp.*
+}
+_register_cleanup "_cleanup" BUS
+
+# Import common functions.
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+_require_scratch
+_require_xfs_stress_scrub
+
+_scratch_mkfs | _filter_mkfs 2>$tmp.mkfs >/dev/null
+. $tmp.mkfs
+_scratch_mount
+
+verbs=()
+
+try_verb()
+{
+	$XFS_IO_PROG -x -c "scrub metapath $*" "$SCRATCH_MNT" 2>&1
+}
+
+# Metapath verbs that don't require arguments
+for v in quotadir usrquota grpquota prjquota rtdir; do
+	testio=$(try_verb "$v")
+	test -z "$testio" && verbs+=("$v")
+done
+
+# Metapath verbs that take a rt group number
+for ((rgno = 0; rgno < rgcount; rgno++)); do
+	for v in rtbitmap rtsummary rtrmapbt rtrefcbt; do
+		testio=$(try_verb "$v" "$rgno")
+		test -z "$testio" && verbs+=("$v $rgno")
+	done
+done
+test "${#verbs[@]}" -gt 0 || _notrun "no metapath verbs detected"
+
+args=()
+for v in "${verbs[@]}"; do
+	args+=("scrub metapath $v")
+done
+
+echo "${verbs[@]}" >> $seqres.full
+_scratch_xfs_stress_scrub "${args[@]}"
+
+# success, all done
+echo Silence is golden
+status=0
+exit
