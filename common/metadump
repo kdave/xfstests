@@ -27,6 +27,7 @@ _xfs_cleanup_verify_metadump()
 	if [ -n "$XFS_METADUMP_IMG" ]; then
 		[ -b "$METADUMP_DATA_LOOP_DEV" ] && _destroy_loop_device $METADUMP_DATA_LOOP_DEV
 		[ -b "$METADUMP_LOG_LOOP_DEV" ] && _destroy_loop_device $METADUMP_LOG_LOOP_DEV
+		[ -b "$METADUMP_RT_LOOP_DEV" ] && _destroy_loop_device $METADUMP_RT_LOOP_DEV
 		for img in "$XFS_METADUMP_IMG"*; do
 			test -e "$img" && rm -f "$img"
 		done
@@ -101,6 +102,7 @@ _xfs_verify_metadump_v2()
 	local version="-v 2"
 	local data_img="$XFS_METADUMP_IMG.data"
 	local log_img=""
+	local rt_img=""
 
 	# Capture metadump, which creates metadump_file
 	_scratch_xfs_metadump $metadump_file $metadump_args $version
@@ -111,8 +113,12 @@ _xfs_verify_metadump_v2()
 	# from such a metadump file.
 	test -n "$SCRATCH_LOGDEV" && log_img="$XFS_METADUMP_IMG.log"
 
+	# Use a temporary file to hold restored rt device contents
+	test -n "$SCRATCH_RTDEV" && _xfs_metadump_supports_rt && \
+		rt_img="$XFS_METADUMP_IMG.rt"
+
 	# Restore metadump, which creates data_img and log_img
-	SCRATCH_DEV=$data_img SCRATCH_LOGDEV=$log_img \
+	SCRATCH_DEV=$data_img SCRATCH_LOGDEV=$log_img SCRATCH_RTDEV=$rt_img \
 		_scratch_xfs_mdrestore $metadump_file
 
 	# Create loopdev for data device so we can mount the fs
@@ -121,12 +127,15 @@ _xfs_verify_metadump_v2()
 	# Create loopdev for log device if we recovered anything
 	test -s "$log_img" && METADUMP_LOG_LOOP_DEV=$(_create_loop_device $log_img)
 
+	# Create loopdev for rt device if we recovered anything
+	test -s "$rt_img" && METADUMP_RT_LOOP_DEV=$(_create_loop_device $rt_img)
+
 	# Mount fs, run an extra test, fsck, and unmount
-	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV _scratch_mount
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV SCRATCH_RTDEV=$METADUMP_RT_LOOP_DEV _scratch_mount
 	if [ -n "$extra_test" ]; then
-		SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV $extra_test
+		SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV SCRATCH_RTDEV=$METADUMP_RT_LOOP_DEV $extra_test
 	fi
-	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV _check_xfs_scratch_fs
+	SCRATCH_DEV=$METADUMP_DATA_LOOP_DEV SCRATCH_LOGDEV=$METADUMP_LOG_LOOP_DEV SCRATCH_RTDEV=$METADUMP_RT_LOOP_DEV _check_xfs_scratch_fs
 	_unmount $METADUMP_DATA_LOOP_DEV
 
 	# Tear down what we created
@@ -134,6 +143,11 @@ _xfs_verify_metadump_v2()
 		_destroy_loop_device $METADUMP_LOG_LOOP_DEV
 		unset METADUMP_LOG_LOOP_DEV
 		rm -f $log_img
+	fi
+	if [ -b "$METADUMP_RT_LOOP_DEV" ]; then
+		_destroy_loop_device $METADUMP_RT_LOOP_DEV
+		unset METADUMP_RT_LOOP_DEV
+		rm -f $rt_img
 	fi
 	_destroy_loop_device $METADUMP_DATA_LOOP_DEV
 	unset METADUMP_DATA_LOOP_DEV

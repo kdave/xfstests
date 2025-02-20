@@ -625,12 +625,17 @@ _xfs_metadump() {
 	local metadump="$1"
 	local device="$2"
 	local logdev="$3"
-	local compressopt="$4"
-	shift; shift; shift; shift
+	local rtdev="$4"
+	local compressopt="$5"
+	shift; shift; shift; shift; shift
 	local options="$@"
 
 	if [ "$logdev" != "none" ]; then
 		options="$options -l $logdev"
+	fi
+
+	if [ "$rtdev" != "none" ] && _xfs_metadump_supports_rt; then
+		options="$options -r $rtdev"
 	fi
 
 	$XFS_METADUMP_PROG $options "$device" "$metadump"
@@ -656,7 +661,8 @@ _xfs_mdrestore() {
 	local metadump="$1"
 	local device="$2"
 	local logdev="$3"
-	shift; shift; shift
+	local rtdev="$4"
+	shift; shift; shift; shift
 	local options="$@"
 	local dumpfile_ver
 
@@ -684,6 +690,18 @@ _xfs_mdrestore() {
 		options="$options -l $logdev"
 	fi
 
+	if [ "$rtdev" != "none" ] && [[ $dumpfile_ver > 1 ]] && _xfs_metadump_supports_rt; then
+		# metadump and mdrestore capture and restore metadata on the
+		# realtime volume by turning on metadump v2 format.  This is
+		# only done if the realtime volume contains metadata such as
+		# rtgroup superblocks.  The -r option to mdrestore wasn't added
+		# until the creation of rtgroups.
+		#
+		# Hence it only makes sense to specify -r here if the dump file
+		# itself is in v2 format.
+		options="$options -r $rtdev"
+	fi
+
 	$XFS_MDRESTORE_PROG $options "${metadump}" "${device}"
 }
 
@@ -697,17 +715,27 @@ _xfs_metadump_max_version()
 	fi
 }
 
+# Do xfs_metadump/mdrestore support the -r switch for realtime devices?
+_xfs_metadump_supports_rt()
+{
+	$XFS_METADUMP_PROG --help 2>&1 | grep -q -- '-r rtdev'
+}
+
 # Snapshot the metadata on the scratch device
 _scratch_xfs_metadump()
 {
 	local metadump=$1
 	shift
 	local logdev=none
+	local rtdev=none
 
 	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ] && \
 		logdev=$SCRATCH_LOGDEV
 
-	_xfs_metadump "$metadump" "$SCRATCH_DEV" "$logdev" nocompress "$@"
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+		rtdev=$SCRATCH_RTDEV
+
+	_xfs_metadump "$metadump" "$SCRATCH_DEV" "$logdev" "$rtdev" nocompress "$@"
 }
 
 # Restore snapshotted metadata on the scratch device
@@ -716,6 +744,7 @@ _scratch_xfs_mdrestore()
 	local metadump=$1
 	shift
 	local logdev=none
+	local rtdev=none
 	local options="$@"
 
 	# $SCRATCH_LOGDEV should have a non-zero length value only when all of
@@ -726,7 +755,10 @@ _scratch_xfs_mdrestore()
 		logdev=$SCRATCH_LOGDEV
 	fi
 
-	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$logdev" "$@"
+	[ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ] && \
+		rtdev=$SCRATCH_RTDEV
+
+	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$logdev" "$rtdev" "$@"
 }
 
 # Do not use xfs_repair (offline fsck) to rebuild the filesystem
@@ -847,7 +879,7 @@ _check_xfs_filesystem()
 	if [ "$ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
 		local flatdev="$(basename "$device")"
 		_xfs_metadump "$seqres.$flatdev.check.md" "$device" "$logdev" \
-			compress -a -o >> $seqres.full
+			"$rtdev" compress -a -o >> $seqres.full
 	fi
 
 	# Optionally test the index rebuilding behavior.
@@ -880,7 +912,7 @@ _check_xfs_filesystem()
 		if [ "$rebuild_ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
 			local flatdev="$(basename "$device")"
 			_xfs_metadump "$seqres.$flatdev.rebuild.md" "$device" \
-				"$logdev" compress -a -o >> $seqres.full
+				"$logdev" "$rtdev" compress -a -o >> $seqres.full
 		fi
 	fi
 
@@ -964,7 +996,7 @@ _check_xfs_filesystem()
 		if [ "$orebuild_ok" -ne 1 ] && [ "$DUMP_CORRUPT_FS" = "1" ]; then
 			local flatdev="$(basename "$device")"
 			_xfs_metadump "$seqres.$flatdev.orebuild.md" "$device" \
-				"$logdev" compress -a -o >> $seqres.full
+				"$logdev" "$rtdev" compress -a -o >> $seqres.full
 		fi
 	fi
 
