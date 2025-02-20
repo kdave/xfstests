@@ -27,13 +27,33 @@ $XFS_IO_PROG -f -R -c "pwrite -S 0x68 0 9999" $SCRATCH_MNT/f2 >> $seqres.full
 _scratch_unmount
 
 echo "Corrupt fs"
-_scratch_xfs_db -x -c 'sb 0' -c 'addr rrmapino' \
-	-c 'write core.nlinkv2 0' -c 'write core.mode 0' -c 'sb 0' \
-	-c 'write rrmapino 0' >> $seqres.full
-_try_scratch_mount >> $seqres.full 2>&1 && echo "mount should have failed"
+readarray -t rtrmap_path < <(_scratch_find_rt_metadir_entry 0.rmap)
+
+rtrmap_accessors=()
+rtrmap_path_len="${#rtrmap_path[@]}"
+for ((i = 0; i < rtrmap_path_len - 1; i++)); do
+	rtrmap_accessors+=(-c "${rtrmap_path[i]}")
+done
+rtrmap_entry="${rtrmap_path[rtrmap_path_len - 1]}"
+test -n "$rtrmap_entry" || _fail "Could not find rtrmap metadir entry?"
+
+_scratch_xfs_db -x -c 'path -m /rtgroups/0.rmap' \
+	-c 'write core.nlinkv2 0' -c 'write core.mode 0' \
+	"${rtrmap_accessors[@]}" \
+	-c "print $rtrmap_entry" \
+	-c "write -d $rtrmap_entry 0" >> $seqres.full
+if _try_scratch_mount >> $seqres.full 2>&1; then
+       echo "mount should have failed"
+       _scratch_unmount
+else
+	# If the verifiers are working properly, the mount will fail because
+	# we fuzzed the metadata root directory.  This causes loud complaints
+	# to dmesg, so we want to ignore those.
+	_disable_dmesg_check
+fi
 
 echo "Repair fs"
-_scratch_unmount 2>&1 | _filter_scratch
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 _repair_scratch_fs >> $seqres.full 2>&1
 
 echo "Try to create more files (again)"

@@ -29,7 +29,8 @@ ln $SCRATCH_MNT/f3 $SCRATCH_MNT/f4
 _scratch_unmount
 
 echo "Corrupt fs"
-rrmapino=`_scratch_xfs_get_sb_field rrmapino`
+rrmapino=$(_scratch_metadir_lookup /rtgroups/0.rmap)
+test -n "$rrmapino" || _fail "Could not find rtrmap inode?"
 _scratch_xfs_set_metadata_field "u3.sfdir3.list[3].inumber.i4" $rrmapino \
 	'sb 0' 'addr rootino' >> $seqres.full
 _scratch_mount
@@ -41,7 +42,7 @@ echo "Try to create more files"
 $XFS_IO_PROG -f -R -c "pwrite -S 0x68 0 9999" $SCRATCH_MNT/f5 >> $seqres.full 2>&1
 
 echo "Repair fs"
-_scratch_unmount 2>&1 | _filter_scratch
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 _repair_scratch_fs >> $seqres.full 2>&1
 
 echo "Try to create more files (again)"

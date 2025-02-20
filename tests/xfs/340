@@ -29,16 +29,31 @@ ino=$(stat -c '%i' $SCRATCH_MNT/f3)
 _scratch_unmount
 
 echo "Corrupt fs"
-rrmapino=$(_scratch_xfs_get_sb_field rrmapino)
-_scratch_xfs_db -x -c "inode $rrmapino" \
+readarray -t rtrmap_path < <(_scratch_find_rt_metadir_entry 0.rmap)
+
+rtrmap_accessors=()
+rtrmap_path_len="${#rtrmap_path[@]}"
+for ((i = 0; i < rtrmap_path_len - 1; i++)); do
+	rtrmap_accessors+=(-c "${rtrmap_path[i]}")
+done
+rtrmap_entry="${rtrmap_path[rtrmap_path_len - 1]}"
+test -n "$rtrmap_entry" || _fail "Could not find rtrmap metadir entry?"
+
+rrmapino=$(_scratch_metadir_lookup /rtgroups/0.rmap)
+test -n "$rrmapino" || _fail "Could not find rtrmap inode?"
+_scratch_xfs_db -x -c "path -m /rtgroups/0.rmap" \
 	-c 'write core.format 2' -c 'write core.size 0' \
-	-c 'write core.nblocks 0' -c 'sb 0' -c 'addr rootino' \
+	-c 'write core.nblocks 0' \
+	-c 'sb 0' -c 'addr rootino' \
+	-c "print u3.sfdir3.list[2].inumber" \
 	-c "write u3.sfdir3.list[2].inumber.i4 $rrmapino" \
-	-c 'sb 0' -c "write rrmapino $ino" >> $seqres.full
+	"${rtrmap_accessors[@]}" \
+	-c "print $rtrmap_entry" \
+	-c "write $rtrmap_entry $ino" >> $seqres.full
 _try_scratch_mount >> $seqres.full 2>&1 && echo "mount should have failed"
 
 echo "Repair fs"
-_scratch_unmount 2>&1 | _filter_scratch
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 _repair_scratch_fs >> $seqres.full 2>&1
 
 echo "Try to create more files (again)"

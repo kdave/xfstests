@@ -2135,3 +2135,44 @@ _require_xfs_rtquota_if_rtdev() {
 		_notrun "Quotas probably not supported on realtime scratch device; set TEST_RTDEV"
 	fi
 }
+
+# Resolve a metadata directory tree path and return the inode number.
+_scratch_metadir_lookup() {
+	local res="$(_scratch_xfs_db -c "ls -i -m $1")"
+	test "${PIPESTATUS[0]}" -eq 0 && echo "$res"
+}
+
+# Figure out which directory entry we have to change to update the rtrmap
+# inode pointer.  The last line of output is inumber field within a metadata
+# object; any previous lines are the accessor commands that must be fed to
+# xfs_db to get to the correct directory block.
+_scratch_find_rt_metadir_entry() {
+	local sfkey="$(_scratch_xfs_db -c 'path -m /rtgroups' -c print | \
+		grep "\"$1\"" | \
+		sed -e 's/.name.*$//g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' )"
+	if [ -n "$sfkey" ]; then
+		echo 'path -m /rtgroups'
+		_scratch_xfs_db -c 'path -m /rtgroups' -c print | \
+			grep "${sfkey}.inumber" | awk '{print $1}'
+		return 0
+	fi
+
+	local size=$(_scratch_xfs_db -c 'path -m /rtgroups' -c 'print core.size' | awk '{print $3}')
+	local blksz=$(_scratch_xfs_db -c 'sb 0' -c 'print blocksize' | awk '{print $3}')
+	local dirblklog=$(_scratch_xfs_db -c 'sb 0' -c 'print dirblklog' | awk '{print $3}')
+	local dirblksz=$((blksz << dirblklog ))
+	for ((fileoff = 0; fileoff < (size / dirblksz); fileoff++)); do
+		local dbkey="$(_scratch_xfs_db -c 'path -m /rtgroups' -c "dblock $fileoff" -c 'print' | \
+			grep "\"$1\"" | \
+			sed -e 's/.name.*$//g' -e 's/\[/\\[/g' -e 's/\]/\\]/g' )"
+		if [ -n "$dbkey" ]; then
+			echo 'path -m /rtgroups'
+			echo "dblock $fileoff"
+			_scratch_xfs_db -c 'path -m /rtgroups' -c "dblock $fileoff" -c print | \
+				grep "${dbkey}.inumber" | awk '{print $1}'
+			return 0
+		fi
+	done
+
+	return 1
+}
