@@ -38,34 +38,58 @@ _cp_reflink $SCRATCH_MNT/f1 $SCRATCH_MNT/f2
 ino=$(stat -c '%i' $SCRATCH_MNT/f1)
 
 echo "Get fsmap" | tee -a $seqres.full
-$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT >> $seqres.full
 $XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT | tr '[]()' '    ' > $TEST_DIR/fsmap
+cat $TEST_DIR/fsmap >> $seqres.full
 
 echo "Get f1 bmap" | tee -a $seqres.full
-$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f1 >> $seqres.full
 $XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f1 | grep '^[[:space:]]*[0-9]*:' | grep -v 'hole' | tr '[]()' '    ' > $TEST_DIR/bmap
+cat $TEST_DIR/bmap >> $seqres.full
 
-echo "Check f1 bmap and fsmap" | tee -a $seqres.full
-cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
-	qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 010[01]{4}$"
-	echo "${qstr}" >> $seqres.full
-	grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
-	found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
-	test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
-done
+if _xfs_is_realtime_file $SCRATCH_MNT/f1 && ! _xfs_has_feature $SCRATCH_MNT rtgroups; then
+	# file on rt volume
+	echo "Check f1 bmap and fsmap" | tee -a $seqres.full
+	cat $TEST_DIR/bmap | while read ext offrange colon rtblockrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${rtblockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${total} 010[01]{4}$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
+else
+	# file on data volume
+	echo "Check f1 bmap and fsmap" | tee -a $seqres.full
+	cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 010[01]{4}$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
+fi
 
 echo "Get f2 bmap" | tee -a $seqres.full
-$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f2 >> $seqres.full
 $XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/f2 | grep '^[[:space:]]*[0-9]*:' | grep -v 'hole' | tr '[]()' '    ' > $TEST_DIR/bmap
+cat $TEST_DIR/bmap >> $seqres.full
 
-echo "Check f2 bmap and fsmap" | tee -a $seqres.full
-cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
-	qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 010[01]{4}$"
-	echo "${qstr}" >> $seqres.full
-	grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
-	found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
-	test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
-done
+if _xfs_is_realtime_file $SCRATCH_MNT/f2 && ! _xfs_has_feature $SCRATCH_MNT rtgroups; then
+	echo "Check f2 bmap and fsmap" | tee -a $seqres.full
+	cat $TEST_DIR/bmap | while read ext offrange colon rtblockrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${rtblockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${total} 010[01]{4}$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
+else
+	echo "Check f2 bmap and fsmap" | tee -a $seqres.full
+	cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total} 010[01]{4}$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
+fi
 
 # success, all done
 status=0

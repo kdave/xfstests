@@ -38,26 +38,40 @@ $here/src/punch-alternating $SCRATCH_MNT/urk >> $seqres.full
 ino=$(stat -c '%i' $SCRATCH_MNT/urk)
 
 echo "Get fsmap" | tee -a $seqres.full
-$XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT >> $seqres.full
 $XFS_IO_PROG -c 'fsmap -v' $SCRATCH_MNT | tr '[]()' '    ' > $TEST_DIR/fsmap
+cat $TEST_DIR/fsmap >> $seqres.full
 
 echo "Get bmap" | tee -a $seqres.full
-$XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/urk >> $seqres.full
 $XFS_IO_PROG -c 'bmap -v' $SCRATCH_MNT/urk | grep '^[[:space:]]*[0-9]*:' | grep -v 'hole' | tr '[]()' '    ' > $TEST_DIR/bmap
+cat $TEST_DIR/bmap >> $seqres.full
 
 echo "Check bmap and fsmap" | tee -a $seqres.full
-cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
-	qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total}(| [01]*)$"
-	echo "${qstr}" >> $seqres.full
-	grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
-	found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
-	test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
-done
+if $XFS_IO_PROG -c 'stat -v' $SCRATCH_MNT/urk | grep -q realtime; then
+	# file on rt volume
+	cat $TEST_DIR/bmap | while read ext offrange colon rtblockrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${rtblockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${total}(| [01]*)$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
 
-echo "Check device field of FS metadata and regular file"
-data_dev=$(grep 'inode btree' $TEST_DIR/fsmap | head -n 1 | awk '{print $2}')
-rt_dev=$(grep "${ino}[[:space:]]*[0-9]*\.\.[0-9]*" $TEST_DIR/fsmap | head -n 1 | awk '{print $2}')
-test "${data_dev}" = "${rt_dev}" || echo "data ${data_dev} realtime ${rt_dev}?"
+	echo "Check device field of FS metadata and regular file"
+else
+	# file on data volume
+	cat $TEST_DIR/bmap | while read ext offrange colon blockrange ag agrange total crap; do
+		qstr="^[[:space:]]*[0-9]*:[[:space:]]*[0-9]*:[0-9]*[[:space:]]*${blockrange} :[[:space:]]*${ino}[[:space:]]*${offrange}[[:space:]]*${ag}[[:space:]]*${agrange}[[:space:]]*${total}(| [01]*)$"
+		echo "${qstr}" >> $seqres.full
+		grep "${qstr}" $TEST_DIR/fsmap >> $seqres.full
+		found=$(grep -E -c "${qstr}" $TEST_DIR/fsmap)
+		test $found -eq 1 || echo "Unexpected output for offset ${offrange}."
+	done
+
+	echo "Check device field of FS metadata and regular file"
+	data_dev=$(grep 'inode btree' $TEST_DIR/fsmap | head -n 1 | awk '{print $2}')
+	rt_dev=$(grep "${ino}[[:space:]]*[0-9]*\.\.[0-9]*" $TEST_DIR/fsmap | head -n 1 | awk '{print $2}')
+	test "${data_dev}" = "${rt_dev}" || echo "data ${data_dev} realtime ${rt_dev}?"
+fi
 
 # success, all done
 status=0
