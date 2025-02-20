@@ -1,0 +1,38 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2022-2025 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 834
+#
+# Populate a XFS filesystem and fuzz every rtrefcountbt key/ptr field.
+# Try online repair and, if necessary, offline repair,
+# to test the most likely usage pattern.
+
+. ./common/preamble
+_begin_fstest dangerous_fuzzers scrub repair fuzzers_bothrepair realtime
+
+_register_cleanup "_cleanup" BUS
+
+. ./common/filter
+. ./common/populate
+. ./common/fuzzy
+. ./common/reflink
+
+_require_realtime
+_require_scratch_reflink
+_require_scratch_xfs_fuzz_fields
+_disable_dmesg_check
+
+echo "Format and populate"
+_scratch_populate_cached nofill > $seqres.full 2>&1
+
+path="$(_scratch_xfs_find_rgbtree_height 'refcnt' 2)" || \
+	_fail "could not find two-level rtrefcountbt"
+
+echo "Fuzz rtrefcountbt keyptrs"
+_scratch_xfs_fuzz_metadata '(rtrefcbt)' 'both' "path -m $path" >> $seqres.full
+echo "Done fuzzing rtrefcountbt keyptrs"
+
+# success, all done
+status=0
+exit
