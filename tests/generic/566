@@ -35,7 +35,9 @@ _qmount
 dir="$SCRATCH_MNT/dummy"
 mkdir -p $dir
 chown $qa_user $dir
-$XFS_QUOTA_PROG -x -c "limit -g bsoft=100k bhard=100k $qa_user" $SCRATCH_MNT
+_scratch_supports_rtquota && \
+	extra_limits="rtbsoft=100k rtbhard=100k"
+$XFS_QUOTA_PROG -x -c "limit -g bsoft=100k bhard=100k $extra_limits $qa_user" $SCRATCH_MNT
 
 $XFS_IO_PROG -f -c 'pwrite -S 0x58 0 1m' $dir/foo >> $seqres.full
 chown $qa_user "${dir}/foo"

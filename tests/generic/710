@@ -32,7 +32,9 @@ $XFS_IO_PROG -f -c 'pwrite -S 0x59 0 64k -b 64k' -c 'truncate 256k' $SCRATCH_MNT
 chown nobody $SCRATCH_MNT/b
 
 # Set up a quota limit
-$XFS_QUOTA_PROG -x -c "limit -u bhard=70k nobody" $SCRATCH_MNT
+_scratch_supports_rtquota && \
+	extra_limits="rtbhard=70k"
+$XFS_QUOTA_PROG -x -c "limit -u bhard=70k $extra_limits nobody" $SCRATCH_MNT
 
 echo before exchangerange >> $seqres.full
 $XFS_QUOTA_PROG -x -c 'report -a' $SCRATCH_MNT >> $seqres.full

@@ -436,5 +436,30 @@ _restore_project_quota()
 	sed -i "/:$id$/d" /etc/projid
 }
 
+# Reconfigure the mounted fs as needed so that we can test the VFS quota
+# utilities.  They do not support realtime block limits or reporting, so
+# we forcibly inhibit rtinherit on XFS filesystems.
+_force_vfs_quota_testing()
+{
+	local mount="${1:-$TEST_DIR}"
+
+	test "$FSTYP" = "xfs" && _xfs_force_bdev data "$mount"
+}
+
+# Does the mounted scratch filesystem have a realtime volume where quota works?
+# Returns nonzero if any of the above are false.
+_scratch_supports_rtquota()
+{
+	case "$FSTYP" in
+	"xfs")
+		if [ "$USE_EXTERNAL" = yes ] && [ -n "$SCRATCH_RTDEV" ]; then
+			_xfs_scratch_supports_rtquota
+			return
+		fi
+	esac
+
+	return 1
+}
+
 # make sure this script returns success
 /bin/true

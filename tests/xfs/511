@@ -38,11 +38,19 @@ $XFS_IO_PROG -f -c "pwrite 0 65536" -c syncfs $SCRATCH_MNT/t/file >>$seqres.full
 quota_cmd="$XFS_QUOTA_PROG -x"
 $quota_cmd -c "project -s -p $SCRATCH_MNT/t 42" $SCRATCH_MNT >/dev/null 2>&1
 $quota_cmd -c 'limit -p isoft=53 bsoft=100m 42' $SCRATCH_MNT
+_scratch_supports_rtquota && \
+	$quota_cmd -c 'limit -p rtbsoft=100m 42' $SCRATCH_MNT
+
+# The golden output for this test was written with the assumption that the file
+# allocation unit divides 64k evenly, so the file block usage would be exactly
+# 64k.  On realtime filesystems this isn't always true (e.g. -rextsize=28k) so
+# we'll accept the space usage being the same as what du reports for the file.
+file_nblocks=$(du -B 1024 $SCRATCH_MNT/t/file | awk '{print $1}')
 
 # The itotal and size should be 53 and 102400(k), as above project quota limit.
 # The isued and used should be 2 and 64(k), as this case takes.
 df -k --output=file,itotal,iused,size,used $SCRATCH_MNT/t | \
-	_filter_scratch | _filter_spaces
+	_filter_scratch | _filter_spaces | sed -e "s|$file_nblocks$|64|"
 
 # success, all done
 status=0
