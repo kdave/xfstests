@@ -1,0 +1,32 @@
+#!/bin/sh
+# Emulate waiting for DM devices
+
+verbose=false
+
+_logger() {
+	$verbose || return
+
+	if [ -w /dev/kmsg ]; then
+		echo "[U] $*" >> /dev/kmsg
+		return
+	fi
+}
+
+if [ "$1" == '--remove' ]; then
+	dev="$2"
+	count=0
+	while [ -b "$dev" ]; do
+		sleep 1
+		count=$(($count+1))
+	done
+	_logger "UDEV_WAIT: removed $dev waited ${count}s"
+	exit
+fi
+
+dev="$2"
+count=0
+while [ -b "$dev" ]; do
+	sleep 1
+	count=$(($count+1))
+done
+_logger "UDEV_WAIT: created $dev waited ${count}s"
