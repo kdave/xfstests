@@ -451,16 +451,30 @@ _scratch_xfs_populate() {
 	local dir="${SCRATCH_MNT}/INOBT"
 	__populate_create_dir "${dir}" "${nr}" true --file-pct 100
 
-	# Reverse-mapping btree
+	is_rt="$(_xfs_get_rtextents "$SCRATCH_MNT")"
 	is_rmapbt="$(_xfs_has_feature "$SCRATCH_MNT" rmapbt -v)"
+	is_reflink="$(_xfs_has_feature "$SCRATCH_MNT" reflink -v)"
+
+	# Reverse-mapping btree
 	if [ $is_rmapbt -gt 0 ]; then
 		echo "+ rmapbt btree"
 		nr="$((blksz * 2 / 24))"
 		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/RMAPBT"
 	fi
 
+	# Realtime Reference-count btree comes before the rtrmapbt so that
+	# the refcount entries are created in rtgroup 0.
+	if [ $is_reflink -gt 0 ] && [ $is_rt -gt 0 ]; then
+		echo "+ rtreflink btree"
+		rt_blksz=$(_xfs_get_rtextsize "$SCRATCH_MNT")
+		nr="$((rt_blksz * 2 / 12))"
+		$XFS_IO_PROG -R -f -c 'truncate 0' "${SCRATCH_MNT}/RTREFCOUNTBT"
+		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/RTREFCOUNTBT"
+		$XFS_IO_PROG -R -f -c 'truncate 0' "${SCRATCH_MNT}/RTREFCOUNTBT2"
+		cp --reflink=always "${SCRATCH_MNT}/RTREFCOUNTBT" "${SCRATCH_MNT}/RTREFCOUNTBT2"
+	fi
+
 	# Realtime Reverse-mapping btree
-	is_rt="$(_xfs_get_rtextents "$SCRATCH_MNT")"
 	if [ $is_rmapbt -gt 0 ] && [ $is_rt -gt 0 ]; then
 		echo "+ rtrmapbt btree"
 		nr="$((blksz * 2 / 24))"
@@ -469,7 +483,6 @@ _scratch_xfs_populate() {
 	fi
 
 	# Reference-count btree
-	is_reflink="$(_xfs_has_feature "$SCRATCH_MNT" reflink -v)"
 	if [ $is_reflink -gt 0 ]; then
 		echo "+ reflink btree"
 		nr="$((blksz * 2 / 12))"
@@ -534,6 +547,7 @@ _scratch_xfs_populate() {
 	__populate_fragment_file "${SCRATCH_MNT}/RMAPBT"
 	__populate_fragment_file "${SCRATCH_MNT}/RTRMAPBT"
 	__populate_fragment_file "${SCRATCH_MNT}/REFCOUNTBT"
+	__populate_fragment_file "${SCRATCH_MNT}/RTREFCOUNTBT"
 
 	_scratch_unmount
 }
@@ -779,6 +793,10 @@ __populate_check_xfs_rgbtree_height() {
 		path_format="/rtgroups/%u.rmap"
 		bt_prefix="u3.rtrmapbt"
 		;;
+	"refcnt")
+		path_format="/rtgroups/%u.refcount"
+		bt_prefix="u3.rtrefcbt"
+		;;
 	*)
 		_fail "Don't know about rt btree ${bt_type}"
 		;;
@@ -853,6 +871,8 @@ _scratch_xfs_populate_check() {
 	test $is_reflink -ne 0 && __populate_check_xfs_agbtree_height "refcnt"
 	test $is_rmapbt -ne 0 && test $is_rt -gt 0 && \
 		__populate_check_xfs_rgbtree_height "rmap"
+	test $is_reflink -ne 0 && test $is_rt -gt 0 && \
+		__populate_check_xfs_rgbtree_height "refcnt"
 }
 
 # Check data fork format of ext4 file
