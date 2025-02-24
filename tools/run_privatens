@@ -5,6 +5,16 @@
 #
 # Try starting things in a private pid/mount namespace with a private /tmp
 # and /proc so that child process trees cannot interfere with each other.
+verbose=false
+
+_logger() {
+	$verbose || return
+
+	if [ -w /dev/kmsg ]; then
+		echo "[U] $*" >> /dev/kmsg
+		return
+	fi
+}
 
 if [ -n "${FSTESTS_ISOL}" ]; then
 	# Don't allow changes to these mountpoints to propagate
@@ -23,6 +33,9 @@ if [ -n "${FSTESTS_ISOL}" ]; then
 	oom_knob="/proc/self/oom_score_adj"
 	test -w "${oom_knob}" && echo 250 > "${oom_knob}"
 
+	_logger "PWD: "`pwd`
+	_logger "ARGS: $@"
+	_logger "LS: "$(ls -lr /tmp/)
 	exec "$@"
 fi
 
