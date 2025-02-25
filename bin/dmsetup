@@ -26,24 +26,23 @@ _logger "DMSETUP: $@"
 case "$op" in
 create)
 	/usr/sbin/dmsetup --noudevrules --noudevsync "$@" || return 1
-	sleep $delay
-	/usr/sbin/dmsetup --noudevrules --noudevsync mknodes "$name" || return 1
-	_logger "DMSETUP: "$(ls /dev/dm-* /dev/mapper/*)
 	;;
 resume)
 	/usr/sbin/dmsetup --noudevrules --noudevsync "$@" || return 1
-	sleep $delay
-	/usr/sbin/dmsetup --noudevrules --noudevsync mknodes "$name" || return 1
-	_logger "DMSETUP: "$(ls /dev/dm-* /dev/mapper/*)
 	;;
 remove)
 	/usr/sbin/dmsetup --noudevrules --noudevsync "$@" || return 1
-	sleep $delay
-	/usr/sbin/dmsetup --noudevrules --noudevsync mknodes "$name" || return 1
-	_logger "DMSETUP: "$(ls /dev/dm-* /dev/mapper/*)
 	;;
 *)
 	/usr/sbin/dmsetup "$@"
-	sleep $delay
 	;;
 esac
+
+sleep $delay
+if [ -n "$name" ]; then
+	/usr/sbin/dmsetup --noudevrules --noudevsync mknodes "$name" || return 1
+fi
+
+# Sync all devices in any case
+/usr/sbin/dmsetup --noudevrules --noudevsync mknodes || return 1
+_logger "DMSETUP: "$(ls /dev/dm-* /dev/mapper/*)
