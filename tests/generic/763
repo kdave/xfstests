@@ -1,0 +1,29 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Red Hat, Inc.  All Rights Reserved.
+#
+# FS QA Test No. 763
+#
+# test zero-byte writes
+#
+# exfat had a regression where a zero-byte write to a file would
+# yield -EfAULT. Should work on all filesystems - write should
+# succeed.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Import common functions.
+. ./common/filter
+
+[ "$FSTYP" = "exfat" ] && _fixed_by_kernel_commit dda0407a2026 \
+	"exfat: short-circuit zero-byte writes in exfat_file_write_iter"
+
+# Modify as appropriate.
+_require_test
+
+$XFS_IO_PROG -f -c "pwrite 0 0" $TEST_DIR/testfile.$seq 2>&1 | _filter_xfs_io
+
+# success, all done
+status=0
+exit
