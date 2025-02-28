@@ -32,6 +32,8 @@ _cleanup()
 
 _require_scratch_nocheck
 
+truncate_offset=90123
+
 create_snapshot()
 {
 	local ts=`date +'%H_%M_%S_%N'`
@@ -48,7 +50,7 @@ create_file()
 		-c "pwrite -S 0xaa -b 32K 0 32K" \
 		-c "fsync" \
 		-c "pwrite -S 0xbb -b 32770 16K 32770" \
-		-c "truncate 90123" \
+		-c "truncate $truncate_offset" \
 		$SCRATCH_MNT/$name
 }
 
@@ -81,6 +83,12 @@ _scratch_mkfs "$mkfs_options" >>$seqres.full 2>&1
 
 _scratch_mount
 
+# Create a file while no snapshotting is in progress so that we get the expected
+# digest for every file in a snapshot that caught the truncate operation (which
+# sets the file's size to $truncate_offset).
+create_file "gold_file"
+expected_digest=`_md5_checksum "$SCRATCH_MNT/gold_file"`
+
 # Run some background load in order to make the issue easier to trigger.
 # Specially needed when testing with non-debug kernels and there isn't
 # any other significant load on the test machine other than this test.
@@ -103,24 +111,20 @@ for ((i = 0; i < $num_procs; i++)); do
 done
 
 for f in $(find $SCRATCH_MNT -type f -name 'foobar_*'); do
-	digest=`md5sum $f | cut -d ' ' -f 1`
-	case $digest in
-	"d41d8cd98f00b204e9800998ecf8427e")
-		# ok, empty file
-		;;
-	"c28418534a020122aca59fd3ff9581b5")
-		# ok, only first write captured
-		;;
-	"cd0032da89254cdc498fda396e6a9b54")
-		# ok, only 2 first writes captured
-		;;
-	"a1963f914baf4d2579d643425f4e54bc")
-		# ok, the 2 writes and the truncate were captured
-		;;
-	*)
-		# not ok, truncate captured but not one or both writes
-		_fail "Unexpected digest for file $f"
-	esac
+	file_size=$(stat -c%s "$f")
+	# We want to verify that if the file has the size set by the truncate
+	# operation, then both delalloc writes were flushed, and every version
+	# of the file in each snapshot has its range [0, 16K) full of bytes with
+	# a value of 0xaa and the range [16K, 49154) is full of bytes with a
+	# value of 0xbb.
+	if [ "$file_size" -eq "$truncate_offset" ]; then
+		digest=`_md5_checksum "$f"`
+		if [ "$digest" != "$expected_digest" ]; then
+			echo -e "Unexpected content for file $f:\n"
+			_hexdump "$f"
+			_fail "Bad file content"
+		fi
+	fi
 done
 
 # Check the filesystem for inconsistencies.
