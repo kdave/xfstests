@@ -7,9 +7,15 @@
 # and /proc so that child process trees cannot interfere with each other.
 
 if [ -n "${FSTESTS_ISOL}" ]; then
+	# Don't allow changes to these mountpoints to propagate
+	# outside of our mount namespace...
 	for path in /proc /tmp; do
-		mount --make-private "$path"
+		mountpoint "$path" >/dev/null && \
+			mount --make-private "$path"
 	done
+
+	# ...because here we create new mounts that are private
+	# to this mount namespace that we don't want to escape.
 	mount -t proc proc /proc
 	mount -t tmpfs tmpfs /tmp
 
