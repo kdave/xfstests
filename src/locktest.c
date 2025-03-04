@@ -1152,7 +1152,7 @@ main(int argc, char *argv[])
 	if (port == 0) {
 	        socklen_t addr_len = sizeof(myAddr);
 
-		if (getsockname(s_fd, &myAddr, &addr_len)) {
+		if (getsockname(s_fd, (struct sockaddr *)&myAddr, &addr_len)) {
 		    perror("getsockname");
 		    exit(1);
 		}
