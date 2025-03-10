@@ -14,6 +14,20 @@ else
   Q = @
 endif
 
+CHECK=sparse
+CHECK_OPTS=-Wsparse-all -Wbitwise -Wno-transparent-union -Wno-return-void -Wno-undef \
+	-Wno-non-pointer-null -D__CHECK_ENDIAN__ -D__linux__
+
+ifeq ("$(origin C)", "command line")
+  CHECK_CMD=$(CHECK) $(CHECK_OPTS)
+  CHECKSRC=$(C)
+else
+  CHECK_CMD=@true
+  CHECKSRC=0
+endif
+
+export CHECK_CMD CHECKSRC
+
 MAKEOPTS = --no-print-directory Q=$(Q)
 
 TOPDIR = .
