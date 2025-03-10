@@ -42,6 +42,7 @@
  *
  */
 
+#include <aio.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -810,7 +811,7 @@ lio_read_buffer(
  * (rrl 04/96)
  ***********************************************************************/
 int
-lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
+lio_check_asyncio(char *io_type, int size, const struct aiocb *aiocbp, int method)
 {
     int ret;
     int cnt = 1;
@@ -895,9 +896,10 @@ lio_check_asyncio(char *io_type, int size, aiocb_t *aiocbp, int method)
  * (rrl 04/96)
  ***********************************************************************/
 int
-lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
+lio_wait4asyncio(int method, int fd, const struct aiocb *aiocbp)
 {
-    int cnt;
+    struct aiocb *const aioary[1];
+    int cnt, ret;
 
     if ( (method & LIO_WAIT_RECALL)
 	|| ((method & LIO_WAIT_TYPES) == 0) ){
