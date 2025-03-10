@@ -143,13 +143,13 @@ static int Debug_level = 0;
  ***********************************************************************/
 
 int
-stride_bounds(offset, stride, nstrides, bytes_per_stride, min, max)
-int	offset;
-int	stride;
-int	nstrides;
-int	bytes_per_stride;
-int	*min;
-int	*max;
+stride_bounds(
+	int offset,
+	int stride,
+	int nstrides,
+	int bytes_per_stride,
+	int *min,
+	int *max)
 {
 	int	nbytes, min_byte, max_byte;
 
@@ -443,14 +443,14 @@ lio_random_methods(long curr_mask)
  * (rrl 04/96)
  ***********************************************************************/
 int
-lio_write_buffer(fd, method, buffer, size, sig, errmsg, wrd)
-int fd;		/* open file descriptor */
-int method;	/* contains io type and wait method bitmask */
-char *buffer;	/* pointer to buffer */
-int size;	/* the size of the io */
-int sig;	/* signal to use if async io */
-char **errmsg;	/* char pointer that will be updated to point to err message */
-long wrd;	/* to allow future features, use zero for now */
+lio_write_buffer(
+    int fd,		/* open file descriptor */
+    int method,		/* contains io type and wait method bitmask */
+    char *buffer,	/* pointer to buffer */
+    int size,		/* the size of the io */
+    int sig,		/* signal to use if async io */
+    char **errmsg,	/* char pointer that will be updated to point to err message */
+    long wrd)		/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
 #ifndef __linux__
@@ -640,14 +640,14 @@ long wrd;	/* to allow future features, use zero for now */
  * (rrl 04/96)
  ***********************************************************************/
 int
-lio_read_buffer(fd, method, buffer, size, sig, errmsg, wrd)
-int fd;		/* open file descriptor */
-int method;	/* contains io type and wait method bitmask */
-char *buffer;	/* pointer to buffer */
-int size;	/* the size of the io */
-int sig;	/* signal to use if async io */
-char **errmsg;	/* char pointer that will be updated to point to err message */
-long wrd;	/* to allow future features, use zero for now */
+lio_read_buffer(
+    int fd,		/* open file descriptor */
+    int method,		/* contains io type and wait method bitmask */
+    char *buffer,	/* pointer to buffer */
+    int size,		/* the size of the io */
+    int sig,		/* signal to use if async io */
+    char **errmsg,	/* char pointer that will be updated to point to err message */
+    long wrd)		/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
 #ifndef __linux__
@@ -1031,9 +1031,7 @@ struct unit_info_t {
 };
 
 int
-main(argc, argv)
-int argc;
-char **argv;
+main(int argc, char **argv)
 {
     extern char *optarg;
     extern int optind;

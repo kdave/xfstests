@@ -34,10 +34,7 @@ static char errmsg[256];
  * It will loop if the LOCK_NB flags is NOT set.
  ***********************************************************************/
 int
-file_lock(fd, flags, errormsg)
-int fd;
-int flags;
-char **errormsg;
+file_lock(int fd, int flags, char **errormsg)
 {
         register int cmd, ret;
         struct flock flocks;
@@ -109,12 +106,7 @@ char **errormsg;
  * It will loop if the LOCK_NB flags is NOT set.
  ***********************************************************************/
 int
-record_lock(fd, flags, start, len, errormsg)
-int fd;
-int flags;
-int start;
-int len;
-char **errormsg;
+record_lock(int fd, int flags, int start, int len, char **errormsg)
 {
         register int cmd, ret;
         struct flock flocks;

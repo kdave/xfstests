@@ -17,18 +17,18 @@
 static char Errmsg[80];
 
 int
-dataasciigen(listofchars, buffer, bsize, offset)
-char *listofchars;	/* a null terminated list of characters */
-char *buffer;
-int bsize;
-int offset;
+dataasciigen(
+	char *listofchars,	/* a null terminated list of characters */
+	char *buffer,
+	int bsize,
+	int offset)
 {
-   int cnt;
-   int total;
-   int ind;	/* index into CHARS array */
-   char *chr;
-   int chars_size;
-   char *charlist;
+	int cnt;
+	int total;
+	int ind;	/* index into CHARS array */
+	char *chr;
+	int chars_size;
+	char *charlist;
 
 	chr=buffer;
 	total=offset+bsize;
@@ -52,19 +52,19 @@ int offset;
 }	/* end of dataasciigen */
 
 int
-dataasciichk(listofchars, buffer, bsize, offset, errmsg)
-char *listofchars;	/* a null terminated list of characters */
-char *buffer;
-int bsize;
-int offset;
-char **errmsg;
+dataasciichk(
+	char *listofchars,	/* a null terminated list of characters */
+	char *buffer,
+	int bsize,
+	int offset,
+	char **errmsg)
 {
-   int cnt;
-   int total;
-   int ind;	/* index into CHARS array */
-   char *chr;
-   int chars_size;
-   char *charlist;
+	int cnt;
+	int total;
+	int ind;	/* index into CHARS array */
+	char *chr;
+	int chars_size;
+	char *charlist;
 
 	chr=buffer;
 	total=offset+bsize;
@@ -104,15 +104,12 @@ char **errmsg;
  * main for doing unit testing
  ***********************************************************************/
 int
-main(ac, ag)
-int ac;
-char **ag;
+main(int ac, char **ag)
 {
-
-int size=1023;
-char *buffer;
-int ret;
-char *errmsg;
+    int size=1023;
+    char *buffer;
+    int ret;
+    char *errmsg;
 
     if ((buffer=(char *)malloc(size)) == NULL ) {
         perror("malloc");

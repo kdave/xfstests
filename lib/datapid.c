@@ -57,15 +57,13 @@ static char Errmsg[80];
  * Thus, offset 8 is in middle of word 1
  ***********************************************************************/
 int
-datapidgen(pid, buffer, bsize, offset)
-int pid;
-char *buffer;
-int bsize;
-int offset;
+datapidgen(
+	int pid,
+	char *buffer,
+	int bsize,
+	int offset)
 {
 	return -1;	/* not support on non-64 bits word machines  */
-
-
 } 
 
 /***********************************************************************
@@ -73,12 +71,7 @@ int offset;
  *
  ***********************************************************************/
 int
-datapidchk(pid, buffer, bsize, offset, errmsg)
-int pid;
-char *buffer;
-int bsize;
-int offset;
-char **errmsg;
+datapidchk(int pid, char *buffer, int bsize, int offset, char **errmsg)
 {
     if ( errmsg != NULL ) {
         *errmsg = Errmsg;
@@ -94,15 +87,12 @@ char **errmsg;
  * main for doing unit testing
  ***********************************************************************/
 int
-main(ac, ag)
-int ac;
-char **ag;
+main( int ac, char **ag)
 {
-
-int size=1234;
-char *buffer;
-int ret;
-char *errmsg;
+    int size=1234;
+    char *buffer;
+    int ret;
+    char *errmsg;
 
     if ((buffer=(char *)malloc(size)) == NULL ) {
         perror("malloc");
