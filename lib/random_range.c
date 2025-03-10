@@ -69,7 +69,7 @@ struct range {
  * parse_range() returns -1 on error, or the number of ranges parsed.
  */
 
-static int       str_to_int();
+static int       str_to_int(char *str, int *ip);
 static long long divider(long long, long long, long long, long long);
 
 int
@@ -78,7 +78,7 @@ parse_ranges(
 	int defmin,
 	int defmax,
 	int defmult,
-	int (*parse_func)(),
+	int (*parse_func)(char *str, int *ip),
 	char **rangeptr,
 	char **errptr)
 {
@@ -570,8 +570,6 @@ printf("   diff = %lld, half = %lld,   med = %lld\n", diff, half, med);
 void
 random_range_seed(long s)
 {
-    extern void srand48();
-
     srand48(s);
 }
 

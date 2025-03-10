@@ -6,7 +6,7 @@
 #ifndef _RANDOM_RANGE_H_
 #define _RANDOM_RANGE_H_
 
-int       parse_ranges     ( char *, int, int, int, int (*)(), char **, char ** );
+int       parse_ranges     ( char *, int, int, int, int (*)(char *, int *), char **, char ** );
 int       range_min        ( char *, int );
 int       range_max        ( char *, int );
 int       range_mult       ( char *, int );

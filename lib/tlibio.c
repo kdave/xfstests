@@ -75,7 +75,7 @@
 
 
 #ifndef __linux__
-static void lio_async_signal_handler();
+static void lio_async_signal_handler(int sig);
 #endif
 
 /*

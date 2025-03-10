@@ -217,7 +217,7 @@ int
 wlog_scan_backward(
 	struct wlog_file	*wfile,
 	int 			nrecs,
-	int 			(*func)(),
+	int 			(*func)(struct wlog_rec *, long data),
 	long			data)
 {
 	int			fd, leftover, nbytes, offset, recnum, reclen;
