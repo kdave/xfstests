@@ -82,6 +82,7 @@ static void lio_async_signal_handler(int sig);
 /*
  * Define the structure as used in lio_parse_arg1 and lio_help1
  */
+static
 struct lio_info_type  Lio_info1[] = {
     { "s", LIO_IO_SYNC, "sync i/o" },
     { "p", LIO_IO_ASYNC|LIO_WAIT_SIGACTIVE, "async i/o using a loop to wait for a signal" },
@@ -101,6 +102,7 @@ struct lio_info_type  Lio_info1[] = {
 /*
  * Define the structure used by lio_parse_arg2 and lio_help2
  */
+static
 struct lio_info_type  Lio_info2[] = {
     { "sync",      LIO_IO_SYNC,		"sync i/o (read/write)"},
     { "async",     LIO_IO_ASYNC,	"async i/o (reada/writea/aio_read/aio_write)" },
@@ -120,7 +122,7 @@ struct lio_info_type  Lio_info2[] = {
 	"all random i/o types and wait methods (except nowait)" },
 };
 
-char Lio_SysCall[PATH_MAX];	/* string containing last i/o system call */
+static char Lio_SysCall[PATH_MAX];	/* string containing last i/o system call */
 
 static volatile int Received_signal = 0;	/* number of signals received */
 static volatile int Rec_signal;
