@@ -11,7 +11,7 @@
 #define LIO_IO_SYNCV            00020   /* single-buffer readv/writev */
 #define LIO_IO_SYNCP            00040   /* pread/pwrite */
 
-#ifdef linux
+#ifdef __linux__
 #define LIO_IO_TYPES            00021   /* all io types */
 #endif /* linux */
 
@@ -21,14 +21,14 @@
 #define LIO_WAIT_SIGPAUSE       00100000 /* call pause */
 #define LIO_WAIT_SIGACTIVE      00200000 /* spin waiting for signal */
 
-#ifdef linux
+#ifdef __linux__
 #define LIO_WAIT_TYPES          00300000 /* all wait types, except nowait */
 #endif /* linux */
 
 /* meta wait io  */
 /*  00  000 0000 */
 
-#ifdef linux
+#ifdef __linux__
 /* all signal wait types */
 #define LIO_WAIT_SIGTYPES	(LIO_WAIT_SIGPAUSE)
 #endif /* linux */

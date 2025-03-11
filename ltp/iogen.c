@@ -128,7 +128,7 @@ void	startup_info(FILE *stream, int seed);
  */
 
 struct strmap	Aio_Strat_Map[] = {
-#ifndef linux
+#ifndef __linux__
 	{ "poll",	A_POLL		},
 	{ "signal",	A_SIGNAL	},
 #else
@@ -1610,7 +1610,7 @@ FILE	*stream;
 {
     usage(stream);
     fprintf(stream, "\n");
-#ifndef linux
+#ifndef __linux__
     fprintf(stream, "\t-a aio_type,...  Async io completion types to choose.  Supported types\n");
     fprintf(stream, "\t                 are:  poll, signal, suspend, and callback.\n");
     fprintf(stream, "\t                 Default is all of the above.\n");
@@ -1643,7 +1643,7 @@ FILE	*stream;
     fprintf(stream, "\t-q               Quiet mode.  Normally iogen spits out info\n");
     fprintf(stream, "\t                 about test files, options, etc. before starting.\n");
     fprintf(stream, "\t-s syscall,...   Syscalls to do.  Supported syscalls are\n");
-#ifdef linux
+#ifdef __linux__
     fprintf(stream, "\t                 read, write, pread, pwrite, readv, writev,\n");
     fprintf(stream, "\t                 mmread, mmwrite, fsync2, fdatasync,\n");
     fprintf(stream, "\t                 Default is 'read,write,readv,writev,mmread,mmwrite'.\n");

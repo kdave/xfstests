@@ -222,7 +222,7 @@ int     parse_cmdline( int, char **, char * );
 int     lock_file_region( char *, int, int, int, int );
 struct	fd_cache *alloc_fdcache(char *, int);
 int     aio_register( int, int, int );
-#ifndef linux
+#ifndef __linux__
 int aio_wait(int);
 #endif
 
@@ -1990,7 +1990,7 @@ do_rw(req)
 		/*
 		 * If the syscall was async, wait for I/O to complete
 		 */
-#ifndef linux
+#ifndef __linux__
 		if(sy->sy_flags & SY_ASYNC) {
 			for(i=0; i < nents; i++) {
 				aio_wait(s->aioid[i]);
@@ -2425,7 +2425,7 @@ int nbytes;
 	static int	mturn = 0;	/* which memory type to use */
 	struct memalloc	*M;
 	char		filename[255];
-#ifdef linux
+#ifdef __linux__
 	struct shmid_ds shm_ds;
 	bzero( &shm_ds, sizeof(struct shmid_ds) );
 #endif
@@ -2997,7 +2997,7 @@ int	aio_id;
 	return 0;
 }
 
-#ifndef linux
+#ifndef __linux__
 int
 aio_wait(aio_id)
 int	aio_id;

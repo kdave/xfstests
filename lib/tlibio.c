@@ -74,7 +74,7 @@
 #endif
 
 
-#ifndef linux
+#ifndef __linux__
 static void lio_async_signal_handler();
 #endif
 
@@ -351,7 +351,7 @@ lio_help2(char *prefix)
     return;
 }
 
-#ifndef linux
+#ifndef __linux__
 /***********************************************************************
  * This is an internal signal handler.
  * If the handler is called, it will increment the Received_signal
@@ -453,7 +453,7 @@ char **errmsg;	/* char pointer that will be updated to point to err message */
 long wrd;	/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
-#ifndef linux
+#ifndef __linux__
     int omethod = method;
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
 #endif
@@ -650,7 +650,7 @@ char **errmsg;	/* char pointer that will be updated to point to err message */
 long wrd;	/* to allow future features, use zero for now */
 {
     int ret = 0;	/* syscall return or used to get random method */
-#ifndef linux
+#ifndef __linux__
     int listio_cmd;		/* Holds the listio/lio_listio cmd */
     int omethod = method;
 #endif
@@ -797,7 +797,7 @@ long wrd;	/* to allow future features, use zero for now */
 }	/* end of lio_read_buffer */
 
 
-#ifndef linux
+#ifndef __linux__
 /***********************************************************************
  * This function will check that async io was successful.
  * It can also be used to check sync listio since it uses the
@@ -998,7 +998,7 @@ lio_wait4asyncio(int method, int fd, aiocb_t *aiocbp)
 
 } /* end of lio_wait4asyncio */
 
-#endif /* ifndef linux */
+#endif /* ifndef __linux__ */
 
 #if UNIT_TEST
 /***********************************************************************

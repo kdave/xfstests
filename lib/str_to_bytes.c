@@ -31,7 +31,7 @@
  *
  ****************************************************************************/
 
-#if linux
+#ifdef __linux__
 #define B_MULT	DEV_BSIZE	/* block size */
 #endif
 

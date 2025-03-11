@@ -79,7 +79,7 @@ struct wlog_rec {
  */
 
 struct wlog_rec_disk {
-#ifdef linux
+#ifdef __linux__
     uint    w_offset    : 32;	    /* file offset  	    	    */
     uint    w_extra0    : 32;       /* EXTRA BITS IN WORD 0         */
 #endif
