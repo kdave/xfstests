@@ -3985,11 +3985,18 @@ _require_scratch_dev_pool_equal_size()
 _require_fio()
 {
 	local job=$1
+	local eng
 
 	_require_command "$FIO_PROG" fio
 	if [ -z "$1" ]; then
 		return 1;
 	fi
+
+	# Explicitly check for every ioengine listed in the job
+	for eng in `sed -n "s/ioengine=\(.*\)/\1/p" $job | sort -u`; do
+		grep -wq $eng <($FIO_PROG --enghelp 2>/dev/null) || \
+			_notrun "fio engine $eng not available"
+	done
 
 	$FIO_PROG --warnings-fatal --showcmd $job >> $seqres.full 2>&1
 	[ $? -eq 0 ] || _notrun "$FIO_PROG too old, see $seqres.full"
