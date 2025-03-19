@@ -21,6 +21,7 @@ _cleanup()
 {
 	if [ ! -z $XFS_IO_PID ]; then
 		kill $XFS_IO_PID > /dev/null 2>&1
+		wait
 	fi
 	rm -fr $tmp
 }
@@ -29,17 +30,21 @@ _cleanup()
 
 _require_scratch
 _require_xfs_io_command "-T"
+_require_mknod
+_require_btrfs_command inspect-internal dump-tree
 
 _scratch_mkfs >/dev/null 2>&1
 _scratch_mount
 
+mkfifo $SCRATCH_MNT/fifo
+
 # Create a tmpfile file, write some data to it and leave it open, so that our
 # main subvolume has an orphan inode item.
-$XFS_IO_PROG -T $SCRATCH_MNT >>$seqres.full 2>&1 < <(
-	echo "pwrite 0 65536"
-	read
-) &
+tail -f $SCRATCH_MNT/fifo | $XFS_IO_PROG >>$seqres.full &
 XFS_IO_PID=$!
+
+echo "open -T $SCRATCH_MNT" > $SCRATCH_MNT/fifo
+echo "pwrite 0 64K" > $SCRATCH_MNT/fifo
 
 # Give it some time to the xfs_io process to create the tmpfile.
 sleep 3
@@ -48,6 +53,21 @@ sleep 3
 # The send operation used to fail with -ESTALE due to the presence of the
 # orphan inode.
 _btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/mysnap
+
+snap_id=$(_btrfs_get_subvolid $SCRATCH_MNT mysnap)
+# Inode numbers are sequential, so our tmpfile's inode number is the number of
+# the fifo's inode plus 1.
+ino=$(( $(stat -c %i $SCRATCH_MNT/fifo) + 1 ))
+
+# Verify that we indeed have the tmpfile in the snapshot tree.
+$BTRFS_UTIL_PROG inspect-internal dump-tree -t $snap_id $SCRATCH_DEV | \
+	grep -q "(ORPHAN ORPHAN_ITEM $ino)"
+if [ $? -ne 0 ]; then
+	echo "orphan item for tmpfile not found in the snapshot tree!"
+	echo -e "snapshot tree dump is:\n"
+	$BTRFS_UTIL_PROG inspect-internal dump-tree -t $snap_id $SCRATCH_DEV
+fi
+
 _btrfs send -f /dev/null $SCRATCH_MNT/mysnap
 
 status=0
