@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test 335
+#
+# Regression test for a kernel crash when converting a zoned BTRFS from
+# metadata DUP to RAID1 and one of the devices has a non 0 write pointer
+# position in the target zone.
+#
+. ./common/preamble
+_begin_fstest zone quick volume
+
+. ./common/filter
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: zoned: return EIO on RAID1 block group write pointer mismatch"
+
+_require_scratch_dev_pool 2
+declare -a devs="( $SCRATCH_DEV_POOL )"
+_require_zoned_device ${devs[0]}
+_require_zoned_device ${devs[1]}
+_require_command "$BLKZONE_PROG" blkzone
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# Write some data to the FS to dirty it
+$XFS_IO_PROG -fc "pwrite 0 128M" $SCRATCH_MNT/test | _filter_xfs_io
+
+# Add device two to the FS
+$BTRFS_UTIL_PROG device add ${devs[1]} $SCRATCH_MNT >> $seqres.full
+
+# Move write pointers of all empty zones by 4k to simulate write pointer
+# mismatch.
+zones=$($BLKZONE_PROG report ${devs[1]} | $AWK_PROG '/em/ { print $2 }' |\
+	sed 's/,//' | head -n 64)
+for zone in $zones;
+do
+	# We have to ignore the output here, as a) we don't know the number of
+	# zones that have dirtied and b) if we run over the maximal number of
+	# active zones, xfs_io will output errors, both we don't care.
+	$XFS_IO_PROG -fdc "pwrite $(($zone << 9)) 4096" ${devs[1]} > /dev/null 2>&1
+done
+
+# expected to fail
+$BTRFS_UTIL_PROG balance start -mconvert=raid1 $SCRATCH_MNT 2>&1 |\
+	_filter_scratch
+
+_scratch_unmount
+
+$MOUNT_PROG -t btrfs -odegraded ${devs[0]} $SCRATCH_MNT
+
+$BTRFS_UTIL_PROG device remove --force missing $SCRATCH_MNT >> $seqres.full
+$BTRFS_UTIL_PROG balance start --full-balance $SCRATCH_MNT >> $seqres.full
+
+# Check that both System and Metadata are back to the DUP profile
+$BTRFS_UTIL_PROG filesystem df $SCRATCH_MNT |\
+	grep -o -e "System, DUP" -e "Metadata, DUP"
+
+status=0
+exit
