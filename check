@@ -674,14 +674,6 @@ _stash_test_status() {
 	esac
 }
 
-# Don't try "privatens" by default, it's experimental for now.
-if [ "$TRY_PRIVATENS" = "yes" ];then
-	# Can we run in a private pid/mount namespace?
-	HAVE_PRIVATENS=
-	./tools/run_privatens bash -c "exit 77"
-	test $? -eq 77 && HAVE_PRIVATENS=yes
-fi
-
 # Can we run systemd scopes?
 HAVE_SYSTEMD_SCOPES=
 systemctl reset-failed "fstests-check" &>/dev/null
@@ -699,29 +691,22 @@ _adjust_oom_score -500
 # the system runs out of memory it'll be the test that gets killed and not the
 # test framework.  The test is run in a separate process without any of our
 # functions, so we open-code adjusting the OOM score.
+#
+# If systemd is available, run the entire test script in a scope so that we can
+# kill all subprocesses of the test if it fails to clean up after itself.  This
+# is essential for ensuring that the post-test unmount succeeds.  Note that
+# systemd doesn't automatically remove transient scopes that fail to terminate
+# when systemd tells them to terminate (e.g. programs stuck in D state when
+# systemd sends SIGKILL), so we use reset-failed to tear down the scope.
+#
+# Use setsid to run the test program with a separate session id so that we
+# can pkill only the processes started by this test.
 _run_seq() {
 	local res
 	unset CHILDPID
 	unset FSTESTS_ISOL	# set by tools/run_seq_*
 
-	if [ -n "${HAVE_PRIVATENS}" ]; then
-		# If pid and mount namespaces are available, run the whole test
-		# inside them so that the test cannot access any process or
-		# /tmp contents that it does not itself create.  The ./$seq
-		# process is considered the "init" process of the pid
-		# namespace, so all subprocesses will be sent SIGKILL when it
-		# terminates.
-		./tools/run_privatens "./$seq"
-		res=$?
-	elif [ -n "${HAVE_SYSTEMD_SCOPES}" ]; then
-		# If systemd is available, run the entire test script in a
-		# scope so that we can kill all subprocesses of the test if it
-		# fails to clean up after itself.  This is essential for
-		# ensuring that the post-test unmount succeeds.  Note that
-		# systemd doesn't automatically remove transient scopes that
-		# fail to terminate when systemd tells them to terminate (e.g.
-		# programs stuck in D state when systemd sends SIGKILL), so we
-		# use reset-failed to tear down the scope.
+	if [ -n "${HAVE_SYSTEMD_SCOPES}" ]; then
 		local unit="$(systemd-escape "fs$seq").scope"
 		systemctl reset-failed "${unit}" &> /dev/null
 		systemd-run --quiet --unit "${unit}" --scope \
