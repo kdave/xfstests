@@ -698,46 +698,19 @@ _adjust_oom_score -500
 # systemd doesn't automatically remove transient scopes that fail to terminate
 # when systemd tells them to terminate (e.g. programs stuck in D state when
 # systemd sends SIGKILL), so we use reset-failed to tear down the scope.
-#
-# Use setsid to run the test program with a separate session id so that we
-# can pkill only the processes started by this test.
 _run_seq() {
+	local cmd=(bash -c "test -w ${OOM_SCORE_ADJ} && echo 250 > ${OOM_SCORE_ADJ}; exec ./$seq")
 	local res
-	unset CHILDPID
-	unset FSTESTS_ISOL	# set by tools/run_seq_*
 
 	if [ -n "${HAVE_SYSTEMD_SCOPES}" ]; then
 		local unit="$(systemd-escape "fs$seq").scope"
 		systemctl reset-failed "${unit}" &> /dev/null
-		systemd-run --quiet --unit "${unit}" --scope \
-			./tools/run_setsid "./$seq" &
-		CHILDPID=$!
-		wait
+		systemd-run --quiet --unit "${unit}" --scope "${cmd[@]}"
 		res=$?
-		unset CHILDPID
 		systemctl stop "${unit}" &> /dev/null
+		return "${res}"
 	else
-		# bash won't run the SIGINT trap handler while there are
-		# foreground children in a separate session, so we must run
-		# the test in the background and wait for it.
-		./tools/run_setsid "./$seq" &
-		CHILDPID=$!
-		wait
-		res=$?
-		unset CHILDPID
-	fi
-
-	return $res
-}
-
-_kill_seq() {
-	if [ -n "$CHILDPID" ]; then
-		# SIGPIPE will kill all the children (including fsstress)
-		# without bash logging fatal signal termination messages to the
-		# console
-		pkill -PIPE --session "$CHILDPID"
-		wait
-		unset CHILDPID
+		"${cmd[@]}"
 	fi
 }
 
@@ -746,9 +719,9 @@ _prepare_test_list
 fstests_start_time="$(date +"%F %T")"
 
 if $OPTIONS_HAVE_SECTIONS; then
-	trap "_kill_seq; _summary; exit \$status" 0 1 2 3 15
+	trap "_summary; exit \$status" 0 1 2 3 15
 else
-	trap "_kill_seq; _wrapup; exit \$status" 0 1 2 3 15
+	trap "_wrapup; exit \$status" 0 1 2 3 15
 fi
 
 function run_section()

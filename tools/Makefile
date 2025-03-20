@@ -7,7 +7,6 @@ include $(TOPDIR)/include/builddefs
 
 TOOLS_DIR = tools
 helpers=\
-	run_setsid \
 	run_privatens
 
 include $(BUILDRULES)
