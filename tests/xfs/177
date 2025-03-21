@@ -77,7 +77,9 @@ delay_centisecs="$(cat "$xfs_centisecs_file")"
 sleep_seconds=$(( ( (99 + (delay_centisecs / 6) ) / 100) + 1))
 echo "Will sleep $sleep_seconds seconds to expire inodes" >> $seqres.full
 
-_scratch_mkfs >> $seqres.full
+# Force a relatively small file system size to keep the number of rtgroups
+# and thus metadata inodes low
+_scratch_mkfs_sized $((512 * 1024 * 1024)) >> $seqres.full
 _scratch_mount >> $seqres.full
 
 junkdir=$SCRATCH_MNT/$seq.junk
