@@ -2206,7 +2206,10 @@ _xfs_scratch_supports_rtquota() {
 # can check that quickly, and we make the bold assumption that the same will
 # apply to any scratch fs that might be created.
 _require_xfs_rtquota_if_rtdev() {
-	test "$USE_EXTERNAL" = "yes" || return
+	if [ "$USE_EXTERNAL" != "yes" ]; then
+		$XFS_INFO_PROG "$TEST_DIR" | grep -q 'realtime.*internal' &&
+			_notrun "Quota on internal rt device not supported"
+	fi
 
 	if [ -n "$TEST_RTDEV$SCRATCH_RTDEV" ]; then
 		_xfs_kmod_supports_rtquota || \
