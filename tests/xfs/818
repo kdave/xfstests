@@ -75,9 +75,8 @@ _run_fsstress -n 1000 -d $SCRATCH_MNT/newfiles
 make_stat $SCRATCH_MNT before
 make_md5 $SCRATCH_MNT before
 
-kb_needed=$(du -k -s $SCRATCH_MNT | awk '{print $1}')
-img_size=$((kb_needed * 2))
-test "$img_size" -lt $((300 * 1024)) && img_size=$((300 * 1024))
+scratch_sectors="$(blockdev --getsz $SCRATCH_DEV)"
+img_size=$((scratch_sectors * 512 / 1024))
 
 echo "Clone image with protofile"
 $XFS_PROTOFILE_PROG $SCRATCH_MNT > $testfiles/protofile
@@ -99,7 +98,21 @@ if ! _try_mkfs_dev -p $testfiles/protofile $testfiles/image &> $tmp.mkfs; then
 	if grep -q 'No space left on device' $tmp.mkfs; then
 		_notrun "not enough space in filesystem"
 	fi
+
+	# mkfs cannot create realtime files.
+	#
+	# If zoned=1 is in MKFS_OPTIONS, mkfs will create an internal realtime
+	# volume with rtinherit=1 and fail, so we need to _notrun that case.
+	#
+	# If zoned=1 is /not/ in MKFS_OPTIONS, we didn't pass a realtime device
+	# to mkfs so it will not create realtime files.  The format should work
+	# just fine.
+	if grep -q 'creating realtime files from proto file not supported' $tmp.mkfs; then
+		_notrun "mkfs cannot create realtime files"
+	fi
+
 	cat $tmp.mkfs
+	exit
 fi
 
 _mount $testfiles/image $testfiles/mount
