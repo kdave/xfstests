@@ -25,13 +25,16 @@ _require_test
 $MKFS_XFS_PROG 2>&1 | grep -q concurrency || \
 	_notrun "mkfs does not support concurrency options"
 
-test_dev_lbasize=$(blockdev --getss $TEST_DEV)
-seqfull=$0
-_link_out_file "lba${test_dev_lbasize}"
-
+# Figure out what sector size mkfs will use to format, which might be dependent
+# upon the directio write geometry of the test filesystem.
 loop_file=$TEST_DIR/$seq.loop
-
 rm -f "$loop_file"
+truncate -s 16M "$loop_file"
+$MKFS_XFS_PROG -f -N "$loop_file" | _filter_mkfs 2>$tmp.mkfs >/dev/null
+. $tmp.mkfs
+seqfull=$0
+_link_out_file "lba${sectsz}"
+
 for sz in 16M 512M 1G 2G 16G 64G 256G 512G 1T 2T 4T 16T 64T 256T 512T 1P; do
 	for cpus in 2 4 8 16 32 40 64 96 160 512; do
 		truncate -s "$sz" "$loop_file"
