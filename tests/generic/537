@@ -18,6 +18,7 @@ _begin_fstest auto quick trim
 
 # Import common functions.
 . ./common/filter
+. ./common/quota
 
 _require_scratch
 _require_fstrim
@@ -35,6 +36,22 @@ echo "fstrim on ro mount"
 _scratch_mount -o ro >> $seqres.full 2>&1
 $FSTRIM_PROG -v $SCRATCH_MNT >> $seqres.full 2>&1
 _scratch_unmount
+
+# As of kernel commit 9f0902091c332b ("xfs: Do not allow norecovery mount with
+# quotacheck"), it is no longer possible to mount with "norecovery" and any
+# quota mount option if the quota mount options would require a metadata update
+# such as quotacheck.  For a pre-metadir XFS filesystem with a realtime volume
+# and quota-enabling options, the first two mount attempts will have succeeded
+# but with quotas disabled.  The mount option parsing for this next mount
+# attempt will see the same quota-enabling options and a lack of qflags in the
+# ondisk metadata and reject the mount because it thinks that will require
+# quotacheck.  Edit out the quota mount options for this specific
+# configuration.
+if [ "$FSTYP" = "xfs" ]; then
+	if [ "$USE_EXTERNAL" = "yes" ] && [ -n "$SCRATCH_RTDEV" ]; then
+		_qmount_option ""
+	fi
+fi
 
 echo "fstrim on ro mount with no log replay"
 norecovery="norecovery"
