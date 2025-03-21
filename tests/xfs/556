@@ -35,6 +35,19 @@ filter_scrub_errors() {
 }
 
 _scratch_mkfs >> $seqres.full
+
+#
+# The dm-error map added by this test doesn't work on zoned devices because
+# table sizes need to be aligned to the zone size, and even for zoned on
+# conventional this test will get confused because of the internal RT device.
+#
+# That check requires a mounted file system, so do a dummy mount before setting
+# up DM.
+#
+_scratch_mount
+_require_xfs_scratch_non_zoned
+_scratch_unmount
+
 _dmerror_init
 _dmerror_mount >> $seqres.full 2>&1
 

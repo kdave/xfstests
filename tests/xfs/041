@@ -44,6 +44,11 @@ bsize=`_scratch_mkfs_xfs -dsize=${agsize}m,agcount=1 2>&1 | _filter_mkfs 2>&1 \
 onemeginblocks=`expr 1048576 / $bsize`
 _scratch_mount
 
+# Growing the data device doesn't work with an internal RT volume directly
+# following the data device.  But even without that this test forces data
+# to the data device, which often is tiny on zoned file systems.
+_require_xfs_scratch_non_zoned
+
 # We're growing the data device, so force new file creation there
 _xfs_force_bdev data $SCRATCH_MNT
 
