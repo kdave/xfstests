@@ -2049,6 +2049,12 @@ _scratch_xfs_find_metafile()
 # Force metadata directories off.
 _scratch_xfs_force_no_metadir()
 {
+	_require_non_zoned_device $SCRATCH_DEV
+	# metadir is required for when the rt device is on a zoned device
+	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ]; then
+		_require_non_zoned_device $SCRATCH_RTDEV
+	fi
+
 	# Remove any mkfs-time quota options because those are only supported
 	# with metadir=1
 	for opt in uquota gquota pquota; do
@@ -2068,6 +2074,12 @@ _scratch_xfs_force_no_metadir()
 	# that option.
 	if grep -q 'metadir=' $MKFS_XFS_PROG; then
 		MKFS_OPTIONS="-m metadir=0 $MKFS_OPTIONS"
+	fi
+
+	# Replace any explicit zonedr option with zoned=0
+	if echo "$MKFS_OPTIONS" | grep -q 'zoned='; then
+		MKFS_OPTIONS="$(echo "$MKFS_OPTIONS" | sed -e 's/zoned=[0-9]*/zoned=0/g' -e 's/zoned\([, ]\)/zoned=0\1/g')"
+		return
 	fi
 }
 
