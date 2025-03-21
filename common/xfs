@@ -2071,6 +2071,33 @@ _scratch_xfs_force_no_metadir()
 	fi
 }
 
+# do not run on zoned file systems
+_require_xfs_scratch_non_zoned()
+{
+	if _has_fs_sysfs_attr $SCRATCH_DEV "zoned/max_open_zones"; then
+		_notrun "Not supported on zoned file systems"
+	fi
+}
+
+# only run on zoned file systems
+_require_xfs_scratch_zoned()
+{
+	local attr="zoned/max_open_zones"
+	local min_open_zones=$1
+
+	if ! _has_fs_sysfs_attr $SCRATCH_DEV $attr; then
+		_notrun "Requires zoned file system"
+	fi
+
+	if [ -n "${min_open_zones}" ]; then
+		local has_open_zones=`_get_fs_sysfs_attr $SCRATCH_DEV $attr`
+
+		if [ "${min_open_zones}" -gt "${has_open_zones}" ]; then
+			_notrun "Requires at least ${min_open_zones} open zones"
+		fi
+	fi
+}
+
 # Decide if a mount filesystem has metadata directory trees.
 _xfs_mount_has_metadir() {
 	local mount="$1"
