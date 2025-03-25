@@ -1,0 +1,138 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/009
+#
+# This is a regression test to check whether fsck can handle corrupted
+# nlinks correctly, it uses inject.f2fs to inject nlinks w/ wrong value,
+# and expects fsck.f2fs can detect such corruption and do the repair.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_scratch
+_require_command "$F2FS_INJECT_PROG" inject.f2fs
+_require_command "$(type -P socket)" socket
+
+_fixed_by_git_commit f2fs-tools 958cd6e \
+	"fsck.f2fs: support to repair corrupted i_links"
+
+filename=$SCRATCH_MNT/foo
+hardlink=$SCRATCH_MNT/bar
+
+_cleanup()
+{
+	if [ -n "$pid" ]; then
+		kill $pid &> /dev/null
+		wait
+	fi
+	cd /
+	rm -r -f $tmp.*
+}
+
+inject_and_check()
+{
+	local nlink=$1
+	local ino=$2
+
+	echo "ino:"$ino >> $seqres.full
+	echo "nlink:"$nlink >> $seqres.full
+
+	_scratch_unmount
+
+	$F2FS_INJECT_PROG --node --mb i_links --nid $ino --val $nlink $SCRATCH_DEV \
+		>> $seqres.full || _fail "fail to inject"
+
+	_check_scratch_fs >> $seqres.full 2>&1 && _fail "can't find corruption"
+	_repair_scratch_fs >> $seqres.full
+	_check_scratch_fs >> $seqres.full 2>&1 || _fail "fsck can't fix corruption"
+
+	_scratch_mount
+	_scratch_unmount
+
+	_scratch_mkfs >> $seqres.full
+	_scratch_mount
+}
+
+check_links()
+{
+	local nlink=$1
+	local create_hardlink=$2
+	local ino=$3
+
+	if [ -z $ino ]; then
+		ino=`stat -c '%i' $filename`
+	fi
+
+	if [ $create_hardlink == 1 ]; then
+		ln $filename $hardlink
+	fi
+
+	inject_and_check $nlink $ino
+}
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+touch $filename
+check_links 0 0
+
+mkdir $filename
+check_links 1 0
+
+mknod $filename c 9 0
+check_links 0 0
+
+mknod $filename b 8 0
+check_links 0 0
+
+mkfifo $filename
+check_links 0 0
+
+socket -s $filename >> $seqres.full 2>&1 &
+pid=$!
+sleep 2
+ino=`stat -c '%i' $filename`
+kill $pid >> $seqres.full 2>&1
+check_links 0 0 $ino
+
+ln -s $SCRATCH_MNT/empty $filename
+check_links 0 0
+
+touch $filename
+ino=`stat -c '%i' $filename`
+$F2FS_IO_PROG write 1 0 1 zero atomic_commit $filename 5000 >> $seqres.full 2>&1 &
+stat $filename >> $seqres.full
+rm $filename
+$F2FS_IO_PROG shutdown 1 $SCRATCH_MNT/ >> $seqres.full
+sleep 6
+check_links 1 0 $ino
+
+# hardlink
+touch $filename
+check_links 0 1
+
+mknod $filename c 9 0
+check_links 0 1
+
+mknod $filename b 8 0
+check_links 0 1
+
+mkfifo $filename
+check_links 0 1
+
+socket -s $filename >> $seqres.full 2>&1 &
+pid=$!
+sleep 2
+ino=`stat -c '%i' $filename`
+kill $pid >> $seqres.full 2>&1
+check_links 0 1 $ino
+
+ln -s $SCRATCH_MNT/empty $filename
+check_links 0 1
+
+echo "Silence is golden"
+
+status=0
+exit
