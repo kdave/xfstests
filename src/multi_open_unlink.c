@@ -28,7 +28,7 @@
 void
 usage(char *prog)
 {
-	fprintf(stderr, "Usage: %s [-e num-eas] [-f path_prefix] [-n num_files] [-s sleep_time] [-v ea-valuesize] \n", prog);
+	fprintf(stderr, "Usage: %s [-e num-eas] [-f path_prefix] [-F] [-n num_files] [-s sleep_time] [-S] [-v ea-valuesize] \n", prog);
 	exit(1);
 }
 
@@ -44,8 +44,10 @@ main(int argc, char *argv[])
 	int value_size = MAX_VALUELEN;
 	int fd = -1;
 	int i,j,c;
+	int fsync_files = 0;
+	int sync_fs = 0;
 
-	while ((c = getopt(argc, argv, "e:f:n:s:v:")) != EOF) {
+	while ((c = getopt(argc, argv, "e:f:Fn:s:Sv:")) != EOF) {
 		switch (c) {
 			case 'e':   /* create eas */
 				num_eas = atoi(optarg);
@@ -53,11 +55,17 @@ main(int argc, char *argv[])
 			case 'f':   /* file prefix */
 				given_path = optarg;
 				break;
+			case 'F':   /* fsync files after unlink */
+				fsync_files = 1;
+				break;
 			case 'n':   /* number of files */
 				num_files = atoi(optarg);
 				break;
 			case 's':   /* sleep time */
 				sleep_time = atoi(optarg);
+				break;
+			case 'S':   /* sync fs after creating files */
+				sync_fs = 1;
 				break;
 			case 'v':  /* value size on eas */
 				value_size = atoi(optarg);
@@ -80,6 +88,12 @@ main(int argc, char *argv[])
 		fd = open(path, O_RDWR|O_CREAT|O_EXCL, 0666);
 		if (fd == -1) {
 			fprintf(stderr, "%s: failed to create \"%s\": %s\n", prog, path, strerror(errno));
+			return 1;
+		}
+
+		if (sync_fs && syncfs(fd) == -1) {
+			fprintf(stderr, "%s: failed to sync filesystem: %s\n",
+				prog, strerror(errno));
 			return 1;
 		}
 
@@ -108,6 +122,12 @@ main(int argc, char *argv[])
 
 		if (unlink(path) == -1) {
 			fprintf(stderr, "%s: failed to unlink \"%s\": %s\n",
+				prog, path, strerror(errno));
+			return 1;
+		}
+
+		if (fsync_files && fsync(fd) == -1) {
+			fprintf(stderr, "%s: failed to fsync \"%s\": %s\n",
 				prog, path, strerror(errno));
 			return 1;
 		}

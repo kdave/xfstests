@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 764
+#
+# Test that if we fsync a file that has no more hard links, power fail and then
+# mount the filesystem, after the journal/log is replayed, the file doesn't
+# exists anymore.
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/dmflakey
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix fsync of files with no hard links not persisting deletion"
+
+_require_scratch
+_require_dm_target flakey
+_require_test_program "multi_open_unlink"
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+mkdir $SCRATCH_MNT/testdir
+$here/src/multi_open_unlink -f $SCRATCH_MNT/testdir/foo -F -S -n 1 -s 0
+
+# Simulate a power failure and then mount again the filesystem to replay the
+# journal/log.
+_flakey_drop_and_remount
+
+# We don't expect the file to exist anymore, since it was fsynced when it had no
+# more hard links.
+ls $SCRATCH_MNT/testdir
+
+_unmount_flakey
+
+echo "Silence is golden"
+status=0
+exit
