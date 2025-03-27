@@ -1,0 +1,53 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/011
+#
+# This is a regression testcase to check whether we will handle
+# out-of-space case correctly during fallocate() on pinned file
+# once we disable checkpoint.
+# 1. mount f2fs w/ checkpoint=disable option
+# 2. create fragmented file data
+# 3. set flag w/ pinned flag
+# 4. fallocate space for pinned file, expects panic due to running
+# out of space
+# We should apply both commit ("f2fs: fix to avoid panic once
+# fallocation fails for pinfile") and commit ("f2fs: fix to avoid
+# running out of free segments") to avoid system panic.
+# Note that w/ these two commit, we fixed such issue in both
+# convential and zoned block device.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_fixed_by_kernel_commit 48ea8b200414 \
+	"f2fs: fix to avoid panic once fallocation fails for pinfile"
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"f2fs: fix to avoid running out of free segments"
+
+_require_scratch
+_require_command "$F2FS_IO_PROG" f2fs_io
+
+_scratch_mkfs_sized $((1*1024*1024*1024)) >> $seqres.full
+_scratch_mount -o checkpoint=disable:10%
+
+pinfile=$SCRATCH_MNT/file
+
+# simulate fragment status in f2fs
+for ((i=0;i<256;i++)) do
+	$XFS_IO_PROG -f -c "pwrite 0 1m" $SCRATCH_MNT/$i >>$seqres.full
+done
+sync
+
+for ((i=0;i<256;i+=2)) do
+	rm -f $SCRATCH_MNT/$i
+done
+sync
+
+touch $pinfile
+$F2FS_IO_PROG pinfile set $pinfile >> $seqres.full
+$XFS_IO_PROG -c "falloc 0 $((3*256*1024*1024))" $pinfile
+
+status=0
+exit
