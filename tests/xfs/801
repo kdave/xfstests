@@ -42,6 +42,18 @@ test -w "$knob" || _notrun "tmpfs transparent hugepages disabled"
 pagesize=`getconf PAGE_SIZE`
 pagesize_kb=$((pagesize / 1024))
 
+sysfs-dump() {
+	for i in "$@"; do
+		if [ -d "$i" ]; then
+			for x in "$i/"*; do
+				test -f "$x" && echo "$x: $(cat "$x")"
+			done
+		else
+			test -f "$i" && echo "$i: $(cat "$i")"
+		fi
+	done
+}
+
 echo "settings now: pagesize=${pagesize_kb}KB" >> $seqres.full
 sysfs-dump /sys/kernel/mm/transparent_hugepage/* >> $seqres.full
 
