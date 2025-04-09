@@ -909,8 +909,7 @@ _mkfs_dev()
 	# output stored mkfs output
 	cat $tmp.mkfserr >&2
 	cat $tmp.mkfsstd
-	status=1
-	exit 1
+	_exit 1
     fi
     rm -f $tmp.mkfserr $tmp.mkfsstd
 }
@@ -1575,7 +1574,7 @@ _get_pids_by_name()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _get_pids_by_name process-name" 1>&2
-	exit 1
+	_exit 1
     fi
 
     # Algorithm ... all ps(1) variants have a time of the form MM:SS or
@@ -1609,7 +1608,7 @@ _df_device()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _df_device device" 1>&2
-	exit 1
+	_exit 1
     fi
 
     # Note that we use "==" here so awk doesn't try to interpret an NFS over
@@ -1641,7 +1640,7 @@ _df_dir()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _df_dir device" 1>&2
-	exit 1
+	_exit 1
     fi
 
     $DF_PROG $1 2>/dev/null | $AWK_PROG -v what=$1 '
@@ -1667,7 +1666,7 @@ _used()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _used device" 1>&2
-	exit 1
+	_exit 1
     fi
 
     _df_device $1 | $AWK_PROG '{ sub("%", "") ; print $6 }'
@@ -1680,7 +1679,7 @@ _fs_type()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _fs_type device" 1>&2
-	exit 1
+	_exit 1
     fi
 
     #
@@ -1705,7 +1704,7 @@ _fs_options()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _fs_options device" 1>&2
-	exit 1
+	_exit 1
     fi
 
     $AWK_PROG -v dev=$1 '
@@ -1720,7 +1719,7 @@ _is_block_dev()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _is_block_dev dev" 1>&2
-	exit 1
+	_exit 1
     fi
 
     local dev=$1
@@ -1739,7 +1738,7 @@ _is_char_dev()
 {
 	if [ $# -ne 1 ]; then
 		echo "Usage: _is_char_dev dev" 1>&2
-		exit 1
+		_exit 1
 	fi
 
 	local dev=$1
@@ -1772,7 +1771,7 @@ _do()
 	echo -n "$note... "
     else
 	echo "Usage: _do [note] cmd" 1>&2
-	status=1; exit
+	_exit 1
     fi
 
     (eval "echo '---' \"$cmd\"") >>$seqres.full
@@ -1793,7 +1792,7 @@ _do()
     then
 	[ $# -ne 2 ] && echo
 	eval "echo \"$cmd\" failed \(returned $ret\): see $seqres.full"
-	status=1; exit
+	_exit 1
     fi
 
     return $ret
@@ -1809,8 +1808,7 @@ _notrun()
     rm -f ${RESULT_DIR}/require_test*
     rm -f ${RESULT_DIR}/require_scratch*
 
-    status=0
-    exit
+    _exit 0
 }
 
 # just plain bail out
@@ -1819,8 +1817,7 @@ _fail()
 {
     echo "$*" | tee -a $seqres.full
     echo "(see $seqres.full for details)"
-    status=1
-    exit 1
+    _exit 1
 }
 
 #
@@ -2049,14 +2046,14 @@ _require_scratch_nocheck()
 
     _check_mounted_on SCRATCH_DEV $SCRATCH_DEV SCRATCH_MNT $SCRATCH_MNT
     local err=$?
-    [ $err -le 1 ] || exit 1
+    [ $err -le 1 ] || _exit 1
     if [ $err -eq 0 ]
     then
         # if it's mounted, unmount it
         if ! _scratch_unmount
         then
             echo "failed to unmount $SCRATCH_DEV"
-            exit 1
+            _exit 1
         fi
     fi
     rm -f ${RESULT_DIR}/require_scratch "$RESULT_DIR/.skip_orebuild" "$RESULT_DIR/.skip_rebuild"
@@ -2273,13 +2270,13 @@ _require_test()
 
     _check_mounted_on TEST_DEV $TEST_DEV TEST_DIR $TEST_DIR
     local err=$?
-    [ $err -le 1 ] || exit 1
+    [ $err -le 1 ] || _exit 1
     if [ $err -ne 0 ]
     then
 	if ! _test_mount
 	then
 		echo "!!! failed to mount $TEST_DEV on $TEST_DIR"
-		exit 1
+		_exit 1
 	fi
     fi
     touch ${RESULT_DIR}/require_test
@@ -2391,7 +2388,7 @@ _require_block_device()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _require_block_device <dev>" 1>&2
-		exit 1
+		_exit 1
 	fi
 	if [ "`_is_block_dev "$1"`" == "" ]; then
 		_notrun "require $1 to be valid block disk"
@@ -2404,7 +2401,7 @@ _require_local_device()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _require_local_device <dev>" 1>&2
-		exit 1
+		_exit 1
 	fi
 	if [ "`_is_block_dev "$1"`" != "" ]; then
 		return 0
@@ -2512,7 +2509,7 @@ _zone_type()
 	local target=$1
 	if [ -z $target ]; then
 		echo "Usage: _zone_type <device>"
-		exit 1
+		_exit 1
 	fi
 	local sdev=`_short_dev $target`
 
@@ -2528,7 +2525,7 @@ _require_zoned_device()
 	local target=$1
 	if [ -z $target ]; then
 		echo "Usage: _require_zoned_device <device>"
-		exit 1
+		_exit 1
 	fi
 
 	local type=`_zone_type ${target}`
@@ -2668,7 +2665,7 @@ _run_aiodio()
     if [ -z "$1" ]
     then
         echo "usage: _run_aiodio command_name" 2>&1
-        status=1; exit 1
+        _exit 1
     fi
 
     _require_aiodio $1
@@ -2880,7 +2877,7 @@ _require_xfs_io_command()
 	if [ -z "$1" ]
 	then
 		echo "Usage: _require_xfs_io_command command [switch]" 1>&2
-		exit 1
+		_exit 1
 	fi
 	local command=$1
 	shift
@@ -3368,7 +3365,7 @@ _is_dev_mounted()
 
 	if [ $# -lt 1 ]; then
 		echo "Usage: _is_dev_mounted <device> [fstype]" 1>&2
-		exit 1
+		_exit 1
 	fi
 
 	findmnt -rncv -S $dev -t $fstype -o TARGET | head -1
@@ -3382,7 +3379,7 @@ _is_dir_mountpoint()
 
 	if [ $# -lt 1 ]; then
 		echo "Uasge: _is_dir_mountpoint <dir> [fstype]" 1>&2
-		exit 1
+		_exit 1
 	fi
 
 	findmnt -rncv -t $fstype -o TARGET $dir | head -1
@@ -3395,7 +3392,7 @@ _remount()
     if [ $# -ne 2 ]
     then
 	echo "Usage: _remount device ro/rw" 1>&2
-	exit 1
+	_exit 1
     fi
     local device=$1
     local mode=$2
@@ -3403,7 +3400,7 @@ _remount()
     if ! mount -o remount,$mode $device
     then
         echo "_remount: failed to remount filesystem on $device as $mode"
-        exit 1
+        _exit 1
     fi
 }
 
@@ -3421,7 +3418,7 @@ _umount_or_remount_ro()
     if [ $# -ne 1 ]
     then
 	echo "Usage: _umount_or_remount_ro <device>" 1>&2
-	exit 1
+	_exit 1
     fi
 
     local device=$1
@@ -3439,7 +3436,7 @@ _mount_or_remount_rw()
 {
 	if [ $# -ne 3 ]; then
 		echo "Usage: _mount_or_remount_rw <opts> <dev> <mnt>" 1>&2
-		exit 1
+		_exit 1
 	fi
 	local mount_opts=$1
 	local device=$2
@@ -3520,7 +3517,7 @@ _check_generic_filesystem()
     if [ $ok -eq 0 ]; then
 	status=1
 	if [ "$iam" != "check" ]; then
-		exit 1
+		_exit 1
 	fi
 	return 1
     fi
@@ -3586,7 +3583,7 @@ _check_udf_filesystem()
     if [ $# -ne 1 -a $# -ne 2 ]
     then
 	echo "Usage: _check_udf_filesystem device [last_block]" 1>&2
-	exit 1
+	_exit 1
     fi
 
     if [ ! -x $here/src/udf_test ]
@@ -3780,7 +3777,7 @@ _get_os_name()
 		echo 'linux'
 	else
 		echo Unknown operating system: `uname`
-		exit
+		_exit 1
 	fi
 }
 
@@ -3841,7 +3838,7 @@ _link_out_file()
 _die()
 {
         echo $@
-        exit 1
+        _exit 1
 }
 
 # convert urandom incompressible data to compressible text data
@@ -3998,7 +3995,7 @@ _require_scratch_dev_pool()
 		if _mount | grep -q $i; then
 			if ! _unmount $i; then
 		            echo "failed to unmount $i - aborting"
-		            exit 1
+		            _exit 1
 		        fi
 		fi
 		# To help better debug when something fails, we remove
@@ -4407,7 +4404,7 @@ _require_batched_discard()
 {
 	if [ $# -ne 1 ]; then
 		echo "Usage: _require_batched_discard mnt_point" 1>&2
-		exit 1
+		_exit 1
 	fi
 	_require_fstrim
 
@@ -4634,7 +4631,7 @@ _require_chattr()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _require_chattr <attr>"
-		exit 1
+		_exit 1
 	fi
 	local attribute=$1
 
@@ -4653,7 +4650,7 @@ _get_total_inode()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_total_inode <mnt>"
-		exit 1
+		_exit 1
 	fi
 	local nr_inode;
 	nr_inode=`$DF_PROG -i $1 | tail -1 | awk '{print $3}'`
@@ -4664,7 +4661,7 @@ _get_used_inode()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_used_inode <mnt>"
-		exit 1
+		_exit 1
 	fi
 	local nr_inode;
 	nr_inode=`$DF_PROG -i $1 | tail -1 | awk '{print $4}'`
@@ -4675,7 +4672,7 @@ _get_used_inode_percent()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_used_inode_percent <mnt>"
-		exit 1
+		_exit 1
 	fi
 	local pct_inode;
 	pct_inode=`$DF_PROG -i $1 | tail -1 | awk '{ print $6 }' | \
@@ -4687,7 +4684,7 @@ _get_free_inode()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_free_inode <mnt>"
-		exit 1
+		_exit 1
 	fi
 	local nr_inode;
 	nr_inode=`$DF_PROG -i $1 | tail -1 | awk '{print $5}'`
@@ -4700,7 +4697,7 @@ _get_available_space()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_available_space <mnt>"
-		exit 1
+		_exit 1
 	fi
 	$DF_PROG -B 1 $1 | tail -n1 | awk '{ print $5 }'
 }
@@ -4711,7 +4708,7 @@ _get_total_space()
 {
 	if [ -z "$1" ]; then
 		echo "Usage: _get_total_space <mnt>"
-		exit 1
+		_exit 1
 	fi
 	$DF_PROG -B 1 $1 | tail -n1 | awk '{ print $3 }'
 }
@@ -4956,7 +4953,7 @@ init_rc()
 	if [ "$TEST_DEV" = ""  ]
 	then
 		echo "common/rc: Error: \$TEST_DEV is not set"
-		exit 1
+		_exit 1
 	fi
 
 	# if $TEST_DEV is not mounted, mount it now as XFS
@@ -4970,20 +4967,20 @@ init_rc()
 			if ! _test_mount
 			then
 				echo "common/rc: could not mount $TEST_DEV on $TEST_DIR"
-				exit 1
+				_exit 1
 			fi
 		fi
 	fi
 
 	# Sanity check that TEST partition is not mounted at another mount point
 	# or as another fs type
-	_check_mounted_on TEST_DEV $TEST_DEV TEST_DIR $TEST_DIR $FSTYP || exit 1
+	_check_mounted_on TEST_DEV $TEST_DEV TEST_DIR $TEST_DIR $FSTYP || _exit 1
 	if [ -n "$SCRATCH_DEV" ]; then
 		# Sanity check that SCRATCH partition is not mounted at another
 		# mount point, because it is about to be unmounted and formatted.
 		# Another fs type for scratch is fine (bye bye old fs type).
 		_check_mounted_on SCRATCH_DEV $SCRATCH_DEV SCRATCH_MNT $SCRATCH_MNT
-		[ $? -le 1 ] || exit 1
+		[ $? -le 1 ] || _exit 1
 	fi
 
 	# Figure out if we need to add -F ("foreign", deprecated) option to xfs_io
@@ -5033,7 +5030,7 @@ _get_file_block_size()
 {
 	if [ -z $1 ] || [ ! -d $1 ]; then
 		echo "Missing mount point argument for _get_file_block_size"
-		exit 1
+		_exit 1
 	fi
 
 	case "$FSTYP" in
@@ -5080,7 +5077,7 @@ _get_block_size()
 {
 	if [ -z $1 ] || [ ! -d $1 ]; then
 		echo "Missing mount point argument for _get_block_size"
-		exit 1
+		_exit 1
 	fi
 	stat -f -c %S $1
 }
@@ -5150,14 +5147,14 @@ _run_hugepage_fsx() {
 	fi
 	cat $tmp.hugepage_fsx
 	rm -f $tmp.hugepage_fsx
-	test $res -ne 0 && exit 1
+	test $res -ne 0 && _exit 1
 	return 0
 }
 
 # run fsx or exit the test
 run_fsx()
 {
-	_run_fsx "$@" || exit 1
+	_run_fsx "$@" || _exit 1
 }
 
 _require_statx()
@@ -5322,7 +5319,7 @@ _get_max_file_size()
 {
 	if [ -z $1 ] || [ ! -d $1 ]; then
 		echo "Missing mount point argument for _get_max_file_size"
-		exit 1
+		_exit 1
 	fi
 
 	local mnt=$1
