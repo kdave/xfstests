@@ -42,8 +42,11 @@ _fsstress()
 	# io_uring_queue_init fail on ENOMEM, set max locked memory to unlimited
 	# temporarily.
 	ulimit -l unlimited
+
+	# The absolute path $here might not be traversable (+x) for $qa_user, so
+	# supply a relative path to fsstress here.
 	echo "fsstress $args" >> $seqres.full
-	if ! _su $qa_user -c "$FSSTRESS_PROG $args" | tee -a $seqres.full | _filter_num
+	if ! _su $qa_user -c "ltp/fsstress $args" | tee -a $seqres.full | _filter_num
 	then
 		echo "    fsstress $args returned $?"
 		cat $tmp.out | tee -a $seqres.full
