@@ -18,7 +18,7 @@ _cleanup()
 	rm -r -f $tempfsid_mnt
 }
 
-. ./common/filter.btrfs
+. ./common/filter
 
 _require_scratch_dev_pool 3
 _require_btrfs_fs_feature temp_fsid
@@ -27,25 +27,6 @@ _scratch_dev_pool_get 3
 
 # mount point for the tempfsid device
 tempfsid_mnt=$TEST_DIR/$seq/tempfsid_mnt
-
-_filter_mount_error()
-{
-	# There are two different errors that occur at the output when
-	# mounting fails; as shown below, pick out the common part. And,
-	# remove the dmesg line.
-
-	# mount: <mnt-point>: mount(2) system call failed: File exists.
-
-	# mount: <mnt-point>: fsconfig system call failed: File exists.
-	# dmesg(1) may have more information after failed mount system call.
-
-	# For util-linux v2.4 and later:
-	# mount: <mountpoint>: mount system call failed: File exists.
-
-	grep -v dmesg | _filter_test_dir | \
-		sed -e "s/mount(2)\|fsconfig//g" \
-		    -e "s/mount\( system call failed:\)/\1/"
-}
 
 seed_device_must_fail()
 {
@@ -57,7 +38,7 @@ seed_device_must_fail()
 	$BTRFS_TUNE_PROG -S 1 ${SCRATCH_DEV_NAME[1]}
 
 	_scratch_mount 2>&1 | _filter_scratch
-	_mount ${SCRATCH_DEV_NAME[1]} ${tempfsid_mnt} 2>&1 | _filter_mount_error
+	_mount ${SCRATCH_DEV_NAME[1]} ${tempfsid_mnt} 2>&1 | _filter_error_mount
 }
 
 device_add_must_fail()
