@@ -123,7 +123,7 @@ examples:
  check -X .exclude -g auto
  check -E ~/.xfstests.exclude
 '
-	    exit 1
+	    _fatal
 }
 
 get_sub_group_list()
@@ -232,8 +232,7 @@ _prepare_test_list()
 		for group in $GROUP_LIST; do
 			list=$(get_group_list $group)
 			if [ -z "$list" ]; then
-				echo "Group \"$group\" is empty or not defined?"
-				exit 1
+				_fatal "Group \"$group\" is empty or not defined?"
 			fi
 
 			for t in $list; do
@@ -317,15 +316,13 @@ while [ $# -gt 0 ]; do
 	-n)	showme=true ;;
 	-r)
 		if $exact_order; then
-			echo "Cannot specify -r and --exact-order."
-			exit 1
+			_fatal "Cannot specify -r and --exact-order."
 		fi
 		randomize=true
 		;;
 	--exact-order)
 		if $randomize; then
-			echo "Cannnot specify --exact-order and -r."
-			exit 1
+			_fatal "Cannnot specify --exact-order and -r."
 		fi
 		exact_order=true
 		;;
@@ -362,8 +359,7 @@ done
 # we need common/rc, that also sources common/config. We need to source it
 # after processing args, overlay needs FSTYP set before sourcing common/config
 if ! . ./common/rc; then
-	echo "check: failed to source common/rc"
-	exit 1
+	_fatal "check: failed to source common/rc"
 fi
 
 init_rc
@@ -375,8 +371,7 @@ if [ -n "$SOAK_DURATION" ]; then
 		sed -e 's/^\([.0-9]*\)\([a-z]\)*/\1 \2/g' | \
 		$AWK_PROG -f $here/src/soak_duration.awk)"
 	if [ $? -ne 0 ]; then
-		status=1
-		exit 1
+		_fatal
 	fi
 fi
 
@@ -387,8 +382,7 @@ if [ -n "$FUZZ_REWRITE_DURATION" ]; then
 		sed -e 's/^\([.0-9]*\)\([a-z]\)*/\1 \2/g' | \
 		$AWK_PROG -f $here/src/soak_duration.awk)"
 	if [ $? -ne 0 ]; then
-		status=1
-		exit 1
+		_fatal
 	fi
 fi
 
@@ -405,9 +399,7 @@ fi
 if $have_test_arg; then
 	while [ $# -gt 0 ]; do
 		case "$1" in
-		-*)	echo "Arguments before tests, please!"
-			status=1
-			exit $status
+		-*)	_fatal "Arguments before tests, please!"
 			;;
 		*)	# Expand test pattern (e.g. xfs/???, *fs/001)
 			list=$(cd $SRC_DIR; echo $1)
@@ -439,8 +431,7 @@ fi
 
 if [ `id -u` -ne 0 ]
 then
-    echo "check: QA must be run as root"
-    exit 1
+    _fatal "check: QA must be run as root"
 fi
 
 _wipe_counters()
@@ -722,6 +713,9 @@ _detect_kmemleak
 _prepare_test_list
 fstests_start_time="$(date +"%F %T")"
 
+# We are not using _exit in the trap handler so that it is obvious to the reader
+# that we are using the last set value of "status" before we finally exit
+# from the check script.
 if $OPTIONS_HAVE_SECTIONS; then
 	trap "_summary; exit \$status" 0 1 2 3 15
 else
@@ -768,9 +762,7 @@ function run_section()
 
 	mkdir -p $RESULT_BASE
 	if [ ! -d $RESULT_BASE ]; then
-		echo "failed to create results directory $RESULT_BASE"
-		status=1
-		exit
+		_fatal "failed to create results directory $RESULT_BASE"
 	fi
 
 	if $OPTIONS_HAVE_SECTIONS; then
@@ -785,9 +777,7 @@ function run_section()
 		then
 			echo "our local _test_mkfs routine ..."
 			cat $tmp.err
-			echo "check: failed to mkfs \$TEST_DEV using specified options"
-			status=1
-			exit
+			_fatal "check: failed to mkfs \$TEST_DEV using specified options"
 		fi
 		# Previous FSTYP derived from TEST_DEV could be changed, source
 		# common/rc again with correct FSTYP to get FSTYP specific configs,
@@ -830,9 +820,7 @@ function run_section()
 	  then
 	      echo "our local _scratch_mkfs routine ..."
 	      cat $tmp.err
-	      echo "check: failed to mkfs \$SCRATCH_DEV using specified options"
-	      status=1
-	      exit
+	      _fatal "check: failed to mkfs \$SCRATCH_DEV using specified options"
 	  fi
 
 	  # call the overridden mount - make sure the FS mounts with
@@ -841,9 +829,7 @@ function run_section()
 	  then
 	      echo "our local mount routine ..."
 	      cat $tmp.err
-	      echo "check: failed to mount \$SCRATCH_DEV using specified options"
-	      status=1
-	      exit
+	      _fatal "check: failed to mount \$SCRATCH_DEV using specified options"
 	  else
 	      _scratch_unmount
 	  fi
@@ -1106,12 +1092,10 @@ for ((iters = 0; iters < $iterations; iters++)) do
 		run_section $section
 		if [ "$sum_bad" != 0 ] && [ "$istop" = true ]; then
 			interrupt=false
-			status=`expr $sum_bad != 0`
-			exit
+			_exit `expr $sum_bad != 0`
 		fi
 	done
 done
 
 interrupt=false
-status=`expr $sum_bad != 0`
-exit
+_exit `expr $sum_bad != 0`
