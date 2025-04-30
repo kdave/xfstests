@@ -222,11 +222,6 @@ _filter_bmap()
 	_coalesce_extents
 }
 
-die_now()
-{
-	_exit 1
-}
-
 # test the different corner cases for zeroing a range:
 #
 #	1. into a hole
@@ -305,7 +300,7 @@ _test_generic_punch()
 	$XFS_IO_PROG -f -c "truncate $_20k" \
 		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	echo "	2. into allocated space"
@@ -316,7 +311,7 @@ _test_generic_punch()
 		-c "pwrite 0 $_20k" $sync_cmd \
 		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	if [ "$unwritten_tests" ]; then
@@ -328,7 +323,7 @@ _test_generic_punch()
 			-c "$alloc_cmd 0 $_20k" \
 			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 	fi
 
@@ -340,7 +335,7 @@ _test_generic_punch()
 		-c "pwrite $_8k $_8k" $sync_cmd \
 		-c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	if [ "$unwritten_tests" ]; then
@@ -352,7 +347,7 @@ _test_generic_punch()
 			-c "$alloc_cmd $_8k $_8k" \
 			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 	fi
 
@@ -364,7 +359,7 @@ _test_generic_punch()
 		-c "pwrite 0 $_8k" $sync_cmd \
 		 -c "$zero_cmd $_4k $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	if [ "$unwritten_tests" ]; then
@@ -377,7 +372,7 @@ _test_generic_punch()
 			-c "$alloc_cmd $_8k $_8k" \
 			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 
 		echo "	8. unwritten -> hole"
@@ -388,7 +383,7 @@ _test_generic_punch()
 			-c "$alloc_cmd 0 $_8k" \
 			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 
 		echo "	9. unwritten -> data"
@@ -400,7 +395,7 @@ _test_generic_punch()
 			-c "pwrite $_8k $_8k" $sync_cmd \
 			-c "$zero_cmd $_4k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 	fi
 
@@ -412,7 +407,7 @@ _test_generic_punch()
 		-c "pwrite $_8k $_4k" $sync_cmd \
 		-c "$zero_cmd $_4k $_12k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	echo "	11. data -> hole -> data"
@@ -426,7 +421,7 @@ _test_generic_punch()
 		-c "$punch_cmd $_8k $_4k" \
 		-c "$zero_cmd $_4k $_12k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	if [ "$unwritten_tests" ]; then
@@ -439,7 +434,7 @@ _test_generic_punch()
 			-c "pwrite $_8k $_4k" $sync_cmd \
 			-c "$zero_cmd $_4k $_12k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 
 		echo "	13. data -> unwritten -> data"
@@ -452,7 +447,7 @@ _test_generic_punch()
 			-c "pwrite $_12k $_8k" -c "fsync" \
 			-c "$zero_cmd $_4k $_12k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 	fi
 
@@ -466,7 +461,7 @@ _test_generic_punch()
 			-c "pwrite 0 $_20k" $sync_cmd \
 			-c "$zero_cmd $_12k $_8k" \
 			-c "$map_cmd -v" $testfile | $filter_cmd
-		[ $? -ne 0 ] && die_now
+		[ $? -ne 0 ] && _fatal
 		_md5_checksum $testfile
 	fi
 
@@ -483,7 +478,7 @@ _test_generic_punch()
 		-c "pwrite 0 $_20k" $sync_cmd \
 		-c "$zero_cmd 0 $_8k" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	_md5_checksum $testfile
 
 	# If zero_cmd is fcollpase, don't check unaligned offsets
@@ -512,7 +507,7 @@ _test_generic_punch()
 		-c "fadvise -d" \
 		-c "$map_cmd -v" $testfile | $filter_cmd
 	diff $testfile $testfile.2
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	rm -f $testfile.2
 	_md5_checksum $testfile
 
@@ -532,7 +527,7 @@ _test_generic_punch()
 		-c "$zero_cmd 128 128" \
 		-c "$map_cmd -v" $testfile | $filter_cmd | \
 			 sed -e "s/\.\.[0-9]*\]/..7\]/"
-	[ $? -ne 0 ] && die_now
+	[ $? -ne 0 ] && _fatal
 	od -x $testfile | head -n -1
 }
 

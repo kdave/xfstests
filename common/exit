@@ -1,0 +1,39 @@
+##/bin/bash
+
+# This functions sets the exit code to status and then exits. Don't use
+# exit directly, as it might not set the value of "$status" correctly, which is
+# used as an exit code in the trap handler routine set up by the check script.
+_exit()
+{
+	test -n "$1" && status="$1"
+	exit "$status"
+}
+
+_fatal()
+{
+    echo "$*"
+    _exit 1
+}
+
+# just plain bail out
+#
+_fail()
+{
+    echo "$*" | tee -a $seqres.full
+    echo "(see $seqres.full for details)"
+    _exit 1
+}
+
+# bail out, setting up .notrun file. Need to kill the filesystem check files
+# here, otherwise they are set incorrectly for the next test.
+#
+_notrun()
+{
+    echo "$*" > $seqres.notrun
+    echo "$seq not run: $*"
+    rm -f ${RESULT_DIR}/require_test*
+    rm -f ${RESULT_DIR}/require_scratch*
+
+    _exit 0
+}
+
