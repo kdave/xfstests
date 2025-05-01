@@ -1267,12 +1267,19 @@ _try_scratch_mkfs_sized()
 	case $FSTYP in
 	xfs)
 		local rt_ops
+		local zone_type=`_zone_type $SCRATCH_DEV`
 
 		if [ -b "$SCRATCH_RTDEV" ]; then
 			local rtdevsize=`blockdev --getsize64 $SCRATCH_RTDEV`
 			if [ "$fssize" -gt "$rtdevsize" ]; then
 				_notrun "Scratch rt device too small"
 			fi
+			rt_ops="-r size=$fssize"
+		elif [ "${zone_type}" != "none" ] ||
+		     [[ $MKFS_OPTIONS =~ "zoned=1" ]]; then
+			# Maybe also add back the size check, but it'll require
+			# somewhat complicated arithmetics for the size of the
+			# conventional zones
 			rt_ops="-r size=$fssize"
 		fi
 
