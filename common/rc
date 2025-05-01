@@ -906,6 +906,10 @@ _mkfs_dev()
 {
     local tmp=`mktemp -u`
     if ! _try_mkfs_dev "$@" 2>$tmp.mkfserr 1>$tmp.mkfsstd; then
+	grep -q "must be greater than the minimum zone count" $tmp.mkfserr && \
+		_notrun "Zone count too small"
+	grep -q "too small for zoned allocator" $tmp.mkfserr && \
+		_notrun "Zone count too small"
 	# output stored mkfs output
 	cat $tmp.mkfserr >&2
 	cat $tmp.mkfsstd
