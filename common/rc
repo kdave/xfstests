@@ -2329,10 +2329,15 @@ _require_no_large_scratch_dev()
 #
 _require_realtime()
 {
-    [ "$USE_EXTERNAL" = yes ] || \
-	_notrun "External volumes not in use, skipped this test"
-    [ "$SCRATCH_RTDEV" = "" ] && \
-	_notrun "Realtime device required, skipped this test"
+	local zone_type=`_zone_type $SCRATCH_DEV`
+	if [ "${zone_type}" = "none" ]; then
+		if [ "$USE_EXTERNAL" != "yes" ]; then
+			_notrun "External volumes not in use, skipped this test"
+		fi
+		if [ "$SCRATCH_RTDEV" = "" ]; then
+			_notrun "Realtime device required, skipped this test"
+		fi
+	fi
 }
 
 # This test requires that a realtime subvolume is not in use
