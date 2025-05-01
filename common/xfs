@@ -160,6 +160,11 @@ _try_scratch_mkfs_xfs()
 
 	grep -q crc=0 $tmp.mkfsstd && _force_xfsv4_mount_options
 
+	grep -q "zoned file systems do not support" $tmp.mkfserr && \
+		_notrun "Not supported on zoned file systems"
+	grep -q "must be greater than the minimum zone count" $tmp.mkfserr && \
+		_notrun "Zone count too small"
+
 	if [ $mkfs_status -eq 0 -a "$LARGE_SCRATCH_DEV" = yes ]; then
 		# manually parse the mkfs output to get the fs size in bytes
 		local fs_size
