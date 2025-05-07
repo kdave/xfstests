@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/012
+#
+# This testcase checks whether linear lookup fallback works well
+# or not as below:
+# 1.create file w/ red heart as its filename
+# 2.inject wrong hash code to the file
+# 3.disable linear lookup, expect lookup failure
+# 4.enable linear lookup, expect lookup succeed
+#
+. ./common/preamble
+_begin_fstest auto quick casefold
+
+_fixed_by_kernel_commit 91b587ba79e1 \
+	"f2fs: Introduce linear search for dentries"
+
+export LC_ALL=C.UTF-8
+_require_scratch_nocheck
+_require_command "$F2FS_IO_PROG" f2fs_io
+_require_command "$F2FS_INJECT_PROG" inject.f2fs
+
+check_lookup()
+{
+	local nolinear_lookup=$1
+	local dir=$SCRATCH_MNT/dir
+	# red heart charactor in unicode format
+	local redheart=$dir/$'\u2764\ufe0f'
+
+	_scratch_mkfs -O casefold -C utf8 >> $seqres.full
+	_scratch_mount
+
+	mkdir $dir
+	$F2FS_IO_PROG setflags casefold $dir >> $seqres.full
+	touch $redheart
+	ino=`stat -c '%i' $redheart`
+	_scratch_unmount
+
+	# should tune nolinear_lookup feature before fault injection
+	$F2FS_FSCK_PROG --nolinear-lookup=$nolinear_lookup $SCRATCH_DEV >> $seqres.full
+
+	# check whether linear_lookup is changed as expected
+	if [ $nolinear_lookup == "1" ]; then
+		$F2FS_FSCK_PROG $SCRATCH_DEV | grep -q "linear_lookup \[disable\]" ||	\
+					_fail "linear_lookup is not disabled"
+	else
+		$F2FS_FSCK_PROG $SCRATCH_DEV | grep -q "linear_lookup \[enable\]" ||	\
+					_fail "linear_lookup is not enabled"
+	fi
+
+	$F2FS_INJECT_PROG --dent --mb d_hash --nid $ino --val 0x9a2ea068 $SCRATCH_DEV >> $seqres.full
+
+	_scratch_mount
+	if [ $nolinear_lookup == "1" ]; then
+		[ -f $redheart ] && _fail "red heart file should not exist"
+	else
+		[ -f $redheart ] || _fail "red heart file should exist"
+	fi
+	_scratch_unmount
+}
+
+check_lookup 1
+check_lookup 0
+
+echo "Silence is golden"
+
+status=0
+exit
