@@ -2481,7 +2481,7 @@ attr_remove_f(opnum_t opno, long r)
 void
 attr_set_f(opnum_t opno, long r)
 {
-	char		aname[10];
+	char		aname[32];
 	char		*aval;
 	int		e;
 	pathname_t	f;
@@ -2493,7 +2493,7 @@ attr_set_f(opnum_t opno, long r)
 	init_pathname(&f);
 	if (!get_fname(FT_ANYm, r, &f, NULL, NULL, &v))
 		append_pathname(&f, ".");
-	sprintf(aname, "a%x", nameseq++);
+	sprintf(aname, "user.a%x", nameseq++);
 	li = (int)(random() % (sizeof(lengths) / sizeof(lengths[0])));
 	len = (int)(random() % lengths[li]);
 	if (len == 0)
