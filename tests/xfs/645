@@ -1,0 +1,32 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 645
+#
+# Regression test for xfs_repair messing up the per-zone used counter.
+#
+
+. ./common/preamble
+_begin_fstest auto quick zone repair
+
+_require_scratch
+_require_odirect
+
+_scratch_mkfs >> $seqres.full 2>&1
+_scratch_mount
+
+dd if=/dev/zero of=$SCRATCH_MNT/test1 oflag=direct bs=1M count=64
+
+_scratch_unmount
+
+echo "Repairing"
+_scratch_xfs_repair 2>> $seqres.full
+
+echo "Removing file after repair"
+_scratch_mount
+rm -f $SCRATCH_MNT/test1
+_scratch_unmount
+
+status=0
+exit
