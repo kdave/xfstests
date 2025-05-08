@@ -1,0 +1,85 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 642
+#
+# Test that multiple parallel writers can't accidentally dip into the reserved
+# space pool.
+#
+. ./common/preamble
+_begin_fstest quick auto rw zone enospc
+
+. ./common/filter
+. ./common/zoned
+
+_require_scratch
+_require_odirect
+_require_aio
+
+_scratch_mkfs_sized $((256 * 1024 * 1024))  >>$seqres.full 2>&1
+
+# limit to two max open zones so that all writes get thrown into the blender
+export MOUNT_OPTIONS="$MOUNT_OPTIONS -o max_open_zones=2"
+_try_scratch_mount || _notrun "mount option not supported"
+_require_xfs_scratch_zoned
+
+fio_config=$tmp.fio
+
+cat >$fio_config <<EOF
+[global]
+bs=64k
+iodepth=16
+iodepth_batch=8
+directory=$SCRATCH_MNT
+ioengine=libaio
+rw=write
+direct=1
+size=60m
+
+[file1]
+filename=file1
+
+[file2]
+filename=file2
+
+[file3]
+filename=file3
+
+[file4]
+filename=file4
+
+[file5]
+filename=file5
+
+[file6]
+filename=file6
+
+[file7]
+filename=file7
+
+[file8]
+filename=file8
+EOF
+
+_require_fio $fio_config
+
+# try to overfill the file system
+$FIO_PROG $fio_config 2>&1 | \
+	grep -q "No space left on dev" || \
+	_fail "Overfill did not cause ENOSPC"
+
+sync
+
+#
+# Compare the df and du values to ensure we did not overshoot
+#
+# Use within_tolerance to paper over the fact that the du output includes
+# the root inode, which does not sit in the RT device, while df does not
+#
+df_val=`df --output=size $SCRATCH_MNT | tail -n 1`
+du_val=`du -s $SCRATCH_MNT | awk '{print $1}'`
+_within_tolerance "file space usage" $df_val $du_val 64 -v
+
+status=0
+exit
