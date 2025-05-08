@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig
+#
+# FS QA Test No. 636
+#
+# Ensure that direct I/O writes are not pointlessly reordered on zoned
+# devices.
+#
+# This is a regression test for the block layer or drivers reordering
+# writes and thus creating more extents than required.
+#
+. ./common/preamble
+_begin_fstest quick auto rw zone
+
+. ./common/filter
+. ./common/zoned
+
+_require_scratch
+_require_realtime
+
+_scratch_mkfs >/dev/null 2>&1
+
+_scratch_mount
+_require_xfs_scratch_zoned
+_xfs_force_bdev realtime $SCRATCH_MNT
+
+dd if=/dev/zero of=$SCRATCH_MNT/test bs=1M count=16 oflag=direct
+
+echo "Check extent counts"
+extents=$(_count_extents $SCRATCH_MNT/test)
+
+# There should not be more than a single extent when there are
+# no other concurrent writers
+echo "number of extents: $extents"
+
+status=0
