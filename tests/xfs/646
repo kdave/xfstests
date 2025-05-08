@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 646
+#
+# Ensure that a truncate that needs to zero the EOFblock doesn't get ENOSPC
+# when another thread is waiting for space to become available through GC.
+#
+. ./common/preamble
+_begin_fstest auto rw zone
+
+. ./common/zoned
+
+_require_scratch
+
+_scratch_mkfs_sized $((256 * 1024 * 1024))  >>$seqres.full 2>&1
+_scratch_mount
+_require_xfs_scratch_zoned
+
+for i in `seq 1 20`; do
+	# fill up all user capacity
+	PUNCH_FILE=$SCRATCH_MNT/punch.$i
+	TEST_FILE=$SCRATCH_MNT/file.$i
+
+	dd if=/dev/zero of=$PUNCH_FILE bs=1M count=128 conv=fdatasync \
+		>> $seqres.full 2>&1
+
+	dd if=/dev/zero of=$TEST_FILE bs=4k >> $seqres.full 2>&1 &
+	# truncate to a value not rounded to the block size
+	$XFS_IO_PROG -c "truncate 3275" $PUNCH_FILE
+	sync $SCRATCH_MNT
+	rm -f $TEST_FILE
+done
+
+status=0
+exit
