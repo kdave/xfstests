@@ -1,0 +1,41 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 639
+#
+# Test that data is packed tighly for writeback after the files were
+# closed.
+#
+. ./common/preamble
+_begin_fstest auto quick rw zone
+
+. ./common/xfs
+
+_require_scratch
+
+_scratch_mkfs_xfs >>$seqres.full 2>&1
+_scratch_mount
+_require_xfs_scratch_zoned
+
+# Create a bunch of small files
+for i in `seq 1 100`; do
+	file=$SCRATCH_MNT/$i
+
+	$XFS_IO_PROG -f -c 'pwrite 0 8k' $file >>$seqres.full
+done
+
+sync
+
+# Check that all small files are placed together
+short_rg=`xfs_bmap -v $SCRATCH_MNT/1 | _filter_bmap_gno`
+for i in `seq 2 100`; do
+	file=$SCRATCH_MNT/$i
+	rg=`xfs_bmap -v $file | _filter_bmap_gno`
+	if [ "${rg}" != "${short_rg}" ]; then
+		echo "RG mismatch for file $i: $short_rg/$rg"
+	fi
+done
+
+status=0
+exit
