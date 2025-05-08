@@ -1,0 +1,24 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 637
+#
+# Check that trying to grow a data device followed by the internal RT device
+# fails gracefully with EINVAL.
+#
+. ./common/preamble
+_begin_fstest quick auto growfs ioctl zone
+
+_require_scratch
+_require_zoned_device $SCRATCH_DEV
+
+echo "Creating file system"
+_scratch_mkfs_xfs >>$seqres.full 2>&1
+_scratch_mount
+
+echo "Trying to grow file system (should fail)"
+$XFS_GROWFS_PROG -d $SCRATCH_MNT >>$seqres.full 2>&1
+
+status=0
+exit
