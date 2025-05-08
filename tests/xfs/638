@@ -1,0 +1,90 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 638
+#
+# Test data placement by write hints.
+#
+. ./common/preamble
+_begin_fstest auto rw zone
+
+. ./common/filter
+. ./common/xfs
+
+_require_scratch
+
+test_placement()
+{
+	xfs_io_opts=$1
+
+	_scratch_mkfs_xfs >>$seqres.full 2>&1
+	_scratch_mount
+	_require_xfs_scratch_zoned 3
+
+	# Create a bunch of files for the three major temperature buckets
+	for i in `seq 1 100`; do
+		for hint in "short" "medium" "long"; do
+			file=$SCRATCH_MNT/$hint.$i
+
+			touch $file
+			$here/src/rw_hint $file $hint
+			$XFS_IO_PROG ${xfs_io_opts} \
+				-c 'pwrite 0 1m' \
+				$file >>$seqres.full
+		done
+	done
+
+	sync
+
+	# Check that all short lifetime files are placed together
+	short_rg=`xfs_bmap -v $SCRATCH_MNT/short.1 | _filter_bmap_gno`
+	for i in `seq 2 100`; do
+		file=$SCRATCH_MNT/short.$i
+		rg=`xfs_bmap -v $file | _filter_bmap_gno`
+		if [ "${rg}" != "${short_rg}" ]; then
+			echo "short RG mismatch for file $i: $short_rg/$rg"
+		fi
+	done
+
+	# Check that all medium lifetime files are placed together,
+	# but not in the short RG
+	medium_rg=`xfs_bmap -v $SCRATCH_MNT/medium.1 | _filter_bmap_gno`
+	if [ "${medium}" == "${short_rg}" ]; then
+		echo "medium rg == short_rg"
+	fi
+	for i in `seq 2 100`; do
+		file=$SCRATCH_MNT/medium.$i
+		rg=`xfs_bmap -v $file | _filter_bmap_gno`
+		if [ "${rg}" != "${medium_rg}" ]; then
+			echo "medium RG mismatch for file $i: $medium_rg/$rg"
+		fi
+	done
+
+	# Check that none of the long lifetime files are colocated with
+	# short and medium ones
+	for i in `seq 1 100`; do
+		file=$SCRATCH_MNT/long.$i
+		rg=`xfs_bmap -v $file | _filter_bmap_gno`
+		if [ "${rg}" == "${short_rg}" ]; then
+			echo "long file $i placed into short RG "
+		fi
+		if [ "${rg}" == "${medium_rg}" ]; then
+			echo "long file $i placed into medium RG"
+		fi
+	done
+
+	_scratch_unmount
+}
+
+echo "Testing buffered I/O:"
+test_placement ""
+
+echo "Testing synchronous buffered I/O:"
+test_placement "-s"
+
+echo "Testing direct I/O:"
+test_placement "-d"
+
+status=0
+exit
