@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2000-2002 Silicon Graphics, Inc.  All Rights Reserved.
+# Copyright (c) 2024 Christoph Hellwig
+#
+# FS QA Test No. 635
+#
+# growfs QA tests - repeatedly fill/grow the rt volume of the filesystem check
+# the filesystem contents after each operation.  This is the zoned equivalent of
+# xfs/596
+#
+. ./common/preamble
+_begin_fstest growfs ioctl auto zone
+
+_cleanup()
+{
+	rm -f $tmp.*
+}
+
+. ./common/filter
+. ./common/zoned
+
+_require_scratch
+_require_realtime
+_require_no_large_scratch_dev
+
+zone_capacity=$(_zone_capacity 0 $SCRATCH_RTDEV)
+
+fill_fs()
+{
+    if [ $# -ne 1 ]; then echo "Usage: fill_fs \"path\"" 1>&2 ; exit 1; fi
+    _do "Fill filesystem" \
+	"$here/src/fill2fs --verbose --dir=$1 --seed=0 --filesize=65536 --stddev=32768 --list=- >>$tmp.manifest"
+}
+
+_do_die_on_error=message_only
+rtsize=$zone_capacity
+echo -n "Make rt filesystem on SCRATCH_DEV and mount... "
+_scratch_mkfs_xfs -r size=${rtsize} | \
+	_filter_mkfs 2> "$tmp.mkfs" >> $seqres.full
+
+# for $dbsize
+. $tmp.mkfs
+
+_scratch_mount
+_require_xfs_scratch_zoned
+
+# We're growing the realtime device, so force new file creation there
+_xfs_force_bdev realtime $SCRATCH_MNT
+
+echo "done"
+
+#
+# Zone RT devices can only grow by entire zones.
+# Do that twice.  The high starting code looks weird, but is neededed
+# due to the automatically added OP
+#
+for size in $(( 6 * $zone_capacity )) $(( 7 * $zone_capacity )); do
+    grow_size=$(( $size / $dbsize ))
+    fill_fs $SCRATCH_MNT/fill_$size
+    _do "Grow filesystem" "xfs_growfs -R $grow_size $SCRATCH_MNT"
+    echo -n "Flush filesystem... "
+    _do "_scratch_unmount"
+    _do "_try_scratch_mount"
+    echo "done"
+    echo -n "Check files... "
+    if ! _do "$here/src/fill2fs_check $tmp.manifest"; then
+      echo "fail (see $seqres.full)"
+      _do "cat $tmp.manifest"
+      _do "ls -altrR $SCRATCH_MNT"
+      status=1 ; exit
+    fi
+    echo "done"
+done
+
+# success, all done
+echo "Growfs tests passed."
+status=0 ; exit
