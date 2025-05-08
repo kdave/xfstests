@@ -1,0 +1,40 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 Christoph Hellwig.
+#
+# FS QA Test No. 634
+#
+# Regression test for mount time accounting of an open zone with freed blocks.
+#
+
+. ./common/preamble
+_begin_fstest auto quick zone
+
+_require_scratch
+_require_odirect
+
+#
+# Create a 256MB file system.  This is picked as the lowest common zone size
+# to ensure both files are placed into the same zone.
+#
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mount
+
+dd if=/dev/zero of=$SCRATCH_MNT/test1 oflag=direct conv=fsync bs=1M count=32
+dd if=/dev/zero of=$SCRATCH_MNT/test2 oflag=direct conv=fsync bs=1M count=32
+rm $SCRATCH_MNT/test1
+
+# let delayed inode deactivate do its work
+sleep 1
+df -h $SCRATCH_MNT > $tmp.df.old
+
+_scratch_cycle_mount
+
+echo "Check that df output matches after remount"
+df -h $SCRATCH_MNT > $tmp.df.new
+diff -u $tmp.df.old $tmp.df.new
+
+_scratch_unmount
+
+status=0
+exit
