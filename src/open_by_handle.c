@@ -96,6 +96,9 @@ Examples:
 #ifndef AT_HANDLE_MNT_ID_UNIQUE
 #	define AT_HANDLE_MNT_ID_UNIQUE 0x001
 #endif
+#ifndef AT_HANDLE_CONNECTABLE
+#	define AT_HANDLE_CONNECTABLE   0x002
+#endif
 
 #define MAXFILES 1024
 
@@ -121,6 +124,7 @@ void usage(void)
 	fprintf(stderr, "open_by_handle -d <test_dir> [N] - unlink test files and hardlinks, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -m <test_dir> [N] - rename test files, drop caches and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -M <test_dir> [N] - do not silently skip the mount ID verifications\n");
+	fprintf(stderr, "open_by_handle -N <test_dir> [N] - encode connectable file handles\n");
 	fprintf(stderr, "open_by_handle -p <test_dir>     - create/delete and try to open by handle also test_dir itself\n");
 	fprintf(stderr, "open_by_handle -i <handles_file> <test_dir> [N] - read test files handles from file and try to open by handle\n");
 	fprintf(stderr, "open_by_handle -o <handles_file> <test_dir> [N] - get file handles of test files and write handles to file\n");
@@ -130,14 +134,16 @@ void usage(void)
 	fprintf(stderr, "open_by_handle -C <feature>      - check if <feature> is supported by the kernel.\n");
 	fprintf(stderr, "  <feature> can be any of the following values:\n");
 	fprintf(stderr, "  - AT_HANDLE_MNT_ID_UNIQUE\n");
+	fprintf(stderr, "  - AT_HANDLE_CONNECTABLE\n");
 	exit(EXIT_FAILURE);
 }
 
-static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
-				int bufsz, bool force_check_mountid)
+static int do_name_to_handle_at(const char *fname, struct file_handle *fh, int bufsz,
+				bool force_check_mountid, bool connectable)
 {
 	int ret;
 	int mntid_short;
+	int at_flags;
 
 	static bool skip_mntid, skip_mntid_unique;
 
@@ -181,18 +187,24 @@ static int do_name_to_handle_at(const char *fname, struct file_handle *fh,
 		}
 	}
 
+	at_flags = connectable ? AT_HANDLE_CONNECTABLE : 0;
 	fh->handle_bytes = bufsz;
-	ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, 0);
+	ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, at_flags);
 	if (bufsz < fh->handle_bytes) {
 		/* Query the filesystem required bufsz and the file handle */
 		if (ret != -1 || errno != EOVERFLOW) {
 			fprintf(stderr, "%s: unexpected result from name_to_handle_at: %d (%m)\n", fname, ret);
 			return EXIT_FAILURE;
 		}
-		ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, 0);
+		ret = name_to_handle_at(AT_FDCWD, fname, fh, &mntid_short, at_flags);
 	}
 	if (ret < 0) {
-		fprintf(stderr, "%s: name_to_handle: %m\n", fname);
+		/* No filesystem support for encoding connectable file handles (e.g. overlayfs)? */
+		if (connectable)
+			fprintf(stderr, "%s: name_to_handle_at(AT_HANDLE_CONNECTABLE) not supported by %s\n",
+					fname, errno == EINVAL ? "kernel" : "filesystem");
+		else
+			fprintf(stderr, "%s: name_to_handle: %m\n", fname);
 		return EXIT_FAILURE;
 	}
 
@@ -245,7 +257,16 @@ static int check_feature(const char *feature)
 			return EXIT_FAILURE;
 		}
 		return 0;
+	} else if (!strcmp(feature, "AT_HANDLE_CONNECTABLE")) {
+		int ret = name_to_handle_at(AT_FDCWD, ".", NULL, NULL, AT_HANDLE_CONNECTABLE);
+		/* If AT_HANDLE_CONNECTABLE is supported, we get EFAULT. */
+		if (ret < 0 && errno == EINVAL) {
+			fprintf(stderr, "name_to_handle_at(AT_HANDLE_CONNECTABLE) not supported by running kernel\n");
+			return EXIT_FAILURE;
+		}
+		return 0;
 	}
+
 
 	fprintf(stderr, "unknown feature name '%s'\n", feature);
 	return EXIT_FAILURE;
@@ -270,13 +291,13 @@ int main(int argc, char **argv)
 	int	create = 0, delete = 0, nlink = 1, move = 0;
 	int	rd = 0, wr = 0, wrafter = 0, parent = 0;
 	int	keepopen = 0, drop_caches = 1, sleep_loop = 0;
-	int	force_check_mountid = 0;
+	bool	force_check_mountid = 0, connectable = 0;
 	int	bufsz = MAX_HANDLE_SZ;
 
 	if (argc < 2)
 		usage();
 
-	while ((c = getopt(argc, argv, "cC:ludmMrwapknhi:o:sz")) != -1) {
+	while ((c = getopt(argc, argv, "cC:ludmMNrwapknhi:o:sz")) != -1) {
 		switch (c) {
 		case 'c':
 			create = 1;
@@ -312,6 +333,9 @@ int main(int argc, char **argv)
 			break;
 		case 'M':
 			force_check_mountid = 1;
+			break;
+		case 'N':
+			connectable = 1;
 			break;
 		case 'p':
 			parent = 1;
@@ -445,7 +469,8 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			ret = do_name_to_handle_at(fname, &handle[i].fh, bufsz, force_check_mountid);
+			ret = do_name_to_handle_at(fname, &handle[i].fh, bufsz,
+						   force_check_mountid, connectable);
 			if (ret)
 				return EXIT_FAILURE;
 		}
@@ -475,7 +500,8 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 		} else {
-			ret = do_name_to_handle_at(test_dir, &dir_handle.fh, bufsz, force_check_mountid);
+			ret = do_name_to_handle_at(test_dir, &dir_handle.fh, bufsz,
+						   force_check_mountid, connectable);
 			if (ret)
 				return EXIT_FAILURE;
 		}
@@ -589,6 +615,15 @@ int main(int argc, char **argv)
 		errno = 0;
 		fd = open_by_handle_at(mount_fd, &handle[i].fh, wrafter ? O_RDWR : O_RDONLY);
 		if ((nlink || keepopen) && fd >= 0) {
+			char linkname[PATH_MAX];
+			char procname[64];
+			sprintf(procname, "/proc/self/fd/%i", fd);
+			int n = readlink(procname, linkname, PATH_MAX);
+
+			/* check that fd is "connected" - that is has a non empty path */
+			if (connectable && n <= 1) {
+				printf("open_by_handle(%s) returned a disconnected fd!\n", fname);
+			}
 			if (rd) {
 				char buf[4] = {0};
 				int size = read(fd, buf, 4);

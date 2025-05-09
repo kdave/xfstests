@@ -4048,8 +4048,14 @@ _require_freeze()
 }
 
 # Does NFS export work on this fs?
-_require_exportfs()
+_require_open_by_handle()
 {
+	local what="NFS export"
+	local opts="$1"
+	if [ "$1" == "-N" ]; then
+		what="connectable file handles"
+	fi
+
 	_require_test_program "open_by_handle"
 
 	# virtiofs doesn't support open_by_handle_at(2) yet, though the syscall
@@ -4060,10 +4066,14 @@ _require_exportfs()
 		_notrun "$FSTYP doesn't support open_by_handle_at(2)"
 
 	mkdir -p "$TEST_DIR"/exportfs_test
-	$here/src/open_by_handle -c "$TEST_DIR"/exportfs_test 2>&1 \
-		|| _notrun "$FSTYP does not support NFS export"
+	$here/src/open_by_handle $opts -c "$TEST_DIR"/exportfs_test 2>&1 \
+		|| _notrun "$FSTYP does not support $what"
 }
 
+_require_exportfs()
+{
+	_require_open_by_handle
+}
 
 # Does shutdown work on this fs?
 _require_scratch_shutdown()
