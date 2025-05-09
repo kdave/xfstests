@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2018-2025 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test No. 777
+#
+# Check open by connectable file handle after cycle mount.
+#
+# This is a variant of test 477 with connectable file handles.
+# This test uses load and store of file handles from a temp file to test
+# decoding file handles after cycle mount and after directory renames.
+# Decoding connectable file handles after being moved to a new parent
+# is expected to fail on some filesystems, but not on filesystems that
+# do not really get unmounted in mount cycle like tmpfs, so skip this test.
+#
+. ./common/preamble
+_begin_fstest auto quick exportfs
+
+# Import common functions.
+. ./common/filter
+
+
+# Modify as appropriate.
+_require_test
+# Require connectable file handles support
+_require_open_by_handle -N
+
+NUMFILES=10
+testroot=$TEST_DIR/$seq-dir
+testdir=$testroot/testdir
+
+# Create test dir and test files, encode connectable file handles and store to tmp file
+create_test_files()
+{
+	rm -rf $testdir
+	mkdir -p $testdir
+	$here/src/open_by_handle -N -cwp -o $tmp.handles_file $testdir $NUMFILES
+}
+
+# Decode connectable file handles loaded from tmp file
+test_file_handles()
+{
+	local opt=$1
+	local when=$2
+
+	echo test_file_handles after $when
+	$here/src/open_by_handle $opt -i $tmp.handles_file $TEST_DIR $NUMFILES
+}
+
+# Decode file handles of files/dir after cycle mount
+create_test_files
+_test_cycle_mount
+test_file_handles -rp "cycle mount"
+
+# Decode file handles of files/dir after rename of parent and cycle mount
+create_test_files $testdir
+rm -rf $testdir.renamed
+mv $testdir $testdir.renamed/
+_test_cycle_mount
+test_file_handles -rp "rename parent"
+
+# Decode file handles of files/dir after rename of grandparent and cycle mount
+create_test_files $testdir
+rm -rf $testroot.renamed
+mv $testroot $testroot.renamed/
+_test_cycle_mount
+test_file_handles -rp "rename grandparent"
+
+status=0
+exit
