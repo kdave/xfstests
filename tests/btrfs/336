@@ -1,0 +1,35 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025 SUSE Linux Products GmbH. All Rights Reserved.
+#
+# FS QA Test 336
+#
+# Make sure read-only scrub won't cause NULL pointer dereference with
+# rescue=idatacsums mount option
+#
+. ./common/preamble
+_begin_fstest auto scrub quick
+
+_fixed_by_kernel_commit 6aecd91a5c5b \
+	"btrfs: avoid NULL pointer dereference if no valid extent tree"
+
+_require_scratch
+_scratch_mkfs >> $seqres.full
+
+_try_scratch_mount "-o ro,rescue=ignoredatacsums" > /dev/null 2>&1 ||
+	_notrun "rescue=ignoredatacsums mount option not supported"
+
+# For unpatched kernel this will cause NULL pointer dereference and crash the kernel.
+$BTRFS_UTIL_PROG scrub start -Br $SCRATCH_MNT >> $seqres.full 2>&1
+# For patched kernel scrub will be gracefully rejected.
+if [ $? -eq 0 ]; then
+	echo "read-only scrub should fail but didn't"
+fi
+
+_scratch_unmount
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
