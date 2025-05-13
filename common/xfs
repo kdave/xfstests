@@ -777,6 +777,20 @@ _scratch_xfs_mdrestore()
 	_xfs_mdrestore "$metadump" "$SCRATCH_DEV" "$logdev" "$rtdev" "$@"
 }
 
+# Check if mdrestore to the scratch device is supported
+_require_scratch_xfs_mdrestore() {
+	_require_command "$XFS_MDRESTORE_PROG" "xfs_mdrestore"
+
+	# mdrestore can't restore to zoned devices
+        _require_non_zoned_device $SCRATCH_DEV
+	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ]; then
+		_require_non_zoned_device $SCRATCH_LOGDEV
+	fi
+	if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_RTDEV" ]; then
+		_require_non_zoned_device $SCRATCH_RTDEV
+	fi
+}
+
 # Do not use xfs_repair (offline fsck) to rebuild the filesystem
 _xfs_skip_offline_rebuild() {
 	touch "$RESULT_DIR/.skip_rebuild"
