@@ -12,44 +12,29 @@
 . ./common/preamble
 _begin_fstest auto quick replace volume raid
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	$UMOUNT_PROG $loop_mnt
-	_destroy_loop_device $loop_dev1
-	losetup -d $loop_dev2 >/dev/null 2>&1
-	_destroy_loop_device $loop_dev3
-	rm -rf $loop_mnt
-	rm -f $fs_img1 $fs_img2 $fs_img3
-}
-
 . ./common/filter
 
-_require_test
-_require_loop
+_require_scratch_dev_pool 3
 
-echo "Silence is golden"
+_fixed_by_kernel_commit bbb651e469d9 \
+	"Btrfs: don't allow the replace procedure on read only filesystems"
 
-loop_mnt=$TEST_DIR/$seq.$$.mnt
-fs_img1=$TEST_DIR/$seq.$$.img1
-fs_img2=$TEST_DIR/$seq.$$.img2
-fs_img3=$TEST_DIR/$seq.$$.img3
-mkdir $loop_mnt
-$XFS_IO_PROG -f -c "truncate 256m" $fs_img1 >>$seqres.full 2>&1
-$XFS_IO_PROG -f -c "truncate 256m" $fs_img2 >>$seqres.full 2>&1
-$XFS_IO_PROG -f -c "truncate 256m" $fs_img3 >>$seqres.full 2>&1
+_scratch_dev_pool_get 2
+_spare_dev_get
 
-loop_dev1=`_create_loop_device $fs_img1`
-loop_dev2=`_create_loop_device $fs_img2`
-loop_dev3=`_create_loop_device $fs_img3`
+_scratch_pool_mkfs -m raid1 -d raid1 >> $seqres.full 2>&1
+_scratch_mount -o ro
 
-_mkfs_dev -m raid1 -d raid1 $loop_dev1 $loop_dev2 >>$seqres.full 2>&1
-_mount -o ro $loop_dev1 $loop_mnt
+# The replace is expected to fail.
+#
+# There is an unexpected newline at the middle of the error message, filter it out
+# to handle older progs (unexpected new line) and newer ones (new line removed).
+$BTRFS_UTIL_PROG replace start -B 2 $SPARE_DEV $SCRATCH_MNT 2>&1 >> $seqres.full | \
+	sed -e "/^$/d" | _filter_scratch
 
-$BTRFS_UTIL_PROG replace start -B 2 $loop_dev3 $loop_mnt >>$seqres.full 2>&1 && \
-_fail "FAIL: Device replaced on RO btrfs"
+_scratch_unmount
+_spare_dev_put
+_scratch_dev_pool_put
 
 status=0
 exit
