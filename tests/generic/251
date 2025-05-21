@@ -40,8 +40,9 @@ _destroy()
 
 _destroy_fstrim()
 {
-	kill $fpid 2> /dev/null
-	wait $fpid 2> /dev/null
+	test -n "$fpid" && kill $fpid 2> /dev/null
+	test -n "$fpid" && wait $fpid 2> /dev/null
+	rm -f $tmp.fstrim_loop
 }
 
 _fail()
@@ -61,14 +62,14 @@ set_minlen_constraints()
 	done
 	test $mmlen -gt 0 || \
 		_notrun "could not determine maximum FSTRIM minlen param"
-	FSTRIM_MAX_MINLEN=$mmlen
+	export FSTRIM_MAX_MINLEN=$mmlen
 
 	for ((mmlen = 1; mmlen < FSTRIM_MAX_MINLEN; mmlen *= 2)); do
 		$FSTRIM_PROG -l $(($mmlen*2))k -m ${mmlen}k $SCRATCH_MNT &> /dev/null && break
 	done
 	test $mmlen -le $FSTRIM_MAX_MINLEN || \
 		_notrun "could not determine minimum FSTRIM minlen param"
-	FSTRIM_MIN_MINLEN=$mmlen
+	export FSTRIM_MIN_MINLEN=$mmlen
 }
 
 # Set FSTRIM_{MIN,MAX}_LEN to the lower and upper bounds of the -l(ength)
@@ -82,14 +83,14 @@ set_length_constraints()
 	done
 	test $mmlen -gt 0 || \
 		_notrun "could not determine maximum FSTRIM length param"
-	FSTRIM_MAX_LEN=$mmlen
+	export FSTRIM_MAX_LEN=$mmlen
 
 	for ((mmlen = 1; mmlen < FSTRIM_MAX_LEN; mmlen *= 2)); do
 		$FSTRIM_PROG -l ${mmlen}k $SCRATCH_MNT &> /dev/null && break
 	done
 	test $mmlen -le $FSTRIM_MAX_LEN || \
 		_notrun "could not determine minimum FSTRIM length param"
-	FSTRIM_MIN_LEN=$mmlen
+	export FSTRIM_MIN_LEN=$mmlen
 }
 
 ##
@@ -99,12 +100,14 @@ set_length_constraints()
 ##
 fstrim_loop()
 {
+	# always remove the $tmp.fstrim_loop file on exit
+	trap "_destroy_fstrim; exit \$status" 2 15 EXIT
+
 	set_minlen_constraints
 	set_length_constraints
 	echo "MINLEN max=$FSTRIM_MAX_MINLEN min=$FSTRIM_MIN_MINLEN" >> $seqres.full
 	echo "LENGTH max=$FSTRIM_MAX_LEN min=$FSTRIM_MIN_LEN" >> $seqres.full
 
-	trap "_destroy_fstrim; exit \$status" 2 15
 	fsize=$(_discard_max_offset_kb "$SCRATCH_MNT" "$SCRATCH_DEV")
 
 	while true ; do
@@ -168,6 +171,7 @@ function run_process() {
 		cp -axT $content/ $SCRATCH_MNT/$p/
 
 		check_sums
+		test -e $tmp.fstrim_loop || break
 	done
 }
 
@@ -197,7 +201,7 @@ done
 echo "done."
 
 wait $pids
-truncate -s 0 $tmp.fstrim_loop
+test -e "$tmp.fstrim_loop" && truncate -s 0 $tmp.fstrim_loop
 while test -e $tmp.fstrim_loop; do
 	sleep 1
 done
