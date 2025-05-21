@@ -103,11 +103,6 @@ fstrim_loop()
 	# always remove the $tmp.fstrim_loop file on exit
 	trap "_destroy_fstrim; exit \$status" 2 15 EXIT
 
-	set_minlen_constraints
-	set_length_constraints
-	echo "MINLEN max=$FSTRIM_MAX_MINLEN min=$FSTRIM_MIN_MINLEN" >> $seqres.full
-	echo "LENGTH max=$FSTRIM_MAX_LEN min=$FSTRIM_MIN_LEN" >> $seqres.full
-
 	fsize=$(_discard_max_offset_kb "$SCRATCH_MNT" "$SCRATCH_DEV")
 
 	while true ; do
@@ -176,6 +171,12 @@ function run_process() {
 }
 
 nproc=$((4 * LOAD_FACTOR))
+
+# Discover the fstrim constraints before we do anything else
+set_minlen_constraints
+set_length_constraints
+echo "MINLEN max=$FSTRIM_MAX_MINLEN min=$FSTRIM_MIN_MINLEN" >> $seqres.full
+echo "LENGTH max=$FSTRIM_MAX_LEN min=$FSTRIM_MIN_LEN" >> $seqres.full
 
 # Use fsstress to create a directory tree with some variability
 content=$SCRATCH_MNT/orig
