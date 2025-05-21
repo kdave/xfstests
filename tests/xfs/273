@@ -50,6 +50,11 @@ rtdev_daddrs=$((rtdev_fsblocks * fsblock_bytes / 512))
 ddev_devno=$(stat -c '%t:%T' $SCRATCH_DEV)
 if [ "$USE_EXTERNAL" = "yes" ] && [ -n "$SCRATCH_RTDEV" ]; then
 	rtdev_devno=$(stat -c '%t:%T' $SCRATCH_RTDEV)
+elif $XFS_INFO_PROG $SCRATCH_MNT | grep -q 'zoned=1'; then
+	# no external rt device and zoned=1 means fsmap reports internal device
+	# numbers instead of block major/minor.
+	ddev_devno="0:1"
+	rtdev_devno="0:3"
 fi
 
 $XFS_IO_PROG -c 'fsmap -m -n 65536' $SCRATCH_MNT | awk -F ',' \
