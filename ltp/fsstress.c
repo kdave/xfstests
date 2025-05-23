@@ -5326,14 +5326,15 @@ void
 sync_f(opnum_t opno, long r)
 {
 	int	fd;
+	int	e;
 
 	fd = open(homedir, O_RDONLY|O_DIRECTORY);
 	if (fd < 0)
 		goto use_sync;
-	syncfs(fd);
+	e = syncfs(fd) < 0 ? errno : 0;
 	close(fd);
 	if (verbose)
-		printf("%d/%lld: syncfs\n", procid, opno);
+		printf("%d/%lld: syncfs %d\n", procid, opno, e);
 	return;
 
 use_sync:
