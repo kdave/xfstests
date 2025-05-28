@@ -28,6 +28,10 @@ _cleanup()
 
 _syncloop()
 {
+	# Wait for any running xfs_io command running syncfs before we exit so
+	# that unmount will not fail due to the mount being pinned by xfs_io.
+	trap "wait; exit" SIGTERM
+
 	while [ true ]; do
 		_scratch_sync
 	done
@@ -80,15 +84,6 @@ echo $iters iterations
 
 kill $syncpid
 wait
-
-# The xfs_io instance started by _scratch_sync could be stuck in D state when
-# the subshell running _syncloop & is killed.  That xfs_io process pins the
-# mount so we must kill it and wait for it to die before cycling the mount.
-dead_syncfs_pid=$(_pgrep xfs_io)
-if [ -n "$dead_syncfs_pid" ]; then
-	_pkill xfs_io
-	wait $dead_syncfs_pid
-fi
 
 # clear page cache and dump the file
 _scratch_cycle_mount
