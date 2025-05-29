@@ -9,18 +9,22 @@
 . ./common/preamble
 _begin_fstest auto quick prealloc fiemap
 
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -f $fiemapfile
+}
+
 # Import common functions.
 . ./common/filter
 
-_require_scratch
+_require_test
 _require_odirect
 _require_xfs_io_command "fiemap"
 _require_xfs_io_command "falloc"
 
-_scratch_mkfs > /dev/null 2>&1
-_scratch_mount > /dev/null 2>&1
-
-fiemapfile=$SCRATCH_MNT/$seq.fiemap
+fiemapfile=$TEST_DIR/$seq.fiemap
 
 _require_test_program "fiemap-tester"
 
@@ -29,12 +33,10 @@ seed=`date +%s`
 echo "using seed $seed" >> $seqres.full
 
 echo "fiemap run with sync"
-$here/src/fiemap-tester -q -S -s $seed -r 200 $fiemapfile 2>&1 | \
-	tee -a $seqres.full
+$here/src/fiemap-tester -q -S -s $seed -r 200 $fiemapfile
 
 echo "fiemap run without sync"
-$here/src/fiemap-tester -q -s $seed -r 200 $fiemapfile 2>&1 | \
-	tee -a $seqres.full
+$here/src/fiemap-tester -q -s $seed -r 200 $fiemapfile
 
 status=0
 exit
