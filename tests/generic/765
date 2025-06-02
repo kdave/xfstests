@@ -7,7 +7,7 @@
 # Validate atomic write support
 #
 . ./common/preamble
-_begin_fstest auto quick rw
+_begin_fstest auto quick rw atomicwrites
 
 _require_scratch_write_atomic
 _require_xfs_io_command pwrite -A
@@ -34,6 +34,10 @@ get_supported_bsize()
         _notrun "$FSTYP does not support atomic writes"
         ;;
     esac
+
+    echo "fs config ------------" >> $seqres.full
+    echo "min_bsize $min_bsize" >> $seqres.full
+    echo "max_bsize $max_bsize" >> $seqres.full
 }
 
 get_mkfs_opts()
@@ -69,6 +73,11 @@ test_atomic_writes()
     file_min_write=$(_get_atomic_write_unit_min $testfile)
     file_max_write=$(_get_atomic_write_unit_max $testfile)
     file_max_segments=$(_get_atomic_write_segments_max $testfile)
+
+    echo "test $bsize --------------" >> $seqres.full
+    echo "file awu_min $file_min_write" >> $seqres.full
+    echo "file awu_max $file_max_write" >> $seqres.full
+    echo "file awu_segments $file_max_segments" >> $seqres.full
 
     # Check that atomic min/max = FS block size
     test $file_min_write -eq $bsize || \
@@ -145,6 +154,15 @@ test_atomic_write_bounds()
     testfile=$SCRATCH_MNT/testfile
     touch $testfile
 
+    file_min_write=$(_get_atomic_write_unit_min $testfile)
+    file_max_write=$(_get_atomic_write_unit_max $testfile)
+    file_max_segments=$(_get_atomic_write_segments_max $testfile)
+
+    echo "test awb $bsize --------------" >> $seqres.full
+    echo "file awu_min $file_min_write" >> $seqres.full
+    echo "file awu_max $file_max_write" >> $seqres.full
+    echo "file awu_segments $file_max_segments" >> $seqres.full
+
     $XFS_IO_PROG -dc "pwrite -A -D -V1 -b $bsize 0 $bsize" $testfile 2>> $seqres.full && \
         echo "atomic write should fail when bsize is out of bounds"
 
@@ -156,6 +174,11 @@ sys_max_write=$(cat "/sys/block/$(_short_dev $SCRATCH_DEV)/queue/atomic_write_un
 
 bdev_min_write=$(_get_atomic_write_unit_min $SCRATCH_DEV)
 bdev_max_write=$(_get_atomic_write_unit_max $SCRATCH_DEV)
+
+echo "sysfs awu_min $sys_min_write" >> $seqres.full
+echo "sysfs awu_min $sys_max_write" >> $seqres.full
+echo "bdev awu_min $bdev_min_write" >> $seqres.full
+echo "bdev awu_min $bdev_max_write" >> $seqres.full
 
 # Test that statx atomic values are the same as sysfs values
 if [ "$sys_min_write" -ne "$bdev_min_write" ]; then
