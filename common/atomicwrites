@@ -4,6 +4,8 @@
 #
 # Routines for testing atomic writes.
 
+export STATX_WRITE_ATOMIC=0x10000
+
 _get_atomic_write_unit_min()
 {
 	$XFS_IO_PROG -c "statx -r -m $STATX_WRITE_ATOMIC" $1 | \
@@ -25,8 +27,6 @@ _get_atomic_write_segments_max()
 _require_scratch_write_atomic()
 {
 	_require_scratch
-
-	export STATX_WRITE_ATOMIC=0x10000
 
 	awu_min_bdev=$(_get_atomic_write_unit_min $SCRATCH_DEV)
 	awu_max_bdev=$(_get_atomic_write_unit_max $SCRATCH_DEV)
@@ -51,6 +51,14 @@ _require_scratch_write_atomic()
 	fi
 }
 
+# Check for xfs_io commands required to run _test_atomic_file_writes
+_require_atomic_write_test_commands()
+{
+	_require_xfs_io_command "falloc"
+	_require_xfs_io_command "fpunch"
+	_require_xfs_io_command pwrite -A
+}
+
 _test_atomic_file_writes()
 {
     local bsize="$1"
@@ -64,11 +72,7 @@ _test_atomic_file_writes()
     test $bytes_written -eq $bsize || echo "atomic write len=$bsize failed"
 
     # Check that we can perform an atomic single-block cow write
-    if [ "$FSTYP" == "xfs" ]; then
-        testfile_cp=$SCRATCH_MNT/testfile_copy
-        if _xfs_has_feature $SCRATCH_MNT reflink; then
-            cp --reflink $testfile $testfile_cp
-        fi
+    if cp --reflink=always $testfile $testfile_cp 2>> $seqres.full; then
         bytes_written=$($XFS_IO_PROG -dc "pwrite -A -D -V1 -b $bsize 0 $bsize" $testfile_cp | \
             grep wrote | awk -F'[/ ]' '{print $2}')
         test $bytes_written -eq $bsize || echo "atomic write on reflinked file failed"
