@@ -13,6 +13,9 @@ _begin_fstest auto quick mount
 # Import common functions.
 . ./common/filter
 
+# Overlayfs does not allow mounting over again with the same layers
+# until umount is fully completed, so is not appropriate for this test.
+_exclude_fs overlay
 
 # Modify as appropriate.
 _require_scratch
@@ -22,11 +25,9 @@ _scratch_mount
 for i in $(seq 0 500); do
 	$XFS_IO_PROG -f -c "pwrite 0 4K" $SCRATCH_MNT/$i >/dev/null
 done
-# For overlayfs, avoid unmounting the base fs after _scratch_mount tries to
-# mount the base fs.  Delay the mount attempt by a small amount in the hope
-# that the mount() call will try to lock s_umount /after/ umount has already
-# taken it.
-_unmount $SCRATCH_MNT &
+# Delay the mount attempt by a small amount in the hope that the mount() call
+# will try to lock s_umount /after/ umount has already taken it.
+_scratch_unmount &
 sleep 0.01s ; _scratch_mount
 wait
 
