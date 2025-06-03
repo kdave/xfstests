@@ -8,7 +8,6 @@
 # mounts specifically.
 #
 . ./common/preamble
-. ./common/overlay
 _begin_fstest auto quick perms attr idmapped mount
 
 # Override the default cleanup function.
@@ -96,20 +95,24 @@ reset_ownership()
 	stat -c '%u:%g' $path
 }
 
+setup_overlayfs()
+{
+	mkdir -p $upper $work $merge
+	_mount -t overlay -o lowerdir=$lower,upperdir=$upper,workdir=$work \
+		overlay $merge $*
+}
+
 # Prepare overlayfs with metacopy turned off.
 setup_overlayfs_idmapped_lower_metacopy_off()
 {
-	mkdir -p $upper $work $merge
-	_overlay_mount_dirs $lower $upper $work \
-			    overlay $merge -ometacopy=off || \
-			    _notrun "overlayfs doesn't support idmappped layers"
+	setup_overlayfs -ometacopy=off || \
+	    _notrun "overlayfs doesn't support idmappped layers"
 }
 
 # Prepare overlayfs with metacopy turned on.
 setup_overlayfs_idmapped_lower_metacopy_on()
 {
-	mkdir -p $upper $work $merge
-	_overlay_mount_dirs $lower $upper $work overlay $merge -ometacopy=on
+	setup_overlayfs -ometacopy=on
 }
 
 reset_overlayfs()
