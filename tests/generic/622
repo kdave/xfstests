@@ -116,6 +116,9 @@ do_test()
 
 	echo -e "\n# Testing that lazytime $timestamp_type update is persisted by $persist_method"
 
+	# exfat does not support last metadata change timestamp
+	[ "${FSTYP}" == "exfat" -a "${timestamp_type}" == "ctime" ] && return 0
+
 	# Mount the filesystem with lazytime.  If atime is being tested, then
 	# also use strictatime, since otherwise the filesystem may default to
 	# relatime and not do the atime updates.
@@ -128,6 +131,10 @@ do_test()
 	# Update the specified timestamp on the file.
 	local orig_time=$(get_timestamp $timestamp_type)
 	sleep 0.1
+
+	# exfat's timestamp for access_time has double seconds granularity
+	[ "${FSTYP}" == "exfat" -a "${timestamp_type}" == "atime" ] && sleep 2
+
 	case $timestamp_type in
 	atime)
 		# Read from the file to update its atime.
