@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2009 Christoph Hellwig.
+# Copyright (c) 2025 Western Digital Corporation
+#
+# FS QA Test No. 837
+#
+# Check out various mount/remount/unmount scenarious on a read-only rtdev
+# Based on generic/050
+#
+. ./common/preamble
+_begin_fstest mount auto quick
+
+_cleanup_setrw()
+{
+	cd /
+	blockdev --setrw $SCRATCH_RTDEV
+}
+
+# Import common functions.
+. ./common/filter
+
+_fixed_by_kernel_commit bfecc4091e07 \
+	"xfs: allow ro mounts if rtdev or logdev are read-only"
+
+_require_realtime
+_require_scratch
+
+if [ -z "$SCRATCH_RTDEV" ]; then
+	_notrun "requires external scratch rt device"
+else
+	_require_local_device $SCRATCH_RTDEV
+fi
+
+_register_cleanup "_cleanup_setrw"
+
+_scratch_mkfs "-d rtinherit" > /dev/null 2>&1
+
+#
+# Mark the rt device read-only.
+#
+echo "setting device read-only"
+blockdev --setro $SCRATCH_RTDEV
+
+#
+# Mount it and make sure it can't be written to.
+#
+echo "mounting read-only rt block device:"
+_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
+if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+	echo "writing to file on read-only filesystem:"
+	dd if=/dev/zero of=$SCRATCH_MNT/foo bs=1M count=1 oflag=direct 2>&1 | _filter_scratch
+else
+	_fail "failed to mount"
+fi
+
+echo "remounting read-write:"
+_scratch_remount rw 2>&1 | _filter_scratch | _filter_ro_mount
+
+echo "unmounting read-only filesystem"
+_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
+
+# success, all done
+echo "*** done"
+status=0
