@@ -271,6 +271,22 @@ _require_scratch_overlay_lowerdir_add_layers()
 	_scratch_unmount
 }
 
+# Check kernel support for datadir+=<datadir> without "metacopy=on" option
+_require_scratch_overlay_datadir_without_metacopy()
+{
+	local lowerdir="$OVL_BASE_SCRATCH_MNT/$OVL_UPPER"
+	local datadir="$OVL_BASE_SCRATCH_MNT/$OVL_LOWER"
+
+	_scratch_mkfs > /dev/null 2>&1
+	_overlay_scratch_mount_opts \
+		-o"lowerdir+=$lowerdir,datadir+=$datadir" > /dev/null 2>&1 || \
+	        _notrun "overlay datadir+ without metacopy not supported on ${SCRATCH_DEV}"
+
+	_scratch_unmount
+
+}
+
+
 # Helper function to check underlying dirs of overlay filesystem
 _overlay_fsck_dirs()
 {
@@ -470,6 +486,19 @@ _require_unionmount_testsuite()
 	local usage=`UNIONMOUNT_MNTOPTIONS=_ "$UNIONMOUNT_TESTSUITE/run" 2>&1`
 	echo $usage | grep -wq "UNIONMOUNT_MNTOPTIONS" || \
 		_notrun "newer version of unionmount testsuite required to support OVERLAY_MOUNT_OPTIONS."
+}
+
+# transform overlay xattrs (trusted.overlay -> user.overlay)
+_overlay_trusted_to_user()
+{
+	local dir=$1
+
+	for file in `find $dir`; do
+		_getfattr --absolute-names -d -m '^trusted.overlay.(redirect|metacopy)$' $file  | sed 's/^trusted/user/' | $SETFATTR_PROG --restore=-
+		for xattr in `_getfattr --absolute-names -d -m '^trusted.overlay.' $file  | tail -n +2 | cut -d= -f1`; do
+			$SETFATTR_PROG -x $xattr $file;
+		done
+	done
 }
 
 _unionmount_testsuite_run()
