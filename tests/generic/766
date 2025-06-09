@@ -3,10 +3,11 @@
 # Copyright (c) 2009 Christoph Hellwig.
 # Copyright (c) 2020 Lukas Czerner.
 #
-# FS QA Test No. 002
+# FS QA Test No. 766
 #
 # Copied from tests generic/050 and adjusted to support testing
 # read-only external journal device on ext4.
+# Moved to generic from ext4/002 to support xfs as well
 #
 # Check out various mount/remount/unmount scenarious on a read-only
 # logdev blockdev.
@@ -30,6 +31,14 @@ _cleanup()
 . ./common/filter
 
 _exclude_fs ext2
+
+[ $FSTYP == "ext4" ] && \
+        _fixed_by_kernel_commit 273108fa5015 \
+        "ext4: handle read only external journal device"
+
+[ $FSTYP == "xfs" ] && \
+        _fixed_by_kernel_commit bfecc4091e07 \
+        "xfs: allow ro mounts if rtdev or logdev are read-only"
 
 _require_scratch_nocheck
 _require_scratch_shutdown
