@@ -616,6 +616,27 @@ _scratch_shutdown_and_syncfs()
 	fi
 }
 
+# Requirements for tests that shutdown fs using "xfs_io -c shutdown".
+# The requirements are stricter than the requirement for tests that
+# shutdown fs using _scratch_shutdown helper.
+# Generally, with overlay fs, test can do _scratch_shutdown, but not
+# xfs_io -c shutdown.
+# It is possible, but not trivial, to execute "xfs_io -c shutdown" as part
+# of a command sequence when shutdown ioctl is to be performed on the base fs
+# (i.e. on an alternative _scratch_shutdown_handle path) as the example code
+# in _scratch_shutdown_and_syncfs() does.
+# A test that open codes this pattern can relax the _require_xfs_io_shutdown
+# requirement down to _require_scratch_shutdown.
+_require_xfs_io_shutdown()
+{
+	if [ _scratch_shutdown_handle != $SCRATCH_MNT ]; then
+		# Most likely overlayfs
+		_notrun "xfs_io -c shutdown not supported on $FSTYP"
+	fi
+	_require_xfs_io_command "shutdown"
+	_require_scratch_shutdown
+}
+
 _move_mount()
 {
 	local mnt=$1
