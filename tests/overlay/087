@@ -32,9 +32,8 @@ _begin_fstest auto quick mount shutdown
 
 
 # Modify as appropriate.
-_require_xfs_io_command syncfs
 _require_scratch_nocheck
-_require_scratch_shutdown
+_require_scratch_shutdown_and_syncfs
 
 [ "$OVL_BASE_FSTYP" == "xfs" ] || \
 	_notrun "base fs $OVL_BASE_FSTYP has unknown behavior with syncfs after shutdown"
@@ -43,19 +42,13 @@ _require_scratch_shutdown
 # bother checking the filesystem afterwards since we never wrote anything.
 echo "=== syncfs after shutdown"
 _scratch_mount
-# This command is complicated a bit because in the case of overlayfs the
-# syncfs fd needs to be opened before shutdown and it is different from the
-# shutdown fd, so we cannot use the _scratch_shutdown() helper.
-# Filter out xfs_io output of active fds.
-$XFS_IO_PROG -x -c "open $(_scratch_shutdown_handle)" -c 'shutdown -f ' -c close -c syncfs $SCRATCH_MNT | \
-	grep -vF '[00'
+_scratch_shutdown_and_syncfs
 
 # Now repeat the same test with a volatile overlayfs mount and expect no error
 _scratch_unmount
 echo "=== syncfs after shutdown (volatile)"
 _scratch_mount -o volatile
-$XFS_IO_PROG -x -c "open $(_scratch_shutdown_handle)" -c 'shutdown -f ' -c close -c syncfs $SCRATCH_MNT | \
-	grep -vF '[00'
+_scratch_shutdown_and_syncfs
 
 # success, all done
 status=0

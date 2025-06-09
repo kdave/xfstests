@@ -595,6 +595,27 @@ _scratch_shutdown_handle()
 	fi
 }
 
+_scratch_shutdown_and_syncfs()
+{
+	if [ $FSTYP = "overlay" ]; then
+		# In legacy overlay usage, it may specify directory as
+		# SCRATCH_DEV, in this case OVL_BASE_SCRATCH_DEV
+		# will be null, so check OVL_BASE_SCRATCH_DEV before
+		# running shutdown to avoid shutting down base fs accidently.
+		if [ -z $OVL_BASE_SCRATCH_DEV ]; then
+			_fail "_scratch_shutdown: call _require_scratch_shutdown first in test"
+		fi
+		# This command is complicated a bit because in the case of overlayfs the
+		# syncfs fd needs to be opened before shutdown and it is different from the
+		# shutdown fd, so we cannot use the _scratch_shutdown() helper.
+		# Filter out xfs_io output of active fds.
+		$XFS_IO_PROG -x -c "open $(_scratch_shutdown_handle)" -c 'shutdown -f ' \
+				-c close -c syncfs $SCRATCH_MNT | grep -vF '[00'
+	else
+		$XFS_IO_PROG -x -c 'shutdown -f ' -c syncfs $SCRATCH_MNT
+	fi
+}
+
 _move_mount()
 {
 	local mnt=$1
@@ -4085,7 +4106,7 @@ _require_scratch_shutdown()
 
 	if [ $FSTYP = "overlay" ]; then
 		if [ -z $OVL_BASE_SCRATCH_DEV ]; then
-			# In lagacy overlay usage, it may specify directory as
+			# In legacy overlay usage, it may specify directory as
 			# SCRATCH_DEV, in this case OVL_BASE_SCRATCH_DEV
 			# will be null, so check OVL_BASE_SCRATCH_DEV before
 			# running shutdown to avoid shutting down base fs accidently.
@@ -4100,6 +4121,12 @@ _require_scratch_shutdown()
 	fi
 
 	_scratch_unmount
+}
+
+_require_scratch_shutdown_and_syncfs()
+{
+	_require_xfs_io_command syncfs
+	_require_scratch_shutdown
 }
 
 _check_s_dax()
