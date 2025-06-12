@@ -307,7 +307,7 @@ main(int argc, char **argv)
  cleanup:
 
     /* close file and flush buffers - check if this fails */
-    if (fclose(f) != 0) {
+    if (f && fclose(f) != 0) {
 	fprintf(stderr, "fill2: fclose() on \"%s\" failed: %s\n",
 		dfile, strerror(errno));
 	status = 1;
