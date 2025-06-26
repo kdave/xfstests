@@ -24,6 +24,27 @@ _get_atomic_write_segments_max()
         grep -w atomic_write_segments_max | grep -o '[0-9]\+'
 }
 
+_require_scratch_write_atomic_multi_fsblock()
+{
+	_require_scratch
+
+	_scratch_mkfs > /dev/null 2>&1 || \
+		_notrun "cannot format scratch device for atomic write checks"
+	_try_scratch_mount || \
+		_notrun "cannot mount scratch device for atomic write checks"
+
+	local testfile=$SCRATCH_MNT/testfile
+	touch $testfile
+
+	local bsize=$(_get_file_block_size $SCRATCH_MNT)
+	local awu_max_fs=$(_get_atomic_write_unit_max $testfile)
+
+	_scratch_unmount
+
+	test $awu_max_fs -ge $((bsize * 2)) || \
+		_notrun "multi-block atomic writes not supported by this filesystem"
+}
+
 _require_scratch_write_atomic()
 {
 	_require_scratch
