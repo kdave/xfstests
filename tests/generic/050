@@ -34,6 +34,18 @@ elif [ "$FSTYP" = "xfs" ] && echo "$MOUNT_OPTIONS" | grep -q quota ; then
 	# Mounting with quota on XFS requires a writable fs, which means
 	# we expect to fail the ro blockdev test with with EPERM.
 	features="xfsquota"
+elif [ "$FSTYP" = "btrfs" ]; then
+	# Btrfs' log tree is not the traditional journal to protect metadata
+	# (that is done by metadata COW), the log tree is to speed up fsync()
+	# without syncing the full fs.
+	#
+	# In this particular test case, the workload (touching files without
+	# fsync, and use FLUSHLOG option to shutdown) will not utilize log tree
+	# at all.
+	#
+	# So for this test case, btrfs will not get any dirty log tree thus
+	# it can be treated as "nojournal".
+	features="nojournal"
 fi
 _link_out_file "$features"
 
