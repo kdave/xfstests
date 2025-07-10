@@ -1,0 +1,63 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 211
+#
+# Test that overwriting a file with mmap when the filesystem has no more space
+# available for data allocation works. The motivation here is to check that
+# NOCOW mode of a COW filesystem (such as btrfs) works as expected.
+#
+. ./common/preamble
+_begin_fstest auto quick rw mmap
+
+. ./common/filter
+
+_require_scratch
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix -ENOSPC mmap write failure on NOCOW files/extents"
+
+# Use a 512M fs so that it's fast to fill it with data but not too small such
+# that on btrfs it results in a fs with mixed block groups - we want to have
+# dedicated block groups for data and metadata, so that after filling all the
+# data block groups we can do a NOCOW write with mmap (if we have enough free
+# metadata space available).
+fs_size=$(_small_fs_size_mb 512)
+_try_scratch_mkfs_sized $((fs_size * 1024 * 1024)) >>$seqres.full 2>&1 || \
+	_fail "mkfs failed"
+_scratch_mount
+
+touch $SCRATCH_MNT/foobar
+
+# Set the file to NOCOW mode on btrfs, which must be done while the file is
+# empty, otherwise it fails.
+if [ $FSTYP == "btrfs" ]; then
+	_require_chattr C
+	$CHATTR_PROG +C $SCRATCH_MNT/foobar
+fi
+
+# Add initial data to the file we will later overwrite with mmap.
+$XFS_IO_PROG -c "pwrite -S 0xab 0 1M" $SCRATCH_MNT/foobar | _filter_xfs_io
+
+# Now fill all the remaining space with data. We use dd because we want to fill
+# only data space in btrfs - creating files with __populate_fill_fs() would also
+# fill metadata space. We want to exhaust data space on btrfs but still have
+# metadata space available, as metadata is always COWed on btrfs, so that the
+# mmap writes below succeed (metadata space available but no more data space
+# available).
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+dd if=/dev/zero of=$SCRATCH_MNT/filler bs=$blksz >>$seqres.full 2>&1
+
+# Overwrite the file with a mmap write. Should succeed.
+$XFS_IO_PROG -c "mmap -w 0 1M"        \
+	     -c "mwrite -S 0xcd 0 1M" \
+	     -c "munmap"              \
+	     $SCRATCH_MNT/foobar
+
+# Cycle mount and dump the file's content. We expect to see the new data.
+_scratch_cycle_mount
+_hexdump $SCRATCH_MNT/foobar
+
+# success, all done
+_exit 0
