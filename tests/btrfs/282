@@ -9,13 +9,25 @@
 . ./common/preamble
 _begin_fstest auto scrub
 
+_cleanup()
+{
+	[ -n "$filler_pid" ] && kill "$filler_pid" &> /dev/null
+	wait
+}
+
 . ./common/filter
 
 _wants_kernel_commit eb3b50536642 \
 	"btrfs: scrub: per-device bandwidth control"
 
-# We want at least 5G for the scratch device.
-_require_scratch_size $(( 5 * 1024 * 1024))
+# For direct IO without falling back to buffered IO.
+_require_odirect
+_require_chattr C
+# For data checksum verification during scrub
+_require_btrfs_no_nodatasum
+
+# We want at least 10G for the scratch device.
+_require_scratch_size $(( 10 * 1024 * 1024))
 
 # Make sure we can create scrub progress data file
 if [ -e /var/lib/btrfs ]; then
@@ -36,9 +48,38 @@ if [ ! -f "${devinfo_dir}/scrub_speed_max" ]; then
 	_notrun "No sysfs interface for scrub speed throttle"
 fi
 
-# Create a 2G file for later scrub workload.
-# The 2G size is chosen to fit even DUP on a 5G disk.
-$XFS_IO_PROG -f -c "pwrite -i /dev/urandom 0 2G" $SCRATCH_MNT/file | _filter_xfs_io
+# Create a NOCOW file and do direct IO for 4 seconds to measure the performance.
+#
+# The only way to reach real disk performance is direct IO without falling back
+# to buffered IO, thus requiring NOCOW.
+touch $SCRATCH_MNT/filler
+chattr +C $SCRATCH_MNT/filler
+$XFS_IO_PROG -d -c "pwrite -b 128K 0 1E" "$SCRATCH_MNT/filler" >> $seqres.full 2>&1 &
+filler_pid=$!
+sleep 4
+kill $filler_pid
+wait
+unset filler_pid
+
+# Make sure we still have some space left, if we hit ENOSPC, this means the
+# storage is too fast and the filler didn't reach full 4 seconds write before
+# hitting ENOSPC. In that case we have no reliable way to calculate scrub speed
+# but skip the run.
+_pwrite_byte 0x00 0 1M $SCRATCH_MNT/foobar >> $seqres.full 2>&1
+if [ $? -ne 0 ]; then
+	_notrun "Storage too fast, unreliable scrub speed"
+fi
+
+# But above NOCOW file has no csum, thus it won't really cause much
+# verification workload. Use the filesize of above run to re-create a file with data
+# checksums.
+size=$(_get_filesize $SCRATCH_MNT/filler)
+rm $SCRATCH_MNT/filler
+
+# Recreate one with checksums.
+touch $SCRATCH_MNT/filler
+chattr -C $SCRATCH_MNT/filler
+$XFS_IO_PROG -c "pwrite -i /dev/urandom 0 $size" $SCRATCH_MNT/filler >> $seqres.full
 
 # Writeback above data, as scrub only verify the committed data.
 sync
@@ -77,11 +118,14 @@ $BTRFS_UTIL_PROG scrub start -B $SCRATCH_MNT >> $seqres.full
 speed=$($BTRFS_UTIL_PROG scrub status --raw $SCRATCH_MNT | grep "Rate:" |\
 	     $AWK_PROG '{print $2}' | cut -f1 -d\/)
 
-# We gave a +- 10% tolerance for the throttle
-if [ "$speed" -gt "$(( $target_speed * 11 / 10 ))" -o \
-     "$speed" -lt "$(( $target_speed * 9 / 10))" ]; then
+# The expected runtime should be 4 and 8 seconds, and since the runtime
+# accuracy is only 1 second, give it a +/- 25% tolerance
+if [ "$speed" -gt "$(( $target_speed * 5 / 4 ))" -o \
+     "$speed" -lt "$(( $target_speed * 3 / 4 ))" ]; then
 	echo "scrub speed $speed Bytes/s is not properly throttled, target is $target_speed Bytes/s"
 fi
+
+echo "Silence is golden"
 
 # success, all done
 status=0
