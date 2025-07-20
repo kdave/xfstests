@@ -165,15 +165,26 @@ _ext4_mdrestore()
 	return $res
 }
 
-# this test requires the ext4 kernel support crc feature on scratch device
+# this test requires the ext4 kernel supports a particular feature
+# on the scratch device
 #
+_require_scratch_ext4_feature_enabled()
+{
+    if [ -z "$1" ]; then
+        echo "Usage: _require_scratch_ext4_feature feature"
+        _exit 1
+    fi
+    _scratch_mkfs_ext4 >/dev/null 2>&1
+    $DUMPE2FS_PROG -h $SCRATCH_DEV 2> /dev/null | grep -q "$1" || \
+	_notrun "$1 not enabled by this filesystem"
+    _try_scratch_mount >/dev/null 2>&1 \
+	|| _notrun "Kernel doesn't support $1 feature"
+    _scratch_unmount
+}
+
 _require_scratch_ext4_crc()
 {
-	_scratch_mkfs_ext4 >/dev/null 2>&1
-	dumpe2fs -h $SCRATCH_DEV 2> /dev/null | grep -q metadata_csum || _notrun "metadata_csum not supported by this filesystem"
-	_try_scratch_mount >/dev/null 2>&1 \
-	   || _notrun "Kernel doesn't support metadata_csum feature"
-	_scratch_unmount
+    _require_scratch_ext4_feature_enabled "metadata_csum"
 }
 
 # Check whether the specified feature whether it is supported by
