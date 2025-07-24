@@ -27,15 +27,10 @@ fs_size=$(_small_fs_size_mb 512)
 _try_scratch_mkfs_sized $((fs_size * 1024 * 1024)) >>$seqres.full 2>&1 || \
 	_fail "mkfs failed"
 _scratch_mount
+_require_inplace_writes $SCRATCH_MNT
 
 touch $SCRATCH_MNT/foobar
-
-# Set the file to NOCOW mode on btrfs, which must be done while the file is
-# empty, otherwise it fails.
-if [ $FSTYP == "btrfs" ]; then
-	_require_chattr C
-	$CHATTR_PROG +C $SCRATCH_MNT/foobar
-fi
+_force_inplace_writes $SCRATCH_MNT/foobar
 
 # Add initial data to the file we will later overwrite with mmap.
 $XFS_IO_PROG -c "pwrite -S 0xab 0 1M" $SCRATCH_MNT/foobar | _filter_xfs_io

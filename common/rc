@@ -5873,6 +5873,77 @@ _require_program() {
 	_have_program "$1" || _notrun "$tag required"
 }
 
+_force_inplace_writes()
+{
+	local file=$1
+
+	if [ -z "$file" ]; then
+		_fail "Usage: _force_inplace_writes <file path>"
+	fi
+
+	case "$FSTYP" in
+	"btrfs")
+		# Set the file to NOCOW mode on btrfs, which must be done while
+		# the file is empty, otherwise it fails with -EINVAL.
+		_require_chattr C
+		$CHATTR_PROG +C "$file"
+		;;
+	esac
+}
+
+# Test that a filesystem can do writes to a file in place (without allocating
+# new extents, without Copy-On-Write semantics).
+_require_inplace_writes()
+{
+	_require_xfs_io_command "fiemap"
+
+	local target=$1
+	local test_file="${target}/test_inplace_writes"
+	local fiemap_before
+	local fiemap_after
+
+	if [ -z "$target" ]; then
+		_fail "Usage: _require_inplace_writes <filesystem path>"
+	fi
+
+	rm -f "$test_file"
+	touch "$test_file"
+	_force_inplace_writes "$test_file"
+
+	$XFS_IO_PROG -c "pwrite 0 128K" -c "fsync" "$test_file" &> /dev/null
+	if [ $? -ne 0 ]; then
+		rm -f "$test_file"
+		_fail "_require_inplace_writes failed to write to test file"
+	fi
+
+	# Grab fiemap output before overwriting.
+	fiemap_before=$($XFS_IO_PROG -c "fiemap" "$test_file")
+	if [ $? -ne 0 ]; then
+		rm -f "$test_file"
+		_fail "_require_inplace_writes first fiemap call failed"
+	fi
+
+	$XFS_IO_PROG -c "pwrite 0 128K" -c "fsync" "$test_file" &> /dev/null
+	if [ $? -ne 0 ]; then
+		rm -f "$test_file"
+		_fail "_require_inplace_writes failed to overwrite test file"
+	fi
+
+	fiemap_after=$($XFS_IO_PROG -c "fiemap" "$test_file")
+	if [ $? -ne 0 ]; then
+		rm -f "$test_file"
+		_fail "_require_inplace_writes second fiemap call failed"
+	fi
+
+	rm -f "$test_file"
+
+	# If the filesystem supports inplace writes, then the extent mapping is
+	# the same before and after overwriting.
+	if [ "${fiemap_after}" != "${fiemap_before}" ]; then
+		_notrun "in-place writes not supported"
+	fi
+}
+
 ################################################################################
 # make sure this script returns success
 /bin/true
