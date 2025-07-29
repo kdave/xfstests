@@ -4600,6 +4600,23 @@ _create_loop_device()
 	echo $dev
 }
 
+# Create a loop device from a given file and configure it to support the same
+# sector size as the given block device.
+_create_loop_device_like_bdev()
+{
+	local file=$1
+	local bdev=$2
+	local dev
+	local blksize
+
+	test -b "$bdev" || \
+		_fail "$file: must be a block device"
+
+	blksize="$(blockdev --getss "$bdev")"
+
+	_create_loop_device "$file" "$blksize"
+}
+
 _destroy_loop_device()
 {
 	local dev=$1
