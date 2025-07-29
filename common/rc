@@ -4571,17 +4571,31 @@ _require_userns()
 	$here/src/nsexec -U true 2>/dev/null || _notrun "userns not supported by this kernel"
 }
 
+# Create a loop device from a given file and configure it to support IOs
+# aligned to the specified block size, if provided.
 _create_loop_device()
 {
-	local file=$1 dev
-	dev=`losetup -f --show $file` || _fail "Cannot assign $file to a loop device"
+	local file="$1"
+	local blksize="$2"
+	local dev
+	local dio_args="--direct-io=on"
+	local args
+
+	test -n "$blksize" && args="--sector-size=$blksize"
 
 	# Try to enable asynchronous directio mode on the loopback device so
 	# that writeback started by a filesystem mounted on the loop device
 	# won't be throttled by buffered writes to the lower filesystem.  This
 	# is a performance optimization for tests that want to write a lot of
 	# data, so it isn't required to work.
-	test -b "$dev" && losetup --direct-io=on $dev 2> /dev/null
+	#
+	# Starting with 6.15-rc1 the kernel will set the loop device's sector
+	# size to the directio alignment of the underlying fs, so if we want to
+	# use our own sector size, we need to specify that at creation time.
+	if ! dev="$(losetup $dio_args $args -f --show $file 2>/dev/null)"; then
+		dev="$(losetup $args -f --show $file)" || \
+			_fail "Cannot assign $file to a loop device ($args)"
+	fi
 
 	echo $dev
 }
