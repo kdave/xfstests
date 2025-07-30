@@ -1,0 +1,60 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 771
+#
+# Create two files, the first one with some data, and then fsync both files.
+# The first file is fsynced after removing its hardlink. After a power failure
+# we expect the fs to be mountable and for only the second file to be present.
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+
+_require_scratch
+_require_test_program unlink-fsync
+_require_dm_target flakey
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix log tree replay failure due to file with 0 links and extents"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our first test file with some data.
+mkdir $SCRATCH_MNT/testdir
+$XFS_IO_PROG -f -c "pwrite 0K 64K" $SCRATCH_MNT/testdir/foo | _filter_xfs_io
+
+# fsync our first test file after unlinking it - we keep an fd open for the
+# file, unlink it and then fsync the file using that fd, so that we log/journal
+# a file with 0 hard links.
+$here/src/unlink-fsync $SCRATCH_MNT/testdir/foo
+
+# Create another test file and fsync it.
+touch $SCRATCH_MNT/testdir/bar
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/testdir/bar
+
+# Simulate a power failure and replay the log/journal.
+# On btrfs we had a bug where the replay procedure failed, causing the fs mount
+# to fail, because the first test file has extents and the second one, which has
+# an higher inode number, has a non-zero (1) link count - the replay code got
+# confused and thought the extents belonged to the second file and then it
+# failed when trying to open a non-existing inode to replay the extents.
+_flakey_drop_and_remount
+
+# File foo should not exist and file bar should exist.
+ls -1 $SCRATCH_MNT/testdir
+
+_exit 0
