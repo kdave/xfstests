@@ -19,6 +19,9 @@ _require_xfs_io_command "falloc"
 _require_scratch_enable_simple_quota
 _require_no_compress
 
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix iteration bug in __qgroup_excl_accounting()"
+
 subv=$SCRATCH_MNT/subv
 nested=$SCRATCH_MNT/subv/nested
 snap=$SCRATCH_MNT/snap
@@ -49,7 +52,7 @@ get_qgroup_usage()
 	local output
 
 	output=$($BTRFS_UTIL_PROG qgroup show --sync --raw $SCRATCH_MNT | \
-		 grep "$qgroupid" | $AWK_PROG '{print $3}')
+		 grep -a "^$qgroupid" | $AWK_PROG '{print $3}')
 	# The qgroup is auto-removed, this can only happen if its numbers are
 	# already all zeros, so here we only need to explicitly echo "0".
 	if [ -z "$output" ]; then
@@ -218,7 +221,9 @@ prepare_nested()
 	prepare
 	local subvid=$(get_subvid)
 	$BTRFS_UTIL_PROG qgroup create 1/100 $SCRATCH_MNT
+	$BTRFS_UTIL_PROG qgroup create 2/100 $SCRATCH_MNT
 	$BTRFS_UTIL_PROG qgroup limit $limit 1/100 $SCRATCH_MNT
+	$BTRFS_UTIL_PROG qgroup assign 1/100 2/100 $SCRATCH_MNT >> $seqres.full
 	$BTRFS_UTIL_PROG qgroup assign 0/$subvid 1/100 $SCRATCH_MNT >> $seqres.full
 	$BTRFS_UTIL_PROG subvolume create $nested >> $seqres.full
 	local nestedid=$(get_nestedid)
@@ -228,6 +233,7 @@ prepare_nested()
 	local subv_usage=$(get_subvol_usage $subvid)
 	local nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
+	check_qgroup_usage 2/100 $(($subv_usage + $nested_usage))
 }
 
 # Write in a single subvolume, including going over the limit.
@@ -377,12 +383,14 @@ nested_accounting()
 	local subv_usage=$(get_subvol_usage $subvid)
 	local nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
+	check_qgroup_usage 2/100 $(($subv_usage + $nested_usage))
 	rm $nested/f
 	check_subvol_usage $subvid $total_fill
 	check_subvol_usage $nestedid 0
 	subv_usage=$(get_subvol_usage $subvid)
 	nested_usage=$(get_subvol_usage $nestedid)
 	check_qgroup_usage 1/100 $(($subv_usage + $nested_usage))
+	check_qgroup_usage 2/100 $(($subv_usage + $nested_usage))
 	do_enospc_falloc $nested/large_falloc 2G
 	do_enospc_write $nested/large 2G
 	_scratch_unmount
