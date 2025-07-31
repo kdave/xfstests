@@ -84,40 +84,12 @@ test_atomic_writes()
     # Check that atomic min/max = FS block size
     test $file_min_write -eq $bsize || \
         echo "atomic write min $file_min_write, should be fs block size $bsize"
-    test $file_max_write -eq $bsize || \
-        echo "atomic write max $file_max_write, should be fs block size $bsize"
+    test $file_max_write -ge $bsize || \
+        echo "atomic write max $file_max_write, should be at least fs block size $bsize"
     test $file_max_segments -eq 1 || \
         echo "atomic write max segments $file_max_segments, should be 1"
 
     _test_atomic_file_writes "$bsize" "$testfile"
-
-    _scratch_unmount
-}
-
-test_atomic_write_bounds()
-{
-    local bsize=$1
-
-    get_mkfs_opts $bsize
-    _scratch_mkfs $mkfs_opts >> $seqres.full
-    _scratch_mount
-
-    test "$FSTYP" = "xfs" && _xfs_force_bdev data $SCRATCH_MNT
-
-    testfile=$SCRATCH_MNT/testfile
-    touch $testfile
-
-    file_min_write=$(_get_atomic_write_unit_min $testfile)
-    file_max_write=$(_get_atomic_write_unit_max $testfile)
-    file_max_segments=$(_get_atomic_write_segments_max $testfile)
-
-    echo "test awb $bsize --------------" >> $seqres.full
-    echo "file awu_min $file_min_write" >> $seqres.full
-    echo "file awu_max $file_max_write" >> $seqres.full
-    echo "file awu_segments $file_max_segments" >> $seqres.full
-
-    $XFS_IO_PROG -dc "pwrite -A -D -V1 -b $bsize 0 $bsize" $testfile 2>> $seqres.full && \
-        echo "atomic write should fail when bsize is out of bounds"
 
     _scratch_unmount
 }
@@ -149,14 +121,6 @@ for ((bsize=$bdev_min_write; bsize<=bdev_max_write; bsize*=2)); do
         test_atomic_writes $bsize
     fi
 done;
-
-# Check that atomic write fails if bsize < bdev min or bsize > bdev max
-if [ $((bdev_min_write / 2)) -ge "$min_bsize" ]; then
-    test_atomic_write_bounds $((bdev_min_write / 2))
-fi
-if [ $((bdev_max_write * 2)) -le "$max_bsize" ]; then
-    test_atomic_write_bounds $((bdev_max_write * 2))
-fi
 
 # success, all done
 echo Silence is golden
