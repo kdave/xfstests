@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/016
+#
+# This testcase tries to check stability of mount result
+# w/ f2fs special mount options and their combination.
+#
+. ./common/preamble
+_begin_fstest auto quick mount
+_require_kernel_config CONFIG_F2FS_FS_COMPRESSION
+_require_kernel_config CONFIG_F2FS_FS_LZO
+_require_kernel_config CONFIG_F2FS_FS_LZORLE
+_require_kernel_config CONFIG_F2FS_FS_LZ4
+_require_kernel_config CONFIG_F2FS_FS_LZ4HC
+_require_kernel_config CONFIG_F2FS_FS_ZSTD
+
+options=(
+#	mount_option			mkfs_option
+	"inline_xattr_size=400"		"extra_attr,flexible_inline_xattr"\
+	"compress_algorithm=lzo"	"extra_attr,compression"	\
+	"compress_algorithm=lz4"	"extra_attr,compression"	\
+	"compress_algorithm=zstd"	"extra_attr,compression"	\
+	"compress_algorithm=lzo-rle"	"extra_attr,compression"	\
+	"compress_algorithm=lz4:3"	"extra_attr,compression"	\
+	"compress_algorithm=zstd:1"	"extra_attr,compression"	\
+	"compress_log_size=8"		"extra_attr,compression"	\
+	"compress_extension=so"		"extra_attr,compression"	\
+	"nocompress_extension=so"	"extra_attr,compression"	\
+	"nocompress_extension=*"	"extra_attr,compression"	\
+	"compress_extension=so,nocompress_extension=so"			\
+					"extra_attr,compression"	\
+	"compress_chksum"		"extra_attr,compression"	\
+	"compress_mode=fs"		"extra_attr,compression"	\
+	"compress_mode=user"		"extra_attr,compression"	\
+	"compress_cache"		"extra_attr,compression"	\
+)
+
+for ((i=0;i<${#options[@]};i=i+2))
+do
+	echo "Option#$i: ${options[$i]} : ${options[$((i+1))]}"
+	_scratch_mkfs "-O ${options[$((i+1))]}" >> $seqres.full || _fail "mkfs failed"
+	_try_scratch_mount "-o ${options[$i]}" >> $seqres.full 2>&1
+	echo $?
+	_scratch_unmount >> $seqres.full 2>&1
+done
+
+status=0
+exit
