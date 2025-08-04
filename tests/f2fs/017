@@ -1,0 +1,40 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/017
+#
+# This testcase tries to check stability of mount result
+# w/ mount options for zoned device and their combination.
+#
+. ./common/preamble
+_begin_fstest auto quick mount
+
+_require_zoned_device "$TEST_DEV"
+_test_unmount >> $seqres.full 2>&1
+
+options=(
+#	mount_option			mkfs_option
+	"background_gc=on"		"blkzone"		\
+	"background_gc=off"		"blkzone"		\
+	"background_gc=sync"		"blkzone"		\
+	"mode=adaptive"			"blkzone"		\
+	"mode=lfs"			"blkzone"		\
+	"mode=fragment:segment"		"blkzone"		\
+	"mode=fragment:block"		"blkzone"		\
+	"discard_unit=block"		"blkzone"		\
+	"discard_unit=segment"		"blkzone"		\
+	"discard_unit=section"		"blkzone"		\
+)
+
+for ((i=0;i<${#options[@]};i=i+2))
+do
+	echo "Option#$i: ${options[$i]} : ${options[$((i+1))]}"
+	_test_mkfs "-m" >> $seqres.full || _fail "mkfs failed"
+	_test_mount "-o ${options[$i]}" >> $seqres.full 2>&1
+	echo $?
+	_test_unmount >> $seqres.full 2>&1
+done
+
+status=0
+exit
