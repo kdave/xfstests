@@ -22,6 +22,8 @@ fi
 . ./common/filter
 
 _require_xfs_io_command "fsmap"
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fpunch"
 _require_scratch
 
 _scratch_mkfs >> $seqres.full
@@ -31,6 +33,10 @@ blksz=$(_get_block_size "$SCRATCH_MNT")
 if ((blksz < 2048)); then
 	_notrun "test requires at least 4 bblocks per fsblock"
 fi
+
+# This makes sure there is free space surrounded by allocated blocks, which
+# is needed for some sub tests.
+$XFS_IO_PROG -fc 'falloc 0 3M' -c 'fpunch 1M 1M' -c 'fsync' $SCRATCH_MNT/f
 
 $XFS_IO_PROG -c 'fsmap' $SCRATCH_MNT >> $seqres.full
 
