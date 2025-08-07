@@ -1,0 +1,26 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Red Hat, Inc..  All Rights Reserved.
+#
+# FS QA Test 131
+#
+# Run fsx with XFS force_zero_range error injection enabled. This is a proxy
+# test for iomap zero range. Zero range is used in limited cases by default,
+# such as EOF zeroing on file extension, etc. This error tag forces use of iomap
+# zero range for fallocate zero range operations.
+#
+. ./common/preamble
+_begin_fstest auto quick zero
+
+# Import common functions.
+. ./common/inject
+
+# Modify as appropriate.
+_require_test
+_require_xfs_io_error_injection "force_zero_range"
+
+_test_inject_error "force_zero_range"
+run_fsx -q -S 0 -N $((100000 * TIME_FACTOR))
+
+# success, all done
+_exit 0
