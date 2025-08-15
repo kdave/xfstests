@@ -1,0 +1,84 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu.  All Rights Reserved.
+#
+# FS QA Test No. f2fs/018
+#
+# This is a regression test to check whether page eof will be
+# zero or not after we truncate partial data in compressed
+# cluster.
+#
+. ./common/preamble
+_begin_fstest auto quick rw compress
+
+_fixed_by_kernel_commit ba8dac350faf \
+	"f2fs: fix to zero post-eof page"
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"f2fs: fix to zero data after EOF for compressed file correctly"
+
+_require_xfs_io_command "truncate"
+_require_scratch
+
+testfile=$SCRATCH_MNT/testfile
+fio_config=$tmp.fio
+
+build_fio_config()
+{
+	local offset=$1
+	local size=$2
+
+	cat >$fio_config <<EOF
+[verify-data]
+filename=$testfile
+rw=read
+verify=pattern
+verify_pattern=0x00
+do_verify=1
+verify_only
+offset=$offset
+size=$size
+numjobs=1
+EOF
+	cat $fio_config >> $seqres.full
+}
+
+build_fio_config 0 4k
+_require_fio $fio_config
+
+_scratch_mkfs "-O extra_attr,compression" >> $seqres.full || _fail "mkfs failed"
+_scratch_mount "-o compress_extension=*" >> $seqres.full
+
+check_data_eof()
+{
+	local eof_start=$1
+	local eof_size=$2
+	local filesize=$3
+	local offset1=$4
+	local offset2=$5
+	local offset3=$6
+
+	rm -f $testfile
+
+	$XFS_IO_PROG -f -c "pwrite 0 $filesize" -c "fsync" $testfile >> $seqres.full
+	$XFS_IO_PROG -c "truncate $offset1" $testfile
+	$XFS_IO_PROG -c "truncate $offset2" $testfile
+
+	if [ "$offset3" ]; then
+		$XFS_IO_PROG -c "truncate $offset3" $testfile
+	fi
+
+	build_fio_config $eof_start $eof_size
+	$FIO_PROG $fio_config >> $seqres.full 2>&1
+
+	return $?
+}
+
+run_check check_data_eof 12k 4k 16k 12k 20k
+run_check check_data_eof 10k 6k 16k 10k 20k
+run_check check_data_eof 12k 4k 16k 8k 12k 20k
+run_check check_data_eof 10k 6k 16k 8k 10k 20k
+
+echo "Silence is golden"
+
+status=0
+exit
