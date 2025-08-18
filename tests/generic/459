@@ -93,12 +93,14 @@ $LVM_PROG vgcreate -f $vgname $SCRATCH_DEV >>$seqres.full 2>&1
 
 $LVM_PROG lvcreate  --thinpool $poolname  --errorwhenfull y \
 		    --zero n -L $origpsize \
-		    --poolmetadatasize 4M $vgname >>$seqres.full 2>&1
+		    --poolmetadatasize 4M $vgname >>$seqres.full 2>&1 || \
+	_notrun "Can't create thin pool"
 
 # Create a overprovisioned 300MB dm-thin virt. device
 $LVM_PROG lvcreate  --virtualsize $virtsize \
 		    -T $vgname/$poolname \
-		    -n $lvname >>$seqres.full 2>&1
+		    -n $lvname >>$seqres.full 2>&1 || \
+	_notrun "Can't create thin volume"
 _udev_wait /dev/mapper/$vgname-$lvname
 _mkfs_dev /dev/mapper/$vgname-$lvname >>$seqres.full 2>&1
 
