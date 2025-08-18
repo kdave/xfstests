@@ -28,7 +28,8 @@ get_data_bg()
 {
 	$BTRFS_UTIL_PROG inspect-internal dump-tree -t CHUNK $SCRATCH_DEV |\
 		grep -A 1 "CHUNK_ITEM" | grep -B 1 "type DATA" |\
-		grep -Eo "CHUNK_ITEM [[:digit:]]+" | cut -d ' ' -f 2
+		grep -Eo "CHUNK_ITEM [[:digit:]]+" | cut -d ' ' -f 2 |\
+		tail -n 1
 }
 
 get_data_bg_physical()
@@ -36,8 +37,12 @@ get_data_bg_physical()
 	# Assumes SINGLE data profile
 	$BTRFS_UTIL_PROG inspect-internal dump-tree -t CHUNK $SCRATCH_DEV |\
 		grep -A 4 CHUNK_ITEM | grep -A 3 'type DATA\|SINGLE' |\
-	        grep -Eo 'offset [[:digit:]]+'| cut -d ' ' -f 2
+	        grep -Eo 'offset [[:digit:]]+'| cut -d ' ' -f 2 |\
+		tail -n 1
 }
+
+$BLKZONE_PROG report $SCRATCH_DEV | grep -q -e "nw" && \
+	_notrun "test is unreliable on devices with conventional zones"
 
 sdev="$(_short_dev $SCRATCH_DEV)"
 zone_size=$(($(cat /sys/block/${sdev}/queue/chunk_sectors) << 9))
