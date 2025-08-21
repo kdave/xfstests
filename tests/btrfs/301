@@ -21,6 +21,8 @@ _require_no_compress
 
 _fixed_by_kernel_commit XXXXXXXXXXXX \
 	"btrfs: fix iteration bug in __qgroup_excl_accounting()"
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix squota _cmpr stats leak"
 
 subv=$SCRATCH_MNT/subv
 nested=$SCRATCH_MNT/subv/nested
@@ -393,6 +395,13 @@ nested_accounting()
 	check_qgroup_usage 2/100 $(($subv_usage + $nested_usage))
 	do_enospc_falloc $nested/large_falloc 2G
 	do_enospc_write $nested/large 2G
+	# ensure we can tear everything down in the nested scenario
+	$BTRFS_UTIL_PROG qgroup limit none 1/100 $SCRATCH_MNT
+	$BTRFS_UTIL_PROG subvolume delete $nested >> $seqres.full
+	$BTRFS_UTIL_PROG subvolume delete $subv >> $seqres.full
+	trigger_cleaner
+	$BTRFS_UTIL_PROG qgroup destroy 1/100 $SCRATCH_MNT
+	$BTRFS_UTIL_PROG qgroup destroy 2/100 $SCRATCH_MNT
 	_scratch_unmount
 }
 
