@@ -23,6 +23,7 @@ _cleanup()
 _require_test
 _require_scratch
 _require_xfs_io_command "fiemap"
+_require_btrfs_no_compress
 
 send_files_dir=$TEST_DIR/btrfs-test-$seq
 
@@ -33,12 +34,12 @@ _scratch_mkfs >>$seqres.full 2>&1
 _scratch_mount
 
 # Create the first test file.
-$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 4K" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -f -c "pwrite -S 0xaa -b 64k 0 64K" $SCRATCH_MNT/foo | _filter_xfs_io
 
 # Create a second test file with a 1Mb hole.
 $XFS_IO_PROG -f \
-     -c "pwrite -S 0xaa 0 4K" \
-     -c "pwrite -S 0xbb 1028K 4K" \
+     -c "pwrite -S 0xaa -b 64k 0 64K" \
+     -c "pwrite -S 0xbb -b 64k 1088K 64K" \
      $SCRATCH_MNT/bar | _filter_xfs_io
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
@@ -46,10 +47,10 @@ $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
 
 # Now add one new extent to our first test file, increasing its size and leaving
 # a 1Mb hole between the first extent and this new extent.
-$XFS_IO_PROG -c "pwrite -S 0xbb 1028K 4K" $SCRATCH_MNT/foo | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite -S 0xbb -b 64k 1088K 64K" $SCRATCH_MNT/foo | _filter_xfs_io
 
 # Now overwrite the last extent of our second test file.
-$XFS_IO_PROG -c "pwrite -S 0xcc 1028K 4K" $SCRATCH_MNT/bar | _filter_xfs_io
+$XFS_IO_PROG -c "pwrite -S 0xcc -b 64k 1088K 64K" $SCRATCH_MNT/bar | _filter_xfs_io
 
 $BTRFS_UTIL_PROG subvolume snapshot -r $SCRATCH_MNT \
 		 $SCRATCH_MNT/snap2 >/dev/null
