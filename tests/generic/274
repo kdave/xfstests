@@ -40,8 +40,8 @@ _scratch_unmount 2>/dev/null
 _scratch_mkfs_sized $((2 * 1024 * 1024 * 1024)) >>$seqres.full 2>&1
 _scratch_mount
 
-# Create a 4k file and Allocate 4M past EOF on that file
-$XFS_IO_PROG -f -c "pwrite 0 4k" -c "falloc -k 4k 4m" $SCRATCH_MNT/test \
+# Create a 64k file and Allocate 64M past EOF on that file
+$XFS_IO_PROG -f -c "pwrite 0 64k" -c "falloc -k 64k 64m" $SCRATCH_MNT/test \
 	>>$seqres.full 2>&1 || _fail "failed to create test file"
 
 # Fill the rest of the fs completely
@@ -63,7 +63,7 @@ df $SCRATCH_MNT >>$seqres.full 2>&1
 echo "Fill in prealloc space; fragment at offsets:" >> $seqres.full
 for i in `seq 1 2 1023`; do
 	echo -n "$i " >> $seqres.full
-	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=4K count=1 conv=notrunc \
+	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=64K count=1 conv=notrunc \
 		>>$seqres.full 2>/dev/null || _fail "failed to write to test file"
 done
 _scratch_sync
@@ -71,7 +71,7 @@ echo >> $seqres.full
 echo "Fill in prealloc space; fill holes at offsets:" >> $seqres.full
 for i in `seq 2 2 1023`; do
 	echo -n "$i " >> $seqres.full
-	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=4K count=1 conv=notrunc \
+	dd if=/dev/zero of=$SCRATCH_MNT/test seek=$i bs=64K count=1 conv=notrunc \
 		>>$seqres.full 2>/dev/null || _fail "failed to fill test file"
 done
 _scratch_sync
