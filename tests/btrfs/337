@@ -1,0 +1,53 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE Linux Products GmbH.  All Rights Reserved.
+#
+# FS QA Test 337
+#
+# Test compressed read with shared extents, especially for bs < ps cases.
+#
+. ./common/preamble
+_begin_fstest auto quick compress clone
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix corruption reading compressed range when block size is smaller than page size"
+
+. ./common/reflink
+
+_require_btrfs_support_sectorsize 4096
+_require_scratch_reflink
+
+# The layout used in the test case is all 4K based, and can only be reproduced
+# with page size larger than 4K.
+_scratch_mkfs -s 4k >> $seqres.full || _fail "make a btrfs with -s 4k"
+_scratch_mount "-o compress"
+
+# Create the reflink source, which must be a compressed extent.
+$XFS_IO_PROG -f -c "pwrite -S 0x0f 0 32K" \
+		-c "pwrite -S 0xf0 32K 32K" \
+		$SCRATCH_MNT/base >> $seqres.full
+echo "Reflink source:"
+_hexdump $SCRATCH_MNT/base
+
+# Create the reflink dest, which reverses the order of the two 32K ranges.
+#
+# And do a further aligned write into the last block.
+# This write is to make sure the folio exists in filemap, so that we won't go
+# through the readahead path (which has the proper handling) for the folio.
+$XFS_IO_PROG -f -c "reflink $SCRATCH_MNT/base 32K 0 32K" \
+		-c "reflink $SCRATCH_MNT/base 0 32K 32K" \
+		-c "pwrite 60K 4K" $SCRATCH_MNT/new >> $seqres.full
+
+# This will result an incorrect output for unpatched kernel.
+# The range [32K, 60K) will be zero due to incorrectly merged compressed read.
+echo "Before mount cycle:"
+_hexdump $SCRATCH_MNT/new
+
+_scratch_cycle_mount
+
+# This will go through readahead path, which has the proper handling, thus give
+# the correct content.
+echo "After mount cycle:"
+_hexdump $SCRATCH_MNT/new
+
+_exit 0
