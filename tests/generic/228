@@ -9,22 +9,6 @@
 . ./common/preamble
 _begin_fstest rw auto prealloc quick
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	rm -f $tmp.*
-	sysctl -w kernel.core_pattern="$core_pattern" &>/dev/null
-	ulimit -c $ulimit_c
-}
-
-tmp=$TEST_DIR/$$
-core_pattern=`sysctl -n kernel.core_pattern`
-ulimit_c=`ulimit -c`
-_register_cleanup "_cleanup" 25
-
-# Import common functions.
-
 # generic, but xfs_io's fallocate must work
 # only Linux supports fallocate
 _require_test
@@ -38,10 +22,6 @@ _require_xfs_io_command "falloc"
 avail=`df -P $TEST_DIR | awk 'END {print $4}'`
 [ "$avail" -ge 104000 ] || _notrun "Test device is too small ($avail KiB)"
 
-# Suppress core dumped messages
-sysctl -w kernel.core_pattern=core &>/dev/null
-ulimit -c 0
-
 # Set the FSIZE ulimit to 100MB and check
 ulimit -f 102400
 flim=`ulimit -f`
@@ -50,7 +30,13 @@ flim=`ulimit -f`
 
 echo "File size limit is now set to 100 MB."
 echo "Let us try to preallocate 101 MB. This should fail."
-$XFS_IO_PROG -f -c 'falloc 0 101m' $TEST_DIR/ouch
+# xfs_io will receive SIGXFSZ signal, if not handled it will trigger a coredump.
+#
+# And in bash 5.3.x, bash will always output the command/script triggering the
+# coredump.
+# Work around the new behavior by ignoring the signal.
+# Falloc will still fail but with a more reliable error message.
+bash -c "trap '' SIGXFSZ; $XFS_IO_PROG -f -c 'falloc 0 101m' $TEST_DIR/ouch"
 rm -f $TEST_DIR/ouch
 
 echo "Let us now try to preallocate 50 MB. This should succeed."
