@@ -70,8 +70,21 @@ done
 echo "fnr=$fnr" >> $seqres.full
 
 echo "Reflink the big file"
-$here/src/t_reflink_read_race "$testdir/file1" "$testdir/file2" \
-	"$testdir/outcome" &>> $seqres.full
+# Workaround the default job control by command grouping so that we can redirect
+# the job control message of the subshell.
+#
+# Job control of bash v5.3.x will output the command which triggered the job
+# control (terminated, core dump etc).
+# And since it's handled by bash itself, redirection of the program won't work
+# for the job control message.
+#
+# Running the command in a command group will make the program run in a subshell
+# so that we can direct the job control message of the subshell.
+#
+# We will check the outcome file to determine if the program is properly
+# terminated, thus no need to bother the job control message.
+{ $here/src/t_reflink_read_race "$testdir/file1" "$testdir/file2" \
+	"$testdir/outcome" ; } &>> $seqres.full
 
 if [ ! -e "$testdir/outcome" ]; then
 	echo "Could not set up program"
