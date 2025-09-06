@@ -47,8 +47,9 @@ _require_scratch_write_atomic_multi_fsblock()
 
 	_scratch_unmount
 
-	test $awu_max_fs -ge $((bsize * 2)) || \
+	if [ -z "$awu_max_fs" -o $awu_max_fs -lt $((bsize * 2)) ];then
 		_notrun "multi-block atomic writes not supported by this filesystem"
+	fi
 }
 
 _require_scratch_write_atomic()
@@ -58,7 +59,8 @@ _require_scratch_write_atomic()
 	local awu_min_bdev=$(_get_atomic_write_unit_min $SCRATCH_DEV)
 	local awu_max_bdev=$(_get_atomic_write_unit_max $SCRATCH_DEV)
 
-	if [ $awu_min_bdev -eq 0 ] && [ $awu_max_bdev -eq 0 ]; then
+	if [ -z "$awu_min_bdev" -o -z "$awu_max_bdev" ] || \
+		[ $awu_min_bdev -eq 0 -a $awu_max_bdev -eq 0 ];then
 		_notrun "write atomic not supported by this block device"
 	fi
 
@@ -75,7 +77,8 @@ _require_scratch_write_atomic()
 
 	_scratch_unmount
 
-	if [ $awu_min_fs -eq 0 ] && [ $awu_max_fs -eq 0 ]; then
+	if [ -z "$awu_min_fs" -o -z "$awu_max_fs" ] || \
+		[ $awu_min_fs -eq 0 -a $awu_max_fs -eq 0 ];then
 		_notrun "write atomic not supported by this filesystem"
 	fi
 }
