@@ -5959,6 +5959,49 @@ _max() {
 	echo $ret
 }
 
+# Due to reasons explained in fio commit 40f1fc11d, fio version between
+# v3.33 and v3.38 have atomic= feature but it is a no-op and doesn't do
+# RWF_ATOMIC write. Hence, use this helper to ensure fio has the
+# required support. Currently, the simplest way we have is to ensure
+# the version.
+_require_fio_atomic_writes() {
+	__require_fio_version "3.38+"
+}
+
+# Check the required fio version. Examples:
+#   __require_fio_version 3.38 (matches 3.38 only)
+#   __require_fio_version 3.38+ (matches 3.38 and above)
+#   __require_fio_version 3.38- (matches 3.38 and below)
+#
+# Internal helper, avoid using directly in tests.
+__require_fio_version() {
+	local req_ver="$1"
+	local fio_ver
+
+	_require_fio
+	_require_math
+
+	fio_ver=$(fio -v | cut -d"-" -f2)
+
+	case "$req_ver" in
+	*+)
+		req_ver=${req_ver%+}
+		test $(_math "$fio_ver >= $req_ver") -eq 1 || \
+			_notrun "need fio >= $req_ver (found $fio_ver)"
+		;;
+	*-)
+		req_ver=${req_ver%-}
+		test $(_math "$fio_ver <= $req_ver") -eq 1 || \
+			_notrun "need fio <= $req_ver (found $fio_ver)"
+		;;
+	*)
+		req_ver=${req_ver%-}
+		test $(_math "$fio_ver == $req_ver") -eq 1 || \
+			_notrun "need fio = $req_ver (found $fio_ver)"
+		;;
+	esac
+}
+
 ################################################################################
 # make sure this script returns success
 /bin/true
