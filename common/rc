@@ -4596,6 +4596,9 @@ _create_loop_device()
 	# size to the directio alignment of the underlying fs, so if we want to
 	# use our own sector size, we need to specify that at creation time.
 	if ! dev="$(losetup $dio_args $args -f --show $file 2>/dev/null)"; then
+		# losetup can return error for certain configuration settings
+		# but still create a loop device.
+		test -n "$dev" && losetup -d "$dev" > /dev/null 2>&1
 		dev="$(losetup $args -f --show $file)" || \
 			_fail "Cannot assign $file to a loop device ($args)"
 	fi
