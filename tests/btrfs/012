@@ -42,6 +42,9 @@ $MKFS_EXT4_PROG -F -b $BLOCK_SIZE $SCRATCH_DEV > $seqres.full 2>&1 || \
 	_notrun "Could not create ext4 filesystem"
 # Manual mount so we don't use -t btrfs or selinux context
 mount -t ext4 $SCRATCH_DEV $SCRATCH_MNT
+if [ $? -ne 0 -a $BLOCK_SIZE -gt $(_get_page_size) ]; then
+	_notrun "block size $BLOCK_SIZE is not supported by ext4"
+fi
 
 echo "populating the initial ext fs:" >> $seqres.full
 mkdir "$SCRATCH_MNT/$BASENAME"
