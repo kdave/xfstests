@@ -21,8 +21,7 @@ _require_btrfs_fs_feature "raid_stripe_tree"
 _require_btrfs_fs_feature "free_space_tree"
 _require_btrfs_free_space_tree
 _require_btrfs_no_compress
-
-test $(_get_page_size) -eq 4096 || _notrun "this tests requires 4k pagesize"
+_require_btrfs_support_sectorsize 4096
 
 test_8k_new_stripe()
 {
@@ -32,7 +31,7 @@ test_8k_new_stripe()
 	_scratch_dev_pool_get $ndevs
 
 	echo "==== Testing $profile ===="
-	_scratch_pool_mkfs -d $profile -m $profile -O raid-stripe-tree
+	_scratch_pool_mkfs -s 4k -d $profile -m $profile -O raid-stripe-tree
 	_scratch_mount
 
 	# Fill the first stripe up to 64k - 4k

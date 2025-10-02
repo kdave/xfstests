@@ -33,11 +33,7 @@ _require_btrfs_mkfs_feature "no-holes"
 _require_log_writes
 _require_scratch
 _require_attrs
-
-# We require a 4K nodesize to ensure the test isn't too slow
-if [ $(_get_page_size) -ne 4096 ]; then
-	_notrun "This test doesn't support non-4K page size yet"
-fi
+_require_btrfs_support_sectorsize 4096
 
 runtime=30
 nr_cpus=$("$here/src/feature" -o)
@@ -55,7 +51,7 @@ $BLKDISCARD_PROG $LOGWRITES_DMDEV > /dev/null 2>&1
 # Use no-holes to avoid warnings of missing file extent items (expected
 # for holes due to mix of buffered and direct IO writes).
 # And use 4K nodesize to bump tree height.
-_log_writes_mkfs -O no-holes -n 4k >> $seqres.full
+_log_writes_mkfs -O no-holes -n 4k -s 4k >> $seqres.full
 _log_writes_mount
 
 $BTRFS_UTIL_PROG subvolume create $SCRATCH_MNT/src > /dev/null
