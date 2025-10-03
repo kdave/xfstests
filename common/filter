@@ -683,5 +683,20 @@ _filter_sysfs_error()
 	sed 's/.*: \(.*\)$/\1/'
 }
 
+# Filter file attributes (aka lsattr/chattr)
+# To filter X:
+# 	... | _filter_file_attributes X
+# Or to filter all except X
+# 	... | _filter_file_attributes ~X
+_filter_file_attributes()
+{
+	if [[ $1 == ~* ]]; then
+		regex=$(echo "[aAcCdDeEFijmNPsStTuxVX]" | tr -d "$1")
+	else
+		regex="$1"
+	fi
+	awk "{ printf \"%s \", gensub(\"$regex\", \"-\", \"g\", \$1) } {print \$2}"
+}
+
 # make sure this script returns success
 /bin/true
