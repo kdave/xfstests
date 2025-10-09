@@ -69,3 +69,30 @@ _check_f2fs_filesystem()
 
     return 0
 }
+
+# check that inject.f2fs supports to inject specific field in specific meta area
+_require_inject_f2fs_command()
+{
+	_require_command "$F2FS_INJECT_PROG" inject.f2fs
+
+	if [ $# -ne 2 ]; then
+		echo "Usage: _require_inject_f2fs_command metaarea member" 1>&2
+		_exit 1
+	fi
+	metaarea=$1
+	member=$2
+
+	case $metaarea in
+	sb|cp|nat|sit)
+		val=0
+		;;
+	ssa|node|dent)
+		;;
+	*)
+		_notrun "unsupport metaarea: $metaarea"
+		;;
+	esac
+
+	$F2FS_INJECT_PROG "--$metaarea" "$val" "-h" | grep "$member:" > /dev/null || \
+		_notrun "--$metaarea --mb $member support is missing"
+}
