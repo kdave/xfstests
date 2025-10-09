@@ -3566,50 +3566,6 @@ _check_generic_filesystem()
     return 0
 }
 
-_check_f2fs_filesystem()
-{
-    local device=$1
-
-    # If type is set, we're mounted
-    local type=`_fs_type $device`
-    local ok=1
-
-    if [ "$type" = "f2fs" ]
-    then
-        # mounted ...
-        local mountpoint=`_umount_or_remount_ro $device`
-    fi
-
-    $F2FS_FSCK_PROG --dry-run $device >$tmp.fsck.f2fs 2>&1
-    if [ $? -ne 0 ];then
-        _log_err "_check_f2fs_filesystem: filesystem on $device is inconsistent"
-        echo "*** fsck.f2fs output ***" >>$seqres.full
-        cat $tmp.fsck.f2fs              >>$seqres.full
-        echo "*** end fsck.f2fs output" >>$seqres.full
-
-    ok=0
-    fi
-    rm -f $tmp.fsck.f2fs
-
-    if [ $ok -eq 0 ]
-    then
-        echo "*** mount output ***"		>>$seqres.full
-        _mount					>>$seqres.full
-        echo "*** end mount output"		>>$seqres.full
-    elif [ "$type" = "f2fs" ]
-    then
-	# was mounted ...
-	_mount_or_remount_rw "$MOUNT_OPTIONS" $device $mountpoint
-	ok=$?
-    fi
-
-    if [ $ok -eq 0 ]; then
-	return 1
-    fi
-
-    return 0
-}
-
 # Filter the knowen errors the UDF Verifier reports.
 _udf_test_known_error_filter()
 {
