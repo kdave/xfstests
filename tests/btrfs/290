@@ -106,15 +106,15 @@ corrupt_reg_to_prealloc() {
 # corrupt a file by punching a hole
 corrupt_punch_hole() {
 	local f=$SCRATCH_MNT/punch
-	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 12288" $f
+	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 192k" $f
 	local ino=$(get_ino $f)
 	# make a new extent in the middle, sync so the writes don't coalesce
 	$XFS_IO_PROG -c sync $SCRATCH_MNT
-	$XFS_IO_PROG -fc "pwrite -q -S 0x59 4096 4096" $f
+	$XFS_IO_PROG -fc "pwrite -q -S 0x59 64k 64k" $f
 	_fsv_enable $f
 	_scratch_unmount
 	# change disk_bytenr to 0, representing a hole
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr --value 0 \
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 65536 -f disk_bytenr --value 0 \
 								    $SCRATCH_DEV
 	_scratch_mount
 	validate $f
@@ -123,14 +123,14 @@ corrupt_punch_hole() {
 # plug hole
 corrupt_plug_hole() {
 	local f=$SCRATCH_MNT/plug
-	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 12288" $f
+	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 192k" $f
 	local ino=$(get_ino $f)
-	$XFS_IO_PROG -fc "falloc 4k 4k" $f
+	$XFS_IO_PROG -fc "falloc 64k 64k" $f
 	_fsv_enable $f
 	_scratch_unmount
 	# change disk_bytenr to some value, plugging the hole
-	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 4096 -f disk_bytenr \
-						   --value 13639680 $SCRATCH_DEV
+	$BTRFS_CORRUPT_BLOCK_PROG -i $ino -x 65536 -f disk_bytenr \
+						   --value 218234880 $SCRATCH_DEV
 	_scratch_mount
 	validate $f
 }
@@ -166,7 +166,7 @@ corrupt_root_hash() {
 # corrupt the Merkle tree data itself
 corrupt_merkle_tree() {
 	local f=$SCRATCH_MNT/merkle
-	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 12288" $f
+	$XFS_IO_PROG -fc "pwrite -q -S 0x58 0 192k" $f
 	local ino=$(get_ino $f)
 	_fsv_enable $f
 	_scratch_unmount
