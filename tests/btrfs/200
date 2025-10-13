@@ -38,14 +38,14 @@ _scratch_mount
 # Create our first test file, which has an extent that is shared only with
 # itself and no other files. We want to verify a full send operation will
 # clone the extent.
-$XFS_IO_PROG -f -c "pwrite -S 0xb1 -b 64K 0 64K" $SCRATCH_MNT/foo \
+$XFS_IO_PROG -f -c "pwrite -S 0xb1 -b 128K 0 128K" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
-$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 64K 64K" $SCRATCH_MNT/foo \
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/foo 0 128K 128K" $SCRATCH_MNT/foo \
 	| _filter_xfs_io
 
 # Create out second test file which initially, for the first send operation,
 # only has a single extent that is not shared.
-$XFS_IO_PROG -f -c "pwrite -S 0xc7 -b 64K 0 64K" $SCRATCH_MNT/bar \
+$XFS_IO_PROG -f -c "pwrite -S 0xc7 -b 128K 0 128K" $SCRATCH_MNT/bar \
 	| _filter_xfs_io
 
 _btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/base
@@ -56,7 +56,7 @@ $BTRFS_UTIL_PROG send -f $send_files_dir/1.snap $SCRATCH_MNT/base 2>&1 \
 # Now clone the existing extent in file bar to itself at a different offset.
 # We want to verify the incremental send operation below will issue a clone
 # operation instead of a write operation.
-$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 0 64K 64K" $SCRATCH_MNT/bar \
+$XFS_IO_PROG -c "reflink $SCRATCH_MNT/bar 0 128K 128K" $SCRATCH_MNT/bar \
 	| _filter_xfs_io
 
 _btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/incr
