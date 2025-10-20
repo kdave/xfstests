@@ -24,15 +24,15 @@ _require_inject_f2fs_command node i_nid
 # remove all mkfs options to avoid layout change of on-disk inode
 export MKFS_OPTIONS=""
 
-foo_path=$SCARTCH_MNT/foo
-bar_path=$SCARTCH_MNT/bar
+foo_path=$SCRATCH_MNT/foo
+bar_path=$SCRATCH_MNT/bar
 
 _scratch_mkfs >> $seqres.full
 _scratch_mount
 
 touch $foo_path
 touch $bar_path
-$XFS_IO_PROG $foo_path -c "pwrite 0 8M"
+$XFS_IO_PROG $foo_path -c "pwrite 0 8M" >> $seqres.full
 sync
 foo_ino=`stat -c '%i' $foo_path`
 bar_ino=`stat -c '%i' $bar_path`
@@ -47,8 +47,6 @@ _scratch_mount
 # otherwise, it will enter a deadloop.
 $XFS_IO_PROG $foo_path -c "fpunch 6984k 4k"
 _scratch_unmount
-
-echo "Silence is golden"
 
 status=0
 exit
