@@ -5001,6 +5001,50 @@ _check_kmemleak()
 	fi
 }
 
+# Current timestamp, in a format that systemd likes
+_systemd_now() {
+	timedatectl show --property=TimeUSec --value
+}
+
+# Do what we need to do to capture core dumps from coredumpctl
+_start_coredumpctl_collection() {
+	command -v coredumpctl &>/dev/null || return
+	command -v timedatectl &>/dev/null || return
+	command -v jq &>/dev/null || return
+
+	sysctl kernel.core_pattern | grep -q systemd-coredump || return
+	COREDUMPCTL_START_TIMESTAMP="$(_systemd_now)"
+}
+
+# Capture core dumps from coredumpctl.
+#
+# coredumpctl list only supports json output as a machine-readable format.  The
+# human-readable format intermingles spaces from the timestamp with actual
+# column separators, so we cannot parse that sanely.  The json output is an
+# array of:
+#        {
+#                "time" : 1749744847150926,
+#                "pid" : 2297,
+#                "uid" : 0,
+#                "gid" : 0,
+#                "sig" : 6,
+#                "corefile" : "present",
+#                "exe" : "/run/fstests/e2fsprogs/fuse2fs",
+#                "size" : 47245
+#        },
+# So we use jq to filter out lost corefiles, then print the pid and exe
+# separated by a pipe and hope that nobody ever puts a pipe in an executable
+# name.
+_finish_coredumpctl_collection() {
+	test -n "$COREDUMPCTL_START_TIMESTAMP" || return
+
+	coredumpctl list --since="$COREDUMPCTL_START_TIMESTAMP" --json=short 2>/dev/null | \
+	jq --raw-output 'map(select(.corefile == "present")) | map("\(.pid)|\(.exe)") | .[]' | while IFS='|' read pid exe; do
+		test -e "core.$pid" || coredumpctl dump --output="core.$pid" "$pid" "$exe" &>> $seqres.full
+	done
+	unset COREDUMPCTL_START_TIMESTAMP
+}
+
 # don't check dmesg log after test
 _disable_dmesg_check()
 {
