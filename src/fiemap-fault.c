@@ -55,17 +55,29 @@ int main(int argc, char *argv[])
 				  sizeof(struct fiemap_extent);
 
 	while (last < sz) {
+		size_t old_start;
 		int i;
 
-		fiemap->fm_start = last;
+		fiemap->fm_start = old_start = last;
 		fiemap->fm_length = sz - last;
 
 		ret = ioctl(fd, FS_IOC_FIEMAP, (unsigned long)fiemap);
 		if (ret < 0)
 			err(1, "fiemap failed %d", errno);
+		if (fiemap->fm_mapped_extents == 0) {
+			fprintf(stderr, "%s: fiemap returned 0 extents!\n",
+				argv[0]);
+			return 1;
+		}
 		for (i = 0; i < fiemap->fm_mapped_extents; i++)
 		       last = fiemap->fm_extents[i].fe_logical +
 			       fiemap->fm_extents[i].fe_length;
+
+		if (last <= old_start) {
+			fprintf(stderr, "%s: fiemap made no progress!\n",
+				argv[0]);
+			return 1;
+		}
 	}
 
 	munmap(buf, sz);
