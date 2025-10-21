@@ -3164,7 +3164,6 @@ main(int argc, char **argv)
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'a':
-			prt("main(): Atomic writes disabled\n");
 			do_atomic_writes = 0;
 			break;
 		case 'b':
