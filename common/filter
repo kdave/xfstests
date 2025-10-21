@@ -683,19 +683,36 @@ _filter_sysfs_error()
 	sed 's/.*: \(.*\)$/\1/'
 }
 
-# Filter file attributes (aka lsattr/chattr)
-# To filter X:
-# 	... | _filter_file_attributes X
-# Or to filter all except X
-# 	... | _filter_file_attributes ~X
-_filter_file_attributes()
+# General filter of file attribute characters, do not call directly
+__filter_file_attributes()
 {
+	local filter="$1"
+	shift
+
 	if [[ $1 == ~* ]]; then
-		regex=$(echo "[aAcCdDeEFijmNPsStTuxVX]" | tr -d "$1")
+		regex=$(echo "[${filter}]" | tr -d "$1")
 	else
-		regex="$1"
+		regex="[$1]"
 	fi
 	awk "{ printf \"%s \", gensub(\"$regex\", \"-\", \"g\", \$1) } {print \$2}"
+}
+
+# Filter src/file_attr.c file attribute characters, which for now match the
+# xfs_io lsattr file attribute characters.
+#
+# WARNING: Be careful, this does not filter ext4 lsattr characters!
+#
+# To filter X:
+# 	... | _filter_vfs_file_attributes X
+# To filter X and Y:
+# 	... | _filter_vfs_file_attributes XY
+# Or to filter all except X
+# 	... | _filter_vfs_file_attributes ~X
+# Or to filter all except X and Y
+# 	... | _filter_vfs_file_attributes ~XY
+_filter_vfs_file_attributes()
+{
+	__filter_file_attributes aACdeEfinpPrsStxX "$@"
 }
 
 # make sure this script returns success
