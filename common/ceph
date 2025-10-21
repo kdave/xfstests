@@ -38,3 +38,80 @@ _ceph_get_client_id()
 {
 	$GETFATTR_PROG --only-values -n "ceph.client_id" $TEST_DIR 2>/dev/null
 }
+
+# Get the snapshot directory name from mount options
+# Defaults to ".snap" if snapdirname option is not set
+_ceph_get_snapdirname()
+{
+	local mnt_point=$1
+	local snapdirname
+
+	# Extract snapdirname from mount options
+	snapdirname=$(findmnt -n -o OPTIONS "$mnt_point" | grep -o 'snapdirname=[^,]*' | cut -d'=' -f2)
+
+	# Default to .snap if not set
+	if [ -z "$snapdirname" ]; then
+		echo ".snap"
+	else
+		echo "$snapdirname"
+	fi
+}
+
+# Create a CephFS snapshot
+# _ceph_create_snapshot <directory_path> <snapshot_name>
+# Creates a snapshot under <directory_path>/.snap/<snapshot_name>
+# or <directory_path>/<custom_snapdir>/<snapshot_name> if snapdirname is set
+_ceph_create_snapshot()
+{
+	local dir_path=$1
+	local snap_name=$2
+	local snapdirname
+	local snapdir
+	local mnt_point
+
+	if [ -z "$dir_path" ] || [ -z "$snap_name" ]; then
+		echo "Usage: _ceph_create_snapshot <directory_path> <snapshot_name>"
+		return 1
+	fi
+
+	# Find the mount point for this directory
+	mnt_point=$(df -P "$dir_path" | tail -1 | awk '{print $NF}')
+	snapdirname=$(_ceph_get_snapdirname "$mnt_point")
+	snapdir="$dir_path/$snapdirname/$snap_name"
+
+	mkdir "$snapdir" || _fail "Failed to create snapshot $snapdir"
+	echo "$snapdir"
+}
+
+# Remove a CephFS snapshot
+# _ceph_remove_snapshot <directory_path> <snapshot_name>
+_ceph_remove_snapshot()
+{
+	local dir_path=$1
+	local snap_name=$2
+	local snapdirname
+	local snapdir
+	local mnt_point
+
+	if [ -z "$dir_path" ] || [ -z "$snap_name" ]; then
+		echo "Usage: _ceph_remove_snapshot <directory_path> <snapshot_name>"
+		return 1
+	fi
+
+	# Find the mount point for this directory
+	mnt_point=$(df -P "$dir_path" | tail -1 | awk '{print $NF}')
+	snapdirname=$(_ceph_get_snapdirname "$mnt_point")
+	snapdir="$dir_path/$snapdirname/$snap_name"
+
+	rmdir "$snapdir" 2>/dev/null
+}
+
+# this test requires ceph snapshot support
+_require_ceph_snapshot()
+{
+	local snapdirname=$(_ceph_get_snapdirname "$TEST_DIR")
+	local test_snapdir="$TEST_DIR/$snapdirname/test_snap_$$"
+	mkdir "$test_snapdir" 2>/dev/null || \
+		_notrun "Ceph snapshots not supported (requires fs flag 'allow_snaps' and client auth capability 'snap')"
+	rmdir "$test_snapdir"
+}

@@ -1,0 +1,63 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025 Synology All Rights Reserved.
+#
+# FS QA Test No. 006
+#
+# Test that snapshot data remains intact after punch hole operations
+# on the original file.
+#
+. ./common/preamble
+_begin_fstest auto quick snapshot
+
+. common/ceph
+
+# Override the default cleanup function
+_cleanup()
+{
+	_ceph_remove_snapshot $workdir snap1
+	cd /
+	rm -r -f $tmp.*
+}
+
+_require_test
+_require_xfs_io_command "fpunch"
+_require_ceph_snapshot
+_exclude_test_mount_option "test_dummy_encryption"
+
+# TODO: commit is not merged yet. Update with final commit SHA once merged.
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"ceph: fix snapshot context missing in ceph_zero_partial_object"
+
+workdir=$TEST_DIR/test-$seq
+_ceph_remove_snapshot $workdir snap1
+rm -rf $workdir
+mkdir $workdir
+
+$XFS_IO_PROG -f -c "pwrite -S 0xab 0 1048576" $workdir/foo > /dev/null
+
+snapdir=$(_ceph_create_snapshot $workdir snap1)
+
+original_md5=$(md5sum $snapdir/foo | cut -d' ' -f1)
+
+$XFS_IO_PROG -c "fpunch 0 65536" $workdir/foo
+$XFS_IO_PROG -c "fpunch 131072 65536" $workdir/foo
+$XFS_IO_PROG -c "fpunch 262144 65536" $workdir/foo
+$XFS_IO_PROG -c "fpunch 393216 65536" $workdir/foo
+
+# Make sure we don't read from cache
+echo 3 > /proc/sys/vm/drop_caches
+
+snapshot_md5=$(md5sum $snapdir/foo | cut -d' ' -f1)
+
+if [ "$original_md5" != "$snapshot_md5" ]; then
+	echo "FAIL: Snapshot data changed after punch hole operations"
+	echo "Original md5sum: $original_md5"
+	echo "Snapshot md5sum: $snapshot_md5"
+fi
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
