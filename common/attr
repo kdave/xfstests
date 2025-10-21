@@ -241,7 +241,11 @@ _require_noattr2()
 		|| _fail "_try_scratch_mkfs_xfs failed on $SCRATCH_DEV"
 	_try_scratch_mount -o noattr2 > /dev/null 2>&1 \
 		|| _notrun "noattr2 mount option not supported on $SCRATCH_DEV"
+	grep -qw noattr2 <(findmnt -rncv -M "$SCRATCH_MNT" -o OPTIONS)
+	local res=$?
 	_scratch_unmount
+	test $res -eq 0 \
+		|| _notrun "noattr2 mount option no longer functional"
 }
 
 # getfattr -R returns info in readdir order which varies from fs to fs.
