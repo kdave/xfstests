@@ -619,7 +619,7 @@ _scratch_shutdown_and_syncfs()
 # requirement down to _require_scratch_shutdown.
 _require_xfs_io_shutdown()
 {
-	if [ _scratch_shutdown_handle != $SCRATCH_MNT ]; then
+	if [ $(_scratch_shutdown_handle) != $SCRATCH_MNT ]; then
 		# Most likely overlayfs
 		_notrun "xfs_io -c shutdown not supported on $FSTYP"
 	fi
@@ -3072,6 +3072,11 @@ _require_xfs_io_command()
 			_notrun "xfs_io $command $param kernel support is missing"
 		rm -f $testfile.1
 		param_checked="$param"
+		;;
+	"shutdown")
+		testio=$($XFS_IO_PROG -f -x -c "$command $param" $testfile 2>&1)
+		param_checked="$param"
+		_test_cycle_mount
 		;;
 	"utimes" )
 		testio=`$XFS_IO_PROG -f -c "utimes 0 0 0 0" $testfile 2>&1`
