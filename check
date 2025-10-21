@@ -669,6 +669,10 @@ _stash_test_status() {
 	esac
 }
 
+# Figure out the maximum test name length, e.g. "generic/1212" => 12
+max_test_namelen=$(ls "$SRC_DIR"/*/* | \
+	awk 'BEGIN {x = 0} /\/[0-9]*$/ {l = length($0) - 6; if (l > x) x = l;} END {print x}')
+
 # Can we run systemd scopes?
 HAVE_SYSTEMD_SCOPES=
 systemctl reset-failed "fstests-check" &>/dev/null
@@ -880,7 +884,9 @@ function run_section()
 					     "" &> /dev/null
 		fi
 
-		echo -n "$seqnum"
+		# Print test name and leave the cursor at a consistent column
+		# number for later reporting of test outcome.
+		printf "%-*s" "$max_test_namelen" "$seqnum"
 
 		if $showme; then
 			if _expunge_test $seqnum; then
