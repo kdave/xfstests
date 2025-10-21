@@ -3030,16 +3030,24 @@ _require_xfs_io_command()
 	"pwrite")
 		# -N (RWF_NOWAIT) only works with direct vectored I/O writes
 		local pwrite_opts=" "
+		local write_size="4k"
 		if [ "$param" == "-N" ]; then
 			opts+=" -d"
-			pwrite_opts+="-V 1 -b 4k"
+			pwrite_opts+="-V 1 -b $write_size"
 		fi
 		if [ "$param" == "-A" ]; then
 			opts+=" -d"
-			pwrite_opts+="-V 1 -b 4k"
+			# try to write the minimum supported atomic write size
+			write_size="$($XFS_IO_PROG -f -c "statx -r -m $STATX_WRITE_ATOMIC" $testfile 2>/dev/null | \
+				grep atomic_write_unit_min | \
+				grep -o '[0-9]\+')"
+			if [ -z "$write_size" ] || [ "$write_size" = "0" ]; then
+				write_size="0 --not-supported"
+			fi
+			pwrite_opts+="-V 1 -b $write_size"
 		fi
 		testio=`$XFS_IO_PROG -f $opts -c \
-		        "pwrite $pwrite_opts $param 0 4k" $testfile 2>&1`
+		        "pwrite $pwrite_opts $param 0 $write_size" $testfile 2>&1`
 		param_checked="$pwrite_opts $param"
 		;;
 	"scrub"|"repair")
