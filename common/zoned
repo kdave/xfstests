@@ -45,3 +45,56 @@ _require_zloop()
 	    _notrun "This test requires zoned loopback device support"
     fi
 }
+
+_find_next_zloop()
+{
+    local id=0
+
+    while true; do
+        if [[ ! -b "/dev/zloop$id" ]]; then
+            break
+        fi
+        id=$((id + 1))
+    done
+
+    echo "$id"
+}
+
+# Create a zloop device
+# usage: _create_zloop <base_dir> <zone_size> <nr_conv_zones>
+_create_zloop()
+{
+    local id="$(_find_next_zloop)"
+
+    if [ -n "$1" ]; then
+        local zloop_base="$1"
+    else
+        local zloop_base="/var/local/zloop"
+    fi
+
+    if [ -n "$2" ]; then
+        local zone_size=",zone_size_mb=$2"
+    fi
+
+    if [ -n "$3" ]; then
+        local conv_zones=",conv_zones=$3"
+    fi
+
+    mkdir -p "$zloop_base/$id"
+
+    local zloop_args="add id=$id,base_dir=$zloop_base$zone_size$conv_zones"
+
+    echo "$zloop_args" > /dev/zloop-control || \
+        _fail "cannot create zloop device"
+
+    echo "/dev/zloop$id"
+}
+
+_destroy_zloop() {
+    local zloop="$1"
+
+    test -b "$zloop" || return
+    local id=$(echo $zloop | grep -oE '[0-9]+$')
+
+    echo "remove id=$id" > /dev/zloop-control
+}
