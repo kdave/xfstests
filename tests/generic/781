@@ -1,0 +1,44 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Wesgtern Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test No. 781
+#
+# Smoke test for FSes with ZBD support on zloop
+#
+. ./common/preamble
+. ./common/zoned
+
+_begin_fstest auto zone quick
+
+_cleanup()
+{
+	[ -n "$mnt" ] && _unmount $mnt 2>/dev/null
+	_destroy_zloop $zloop
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Modify as appropriate.
+_require_scratch_size $((16 * 1024 * 1024)) #kB
+_require_block_device $SCRATCH_DEV
+_require_zloop
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+mnt="$SCRATCH_MNT/mnt"
+zloopdir="$SCRATCH_MNT/zloop"
+
+mkdir -p $mnt
+zloop=$(_create_zloop $zloopdir 256 2)
+
+_try_mkfs_dev $zloop >> $seqres.full 2>&1 ||\
+	_notrun "cannot mkfs zoned filesystem"
+_mount $zloop $mnt
+
+$FSX_PROG -q -N 20000 $FSX_AVOID "$mnt/fsx" >> $seqres.full
+
+echo Silence is golden
+# success, all done
+_exit 0
