@@ -69,6 +69,11 @@ induce_node_split() {
 	while [[ "$(stat --printf="%s" $testdir)" == "$dir_size" ]]; do
 		file_num=$(($file_num + 1))
 		touch $testdir/test"$(printf "%04d" $file_num)"
+		local ret=$?
+		if [[ $ret -ne 0 ]]
+		then
+			_fail "ERROR induce_node_split(): $ret"
+		fi
 	done
 	_scratch_unmount >> $seqres.full 2>&1
 }
@@ -81,7 +86,7 @@ test_file1="test0001"
 test_file2="test0002"
 test_file3="test0003"
 
-_scratch_mkfs_sized $((128 * 1024 * 1024)) >> $seqres.full 2>&1
+_scratch_mkfs_sized $((1 * 1024 * 1024 * 1024)) >> $seqres.full 2>&1
 
 # create scratch dir for testing
 # create some files with no name a substr of another name so we can grep later
