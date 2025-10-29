@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test No. 782
+#
+# Test that if we add a new directory to the root directory, change a file in
+# the root directory, fsync the file, add a hard link for the file inside the
+# new directory and then fsync the root directory, after a power failure the
+# root directory has the entry for the new directory.
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+
+_require_scratch
+_require_dm_target flakey
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: do not update last_log_commit when logging inode due to a new name"
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+# Create our test file.
+touch $SCRATCH_MNT/foo
+
+# Make sure it's durably persisted.
+_scratch_sync
+
+# Create a test directory in the root dir.
+mkdir $SCRATCH_MNT/dir
+
+# Write some data to the file and fsync it.
+$XFS_IO_PROG -c "pwrite -S 0xab 0 64K" \
+	     -c "fsync" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Add a hard link for our file inside the test directory.
+# On btrfs this causes updating the file's inode and both parent
+# directories in the log tree (in memory only).
+ln $SCRATCH_MNT/foo $SCRATCH_MNT/dir/bar
+
+# Fsync the root directory.
+# We expect it to persist the entry for directory "dir".
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/
+
+# Simulate a power failure and then mount again the filesystem to replay the
+# journal/log.
+_flakey_drop_and_remount
+
+# The directory "dir" should be present as well as file "foo".
+# Filter the 'lost+found' that only exists in some filesystems like ext4.
+echo "Root content:"
+ls -1 $SCRATCH_MNT | grep -v 'lost+found'
+
+# Also check file "foo" has the expected data.
+echo "File data:"
+_hexdump $SCRATCH_MNT/foo
+
+_unmount_flakey
+
+_exit 0
