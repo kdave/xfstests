@@ -1,0 +1,93 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 338
+#
+# Test that an incremental send works after we removed directories that have
+# large number of hardlinks for the same file (so that we have extrefs).
+#
+. ./common/preamble
+_begin_fstest auto quick send
+
+_cleanup()
+{
+	cd /
+	rm -fr $tmp.*
+	rm -fr $send_files_dir
+}
+
+_require_test
+_require_scratch
+_require_fssum
+
+_fixed_by_kernel_commit 1fabe43b4e1a \
+	"btrfs: send: fix duplicated rmdir operations when using extrefs"
+
+send_files_dir=$TEST_DIR/btrfs-test-$seq
+
+rm -fr $send_files_dir
+mkdir $send_files_dir
+
+first_stream="$send_files_dir/1.send"
+second_stream="$send_files_dir/2.send"
+first_fssum="$send_files_dir/snap1.fssum"
+second_fssum="$send_files_dir/snap2.fssum"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "first mkfs failed"
+_scratch_mount
+
+# Create two directories which will have many hardlinks for the same file, a
+# large number that triggers the use of extrefs. This way we will get many
+# extref items in the subvolume tree, with a very high likelyhood that not
+# all hardlinks for directory "a" are consecutive in the tree, that they are
+# interspersed with extref items for hardlinks to directory "b".
+#
+# Example:
+#
+#        item 0 key (259 INODE_EXTREF 2309449) itemoff 16257 itemsize 26
+#                index 6925 parent 257 namelen 8 name: foo.6923
+#        item 1 key (259 INODE_EXTREF 2311350) itemoff 16231 itemsize 26
+#                index 6588 parent 258 namelen 8 name: foo.6587
+#        item 2 key (259 INODE_EXTREF 2457395) itemoff 16205 itemsize 26
+#                index 6611 parent 257 namelen 8 name: foo.6609
+#        (...)
+#
+# Refer to the kernel commit's changelog for more details.
+mkdir $SCRATCH_MNT/a
+mkdir $SCRATCH_MNT/b
+
+touch $SCRATCH_MNT/a/foo
+for ((i = 1; i <= 1000; i++)); do
+	ln $SCRATCH_MNT/a/foo $SCRATCH_MNT/a/foo.$i
+	ln $SCRATCH_MNT/a/foo $SCRATCH_MNT/b/foo.$i
+done
+
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap1
+
+# Now delete the directories and all the links inside them.
+rm -fr $SCRATCH_MNT/a
+rm -fr $SCRATCH_MNT/b
+
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap2
+
+_btrfs send -f $first_stream $SCRATCH_MNT/snap1
+_btrfs send -f $second_stream -p $SCRATCH_MNT/snap1 $SCRATCH_MNT/snap2
+
+$FSSUM_PROG -A -f -w $first_fssum $SCRATCH_MNT/snap1
+$FSSUM_PROG -A -f -w $second_fssum -x $SCRATCH_MNT/snap2/snap1 \
+	$SCRATCH_MNT/snap2
+
+# Create a new fs and apply both send streams.
+_scratch_unmount
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "second mkfs failed"
+_scratch_mount
+
+_btrfs receive -f $first_stream $SCRATCH_MNT
+_btrfs receive -f $second_stream $SCRATCH_MNT
+
+$FSSUM_PROG -r $first_fssum $SCRATCH_MNT/snap1
+$FSSUM_PROG -r $second_fssum $SCRATCH_MNT/snap2
+
+# success, all done
+_exit 0
