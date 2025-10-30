@@ -6032,6 +6032,38 @@ __require_fio_version() {
 	esac
 }
 
+# Require filesystem to support file_getattr()/file_setattr() syscalls on
+# regular files
+_require_file_attr()
+{
+	local test_file="$TEST_DIR/foo"
+	touch $test_file
+
+	$here/src/file_attr --set --set-nodump $TEST_DIR ./foo &>/dev/null
+	rc=$?
+	rm -f "$test_file"
+
+	if [ $rc -ne 0 ]; then
+		_notrun "file_getattr not supported for regular files on $FSTYP"
+	fi
+}
+
+# Require filesystem to support file_getattr()/file_setattr() syscalls on
+# special files (chardev, fifo...)
+_require_file_attr_special()
+{
+	local test_file="$TEST_DIR/fifo"
+	mkfifo $test_file
+
+	$here/src/file_attr --set --set-nodump $TEST_DIR ./fifo &>/dev/null
+	rc=$?
+	rm -f "$test_file"
+
+	if [ $rc -ne 0 ]; then
+		_notrun "file_getattr not supported for special files on $FSTYP"
+	fi
+}
+
 ################################################################################
 # make sure this script returns success
 /bin/true
