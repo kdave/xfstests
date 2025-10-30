@@ -1,0 +1,86 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Red Hat.  All Rights Reserved.
+#
+# FS QA Test No. 780
+#
+# Test file_getattr() and file_setattr() syscalls on special files (fifo,
+# socket, chardev...)
+#
+. ./common/preamble
+_begin_fstest quick
+
+# Import common functions.
+. ./common/filter
+
+# Modify as appropriate.
+_require_scratch
+_require_test_program "af_unix"
+_require_test_program "file_attr"
+_require_symlinks
+_require_mknod
+_require_file_attr
+_require_file_attr_special
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+file_attr () {
+	$here/src/file_attr $*
+}
+
+create_af_unix () {
+	$here/src/af_unix $* || echo af_unix failed
+}
+
+projectdir=$SCRATCH_MNT/prj
+
+# Create normal files and special files
+mkdir $projectdir
+mkfifo $projectdir/fifo
+mknod $projectdir/chardev c 1 1
+mknod $projectdir/blockdev b 1 1
+create_af_unix $projectdir/socket
+touch $projectdir/foo
+ln -s $projectdir/foo $projectdir/symlink
+touch $projectdir/bar
+ln -s $projectdir/bar $projectdir/broken-symlink
+rm -f $projectdir/bar
+
+echo "Initial attributes state"
+file_attr --get $projectdir | _filter_scratch | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./fifo | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./chardev | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./blockdev | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./socket | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./symlink | _filter_vfs_file_attributes ~d
+
+echo "Set FS_XFLAG_NODUMP (d)"
+file_attr --set --set-nodump $projectdir
+file_attr --set --set-nodump $projectdir ./fifo
+file_attr --set --set-nodump $projectdir ./chardev
+file_attr --set --set-nodump $projectdir ./blockdev
+file_attr --set --set-nodump $projectdir ./socket
+file_attr --set --set-nodump $projectdir ./symlink
+
+echo "Read attributes"
+file_attr --get $projectdir | _filter_scratch | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./fifo | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./chardev | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./blockdev | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./socket | _filter_vfs_file_attributes ~d
+file_attr --get $projectdir ./symlink | _filter_vfs_file_attributes ~d
+
+echo "Set attribute on broken link with AT_SYMLINK_NOFOLLOW"
+file_attr --set --set-nodump $projectdir ./broken-symlink
+file_attr --get $projectdir ./broken-symlink
+
+file_attr --set --no-follow --set-nodump $projectdir ./broken-symlink
+file_attr --get --no-follow $projectdir ./broken-symlink | \
+	_filter_vfs_file_attributes ~d
+
+# optional stuff if your test has verbose output to help resolve problems
+#echo
+#echo "If failure, check $seqres.full (this) and $seqres.full.ok (reference)"
+
+# success, all done
+_exit 0
