@@ -1,0 +1,49 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Chao Yu <chao@kernel.org>
+#
+# FS QA Test No. f2fs/023
+#
+# This testcase tries to inject fault into inode.i_inline_xattr_size,
+# and check whether sanity check of f2fs can handle fault correctly.
+#
+
+. ./common/preamble
+. ./common/attr
+. ./common/filter
+_begin_fstest auto quick rw attr
+
+_fixed_by_kernel_commit 5c1768b67250 \
+        "f2fs: fix to do sanity check correctly on i_inline_xattr_size"
+
+_require_attrs
+_require_scratch_nocheck
+_require_inject_f2fs_command node i_inline
+_require_inject_f2fs_command node i_inline_xattr_size
+
+testfile=$SCRATCH_MNT/testfile
+
+# remove all mkfs options to avoid layout change of on-disk inode
+export MKFS_OPTIONS=""
+
+_scratch_mkfs "-O extra_attr,flexible_inline_xattr" >> $seqres.full || _fail "mkfs failed"
+_scratch_mount "-o inline_xattr_size=512" >>$seqres.full 2>&1
+touch $testfile
+_scratch_unmount
+
+# inject .i_inline field: clear F2FS_EXTRA_ATTR bit
+output=`$F2FS_INJECT_PROG --node --mb i_inline --nid 4 --val 0x1 $SCRATCH_DEV`
+echo "$output" >> $seqres.full
+echo "$output" | grep "unknown or unsupported member" && _fail "i_inline is unsupported"
+
+# inject .i_inline_xattr_size field from 512 to 2048
+output=`$F2FS_INJECT_PROG --node --mb i_inline_xattr_size --nid 4 --val 2048 $SCRATCH_DEV`
+echo "$output" >> $seqres.full
+echo "$output" | grep "unknown or unsupported member" && _fail "i_inline_xattr_size is unsupported"
+
+_scratch_mount
+
+$GETFATTR_PROG -n user.test "$testfile" 2>&1 | _filter_scratch
+
+status=0
+exit
