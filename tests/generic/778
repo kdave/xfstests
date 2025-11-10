@@ -21,6 +21,9 @@ _scratch_mount >> $seqres.full
 testfile=$SCRATCH_MNT/testfile
 touch $testfile
 
+awloop_runfile=$tmp.awloop_running
+awloop_killfile=$tmp.awloop_kill
+
 awu_max=$(_get_atomic_write_unit_max $testfile)
 blksz=$(_get_block_size $SCRATCH_MNT)
 echo "Awu max: $awu_max" >> $seqres.full
@@ -31,25 +34,48 @@ num_blocks=$((awu_max / blksz))
 filesize=$(( 10 * 1024 * 1024 * 1024 ))
 
 _cleanup() {
-	[ -n "$awloop_pid" ] && kill $awloop_pid &> /dev/null
-	wait
+	kill_awloop
 }
 
 atomic_write_loop() {
 	local off=0
 	local size=$awu_max
+
+	rm -f $awloop_killfile
+	touch $awloop_runfile
+
 	for ((i=0; i<$((filesize / $size )); i++)); do
 		# Due to sudden shutdown this can produce errors so just
 		# redirect them to seqres.full
 		$XFS_IO_PROG -c "open -fsd $testfile" -c "pwrite -S 0x61 -DA -V1 -b $size $off $size" >> /dev/null 2>>$seqres.full
+		if [ ! -w "$testfile" ] || [ -e "$awloop_killfile" ]; then
+			break
+		fi
 		echo "Written to offset: $((off + size))" >> $tmp.aw
 		off=$((off + size))
+	done
+
+	rm -f $awloop_runfile
+}
+
+# Use sentinel files to control the loop execution because we don't know the
+# pid of the xfs_io process and so we can't wait for it directly.  A bare
+# wait command won't wait for a D-state xfs_io process so we can't do that
+# either.  We can't use killall because check-parallel, and we can't pkill
+# because the pid namespacing code was removed withotu fixing check-parallel.
+kill_awloop() {
+	test -e $awloop_runfile || return
+
+	touch $awloop_killfile
+
+	for ((i=0;i<300;i++)); do
+		test -e $awloop_runfile || break
+		sleep 0.1
 	done
 }
 
 start_atomic_write_and_shutdown() {
 	atomic_write_loop &
-	awloop_pid=$!
 	local max_loops=100
 
 	local i=0
@@ -70,9 +96,7 @@ start_atomic_write_and_shutdown() {
 	echo "# Shutting down filesystem while write is running" >> $seqres.full
 	_scratch_shutdown
 
-	kill $awloop_pid 2>/dev/null  # the process might have finished already
-	wait $awloop_pid
-	unset $awloop_pid
+	kill_awloop
 }
 
 # This test has the following flow:
