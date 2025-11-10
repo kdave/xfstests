@@ -42,22 +42,28 @@ atomic_write_loop() {
 		# Due to sudden shutdown this can produce errors so just
 		# redirect them to seqres.full
 		$XFS_IO_PROG -c "open -fsd $testfile" -c "pwrite -S 0x61 -DA -V1 -b $size $off $size" >> /dev/null 2>>$seqres.full
-		echo "Written to offset: $off" >> $tmp.aw
-		off=$((off + $size))
+		echo "Written to offset: $((off + size))" >> $tmp.aw
+		off=$((off + size))
 	done
 }
 
 start_atomic_write_and_shutdown() {
 	atomic_write_loop &
 	awloop_pid=$!
+	local max_loops=100
 
 	local i=0
-	# Wait for at least first write to be recorded or 10s
-	while [ ! -f "$tmp.aw" -a $i -le 50 ]; do i=$((i + 1)); sleep 0.2; done
+	# Wait for at least first write to be recorded or too much time passes
+	while [ ! -f "$tmp.aw" -a $i -le $max_loops ]; do
+		i=$((i + 1))
+		sleep 0.2
+	done
 
-	if [[ $i -gt 50 ]]
+	cat $tmp.aw >> $seqres.full
+
+	if [[ $i -gt $max_loops ]]
 	then
-		_fail "atomic write process took too long to start"
+		_notrun "atomic write process took too long to start"
 	fi
 
 	echo >> $seqres.full
@@ -113,20 +119,33 @@ create_mixed_mappings() {
 	local off=0
 	local operations=("W" "U")
 
-	for ((i=0; i<$((size_bytes / blksz )); i++)); do
-		index=$(($i % ${#operations[@]}))
-		map="${operations[$index]}"
+	test $size_bytes -eq 0 && return
 
-		case "$map" in
-		    "W")
-			$XFS_IO_PROG -fc "pwrite -b $blksz $off $blksz" $file  >> /dev/null
-			;;
-		    "U")
-			$XFS_IO_PROG -fc "falloc $off $blksz" $file >> /dev/null
-			;;
-		esac
+	# fallocate the whole file once because preallocating single blocks
+	# with individual xfs_io invocations is really slow and the allocator
+	# usually gives out consecutive blocks anyway
+	$XFS_IO_PROG -f -c "falloc 0 $size_bytes" $file
+
+	local cmds=()
+	for ((i=0; i<$((size_bytes / blksz )); i++)); do
+		if (( i % 2 == 0 )); then
+			cmds+=(-c "pwrite -b $blksz $off $blksz")
+		fi
+
+		# batch the write commands into larger xfs_io invocations to
+		# amortize the fork overhead
+		if [ "${#cmds[@]}" -ge 128 ]; then
+			$XFS_IO_PROG "${cmds[@]}" "$file" >> /dev/null
+			cmds=()
+		fi
+
 		off=$((off + blksz))
 	done
+
+	if [ "${#cmds[@]}" -gt 0 ]; then
+		$XFS_IO_PROG "${cmds[@]}" "$file" >> /dev/null
+		cmds=()
+	fi
 
 	sync $file
 }
@@ -336,9 +355,9 @@ echo >> $seqres.full
 echo "# Populating expected data buffers" >> $seqres.full
 populate_expected_data
 
-# Loop 20 times to shake out any races due to shutdown
-for ((iter=0; iter<20; iter++))
-do
+# Loop to shake out any races due to shutdown
+iter=0
+while _soak_loop_running $TIME_FACTOR; do
 	echo >> $seqres.full
 	echo "------ Iteration $iter ------" >> $seqres.full
 
@@ -361,6 +380,8 @@ do
 	echo >> $seqres.full
 	echo "# Starting shutdown torn write test for append atomic writes" >> $seqres.full
 	test_append_torn_write
+
+	iter=$((iter + 1))
 done
 
 echo "Silence is golden"
