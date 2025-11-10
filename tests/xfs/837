@@ -8,6 +8,7 @@
 # Check out various mount/remount/unmount scenarious on a read-only rtdev
 # Based on generic/050
 #
+seqfull=$0
 . ./common/preamble
 _begin_fstest mount auto quick
 
@@ -36,6 +37,17 @@ _register_cleanup "_cleanup_setrw"
 
 _scratch_mkfs "-d rtinherit" > /dev/null 2>&1
 
+# Select appropriate output file
+features=""
+if ! _xfs_has_feature "$SCRATCH_DEV" metadir && echo "$MOUNT_OPTIONS" | grep -q quota ; then
+	# Mounting with quota mount options on a non-metadir fs requires a
+	# writable fs because the kernel requires write access even if the
+	# mount options match the superblock qflags.  This means we expect to
+	# fail the ro blockdev test with with EPERM.
+	features="oldquota"
+fi
+_link_out_file "$features"
+
 #
 # Mark the rt device read-only.
 #
@@ -46,19 +58,19 @@ blockdev --setro $SCRATCH_RTDEV
 # Mount it and make sure it can't be written to.
 #
 echo "mounting read-only rt block device:"
-_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
+_try_scratch_mount 2>&1 | _filter_ro_mount | _filter_scratch
 if [ "${PIPESTATUS[0]}" -eq 0 ]; then
 	echo "writing to file on read-only filesystem:"
 	dd if=/dev/zero of=$SCRATCH_MNT/foo bs=1M count=1 oflag=direct 2>&1 | _filter_scratch
+
+	echo "remounting read-write:"
+	_scratch_remount rw 2>&1 | _filter_scratch | _filter_ro_mount
+
+	echo "unmounting read-only filesystem"
+	_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 else
-	_fail "failed to mount"
+	echo "failed to mount"
 fi
-
-echo "remounting read-write:"
-_scratch_remount rw 2>&1 | _filter_scratch | _filter_ro_mount
-
-echo "unmounting read-only filesystem"
-_scratch_unmount 2>&1 | _filter_scratch | _filter_ending_dot
 
 # success, all done
 echo "*** done"
