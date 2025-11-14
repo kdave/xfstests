@@ -1,0 +1,242 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2025 CTERA Networks. All Rights Reserved.
+#
+# FS QA Test No. 783
+#
+# Test overlayfs error cases with casefold enabled layers
+#
+# Overalyfs did not allow mounting layers with casefold capable fs
+# until kernel v6.17 and with casefold enabled until kernel v6.18.
+# Since kernel v6.17, overalyfs allows the mount, as long as casefolding
+# is disabled on all directories.
+# Since kernel v6.18, overalyfs allows the mount, as long as casefolding
+# is consistent on all directories and encoding is consistent on all layers.
+#
+. ./common/preamble
+_begin_fstest auto quick mount casefold
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_unmount $merge 2>/dev/null
+	_unmount $MNT1
+	_unmount $MNT2
+	rm -r -f $tmp.*
+}
+
+
+# Import common functions.
+. ./common/filter
+. ./common/casefold
+
+_exclude_fs overlay
+_require_extra_fs overlay
+
+_require_scratch_casefold
+
+# Create casefold capable base fs
+_scratch_mkfs_casefold >>$seqres.full 2>&1
+_scratch_mount_casefold
+
+# Create lowerdir, upperdir and workdir without casefold enabled
+lowerdir="$SCRATCH_MNT/ovl-lower"
+upperdir="$SCRATCH_MNT/ovl-upper"
+workdir="$SCRATCH_MNT/ovl-work"
+merge="$SCRATCH_MNT/ovl-merge"
+
+mount_casefold_version()
+{
+	option="casefold=$1"
+	_mount -t tmpfs -o $option tmpfs $2
+}
+
+mount_overlay()
+{
+	local lowerdirs=$1
+
+	_mount -t overlay overlay $merge \
+		-o lowerdir=$lowerdirs,upperdir=$upperdir,workdir=$workdir
+}
+
+unmount_overlay()
+{
+	_unmount $merge 2>/dev/null
+}
+
+# Try to mount an overlay with casefold enabled layers.
+# On kernels older than v6.18 expect failure and skip the test
+mkdir -p $merge $upperdir $workdir $lowerdir
+_casefold_set_attr $upperdir >>$seqres.full
+_casefold_set_attr $workdir >>$seqres.full
+_casefold_set_attr $lowerdir >>$seqres.full
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	_notrun "overlayfs does not support casefold enabled layers"
+unmount_overlay
+
+# Re-create casefold disabled layers with lower subdir
+casefolddir=$lowerdir/casefold
+rm -rf $upperdir $workdir $lowerdir
+mkdir -p $upperdir $workdir $lowerdir $casefolddir
+
+# Try to mount an overlay with casefold capable but disabled layers.
+# Since we already verified that overalyfs supports casefold enabled layers
+# this is expected to succeed.
+echo Casefold disabled
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	echo "Overlayfs mount with casefold disabled layers failed (1)"
+ls $merge/casefold/ >>$seqres.full
+unmount_overlay
+
+# Use new upper/work dirs for each test to avoid ESTALE errors
+# on mismatch lowerdir/upperdir (see test overlay/037)
+rm -rf $upperdir $workdir
+mkdir $upperdir $workdir
+
+# Try to mount an overlay with casefold disabled layers and
+# enable casefold on lowerdir root after mount - expect ESTALE error on lookup.
+echo Casefold enabled after mount
+mount_overlay $casefolddir >>$seqres.full || \
+	echo "Overlayfs mount with casefold disabled layers failed (2)"
+_casefold_set_attr $casefolddir >>$seqres.full
+mkdir $casefolddir/subdir
+ls $merge/subdir |& _filter_scratch
+unmount_overlay
+
+# Try to mount an overlay with casefold enabled lowerdir root - expect EINVAL.
+# With libmount version >= v1.39, we expect the following descriptive error:
+# mount: overlay: case-insensitive directory on .../ovl-lower/casefold not supported
+# but we want the test to run with older libmount, so we so not expect this output
+# we just expect a mount failure.
+echo Casefold enabled lower dir
+mount_overlay $casefolddir >>$seqres.full 2>&1 && \
+	echo "Overlayfs mount with casefold enabled lowerdir should have failed" && \
+	unmount_overlay
+
+# Changing lower layer root again
+rm -rf $upperdir $workdir
+mkdir $upperdir $workdir
+
+# Try to mount an overlay with casefold disabled layers, but with
+# casefold enabled subdir in lowerdir - expect EREMOTE error on lookup.
+echo Casefold enabled lower subdir
+mount_overlay $lowerdir >>$seqres.full
+ls $merge/casefold/subdir |& _filter_scratch
+unmount_overlay
+
+# workdir needs to be empty to set casefold attribute
+rm -rf $workdir/*
+
+_casefold_set_attr $upperdir >>$seqres.full
+_casefold_set_attr $workdir >>$seqres.full
+
+echo Casefold enabled upper dir
+mount_overlay $lowerdir >>$seqres.full 2>&1 && \
+	echo "Overlayfs mount with casefold enabled upperdir should have failed" && \
+	unmount_overlay
+
+# lowerdir needs to be empty to set casefold attribute
+rm -rf $lowerdir/*
+_casefold_set_attr $lowerdir >>$seqres.full
+mkdir $casefolddir
+
+# Try to mount an overlay with casefold enabled layers.
+# On kernels older than v6.18 expect failure and skip the rest of the test
+# On kernels v6.18 and newer, expect success and run the rest of the test cases.
+echo Casefold enabled
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	echo "Overlayfs mount with casefold enabled layers failed (1)"
+ls $merge/casefold/ >>$seqres.full
+unmount_overlay
+
+# Try to mount an overlayfs with casefold enabled layers. After the mount,
+# disable casefold on the lower layer and try to lookup a file. Should return
+# -ESTALE
+echo Casefold disabled on lower after mount
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	echo "Overlayfs mount with casefold enabled layers failed (2)"
+rm -rf $lowerdir/*
+_casefold_unset_attr $lowerdir >>$seqres.full
+mkdir $lowerdir/dir
+ls $merge/dir/ |& _filter_scratch
+unmount_overlay
+
+# cleanup
+rm -rf $lowerdir/*
+_casefold_set_attr $lowerdir >>$seqres.full
+
+# Try to mount an overlayfs with casefold enabled layers. After the mount,
+# disable casefold on a subdir in  the lower layer and try to lookup it.
+# Should return -EREMOTE
+echo Casefold disabled on subdir after mount
+mkdir $lowerdir/casefold/
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	echo "Overlayfs mount with casefold enabled layers failed (3)"
+_casefold_unset_attr $lowerdir/casefold/
+mkdir $lowerdir/casefold/subdir
+ls $merge/casefold/subdir |& _filter_scratch
+unmount_overlay
+
+# cleanup
+rm -rf $lowerdir/*
+
+# Test strict enconding, but casefold not enabled. Should work
+_scratch_umount_idmapped
+
+_scratch_mkfs_casefold_strict >>$seqres.full 2>&1
+_scratch_mount_casefold_strict
+
+mkdir -p $merge $upperdir $workdir $lowerdir
+
+mount_overlay $lowerdir >>$seqres.full 2>&1 || \
+	echo "Overlayfs mount with strict casefold disabled layers failed"
+unmount_overlay
+
+# Test strict enconding, with casefold enabled. Should fail
+# dmesg: overlayfs: strict encoding not supported
+rm -rf $upperdir $workdir
+mkdir $upperdir $workdir
+
+_casefold_set_attr $upperdir >>$seqres.full
+_casefold_set_attr $workdir >>$seqres.full
+_casefold_set_attr $lowerdir >>$seqres.full
+
+mount_overlay $lowerdir >>$seqres.full 2>&1 && \
+	echo "Overlayfs mount with strict casefold enabled should have failed" && \
+	unmount_overlay
+
+# Test inconsistent casefold version. Should fail
+# dmesg: overlayfs: all layers must have the same encoding
+
+# use tmpfs to make easier to create two different mount points with different
+# utf8 versions
+testdir="$SCRATCH_MNT/newdir/"
+mkdir $testdir
+
+MNT1="$testdir/mnt1"
+MNT2="$testdir/mnt2"
+
+mkdir $MNT1 $MNT2 "$testdir/merge"
+
+mount_casefold_version "utf8-12.1.0" $MNT1
+mount_casefold_version "utf8-11.0.0" $MNT2
+
+mkdir "$MNT1/dir" "$MNT2/dir"
+
+_casefold_set_attr "$MNT1/dir"
+_casefold_set_attr "$MNT2/dir"
+
+mkdir "$MNT1/dir/lower" "$MNT2/dir/upper" "$MNT2/dir/work"
+
+upperdir="$MNT2/dir/upper"
+workdir="$MNT2/dir/work"
+lowerdir="$MNT1/dir/lower"
+
+mount_overlay $lowerdir >>$seqres.full 2>&1  && \
+	echo "Overlayfs mount different unicode versions should have failed" && \
+	unmount_overlay
+
+# success, all done
+status=0
+exit
