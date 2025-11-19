@@ -1,0 +1,139 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Red Hat Inc.  All Rights Reserved.
+#
+# FS QA Test No. 649
+#
+# Regression test for panic following IO error when reading extended attribute blocks
+#
+#   XFS (sda): metadata I/O error in "xfs_da_read_buf+0xe1/0x140 [xfs]" at daddr 0x78 len 8 error 61
+#   BUG: kernel NULL pointer dereference, address: 00000000000000e0
+#   ...
+#   RIP: 0010:xfs_trans_brelse+0xb/0xe0 [xfs]
+#
+# For SELinux enabled filesystems the attribute security.selinux will be
+# created before any additional attributes are added. In this case the
+# regression will trigger via security_d_instantiate() during a stat(2),
+# without SELinux this should trigger from fgetxattr(2).
+#
+# Kernels prior to v4.16 don't have medium_error_start, and only return errors
+# for a specific location, making scsi_debug unsuitable for checking old
+# kernels. See d9da891a892a scsi: scsi_debug: Add two new parameters to
+# scsi_debug driver
+#
+
+. ./common/preamble
+_begin_fstest auto quick attr
+
+_fixed_by_kernel_commit ae668cd567a6 \
+	"xfs: do not propagate ENODATA disk errors into xattr code"
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_unmount $SCRATCH_MNT 2>/dev/null
+	_put_scsi_debug_dev
+	cd /
+	rm -f $tmp.*
+}
+
+# Import common functions.
+. ./common/attr
+. ./common/scsi_debug
+
+_require_scratch_nocheck
+_require_scsi_debug "medium_error_start"
+_require_attrs user
+
+# If SELinux is enabled common/config sets a default context, which breaks this test.
+export SELINUX_MOUNT_OPTIONS=""
+
+scsi_debug_dev=$(_get_scsi_debug_dev)
+scsi_debug_opt_noerror=0
+scsi_debug_opt_error=${scsi_debug_opt_error:=2}
+test -b $scsi_debug_dev || _notrun "Failed to initialize scsi debug device"
+echo "SCSI debug device $scsi_debug_dev" >>$seqres.full
+
+SCRATCH_DEV=$scsi_debug_dev
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+block_size=$(_get_file_block_size $SCRATCH_MNT)
+inode_size=$(_xfs_get_inode_size $SCRATCH_MNT)
+error_length=$((block_size/512)) # Error all sectors in the block
+
+echo Block size $block_size >> $seqres.full
+echo Inode size $inode_size >> $seqres.full
+
+test_attr()
+{
+	local test=$1
+	local testfile=$SCRATCH_MNT/$test
+	local attr_blocks=$2
+	local error_at_block=${3:-0}
+
+	local attr_size_bytes=$((block_size/2*attr_blocks))
+
+	# The maximum size for a single value is ATTR_MAX_VALUELEN (64*1024)
+	# If we wanted to test a larger range of extent combinations the test
+	# would need to use multiple values.
+	[[ $attr_size_bytes -ge 65536 ]] && echo "Test would need to be modified to support > 64k values for $attr_blocks blocks".
+
+	echo $scsi_debug_opt_noerror > /sys/module/scsi_debug/parameters/opts
+
+	echo -e "\nTesting : $test" >> $seqres.full
+	echo -e "attr size: $attr_blocks" >> $seqres.full
+	echo -e "error at block: $error_at_block\n" >> $seqres.full
+
+	touch $testfile
+	local inode=$(stat -c '%i' $testfile)
+	$SETFATTR_PROG -n user.test_attr -v $(printf "%0*d" $attr_size_bytes $attr_size_bytes) $testfile
+
+	$XFS_IO_PROG -c "bmap -al" $testfile >> $seqres.full
+	local start_blocks=($($XFS_IO_PROG -c "bmap -al" $testfile | awk 'match($3, /[0-9]+/, a) {print a[0]}'))
+	echo "Attribute fork extent(s) start at ${start_blocks[*]}" >> $seqres.full
+
+	_scratch_unmount
+
+	echo "Dump inode $inode details with xfs_db" >> $seqres.full
+	_scratch_xfs_db -c "inode $inode" -c "print core.aformat core.naextents a" >> $seqres.full
+
+	if [[ start_blocks[0] -ne 0 ]]; then
+		# Choose the block to error, currently only works with a single extent.
+		error_daddr=$((start_blocks[0] + error_at_block*block_size/512))
+	else
+		# Default to the inode daddr when no extents were found.
+		# Errors when getfattr(1) stats the inode and doesnt get to getfattr(2)
+		error_daddr=$(_scratch_xfs_db -c "inode $inode" -c "daddr" | awk '{print $4}')
+	fi
+
+	_scratch_mount
+
+	echo "Setup scsi_debug to error when reading attributes from block" \
+	     "$error_at_block at daddr $error_daddr" >> $seqres.full
+	echo $error_daddr > /sys/module/scsi_debug/parameters/medium_error_start
+	echo $error_length > /sys/module/scsi_debug/parameters/medium_error_count
+	echo $scsi_debug_opt_error > /sys/module/scsi_debug/parameters/opts
+	grep ^ /sys/module/scsi_debug/parameters/{medium_error_start,medium_error_count,opts} >> $seqres.full
+
+	echo "Read the extended attribute on $testfile" >> $seqres.full
+	sync # the fstests logs to disk.
+
+	_getfattr -d -m - $testfile >> $seqres.full 2>&1 # Panic here on failure
+}
+
+# aformat shortform
+test_attr "attr_local" 0 0
+
+# aformat extents
+# Single leaf block, known to panic
+test_attr "attr_extent_one_block" 1 0
+
+# Other tests to exercise multi block extents
+test_attr "attr_extent_two_blocks_1" 2 1
+test_attr "attr_extent_two_blocks_2" 2 2
+
+# success, all done
+echo Silence is golden
+status=0
+exit

@@ -6,6 +6,7 @@
 
 . common/module
 
+# _require_scsi_debug [mod_param]
 _require_scsi_debug()
 {
 	local mod_present=0
@@ -30,9 +31,14 @@ _require_scsi_debug()
 			_patient_rmmod scsi_debug || _notrun "scsi_debug module in use"
 		fi
 	fi
+
 	# make sure it has the features we need
 	# logical/physical sectors plus unmap support all went in together
-	modinfo scsi_debug | grep -wq sector_size || _notrun "scsi_debug too old"
+	grep -wq sector_size <(modinfo scsi_debug) || _notrun "scsi_debug too old"
+	# make sure it supports this module parameter
+	if [ -n "$1" ];then
+		grep -Ewq "$1" <(modinfo scsi_debug) || _notrun "scsi_debug not support $1"
+	fi
 }
 
 # Args: [physical sector size, [logical sector size, [unaligned(0|1), [size in megs]]]]
