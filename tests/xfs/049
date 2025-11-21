@@ -58,7 +58,9 @@ mount -t ext2 $SCRATCH_DEV $SCRATCH_MNT >> $seqres.full 2>&1 \
     || _fail "!!! failed to mount"
 
 _log "Create xfs fs in file on scratch"
-${MKFS_XFS_PROG} -f -dfile,name=$SCRATCH_MNT/test.xfs,size=40m \
+truncate -s 40m $SCRATCH_MNT/test.xfs
+loop_dev1=$(_create_loop_device $SCRATCH_MNT/test.xfs)
+${MKFS_XFS_PROG} -f $loop_dev1 \
     >> $seqres.full 2>&1 \
     || _fail "!!! failed to mkfs xfs"
 
@@ -67,7 +69,6 @@ mkdir $SCRATCH_MNT/test $SCRATCH_MNT/test2 >> $seqres.full 2>&1 \
     || _fail "!!! failed to make mount points"
 
 _log "Mount xfs via loop"
-loop_dev1=$(_create_loop_device $SCRATCH_MNT/test.xfs)
 _mount $loop_dev1 $SCRATCH_MNT/test >> $seqres.full 2>&1 \
     || _fail "!!! failed to loop mount xfs"
 
