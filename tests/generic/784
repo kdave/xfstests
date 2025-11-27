@@ -1,0 +1,76 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 784
+#
+# Test moving a directory to another location, create a file in the old location
+# of the directory and with the same name, fsync the file, then move the file
+# elsewhere and fsync again the file. After a power failure we expect to be able
+# to mount the fs and have the same content as before the power failure.
+#
+. ./common/preamble
+_begin_fstest auto quick log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+
+_require_scratch
+_require_dm_target flakey
+
+[ "$FSTYP" = "btrfs" ] && _fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: don't log conflicting inode if it's a dir moved in the current transaction"
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_mount_flakey
+
+list_fs_contents()
+{
+	# Remove the 'lost+found' directory which only exists in some
+	# filesystems like extN and remove empty lines to have a consistent
+	# output regardless of the existence of the 'lost+found' directory.
+	ls -1R $SCRATCH_MNT/ | grep -v 'lost+found' | grep -v -e '^$' | \
+		_filter_scratch
+}
+
+mkdir $SCRATCH_MNT/dir1
+mkdir $SCRATCH_MNT/dir2
+
+_scratch_sync
+
+mv $SCRATCH_MNT/dir1 $SCRATCH_MNT/dir2
+
+# Create a file with the old name of the first directory and persist it with
+# a fsync.
+$XFS_IO_PROG -f -c "fsync" $SCRATCH_MNT/dir1
+
+# Move the file to some other location.
+mv $SCRATCH_MNT/dir1 $SCRATCH_MNT/dir2/foo
+
+# Fsync again the file.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/dir2/foo
+
+echo -e "\nfs contents before power failure:\n"
+list_fs_contents
+
+# Simulate a power failure and then mount again the filesystem to replay the
+# journal/log. We expect the mount to succeed.
+_flakey_drop_and_remount
+
+# We expect the fs contents to be the same as before the power failure.
+echo -e "\nfs contents after power failure:\n"
+list_fs_contents
+
+_unmount_flakey
+
+# success, all done
+_exit 0
