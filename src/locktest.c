@@ -126,6 +126,8 @@ static char *child[] = { "child0", "child1" };
 #define		CMD_CHMOD	19
 #define		CMD_MKDIR	20
 #define		CMD_RMDIR	21
+#define		CMD_UNLINK_S	22
+#define		CMD_RENAME_S	23
 
 #define		PASS 	0
 #define		FAIL	1
@@ -169,6 +171,8 @@ static char *get_cmd_str(int cmd)
 		case CMD_CHMOD: return "Chmod"; break;
 		case CMD_MKDIR: return "Mkdir"; break;
 		case CMD_RMDIR: return "Rmdir"; break;
+		case CMD_UNLINK_S: return "Remove Self"; break;
+		case CMD_RENAME_S: return "Rename Self"; break;
 	}
 	return "unknown";
 }
@@ -716,6 +720,150 @@ static int64_t lease_tests[][6] =
 		{0,0,0,0,0,CLIENT}
 	};
 
+char *filedeleg_descriptions[] = {
+    /*  1 */"Take Read Deleg",
+    /*  2 */"Take Write Deleg",
+    /*  3 */"Fail Write Deleg if file is open somewhere else",
+    /*  4 */"Fail Read Deleg if opened with write permissions",
+    /*  5 */"Read deleg gets SIGIO on write open",
+    /*  6 */"Write deleg gets SIGIO on read open",
+    /*  7 */"Read deleg does _not_ get SIGIO on read open",
+    /*  8 */"Read deleg gets SIGIO on write open",
+    /*  9 */"Write deleg gets SIGIO on truncate",
+    /* 10 */"Read deleg gets SIGIO on truncate",
+    /* 11 */"Read deleg gets SIGIO on chmod",
+    /* 12 */"Read deleg gets SIGIO on unlink",
+    /* 13 */"Read deleg gets SIGIO on rename",
+};
+
+static int64_t filedeleg_tests[][6] =
+	/*	test #	Action	[offset|flags|arg]	length		expected	server/client */
+	/*			[sigio_wait_time]						*/
+	{
+	/* Various tests to exercise delegs */
+
+	/* SECTION 1: Simple verification of being able to take delegs */
+	/* Take Read Deleg */
+	{1,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+	{1,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT	},
+	{1,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{1,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{1,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{1,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{1,	CMD_SETDELEG,	F_UNLCK,	0,	PASS,		SERVER	},
+	{1,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{1,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Take Write Deleg */
+	{2,	CMD_OPEN,	O_RDWR,		0,	PASS,		SERVER	},
+	{2,	CMD_SETDELEG,	F_WRLCK,	0,	PASS,		SERVER	},
+	{2,	CMD_GETDELEG,	F_WRLCK,	0,	PASS,		SERVER	},
+	{2,	CMD_SETDELEG,	F_UNLCK,	0,	PASS,		SERVER	},
+	{2,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	/* Fail Write Deleg with other users */
+	{3,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT  },
+	{3,	CMD_OPEN,	O_RDWR,		0,	PASS,		SERVER	},
+	{3,	CMD_SETDELEG,	F_WRLCK,	0,	FAIL,		SERVER	},
+	{3,	CMD_GETDELEG,	F_WRLCK,	0,	FAIL,		SERVER	},
+	{3,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{3,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+	/* Fail Read Deleg if opened for write */
+	{4,	CMD_OPEN,	O_RDWR,		0,	PASS,		SERVER	},
+	{4,	CMD_SETDELEG,	F_RDLCK,	0,	FAIL,		SERVER	},
+	{4,	CMD_GETDELEG,	F_RDLCK,	0,	FAIL,		SERVER	},
+	{4,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+
+	/* SECTION 2: Proper SIGIO notifications */
+	/* Get SIGIO when read deleg is broken by write */
+	{5,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT	},
+	{5,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{5,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{5,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{5,	CMD_OPEN,	O_RDWR,		0,	PASS,		SERVER	},
+	{5,	CMD_WAIT_SIGIO,	5,		0,	PASS,		CLIENT	},
+	{5,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{5,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Get SIGIO when write deleg is broken by read */
+	{6,	CMD_OPEN,	O_RDWR,		0,	PASS,		CLIENT	},
+	{6,	CMD_SETDELEG,	F_WRLCK,	0,	PASS,		CLIENT	},
+	{6,	CMD_GETDELEG,	F_WRLCK,	0,	PASS,		CLIENT	},
+	{6,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{6,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{6,	CMD_WAIT_SIGIO,	5,		0,	PASS,		CLIENT	},
+	{6,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{6,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Don't get SIGIO when read deleg is taken by read */
+	{7,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT	},
+	{7,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{7,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{7,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{7,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{7,	CMD_WAIT_SIGIO,	5,		0,	FAIL,		CLIENT	},
+	{7,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{7,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Get SIGIO when Read deleg is broken by Write */
+	{8,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT	},
+	{8,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{8,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{8,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{8,	CMD_OPEN,	O_RDWR,		0,	PASS,		SERVER	},
+	{8,	CMD_WAIT_SIGIO,	5,		0,	PASS,		CLIENT	},
+	{8,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+	{8,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Get SIGIO when Write deleg is broken by Truncate */
+	{9,	CMD_OPEN,	O_RDWR,		0,	PASS,		CLIENT	},
+	{9,	CMD_SETDELEG,	F_WRLCK,	0,	PASS,		CLIENT	},
+	{9,	CMD_GETDELEG,	F_WRLCK,	0,	PASS,		CLIENT	},
+	{9,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{9,	CMD_TRUNCATE,	FILE_SIZE/2,	0,	PASS,		CLIENT	},
+	{9,	CMD_WAIT_SIGIO,	5,		0,	PASS,		CLIENT	},
+	{9,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Get SIGIO when Read deleg is broken by Truncate */
+	{10,	CMD_OPEN,	O_RDONLY,	0,	PASS,		CLIENT	},
+	{10,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{10,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		CLIENT	},
+	{10,	CMD_SIGIO,	0,		0,	PASS,		CLIENT	},
+	{10,	CMD_TRUNCATE,	FILE_SIZE/2,	0,	PASS,		SERVER	},
+	{10,	CMD_WAIT_SIGIO,	5,		0,	PASS,		CLIENT	},
+	{10,	CMD_CLOSE,	0,		0,	PASS,		CLIENT	},
+
+	/* Get SIGIO when Read deleg is broken by Chmod */
+	{11,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{11,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{11,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{11,	CMD_SIGIO,	0,		0,	PASS,		SERVER	},
+	{11,	CMD_CHMOD,	0644,		0,	PASS,		CLIENT	},
+	{11,	CMD_WAIT_SIGIO,	5,		0,	PASS,		SERVER	},
+	{11,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+
+	/* Get SIGIO when file is unlinked */
+	{12,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{12,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{12,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{12,	CMD_SIGIO,	0,		0,	PASS,		SERVER	},
+	{12,	CMD_UNLINK_S,	0,		0,	PASS,		CLIENT	},
+	{12,	CMD_WAIT_SIGIO,	5,		0,	PASS,		SERVER	},
+	{12,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+
+	/* Get SIGIO when file is renamed */
+	{13,	CMD_OPEN,	O_RDONLY,	0,	PASS,		SERVER	},
+	{13,	CMD_SETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{13,	CMD_GETDELEG,	F_RDLCK,	0,	PASS,		SERVER	},
+	{13,	CMD_SIGIO,	0,		0,	PASS,		SERVER	},
+	{13,	CMD_RENAME_S,	0,		0,	PASS,		CLIENT	},
+	{13,	CMD_WAIT_SIGIO,	5,		0,	PASS,		SERVER	},
+	{13,	CMD_CLOSE,	0,		0,	PASS,		SERVER	},
+
+	/* indicate end of array */
+	{0,0,0,0,0,SERVER},
+	{0,0,0,0,0,CLIENT}
+};
+
 char *dirdeleg_descriptions[] = {
     /*  1 */"Take Read Lease",
     /*  2 */"Write Lease Should Fail",
@@ -1124,6 +1272,37 @@ int do_chmod(int mode)
 	return PASS;
 }
 
+int do_unlink_self(void)
+{
+	int ret;
+
+	ret = unlink(filename);
+	if (ret < 0) {
+		perror("unlink");
+		return FAIL;
+	}
+	return PASS;
+}
+
+int do_rename_self(void)
+{
+	int ret;
+	char target[PATH_MAX];
+
+	ret = snprintf(target, sizeof(target), "%s2", filename);
+	if (ret >= sizeof(target)) {
+		perror("snprintf");
+		return FAIL;
+	}
+
+	ret = rename(filename, target);
+	if (ret < 0) {
+		perror("unlink");
+		return FAIL;
+	}
+	return PASS;
+}
+
 static int do_lock(int cmd, int type, int start, int length)
 {
     int ret;
@@ -1347,6 +1526,7 @@ main(int argc, char *argv[])
     int fail_count = 0;
     int run_leases = 0;
     int run_dirdelegs = 0;
+    int run_filedelegs = 0;
     int test_setlease = 0;
     
     atexit(cleanup);
@@ -1360,7 +1540,7 @@ main(int argc, char *argv[])
 	    prog = p+1;
     }
 
-    while ((c = getopt(argc, argv, "dDLn:h:p:t?")) != EOF) {
+    while ((c = getopt(argc, argv, "dDFLn:h:p:t?")) != EOF) {
 	switch (c) {
 
 	case 'd':	/* debug flag */
@@ -1369,6 +1549,10 @@ main(int argc, char *argv[])
 
 	case 'D':
 	    run_dirdelegs = 1;
+	    break;
+
+	case 'F':
+	    run_filedelegs = 1;
 	    break;
 
 	case 'L':	/* Lease testing */
@@ -1430,7 +1614,7 @@ main(int argc, char *argv[])
     if (test_setlease == 1) {
 	struct delegation deleg = { .d_type = F_UNLCK };
 
-	if (run_dirdelegs)
+	if (run_dirdelegs || run_filedelegs)
 		fcntl(f_fd, F_SETDELEG, &deleg);
 	else
 		fcntl(f_fd, F_SETLEASE, F_UNLCK);
@@ -1568,6 +1752,8 @@ main(int argc, char *argv[])
      */
     if (run_dirdelegs)
 	fail_count = run(dirdeleg_tests, dirdeleg_descriptions);
+    else if (run_filedelegs)
+	fail_count = run(filedeleg_tests, filedeleg_descriptions);
     else if (run_leases)
 	fail_count = run(lease_tests, lease_descriptions);
     else
@@ -1672,6 +1858,12 @@ int run(int64_t tests[][6], char *descriptions[])
 			    break;
 			case CMD_RMDIR:
 			    result = do_rmdir(tests[index][ARG]);
+			    break;
+			case CMD_UNLINK_S:
+			    result = do_unlink_self();
+			    break;
+			case CMD_RENAME_S:
+			    result = do_rename_self();
 			    break;
 		    }
 		    if( result != tests[index][RESULT]) {
@@ -1816,6 +2008,12 @@ int run(int64_t tests[][6], char *descriptions[])
 		    break;
 		case CMD_RMDIR:
 		    result = do_rmdir(ctl.offset);
+		    break;
+		case CMD_UNLINK_S:
+		    result = do_unlink_self();
+		    break;
+		case CMD_RENAME_S:
+		    result = do_rename_self();
 		    break;
 	    }
 	    if( result != ctl.result ) {
