@@ -6,6 +6,7 @@ SERVER_LOG=$TEST_DIR/server.out
 SERVER_PORT=$TEST_DIR/server.port
 CLIENT_LOG=$TEST_DIR/client.out
 TESTFILE=$TEST_DIR/lock_file
+DELEGDIR=$TEST_DIR/dirdeleg
 client_pid=""
 server_pid=""
 
@@ -13,7 +14,7 @@ _cleanup()
 {
 	kill $client_pid > /dev/null 2>&1
 	kill $server_pid > /dev/null 2>&1
-	rm -f $TESTFILE
+	rm -rf $TESTFILE $DELEGDIR
 }
 
 _dump_logs_fail()
@@ -41,8 +42,6 @@ _run_generic() {
 	touch $SERVER_PORT
 	rm -f $CLIENT_LOG
 	touch $CLIENT_LOG
-
-	touch $TESTFILE
 
 	# Start the server
 	$here/src/locktest $mode $TESTFILE 2> $SERVER_LOG 1> $SERVER_PORT &
@@ -87,9 +86,18 @@ _run_generic() {
 }
 
 _run_locktest() {
+	touch $TESTFILE
+
 	_run_generic ""
 }
 
 _run_leasetest() {
+	touch $TESTFILE
+
 	_run_generic "-L"
+}
+
+_run_dirdelegtest() {
+	TESTFILE=$DELEGDIR
+	_run_generic "-D"
 }
