@@ -1,0 +1,32 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Sidong Yang.  All Rights Reserved.
+#
+# FS QA Test 339
+#
+# Test btrfs receive dump stream from different user
+#
+. ./common/preamble
+_begin_fstest auto quick send snapshot
+
+. ./common/filter
+
+_require_scratch
+_require_user
+
+_fixed_by_git_commit btrfs-progs cd933616d485 \
+	"btrfs-progs: receive: don't use O_NOATIME to open stream for dumping"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+stream=$tmp.fsv.ss
+
+_btrfs subvolume snapshot -r $SCRATCH_MNT $SCRATCH_MNT/snap
+_btrfs send -f $stream $SCRATCH_MNT/snap
+chmod a+r $stream
+_su $qa_user -c "$BTRFS_UTIL_PROG receive --dump -f $stream" >> $seqres.full
+
+# success, all done
+echo "Silence is golden"
+_exit 0
