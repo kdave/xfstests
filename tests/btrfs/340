@@ -1,0 +1,45 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test No. 340
+#
+# Make sure when doing a quick inherit for snapshot, all parent qgroups
+# including direct and indirect parents are properly updated.
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: qgroup: update all parent qgroups when doing quick inherit"
+
+# For the automatic fsck at unmount.
+_require_scratch
+_require_btrfs_qgroup_report
+
+# This will imply mkfs and enable regular qgroup.
+_require_scratch_qgroup
+_scratch_mount
+
+# Create a subvolume along with qgroups 1/1 and 2/1.
+# The subvolume qgroup is assgiend to 1/1, and 1/1 is assigned to 2/1.
+_btrfs subvolume create $SCRATCH_MNT/subv1
+subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT subv1)
+_btrfs qgroup create 1/1 $SCRATCH_MNT
+_btrfs qgroup create 2/1 $SCRATCH_MNT
+_btrfs qgroup assign 1/1 2/1 $SCRATCH_MNT
+_btrfs qgroup assign 0/$subvolid 1/1 $SCRATCH_MNT
+
+# All above assign should result quick update, no need for a full rescan
+echo "Before quick inherit:" >> $seqres.full
+_btrfs qgroup show -p --sync $SCRATCH_MNT >> $seqres.full
+
+# The next snapshot creation will create a snapshot and assign it to 1/1,
+# which is the same parent of the source subvolume, and we can do a quick inherit
+# without marking qgroup inconsistent.
+_btrfs subv snap -i 1/1 $SCRATCH_MNT/subv1 $SCRATCH_MNT/snap1
+echo "After quick inherit:" >> $seqres.full
+_btrfs qgroup show -p --sync $SCRATCH_MNT >> $seqres.full
+
+echo "Silence is golden"
+_exit 0
