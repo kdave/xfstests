@@ -1781,23 +1781,38 @@ opendir_path(pathname_t *name)
 void
 process_freq(char *arg)
 {
-	opdesc_t	*p;
-	char		*s;
+	char		*token;
+	char		*argstr = strdup(arg);
+	char		*tokstr = argstr ? argstr : arg;
 
-	s = strchr(arg, '=');
-	if (s == NULL) {
-		fprintf(stderr, "bad argument '%s'\n", arg);
-		exit(1);
-	}
-	*s++ = '\0';
-	for (p = ops; p < ops_end; p++) {
-		if (strcmp(arg, p->name) == 0) {
-			p->freq = atoi(s);
-			return;
+	while ((token = strtok(tokstr, ",")) != NULL) {
+		opdesc_t	*p = ops;
+		char		*s = strchr(token, '=');
+		int		found = 0;
+
+		if (!s) {
+			fprintf(stderr, "bad argument '%s'\n", token);
+			exit(1);
 		}
+
+		*s = '\0';
+		for (; p < ops_end; p++) {
+			if (strcmp(token, p->name) == 0) {
+				p->freq = atoi(s + 1);
+				found = 1;
+				break;
+			}
+		}
+
+		if (!found) {
+			fprintf(stderr, "can't find op type %s for -f\n", token);
+			exit(1);
+		}
+
+		tokstr = NULL;
 	}
-	fprintf(stderr, "can't find op type %s for -f\n", arg);
-	exit(1);
+
+	free(argstr);
 }
 
 int
