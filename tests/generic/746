@@ -93,13 +93,23 @@ get_free_sectors()
 			| sed -n 's/nodesize\s*\(.*\)/\1/p')
 
 		# Get holes within block groups
-		$BTRFS_UTIL_PROG inspect-internal dump-tree -t extent $loop_dev \
-			| $AWK_PROG -v sectorsize=512 -v nodesize=$nodesize -f $here/src/parse-extent-tree.awk
+		$BTRFS_UTIL_PROG inspect-internal dump-tree -t extent $loop_dev >> $tmp/extent_dump
+		if $BTRFS_UTIL_PROG inspect-internal dump-super $loop_dev |\
+				grep -q "BLOCK_GROUP_TREE"; then
+			$BTRFS_UTIL_PROG inspect-internal dump-tree -t block-group $loop_dev \
+				>> $tmp/bg_dump
+		else
+			cp $tmp/extent_dump $tmp/bg_dump
+		fi
+		$PYTHON3_PROG $here/src/parse-free-space.py -n $nodesize -b $tmp/bg_dump \
+			-e $tmp/extent_dump >> $tmp/bg_free_space
 
 		# Get holes within unallocated space on disk
 		$BTRFS_UTIL_PROG inspect-internal dump-tree -t dev $loop_dev \
-			| $AWK_PROG -v sectorsize=512 -v devsize=$device_size -f $here/src/parse-dev-tree.awk
+			| $AWK_PROG -v sectorsize=512 -v devsize=$device_size \
+			  -f $here/src/parse-dev-tree.awk >> $tmp/unallocated
 
+		cat $tmp/bg_free_space $tmp/unallocated | sort
 	;;
 	esac
 }
@@ -157,7 +167,13 @@ merged_sectors="$tmp/merged_free_sectors"
 mkdir $loop_mnt
 
 [ "$FSTYP" = "xfs" ] && MKFS_OPTIONS="-f $MKFS_OPTIONS"
-[ "$FSTYP" = "btrfs" ] && MKFS_OPTIONS="$MKFS_OPTIONS -f -dsingle -msingle"
+if [ "$FSTYP" = "btrfs" ]; then
+	# Only SINGLE chunks have their logical address 1:1 mapped
+	# to physical addresses.
+	MKFS_OPTIONS="$MKFS_OPTIONS -f -dsingle -msingle"
+	_require_command $PYTHON3_PROG python3
+fi
+
 
 _mkfs_dev $loop_dev
 _mount $loop_dev $loop_mnt
