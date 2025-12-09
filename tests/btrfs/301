@@ -32,6 +32,9 @@ fill_sz=$((64 * 1024))
 total_fill=$(($nr_fill * $fill_sz))
 nodesize=$($BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV | \
 					grep nodesize | $AWK_PROG '{print $2}')
+blocksize=$($BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV |\
+					grep sectorsize | $AWK_PROG '{print $2}')
+echo "blocksize=$blocksize" >> $seqres.full
 ext_sz=$((128 * 1024 * 1024))
 limit_nr=8
 limit=$(($ext_sz * $limit_nr))
@@ -45,6 +48,7 @@ directory=${subv}
 rw=randwrite
 nrfiles=${nr_fill}
 filesize=${fill_sz}
+blocksize=${blocksize}
 EOF
 _require_fio $fio_config
 
