@@ -335,7 +335,14 @@ _check_quota_usage()
 
 	VFS_QUOTA=0
 	case $FSTYP in
-	ext2|ext3|ext4|f2fs|gfs2|bcachefs)
+	ext2|ext3|ext4|gfs2|bcachefs)
+		VFS_QUOTA=1
+		quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
+		;;
+	f2fs)
+		# wait for inode_switch_wbs_wor_fn() to release inodes
+		sleep 3
+
 		VFS_QUOTA=1
 		quotaon -f -u -g $SCRATCH_MNT 2>/dev/null
 		;;
