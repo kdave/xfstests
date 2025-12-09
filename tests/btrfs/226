@@ -26,6 +26,10 @@ _scratch_mkfs >>$seqres.full 2>&1
 # nodatasum (otherwise it falls back to buffered IO).
 _scratch_mount -o nodatasum
 
+if [ "$(_get_block_size $SCRATCH_MNT)" -gt "$(_get_page_size)" ]; then
+	_notrun "fs block size larger than page size, unreliable direct IO buffer alignment"
+fi
+
 # Test a write against COW file/extent - should fail with -EAGAIN. Disable the
 # NOCOW attribute of the file just in case MOUNT_OPTIONS has "-o nodatacow".
 echo "Testing write against COW file"
