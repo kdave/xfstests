@@ -48,14 +48,15 @@ _require_attrs user
 # If SELinux is enabled common/config sets a default context, which breaks this test.
 export SELINUX_MOUNT_OPTIONS=""
 
-scsi_debug_dev=$(_get_scsi_debug_dev)
+# need at least 320m to format with 32/64k fsblock size
+scsi_debug_dev=$(_get_scsi_debug_dev 512 512 0 321)
 scsi_debug_opt_noerror=0
 scsi_debug_opt_error=${scsi_debug_opt_error:=2}
 test -b $scsi_debug_dev || _notrun "Failed to initialize scsi debug device"
 echo "SCSI debug device $scsi_debug_dev" >>$seqres.full
 
 SCRATCH_DEV=$scsi_debug_dev
-_scratch_mkfs >> $seqres.full
+_scratch_mkfs >> $seqres.full || _notrun "could not format filesystem"
 _scratch_mount
 
 block_size=$(_get_file_block_size $SCRATCH_MNT)
@@ -77,7 +78,7 @@ test_attr()
 	# The maximum size for a single value is ATTR_MAX_VALUELEN (64*1024)
 	# If we wanted to test a larger range of extent combinations the test
 	# would need to use multiple values.
-	[[ $attr_size_bytes -ge 65536 ]] && echo "Test would need to be modified to support > 64k values for $attr_blocks blocks".
+	[[ $attr_size_bytes -gt 65536 ]] && echo "Test would need to be modified to support > 64k values for $attr_blocks blocks".
 
 	echo $scsi_debug_opt_noerror > /sys/module/scsi_debug/parameters/opts
 
