@@ -253,9 +253,9 @@ _xfs_get_dir_blocksize()
 # Decide if this path is a file on the realtime device
 _xfs_is_realtime_file()
 {
-	if [ "$USE_EXTERNAL" != "yes" ] || [ -z "$SCRATCH_RTDEV" ]; then
-		return 1
-	fi
+	local mntpt="$(findmnt --target "$1" --noheadings --output TARGET)"
+
+	_xfs_has_feature $mntpt realtime || return 1
 	$XFS_IO_PROG -c 'stat -v' "$1" | grep -q -w realtime
 }
 
