@@ -20,6 +20,7 @@ _begin_fstest auto quick
 # Modify as appropriate.
 _require_scratch_nocheck
 _require_xfs_mkfs_finobt
+_require_xfs_nocrc
 
 # Skip the verifier "xfs_check_agi_freecount()" which verify the number of free
 # inodes in the AGI is correct, when XFS_DEBUG is enabled
@@ -35,16 +36,7 @@ filter_dmesg()
 # If enable free inode B+tree, this case will fail on xfs_dialloc_ag_update_inobt,
 # that's not what we want to test. Due to finobt feature is not necessary for this
 # test, so disable it directly.
-_scratch_mkfs_xfs -m finobt=0 | _filter_mkfs 2>$tmp.mkfs >> $seqres.full
-
-# On V5 filesystem, this case can't trigger bug because it doesn't read inodes
-# we are allocating from disk - it simply overwrites them with new inode
-# information. So use ikeep mount option to stop that.
-source $tmp.mkfs
-mount_opt=""
-if [ $_fs_has_crcs -eq 1 ]; then
-	mount_opt="-o ikeep"
-fi
+_scratch_mkfs_xfs -m crc=0,finobt=0 | _filter_mkfs 2>$tmp.mkfs >> $seqres.full
 
 blksz=$(_scratch_xfs_get_sb_field blocksize)
 agcount=$(_scratch_xfs_get_sb_field agcount)
