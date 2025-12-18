@@ -32,7 +32,7 @@ _cleanup()
 		sysctl -w fs.xfs.xfssyncd_centisecs=${interval} >/dev/null 2>&1
 	cd /
 	rm -f $tmp.*
-	_unmount_flakey >/dev/null 2>&1
+	_scratch_unmount >/dev/null 2>&1
 	_cleanup_flakey > /dev/null 2>&1
 }
 
@@ -100,8 +100,12 @@ echo "Silence is golden"
 
 _scratch_mkfs > $seqres.full 2>&1
 
+# this needs to happen after mkfs, but before _init_flakey overrides SCRATCH_DEV
+FLAKEY_TABLE_NON_LOG_ERROR=$(make_xfs_scratch_flakey_table)
+
 # no error will be injected
 _init_flakey
+FLAKEY_TABLE_ERROR=${FLAKEY_TABLE_NON_LOG_ERROR}
 $DMSETUP_PROG info >> $seqres.full
 $DMSETUP_PROG table >> $seqres.full
 
@@ -111,7 +115,7 @@ interval=$(sysctl -n fs.xfs.xfssyncd_centisecs 2>/dev/null)
 sysctl -w fs.xfs.xfssyncd_centisecs=100 >> $seqres.full 2>&1
 
 _qmount_option "usrquota"
-_mount_flakey
+_scratch_mount
 
 # We need to set the quota limitation twice, and inject the write error
 # after the second setting. If we try to inject the write error after
@@ -127,7 +131,6 @@ xfs_freeze -f $SCRATCH_MNT
 xfs_freeze -u $SCRATCH_MNT
 
 # inject write IO error
-FLAKEY_TABLE_ERROR=$(make_xfs_scratch_flakey_table)
 _load_flakey_table ${FLAKEY_ERROR_WRITES}
 $DMSETUP_PROG info >> $seqres.full
 $DMSETUP_PROG table >> $seqres.full
@@ -142,7 +145,7 @@ _scratch_sync
 # the completion of the retried write of dquota buffer
 sleep 2
 
-_unmount_flakey
+_scratch_unmount
 
 _cleanup_flakey
 

@@ -56,19 +56,19 @@ _run_test()
 
 	_md5_checksum $testfile
 	_load_flakey_table $FLAKEY_DROP_WRITES $lockfs
-	_unmount_flakey
+	_scratch_unmount
 
 	#Ok mount so that any recovery that needs to happen is done
 	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
+	_scratch_mount
 	_md5_checksum $testfile
 
 	#Unmount and fsck to make sure we got a valid fs after replay
-	_unmount_flakey
-	_check_scratch_fs $FLAKEY_DEV
+	_scratch_unmount
+	_check_scratch_fs
 	[ $? -ne 0 ] && _fatal "fsck failed"
 
-	_mount_flakey
+	_scratch_mount
 }
 
 _scratch_mkfs >> $seqres.full 2>&1
@@ -76,7 +76,7 @@ _require_metadata_journaling $SCRATCH_DEV
 
 # Create a basic flakey device that will never error out
 _init_flakey
-_mount_flakey
+_scratch_mount
 
 buffered=0
 direct=1

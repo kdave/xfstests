@@ -26,24 +26,24 @@ _require_dm_target flakey
 
 _clean_working_dir()
 {
-	_mount_flakey
+	_scratch_mount
 	rm -rf $SCRATCH_MNT/foo $SCRATCH_MNT/bar
-	_unmount_flakey
+	_scratch_unmount
 }
 
 # Btrfs wasn't making sure the directory survived fsync
 _directory_test()
 {
 	echo "fsync new directory"
-	_mount_flakey
+	_scratch_mount
 	mkdir $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/bar
 
 	_flakey_drop_and_remount
 
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
-	_unmount_flakey
-	_check_scratch_fs $FLAKEY_DEV
+	_scratch_unmount
+	_check_scratch_fs
 	[ $? -ne 0 ] && _fatal "fsck failed"
 }
 
@@ -51,7 +51,7 @@ _directory_test()
 _rename_test()
 {
 	echo "rename fsync test"
-	_mount_flakey
+	_scratch_mount
 	touch $SCRATCH_MNT/foo
 	mkdir $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
@@ -63,8 +63,8 @@ _rename_test()
 
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
 	_ls_l $SCRATCH_MNT/bar | tail -n +2 | awk '{ print $1, $9 }'
-	_unmount_flakey
-	_check_scratch_fs $FLAKEY_DEV
+	_scratch_unmount
+	_check_scratch_fs
 	[ $? -ne 0 ] && _fatal "fsck failed"
 }
 
@@ -73,7 +73,7 @@ _rename_test()
 _replay_rename_test()
 {
 	echo "replay rename fsync test"
-	_mount_flakey
+	_scratch_mount
 	touch $SCRATCH_MNT/foo
 	mkdir $SCRATCH_MNT/bar
 	$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
@@ -90,7 +90,7 @@ _replay_rename_test()
 
 	_ls_l $SCRATCH_MNT | tail -n +2 | awk '{ print $1, $9 }'
 	_ls_l $SCRATCH_MNT/bar | tail -n +2 | awk '{ print $1, $9 }'
-	_unmount_flakey
+	_scratch_unmount
 }
 
 _scratch_mkfs >> $seqres.full 2>&1

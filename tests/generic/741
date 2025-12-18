@@ -19,7 +19,7 @@ _cleanup()
 	_unmount $extra_mnt &> /dev/null
 	_unmount $extra_mnt &> /dev/null
 	rm -rf $extra_mnt
-	_unmount_flakey
+	_scratch_unmount
 	_cleanup_flakey
 	cd /
 	rm -r -f $tmp.*
@@ -38,7 +38,7 @@ _require_dm_target flakey
 
 _scratch_mkfs >> $seqres.full
 _init_flakey
-_mount_flakey
+_scratch_mount
 
 extra_mnt=$TEST_DIR/extra_mnt
 rm -rf $extra_mnt
@@ -46,13 +46,13 @@ mkdir -p $extra_mnt
 
 # Mount must fail because the physical device has a dm created on it.
 # Filters alter the return code of the mount.
-_mount $SCRATCH_DEV $extra_mnt 2>&1 | \
-			_filter_testdir_and_scratch | _filter_error_mount
+_mount $NON_FLAKEY_DEV $extra_mnt 2>/dev/null && \
+	_fail "mount of busy device succeeded"
 
-# Try again with flakey unmounted, must fail.
-_unmount_flakey
-_mount $SCRATCH_DEV $extra_mnt 2>&1 | \
-			_filter_testdir_and_scratch | _filter_error_mount
+# Try again with flakey unmounted, must also fail.
+_scratch_unmount
+_mount $NON_FLAKEY_DEV $extra_mnt 2>/dev/null && \
+	_fail "mount of busy device succeeded"
 
 # Removing dm should make mount successful.
 _cleanup_flakey

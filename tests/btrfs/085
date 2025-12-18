@@ -33,7 +33,7 @@ _require_btrfs_command inspect-internal dump-tree
 has_orphan_item()
 {
 	INO=$1
-	if $BTRFS_UTIL_PROG inspect-internal dump-tree $FLAKEY_DEV | \
+	if $BTRFS_UTIL_PROG inspect-internal dump-tree $SCRATCH_DEV | \
 		grep -q "key (ORPHAN ORPHAN_ITEM $INO)"; then
 		return 0
 	fi
@@ -48,7 +48,7 @@ test_orphan()
 	_scratch_mkfs >> $seqres.full 2>&1
 	_init_flakey
 
-	_mount_flakey
+	_scratch_mount
 
 	$PRECMD
 
@@ -79,13 +79,13 @@ test_orphan()
 	exec 27>&-
 
 	# Orphan item should be on disk if operating correctly
-	_unmount_flakey
+	_scratch_unmount
 	_load_flakey_table $FLAKEY_ALLOW_WRITES
 	if ! has_orphan_item $INO; then
 		echo "ERROR: No orphan item found after umount."
 		return
 	fi
-	_mount_flakey
+	_scratch_mount
 
 	# If $DIR is a subvolume, this will cause a lookup and orphan cleanup
 	(cd $DIR; true)
@@ -94,7 +94,7 @@ test_orphan()
 	# disk until there's a sync.
 	sync
 
-	_unmount_flakey
+	_scratch_unmount
 	if has_orphan_item $INO; then
 		echo "ERROR: Orphan item found after successful mount/sync."
 	fi
@@ -112,8 +112,8 @@ new_default()
 	SUB=$($BTRFS_UTIL_PROG subvolume list $SCRATCH_MNT | $AWK_PROG '{print $2}')
 	_btrfs subvolume set-default $SUB $SCRATCH_MNT
 
-	_unmount_flakey
-	_mount_flakey
+	_scratch_unmount
+	_scratch_mount
 }
 
 echo "Testing with fs root as default subvolume"

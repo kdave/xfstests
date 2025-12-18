@@ -30,7 +30,7 @@ _require_btrfs_command inspect-internal dump-tree
 _scratch_mkfs >>$seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
-_mount_flakey
+_scratch_mount
 
 check_subvol_orphan_item_exists()
 {
@@ -84,7 +84,7 @@ create_subvol_with_orphan()
 	# RW mount.
 	_load_flakey_table $FLAKEY_DROP_WRITES
 	exec 73>&-
-	_unmount_flakey
+	_scratch_unmount
 
 	check_subvol_orphan_item_exists
 	check_subvol_btree_exists
@@ -99,9 +99,9 @@ create_subvol_with_orphan
 # Use a commit interval lower than the default (30 seconds) so that the test
 # is faster and we spend less time waiting for transaction commits.
 MOUNT_OPTIONS="-o commit=1"
-_mount_flakey
+_scratch_mount
 $BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >>$seqres.full
-_unmount_flakey
+_scratch_unmount
 
 check_subvol_orphan_item_not_exists
 check_subvol_btree_not_exists
@@ -110,15 +110,15 @@ check_subvol_btree_not_exists
 _cleanup_flakey
 _scratch_mkfs >>$seqres.full 2>&1
 _init_flakey
-_mount_flakey
+_scratch_mount
 
 create_subvol_with_orphan
 MOUNT_OPTIONS="-o ro,commit=1"
-_mount_flakey
+_scratch_mount
 # The subvolume path should not be accessible anymore, even if deletion of the
 # subvolume btree did not happen yet.
 [ -e $SCRATCH_MNT/testsv ] && echo "subvolume path still exists"
-_unmount_flakey
+_scratch_unmount
 
 # The subvolume btree should still exist, even though the path is not accessible.
 check_subvol_btree_exists
@@ -127,15 +127,15 @@ check_subvol_btree_exists
 check_subvol_orphan_item_exists
 
 # Mount the filesystem RO again.
-_mount_flakey
+_scratch_mount
 
 # Now remount RW, then unmount and then check the subvolume's orphan item, btree
 # and path don't exist anymore.
 MOUNT_OPTIONS="-o remount,rw"
-_mount_flakey
+_scratch_mount
 $BTRFS_UTIL_PROG subvolume sync $SCRATCH_MNT >>$seqres.full
 [ -e $SCRATCH_MNT/testsv ] && echo "subvolume path still exists"
-_unmount_flakey
+_scratch_unmount
 
 check_subvol_orphan_item_not_exists
 check_subvol_btree_not_exists

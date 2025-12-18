@@ -15,11 +15,19 @@ export FLAKEY_LOGNAME="flakey-logtest.$seq"
 _init_flakey()
 {
 	# Scratch device
-	local BLK_DEV_SIZE=`blockdev --getsz $SCRATCH_DEV`
-	export FLAKEY_DEV="/dev/mapper/$FLAKEY_NAME"
-	FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 180 0"
-	FLAKEY_TABLE_DROP="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 drop_writes"
-	FLAKEY_TABLE_ERROR="0 $BLK_DEV_SIZE flakey $SCRATCH_DEV 0 0 180 1 error_writes"
+	if [ -z "$NON_FLAKEY_DEV" ]; then
+		# Set up the device switch
+		local backing_dev="$SCRATCH_DEV"
+		export NON_FLAKEY_DEV="$SCRATCH_DEV"
+		SCRATCH_DEV=/dev/mapper/$FLAKEY_NAME
+	else
+		# Already set up; recreate tables
+		local backing_dev="$NON_FLAKEY_DEV"
+	fi
+	local BLK_DEV_SIZE=`blockdev --getsz $backing_dev`
+	FLAKEY_TABLE="0 $BLK_DEV_SIZE flakey $backing_dev 0 180 0"
+	FLAKEY_TABLE_DROP="0 $BLK_DEV_SIZE flakey $backing_dev 0 0 180 1 drop_writes"
+	FLAKEY_TABLE_ERROR="0 $BLK_DEV_SIZE flakey $backing_dev 0 0 180 1 error_writes"
 	_dmsetup_create $FLAKEY_NAME --table "$FLAKEY_TABLE" || \
 		_fatal "failed to create flakey device"
 
@@ -62,31 +70,22 @@ _init_flakey()
 	fi
 }
 
-_mount_flakey()
-{
-	_scratch_options mount
-
-	mount -t $FSTYP $SCRATCH_OPTIONS $MOUNT_OPTIONS $FLAKEY_DEV $SCRATCH_MNT
-}
-
-_unmount_flakey()
-{
-	_unmount $SCRATCH_MNT
-}
-
 _cleanup_flakey()
 {
 	# If dmsetup load fails then we need to make sure to do resume here
 	# otherwise the umount will hang
 	test -n "$NON_FLAKEY_LOGDEV" && $DMSETUP_PROG resume $FLAKEY_LOGNAME &> /dev/null
 	test -n "$NON_FLAKEY_RTDEV" && $DMSETUP_PROG resume $FLAKEY_RTNAME &> /dev/null
-	$DMSETUP_PROG resume flakey-test > /dev/null 2>&1
+	test -n "$NON_FLAKEY_DEV" && $DMSETUP_PROG resume flakey-test > /dev/null 2>&1
 
 	_unmount $SCRATCH_MNT > /dev/null 2>&1
 
-	_dmsetup_remove $FLAKEY_NAME
+	test -n "$NON_FLAKEY_DEV" && _dmsetup_remove $FLAKEY_NAME
 	test -n "$NON_FLAKEY_LOGDEV" && _dmsetup_remove $FLAKEY_LOGNAME
 	test -n "$NON_FLAKEY_RTDEV" && _dmsetup_remove $FLAKEY_RTNAME
+
+	SCRATCH_DEV="$NON_FLAKEY_DEV"
+	unset NON_FLAKEY_DEV
 
 	if [ -n "$NON_FLAKEY_LOGDEV" ]; then
 		SCRATCH_LOGDEV="$NON_FLAKEY_LOGDEV"
@@ -179,17 +178,17 @@ _flakey_drop_and_remount()
 {
 	# If the full environment is set up, configure ourselves for shutdown
 	type _prepare_for_eio_shutdown &>/dev/null && \
-		_prepare_for_eio_shutdown $FLAKEY_DEV
+		_prepare_for_eio_shutdown $SCRATCH_DEV
 
 	_load_flakey_table $FLAKEY_DROP_WRITES
-	_unmount_flakey
+	_scratch_unmount
 
 	if [ "x$1" = "xyes" ]; then
-		_check_scratch_fs $FLAKEY_DEV
+		_check_scratch_fs
 	fi
 
 	_load_flakey_table $FLAKEY_ALLOW_WRITES
-	_mount_flakey
+	_scratch_mount
 }
 
 _require_flakey_with_error_writes()
@@ -206,5 +205,5 @@ _require_flakey_with_error_writes()
 	_dmsetup_create $NAME --table "$TABLE" || \
 		_notrun "This test requires error_writes feature in dm-flakey"
 
-	_cleanup_flakey
+	_dmsetup_remove $FLAKEY_NAME
 }

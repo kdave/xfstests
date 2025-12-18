@@ -157,7 +157,7 @@ _scratch_mkfs >>$seqres.full 2>&1
 _require_metadata_journaling $SCRATCH_DEV
 _init_flakey
 MOUNT_OPTIONS="-o datacow"
-_mount_flakey
+_scratch_mount
 
 # Test a few times each scenario because this test was motivated by a race
 # condition.
@@ -170,12 +170,12 @@ for ((i = 1; i <= 3; i++)); do
 	test_fsync "link_cow_$i" "link"
 done
 
-_unmount_flakey
+_scratch_unmount
 
 # Now lets test with nodatacow.
 if ! _scratch_btrfs_is_zoned; then
 	MOUNT_OPTIONS="-o nodatacow"
-	_mount_flakey
+	_scratch_mount
 
 	echo "Testing fsync after rename with NOCOW writes"
 	for ((i = 1; i <= 3; i++)); do
@@ -186,7 +186,7 @@ if ! _scratch_btrfs_is_zoned; then
 		test_fsync "link_nocow_$i" "link"
 	done
 
-	_unmount_flakey
+	_scratch_unmount
 else
 	# Fake result. Zoned btrfs does not support NOCOW
 	echo "Testing fsync after rename with NOCOW writes"
