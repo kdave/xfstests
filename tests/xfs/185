@@ -22,12 +22,11 @@ _cleanup()
 {
 	cd /
 	rm -r -f $tmp.*
-	_scratch_unmount
+	umount $SCRATCH_MNT
 	test -n "$ddloop" && _destroy_loop_device "$ddloop"
 	test -n "$rtloop" && _destroy_loop_device "$rtloop"
 	test -n "$ddfile" && rm -f "$ddfile"
 	test -n "$rtfile" && rm -f "$rtfile"
-	test -n "$old_use_external" && USE_EXTERNAL="$old_use_external"
 }
 
 _require_test
@@ -64,16 +63,8 @@ rtminor=$(stat -c '%T' "$rtloop")
 test $ddmajor -le $rtmajor || \
 	_notrun "Data loopdev minor $ddminor larger than rt minor $rtminor"
 
-# Inject our custom-built devices as an rt-capable scratch device.
-# We avoid touching "require_scratch" so that post-test fsck will not try to
-# run on our synthesized scratch device.
-old_use_external="$USE_EXTERNAL"
-USE_EXTERNAL=yes
-SCRATCH_RTDEV="$rtloop"
-SCRATCH_DEV="$ddloop"
-
-_scratch_mkfs >> $seqres.full
-_try_scratch_mount >> $seqres.full || \
+$MKFS_XFS_PROG -r rtdev=$rtloop $ddloop  >> $seqres.full
+mount -o rtdev=$rtloop $ddloop $SCRATCH_MNT >> $seqres.full || \
 	_notrun "mount with injected rt device failed"
 
 # Create a file that we'll use to seed fsmap entries for the rt device,
