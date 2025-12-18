@@ -50,53 +50,105 @@ fake_rtfile=$TEST_DIR/$seq.scratch.rt
 rm -f $fake_rtfile
 truncate -s $fs_size $fake_rtfile
 
-# Save the original variables
-orig_ddev=$SCRATCH_DEV
-orig_external=$USE_EXTERNAL
-orig_logdev=$SCRATCH_LOGDEV
-orig_rtdev=$SCRATCH_RTDEV
-
 scenario() {
 	echo "$@" | tee -a $seqres.full
 
-	SCRATCH_DEV=$orig_ddev
-	USE_EXTERNAL=$orig_external
-	SCRATCH_LOGDEV=$orig_logdev
-	SCRATCH_RTDEV=$orig_rtdev
+	dev=$SCRATCH_DEV
+	logdev=
+	rtdev=
+}
+
+_fake_mkfs()
+{
+	OPTIONS="$*"
+	if [ -n "$logdev" ]; then
+		OPTIONS="$OPTIONS -l logdev=$logdev"
+	fi
+	if [ -n "$rtdev" ]; then
+		OPTIONS="$OPTIONS -r rtdev=$rtdev"
+	fi
+	$MKFS_XFS_PROG -f $OPTIONS $dev || _fail "mkfs failed"
+}
+
+_fake_xfs_db_options()
+{
+	OPTIONS=""
+	if [ ! -z "$logdev" ]; then
+		OPTIONS="-l $logdev"
+	fi
+	if [ ! -z "$rtdev" ]; then
+		if [ $XFS_DB_PROG --help 2>&1 | grep -q -- '-R rtdev']; then
+			OPTIONS="$OPTIONS -R $rtdev"
+		fi
+	fi
+	echo $OPTIONS $* $dev
+}
+
+_fake_xfs_db()
+{
+	$XFS_DB_PROG "$@" $(_fake_xfs_db_options)
+}
+
+_fake_xfs_admin()
+{
+	local options=("$dev")
+	local rt_opts=()
+	if [ -n "$logdev" ]; then
+		options+=("$logdev")
+	fi
+	if [ -n "$rtdev" ]; then
+		$XFS_ADMIN_PROG --help 2>&1 | grep -q 'rtdev' || \
+			_notrun 'xfs_admin does not support rt devices'
+		rt_opts+=(-r "$rtdev")
+	fi
+
+	# xfs_admin in xfsprogs 5.11 has a bug where an external log device
+	# forces xfs_db to be invoked, potentially with zero command arguments.
+	# When this happens, xfs_db will wait for input on stdin, which causes
+	# fstests to hang.  Since xfs_admin is not an interactive tool, we
+	# can redirect stdin from /dev/null to prevent this issue.
+	$XFS_ADMIN_PROG "${rt_opts[@]}" "$@" "${options[@]}" < /dev/null
+}
+
+
+_fake_xfs_repair()
+{
+	OPTIONS=""
+	if [ -n "$logdev" ]; then
+		OPTIONS="-l $logdev"
+	fi
+	if [ -n "$rtdev" ]; then
+		OPTIONS="$OPTIONS -r $rtdev"
+	fi
+	$XFS_REPAIR_PROG $OPTIONS $* $dev
 }
 
 check_label() {
-	_scratch_mkfs_sized "$fs_size" "" -L oldlabel >> $seqres.full 2>&1
-	_scratch_xfs_db -c label
-	_scratch_xfs_admin -L newlabel "$@" >> $seqres.full
-	_scratch_xfs_db -c label
-	_scratch_xfs_repair -n &>> $seqres.full || echo "Check failed?"
+	_fake_mkfs -L oldlabel >> $seqres.full 2>&1
+	_fake_xfs_db -c label
+	_fake_xfs_admin -L newlabel "$@" >> $seqres.full
+	_fake_xfs_db -c label
+	_fake_xfs_repair -n &>> $seqres.full || echo "Check failed?"
 }
 
 scenario "S1: Check that label setting with file image"
-SCRATCH_DEV=$fake_datafile
+dev=$fake_datafile
 check_label -f
 
 scenario "S2: Check that setting with logdev works"
-USE_EXTERNAL=yes
-SCRATCH_LOGDEV=$fake_logfile
+logdev=$fake_logfile
 check_label
 
 scenario "S3: Check that setting with rtdev works"
-USE_EXTERNAL=yes
-SCRATCH_RTDEV=$fake_rtfile
+rtdev=$fake_rtfile
 check_label
 
 scenario "S4: Check that setting with rtdev + logdev works"
-USE_EXTERNAL=yes
-SCRATCH_LOGDEV=$fake_logfile
-SCRATCH_RTDEV=$fake_rtfile
+logdev=$fake_logfile
+rtdev=$fake_rtfile
 check_label
 
 scenario "S5: Check that setting with nortdev + nologdev works"
-USE_EXTERNAL=
-SCRATCH_LOGDEV=
-SCRATCH_RTDEV=
 check_label
 
 scenario "S6: Check that setting with bdev incorrectly flagged as file works"
