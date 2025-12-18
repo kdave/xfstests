@@ -25,17 +25,11 @@ filter_dbval()
 	awk '{ print $4 }'
 }
 
-# Import common functions.
 . ./common/filter
 
-# Modify as appropriate
-
-# Since we have an open-coded mkfs call, disable the external devices and
-# don't let the post-check fsck actually run since it'll trip over us not
-# using the external devices.
+# Since we have an open-coded mkfs call, don't let the post-check fsck run since
+# it would trip over us not using the external devices.
 _require_scratch_nocheck
-export SCRATCH_LOGDEV=
-export SCRATCH_RTDEV=
 
 echo "Silence is golden."
 
@@ -62,30 +56,31 @@ for SECTOR_SIZE in $sector_sizes; do
 		grep -q 'finobt=1' && finobt_enabled=1
 
 	for TYPE in agf agi agfl sb; do
-		DADDR=`_scratch_xfs_db -c "$TYPE" -c "daddr" | filter_dbval`
-		_scratch_xfs_db -c "daddr $DADDR" -c "type $TYPE"
+		DADDR=`$XFS_DB_PROG -c "$TYPE" -c "daddr" $SCRATCH_DEV |
+			filter_dbval`
+		$XFS_DB_PROG -c "daddr $DADDR" -c "type $TYPE" $SCRATCH_DEV
 	done
 
-	DADDR=`_scratch_xfs_db -c "sb" -c "addr rootino" -c "daddr" |
+	DADDR=`$XFS_DB_PROG -c "sb" -c "addr rootino" -c "daddr" $SCRATCH_DEV |
 		filter_dbval`
-	_scratch_xfs_db -c "daddr $DADDR" -c "type inode"
-	DADDR=`_scratch_xfs_db -c "agf" -c "addr bnoroot" -c "daddr" |
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type inode" $SCRATCH_DEV
+	DADDR=`$XFS_DB_PROG -c "agf" -c "addr bnoroot" -c "daddr" $SCRATCH_DEV |
 		filter_dbval`
-	_scratch_xfs_db -c "daddr $DADDR" -c "type bnobt"
-	DADDR=`_scratch_xfs_db -c "agf" -c "addr cntroot" -c "daddr" |
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type bnobt" $SCRATCH_DEV
+	DADDR=`$XFS_DB_PROG -c "agf" -c "addr cntroot" -c "daddr" $SCRATCH_DEV |
 		filter_dbval`
-	_scratch_xfs_db -c "daddr $DADDR" -c "type cntbt"
-	DADDR=`_scratch_xfs_db -c "agi" -c "addr root" -c "daddr" |
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type cntbt" $SCRATCH_DEV
+	DADDR=`$XFS_DB_PROG -c "agi" -c "addr root" -c "daddr" $SCRATCH_DEV |
 		filter_dbval`
-	_scratch_xfs_db -c "daddr $DADDR" -c "type inobt"
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type inobt" $SCRATCH_DEV
 	if [ $finobt_enabled -eq 1 ]; then
-		DADDR=`_scratch_xfs_db -c "agi" -c "addr free_root" -c "daddr" |
-			filter_dbval`
-		_scratch_xfs_db -c "daddr $DADDR" -c "type finobt"
+		DADDR=`$XFS_DB_PROG -c "agi" -c "addr free_root" -c "daddr" $SCRATCH_DEV |
+			 filter_dbval`
+		$XFS_DB_PROG -c "daddr $DADDR" -c "type finobt" $SCRATCH_DEV
 	fi
 
-	_scratch_xfs_db -c "daddr $DADDR" -c "type text"
-	_scratch_xfs_db -c "daddr $DADDR" -c "type data"
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type text" $SCRATCH_DEV
+	$XFS_DB_PROG -c "daddr $DADDR" -c "type data" $SCRATCH_DEV
 done
 
 # success, all done
