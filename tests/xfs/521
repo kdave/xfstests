@@ -16,34 +16,16 @@
 . ./common/preamble
 _begin_fstest auto quick realtime growfs
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	_scratch_unmount >> $seqres.full 2>&1
-	[ -n "$rt_loop_dev" ] && _destroy_loop_device $rt_loop_dev
-	rm -f $tmp.* $TEST_DIR/$seq.rtvol
-}
-
-# Import common functions.
 . ./common/filter
 
-# Note that we don't _require_realtime because we synthesize a rt volume
-# below.
-_require_scratch_nocheck
-_require_no_large_scratch_dev
-
-echo "Create fake rt volume"
-truncate -s 400m $TEST_DIR/$seq.rtvol
-rt_loop_dev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
+_require_realtime
+_require_scratch
 
 echo "Format and mount 100m rt volume"
-export USE_EXTERNAL=yes
-export SCRATCH_RTDEV=$rtdev
 _scratch_mkfs -r size=100m > $seqres.full
-_try_scratch_mount || _notrun "Could not mount scratch with synthetic rt volume"
+_scratch_mount
 
-# zoned file systems only support zoned size-rounded RT device sizes
+# zoned file systems only support zone-size aligned RT device sizes
 _require_xfs_scratch_non_zoned
 
 testdir=$SCRATCH_MNT/test-$seq
@@ -58,7 +40,10 @@ echo "Create some files"
 _pwrite_byte 0x61 0 1m $testdir/original >> $seqres.full
 
 echo "Grow fs"
-$XFS_GROWFS_PROG $SCRATCH_MNT 2>&1 |  _filter_growfs >> $seqres.full
+# growfs expects sizes in FSB units
+fsbsize=$(_get_block_size $SCRATCH_MNT)
+$XFS_GROWFS_PROG -R $((400 * 1024 * 1024 / fsbsize)) $SCRATCH_MNT 2>&1 | \
+	  _filter_growfs >> $seqres.full
 _scratch_cycle_mount
 
 echo "Recheck 400m rt volume stats"
@@ -73,8 +58,6 @@ echo "Check filesystem"
 _check_scratch_fs
 
 _scratch_unmount
-_destroy_loop_device $rt_loop_dev
-unset rt_loop_dev
 
 # success, all done
 status=0
