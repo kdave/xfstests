@@ -10,27 +10,16 @@
 . ./common/preamble
 _begin_fstest auto quick insert zero collapse punch rw realtime
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	_scratch_unmount >> $seqres.full 2>&1
-	[ -n "$rt_loop_dev" ] && _destroy_loop_device $rt_loop_dev
-	rm -f $tmp.* $TEST_DIR/$seq.rtvol
-}
-
-# Import common functions.
 . ./common/filter
 
-_require_loop
 _require_command "$FILEFRAG_PROG" filefrag
 _require_xfs_io_command "fpunch"
 _require_xfs_io_command "fzero"
 _require_xfs_io_command "fcollapse"
 _require_xfs_io_command "finsert"
-# Note that we don't _require_realtime because we synthesize a rt volume
-# below.  This also means we cannot run the post-test check.
-_require_scratch_nocheck
+
+_require_realtime
+_require_scratch
 
 log() {
 	echo "$@" | tee -a $seqres.full
@@ -63,7 +52,6 @@ test_ops() {
 	local lunaligned_off=$unaligned_sz
 
 	log "Format rtextsize=$rextsize"
-	_scratch_unmount
 	_scratch_mkfs -r extsize=$rextsize >> $seqres.full
 	_try_scratch_mount || \
 		_notrun "Could not mount rextsize=$rextsize with synthetic rt volume"
@@ -151,28 +139,14 @@ test_ops() {
 
 	log "Check everything, rextsize=$rextsize"
 	_check_scratch_fs
+	_scratch_unmount
 }
-
-echo "Create fake rt volume"
-$XFS_IO_PROG -f -c "truncate 400m" $TEST_DIR/$seq.rtvol
-rt_loop_dev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
-
-echo "Make sure synth rt volume works"
-export USE_EXTERNAL=yes
-export SCRATCH_RTDEV=$rt_loop_dev
-_scratch_mkfs > $seqres.full
-_try_scratch_mount || \
-	_notrun "Could not mount with synthetic rt volume"
 
 # power of two
 test_ops 262144
 
 # not a power of two
 test_ops 327680
-
-_scratch_unmount
-_destroy_loop_device $rt_loop_dev
-unset rt_loop_dev
 
 # success, all done
 status=0
