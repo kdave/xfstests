@@ -3692,14 +3692,14 @@ _check_test_fs()
     esac
 }
 
-_check_scratch_fs()
+# check the file system passed in as $1
+_check_dev_fs()
 {
-    local device=$SCRATCH_DEV
-    [ $# -eq 1 ] && device=$1
+    local device=$1
 
     case $FSTYP in
     xfs)
-	_check_xfs_scratch_fs $device
+	_check_xfs_filesystem $device "none" "none"
 	;;
     udf)
 	_check_udf_filesystem $device $udf_fsize
@@ -3749,6 +3749,19 @@ _check_scratch_fs()
 	_check_generic_filesystem $device
 	;;
     esac
+}
+
+# check the scratch file system
+_check_scratch_fs()
+{
+	case $FSTYP in
+	xfs)
+		_check_xfs_scratch_fs $SCRATCH_DEV
+		;;
+	*)
+		_check_dev_fs $SCRATCH_DEV
+		;;
+	esac
 }
 
 _full_fstyp_details()
