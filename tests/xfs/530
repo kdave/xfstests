@@ -10,36 +10,22 @@
 . ./common/preamble
 _begin_fstest auto quick realtime growfs
 
-# Override the default cleanup function.
-_cleanup()
-{
-	cd /
-	_scratch_unmount >> $seqres.full 2>&1
-	[ -n "$rt_loop_dev" ] && _destroy_loop_device $rt_loop_dev
-	rm -f $tmp.* $TEST_DIR/$seq.rtvol
-}
-
-# Import common functions.
 . ./common/filter
 . ./common/inject
 . ./common/populate
 
-
-# Note that we don't _require_realtime because we synthesize a rt volume
-# below.
-_require_test
+_require_scratch
+_require_realtime
 _require_xfs_debug
 _require_test_program "punch-alternating"
 _require_xfs_io_error_injection "reduce_max_iextents"
 _require_xfs_io_error_injection "bmap_alloc_minlen_extent"
-_require_scratch_nocheck
 
 echo "* Test extending rt inodes"
 
 _scratch_mkfs | _filter_mkfs >> $seqres.full 2> $tmp.mkfs
 . $tmp.mkfs
 
-echo "Create fake rt volume"
 nr_bitmap_blks=25
 nr_bits=$((nr_bitmap_blks * dbsize * 8))
 
@@ -50,17 +36,12 @@ else
 	rtextsz=$dbsize
 fi
 
-rtdevsz=$((nr_bits * rtextsz))
-truncate -s $rtdevsz $TEST_DIR/$seq.rtvol
-rt_loop_dev=$(_create_loop_device $TEST_DIR/$seq.rtvol)
-
 echo "Format and mount rt volume"
-
-export USE_EXTERNAL=yes
-export SCRATCH_RTDEV=$rt_loop_dev
-_scratch_mkfs -d size=$((1024 * 1024 * 1024)) \
-	      -r size=${rtextsz},extsize=${rtextsz} >> $seqres.full
-_try_scratch_mount || _notrun "Couldn't mount fs with synthetic rt volume"
+_try_scratch_mkfs_xfs \
+	-d size=$((1024 * 1024 * 1024)) \
+	-r size=${rtextsz},extsize=${rtextsz} >> $seqres.full 2>&1 || \
+	_notrun "Couldn't created crafted fs (zoned?)"
+_try_scratch_mount || _notrun "Couldn't mount crafted fs"
 
 # If we didn't get the desired realtime volume and the same blocksize as the
 # first format (which we used to compute a specific rt geometry), skip the
@@ -92,7 +73,12 @@ echo "Inject bmap_alloc_minlen_extent error tag"
 _scratch_inject_error bmap_alloc_minlen_extent 1
 
 echo "Grow realtime volume"
-$XFS_GROWFS_PROG -r $SCRATCH_MNT >> $seqres.full 2>&1
+# growfs expects sizes in FSB units
+fsbsize=$(_get_block_size $SCRATCH_MNT)
+rtdevsz=$((nr_bits * rtextsz))
+
+$XFS_GROWFS_PROG -R $((rtdevsize / fsbsize)) $SCRATCH_MNT \
+	>> $seqres.full 2>&1
 if [[ $? == 0 ]]; then
 	echo "Growfs succeeded; should have failed."
 	exit 1
@@ -115,8 +101,6 @@ echo "Check filesystem"
 _check_scratch_fs
 
 _scratch_unmount &> /dev/null
-_destroy_loop_device $rt_loop_dev
-unset rt_loop_dev
 
 # success, all done
 status=0
