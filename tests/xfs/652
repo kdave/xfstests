@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2025 Christoph Hellwig.
+#
+# FS QA Test No. 652
+#
+# Tests that xfs_growfs to a realtime volume size that is not zone aligned is
+# rejected.
+#
+. ./common/preamble
+_begin_fstest auto quick realtime growfs zone
+
+. ./common/filter
+. ./common/zoned
+
+_require_realtime
+_require_zloop
+_require_scratch
+_require_scratch_size $((16 * 1024 * 1024)) # 16GiB in kiB units
+
+_cleanup()
+{
+	if [ -n "$mnt" ]; then
+		_unmount $mnt 2>/dev/null
+	fi
+	_destroy_zloop $zloop
+	cd /
+	rm -r -f $tmp.*
+}
+
+_scratch_mkfs > /dev/null 2>&1
+_scratch_mount
+
+fsbsize=4096
+unaligned_size=$((((12 * 1024 * 1024 * 1024) + (fsbsize * 13)) / fsbsize))
+
+mnt="$SCRATCH_MNT/mnt"
+zloopdir="$SCRATCH_MNT/zloop"
+
+mkdir -p $mnt
+zloop=$(_create_zloop $zloopdir 256 2)
+
+echo "Format and mount zloop file system"
+_try_mkfs_dev -b size=4k -r size=10g $zloop >> $seqres.full 2>&1 ||\
+	_notrun "cannot mkfs zoned filesystem"
+_mount $zloop $mnt
+
+echo "Try to grow file system to a not zone aligned size"
+$XFS_GROWFS_PROG -R $unaligned_size $mnt >> $seqres.full 2>&1 && \
+	_fail "growfs to unaligned size succeeded"
+
+echo "Remount file system"
+umount $mnt
+_mount $zloop $mnt
+
+# success, all done
+status=0
+exit
