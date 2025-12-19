@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2025 Christoph Hellwig.
+#
+# FS QA Test No. 653
+#
+# Tests that mkfs for a zoned file system rounds realtime subvolume sizes up to
+# the zone size to create mountable file systems.
+#
+. ./common/preamble
+_begin_fstest auto quick realtime growfs zone
+
+. ./common/filter
+. ./common/zoned
+
+_cleanup()
+{
+	_unmount $LOOP_MNT 2>/dev/null
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
+	rm -rf $LOOP_IMG $LOOP_MNT
+	cd /
+	rm -f $tmp.*
+}
+
+_require_test
+_require_loop
+_require_xfs_io_command "truncate"
+
+fsbsize=4096
+aligned_size=$((3 * 1024 * 1024 * 1024))
+unaligned_size=$((2 * 1024 * 1024 * 1024 + fsbsize * 13))
+
+_require_fs_space $TEST_DIR $((aligned_size / 1024))
+
+LOOP_IMG=$TEST_DIR/$seq.dev
+LOOP_MNT=$TEST_DIR/$seq.mnt
+rm -rf $LOOP_IMG $LOOP_MNT
+mkdir -p $LOOP_MNT
+
+# try to create an unaligned RT volume by manually specifying the RT device size
+$XFS_IO_PROG -f -c "truncate ${aligned_size}" $LOOP_IMG
+loop_dev=$(_create_loop_device $LOOP_IMG)
+
+echo "Formatting file system (unaligned specified size)"
+_try_mkfs_dev -b size=4k -r zoned=1,size=$((unaligned_size / fsbsize))b $loop_dev \
+		>> $seqres.full 2>&1 ||\
+	_notrun "cannot mkfs zoned filesystem"
+_mount $loop_dev $LOOP_MNT
+umount $LOOP_MNT
+_destroy_loop_device $loop_dev
+rm -rf $LOOP_IMG
+
+# try to create an unaligned RT volume on on an oddly sized device
+$XFS_IO_PROG -f -c "truncate ${unaligned_size}" $LOOP_IMG
+loop_dev=$(_create_loop_device $LOOP_IMG)
+
+echo "Formatting file system (unaligned device)"
+_try_mkfs_dev -b size=4k -r zoned=1 $loop_dev \
+		>> $seqres.full 2>&1 ||\
+	_notrun "cannot mkfs zoned filesystem"
+_mount $loop_dev $LOOP_MNT
+umount $LOOP_MNT
+
+# success, all done
+status=0
+exit
