@@ -1,0 +1,34 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2025 Christoph Hellwig.
+#
+# FS QA Test No. 651
+#
+# Test that the sb verifier rejects zoned file system with rump RTGs.
+#
+. ./common/preamble
+_begin_fstest auto quick zone
+
+. ./common/zoned
+
+# we intentionally corrupt the superblock
+_require_scratch_nocheck
+
+_try_scratch_mkfs_xfs -r zoned=1 >> $seqres.full 2>&1 || \
+	_notrun "Can't create zoned file system"
+
+# adjust rblocks/rextents to not be zone aligned
+blocks=$(_scratch_xfs_get_sb_field rblocks)
+blocks=$((blocks - 4096))
+_scratch_xfs_set_sb_field rblocks ${blocks} >> $seqres.full 2>&1
+_scratch_xfs_set_sb_field rextents ${blocks} >> $seqres.full 2>&1
+
+if _try_scratch_mount >/dev/null 2>&1; then
+	echo "Mounted rump RTG file system (bad)"
+else
+	echo "Can't mount rump RTG file system (good)"
+fi
+
+
+status=0
+exit
