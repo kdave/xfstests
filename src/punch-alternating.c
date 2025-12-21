@@ -88,6 +88,11 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 	}
 
+	if (size >= interval) {
+		printf("Interval must be > size\n");
+		usage(argv[0]);
+	}
+
 	if (optind != argc - 1)
 		usage(argv[0]);
 
