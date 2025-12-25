@@ -630,6 +630,31 @@ _btrfs_no_v1_cache_opt()
 	echo -n "-onospace_cache"
 }
 
+# v1 space cache is already deprecated and will be removed soon. Furthermore
+# the soon-to-be-default block-group-tree has dependency on v2 space cache, and
+# will reject v1 cache mount option.
+# Make sure v1 space cache is still supported for test cases still utilizing
+# v1 space cache.
+_require_btrfs_v1_cache()
+{
+	_scratch_mkfs &> /dev/null
+	_try_scratch_mount -o clear_cache,space_cache=v1 || _notrun "v1 space cache is not supported"
+	_scratch_unmount
+
+	# Make sure no FREE_SPACE_TREE enabled.
+	if $BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV |\
+	   grep -q "FREE_SPACE_TREE"; then
+		_notrun "v1 space cache is not supported"
+	fi
+
+	# Make sure the cache generation is not 0 nor -1.
+	local cache_gen=$($BTRFS_UTIL_PROG inspect-internal dump-super $SCRATCH_DEV |\
+			  grep "cache_generation" | $AWK_PROG '{ print $2 }' )
+	if [ "$cache_gen" -eq 0 -o $(( $test_num + 1 )) -eq 0 ]; then
+		_notrun "v1 space cache is not supported"
+	fi
+}
+
 # Require certain sectorsize support
 _require_btrfs_support_sectorsize()
 {
