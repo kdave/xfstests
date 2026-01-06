@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 341
+#
+# Test renaming one directory over another one that has a subvolume inside it
+# and fsync a file in the other directory that was previously renamed. We want
+# to verify that after a power failure we are able to mount the filesystem and
+# it has the correct content (all renames visible).
+#
+. ./common/preamble
+_begin_fstest auto quick subvol rename log
+
+_cleanup()
+{
+	_cleanup_flakey
+	cd /
+	rm -r -f $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+. ./common/renameat2
+
+_require_scratch
+_require_dm_target flakey
+_require_renameat2 exchange
+
+_fixed_by_kernel_commit 7ba0b6461bc4 \
+	"btrfs: always detect conflicting inodes when logging inode refs"
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_require_metadata_journaling $SCRATCH_DEV
+_init_flakey
+_scratch_mount
+
+# Create our test directories, one with a file inside, another with a subvolume
+# that is not empty (has one file).
+mkdir $SCRATCH_MNT/dir1
+echo -n > $SCRATCH_MNT/dir1/foo
+
+mkdir $SCRATCH_MNT/dir2
+_btrfs subvolume create $SCRATCH_MNT/dir2/subvol
+echo -n > $SCRATCH_MNT/dir2/subvol/subvol_file
+
+_scratch_sync
+
+# Rename file foo so that its inode's last_unlink_trans is updated to the
+# current transaction.
+mv $SCRATCH_MNT/dir1/foo $SCRATCH_MNT/dir1/bar
+
+# Rename exchange dir1 with dir2.
+$here/src/renameat2 -x $SCRATCH_MNT/dir1 $SCRATCH_MNT/dir2
+
+# Fsync file bar, we just renamed from foo.
+# Until the kernel fix mentioned above, it would result in logging dir2 without
+# logging dir1, causing log replay to attempt to remove the inode for dir1 since
+# the inode for dir2 has the same name in the same parent directory. Not only
+# this was not correct, since we did not delete the directory, but it would also
+# result in a log replay failure (and therefore mount failure) because we would
+# be attempting to delete a directory with a non-empty subvolume inside it.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/dir2/bar
+
+# Simulate a power failure and then mount again the filesystem to replay the
+# journal/log. We should be able to replay the log tree and mount successfully.
+_flakey_drop_and_remount
+
+echo -e "Filesystem contents after power failure:\n"
+ls -1R $SCRATCH_MNT | _filter_scratch
+
+# success, all done
+_exit 0
