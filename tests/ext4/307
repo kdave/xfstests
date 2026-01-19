@@ -24,9 +24,10 @@ _workout()
 	_run_fsstress $args
 	find $out -type f > $out.list
 	cat $out.list | xargs  md5sum > $out.md5sum
-	usage=`du -sch $out | tail -n1 | gawk '{ print $1 }'`
+	# Use -m to get integer MB size to avoid decimals (e.g. 1.5M) which xfs_io rejects
+	usage=$(du -sm $out | awk '{print $1}')
 	echo "Allocate donor file"
-	$XFS_IO_PROG -c "falloc 0 250M" -f $SCRATCH_MNT/donor | _filter_xfs_io
+	$XFS_IO_PROG -c "falloc 0 ${usage}m" -f $SCRATCH_MNT/donor | _filter_xfs_io
 	echo "Perform compacting"
 	cat $out.list | run_check $here/src/e4compact \
 		-i -v -f $SCRATCH_MNT/donor  >> $seqres.full 2>&1
