@@ -3375,7 +3375,10 @@ main(int argc, char **argv)
 				exit(87);
 			}
 			duration = strtoll(optarg, NULL, 0);
-			if (duration < 1) {
+			if (duration == 0) {
+				/* No action is taken if duration is 0 */
+				exit(0);
+			} else if (duration < 0) {
 				fprintf(stderr, "%lld: invalid duration\n", duration);
 				exit(88);
 			}
