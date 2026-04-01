@@ -21,7 +21,7 @@ if ! [ -d "$cdir" ]; then
 	exit 1
 fi
 
-echo "<details><summary>Tests not run</summary>"
+echo "<details open><summary>Tests not run</summary>"
 echo
 echo '```'
 
