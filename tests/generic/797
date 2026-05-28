@@ -1,0 +1,54 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 797
+#
+# Test writing into a file range containing prealloc extents beyond the current
+# i_size, with an unmount and mount after fallocate and the write, to verify
+# that the file data, size and extent layout were not lost.
+#
+. ./common/preamble
+_begin_fstest auto quick prealloc preallocrw fiemap
+
+. ./common/filter
+. ./common/punch # for _filter_fiemap
+
+_require_scratch
+_require_xfs_io_command "falloc" "-k"
+_require_xfs_io_command "fiemap"
+
+_fixed_by_fs_commit btrfs 080ecbd05432 \
+	"btrfs: mark file extent range dirty after converting prealloc extents"
+
+_scratch_mkfs >>$seqres.full 2>&1
+_scratch_mount
+
+# The fiemap results in the golden output requires file allocations to align to
+# 1M boundaries.
+_require_congruent_file_oplen $SCRATCH_MNT 1048576
+
+# Create our file with a size of 0 and a prealloc extent in the range [0, 2M].
+$XFS_IO_PROG -f -c "falloc -k 0 2M" $SCRATCH_MNT/foo
+
+# Unmount and mount again to remove any in memory state of the inode. We will
+# verify later that neither metadata nor extents were lost during unmount.
+_scratch_cycle_mount
+
+# Write into the [0, 1M] range, which increases the inode's i_size.
+$XFS_IO_PROG -c "pwrite -S 0xab -b 1M 0 1M" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Unmount and mount again to remove any in memory state of the inode. We will
+# verify later that neither metadata nor extents were lost during unmount.
+_scratch_cycle_mount
+
+# Check file data (and size).
+echo "File data:"
+_hexdump $SCRATCH_MNT/foo
+
+# Check we have unwritten extents in range [1M, 2M].
+echo "Fiemap output:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_fiemap
+
+# Success, all done.
+_exit 0
