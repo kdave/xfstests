@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Kylin Software.
+#
+# FS QA Test 333
+#
+# Check that an unrecoverable writeback error on a zoned realtime device shuts
+# down the filesystem.
+#
+. ./common/preamble
+_begin_fstest auto quick rw zone eio
+
+. ./common/filter
+. ./common/fail_make_request
+. ./common/zoned
+
+_require_debugfs
+_require_scratch_nocheck
+_require_realtime
+_require_block_device $SCRATCH_RTDEV
+_require_zoned_device $SCRATCH_RTDEV
+_require_command "$BLKZONE_PROG" blkzone
+_require_fail_make_request
+
+_cleanup()
+{
+	[ -n "$SCRATCH_RTDEV" ] && \
+		_bdev_fail_make_request $SCRATCH_RTDEV 0 > /dev/null 2>&1
+	_disallow_fail_make_request > /dev/null 2>&1
+	_scratch_unmount > /dev/null 2>&1
+	cd /
+	rm -r -f $tmp.*
+}
+
+zone_capacity=$(_zone_capacity 0 $SCRATCH_RTDEV)
+echo "zone capacity: $zone_capacity" >> $seqres.full
+
+_scratch_mkfs_sized $((256 * 1024 * 1024)) >> $seqres.full 2>&1
+
+# Leave only one open zone for user data.  If writeback fails after consuming
+# it, further writers must either see shutdown or wait forever for zone space.
+export MOUNT_OPTIONS="$MOUNT_OPTIONS -o max_open_zones=2"
+_try_scratch_mount || _notrun "max_open_zones mount option is not supported"
+_require_xfs_scratch_zoned 1
+
+testfile=$SCRATCH_MNT/writeback-error
+waitfile=$SCRATCH_MNT/wait-for-zone
+
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 $zone_capacity" $testfile \
+	>> $seqres.full 2>&1 || _fail "failed to dirty test file"
+
+_allow_fail_make_request 100 100000 0 > /dev/null
+_bdev_fail_make_request $SCRATCH_RTDEV 1 > /dev/null
+
+$XFS_IO_PROG -c "fsync" $testfile >> $seqres.full 2>&1 && \
+	_fail "fsync succeeded despite realtime device error"
+
+_bdev_fail_make_request $SCRATCH_RTDEV 0 > /dev/null
+_disallow_fail_make_request > /dev/null
+
+$XFS_IO_PROG -f -c "pwrite -S 0x59 0 4k" -c "fsync" $waitfile \
+	>> $seqres.full 2>&1 && \
+	_fail "filesystem did not shut down after zoned writeback error"
+
+echo "Silence is golden"
+_exit 0
