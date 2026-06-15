@@ -3837,7 +3837,7 @@ int tcore_setgid_create_idmapped(const struct vfstest_info *info)
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -4013,7 +4013,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -7732,7 +7732,7 @@ static int setgid_create_umask_idmapped(const struct vfstest_info *info)
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -7946,7 +7946,7 @@ static int setgid_create_umask_idmapped_in_userns(const struct vfstest_info *inf
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	/*
 	 * Below we verify that setgid inheritance for a newly created file or
@@ -8180,7 +8180,7 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	pid = fork();
 	if (pid < 0) {
@@ -8535,7 +8535,7 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		goto out;
 	}
 
-	supported = openat_tmpfile_supported(open_tree_fd);
+	supported = openat_tmpfile_supported(info->t_dir1_fd);
 
 	/*
 	 * Below we verify that setgid inheritance for a newly created file or
