@@ -20,7 +20,7 @@ _begin_fstest auto quick rw
 . ./common/filter
 
 _require_scratch
-_require_odirect 512	# see fio job1 config below
+_require_odirect
 _require_aio
 
 _fixed_by_fs_commit btrfs xxxxxxxxxxxx \
@@ -30,7 +30,7 @@ iterations=$((32 * LOAD_FACTOR))
 
 fio_config=$tmp.fio
 fio_out=$tmp.fio.out
-blksz=`$here/src/min_dio_alignment $SCRATCH_MNT $SCRATCH_DEV`
+
 cat >$fio_config <<EOF
 [global]
 bs=8k
@@ -57,9 +57,19 @@ filename=file1
 EOF
 _require_fio $fio_config
 
+blksz=""
+
 for (( i = 0; i < $iterations; i++)); do
 	_scratch_mkfs >>$seqres.full 2>&1
 	_scratch_mount
+
+	if [ -z "$blksz" ]; then
+		blksz=`$here/src/min_dio_alignment $SCRATCH_MNT $SCRATCH_DEV`
+		if [[ $blksz -gt 512 ]]; then
+			_notrun "512 byte dio alignment required"
+		fi
+	fi
+
 	# There's a known EIO failure to report collisions between directio and buffered
 	# writes to userspace, refer to upstream linux 5a9d929d6e13. So ignore EIO error
 	# at here.
