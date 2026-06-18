@@ -240,12 +240,11 @@ int tcore_acls(const struct vfstest_info *info)
 		goto out;
 	}
 
-	snprintf(t_buf, sizeof(t_buf), "%s/" T_DIR1 "/" DIR2, info->t_mountpoint);
-	sys_umount2(t_buf, MNT_DETACH);
-
 	fret = 0;
 	log_debug("Ran test");
 out:
+	snprintf(t_buf, sizeof(t_buf), "%s/" T_DIR1 "/" DIR2, info->t_mountpoint);
+	sys_umount2(t_buf, MNT_DETACH);
 	safe_close(attr.userns_fd);
 	safe_close(dir1_fd);
 	safe_close(open_tree_fd);
