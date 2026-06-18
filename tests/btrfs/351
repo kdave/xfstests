@@ -1,0 +1,47 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 351
+#
+# Make sure the unprivileged get_subvol_info ioctl is providing the correct
+# result.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"Revert \"btrfs: add 32-bit compat ioctl for BTRFS_IOC_GET_SUBVOL_INFO\""
+
+_require_test_program btrfs_ioctl
+_require_scratch
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+_btrfs subvolume create $SCRATCH_MNT/subv1
+
+# The id is get through "btrfs subvolume list" command, which doesn't utilize the
+# unprivileged version.
+subvolid=$(_btrfs_get_subvolid $SCRATCH_MNT subv1)
+echo "subvolid=$subvolid" >> $seqres.full
+
+# Do a basic check in case "btrfs subvolume list" doesn't get a correct subvolid
+if [ -z "$subvolid" -o "$subvolid" -lt 256 ]; then
+	_fail "\"btrfs subvolume list\" returned an invalid subvolid"
+fi
+
+# Get the id again through the unprivileged get_subvol_info ioctl
+$here/src/btrfs_ioctl get_subvol_info $SCRATCH_MNT/subv1 >> $tmp.output
+cat $tmp.output >> $seqres.full
+ioctl_subvolid=$(grep treeid: $tmp.output | cut -f 2 -d\ )
+
+if [ "$ioctl_subvolid" -ne "$subvolid" ]; then
+	_fail "get_subvol_info ioctl returned an incorrect treeid"
+fi
+
+_scratch_unmount
+
+echo "Silence is golden"
+# success, all done
+_exit 0
