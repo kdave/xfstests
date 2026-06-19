@@ -57,9 +57,16 @@ _grow_loop()
 	$XFS_IO_PROG -f -c "truncate $original" $LOOP_IMG
 	loop_dev=`_create_loop_device $LOOP_IMG $bsize`
 
-	dparam=""
+	# Disable concurrency scaling to avoid output differences due to large
+	# CPU counts.
+	if _scratch_mkfs_xfs_supports_concurrency -l >> $seqres.full 2>&1; then
+		mkfs_opts="-d concurrency=0 -l concurrency=0 -r concurrency=0"
+	else
+		mkfs_opts=""
+	fi
+
 	if [ -n "$agsize" ]; then
-		dparam="-d agsize=$agsize"
+		mkfs_opts="$mkfs_opts -d agsize=$agsize"
 	fi
 
 	echo
@@ -67,7 +74,7 @@ _grow_loop()
 	echo
 
 	echo "*** mkfs loop file (size=$original)"
-	$MKFS_XFS_PROG -b size=$bsize $dparam $loop_dev | \
+	$MKFS_XFS_PROG -b size=$bsize $mkfs_opts $loop_dev | \
 		_filter_mkfs 2>/dev/null
 
 	echo "*** extend loop file"
