@@ -4185,6 +4185,28 @@ _require_scratch_shutdown_and_syncfs()
 	_require_scratch_shutdown
 }
 
+# Require that the mounted filesystem survive data write errors long enough to
+# report them through the regular error reporting path.
+_require_fs_survives_data_write_eio()
+{
+	local dev=$1
+
+	if [ ! -b "$dev" ]; then
+		_fail "Usage: _require_fs_survives_data_write_eio <mounted_device>"
+	fi
+
+	case "$FSTYP" in
+	xfs)
+		# This is an XFS per-mount sysfs attribute, not a block queue
+		# attribute.  Its existence means XFS mounted this instance with
+		# zoned filesystem semantics.
+		if _has_fs_sysfs_attr "$dev" "zoned/max_open_zones"; then
+			_notrun "zoned XFS shuts down on data write EIO"
+		fi
+		;;
+	esac
+}
+
 _check_s_dax()
 {
 	local target=$1
