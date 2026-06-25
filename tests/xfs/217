@@ -21,11 +21,6 @@ _cleanup()
 
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
-if _scratch_mkfs_xfs_supports_concurrency -l >> $seqres.full 2>&1; then
-	loop_mkfs_opts="-l concurrency=0 -d concurrency=0"
-else
-	loop_mkfs_opts=""
-fi
 _scratch_mount
 # 16T mkfs requires a bit over 2G free
 _require_fs_space $SCRATCH_MNT 2202000
@@ -62,6 +57,10 @@ if [ $? -ne 0 ]; then
 fi
 
 loop_dev=$(_create_loop_device $LOOP_IMG)
+
+if _mkfs_xfs_supported $loop_mkfs_opts -l concurrency=0 -d concurrency=0 $loop_dev &>> $seqres.full; then
+	loop_mkfs_opts="$loop_mkfs_opts -l concurrency=0 -d concurrency=0"
+fi
 
 #
 # walk over "new" sizes supported by recent xfsprogs.

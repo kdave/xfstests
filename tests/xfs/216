@@ -22,11 +22,6 @@ _cleanup()
 
 _require_scratch
 _scratch_mkfs_xfs >/dev/null 2>&1
-if _scratch_mkfs_xfs_supports_concurrency -l >> $seqres.full 2>&1; then
-	loop_mkfs_opts="-l concurrency=0"
-else
-	loop_mkfs_opts=""
-fi
 _scratch_mount
 
 _require_loop
@@ -75,6 +70,10 @@ choose_golden_output $0 $LOOP_IMG
 mkdir $LOOP_MNT
 
 loop_dev=$(_create_loop_device $LOOP_IMG)
+
+if _mkfs_xfs_supported $loop_mkfs_opts -l concurrency=0 $loop_dev &>> $seqres.full; then
+	loop_mkfs_opts="$loop_mkfs_opts -l concurrency=0"
+fi
 
 # walk over standard sizes (up to 256GB)
 _do_mkfs 1 2 4 8 16 32 64 128 256
