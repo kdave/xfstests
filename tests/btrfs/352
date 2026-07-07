@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 352
+#
+# A regression test to make sure failed remount won't leave
+# BTRFS_FS_STATE_REMOUNTING flag set, which can interrupt several features,
+# one of them is btrfs qgroup rescan.
+#
+. ./common/preamble
+_begin_fstest auto quick remount
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: fix leaking BTRFS_FS_STATE_REMOUNTING flag"
+
+_require_btrfs_fs_feature supported_rescue_options
+
+if ! grep -q "ignorebadroots" "/sys/fs/btrfs/features/supported_rescue_options"; then
+	_notrun "\"rescue=ignorebadroots\" mount option not supported"
+fi
+
+_require_btrfs_command quota rescan -w
+_require_scratch
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# Enable regular quota mode, and do a rescan.
+# Although the regression is affecting multiple features, qgroup rescan is the
+# easiest to verify.
+_btrfs quota enable $SCRATCH_MNT
+_btrfs quota rescan -w $SCRATCH_MNT
+
+# The following mount must fail, as the following rescue mount option requires
+# a full RO mount, thus it can not be set for the existing RW mount.
+_scratch_remount "rescue=ignorebadroots" >> $seqres.full 2>&1
+if [ $? -eq 0 ]; then
+	_fail "\"rescue=ignorebadroots\" is applied to RW mount unexpectedly"
+fi
+
+# For unpatched kernel, qgroup rescan will be interrupted immediately.
+_btrfs quota rescan -w $SCRATCH_MNT
+
+# We want capture the stderr output, so use $BTRFS_UTIL_PROG instead of _btrfs
+$BTRFS_UTIL_PROG qgroup show $SCRATCH_MNT >> $seqres.full
+
+echo "Silence is golden"
+
+# success, all done
+_exit 0
