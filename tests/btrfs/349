@@ -1,0 +1,73 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Daan De Meyer. All Rights Reserved.
+#
+# FS QA Test 349
+#
+# Verify that a NOCOW swap file containing a checksummed extent is rejected
+# even after the checksummed source is deleted and the extent is no longer
+# shared.
+#
+. ./common/preamble
+_begin_fstest auto quick clone swap
+
+_cleanup()
+{
+	cd /
+	test -n "$swap_file" && swapoff "$swap_file" > /dev/null 2>&1
+	rm -f $tmp.*
+}
+
+. ./common/reflink
+
+_require_scratch_swapfile
+_require_scratch_reflink
+_require_chattr C
+_require_btrfs_no_nodatacow
+_require_btrfs_no_nodatasum
+_require_btrfs_command inspect-internal dump-tree
+
+_fixed_by_kernel_commit 32f0ea439198 \
+	"btrfs: reject swapfile activation if any extent has checksums"
+_fixed_by_kernel_commit 111c7c266da8 \
+	"btrfs: allow reflinking from checksummed files into nodatasum files"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+swap_file=$SCRATCH_MNT/swapfile
+source=$SCRATCH_MNT/checksummed_source
+swap_size=$((16 * 1024 * 1024))
+extent_size=$((128 * 1024))
+dest_offset=$((1024 * 1024))
+
+# First verify that this filesystem and configuration can activate a regular
+# NOCOW swap file.
+_format_swapfile "$swap_file" "$swap_size" >> $seqres.full
+_swapon_file "$swap_file" >> $seqres.full 2>&1 || \
+	_fail "failed to activate plain NOCOW swap file"
+swapoff "$swap_file" >> $seqres.full 2>&1 || \
+	_fail "failed to deactivate plain NOCOW swap file"
+
+# Replace a range away from the swap header with a checksummed extent.  Delete
+# the source and commit the deletion so that sharedness cannot be the reason
+# for rejecting swap activation.
+$XFS_IO_PROG -f -c "pwrite -q -S 0x61 0 $extent_size" -c fsync "$source" || \
+	_fail "failed to write checksummed source"
+_reflink_range "$source" 0 "$swap_file" "$dest_offset" "$extent_size" \
+	> /dev/null 2>&1
+source_bytenr=$(_btrfs_get_file_extent_item_bytenr "$source" 0)
+swap_bytenr=$(_btrfs_get_file_extent_item_bytenr "$swap_file" "$dest_offset")
+[ -n "$source_bytenr" ] && [ "$source_bytenr" = "$swap_bytenr" ] || \
+	_fail "checksummed extent was not cloned into the swap file"
+rm "$source"
+_scratch_cycle_mount
+
+if _swapon_file "$swap_file" >> $seqres.full 2>&1; then
+	swapoff "$swap_file" > /dev/null 2>&1
+	_fail "activated swap file containing a checksummed extent"
+fi
+
+echo "Silence is golden"
+
+_exit 0

@@ -1,0 +1,180 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Daan De Meyer. All Rights Reserved.
+#
+# FS QA Test 348
+#
+# Verify that checksummed extents can be cloned and deduplicated into NOCOW
+# files.  The reverse direction must remain rejected because NOCOW extents do
+# not have checksums.
+#
+. ./common/preamble
+_begin_fstest auto quick clone dedupe scrub
+
+. ./common/reflink
+
+_require_scratch_reflink
+_require_scratch_dedupe
+_require_chattr C
+_require_btrfs_no_nodatacow
+_require_btrfs_no_nodatasum
+_require_btrfs_command inspect-internal dump-tree
+
+_fixed_by_kernel_commit 111c7c266da8 \
+	"btrfs: allow reflinking from checksummed files into nodatasum files"
+
+filesize=128K
+
+write_pattern()
+{
+	local file=$1
+	local pattern=$2
+
+	$XFS_IO_PROG -f -c "pwrite -q -S $pattern 0 $filesize" \
+		-c fsync "$file" || _fail "failed to write $file"
+}
+
+make_nocow_file()
+{
+	local file=$1
+
+	touch "$file"
+	$CHATTR_PROG +C "$file" || _fail "failed to set NOCOW on $file"
+}
+
+get_extent_bytenr()
+{
+	local file=$1
+	local offset=${2:-0}
+
+	extent_bytenr=$(_btrfs_get_file_extent_item_bytenr "$file" "$offset")
+	[ -n "$extent_bytenr" ] || _fail "failed to find an extent for $file"
+}
+
+check_contents()
+{
+	local file=$1
+	local expected=$2
+
+	cmp -s "$file" "$expected" || _fail "unexpected contents in $file"
+}
+
+# Generate reference files outside the scratch filesystem.
+write_pattern "$tmp.pattern_a" 0x61
+write_pattern "$tmp.pattern_b" 0x62
+write_pattern "$tmp.pattern_c" 0x63
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount
+
+# Clone a checksummed extent into a NOCOW file.
+source=$SCRATCH_MNT/clone_source
+dest=$SCRATCH_MNT/clone_dest
+write_pattern "$source" 0x61
+make_nocow_file "$dest"
+_reflink_range "$source" 0 "$dest" 0 "$filesize" > /dev/null 2>&1
+
+# Remount so that the data checks below cannot be satisfied from page cache.
+_scratch_cycle_mount
+get_extent_bytenr "$source"
+source_bytenr=$extent_bytenr
+get_extent_bytenr "$dest"
+dest_bytenr=$extent_bytenr
+[ "$source_bytenr" = "$dest_bytenr" ] || \
+	_fail "clone did not share the source extent"
+check_contents "$source" "$tmp.pattern_a"
+check_contents "$dest" "$tmp.pattern_a"
+
+# The first write to the NOCOW destination must COW because the shared extent
+# has checksums.  This keeps the source data and its checksums intact.
+write_pattern "$dest" 0x62
+get_extent_bytenr "$dest"
+first_write_bytenr=$extent_bytenr
+[ "$first_write_bytenr" != "$source_bytenr" ] || \
+	_fail "first NOCOW destination write did not COW"
+_scratch_cycle_mount
+check_contents "$source" "$tmp.pattern_a"
+check_contents "$dest" "$tmp.pattern_b"
+
+# Once the destination has a private extent without checksums, NOCOW writes
+# should resume modifying that extent in place.
+write_pattern "$dest" 0x63
+get_extent_bytenr "$dest"
+second_write_bytenr=$extent_bytenr
+[ "$second_write_bytenr" = "$first_write_bytenr" ] || \
+	_fail "subsequent NOCOW destination write was not in place"
+check_contents "$dest" "$tmp.pattern_c"
+
+# The checksums must also force the first write to COW after the checksummed
+# source is deleted and the destination is the extent's only remaining owner.
+source=$SCRATCH_MNT/unshared_source
+dest=$SCRATCH_MNT/unshared_dest
+write_pattern "$source" 0x61
+make_nocow_file "$dest"
+_reflink_range "$source" 0 "$dest" 0 "$filesize" > /dev/null 2>&1
+get_extent_bytenr "$source"
+source_bytenr=$extent_bytenr
+get_extent_bytenr "$dest"
+shared_bytenr=$extent_bytenr
+[ "$source_bytenr" = "$shared_bytenr" ] || \
+	_fail "clone did not share the source extent"
+rm "$source"
+_scratch_cycle_mount
+write_pattern "$dest" 0x62
+get_extent_bytenr "$dest"
+unshared_write_bytenr=$extent_bytenr
+[ "$unshared_write_bytenr" != "$shared_bytenr" ] || \
+	_fail "write to unshared checksummed extent did not COW"
+check_contents "$dest" "$tmp.pattern_b"
+
+# Dedupe uses the same remap preparation path and must allow the same
+# checksummed source to NOCOW destination direction.
+source=$SCRATCH_MNT/dedupe_source
+dest=$SCRATCH_MNT/dedupe_dest
+write_pattern "$source" 0x61
+make_nocow_file "$dest"
+$XFS_IO_PROG -f -c "pwrite -q -S 0x61 0 384K" -c fsync "$dest" || \
+	_fail "failed to write $dest"
+_dedupe_range "$source" 0 "$dest" "$filesize" "$filesize" \
+	> /dev/null 2>&1
+_scratch_cycle_mount
+get_extent_bytenr "$source"
+source_bytenr=$extent_bytenr
+get_extent_bytenr "$dest" "$((128 * 1024))"
+dest_bytenr=$extent_bytenr
+[ "$source_bytenr" = "$dest_bytenr" ] || \
+	_fail "dedupe did not share the source extent"
+_compare_range "$source" 0 "$dest" "$((128 * 1024))" "$((128 * 1024))" || \
+	_fail "deduped range contents differ from the source"
+
+# Scrub must handle the NOCOW destination's mixture of checksummed and
+# non-checksummed extents without reporting an error.
+$BTRFS_UTIL_PROG scrub start -B "$SCRATCH_MNT" >> $seqres.full 2>&1 || \
+	_fail "scrub found errors"
+
+# Cloning or deduplicating a NOCOW source into a checksummed destination must
+# not share the source extent, since it has no checksums for destination reads.
+source=$SCRATCH_MNT/reverse_source
+clone_dest=$SCRATCH_MNT/reverse_clone_dest
+dedupe_dest=$SCRATCH_MNT/reverse_dedupe_dest
+make_nocow_file "$source"
+write_pattern "$source" 0x61
+touch "$clone_dest"
+_reflink_range "$source" 0 "$clone_dest" 0 "$filesize" > /dev/null 2>&1
+get_extent_bytenr "$source"
+source_bytenr=$extent_bytenr
+clone_bytenr=$(_btrfs_get_file_extent_item_bytenr "$clone_dest" 0)
+if [ -n "$clone_bytenr" ] && [ "$clone_bytenr" = "$source_bytenr" ]; then
+	_fail "NOCOW to checksummed clone succeeded"
+fi
+write_pattern "$dedupe_dest" 0x61
+_dedupe_range "$source" 0 "$dedupe_dest" 0 "$filesize" > /dev/null 2>&1
+get_extent_bytenr "$dedupe_dest"
+dedupe_bytenr=$extent_bytenr
+if [ "$dedupe_bytenr" = "$source_bytenr" ]; then
+	_fail "NOCOW to checksummed dedupe succeeded"
+fi
+
+echo "Silence is golden"
+
+_exit 0
