@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 798
+#
+# Basic tests for cachestat()
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+_require_xfs_io_command "cachestat"
+_require_scratch
+# Any mount option that writes data back synchronously should be rejected.
+# Or it will screw up the dirtied page reporting for buffered writes.
+_exclude_scratch_mount_option "dax"
+_exclude_scratch_mount_option "sync"
+
+pagesize=$(_get_page_size)
+
+_scratch_mkfs > /dev/null
+_scratch_mount
+
+for num_page in 1 2 4 8 16; do
+	size=$(($pagesize * $num_page))
+
+	echo "=== Test with $num_page pages ==="
+
+	rm -f $SCRATCH_MNT/foobar
+	$XFS_IO_PROG -f -c "pwrite -b $pagesize 0 $size" $SCRATCH_MNT/foobar > /dev/null
+	# Basic cached number reporting
+	$XFS_IO_PROG -c "cachestat 0 $size" $SCRATCH_MNT/foobar
+
+	# Test dirty page number reporting after a fsync.
+	$XFS_IO_PROG -c "fsync" -c "cachestat 0 $size" $SCRATCH_MNT/foobar
+done
+
+_scratch_unmount
+_exit 0
