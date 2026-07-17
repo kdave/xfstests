@@ -1,0 +1,177 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Samsung Electronics.  All Rights Reserved.
+#
+# FS QA Test 801
+#
+# Verify FALLOC_FL_WRITE_ZEROES (xfs_io "fwzero") on an unaligned range,
+# exercising every state the two boundary allocation units can be in.
+#
+# WRITE_ZEROES must leave the whole requested range backed by *written*
+# (zeroed) extents while preserving the out-of-range bytes of the partial
+# boundary units. The possible scenarios are: written_edges, hole_edges,
+# unwritten_edges and delalloc_edges.
+#
+# It then covers the EOF cases: a WRITE_ZEROES that *extends* the file to a
+# non-unit-aligned size, followed by a further extension. WRITE_ZEROES must
+# never leave written blocks beyond EOF.
+
+. ./common/preamble
+_begin_fstest auto quick prealloc fiemap
+
+testfile=$TEST_DIR/$seq.testfile
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	rm -f $testfile
+}
+
+. ./common/filter
+. ./common/punch
+
+_require_test
+_require_xfs_io_command "fwzero"
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fiemap" "-e"
+_require_xfs_io_command "truncate"
+
+# The allocation unit: rt extent size on an rt config, otherwise the block
+# size. Deriving the range from this makes the head/tail units straddle rt
+# extents when rextsize > 1.
+u=$(_get_file_block_size $TEST_DIR)
+
+# The fs block size. On rt with rextsize > 1 the allocation unit u is the rt
+# extent (u > b). A WRITE_ZEROES that extends EOF must only write out to the
+# block-rounded EOF and leave the rest of the straddling rt extent unwritten,
+# rather than written past EOF.
+b=$(_get_block_size $TEST_DIR)
+
+# Unaligned range within EOF: start 1.5 units in, span 4 units, so both the
+# head unit [u, 2u) and the tail unit [5u, 6u) are only partially covered,
+# with fully covered units in between and data on both sides.
+off=$((u + u / 2))
+len=$((4 * u))
+filesz=$((8 * u))
+pattern=0xab
+
+# Expected images.  For the written/delalloc cases the pattern surrounds the
+# zeroed range; for the hole/unwritten cases the file reads back all zeroes.
+$XFS_IO_PROG -f -c "pwrite -S $pattern 0 $filesz" $tmp.pattern >> $seqres.full 2>&1
+$XFS_IO_PROG -c "pwrite -S 0 $off $len" $tmp.pattern >> $seqres.full 2>&1
+$XFS_IO_PROG -f -c "truncate $filesz" $tmp.zero >> $seqres.full 2>&1
+
+# Assert the whole requested range is backed by written extents immediately
+# after fwzero (before any sync/remount): no holes, no unwritten.
+_check_range_written()
+{
+	local file=$1
+	local bad
+
+	bad=$($XFS_IO_PROG -c "fiemap -v $off $len" "$file" | \
+		_filter_fiemap | grep -E -c 'hole|unwritten')
+	if [ "$bad" -eq 0 ]; then
+		echo "extents: range fully written"
+	else
+		echo "extents: FAIL - $bad hole/unwritten extent(s) in range"
+		$XFS_IO_PROG -c "fiemap -v $off $len" "$file" | _filter_fiemap
+	fi
+}
+
+_check_data()
+{
+	local file=$1
+	local want=$2
+
+	if cmp -s "$file" "$want"; then
+		echo "data: matches expected image"
+	else
+		echo "data: FAIL - mismatch against expected image"
+		cmp "$file" "$want" | head
+	fi
+}
+
+# Assert [start, start+len) has no written extents (unwritten/hole only).  Used
+# to verify the tail of the straddling rt extent, past the block-rounded EOF,
+# was left unwritten.  len <= 0 means u == block size (no rt tail) -> nothing to
+# check, but still emit the line so the output is config-independent.
+_check_eof_tail()
+{
+	local file=$1 start=$2 len=$3 bad
+
+	if [ "$len" -le 0 ]; then
+		echo "extents: eof tail unwritten"
+		return
+	fi
+	bad=$($XFS_IO_PROG -c "fiemap -v $start $len" "$file" | \
+		_filter_fiemap | grep -E -c 'data')
+	if [ "$bad" -eq 0 ]; then
+		echo "extents: eof tail unwritten"
+	else
+		echo "extents: FAIL - $bad written extent(s) past block-rounded EOF"
+		$XFS_IO_PROG -c "fiemap -v $start $len" "$file" | _filter_fiemap
+	fi
+}
+
+_run_case()
+{
+	local name=$1
+	local want=$2
+
+	echo "=== $name ==="
+
+	$XFS_IO_PROG -c "fwzero $off $len" $testfile >> $seqres.full 2>&1
+
+	echo "== $name fiemap after fwzero ==" >> $seqres.full
+	$XFS_IO_PROG -c "fiemap -v" $testfile >> $seqres.full 2>&1
+
+	_check_range_written $testfile
+	_test_cycle_mount
+	_check_data $testfile $want
+
+	rm -f $testfile
+}
+
+# 1) Boundary units already written, within i_size.
+$XFS_IO_PROG -f -c "pwrite -S $pattern 0 $filesz" -c fsync $testfile \
+	>> $seqres.full 2>&1
+_run_case "written_edges" $tmp.pattern
+
+# 2) Boundary units are holes (sparse file).
+$XFS_IO_PROG -f -c "truncate $filesz" $testfile >> $seqres.full 2>&1
+_run_case "hole_edges" $tmp.zero
+
+# 3) Boundary units are unwritten preallocation.
+$XFS_IO_PROG -f -c "falloc 0 $filesz" $testfile >> $seqres.full 2>&1
+_run_case "unwritten_edges" $tmp.zero
+
+# 4) Boundary units are dirty/delalloc:
+$XFS_IO_PROG -f -c "pwrite -S $pattern 0 $filesz" $testfile >> $seqres.full 2>&1
+_run_case "delalloc_edges" $tmp.pattern
+
+# 5) Boundary units are dirty unwritten.
+$XFS_IO_PROG -f -c "falloc 0 $filesz" -c "pwrite -S $pattern 0 $filesz" \
+	$testfile >> $seqres.full 2>&1
+_run_case "dirty_unwritten_edges" $tmp.pattern
+
+# 6) EOF cases. A WRITE_ZEROES that extends the file to a non-unit-aligned
+#    size, followed by a further extend.
+eof=$((3 * u + 1))
+
+echo "=== eof_then_truncate ==="
+$XFS_IO_PROG -f -c "fwzero 0 $eof" $testfile >> $seqres.full 2>&1
+# The write must stop at the block-rounded EOF; the rest of the rt extent that
+# straddles EOF must be unwritten, not written past EOF.  Round EOF up to the
+# fs block size (b is a power of two) the same way as generic/219.
+eof_ru=$(( (eof + b - 1) & ~(b - 1) ))
+_check_eof_tail $testfile $eof_ru $((4 * u - eof_ru))
+
+$XFS_IO_PROG -c "truncate $filesz" $testfile >> $seqres.full 2>&1
+_test_cycle_mount
+_check_data $testfile $tmp.zero
+rm -f $testfile
+
+# success, all done
+status=0
+exit
