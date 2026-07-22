@@ -36,7 +36,7 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	fscrypt-crypt-util bulkstat_null_ocount splice-test chprojid_fail \
 	detached_mounts_propagation ext4_resize t_readdir_3 splice2pipe \
 	uuid_ioctl t_snapshot_deleted_subvolume fiemap-fault min_dio_alignment \
-	rw_hint fs-monitor btrfs_ioctl
+	rw_hint btrfs_ioctl
 
 EXTRA_EXECS = dmerror fill2attr fill2fs fill2fs_check scaleread.sh \
 	      btrfs_crc32c_forged_name.py popdir.pl popattr.py \
@@ -105,6 +105,10 @@ endif
 
 ifeq ($(HAVE_FICLONE),yes)
      TARGETS += t_reflink_read_race
+endif
+
+ifeq ($(HAVE_FANOTIFY_FID),yes)
+     TARGETS += fs-monitor
 endif
 
 ifeq ($(HAVE_LIBBTRFSUTIL), true)
