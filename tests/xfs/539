@@ -1,0 +1,62 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Red Hat.  All Rights Reserved.
+#
+# FS QA Test 539
+#
+# Regression test for cumulative restores where a directory has been
+# renamed outside of the subtree being restored resulting in
+#
+#   xfsrestore: tree.c:1421: noref_elim_recurse: Assertion 'isrealpr' failed
+#
+. ./common/preamble
+_begin_fstest auto dump
+
+_fixed_by_git_commit xfsdump dd63de5 \
+	"xfsrestore: only process subtrees that are selected"
+
+# Override the default cleanup function.
+_cleanup()
+{
+	_cleanup_dump
+	cd /
+	rm -r -f $tmp.*
+}
+
+# Import common functions.
+. ./common/dump
+# Modify as appropriate.
+_require_scratch
+_scratch_mkfs_xfs >>$seqres.full
+_scratch_mount
+
+mkdir -p $SCRATCH_MNT/a/b/c/d/e/f/g
+mkdir -p $SCRATCH_MNT/restore_me/B/C/D/E/F/G
+
+_do_die_on_error="always"
+_do "Creating l0 dump" \
+	"$XFSDUMP_PROG -L lab_l0 -M test -l0 -f $tmp.dump.l0 $SCRATCH_MNT"
+
+mv $SCRATCH_MNT/a/b/c $SCRATCH_MNT/1
+
+_do "Creating l2 dump" \
+	"$XFSDUMP_PROG -L lab_l2.0 -M test -l2 -f $tmp.dump.l2.0 $SCRATCH_MNT"
+
+dir=$(mktemp -d $SCRATCH_MNT/restore_XXX)
+_do "Cumulative restore l0" "$XFSRESTORE_PROG -f $tmp.dump.l0 -r $dir"
+_do "Cumulative restore l2" "$XFSRESTORE_PROG -f $tmp.dump.l2.0 -r $dir"
+
+dir=$(mktemp -d $SCRATCH_MNT/restore_XXX)
+_do "Cumulative subtree restore l0" \
+	"$XFSRESTORE_PROG -f $tmp.dump.l0 -r -s restore_me $dir"
+# The next command core dumps prior to xfsdump v3.3.0 when noref_elim_recurse attempts to
+# rename directories outside of the subtree when their parent has not been created.
+_do "Cumulative subtree restore l2" \
+	"$XFSRESTORE_PROG -f $tmp.dump.l2.0 -r $dir"
+
+dir=$(mktemp -d $SCRATCH_MNT/restore_XXX)
+_do "Restore l2 on its own" \
+	"$XFSRESTORE_PROG -f $tmp.dump.l0 -r -s restore_me $dir"
+
+# success, all done
+_exit 0
