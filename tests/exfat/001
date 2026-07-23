@@ -1,0 +1,171 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Rochan Avlur.  All Rights Reserved.
+#
+# FS QA Test No. exfat/001
+#
+# Verify that rename and cross-directory move do not destroy
+# unrecognized benign secondary directory entries.  exFAT spec section 8.2
+# requires implementations to preserve benign secondary entries they
+# do not recognize.
+#
+# Regression test for kernel commit 8258ef28001a
+# ("exfat: handle unreconized benign secondary entries") which added
+# cluster freeing for benign secondary entries inside
+# exfat_remove_entries(), but that function is also called by the
+# rename and move paths where freeing is incorrect.
+#
+. ./common/preamble
+_begin_fstest auto quick
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_unmount $loop_mnt 2>/dev/null
+	[ -n "$loop_dev" ] && _destroy_loop_device $loop_dev
+	rm -rf $loop_mnt $img_file $tmp.*
+}
+
+_fixed_by_kernel_commit 942296784b2a \
+	"exfat: preserve benign secondary entries during rename and move"
+
+_require_test
+_require_loop
+_require_command "$PYTHON3_PROG" python3
+
+img_file=$TEST_DIR/$seq.exfat.img
+loop_mnt=$TEST_DIR/$seq.mnt
+loop_dev=""
+
+INJECT=$here/src/exfat_inject_vendor_ext.py
+VERIFY=$here/src/exfat_verify_vendor_ext.py
+MARKER="XFST_BENIGN_01"
+
+create_exfat_image()
+{
+	rm -f $img_file
+	truncate -s 10M $img_file
+	loop_dev=$(_create_loop_device $img_file)
+	_mkfs_dev $loop_dev >> $seqres.full 2>&1
+	mkdir -p $loop_mnt
+}
+
+mount_image()
+{
+	_mount $loop_dev $loop_mnt
+}
+
+unmount_image()
+{
+	_unmount $loop_mnt
+}
+
+teardown_image()
+{
+	_unmount $loop_mnt 2>/dev/null
+	_destroy_loop_device $loop_dev
+	loop_dev=""
+}
+
+verify_benign_preserved()
+{
+	local label="$1"
+	local count="${2:-1}"
+
+	result=$($PYTHON3_PROG $VERIFY $loop_dev "$MARKER" "$count" \
+		2>>$seqres.full)
+	if [ "$result" = "PASS" ]; then
+		echo "PASS: benign secondary entries preserved after $label"
+	else
+		echo "FAIL: benign secondary entries destroyed by $label"
+	fi
+}
+
+# Test 1: rename to longer name (entry set must be relocated)
+create_exfat_image
+mount_image
+echo "payload" > $loop_mnt/a
+unmount_image
+
+$PYTHON3_PROG $INJECT $loop_dev "$MARKER" a \
+	>> $seqres.full 2>&1 || _fail "inject failed for test 1"
+
+mount_image
+mv $loop_mnt/a "$loop_mnt/a_long_name_to_force_entry_set_relocation"
+unmount_image
+
+verify_benign_preserved "rename to longer name"
+teardown_image
+
+# Test 2: cross-directory move
+create_exfat_image
+mount_image
+echo "payload" > $loop_mnt/b
+unmount_image
+
+$PYTHON3_PROG $INJECT $loop_dev "$MARKER" b \
+	>> $seqres.full 2>&1 || _fail "inject failed for test 2"
+
+mount_image
+mkdir $loop_mnt/subdir
+mv $loop_mnt/b $loop_mnt/subdir/b
+unmount_image
+
+verify_benign_preserved "cross-directory move"
+teardown_image
+
+# Test 3: rename to shorter name (entry set is updated in place)
+create_exfat_image
+mount_image
+echo "payload" > "$loop_mnt/a_long_name_to_force_multiple_name_entries"
+unmount_image
+
+$PYTHON3_PROG $INJECT $loop_dev "$MARKER" \
+	a_long_name_to_force_multiple_name_entries \
+	>> $seqres.full 2>&1 || _fail "inject failed for test 3"
+
+mount_image
+mv "$loop_mnt/a_long_name_to_force_multiple_name_entries" $loop_mnt/c
+unmount_image
+
+verify_benign_preserved "rename to shorter name"
+teardown_image
+
+# Test 4: rename overwriting an existing file (source's benign entries
+#         must survive even though the target's entries are deleted)
+create_exfat_image
+mount_image
+echo "target" > $loop_mnt/dst
+echo "source" > $loop_mnt/src
+unmount_image
+
+$PYTHON3_PROG $INJECT $loop_dev "$MARKER" src \
+	>> $seqres.full 2>&1 || _fail "inject failed for test 4 (src)"
+
+mount_image
+mv $loop_mnt/src $loop_mnt/dst
+unmount_image
+
+verify_benign_preserved "rename overwriting existing file"
+teardown_image
+
+# Test 5: multiple benign entries (verifies all are copied, not just one)
+create_exfat_image
+mount_image
+echo "payload" > $loop_mnt/m
+unmount_image
+
+$PYTHON3_PROG $INJECT $loop_dev "$MARKER" m 3 \
+	>> $seqres.full 2>&1 || _fail "inject failed for test 5"
+
+mount_image
+mv $loop_mnt/m "$loop_mnt/m_longer_name_for_relocation"
+unmount_image
+
+verify_benign_preserved "rename with multiple benign entries" 3
+teardown_image
+
+# success, all done
+status=0
+exit

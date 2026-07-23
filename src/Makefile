@@ -40,7 +40,8 @@ LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 
 EXTRA_EXECS = dmerror fill2attr fill2fs fill2fs_check scaleread.sh \
 	      btrfs_crc32c_forged_name.py popdir.pl popattr.py \
-	      soak_duration.awk parse-dev-tree.awk parse-free-space.py
+	      soak_duration.awk parse-dev-tree.awk parse-free-space.py \
+	      exfat_inject_vendor_ext.py exfat_verify_vendor_ext.py
 
 SUBDIRS = log-writes perf
 
