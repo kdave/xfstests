@@ -4641,11 +4641,13 @@ _create_loop_device()
 {
 	local file="$1"
 	local blksize="$2"
+	local sizelimit="$3"
 	local dev
 	local dio_args="--direct-io=on"
 	local args
 
 	test -n "$blksize" && args="--sector-size=$blksize"
+	test -n "$sizelimit" && args+=" --sizelimit=$sizelimit"
 
 	# Try to enable asynchronous directio mode on the loopback device so
 	# that writeback started by a filesystem mounted on the loop device
@@ -4681,7 +4683,8 @@ _create_loop_device_like_bdev()
 
 	blksize="$(blockdev --getss "$bdev")"
 
-	_create_loop_device "$file" "$blksize"
+	shift 2
+	_create_loop_device "$file" "$blksize" "$@"
 }
 
 _destroy_loop_device()
