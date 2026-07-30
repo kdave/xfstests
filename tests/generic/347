@@ -38,7 +38,17 @@ _setup_thin()
 
 _workout()
 {
-	# Overfill it by a bit
+	# Preallocate space to avoid failure for metadata writeback
+	for I in `seq 1 500`; do
+		$XFS_IO_PROG -f -c "falloc 0 1M" $SCRATCH_MNT/file$I &>/dev/null
+	done
+
+	# Unmount and check the device to make sure all metadata is written
+	_dmthin_check_fs
+	_dmthin_mount
+
+	# Write the data blocks to force thinp space allocation.
+	# Overfill it by a bit.
 	for I in `seq 1 500`; do
 		$XFS_IO_PROG -f -c "pwrite -W 0 1M" $SCRATCH_MNT/file$I &>/dev/null
 	done
@@ -57,6 +67,7 @@ _workout()
 . ./common/dmthin
 
 _require_scratch_nocheck
+_require_xfs_io_command "falloc"
 _require_dm_target thin-pool
 
 _setup_thin
