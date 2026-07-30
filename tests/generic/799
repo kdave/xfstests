@@ -1,0 +1,59 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (C) 2026 KylinSoft Co., Ltd. All rights reserved.
+# Author(s): ChenXiaoSong <chenxiaosong@kylinos.cn>
+#
+# FS QA Test No. 799
+#
+# Check that fstat(2) returns the correct hard link count for a regular file.
+#
+#  from
+#  tests/generic/002
+#  Copyright (c) 2000-2001 Silicon Graphics, Inc.  All Rights Reserved.
+#
+. ./common/preamble
+_begin_fstest metadata auto quick hardlink
+
+_cleanup()
+{
+	cd /
+	rm -rf "$tmp".* "$testdir"
+}
+
+_require_test
+_require_hardlinks
+
+_fixed_by_fs_commit cifs 9dd1964ac59d \
+	"smb/client: fix incorrect nlink returned by fstat()"
+
+_get_nlink()
+{
+	# This calls `fstat()`, see `stat_f()` in xfsprogs-dev.git io/stat.c:
+	# https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git/tree/io/stat.c
+	$XFS_IO_PROG -c 'stat -r' "$1" |
+		sed -n 's/^stat\.nlink = //p'
+}
+
+testdir=$TEST_DIR/$seq
+rm -rf "$testdir"
+mkdir "$testdir"
+
+touch "$testdir/tmp.1"
+for ((l = 2; l <= 20; l++)); do
+	ln "$testdir/tmp.1" "$testdir/tmp.$l"
+	nlink=$(_get_nlink "$testdir/tmp.1")
+	if [ "$nlink" != "$l" ]; then
+		_fail "Expected nlink $l after creating link $testdir/tmp.$l, got ${nlink:-nothing}"
+	fi
+done
+
+for ((l = 20; l >= 1; l--)); do
+	nlink=$(_get_nlink "$testdir/tmp.1")
+	if [ "$nlink" != "$l" ]; then
+		_fail "Expected nlink $l before removing link $testdir/tmp.$l, got ${nlink:-nothing}"
+	fi
+	rm -f "$testdir/tmp.$l"
+done
+
+echo "Silence is golden"
+_exit 0
