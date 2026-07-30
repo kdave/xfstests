@@ -22,7 +22,13 @@ _wants_kernel_commit dacfd001eaf2 \
 echo "Silence is golden"
 
 $here/src/vfs/vfstest --test-nested-userns \
-	--device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP"
+	--device "$TEST_DEV" --mount "$TEST_DIR" --fstype "$FSTYP" \
+	> $tmp.vfstest 2>&1
 
+if grep -q "No space left on device" $tmp.vfstest; then
+	_notrun "$TEST_DEV ran out of free blocks/inodes"
+fi
+
+cat $tmp.vfstest
 status=$?
 exit
