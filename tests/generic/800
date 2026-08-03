@@ -1,0 +1,79 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 800
+#
+# Test direct read into a mmaped range meanwhile doing data sync for the mmaped
+# range.
+# Such racy workload should cause direct endio function to mark the folio
+# dirty without going through buffered write nor page_mkwrite().
+#
+# Make sure the fs can handle such ->dirty_folio() callback correctly.
+#
+. ./common/preamble
+_begin_fstest auto rw mmap
+
+_require_test_program dio-read-into-mmap
+_require_scratch
+_require_test
+_require_odirect
+_require_xfs_io_command sync_range
+
+_cleanup()
+{
+	cd /
+	[ -n "$read_pid" ] && kill $read_pid &> /dev/null
+	[ -n "$sync_pid" ] && kill $sync_pid &> /dev/null
+	wait
+	rm -r -f $tmp.*
+}
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# Create the 4MiB target file on TEST_MNT as the read source.
+$XFS_IO_PROG -f -c "pwrite -i /dev/urandom 0 4M" "$TEST_MNT/dio-read-source" >> $seqres.full
+
+# Another 4MiB target file on SCRATCH_MNT as the mmap dest
+$XFS_IO_PROG -f -c "pwrite 0 4M" "$SCRATCH_MNT/mmap-dest" >> $seqres.full
+
+read_workload()
+{
+	_register_cleanup "wait"
+	while true; do
+		$here/src/dio-read-into-mmap "$TEST_MNT/dio-read-source" \
+			"$SCRATCH_MNT/mmap-dest" &> /dev/null
+		if [ $? -ne 0 ]; then
+			echo "dio read failed"
+			break;
+		fi
+	done
+}
+
+sync_workload()
+{
+	_register_cleanup "wait"
+	while true; do
+		$XFS_IO_PROG -c "sync_range 0 4m" "$SCRATCH_MNT/mmap-dest"
+		if [ $? -ne 0 ]; then
+			echo "sync_range failed"
+			break;
+		fi
+	done
+}
+
+read_workload &
+read_pid=$!
+
+sync_workload &
+sync_pid=$!
+
+sleep $((15 * $TIME_FACTOR))
+
+kill "$read_pid" "$sync_pid" &> /dev/null
+unset read_pid sync_pid
+wait
+
+echo "Silence is golden"
+_exit 0
