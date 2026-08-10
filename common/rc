@@ -1201,10 +1201,64 @@ _scratch_pool_mkfs()
     esac
 }
 
+# Return the amount of memory available to the current cgroup.
+_cgroup_available_memory_bytes()
+{
+	local limit
+	local usage
+
+	if [[ -r /sys/fs/cgroup/memory.max &&
+	      -r /sys/fs/cgroup/memory.current ]]; then
+		# cgroup v2
+		limit=$(< /sys/fs/cgroup/memory.max)
+		usage=$(< /sys/fs/cgroup/memory.current)
+	elif [[ -r /sys/fs/cgroup/memory/memory.limit_in_bytes &&
+		-r /sys/fs/cgroup/memory/memory.usage_in_bytes ]]; then
+		# cgroup v1
+		limit=$(< /sys/fs/cgroup/memory/memory.limit_in_bytes)
+		usage=$(< /sys/fs/cgroup/memory/memory.usage_in_bytes)
+	else
+		return 1
+	fi
+
+	[[ $limit == "max" ]] && return 1
+	[[ $limit =~ ^[0-9]+$ && $usage =~ ^[0-9]+$ ]] || return 1
+
+	if [[ $limit -le $usage ]]; then
+		echo 0
+	else
+		echo $((limit - usage))
+	fi
+}
+
+_trim_memory_with_cgroup()
+{
+	local size=$1
+	local available
+
+	available=$(_cgroup_available_memory_bytes) || {
+		echo "$size"
+		return
+	}
+
+	# Keep a 64MiB margin for the test process and runtime overhead.
+	if [[ $available -gt 67108864 ]]; then
+		available=$((available - 67108864))
+	fi
+
+	if [[ $available -lt $size ]]; then
+		echo "$available"
+	else
+		echo "$size"
+	fi
+}
+
 # Return the amount of free memory available on the system
 _free_memory_bytes()
 {
-    free -b | grep ^Mem | awk '{print $4}'
+	local size=`free -b | grep ^Mem | awk '{print $4}'`
+
+	_trim_memory_with_cgroup "$size"
 }
 
 _available_memory_bytes()
@@ -1214,7 +1268,9 @@ _available_memory_bytes()
 		# Doesn't have available field. Fallback.
 		_free_memory_bytes
 	else
-		free -b | grep ^Mem | awk '{print $7}'
+		local size=`free -b | grep ^Mem | awk '{print $7}'`
+
+		_trim_memory_with_cgroup "$size"
 	fi
 }
 
