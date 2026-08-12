@@ -941,11 +941,7 @@ bool openat_tmpfile_supported(int dirfd)
 
 	fd = openat(dirfd, ".", O_TMPFILE | O_RDWR, S_IXGRP | S_ISGID);
 	if (fd == -1) {
-		/*
-		 * Kernel commit 539dce114465 ("fs: refuse O_TMPFILE creation
-		 * with an unmapped fsuid or fsgid") will reject such operation.
-		 */
-		if (errno == ENOTSUP || errno == EOVERFLOW) {
+		if (errno == ENOTSUP) {
 			errno = 0; /* Don't report misleading errno. */
 			return false;
 		} else {
