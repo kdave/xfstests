@@ -111,6 +111,10 @@ AC_CHECK_TYPES([struct btrfs_ioctl_received_subvol_args], [], [], [[
 #include <stddef.h>
 #include <linux/btrfs.h>
 ]])
+AC_CHECK_TYPES([struct delegation], [], [], [[
+#include <stddef.h>
+#include <fcntl.h>
+]])
 AC_CHECK_HEADERS([linux/btrfs.h linux/btrfs_tree.h])
 AC_CHECK_MEMBERS([struct btrfs_ioctl_vol_args_v2.subvolid], [], [], [[
 #include <stddef.h>

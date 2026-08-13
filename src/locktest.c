@@ -80,7 +80,9 @@ extern int h_errno;
 #ifndef F_GETDELEG
 #define F_GETDELEG	(1024 + 15)
 #define F_SETDELEG	(1024 + 16)
+#endif
 
+#ifndef HAVE_STRUCT_DELEGATION
 struct delegation {
 	uint32_t d_flags;
 	uint16_t d_type;
