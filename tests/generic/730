@@ -25,14 +25,17 @@ _cleanup()
 _require_test
 _require_block_device $TEST_DEV
 _require_scsi_debug
-# scsi_debug doesn't support DAX, so skip this test if MOUNT_OPTIONS
-# contains "dax"
-_exclude_scratch_mount_option "dax"
+
+# The actual test does not use the scratch device, but _require_scratch_shutdown
+# is the most sensible way to check that a file system supports shutdown.
+# Require scratch to use that check, but otherwise just use the scsi_debug
+# device.
+_require_scratch_nocheck
+_require_scratch_shutdown
 
 size=$(_small_fs_size_mb 256)
 SCSI_DEBUG_DEV=`_get_scsi_debug_dev 512 512 0 $size`
 test -b "$SCSI_DEBUG_DEV" || _notrun "Failed to initialize scsi debug device"
-SCRATCH_DEV=$SCSI_DEBUG_DEV _require_scratch_shutdown
 echo "SCSI debug device $SCSI_DEBUG_DEV" >>$seqres.full
 
 run_check _mkfs_dev $SCSI_DEBUG_DEV
