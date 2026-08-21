@@ -41,7 +41,6 @@ _cleanup()
 . ./common/attr
 . ./common/scsi_debug
 
-_require_scratch_nocheck
 _require_scsi_debug "medium_error_start"
 _require_attrs user
 
@@ -55,9 +54,8 @@ scsi_debug_opt_error=${scsi_debug_opt_error:=2}
 test -b $scsi_debug_dev || _notrun "Failed to initialize scsi debug device"
 echo "SCSI debug device $scsi_debug_dev" >>$seqres.full
 
-SCRATCH_DEV=$scsi_debug_dev
-_scratch_mkfs >> $seqres.full || _notrun "could not format filesystem"
-_scratch_mount
+_mkfs_dev $scsi_debug_dev >> $seqres.full || _notrun "could not format filesystem"
+_mount -t xfs $scsi_debug_dev $SCRATCH_MNT
 
 block_size=$(_get_file_block_size $SCRATCH_MNT)
 inode_size=$(_xfs_get_inode_size $SCRATCH_MNT)
@@ -94,10 +92,12 @@ test_attr()
 	local start_blocks=($($XFS_IO_PROG -c "bmap -al" $testfile | awk 'match($3, /[0-9]+/, a) {print a[0]}'))
 	echo "Attribute fork extent(s) start at ${start_blocks[*]}" >> $seqres.full
 
-	_scratch_unmount
+	umount $scsi_debug_dev
 
 	echo "Dump inode $inode details with xfs_db" >> $seqres.full
-	_scratch_xfs_db -c "inode $inode" -c "print core.aformat core.naextents a" >> $seqres.full
+	$XFS_DB_PROG $scsi_debug_dev \
+		-c "inode $inode" -c "print core.aformat core.naextents a" \
+		>> $seqres.full
 
 	if [[ start_blocks[0] -ne 0 ]]; then
 		# Choose the block to error, currently only works with a single extent.
@@ -105,10 +105,11 @@ test_attr()
 	else
 		# Default to the inode daddr when no extents were found.
 		# Errors when getfattr(1) stats the inode and doesnt get to getfattr(2)
-		error_daddr=$(_scratch_xfs_db -c "inode $inode" -c "daddr" | awk '{print $4}')
+		error_daddr=$($XFS_DB_PROG $scsi_debug_dev \
+			-c "inode $inode" -c "daddr" | awk '{print $4}')
 	fi
 
-	_scratch_mount
+	_mount $scsi_debug_dev $SCRATCH_MNT
 
 	echo "Setup scsi_debug to error when reading attributes from block" \
 	     "$error_at_block at daddr $error_daddr" >> $seqres.full
