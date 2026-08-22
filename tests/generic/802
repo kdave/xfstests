@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 802
+#
+# Regression test for an exchange-range bug which unintentionally results in
+# files that share data blocks but don't have the reflink flag set.  This
+# enables attackers to rewrite shared blocks to gain root privileges, similar
+# to refluxfs.
+. ./common/preamble
+_begin_fstest auto quick fiexchange
+
+. ./common/filter
+. ./common/reflink
+
+_require_scratch_reflink
+_require_xfs_io_command exchangerange
+_require_cp_reflink
+
+_fixed_by_fs_commit xfs b2d5a81dae3853 \
+	"xfs: fix exchange-range reflink flag clearing issue with  INO1_WRITTEN"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+# Create file1 as a fully written file, and file2 as a sparse file with one
+# written area.
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 1m" $SCRATCH_MNT/file1 >> $seqres.full
+$XFS_IO_PROG -f -c "truncate 1m" -c "pwrite -S 0x59 64k 64k" $SCRATCH_MNT/file2 >> $seqres.full
+
+_scratch_unmount
+_scratch_xfs_db -c "path /file1" -c 'print' -c "path /file2" -c 'print' | grep reflink
+_scratch_mount
+
+# Reflink file1 so that the reflink flag gets set
+_cp_reflink $SCRATCH_MNT/file1 $SCRATCH_MNT/fileC
+
+md5sum $SCRATCH_MNT/file1 $SCRATCH_MNT/file2 $SCRATCH_MNT/fileC | _filter_scratch
+
+# Exchange the written parts of file2 with file1, but only file1 has the
+# reflink flag set.
+$XFS_IO_PROG -c "exchangerange -w $SCRATCH_MNT/file2" $SCRATCH_MNT/file1 >> $seqres.full
+
+# Check reflink flags
+_scratch_unmount
+_scratch_xfs_db -c "path /file1" -c 'print' -c "path /file2" -c 'print' | grep reflink
+_scratch_mount
+
+# Record content and layout
+md5sum $SCRATCH_MNT/file1 $SCRATCH_MNT/file2 $SCRATCH_MNT/fileC | _filter_scratch
+$XFS_IO_PROG -c 'bmap -vvvvvvvv' $SCRATCH_MNT/file[12C] >> $seqres.full
+
+# Write a single byte to file1, does that get echoed in fileC?
+$XFS_IO_PROG -c 'pwrite -S 0x59 0 1' $SCRATCH_MNT/file1 >> $seqres.full
+#
+# Check reflink flags
+_scratch_unmount
+_scratch_xfs_db -c "path /file1" -c 'print' -c "path /file2" -c 'print' | grep reflink
+_scratch_mount
+
+md5sum $SCRATCH_MNT/file1 $SCRATCH_MNT/file2 $SCRATCH_MNT/fileC | _filter_scratch
+$XFS_IO_PROG -c 'bmap -vvvvvvvv' $SCRATCH_MNT/file[12C] >> $seqres.full
+
+_exit 0
