@@ -27,12 +27,21 @@ for num_page in 1 2 4 8 16; do
 	echo "=== Test with $num_page pages ==="
 
 	rm -f $SCRATCH_MNT/foobar
-	$XFS_IO_PROG -f -c "pwrite -b $pagesize 0 $size" $SCRATCH_MNT/foobar > /dev/null
-	# Basic cached number reporting
-	$XFS_IO_PROG -c "cachestat 0 $size" $SCRATCH_MNT/foobar
 
-	# Test dirty page number reporting after a fsync.
-	$XFS_IO_PROG -c "fsync" -c "cachestat 0 $size" $SCRATCH_MNT/foobar
+	# Basic cached number reporting and test dirty page number
+	# reporting after a fsync.
+	#
+	# Do the whole write+cachestat+fsync+cachestat sequence in a
+	# single xfs_io invocation. Some filesystems (e.g. NFS) flush
+	# dirty data back to the server as part of their own close()-time
+	# cache consistency, which would clear the dirty bits before the
+	# second xfs_io process ever got to run cachestat.
+	$XFS_IO_PROG -f \
+		-c "pwrite -q -b $pagesize 0 $size" \
+		-c "cachestat 0 $size" \
+		-c "fsync" \
+		-c "cachestat 0 $size" \
+		$SCRATCH_MNT/foobar
 done
 
 _scratch_unmount
