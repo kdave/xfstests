@@ -15,7 +15,7 @@ notrun=()
 interrupt=true
 diff="diff -u"
 showme=false
-have_test_arg=false
+remain_args=()
 randomize=false
 exact_order=false
 export here=`pwd`
@@ -228,7 +228,7 @@ _prepare_test_list()
 	# Specified groups to include
 	# Note that the CLI processing adds a leading space to the first group
 	# parameter, so we have to catch that here checking for "all"
-	if ! $have_test_arg && [ "$GROUP_LIST" == " all" ]; then
+	if [ ${#remain_args[@]} -eq 0 ] && [ "$GROUP_LIST" == " all" ]; then
 		# no test numbers, do everything
 		get_all_tests
 	else
@@ -301,137 +301,183 @@ compat_old_option()
 	done
 }
 
-short_opts="g:x:X:e:E:s:S:lnri:I:TdbR:L:h"
-long_opts="fs:,exact-order,large-fs,extra-space:,udiff,help"
+# Process tests from command line now.
+process_remain_tests()
+{
+	local list test_dir test_name group_file
 
-compat_old_option "$@"
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-*)
+			_fatal "Arguments before tests, please!"
+			;;
+		*)
+			# Expand test pattern (e.g. xfs/???, *fs/001)
+			list=$(cd $SRC_DIR; echo $1)
+			for t in $list; do
+				t=${t#$SRC_DIR/}
+				test_dir=${t%%/*}
+				test_name=${t##*/}
+				group_file=$SRC_DIR/$test_dir/group.list
 
-# Note: The '+' prefix in getopt's option string preserves the existing
-# behavior that option parsing stops at the first non-option test argument.
-parsed_opts=$(getopt -n "check" -o +"${short_opts}" -l "$long_opts" -- "${check_args[@]}")
-test $? -ne 0 && usage
+				if grep -Eq "^$test_name" $group_file; then
+					# in group file ... OK
+					echo $SRC_DIR/$test_dir/$test_name \
+						>>$tmp.arglist
+				else
+					# oops
+					echo "$t - unknown test, ignored"
+				fi
+			done
+			;;
+		esac
 
-eval set -- "$parsed_opts"
+		shift
+	done
+}
 
-while [ $# -gt 0 ]; do
-	case "$1" in
-	--fs)
-		if [ "$2" == "overlay" ];then
-			[ "$FSTYP" == overlay ] || \
-				export OVL_BASE_FSTYP="$FSTYP"
-			FSTYP=overlay
-			export OVERLAY=true
-		else
-			FSTYP="$2"
-		fi
-		shift
-		;;
-	--udiff)
-		diff="$diff -u"
-		;;
-	-g)
-		GROUP_LIST="$GROUP_LIST ${2//,/ }"
-		shift
-		;;
-	-x)
-		XGROUP_LIST="$XGROUP_LIST ${2//,/ }"
-		shift
-		;;
-	-X)
-		subdir_xfile="$2"
-		shift
-		;;
-	-e)
-		readarray -t -O "${#exclude_tests[@]}" exclude_tests < \
-			<(echo "$2" | tr ', ' '\n\n')
-		shift
-		;;
-	-E)
-		if [ -f "$2" ]; then
-			readarray -t -O ${#exclude_tests[@]} exclude_tests < \
-				<(sed "s/#.*$//" "$2")
-		fi
-		shift
-		;;
-	-s)
-		RUN_SECTION="$RUN_SECTION $2"
-		shift
-		;;
-	-S)
-		EXCLUDE_SECTION="$EXCLUDE_SECTION $2"
-		shift
-		;;
-	-l)
-		diff="diff"
-		;;
-	-n)
-		showme=true
-		;;
-	-r)
-		if $exact_order; then
-			_fatal "Cannot specify -r and --exact-order."
-		fi
-		randomize=true
-		;;
-	--exact-order)
-		if $randomize; then
-			_fatal "Cannot specify --exact-order and -r."
-		fi
-		exact_order=true
-		;;
-	-i)
-		iterations=$2
-		shift
-		;;
-	-I)
-		iterations=$2
-		istop=true
-		shift
-		;;
-	-T)
-		timestamp=true
-		;;
-	-d)
-		DUMP_OUTPUT=true
-		;;
-	-b)
-		brief_test_summary=true
-		;;
-	-R)
-		REPORT_LIST="$REPORT_LIST ${2//,/ }"
-		do_report=true
-		shift
-		;;
-	--large-fs)
-		export LARGE_SCRATCH_DEV=yes
-		;;
-	--extra-space)
-		export SCRATCH_DEV_EMPTY_SPACE="$2"
-		shift
-		;;
-	-L)
-		[[ $2 =~ ^[0-9]+$ ]] || usage
-		loop_on_fail=$2
-		shift
-		;;
-	-h|--help)
-		usage
-		;;
-	--)
-		shift
-		break
-		;;
-	*)
-		usage
-		;;
-	esac
-	shift
-done
+parse_check_args()
+{
+	local short_opts="g:x:X:e:E:s:S:lnri:I:TdbR:L:h"
+	local long_opts="fs:,exact-order,large-fs,extra-space:,udiff,help"
 
-# Remaining arguments
-if [ $# -gt 0 ]; then
-	have_test_arg=true
-fi
+	compat_old_option "$@"
+
+	# Note: The '+' prefix in getopt's option string preserves the existing
+	# behavior that option parsing stops at the first non-option test argument.
+	local parsed_opts
+	parsed_opts=$(getopt -n "check" -o +"${short_opts}" -l "$long_opts" -- "${check_args[@]}")
+	test $? -ne 0 && usage
+
+	eval set -- "$parsed_opts"
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--fs)
+			if [ "$2" == "overlay" ];then
+				[ "$FSTYP" == overlay ] || \
+					export OVL_BASE_FSTYP="$FSTYP"
+				FSTYP=overlay
+				export OVERLAY=true
+			else
+				FSTYP="$2"
+			fi
+			shift
+			;;
+		--udiff)
+			diff="$diff -u"
+			;;
+		-g)
+			GROUP_LIST="$GROUP_LIST ${2//,/ }"
+			shift
+			;;
+		-x)
+			XGROUP_LIST="$XGROUP_LIST ${2//,/ }"
+			shift
+			;;
+		-X)
+			subdir_xfile="$2"
+			shift
+			;;
+		-e)
+			readarray -t -O "${#exclude_tests[@]}" exclude_tests < \
+				<(echo "$2" | tr ', ' '\n\n')
+			shift
+			;;
+		-E)
+			if [ -f "$2" ]; then
+				readarray -t -O ${#exclude_tests[@]} exclude_tests < \
+					<(sed "s/#.*$//" "$2")
+			fi
+			shift
+			;;
+		-s)
+			RUN_SECTION="$RUN_SECTION $2"
+			shift
+			;;
+		-S)
+			EXCLUDE_SECTION="$EXCLUDE_SECTION $2"
+			shift
+			;;
+		-l)
+			diff="diff"
+			;;
+		-n)
+			showme=true
+			;;
+		-r)
+			if $exact_order; then
+				_fatal "Cannot specify -r and --exact-order."
+			fi
+			randomize=true
+			;;
+		--exact-order)
+			if $randomize; then
+				_fatal "Cannot specify --exact-order and -r."
+			fi
+			exact_order=true
+			;;
+		-i)
+			iterations=$2
+			shift
+			;;
+		-I)
+			iterations=$2
+			istop=true
+			shift
+			;;
+		-T)
+			timestamp=true
+			;;
+		-d)
+			DUMP_OUTPUT=true
+			;;
+		-b)
+			brief_test_summary=true
+			;;
+		-R)
+			REPORT_LIST="$REPORT_LIST ${2//,/ }"
+			do_report=true
+			shift
+			;;
+		--large-fs)
+			export LARGE_SCRATCH_DEV=yes
+			;;
+		--extra-space)
+			export SCRATCH_DEV_EMPTY_SPACE="$2"
+			shift
+			;;
+		-L)
+			[[ $2 =~ ^[0-9]+$ ]] || usage
+			loop_on_fail=$2
+			shift
+			;;
+		-h|--help)
+			usage
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			usage
+			;;
+		esac
+		shift
+	done
+
+	# Remaining arguments (tests list)
+	if [ $# -gt 0 ]; then
+		remain_args=("$@")
+		process_remain_tests "${remain_args[@]}"
+	elif [ -z "$GROUP_LIST" ]; then
+		# default group list is the auto group. If any other group or
+		# test is specified, we use that instead.
+		GROUP_LIST="auto"
+	fi
+}
+
+parse_check_args "$@"
 
 # we need common/rc, that also sources common/config. We need to source it
 # after processing args, overlay needs FSTYP set before sourcing common/config
@@ -470,40 +516,6 @@ if [ -n "$subdir_xfile" ]; then
 			exclude_tests+=($d/$f)
 		done
 	done
-fi
-
-# Process tests from command line now.
-if $have_test_arg; then
-	while [ $# -gt 0 ]; do
-		case "$1" in
-		-*)	_fatal "Arguments before tests, please!"
-			;;
-		*)	# Expand test pattern (e.g. xfs/???, *fs/001)
-			list=$(cd $SRC_DIR; echo $1)
-			for t in $list; do
-				t=${t#$SRC_DIR/}
-				test_dir=${t%%/*}
-				test_name=${t##*/}
-				group_file=$SRC_DIR/$test_dir/group.list
-
-				if grep -Eq "^$test_name" $group_file; then
-					# in group file ... OK
-					echo $SRC_DIR/$test_dir/$test_name \
-						>>$tmp.arglist
-				else
-					# oops
-					echo "$t - unknown test, ignored"
-				fi
-			done
-			;;
-		esac
-
-		shift
-	done
-elif [ -z "$GROUP_LIST" ]; then
-	# default group list is the auto group. If any other group or test is
-	# specified, we use that instead.
-	GROUP_LIST="auto"
 fi
 
 if [ `id -u` -ne 0 ]
