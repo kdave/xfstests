@@ -272,48 +272,98 @@ _prepare_test_list()
 	rm -f $tmp.list
 }
 
-# Process command arguments first.
+# Backward compatible with the old options mode. Translate word-style options
+# that getopt would misinterpret into long options.
+compat_old_option()
+{
+	check_args=()
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-nfs)		check_args+=("--fs" "nfs") ;;
+		-afs)		check_args+=("--fs" "afs") ;;
+		-glusterfs)	check_args+=("--fs" "glusterfs") ;;
+		-cifs)		check_args+=("--fs" "cifs") ;;
+		-9p)		check_args+=("--fs" "9p") ;;
+		-fuse)		check_args+=("--fs" "fuse") ;;
+		-virtiofs)	check_args+=("--fs" "virtiofs") ;;
+		-pvfs2)		check_args+=("--fs" "pvfs2") ;;
+		-tmpfs)		check_args+=("--fs" "tmpfs") ;;
+		-ubifs)		check_args+=("--fs" "ubifs") ;;
+		-overlay)	check_args+=("--fs" "overlay") ;;
+		-udiff)		check_args+=("--udiff") ;;
+		-\?)		check_args+=("--help") ;;
+		*)		check_args+=("$1") ;;
+		esac
+		shift
+	done
+}
+
+short_opts="g:x:X:e:E:s:S:lnri:I:TdbR:L:h"
+long_opts="fs:,exact-order,large-fs,extra-space:,udiff,help"
+
+compat_old_option "$@"
+
+# Note: The '+' prefix in getopt's option string preserves the existing
+# behavior that option parsing stops at the first non-option test argument.
+parsed_opts=$(getopt -n "check" -o +"${short_opts}" -l "$long_opts" -- "${check_args[@]}")
+test $? -ne 0 && usage
+
+eval set -- "$parsed_opts"
+
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-\? | -h | --help) usage ;;
-
-	-nfs|-afs|-glusterfs|-cifs|-9p|-fuse|-virtiofs|-pvfs2|-tmpfs|-ubifs)
-		FSTYP="${1:1}"
+	--fs)
+		if [ "$2" == "overlay" ];then
+			[ "$FSTYP" == overlay ] || \
+				export OVL_BASE_FSTYP="$FSTYP"
+			FSTYP=overlay
+			export OVERLAY=true
+		else
+			FSTYP="$2"
+		fi
+		shift
 		;;
-	-overlay)
-		[ "$FSTYP" == overlay ] || export OVL_BASE_FSTYP="$FSTYP"
-		FSTYP=overlay
-		export OVERLAY=true
+	--udiff)
+		diff="$diff -u"
 		;;
-
-	-g)	group=$2 ; shift ;
-		GROUP_LIST="$GROUP_LIST ${group//,/ }"
+	-g)
+		GROUP_LIST="$GROUP_LIST ${2//,/ }"
+		shift
 		;;
-
-	-x)	xgroup=$2 ; shift ;
-		XGROUP_LIST="$XGROUP_LIST ${xgroup//,/ }"
+	-x)
+		XGROUP_LIST="$XGROUP_LIST ${2//,/ }"
+		shift
 		;;
-
-	-X)	subdir_xfile=$2; shift ;
+	-X)
+		subdir_xfile="$2"
+		shift
 		;;
 	-e)
-		xfile=$2; shift ;
 		readarray -t -O "${#exclude_tests[@]}" exclude_tests < \
-			<(echo "$xfile" | tr ', ' '\n\n')
+			<(echo "$2" | tr ', ' '\n\n')
+		shift
 		;;
-
-	-E)	xfile=$2; shift ;
-		if [ -f $xfile ]; then
+	-E)
+		if [ -f "$2" ]; then
 			readarray -t -O ${#exclude_tests[@]} exclude_tests < \
-				<(sed "s/#.*$//" $xfile)
+				<(sed "s/#.*$//" "$2")
 		fi
+		shift
 		;;
-	-s)	RUN_SECTION="$RUN_SECTION $2"; shift ;;
-	-S)	EXCLUDE_SECTION="$EXCLUDE_SECTION $2"; shift ;;
-	-l)	diff="diff" ;;
-	-udiff)	diff="$diff -u" ;;
-
-	-n)	showme=true ;;
+	-s)
+		RUN_SECTION="$RUN_SECTION $2"
+		shift
+		;;
+	-S)
+		EXCLUDE_SECTION="$EXCLUDE_SECTION $2"
+		shift
+		;;
+	-l)
+		diff="diff"
+		;;
+	-n)
+		showme=true
+		;;
 	-r)
 		if $exact_order; then
 			_fatal "Cannot specify -r and --exact-order."
@@ -322,39 +372,63 @@ while [ $# -gt 0 ]; do
 		;;
 	--exact-order)
 		if $randomize; then
-			_fatal "Cannnot specify --exact-order and -r."
+			_fatal "Cannot specify --exact-order and -r."
 		fi
 		exact_order=true
 		;;
-	-i)	iterations=$2; shift ;;
-	-I) 	iterations=$2; istop=true; shift ;;
-	-T)	timestamp=true ;;
-	-d)	DUMP_OUTPUT=true ;;
-	-b)	brief_test_summary=true;;
-	-R)	report_fmt=$2 ; shift ;
-		REPORT_LIST="$REPORT_LIST ${report_fmt//,/ }"
+	-i)
+		iterations=$2
+		shift
+		;;
+	-I)
+		iterations=$2
+		istop=true
+		shift
+		;;
+	-T)
+		timestamp=true
+		;;
+	-d)
+		DUMP_OUTPUT=true
+		;;
+	-b)
+		brief_test_summary=true
+		;;
+	-R)
+		REPORT_LIST="$REPORT_LIST ${2//,/ }"
 		do_report=true
+		shift
 		;;
-	--large-fs) export LARGE_SCRATCH_DEV=yes ;;
-	--extra-space=*) export SCRATCH_DEV_EMPTY_SPACE=${r#*=} ;;
-	-L)	[[ $2 =~ ^[0-9]+$ ]] || usage
-		loop_on_fail=$2; shift
+	--large-fs)
+		export LARGE_SCRATCH_DEV=yes
 		;;
-
-	-*)	usage ;;
-	*)	# not an argument, we've got tests now.
-		have_test_arg=true ;;
+	--extra-space)
+		export SCRATCH_DEV_EMPTY_SPACE="$2"
+		shift
+		;;
+	-L)
+		[[ $2 =~ ^[0-9]+$ ]] || usage
+		loop_on_fail=$2
+		shift
+		;;
+	-h|--help)
+		usage
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		usage
+		;;
 	esac
-
-	# if we've found a test specification, the break out of the processing
-	# loop before we shift the arguments so that this is the first argument
-	# that we process in the test arg loop below.
-	if $have_test_arg; then
-		break;
-	fi
-
 	shift
 done
+
+# Remaining arguments
+if [ $# -gt 0 ]; then
+	have_test_arg=true
+fi
 
 # we need common/rc, that also sources common/config. We need to source it
 # after processing args, overlay needs FSTYP set before sourcing common/config
