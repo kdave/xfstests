@@ -9,6 +9,7 @@
  * Synchronized byte range lock and lease exerciser
  */
 
+#define __USE_GNU
 #include <stdio.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -81,12 +82,12 @@ extern int h_errno;
 #define F_GETDELEG	(1024 + 15)
 #define F_SETDELEG	(1024 + 16)
 
+#endif
 struct delegation {
 	uint32_t d_flags;
 	uint16_t d_type;
 	uint16_t __pad;
 };
-#endif
 
 static char	*prog;
 static char	*filename = 0;
