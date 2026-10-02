@@ -1,0 +1,65 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 357
+#
+# Make sure on degraded RAID5/6, RMW writes won't return false errors
+# when some blocks do not have checksums.
+#
+. ./common/preamble
+
+_begin_fstest auto raid volume
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: raid56: do not verify the content if there is no data checksum"
+
+_require_command "$WIPEFS_PROG" wipefs
+_require_scratch_dev_pool 4
+_scratch_dev_pool_get 4
+
+fio_job_file=$tmp.fio
+cat > $fio_job_file << EOF
+[sync_randwrite]
+directory=$SCRATCH_MNT
+rw=randwrite
+filesize=512M
+bs=4K
+fsync=8
+time_based
+fallocate=posix
+runtime=15
+EOF
+
+_require_fio "$fio_job_file"
+
+# The target to remove for degraded mount.
+dev2="${SCRATCH_DEV_NAME[1]}"
+
+workload()
+{
+	local profile=$1
+	_scratch_pool_mkfs "-m raid1 -d $profile" >> $seqres.full 2>&1
+	$WIPEFS_PROG -fa "$dev2" >> $seqres.full 2>&1
+	_scratch_mount -o degraded
+
+	# The fio job will do fsync after 8 4K writes, which is not enough to
+	# fill a full stripe and always trigger RMW.
+	# And the target file is preallocated, after some writes a full stripe
+	# can have blocks with csum and some blocks without csum.
+	#
+	# Unpatched kernels will try to verify the checksum even if there is no
+	# csum and fail the RMW, causing fio to fail.
+	$FIO_PROG $fio_job_file >> $seqres.full 2>&1
+	if [ $? -ne 0 ]; then
+		echo "fio failed on degraded $profile"
+	fi
+	_scratch_unmount
+}
+
+workload raid5
+workload raid6
+
+_scratch_dev_pool_put
+echo "Silence is golden"
+_exit 0
