@@ -1,0 +1,78 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 358
+#
+# Verify that when deleting a partially owned qgroup (excl != rfer),
+# the sysfs and in-memory rb-tree entries are also properly removed.
+#
+. ./common/preamble
+_begin_fstest auto quick qgroup
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: qgroup: do not treat \"ret > 0\" as error when deleting a qgroup"
+
+_require_btrfs_sysfs_fsid
+_require_btrfs_command qgroup remove --no-rescan
+_require_scratch
+_require_btrfs_qgroup_report
+
+# This implies making a btrfs and enabling full qgroup mode.
+_require_scratch_qgroup
+_scratch_mount
+
+fsid=$(_btrfs_get_fsid "$SCRATCH_MNT")
+
+# We require /sys/fs/btrfs/<fsid>/qgroups/ directory
+if [ ! -d "/sys/fs/btrfs/$fsid/qgroups/0_5" ]; then
+	_notrun "No sysfs qgroups directory"
+fi
+
+_btrfs subvolume create "$SCRATCH_MNT/subv1"
+_pwrite_byte 0x00 0 1M "$SCRATCH_MNT/subv1/data1" >> $seqres.full
+_btrfs subvolume snapshot "$SCRATCH_MNT/subv1" "$SCRATCH_MNT/snap1"
+snap1id=$(_btrfs_get_subvolid "$SCRATCH_MNT" snap1)
+
+# Create the following qgroup layout and rescan.
+#                    2/1
+#                     |
+#                    1/1
+#                     |
+#  0/subv1           0/snap1
+#
+# Since snap1 is a snapshot of subv1, both will have 1M shared data
+# plus nodesize as exclusive metadata.
+# This means neither of them is fully exclusive (rfer > excl).
+_btrfs qgroup create 1/1 "$SCRATCH_MNT"
+_btrfs qgroup create 2/1 "$SCRATCH_MNT"
+_btrfs qgroup assign 1/1 2/1 "$SCRATCH_MNT"
+_btrfs qgroup assign 0/$snap1id 1/1 "$SCRATCH_MNT"
+
+# Do a rescan, as the above assign will mark the qgroup inconsistent.
+_btrfs quota rescan -w "$SCRATCH_MNT"
+
+# Now remove the qgroup relationship between 0/snap1 and 1/1.
+# This will mark qgroup inconsistent but we do not want to trigger a rescan
+# automatically.
+# This will leave the old numbers (rfer > excl) for 1/1.
+_btrfs qgroup remove --no-rescan "0/$snap1id" 1/1 "$SCRATCH_MNT"
+
+# Now delete qgroup 1/1, which will automatically remove the relationship
+# between 1/1 and 2/1.
+# Since qgroup 1/1 still has stale values where rfer doesn't match excl,
+# the kernel marks the qgroups inconsistent and returns 1 to indicate a
+# rescan is needed.
+_btrfs qgroup destroy 1/1 "$SCRATCH_MNT"
+
+# For unpatched kernels, that positive return value is treated as an error,
+# causing btrfs to delete on-disk items for qgroup 1/1, but leaving the
+# in-memory rb-tree and sysfs entries untouched.
+# Check if the sysfs qgroup directory still has a directory for qgroup 1/1.
+if [ -d "/sys/fs/btrfs/$fsid/qgroups/1_1" ]; then
+	echo "Qgroup 1/1 still exists in sysfs qgroups directory"
+fi
+
+echo "Silence is golden"
+_scratch_unmount
+_exit 0
