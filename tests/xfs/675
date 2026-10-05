@@ -1,0 +1,39 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2026 Christoph Hellwig.
+#
+# FS QA Test No. 675
+#
+# Tests that repair refuses to work without -r argument, and xfs_db works fine
+# even without it to check libxfs initialization behavior with missing RT
+# devices.
+#
+. ./common/preamble
+_begin_fstest auto quick repair db
+
+. ./common/filter
+
+_require_scratch_nocheck
+_require_external_realtime_device
+
+# require metadir for the rtsb command
+$MKFS_XFS_PROG -f \
+	-m metadir=1 \
+	-r rtdev=$SCRATCH_RTDEV \
+	$SCRATCH_DEV >> $seqres.full 2>&1
+
+echo "Dumping superblock using xfs_db without rtdev"
+$XFS_DB_PROG $SCRATCH_DEV -c 'sb 0' -c 'p' >> $seqres.full
+
+echo "Loading RT superblock using xfs_db without rtdev, should fail"
+$XFS_DB_PROG $SCRATCH_DEV -c 'rtsb'
+
+echo "Running xfs_repair -n without rt device, should fail"
+$XFS_REPAIR_PROG -n $SCRATCH_DEV
+
+echo "Running xfs_repair without rt device, should fail"
+$XFS_REPAIR_PROG $SCRATCH_DEV
+
+
+status=0
+exit
