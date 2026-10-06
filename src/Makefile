@@ -6,7 +6,9 @@
 TOPDIR = ..
 include $(TOPDIR)/include/builddefs
 
-TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
+TARGETS =
+
+LINUX_TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	nametest permname randholes runas truncfile usemem \
 	mmapcat append_reader append_writer dirperf metaperf \
 	devzero feature alloc fault fstest t_access_root \
@@ -21,9 +23,8 @@ TARGETS = dirstress fill fill2 getpagesize holes lstat64 \
 	t_mmap_writev_overlap checkpoint_journal mmap-rw-fault allocstale \
 	t_mmap_cow_memory_failure fake-dump-rootino dio-buf-fault rewinddir-test \
 	readdir-while-renames dio-append-buf-fault dio-write-fsync-same-fd \
-	dio-writeback-race unlink-fsync truncate dio-read-into-mmap
-
-LINUX_TARGETS = xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
+	dio-writeback-race unlink-fsync truncate dio-read-into-mmap \
+	xfsctl bstat t_mtab getdevicesize preallo_rw_pattern_reader \
 	preallo_rw_pattern_writer ftrunc trunc fs_perms testx looptest \
 	locktest unwritten_mmap bulkstat_unlink_test deduperace \
 	bulkstat_unlink_test_modified t_dir_offset t_futimens t_immutable \
@@ -49,68 +50,64 @@ SUBDIRS = log-writes perf
 LLDLIBS = $(LIBHANDLE) $(LIBACL) -lpthread -lrt -luuid
 
 ifeq ($(HAVE_XLOG_ASSIGN_LSN), true)
-LINUX_TARGETS += loggen
+    LINUX_TARGETS += loggen
 endif
 
 ifeq ($(HAVE_FIEMAP), true)
-LINUX_TARGETS += fiemap-tester t_stripealign
+    LINUX_TARGETS += fiemap-tester t_stripealign
 endif
 
 ifeq ($(HAVE_OPEN_BY_HANDLE_AT), true)
-LINUX_TARGETS += open_by_handle
+    LINUX_TARGETS += open_by_handle
 endif
 
 ifeq ($(HAVE_FALLOCATE), true)
-LCFLAGS += -DHAVE_FALLOCATE
+    LCFLAGS += -DHAVE_FALLOCATE
 endif
 
 ifeq ($(HAVE_FILE_GETATTR), yes)
-LINUX_TARGETS += file_attr
-LCFLAGS += -DHAVE_FILE_GETATTR
-endif
-
-ifeq ($(PKG_PLATFORM),linux)
-TARGETS += $(LINUX_TARGETS)
+    LINUX_TARGETS += file_attr
+    LCFLAGS += -DHAVE_FILE_GETATTR
 endif
 
 ifeq ($(HAVE_DB), true)
-TARGETS += dbtest
-LLDLIBS += $(LIBGDBM)
+    TARGETS += dbtest
+    LLDLIBS += $(LIBGDBM)
 endif
 
 ifeq ($(HAVE_AIO), true)
-TARGETS += t_mmap_dio
-SUBDIRS += aio-dio-regress
-LLDLIBS += -laio
+    LINUX_TARGETS += t_mmap_dio
+    SUBDIRS += aio-dio-regress
+    LLDLIBS += -laio
 endif
 
 ifeq ($(HAVE_URING), true)
-LINUX_TARGETS += btrfs_encoded_read btrfs_encoded_write
-TARGETS += uring_read_fault
-LLDLIBS += -luring
+    LINUX_TARGETS += btrfs_encoded_read btrfs_encoded_write \
+		     uring_read_fault
+    LLDLIBS += -luring
 endif
 
 SUBDIRS += vfs
 ifeq ($(HAVE_LIBCAP), true)
-LLDLIBS += -lcap
+    LLDLIBS += -lcap
 endif
 
 ifeq ($(HAVE_SEEK_DATA), yes)
  ifeq ($(HAVE_NFTW), yes)
   ifeq ($(HAVE_BMV_OF_SHARED), yes)
    ifeq ($(HAVE_RLIMIT_NOFILE), yes)
-     TARGETS += xfsfind
+     LINUX_TARGETS += xfsfind
    endif
   endif
  endif
 endif
 
 ifeq ($(HAVE_FICLONE),yes)
-     TARGETS += t_reflink_read_race
+     LINUX_TARGETS += t_reflink_read_race
 endif
 
 ifeq ($(HAVE_FANOTIFY_FID),yes)
-     TARGETS += fs-monitor
+     LINUX_TARGETS += fs-monitor
 endif
 
 ifeq ($(HAVE_LIBBTRFSUTIL), true)
@@ -118,7 +115,11 @@ ifeq ($(HAVE_LIBBTRFSUTIL), true)
 endif
 
 ifeq ($(NEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE),yes)
-LCFLAGS += -DNEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE
+     LCFLAGS += -DNEED_INTERNAL_XFS_IOC_EXCHANGE_RANGE
+endif
+
+ifeq ($(PKG_PLATFORM),linux)
+     TARGETS += $(LINUX_TARGETS)
 endif
 
 CFILES = $(TARGETS:=.c)
