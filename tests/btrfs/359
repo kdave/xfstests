@@ -1,0 +1,26 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 359
+#
+# Make sure the btrfs control file (/dev/btrfs-control) properly rejects
+# an unsupported ioctl.
+#
+. ./common/preamble
+_begin_fstest auto quick ioctl
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: return -ENOTTY for unknown ioctls on the control device"
+
+_require_test_program btrfs_ioctl
+
+path="/dev/btrfs-control"
+if [ ! -c "$path" ]; then
+	_notrun "No btrfs control file at \"$path\""
+fi
+
+# This should fail with -ENOTTY error.
+$here/src/btrfs_ioctl get_subvol_info "$path" >> $seqres.full
+
+_exit 0
