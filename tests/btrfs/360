@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 360
+#
+# Test that setting an attribute unrelated to compression on a file that has
+# inherited compression from its parent directory does not fail when the fs is
+# mounted with the nodatasum option.
+#
+. ./common/preamble
+_begin_fstest auto quick compress
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix chattr failing on nodatasum files that have the compress flag"
+
+_require_scratch
+_require_btrfs_no_nodatacow
+_require_chattr c
+_require_chattr A
+
+_scratch_mkfs >>$seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount "-o nodatasum"
+
+mkdir $SCRATCH_MNT/dir
+# Set the compression attribute on the directory so that any file created inside
+# it will inherit compression.
+$CHATTR_PROG +c $SCRATCH_MNT/dir
+
+# File foo inherits compression from its parent directory.
+touch $SCRATCH_MNT/dir/foo
+
+# Now set some other attribute on file foo and check that it succeeds.
+$CHATTR_PROG +A $SCRATCH_MNT/dir/foo
+
+echo "Silence is golden"
+_exit 0
