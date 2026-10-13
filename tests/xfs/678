@@ -1,0 +1,70 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 678
+#
+# Regression test for an swapext bug which unintentionally results in files
+# that share data blocks but don't have the reflink flag set.  This enables
+# attackers to rewrite shared blocks to gain root privileges, similar to
+# refluxfs.
+. ./common/preamble
+_begin_fstest auto quick swapext
+
+. ./common/filter
+. ./common/reflink
+
+_require_test_program "xfs-swapext-reflink"
+_require_user fsgqa
+_require_group fsgqa
+_require_scratch_reflink
+_require_xfs_scratch_rmapbt
+_require_xfs_io_command exchangerange
+_require_cp_reflink
+
+_fixed_by_fs_commit xfs d84d6c1a7f1e2d \
+	"xfs: stop exchanging reflink flags when exchanging mappings"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+rootdir=$SCRATCH_MNT/root
+userdir1=$SCRATCH_MNT/user1
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+# Fill $mnt/peer with "P", run reproducer program
+mkdir -p $rootdir $userdir1
+$XFS_IO_PROG -f -c "pwrite -S 0x50 0 $blksz" $rootdir/peer.copy >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x50 0 $blksz" $rootdir/peer1 >> $seqres.full
+sync
+
+chown $qa_user:$qa_group $userdir1
+chmod +r $rootdir/peer1
+
+_su $qa_user -c "./src/xfs-swapext-reflink $userdir1 $rootdir/peer1" &> $tmp.out1
+
+echo "Errors from reproducer:" >> $seqres.full
+cat $tmp.out1 >> $seqres.full
+
+# Check for file corruption
+grep -q REWRITTEN $tmp.out1 && \
+	echo "$rootdir/peer1 rewritten, filesystem corrupt!"
+
+cmp -s $rootdir/peer.copy $rootdir/peer1 || \
+	echo "$rootdir/peer1 changed since its snapshot, filesystem corrupt!"
+
+# Check reflink flags
+_scratch_unmount
+_scratch_xfs_db \
+	-c "path /user1/file1" -c 'print' \
+	| grep v3.reflink
+_scratch_mount
+
+# Check for file corruption now that we've blown away all caches
+grep -q REWRITTEN $tmp.out1 && \
+	echo "$rootdir/peer1 rewritten, filesystem corrupt!"
+
+cmp -s $rootdir/peer.copy $rootdir/peer1 || \
+	echo "$rootdir/peer1 changed since its snapshot, filesystem corrupt!"
+
+_exit 0
