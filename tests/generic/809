@@ -1,0 +1,138 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 809
+#
+# Regression test for an exchange-range-to-EOF bug which unintentionally
+# results in files that share data blocks but don't have the reflink flag set.
+# This enables attackers to rewrite shared blocks to gain root privileges,
+# similar to refluxfs.
+. ./common/preamble
+_begin_fstest auto quick fiexchange
+
+. ./common/filter
+. ./common/reflink
+
+_require_test_program "xfs-exchange-to-eof"
+_require_test_program "xfs-exchange-to-dirty-eof"
+_require_user fsgqa
+_require_group fsgqa
+_require_scratch_reflink
+_require_xfs_io_command exchangerange
+_require_xfs_io_command bulkstat_single
+_require_cp_reflink
+
+_fixed_by_fs_commit xfs 7dfb218c829c1a \
+	"xfs: fix exchange-range-to-eof file size exchange"
+
+_scratch_mkfs >> $seqres.full
+_scratch_mount
+
+rootdir=$SCRATCH_MNT/root
+userdir1=$SCRATCH_MNT/user1
+userdir2=$SCRATCH_MNT/user2
+blksz=$(_get_file_block_size $SCRATCH_MNT)
+
+# Fill $mnt/peer with "P", run reproducer program
+mkdir -p $rootdir $userdir1 $userdir2
+$XFS_IO_PROG -f -c "pwrite -S 0x50 0 $blksz" $rootdir/peer.copy >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x50 0 $blksz" $rootdir/peer1 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x50 0 $blksz" $rootdir/peer2 >> $seqres.full
+sync
+
+chown $qa_user:$qa_group $userdir1 $userdir2
+chmod +r $rootdir/peer1 $rootdir/peer2
+
+_su $qa_user -c "./src/xfs-exchange-to-eof $userdir1 $rootdir/peer1" &> $tmp.out1
+_su $qa_user -c "./src/xfs-exchange-to-dirty-eof $userdir2 $rootdir/peer2" &> $tmp.out2
+
+echo "Errors from reproducer:" >> $seqres.full
+cat $tmp.out1 >> $seqres.full
+cat $tmp.out2 >> $seqres.full
+
+# Now do an exchange where the distance between the offset and EOF are
+# different for the two files.
+l1sz=12345678			# file size for lopsided1
+l2sz=1234567			# file size for lopsided2
+
+l1rem=$((l1sz % 1048576))
+l2rem=$((l2sz % 65536))
+
+l1off=$((l1sz - l1rem))		# lopsided1 size rounded down to 1M
+l2off=$((l2sz - l2rem))		# lopsided2 size rounded down to 64k
+
+$XFS_IO_PROG -f \
+	-c "pwrite -S 0x58 0 $l1off" \
+	-c "pwrite -S 0x59 $l1off $l2rem" \
+	$rootdir/lopsided1.copy >> $seqres.full
+$XFS_IO_PROG -f \
+	-c "pwrite -S 0x59 0 $l2off" \
+	-c "pwrite -S 0x58 $l2off $l1rem" \
+	$rootdir/lopsided2.copy >> $seqres.full
+
+sync # don't flush the exchange files so that we test the pre-exchange flushing
+
+$XFS_IO_PROG -f -c "pwrite -S 0x58 0 $l1sz" $rootdir/lopsided1 >> $seqres.full
+$XFS_IO_PROG -f -c "pwrite -S 0x59 0 $l2sz" $rootdir/lopsided2 >> $seqres.full
+
+$XFS_IO_PROG -c "exchangerange -d $l1off -s $l2off -t $rootdir/lopsided2" \
+	$rootdir/lopsided1 >> $seqres.full
+
+# Now exploit the broken i_disk_size logic
+$XFS_IO_PROG -f -c "pwrite -q 0 $blksz" -c fsync $rootdir/ondisk1
+$XFS_IO_PROG -f -c "pwrite -q 0 $((3 * blksz))" \
+	-c "exchangerange -s 0 -d $((3 * blksz)) $rootdir/ondisk1" \
+	$rootdir/ondisk2
+stat -c %s $rootdir/ondisk1
+ino=$(stat -c %i $rootdir/ondisk1)
+$XFS_IO_PROG -r -c "bulkstat_single $ino" $rootdir | grep bs_size
+
+# Check for file corruption
+grep -q REWRITTEN $tmp.out1 && \
+	echo "$rootdir/peer1 rewritten, filesystem corrupt!"
+grep -q REWRITTEN $tmp.out2 && \
+	echo "$rootdir/peer2 rewritten, filesystem corrupt!"
+
+cmp -s $rootdir/peer.copy $rootdir/peer1 || \
+	echo "$rootdir/peer1 changed since its snapshot, filesystem corrupt!"
+cmp -s $rootdir/peer.copy $rootdir/peer2 || \
+	echo "$rootdir/peer2 changed since its snapshot, filesystem corrupt!"
+
+stat -c '%n:%s' $rootdir/lopsided[12] | _filter_scratch
+
+cmp -s $rootdir/lopsided1.copy $rootdir/lopsided1 || \
+	echo "$rootdir/lopsided1 is wrong, filesystem corrupt"
+cmp -s $rootdir/lopsided2.copy $rootdir/lopsided2 || \
+	echo "$rootdir/lopsided2 is wrong, filesystem corrupt"
+
+# Check reflink flags
+_scratch_unmount
+_scratch_xfs_db \
+	-c "path /user1/file1" -c 'print' \
+	-c "path /user2/file1" -c 'print' \
+	| grep v3.reflink
+_scratch_mount
+
+# Check for file corruption now that we've blown away all caches
+grep -q REWRITTEN $tmp.out1 && \
+	echo "$rootdir/peer1 rewritten, filesystem corrupt!"
+grep -q REWRITTEN $tmp.out2 && \
+	echo "$rootdir/peer2 rewritten, filesystem corrupt!"
+
+cmp -s $rootdir/peer.copy $rootdir/peer1 || \
+	echo "$rootdir/peer1 changed since its snapshot, filesystem corrupt!"
+cmp -s $rootdir/peer.copy $rootdir/peer2 || \
+	echo "$rootdir/peer2 changed since its snapshot, filesystem corrupt!"
+
+stat -c '%n:%s' $rootdir/lopsided[12] | _filter_scratch
+
+cmp -s $rootdir/lopsided1.copy $rootdir/lopsided1 || \
+	echo "$rootdir/lopsided1 is wrong, filesystem corrupt"
+cmp -s $rootdir/lopsided2.copy $rootdir/lopsided2 || \
+	echo "$rootdir/lopsided2 is wrong, filesystem corrupt"
+
+stat -c %s $rootdir/ondisk1
+$XFS_IO_PROG -r -c "bulkstat_single $ino" $rootdir | grep bs_size
+
+_exit 0
