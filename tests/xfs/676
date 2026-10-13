@@ -1,0 +1,123 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 676
+#
+# Basic functional testing of the verifymedia command.
+#
+. ./common/preamble
+_begin_fstest auto quick scrub selfhealing
+
+. ./common/filter
+
+_require_xfs_io_command verifymedia
+_require_scratch
+
+# Make the data and rt volumes small enough that this won't take forever
+# on large slow devices.
+_scratch_mkfs_sized $((600 * 1024 * 1024)) | \
+	_filter_mkfs 2>$tmp.mkfs >> $seqres.full
+_scratch_mount
+
+. $tmp.mkfs
+
+filter_verifymedia() {
+	grep '^verified' | \
+		tr '/' ' ' | \
+		awk '{printf("VERIFIED=%s WANTED=%s OFFSET=%s\n", $2, $3, $7);}'
+}
+
+testme() {
+	unset VERIFIED
+	unset WANTED
+	unset OFFSET
+
+	local x
+	x=$($XFS_IO_PROG -c "verifymedia $*" $SCRATCH_MNT | filter_verifymedia)
+	eval "$x"
+}
+
+cat $tmp.mkfs >> $seqres.full
+
+DDEV_EOD=$((dblocks * dbsize)) # bytes
+
+# t0: no parameters, which means the whole data device
+testme
+_within_tolerance "t0 wanted range" $WANTED $DDEV_EOD 2% -v
+_within_tolerance "t0 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t0 offset" $OFFSET 0 0 -v
+
+# t1: data device
+testme -d
+_within_tolerance "t1 wanted range" $WANTED $DDEV_EOD 2% -v
+_within_tolerance "t1 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t1 offset" $OFFSET 0 0 -v
+
+# t2: realtime volume
+if [ $rtblocks -gt 0 ]; then
+	testme -r
+	if [ -n "$rtstart" ]; then
+		rtend=$((rtstart + rtblocks))
+	else
+		rtend=$rtblocks
+	fi
+	_within_tolerance "t2 wanted range" $WANTED $((rtend * dbsize)) 2% -v
+	_within_tolerance "t2 verified range" $VERIFIED $WANTED 2% -v
+	_within_tolerance "t2 offset" $OFFSET 0 0 -v
+else
+	cat << ENDL
+t2 wanted range is in range
+t2 verified range is in range
+t2 offset is in range
+ENDL
+fi
+
+# t3: external log volume
+if [ "$ldev" != "internal log" ]; then
+	testme -l
+	_within_tolerance "t3 wanted range" $WANTED $((lblocks * dbsize)) 2% -v
+	_within_tolerance "t3 verified range" $VERIFIED $WANTED 2% -v
+	_within_tolerance "t3 offset" $OFFSET 0 0 -v
+else
+	cat << ENDL
+t3 wanted range is in range
+t3 verified range is in range
+t3 offset is in range
+ENDL
+fi
+
+# t4: start of data device
+testme -d 0m 10m
+_within_tolerance "t4 wanted range" $WANTED $((10 * 1024 * 1024)) 2% -v
+_within_tolerance "t4 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t4 offset" $OFFSET 0 0 -v
+
+# t5: middle of data device
+testme -d 257m 281m
+_within_tolerance "t5 wanted range" $WANTED $((24 * 1024 * 1024)) 2% -v
+_within_tolerance "t5 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t5 offset" $OFFSET $((257 * 1024 * 1024)) 2% -v
+
+# t6: end of data device
+t6_offset=$((DDEV_EOD - (11 * 1024 * 1024)))
+testme -d $t6_offset $DDEV_EOD
+_within_tolerance "t6 wanted range" $WANTED $((11 * 1024 * 1024)) 2% -v
+_within_tolerance "t6 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t6 offset" $OFFSET $t6_offset 2% -v
+
+# t7: start after end
+testme -d 241m 217m
+_within_tolerance "t7 wanted range" $WANTED 0 0 -v
+_within_tolerance "t7 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t7 offset" $OFFSET $((241 * 1024 * 1024)) 2% -v
+
+# t8: range crosses eod
+t8_offset=$((DDEV_EOD - (3 * 1024 * 1024)))
+t8_end=$((DDEV_EOD + (70 * 1024 * 1024)))
+testme -d $t8_offset $t8_end
+_within_tolerance "t8 wanted range" $WANTED $((3 * 1024 * 1024)) 2% -v
+_within_tolerance "t8 verified range" $VERIFIED $WANTED 2% -v
+_within_tolerance "t8 offset" $OFFSET $t8_offset 2% -v
+
+_exit 0
