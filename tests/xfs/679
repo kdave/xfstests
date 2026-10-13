@@ -1,0 +1,53 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 679
+#
+# Repair a rtgroup superblock that was overwritten after mount.
+#
+. ./common/preamble
+_begin_fstest online_repair
+
+_cleanup() {
+	_scratch_xfs_stress_scrub_cleanup &> /dev/null
+	cd /
+	rm -r -f $tmp.*
+}
+_register_cleanup "_cleanup" BUS
+
+. ./common/filter
+. ./common/fuzzy
+. ./common/inject
+. ./common/xfs
+
+_require_external_realtime_device # rgsuper requires external rt device
+_require_scratch
+_require_scratch_shutdown
+_require_xfs_stress_online_repair
+
+_scratch_mkfs > "$seqres.full" 2>&1
+_scratch_mount
+_require_xfs_has_feature "$SCRATCH_MNT" realtime
+_xfs_force_bdev realtime $SCRATCH_MNT
+_xfs_has_feature "$SCRATCH_MNT" rtgroups || _notrun 'rtgroups not enabled'
+_xfs_has_feature "$SCRATCH_MNT" zoned && _notrun 'no rgsuper on zoned fs'
+
+$XFS_IO_PROG -c 'scrub rgsuper 0' $SCRATCH_MNT
+$XFS_IO_PROG -c 'pwrite -S 0x59 0 512' -c fsync $SCRATCH_RTDEV >> $seqres.full
+$XFS_IO_PROG -c 'scrub rgsuper 0' $SCRATCH_MNT
+$XFS_IO_PROG -x -c 'repair rgsuper 0' $SCRATCH_MNT
+
+_scratch_cycle_mount
+
+$XFS_IO_PROG -c 'scrub rgsuper 0' $SCRATCH_MNT
+$XFS_IO_PROG -c 'pwrite -S 0x59 0 512' -c fsync $SCRATCH_RTDEV >> $seqres.full
+$XFS_IO_PROG -x -c 'repair rgsuper 0' -c 'shutdown' $SCRATCH_MNT
+
+_scratch_cycle_mount
+
+$XFS_IO_PROG -c 'scrub rgsuper 0' $SCRATCH_MNT
+
+# success, all done
+status=0
+exit
