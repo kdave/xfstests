@@ -1,0 +1,58 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+#
+# FS QA Test No. 807
+#
+# Regression test for refluxfs, which is an exploit for a race condition in
+# XFS' directio copy-on-write code that can be used to rewrite shared blocks
+# to gain root privileges.
+#
+. ./common/preamble
+_begin_fstest auto rw clone
+
+_cleanup()
+{
+	cd /
+	rm -r -f $tmp.*
+	test -n "$dummydir" && rm -r -f "$dummydir"
+}
+
+. ./common/reflink
+
+_require_test_program "refluxfs"
+_require_test_reflink
+_require_odirect
+_require_user fsgqa
+_require_group fsgqa
+
+_fixed_by_fs_commit xfs 2f4acd0fcd862e \
+	"xfs: resample the data fork mapping after cycling ILOCK"
+
+dummydir="$TEST_DIR/$seq"
+
+rm -r -f "$dummydir"
+mkdir "$dummydir"
+
+fakedata="root:x:0:0:root:/root:/bin/bash"
+echo "$fakedata" > $dummydir/datafile
+
+# Try to trick the system into letting a different user make a reflink copy of
+# the data file and rewrite the shared data block to corrupt the contents.
+mkdir $dummydir/workdir
+chown $qa_user:$qa_group $dummydir/workdir
+_su $qa_user -c "./src/refluxfs -t $dummydir/datafile -d $dummydir/workdir -s $((30 * TIME_FACTOR))" &>> $seqres.full
+res=$?
+case "$res" in
+0)	echo "vulnerable to corruption";;
+1)	echo "runtime error";;
+2)	echo "corruption not observed";;
+*)	echo "unknown outcome $res";;
+esac
+
+result="$(cat $dummydir/datafile)"
+test "$result" != "$fakedata" && \
+	echo "shared data block rewritten, you have been pwned!"
+
+# success, all done
+_exit 0
