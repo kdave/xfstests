@@ -1,0 +1,50 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 361
+#
+# Test that fiemap does not report logically adjacent compressed extents as a
+# single extent.
+#
+. ./common/preamble
+_begin_fstest auto quick compress fiemap
+
+. ./common/filter
+. ./common/punch # for _filter_fiemap_flags
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: fix fiemap merging compressed extents"
+
+_require_btrfs_support_sectorsize 4096
+_require_xfs_io_command "falloc"
+_require_xfs_io_command "fiemap"
+_require_scratch
+
+_scratch_mkfs -s 4K >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount "-o compress"
+
+# Do a write that compresses to a single 4K extent and represents the maximum
+# compressed chunk size (128K).
+$XFS_IO_PROG -f -c "pwrite 0 128K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Sync to flush delalloc and allocate the 4K extent.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
+
+# Now allocate a 124K extent in some other file, which will be adjacent (to the
+# right) of the 4K extent previously allocated.
+$XFS_IO_PROG -f -c "falloc 0 124K" $SCRATCH_MNT/filler
+
+# Do another write to the main file at its current EOF that is compressible and
+# fits in a 4K extent.
+$XFS_IO_PROG -c "pwrite 128K 128K" $SCRATCH_MNT/foo | _filter_xfs_io
+
+# Sync to flush delalloc and allocate the 4K extent.
+$XFS_IO_PROG -c "fsync" $SCRATCH_MNT/foo
+
+# Run fiemap which should report 2 encoded extents, each with a logical size
+# of 128K.
+echo "Fiemap output:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/foo | _filter_fiemap_flags 1
+
+_exit 0
