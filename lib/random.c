@@ -162,38 +162,18 @@ static int32_t mt [128] =   {
           69069
 		};
 
-double 
-_random (int32_t is [2])
-{
-	int32_t it, leh, nit;
-
-	it = is [0];
-	leh = is [1];
-	if (it <= 0)	
-		it = (it + it) ^ MASK;
-	else
-		it = it + it;
-	nit = it - 1;
-/*	to ensure all-ones pattern omitted    */
-	leh = leh * mt[nit & 127] + nit;
-	is [0] = it;    is [1] = leh;
-	if (leh < 0) leh = ~leh;
-	return (SCALE * ((int32_t) (leh | 1)));
-}
-
-
-
 int32_t 
 _irandm (int32_t is [2])
 {
-	int32_t it, leh, nit;
-
+	int32_t it, leh, nit, apply_mask;
 	it = is [0];
 	leh = is [1];
-	if (it <= 0)	
-		it = (it + it) ^ MASK;
-	else
-		it = it + it;
+
+/* 	evaluate on original value - no UB here */
+	apply_mask = (it <= 0);
+/*	double via unsigned shift - well-defined */
+	it = (unsigned)it << 1;
+	if (apply_mask) it ^= MASK;
 	nit = it - 1;
 /*	to ensure all-ones pattern omitted    */
 	leh = leh * mt[nit & 127] + nit;
