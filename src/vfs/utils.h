@@ -372,5 +372,6 @@ extern bool is_setgid(int dfd, const char *path, int flags);
 extern bool is_sticky(int dfd, const char *path, int flags);
 extern bool is_ixgrp(int dfd, const char *path, int flags);
 extern bool openat_tmpfile_supported(int dirfd);
+extern bool whiteout_device_supported(int dirfd);
 
 #endif /* __IDMAP_UTILS_H */

@@ -956,6 +956,31 @@ bool openat_tmpfile_supported(int dirfd)
 }
 
 /*
+ * A 0:0 character device is the only device node an unprivileged caller may
+ * create, so the idmapped mount tests use one as a fixture. overlayfs reserves
+ * that dev_t as its whiteout marker and ovl_mknod() rejects it with EPERM.
+ * Probe on the base mount as the filesystem owner so a filesystem that later
+ * allows the node keeps the coverage. Any error other than EPERM is reported.
+ */
+bool whiteout_device_supported(int dirfd)
+{
+	static const char name[] = ".whiteout_probe";
+
+	if (!mknodat(dirfd, name, S_IFCHR | 0644, makedev(0, 0))) {
+		if (unlinkat(dirfd, name, 0))
+			return log_errno(false, "failure: unlinkat");
+		return true;
+	}
+
+	if (errno == EPERM) {
+		errno = 0;
+		return false;
+	}
+
+	return log_errno(false, "failure: mknodat");
+}
+
+/*
  * There'll be scenarios where you'll want to see the attributes associated with
  * a directory tree during debugging or just to make sure things look correct.
  * Simply uncomment and place the print_r() helper where you need it.

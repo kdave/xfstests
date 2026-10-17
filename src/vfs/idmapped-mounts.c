@@ -432,6 +432,7 @@ out:
 
 int tcore_fsids_mapped(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, hardlink_target_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -534,7 +535,7 @@ int tcore_fsids_mapped(const struct vfstest_info *info)
 			die("failure: create");
 
 		/* create character device */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | 0644, makedev(0, 0)))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | 0644, makedev(0, 0)))
 			die("failure: create");
 
 		/* create symlink */
@@ -734,6 +735,7 @@ out:
 /* Validate that changing file ownership works correctly on idmapped mounts. */
 int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd1 = -EBADF, open_tree_fd2 = -EBADF;
 	struct mount_attr attr1 = {
@@ -763,7 +765,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 	}
 
 	/* create character device */
-	if (mknodat(info->t_dir1_fd, CHRDEV1, S_IFCHR | 0644, makedev(0, 0))) {
+	if (whiteout_dev && mknodat(info->t_dir1_fd, CHRDEV1, S_IFCHR | 0644, makedev(0, 0))) {
 		log_stderr("failure: mknodat");
 		goto out;
 	}
@@ -824,7 +826,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
+	if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -856,7 +858,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 10000, 10000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -911,7 +913,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 30000, 30000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 30000, 30000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -941,7 +943,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: fchownat");
 		goto out;
 	}
-	if (fchownat(info->t_dir1_fd, CHRDEV1, 2000, 2000, 0)) {
+	if (whiteout_dev && fchownat(info->t_dir1_fd, CHRDEV1, 2000, 2000, 0)) {
 		log_stderr("failure: fchownat");
 		goto out;
 	}
@@ -971,7 +973,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 2000, 2000)) {
+	if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 2000, 2000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1001,7 +1003,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 12000, 12000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 12000, 12000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1031,7 +1033,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 32000, 32000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 32000, 32000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1063,7 +1065,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (!fchownat(info->t_dir1_fd, HARDLINK1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(info->t_dir1_fd, CHRDEV1, 1000, 1000, 0))
+		if (whiteout_dev && !fchownat(info->t_dir1_fd, CHRDEV1, 1000, 1000, 0))
 			die("failure: fchownat");
 		if (!fchownat(info->t_dir1_fd, SYMLINK1, 2000, 2000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1078,7 +1080,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (!fchownat(open_tree_fd2, HARDLINK1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (!fchownat(open_tree_fd2, CHRDEV1, 1000, 1000, 0))
+		if (whiteout_dev && !fchownat(open_tree_fd2, CHRDEV1, 1000, 1000, 0))
 			die("failure: fchownat");
 		if (!fchownat(open_tree_fd2, SYMLINK1, 2000, 2000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1093,7 +1095,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (fchownat(open_tree_fd1, HARDLINK1, 1000, 1000, 0))
 			die("failure: fchownat");
-		if (fchownat(open_tree_fd1, CHRDEV1, 1000, 1000, 0))
+		if (whiteout_dev && fchownat(open_tree_fd1, CHRDEV1, 1000, 1000, 0))
 			die("failure: fchownat");
 		if (fchownat(open_tree_fd1, SYMLINK1, 2000, 2000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1108,7 +1110,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
+		if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
@@ -1123,7 +1125,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd2, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
@@ -1138,7 +1140,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd1, HARDLINK1, 0, 1000, 1000))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 1000, 1000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 1000, 1000))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000))
 			die("failure: expected_uid_gid");
@@ -1166,7 +1168,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 1000, 1000)) {
+	if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 1000, 1000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1196,7 +1198,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 11000, 11000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 11000, 11000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1226,7 +1228,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 31000, 31000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 31000, 31000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1258,7 +1260,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (!fchownat(info->t_dir1_fd, HARDLINK1, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(info->t_dir1_fd, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && !fchownat(info->t_dir1_fd, CHRDEV1, 0, 0, 0))
 			die("failure: fchownat");
 		if (!fchownat(info->t_dir1_fd, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1273,7 +1275,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (!fchownat(open_tree_fd1, HARDLINK1, 0, 0, 0))
 			die("failure: fchownat");
-		if (!fchownat(open_tree_fd1, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && !fchownat(open_tree_fd1, CHRDEV1, 0, 0, 0))
 			die("failure: fchownat");
 		if (!fchownat(open_tree_fd1, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1288,7 +1290,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: fchownat");
 		if (fchownat(open_tree_fd2, HARDLINK1, 0, 0, 0))
 			die("failure: fchownat");
-		if (fchownat(open_tree_fd2, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && fchownat(open_tree_fd2, CHRDEV1, 0, 0, 0))
 			die("failure: fchownat");
 		if (!fchownat(open_tree_fd2, SYMLINK1, 3000, 3000, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW))
 			die("failure: fchownat");
@@ -1303,7 +1305,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(info->t_dir1_fd, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
+		if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(info->t_dir1_fd, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
@@ -1318,7 +1320,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd1, HARDLINK1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd1, SYMLINK1, AT_SYMLINK_NOFOLLOW, info->t_overflowuid, info->t_overflowgid))
 			die("failure: expected_uid_gid");
@@ -1333,7 +1335,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd2, HARDLINK1, 0, 0, 0))
 			die("failure: expected_uid_gid");
-		if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 0, 0))
 			die("failure: expected_uid_gid");
 		if (!expected_uid_gid(open_tree_fd2, SYMLINK1, AT_SYMLINK_NOFOLLOW, 2000, 2000))
 			die("failure: expected_uid_gid");
@@ -1361,7 +1363,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
+	if (whiteout_dev && !expected_uid_gid(info->t_dir1_fd, CHRDEV1, 0, 0, 0)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1391,7 +1393,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 10000, 10000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd1, CHRDEV1, 0, 10000, 10000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -1421,7 +1423,7 @@ int tcore_expected_uid_gid_idmapped_mounts(const struct vfstest_info *info)
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
-	if (!expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 30000, 30000)) {
+	if (whiteout_dev && !expected_uid_gid(open_tree_fd2, CHRDEV1, 0, 30000, 30000)) {
 		log_stderr("failure: expected_uid_gid");
 		goto out;
 	}
@@ -3781,6 +3783,7 @@ out:
 
 int tcore_setgid_create_idmapped(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -3881,10 +3884,10 @@ int tcore_setgid_create_idmapped(const struct vfstest_info *info)
 			die("failure: is_setgid");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
 		/*
@@ -3906,7 +3909,7 @@ int tcore_setgid_create_idmapped(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 10000, 10000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -3918,7 +3921,7 @@ int tcore_setgid_create_idmapped(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -3957,6 +3960,7 @@ out:
 
 int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -4051,10 +4055,10 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 			die("failure: is_setgid");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (!is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && !is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
 		if (!expected_uid_gid(open_tree_fd, FILE1, 0, 0, 0))
@@ -4066,7 +4070,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 0))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -4078,7 +4082,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -4168,10 +4172,10 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 			die("failure: is_setgid");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
 		/*
@@ -4193,7 +4197,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 1000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -4205,7 +4209,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -4293,10 +4297,10 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 			die("failure: is_setgid");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
 		if (!expected_uid_gid(open_tree_fd, FILE1, 0, 0, 0))
@@ -4308,7 +4312,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 0))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 0))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 0))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -4320,7 +4324,7 @@ int tcore_setgid_create_idmapped_in_userns(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -7675,6 +7679,7 @@ out:
  */
 static int setgid_create_umask_idmapped(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -7793,13 +7798,13 @@ static int setgid_create_umask_idmapped(const struct vfstest_info *info)
 			die("failure: is_ixgrp");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_ixgrp");
 
 		/*
@@ -7821,7 +7826,7 @@ static int setgid_create_umask_idmapped(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 10000, 10000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -7833,7 +7838,7 @@ static int setgid_create_umask_idmapped(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -7889,6 +7894,7 @@ out:
  */
 static int setgid_create_umask_idmapped_in_userns(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -8028,13 +8034,13 @@ static int setgid_create_umask_idmapped_in_userns(const struct vfstest_info *inf
 			die("failure: is_ixgrp");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_ixgrp");
 
 		/*
@@ -8056,7 +8062,7 @@ static int setgid_create_umask_idmapped_in_userns(const struct vfstest_info *inf
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 1000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -8068,7 +8074,7 @@ static int setgid_create_umask_idmapped_in_userns(const struct vfstest_info *inf
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -8123,6 +8129,7 @@ out:
  */
 static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -8248,13 +8255,13 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 			die("failure: is_ixgrp");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_ixgrp");
 
 		/*
@@ -8276,7 +8283,7 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 10000, 10000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -8288,7 +8295,7 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -8383,13 +8390,13 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 			die("failure: is_ixgrp");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (!is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && !is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_ixgrp");
 
 		/*
@@ -8411,7 +8418,7 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 10000, 10000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 10000, 10000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -8423,7 +8430,7 @@ static int setgid_create_acl_idmapped(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -8478,6 +8485,7 @@ out:
  */
 static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 {
+	bool whiteout_dev = whiteout_device_supported(info->t_dir1_fd);
 	int fret = -1;
 	int file1_fd = -EBADF, open_tree_fd = -EBADF;
 	struct mount_attr attr = {
@@ -8624,13 +8632,13 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 			die("failure: is_ixgrp");
 
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_ixgrp");
 
 		/*
@@ -8652,7 +8660,7 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 1000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -8664,7 +8672,7 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
@@ -8766,13 +8774,13 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		if (!is_ixgrp(open_tree_fd, FILE2, 0))
 			 die("failure: is_ixgrp");
 		/* create a whiteout device via mknodat() vfs_mknod */
-		if (mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
+		if (whiteout_dev && mknodat(open_tree_fd, CHRDEV1, S_IFCHR | S_ISGID | S_IXGRP, 0))
 			die("failure: mknodat");
 
-		if (is_setgid(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && is_setgid(open_tree_fd, CHRDEV1, 0))
 			die("failure: is_setgid");
 
-		if (!is_ixgrp(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && !is_ixgrp(open_tree_fd, CHRDEV1, 0))
 			 die("failure: is_ixgrp");
 
 		/*
@@ -8794,7 +8802,7 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		if (!expected_uid_gid(open_tree_fd, FILE2, 0, 0, 1000))
 			die("failure: check ownership");
 
-		if (!expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
+		if (whiteout_dev && !expected_uid_gid(open_tree_fd, CHRDEV1, 0, 0, 1000))
 			die("failure: check ownership");
 
 		if (unlinkat(open_tree_fd, FILE1, 0))
@@ -8806,7 +8814,7 @@ static int setgid_create_acl_idmapped_in_userns(const struct vfstest_info *info)
 		if (unlinkat(open_tree_fd, FILE2, 0))
 			die("failure: delete");
 
-		if (unlinkat(open_tree_fd, CHRDEV1, 0))
+		if (whiteout_dev && unlinkat(open_tree_fd, CHRDEV1, 0))
 			die("failure: delete");
 
 		/* create tmpfile via filesystem tmpfile api */
