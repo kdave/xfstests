@@ -1,0 +1,72 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test No. 810
+#
+# Verify that reading a large file with holes won't trigger fsverity warnings
+#
+. ./common/preamble
+_begin_fstest auto quick verity
+
+_fixed_by_fs_commit btrfs xxxxxxxxxxxx \
+	"btrfs: fix the fsverity callback where unexpected range is verified"
+
+. ./common/verity
+
+# Override the default cleanup function.
+_cleanup()
+{
+	cd /
+	_restore_fsverity_signatures
+	rm -f $tmp.*
+}
+
+_require_xfs_io_command "fpunch"
+_require_check_dmesg
+_require_scratch_verity
+_disable_fsverity_signatures
+
+filesize=$(( 32 * 1024 * 1024 ))
+interval=$(( 128 * 1024 ))
+holesize=$(( 64 * 1024 ))
+
+_scratch_mkfs_verity >> $seqres.full
+_scratch_mount
+
+# Create a large enough file so that readahead is triggered.
+_pwrite_byte "0xcd" 0 "$filesize" "$SCRATCH_MNT/foobar" > /dev/null
+
+# Create a hole for every $interval bytes. This should limit the read to
+# $(( $interval - $holesize )), which should be much smaller than the maximum
+# folio size (2M for x86_64).
+for (( i = 0; i < $(( $filesize / $interval )); i++ )); do
+	$XFS_IO_PROG -c "fpunch $(( $i * $interval )) $holesize" \
+		"$SCRATCH_MNT/foobar" > /dev/null
+done
+
+_fsv_enable "$SCRATCH_MNT/foobar"
+
+# Cycle mount to drop page cache
+_scratch_cycle_mount
+
+# Read the file, unpatched btrfs will verify blocks outside the read range and
+# trigger fs-verity warnings.
+#
+# This warning is triggered when the folio size is larger than the fs block
+# size, either from block size < page size (e.g. 4K block size on 64K page
+# size systems), or from large folios (requires transparent huge page).
+#
+# But the read itself should still be fine, as the failed part will be retried.
+_md5_checksum "$SCRATCH_MNT/foobar"
+
+# Check for any kernel warnings from fs-verity on file corruption.
+#
+# Using fserror would be more reliable, but unfortunately btrfs doesn't fully
+# support it yet, and the fserror support for fsverity is not available in v7.2,
+# where large folios made this easy to trigger.
+if _check_dmesg_for "FILE CORRUPTED!"; then
+	echo "fs-verity detected corruption"
+fi
+
+_exit 0
