@@ -1,0 +1,66 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Western Digital Corporation.  All Rights Reserved.
+#
+# FS QA Test 363
+#
+# Test that data fsynced on a RAID stripe tree file system is still readable
+# after a power failure, both for a fast fsync and for a full fsync.
+#
+. ./common/preamble
+_begin_fstest auto quick log volume raid-stripe-tree
+
+_fixed_by_kernel_commit XXXXXXXXXXXX \
+	"btrfs: force a transaction commit when fsyncing stripe-tree extents"
+
+_cleanup()
+{
+	cd /
+	_cleanup_flakey
+	rm -fr $tmp.*
+}
+
+. ./common/filter
+. ./common/dmflakey
+
+_require_btrfs_mkfs_feature "raid-stripe-tree"
+_require_btrfs_fs_feature "raid_stripe_tree"
+_require_scratch
+_require_dm_target flakey
+
+# DUP keeps its mapping in the stripe tree, so a single device is enough and
+# dm-flakey can be layered on top of it.
+_scratch_mkfs -d dup -m dup -O raid-stripe-tree >> $seqres.full 2>&1 || \
+	_fail "mkfs failed"
+
+_init_flakey
+_scratch_mount
+
+# The first fsync of an inode is always a full fsync. Do one here and then
+# commit the transaction, so that the second fsync of this file below is a
+# fast fsync.
+$XFS_IO_PROG -f -c "pwrite -S 0xaa 0 128K" -c fsync $SCRATCH_MNT/fast | \
+	_filter_xfs_io
+_scratch_sync
+
+# Fast fsync: only the extents changed since the last fsync are logged.
+$XFS_IO_PROG -c "pwrite -S 0xbb 0 128K" -c fsync $SCRATCH_MNT/fast | \
+	_filter_xfs_io
+
+_flakey_drop_and_remount
+
+echo "fast fsync:"
+_hexdump $SCRATCH_MNT/fast
+
+# Full fsync: this is the first fsync of this inode, so all of its items are
+# logged.
+$XFS_IO_PROG -f -c "pwrite -S 0xcc 0 128K" -c fsync $SCRATCH_MNT/full | \
+	_filter_xfs_io
+
+_flakey_drop_and_remount
+
+echo "full fsync:"
+_hexdump $SCRATCH_MNT/full
+
+# success, all done
+_exit 0
