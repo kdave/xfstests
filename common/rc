@@ -462,6 +462,16 @@ _try_scratch_mount()
 		_overlay_scratch_mount $*
 		return $?
 	fi
+	if [ "$FSTYP" == "gpfs" ]; then
+		# Ensure the scratch fileset junction is linked.
+		# SCRATCH_DEV encodes "gpfsdevice:filesetname"
+		local _gpfs_dev="${SCRATCH_DEV%%:*}"
+		local _gpfs_fileset="${SCRATCH_DEV##*:}"
+		if [ ! -d "$SCRATCH_MNT" ]; then
+			mmlinkfileset "$_gpfs_dev" "$_gpfs_fileset" -J "$SCRATCH_MNT" >/dev/null 2>&1 || return 1
+		fi
+		return 0
+	fi
 	_mount -t $FSTYP$FUSE_SUBTYP `_scratch_mount_options $*`
 	mount_ret=$?
 	[ $mount_ret -ne 0 ] && return $mount_ret
@@ -542,6 +552,13 @@ _scratch_unmount()
 		;;
 	tmpfs)
 		_unmount $SCRATCH_MNT
+		;;
+	gpfs)
+		# Unlink the scratch fileset junction (equivalent to unmount).
+		local _gpfs_dev="${SCRATCH_DEV%%:*}"
+		local _gpfs_fileset="${SCRATCH_DEV##*:}"
+		mmunlinkfileset "$_gpfs_dev" "$_gpfs_fileset" -f >/dev/null 2>&1 || true
+		return 0
 		;;
 	*)
 		_unmount $SCRATCH_DEV
@@ -719,6 +736,10 @@ _test_mount()
     elif [ "$FSTYP" == "overlay" ]; then
         _overlay_test_mount $*
         return $?
+    elif [ "$FSTYP" == "gpfs" ]; then
+        # GPFS is already mounted; test is a subdir
+        mkdir -p $TEST_DIR
+        return 0
     fi
 
     _test_options mount
@@ -734,6 +755,9 @@ _test_unmount()
 {
 	if [ "$FSTYP" == "overlay" ]; then
 		_overlay_test_unmount
+	elif [ "$FSTYP" == "gpfs" ]; then
+		# GPFS stays mounted; nothing to unmount
+		return 0
 	else
 		_unmount $TEST_DEV
 	fi
@@ -1018,6 +1042,19 @@ _scratch_mkfs()
 		# created in previous runs
 		_scratch_cleanup_files
 		return $?
+		;;
+	gpfs)
+		# Re-create scratch as a fresh GPFS fileset.
+		# SCRATCH_DEV encodes "gpfsdevice:filesetname" e.g. scale:xfstests-scratch
+		local _gpfs_dev="${SCRATCH_DEV%%:*}"
+		local _gpfs_fileset="${SCRATCH_DEV##*:}"
+		local _gpfs_jct="$SCRATCH_MNT"
+		mmunlinkfileset "$_gpfs_dev" "$_gpfs_fileset" -f >/dev/null 2>&1 || true
+		mmdelfileset "$_gpfs_dev" "$_gpfs_fileset" -f >/dev/null 2>&1 || true
+		mmcrfileset "$_gpfs_dev" "$_gpfs_fileset" \
+			--inode-space new --inode-limit 1M:1M \
+			-J "$_gpfs_jct" >/dev/null 2>&1 || return 1
+		return 0
 		;;
 	tmpfs)
 		# do nothing for tmpfs
@@ -1990,8 +2027,8 @@ _check_mounted_on()
 	local mnt=$4
 	local type=$5
 
-	# this check doesn't work on ceph-fuse
-	if [ "$dev" != "ceph-fuse" ]; then
+	# this check doesn't work on ceph-fuse or gpfs (gpfs subdir, not mount point)
+	if [ "$dev" != "ceph-fuse" ] && [ "$FSTYP" != "gpfs" ]; then
 		_check_if_dev_already_mounted $dev $mnt
 		dev_already_mounted=$?
 
@@ -2058,6 +2095,15 @@ _require_scratch_nocheck()
 			_notrun "this test requires a valid \$SCRATCH_DEV"
 		fi
 		if [ ! -d "$SCRATCH_MNT" ]; then
+			_notrun "this test requires a valid \$SCRATCH_MNT"
+		fi
+		;;
+	gpfs)
+		# SCRATCH_DEV must be "device:fileset"; SCRATCH_MNT the junction path
+		if [ -z "$SCRATCH_DEV" ]; then
+			_notrun "this test requires a valid \$SCRATCH_DEV (device:fileset)"
+		fi
+		if [ -z "$SCRATCH_MNT" ]; then
 			_notrun "this test requires a valid \$SCRATCH_MNT"
 		fi
 		;;
@@ -2295,6 +2341,11 @@ _require_test()
 		fi
 		if [ ! -d "$TEST_DIR" ]; then
 		     _notrun "this test requires a valid \$TEST_DIR"
+		fi
+		;;
+	gpfs)
+		if [ -z "$TEST_DEV" -o ! -d "$TEST_DIR" ]; then
+			_notrun "this test requires a valid \$TEST_DIR and \$TEST_DEV"
 		fi
 		;;
 	pvfs2)
@@ -3739,6 +3790,9 @@ _check_test_fs()
     overlay)
 	_check_overlay_test_fs
 	;;
+    gpfs)
+	# no way to check consistency for GPFS externally
+	;;
     pvfs2)
 	;;
     udf)
@@ -3800,6 +3854,9 @@ _check_dev_fs()
 	;;
     overlay)
 	_check_overlay_scratch_fs
+	;;
+    gpfs)
+	# no way to check consistency for GPFS externally
 	;;
     pvfs2)
 	;;
@@ -4932,7 +4989,13 @@ _check_dmesg_filter()
 	grep -E -v -e "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low" \
 		-e "BUG: MAX_STACK_TRACE_ENTRIES too low" \
 		-e "WARNING: Reset corrupted AGFL" \
-		$extra_filter
+		$extra_filter \
+		-e "Unpatched return thunk in use" \
+		-e "mmfsd" \
+		-e "mmfs26" \
+		-e "__warn_thunk" \
+		-e "Tainted:.*OE" \
+		-e "tracedev"
 }
 
 # Add a simple expression to the default dmesg filter
@@ -5327,7 +5390,7 @@ _require_congruent_file_oplen()
 	local oplen="$2"
 
 	case $FSTYP in
-	nfs*|afs|cifs|9p|virtiofs|ceph|glusterfs|overlay|pvfs2)
+	nfs*|afs|cifs|9p|virtiofs|ceph|glusterfs|overlay|pvfs2|gpfs)
 		# Network filesystems don't know about (or tell the client
 		# about) the underlying file allocation unit and they generally
 		# pass the file IO request to the underlying filesystem, so we

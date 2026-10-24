@@ -1,0 +1,156 @@
+			  ============
+			  TESTING GPFS
+			  ============
+
+xfstests can be used with GPFS (IBM Storage Scale).  GPFS is a cluster
+filesystem that mounts a single device at a fixed mountpoint; subdirectories
+of that mountpoint cannot be individually mounted.  Instead, GPFS filesets
+provide the equivalent of independent filesystem namespaces: each fileset has
+its own inode space and can be linked (mounted) or unlinked (unmounted) at a
+junction path inside the GPFS mountpoint.
+
+This maps cleanly onto xfstests semantics:
+
+  - The TEST fileset is a persistent fileset linked at TEST_DIR.  It is
+    created once and never destroyed between test runs.
+
+  - The SCRATCH fileset is recreated for each test by _scratch_mkfs, which
+    unlinks and deletes the old fileset then creates and links a fresh one.
+    This gives strong isolation equivalent to a block-level mkfs.
+
+Because GPFS is already mounted when xfstests runs, _scratch_mount and
+_test_mount are no-ops: they only ensure the fileset junction exists.
+_scratch_unmount calls mmunlinkfileset to detach the junction.
+
+
+One-time setup
+--------------
+
+1. Identify your GPFS device name and mountpoint, e.g.:
+
+   $ df -hT | grep gpfs
+   scale  gpfs  100G  8G  93G  8%  /scale
+
+   Here the device is "scale" and it is mounted at "/scale".
+
+2. Create a parent directory for the xfstests junctions:
+
+   $ mkdir /scale/xfstests
+
+3. Create the TEST fileset and link it:
+
+   $ mmcrfileset scale xfstests-test --inode-space new --inode-limit 1M:1M
+   $ mmlinkfileset scale xfstests-test -J /scale/xfstests/test
+
+4. Create the SCRATCH fileset (it will be deleted and recreated by xfstests,
+   but must exist initially so the junction path is present before the first
+   test run):
+
+   $ mmcrfileset scale xfstests-scratch --inode-space new --inode-limit 1M:1M \
+         -J /scale/xfstests/scratch
+
+5. Create the required test users and group:
+
+   $ useradd -m fsgqa
+   $ useradd fsgqa2
+   $ useradd 123456-fsgqa
+   $ groupadd fsgqa
+
+6. Build xfstests.  On RHEL, the following packages are needed:
+
+   $ dnf install -y acl attr bc e2fsprogs fio gcc git libacl-devel \
+         libaio-devel libattr-devel libcap-devel libuuid-devel lvm2 \
+         make psmisc python3 quota sed sqlite xfsprogs xfsprogs-devel
+
+
+local.config
+------------
+
+The SCRATCH_DEV variable uses a "device:fileset" encoding so the xfstests
+GPFS helpers know both the GPFS device name and the fileset to recreate.
+Adapt the device name, paths, and fileset names to match your environment:
+
+	FSTYP=gpfs
+
+	# GPFS device name (not a block device path)
+	TEST_DEV=scale
+
+	# Junction path of the persistent test fileset
+	TEST_DIR=/scale/xfstests/test
+
+	# "gpfsdevice:filesetname" — used by _scratch_mkfs to recreate the fileset
+	SCRATCH_DEV=scale:xfstests-scratch
+
+	# Junction path of the scratch fileset
+	SCRATCH_MNT=/scale/xfstests/scratch
+
+
+Running tests
+-------------
+
+   $ ./check -g generic/quick
+
+A typical run on a single-node GPFS 6.x cluster against the generic/quick
+group (647 tests) produces roughly:
+
+   ~129 passed
+   ~482 not run (skipped — features GPFS does not expose to xfstests)
+     36 failed 
+
+The 482 skipped tests cover features such as reflink, fiemap, dedupe,
+block-device operations, quotas, casefold, fsverity, zoned devices, and
+kernel interfaces that require a block-device scratch partition.
+
+The 36 failing tests require further analysis to determine whether they
+represent genuine GPFS bugs, xfstests assumptions that do not hold for
+GPFS, or test environment issues.  The failing tests are:
+
+   generic/003 020 062 087 103 105 193 228 258 286 294 306 314 318 346
+   generic/355 375 401 423 436 444 486 490 531 532 533 597 598 632 634
+   generic/680 683 684 688 708 732
+
+
+Known hangs (skipped with _notrun)
+-----------------------------------
+
+generic/248  pwrite from mmaped buffer of same file
+
+   Writing via pwrite(2) from an mmap of the same file triggers a GPFS
+   page-lock deadlock.  The test process enters uninterruptible sleep (D
+   state) and cannot be killed with SIGKILL.  Recovery requires an
+   mmshutdown / mmstartup cycle.  The test is skipped on GPFS via a
+   _notrun guard in tests/generic/248.
+
+
+Notes
+-----
+
+  - GPFS kernel modules emit "Unpatched return thunk" and related
+    warnings on some kernels.  These are filtered from the dmesg check
+    automatically.
+
+  - The SCRATCH fileset is fully destroyed and recreated by each test
+    that calls _scratch_mkfs (i.e. _require_scratch).  Tests that only
+    call _require_test leave the TEST fileset untouched.
+
+  - Inode limits for the filesets (1M inodes above) can be tuned to
+    match available GPFS inode quota.  Use mmlsfileset to inspect
+    current limits.
+
+  - If a test run is interrupted (e.g. by a GPFS restart), a stale
+    systemd transient scope unit may be left behind.  This prevents the
+    same test from running again with the error:
+      "Failed to start transient scope unit: Unit fstests-generic-NNN.scope
+       was already loaded or has a fragment file."
+    Clean it up with:
+      $ systemctl reset-failed
+      $ rm -f /run/systemd/transient/fstests-*.scope
+      $ systemctl daemon-reload
+
+  - To clean up after testing:
+
+      $ mmunlinkfileset scale xfstests-scratch
+      $ mmdelfileset scale xfstests-scratch -f
+      $ mmunlinkfileset scale xfstests-test
+      $ mmdelfileset scale xfstests-test -f
+      $ rmdir /scale/xfstests
