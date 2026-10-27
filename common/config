@@ -384,6 +384,9 @@ _common_mount_opts()
 	glusterfs)
 		echo $GLUSTERFS_MOUNT_OPTIONS
 		;;
+	gpfs)
+		# GPFS is already mounted; no extra mount options needed
+		;;
 	overlay)
 		echo $OVERLAY_MOUNT_OPTIONS
 		;;
@@ -548,6 +551,9 @@ _source_specific_fs()
 	reiser4)
 		[ "$MKFS_REISER4_PROG" = "" ] && _fatal "mkfs.reiser4 not found"
 		;;
+	gpfs)
+		# no additional check needed for GPFS
+		;;
 	pvfs2)
 		;;
 	ubifs)
@@ -610,9 +616,9 @@ _check_device()
 	fi
 
 	case "$FSTYP" in
-	9p|fuse|tmpfs|virtiofs|afs)
-		# 9p, fuse, virtiofs and afs mount tags are just plain strings,
-		# so anything is allowed tmpfs doesn't use mount source, ignore
+	9p|fuse|tmpfs|virtiofs|afs|gpfs)
+		# 9p, fuse, virtiofs, afs and gpfs mount tags are just plain strings;
+		# GPFS uses a device name (not block device), so anything is allowed
 		;;
 	ceph)
 		# ceph has two different possible syntaxes for mount devices. The
@@ -648,6 +654,13 @@ _canonicalize_mountpoint()
 	if [ -d "$dir" ]; then
 		# this follows symlinks and removes all trailing "/"s
 		readlink -e "$dir"
+		return 0
+	fi
+
+	# For GPFS the scratch junction may be unlinked (fileset not yet linked);
+	# return the path as-is so SCRATCH_MNT is not corrupted.
+	if [ "$FSTYP" = "gpfs" ]; then
+		echo "$dir"
 		return 0
 	fi
 
