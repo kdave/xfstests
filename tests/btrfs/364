@@ -1,0 +1,44 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 SUSE S.A.  All Rights Reserved.
+#
+# FS QA Test 364
+#
+# Test that if we mount a filesystem with "-o nodatacow", set the compression
+# attribute on a directory and then create a file under it, the file should
+# inherit compression and setting an additional attribute (like +A, write append
+# mode) should work.
+#
+. ./common/preamble
+_begin_fstest auto quick compress fiemap
+
+. ./common/filter
+. ./common/punch # for _filter_fiemap_flags
+
+_require_xfs_io_command "fiemap"
+_require_chattr cA
+_require_scratch
+
+_fixed_by_kernel_commit xxxxxxxxxxxx \
+	"btrfs: dont propagate nodatacow mount option on files with inherited compression"
+
+_scratch_mkfs >> $seqres.full 2>&1 || _fail "mkfs failed"
+_scratch_mount "-o nodatacow"
+
+# Create a directory with the compression attribute, so that all files created
+# under it inherit the compression attribute.
+mkdir $SCRATCH_MNT/dir
+$CHATTR_PROG +c $SCRATCH_MNT/dir
+
+# Now create a file with some data inside the directory.
+$XFS_IO_PROG -f -c "pwrite 0 128K" $SCRATCH_MNT/dir/foo | _filter_xfs_io
+
+# Now try to make the file append only, it should work.
+$CHATTR_PROG +A $SCRATCH_MNT/dir/foo
+
+# A fiemap should report an encoded extent, which means it's compressed.
+echo "Fiemap output:"
+$XFS_IO_PROG -c "fiemap -v" $SCRATCH_MNT/dir/foo | _filter_fiemap_flags 1
+
+# success, all done
+_exit 0
