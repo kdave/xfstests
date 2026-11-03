@@ -534,6 +534,10 @@ if ! . ./common/rc; then
 	_fatal "check: failed to source common/rc"
 fi
 
+# init_rc could write to the $seqres.full, however we don't have any context
+# here yet, and no RESULT_BASE is setup. These logs aren't that important but
+# let's keep them in /tmp anyway.
+seqres=$tmp.check
 init_rc
 
 # If the test config specified a soak test duration, see if there are any
@@ -932,14 +936,14 @@ function run_section()
 		_test_unmount 2> /dev/null
 	fi
 
-	init_rc
-
 	seq="check.$$"
 	check="$RESULT_BASE/check"
 	seqres="$check"
 
 	# don't leave old full output behind on a clean run
 	rm -f $check.full
+
+	init_rc
 
 	[ -f $check.time ] || touch $check.time
 
