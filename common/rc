@@ -5587,6 +5587,58 @@ _require_scratch_sysfs_dev_attr()
 	_require_fs_sysfs_dev_attr $SCRATCH_DEV "$1"
 }
 
+# Print the content of /sys/fs/$FSTYP/features/$ATTR
+#
+# Only one argument is needed:
+#  - attr: path name under /sys/fs/$FSTYP/features
+#
+# Usage example:
+#   _get_fs_sysfs_feature_attr send_stream_version
+_get_fs_sysfs_feature_attr()
+{
+	local attr=$1
+
+	if [ -z "$attr" ];then
+		_fail "Usage: _get_fs_sysfs_feature_attr <attr>"
+	fi
+
+	cat /sys/fs/${FSTYP}/features/${attr}
+}
+
+# Test for the existence of a sysfs entry at /sys/fs/$FSTYP/features/$ATTR
+#
+# Only one argument is needed:
+#  - attr: path name under /sys/fs/$FSTYP/features
+#
+# Usage example:
+#   _has_fs_sysfs_feature_attr raid56
+_has_fs_sysfs_feature_attr()
+{
+	local attr=$1
+
+	if [ -z "$attr" ];then
+		_fail "Usage: _has_fs_sysfs_feature_attr <attr>"
+	fi
+
+	test -e /sys/fs/${FSTYP}/features/${attr}
+}
+
+# Require the existence of a sysfs entry at /sys/fs/$FSTYP/features/$ATTR
+#
+# Only one argument is needed:
+#  - attr: path name under /sys/fs/$FSTYP/features
+#
+# Usage example:
+#   _require_fs_sysfs_feature_attr raid56
+_require_fs_sysfs_feature_attr()
+{
+	local attr=$1
+
+	_has_fs_sysfs_feature_attr "$attr" && return
+
+	_notrun "This test requires /sys/fs/${FSTYP}/features/${attr}"
+}
+
 # Generic test for specific filesystem feature.
 # Currently only implemented to test overlayfs features.
 _require_scratch_feature()
