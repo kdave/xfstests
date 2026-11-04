@@ -36,7 +36,7 @@ done
 # remount read-only and set the gc limit to free up unused space
 _scratch_remount ro
 rt_available_pre="$(_xfs_get_user_available_rt_blocks "$SCRATCH_MNT")"
-_set_fs_sysfs_attr $SCRATCH_DEV "zoned/zonegc_low_space" 100
+_set_fs_sysfs_dev_attr $SCRATCH_DEV "zoned/zonegc_low_space" 100
 
 # reclaiming a zone with 5% used blocks should take way less than 1 second
 sleep 1
@@ -46,14 +46,14 @@ rt_available_post="$(_xfs_get_user_available_rt_blocks "$SCRATCH_MNT")"
 [ "$rt_available_post" -gt "$rt_available_pre" ] && \
 	_fail "gc should not run while read only"
 
-_set_fs_sysfs_attr $SCRATCH_DEV "zoned/zonegc_low_space" 0
+_set_fs_sysfs_dev_attr $SCRATCH_DEV "zoned/zonegc_low_space" 0
 
 # remount rw and check that gc starts, frees up blocks and stops after
 # the threshold is set to reclaim the unused blocks
 _scratch_remount rw
 
 rt_available_pre="$(_xfs_get_user_available_rt_blocks "$SCRATCH_MNT")"
-_set_fs_sysfs_attr $SCRATCH_DEV "zoned/zonegc_low_space" 100
+_set_fs_sysfs_dev_attr $SCRATCH_DEV "zoned/zonegc_low_space" 100
 
 i=0
 while [ $(_xfs_get_rt_gc_required "$SCRATCH_MNT") -eq "1" ]; do

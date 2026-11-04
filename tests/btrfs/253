@@ -119,7 +119,7 @@ FIRST_DATA_CHUNK_SIZE_B=$((1024 * 1024 * 1024))
 
 # For metadata, we are safe to use the exported value, as the default
 # metadata chunk size limit is already smaller than its stripe size.
-FIRST_METADATA_CHUNK_SIZE_B=$(_get_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size)
+FIRST_METADATA_CHUNK_SIZE_B=$(_get_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size)
 
 echo "Orig Data chunk size    = ${FIRST_DATA_CHUNK_SIZE_B}"     >> ${seqres}.full
 echo "Orig Metaata chunk size = ${FIRST_METADATA_CHUNK_SIZE_B}" >> ${seqres}.full
@@ -138,8 +138,8 @@ alloc_size "Metadata" METADATA_SIZE_START_MB
 echo "Block group Data alloc size     = ${DATA_SIZE_START_MB}MB"     >> $seqres.full
 echo "Block group Metadata alloc size = ${METADATA_SIZE_START_MB}MB" >> $seqres.full
 
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/force_chunk_alloc 1
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/metadata/force_chunk_alloc 1
 
 alloc_size "Data"     FIRST_DATA_SIZE_MB
 alloc_size "Metadata" FIRST_METADATA_SIZE_MB
@@ -171,15 +171,15 @@ fi
 echo "Second block group Data alloc size     = ${SECOND_DATA_CHUNK_SIZE_B}"     >> $seqres.full
 echo "Second block group Metadata alloc size = ${SECOND_METADATA_CHUNK_SIZE_B}" >> $seqres.full
 
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/chunk_size ${SECOND_DATA_CHUNK_SIZE_B}
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size ${SECOND_METADATA_CHUNK_SIZE_B}
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/chunk_size ${SECOND_DATA_CHUNK_SIZE_B}
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size ${SECOND_METADATA_CHUNK_SIZE_B}
 
-SECOND_DATA_CHUNK_SIZE_READ_B=$(_get_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/chunk_size)
-SECOND_METADATA_CHUNK_SIZE_READ_B=$(_get_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size)
+SECOND_DATA_CHUNK_SIZE_READ_B=$(_get_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/chunk_size)
+SECOND_METADATA_CHUNK_SIZE_READ_B=$(_get_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/metadata/chunk_size)
 
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
 echo "Allocated data chunk" >> $seqres.full
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/metadata/force_chunk_alloc 1
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/metadata/force_chunk_alloc 1
 echo "Allocated metadata chunk" >> $seqres.full
 
 alloc_size "Data"     SECOND_DATA_SIZE_MB
@@ -210,12 +210,12 @@ echo "Allocation size in bytes = ${THIRD_DATA_CHUNK_SIZE_B}"  >> ${seqres}.full
 # Do allocation until free space is exhausted.
 #
 echo "Third allocation."
-_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/chunk_size ${THIRD_DATA_CHUNK_SIZE_B}
+_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/chunk_size ${THIRD_DATA_CHUNK_SIZE_B}
 
 free_space FREE_SPACE_MB
 while [ $FREE_SPACE_MB -gt $THIRD_DATA_CHUNK_SIZE_MB ]; do
 	alloc_size "Data" THIRD_DATA_SIZE_MB
-	_set_fs_sysfs_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
+	_set_fs_sysfs_dev_attr ${SCRATCH_BDEV} allocation/data/force_chunk_alloc 1
 
 	free_space FREE_SPACE_MB
 done

@@ -1167,23 +1167,23 @@ _reset_xfs_sysfs_error_handling()
 		_fail "Usage: reset_xfs_sysfs_error_handling <device>"
 	fi
 
-	_set_fs_sysfs_attr $dev error/fail_at_unmount 1
+	_set_fs_sysfs_dev_attr $dev error/fail_at_unmount 1
 	echo -n "error/fail_at_unmount="
-	_get_fs_sysfs_attr $dev error/fail_at_unmount
+	_get_fs_sysfs_dev_attr $dev error/fail_at_unmount
 
 	# Make sure all will be configured to retry forever by default, except
 	# for ENODEV, which is an unrecoverable error, so it will be configured
 	# to not retry on error by default.
 	for e in default EIO ENOSPC; do
-		_set_fs_sysfs_attr $dev \
+		_set_fs_sysfs_dev_attr $dev \
 				   error/metadata/${e}/max_retries -1
 		echo -n "error/metadata/${e}/max_retries="
-		_get_fs_sysfs_attr $dev error/metadata/${e}/max_retries
+		_get_fs_sysfs_dev_attr $dev error/metadata/${e}/max_retries
 
-		_set_fs_sysfs_attr $dev \
+		_set_fs_sysfs_dev_attr $dev \
 				   error/metadata/${e}/retry_timeout_seconds -1
 		echo -n "error/metadata/${e}/retry_timeout_seconds="
-		_get_fs_sysfs_attr $dev \
+		_get_fs_sysfs_dev_attr $dev \
 				   error/metadata/${e}/retry_timeout_seconds
 	done
 }
@@ -1226,13 +1226,13 @@ _xfs_prepare_for_eio_shutdown()
 	_add_dmesg_filter "Internal error"
 
 	# Don't retry any writes during the (presumably) post-shutdown unmount
-	_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_attr $dev "$ctlfile" 1
+	_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_dev_attr $dev "$ctlfile" 1
 
 	# Disable retry of metadata writes that fail with EIO
 	for ctl in max_retries retry_timeout_seconds; do
 		ctlfile="error/metadata/EIO/$ctl"
 
-		_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_attr $dev "$ctlfile" 0
+		_has_fs_sysfs "$ctlfile" && _set_fs_sysfs_dev_attr $dev "$ctlfile" 0
 	done
 }
 
@@ -2149,7 +2149,7 @@ _scratch_xfs_force_no_metadir()
 # do not run on zoned file systems
 _require_xfs_scratch_non_zoned()
 {
-	if _has_fs_sysfs_attr $SCRATCH_DEV "zoned/max_open_zones"; then
+	if _has_fs_sysfs_dev_attr $SCRATCH_DEV "zoned/max_open_zones"; then
 		_notrun "Not supported on zoned file systems"
 	fi
 }
@@ -2160,12 +2160,12 @@ _require_xfs_scratch_zoned()
 	local attr="zoned/max_open_zones"
 	local min_open_zones=$1
 
-	if ! _has_fs_sysfs_attr $SCRATCH_DEV $attr; then
+	if ! _has_fs_sysfs_dev_attr $SCRATCH_DEV $attr; then
 		_notrun "Requires zoned file system"
 	fi
 
 	if [ -n "${min_open_zones}" ]; then
-		local has_open_zones=`_get_fs_sysfs_attr $SCRATCH_DEV $attr`
+		local has_open_zones=`_get_fs_sysfs_dev_attr $SCRATCH_DEV $attr`
 
 		if [ "${min_open_zones}" -gt "${has_open_zones}" ]; then
 			_notrun "Requires at least ${min_open_zones} open zones"

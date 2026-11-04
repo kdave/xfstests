@@ -4223,7 +4223,7 @@ _require_fs_survives_data_write_eio()
 		# This is an XFS per-mount sysfs attribute, not a block queue
 		# attribute.  Its existence means XFS mounted this instance with
 		# zoned filesystem semantics.
-		if _has_fs_sysfs_attr "$dev" "zoned/max_open_zones"; then
+		if _has_fs_sysfs_dev_attr "$dev" "zoned/max_open_zones"; then
 			_notrun "zoned XFS shuts down on data write EIO"
 		fi
 		;;
@@ -5481,8 +5481,8 @@ _fs_sysfs_dname()
 #  - content: the content of $attr
 #
 # Usage example:
-#   _set_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount 0
-_set_fs_sysfs_attr()
+#   _set_fs_sysfs_dev_attr /dev/mapper/scratch-dev error/fail_at_unmount 0
+_set_fs_sysfs_dev_attr()
 {
 	local dev=$1
 	shift
@@ -5491,7 +5491,7 @@ _set_fs_sysfs_attr()
 	local content="$*"
 
 	if [ ! -b "$dev" -o -z "$attr" -o -z "$content" ];then
-		_fail "Usage: _set_fs_sysfs_attr <mounted_device> <attr> <content>"
+		_fail "Usage: _set_fs_sysfs_dev_attr <mounted_device> <attr> <content>"
 	fi
 
 	local dname=$(_fs_sysfs_dname $dev)
@@ -5507,14 +5507,14 @@ _set_fs_sysfs_attr()
 #  - attr: path name under /sys/fs/$FSTYP/$dev
 #
 # Usage example:
-#   _get_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount
-_get_fs_sysfs_attr()
+#   _get_fs_sysfs_dev_attr /dev/mapper/scratch-dev error/fail_at_unmount
+_get_fs_sysfs_dev_attr()
 {
 	local dev=$1
 	local attr=$2
 
 	if [ ! -b "$dev" -o -z "$attr" ];then
-		_fail "Usage: _get_fs_sysfs_attr <mounted_device> <attr>"
+		_fail "Usage: _get_fs_sysfs_dev_attr <mounted_device> <attr>"
 	fi
 
 	local dname=$(_fs_sysfs_dname $dev)
@@ -5529,14 +5529,14 @@ _get_fs_sysfs_attr()
 #  - attr: path name under /sys/fs/$FSTYP/$dev
 #
 # Usage example:
-#   _has_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount
-_has_fs_sysfs_attr()
+#   _has_fs_sysfs_dev_attr /dev/mapper/scratch-dev error/fail_at_unmount
+_has_fs_sysfs_dev_attr()
 {
 	local dev=$1
 	local attr=$2
 
 	if [ ! -b "$dev" -o -z "$attr" ];then
-		_fail "Usage: _has_fs_sysfs_attr <mounted_device> <attr>"
+		_fail "Usage: _has_fs_sysfs_dev_attr <mounted_device> <attr>"
 	fi
 
 	local dname=$(_fs_sysfs_dname $dev)
@@ -5550,10 +5550,10 @@ _has_fs_sysfs_attr()
 #  - attr: path name under /sys/fs/$FSTYP/$dev
 #
 # Usage example:
-#   _require_fs_sysfs_attr /dev/mapper/scratch-dev error/fail_at_unmount
-_require_fs_sysfs_attr()
+#   _require_fs_sysfs_dev_attr /dev/mapper/scratch-dev error/fail_at_unmount
+_require_fs_sysfs_dev_attr()
 {
-	_has_fs_sysfs_attr "$@" && return
+	_has_fs_sysfs_dev_attr "$@" && return
 
 	local dev=$1
 	local attr=$2
@@ -5571,7 +5571,7 @@ _require_fs_sysfs_attr()
 #   _has_fs_sysfs error/fail_at_unmount
 _has_fs_sysfs()
 {
-	_has_fs_sysfs_attr $TEST_DEV "$@"
+	_has_fs_sysfs_dev_attr $TEST_DEV "$@"
 }
 
 # Require the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
@@ -6302,7 +6302,7 @@ _require_fanotify_ioerrors()
 		;;
 	ext4)
 		# added at the same time as err_report_sec
-		x="$(_get_fs_sysfs_attr $TEST_DEV err_report_sec)"
+		x="$(_get_fs_sysfs_dev_attr $TEST_DEV err_report_sec)"
 		test -n "$x" && return 0
 		;;
 	f2fs)

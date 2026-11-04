@@ -35,7 +35,7 @@ $MKFS_XFS_PROG -b size=${bsize} -r zoned=1,rgsize=${blocks}b \
 _mount $SCRATCH_DEV $SCRATCH_MNT -o max_open_zones=${open_zones} || \
 	_notrun "Zoned allocator not supported"
 
-_has_fs_sysfs_attr $SCRATCH_DEV zoned/nr_open_zones || \
+_has_fs_sysfs_dev_attr $SCRATCH_DEV zoned/nr_open_zones || \
 	_notrun "This test requires /sys/fs/${FSTYP}/$SCRATCH_DEV/zoned/nr_open_zones"
 
 for i in $(seq 1 $nr_files); do
@@ -51,8 +51,8 @@ done
 _scratch_unmount
 _mount $SCRATCH_DEV $SCRATCH_MNT -o max_open_zones=${open_zones}
 
-max_open=$(_get_fs_sysfs_attr $SCRATCH_DEV zoned/max_open_zones)
-nr_open=$(_get_fs_sysfs_attr $SCRATCH_DEV zoned/nr_open_zones)
+max_open=$(_get_fs_sysfs_dev_attr $SCRATCH_DEV zoned/max_open_zones)
+nr_open=$(_get_fs_sysfs_dev_attr $SCRATCH_DEV zoned/nr_open_zones)
 
 if [ ${max_open} -ne $((open_zones - 1)) ]; then
 	_fail "Test needs adjustments for multiple open GC zones"
