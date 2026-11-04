@@ -100,26 +100,6 @@ _require_btrfs_mkfs_uuid_option()
 	fi
 }
 
-_require_btrfs_fs_feature()
-{
-	if [ -z $1 ]; then
-		echo "Missing feature name argument for _require_btrfs_fs_feature"
-		_exit 1
-	fi
-	feat=$1
-	modprobe btrfs > /dev/null 2>&1
-	[ -e /sys/fs/btrfs/features/$feat ] || \
-		_notrun "Feature $feat not supported by the available btrfs version"
-}
-
-_require_btrfs_fs_sysfs()
-{
-	modprobe btrfs > /dev/null 2>&1
-	[ -e /sys/fs/btrfs/features ] || \
-		_notrun "Sysfs not supported by the available btrfs version"
-
-}
-
 _require_btrfs_no_compress()
 {
 	if _normalize_mount_options "$MOUNT_OPTIONS" | grep -q "compress"; then
@@ -962,18 +942,6 @@ _require_scratch_enable_simple_quota()
 	_scratch_unmount
 }
 
-_has_btrfs_sysfs_feature_attr()
-{
-	local feature_attr=$1
-
-	[ -z $feature_attr ] && \
-		_fail "Missing feature name argument for _has_btrfs_sysfs_attr"
-
-	modprobe btrfs &> /dev/null
-
-	test -e /sys/fs/btrfs/features/$feature_attr
-}
-
 # Print the fsid and metadata uuid replaced with constant strings FSID and
 # METADATA_UUID. Compare temp_fsid with fsid and metadata_uuid, then echo what
 # it matches to or TEMP_FSID. This helps in comparing with the golden output.
@@ -983,9 +951,8 @@ _check_temp_fsid()
 	local fsid
 	local metadata_uuid
 
-	_require_btrfs_fs_sysfs
-	_require_btrfs_fs_feature temp_fsid
-	_require_btrfs_fs_feature metadata_uuid
+	_require_fs_sysfs_feature_attr temp_fsid
+	_require_fs_sysfs_feature_attr metadata_uuid
 	_require_btrfs_command inspect-internal dump-super
 
 	# on disk fsid
