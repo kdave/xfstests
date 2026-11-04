@@ -5545,6 +5545,7 @@ _has_fs_sysfs_dev_attr()
 }
 
 # Require the existence of a sysfs entry at /sys/fs/$FSTYP/$DEV/$ATTR
+#
 # All arguments are necessary, and in this order:
 #  - dev: device name, e.g. $SCRATCH_DEV
 #  - attr: path name under /sys/fs/$FSTYP/$dev
@@ -5562,27 +5563,28 @@ _require_fs_sysfs_dev_attr()
 	_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr}"
 }
 
-# Test for the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
+# Require the existence of a sysfs entry at /sys/fs/$FSTYP/$TEST_DEV/$ATTR
 #
 # Only one argument is needed:
-#  - attr: path name under /sys/fs/$FSTYP/DEV
+#  - attr: path name under /sys/fs/$FSTYP/$TEST_DEV
 #
 # Usage example:
-#   _has_fs_sysfs error/fail_at_unmount
-_has_fs_sysfs()
+#   _require_test_sysfs_dev_attr error/fail_at_unmount
+_require_test_sysfs_dev_attr()
 {
-	_has_fs_sysfs_dev_attr $TEST_DEV "$@"
+	_require_fs_sysfs_dev_attr $TEST_DEV "$1"
 }
 
-# Require the existence of a sysfs entry at /sys/fs/$FSTYP/DEV/$ATTR
-_require_fs_sysfs()
+# Require the existence of a sysfs entry at /sys/fs/$FSTYP/$SCRATCH_DEV/$ATTR
+#
+# Only one argument is needed:
+#  - attr: path name under /sys/fs/$FSTYP/$SCRATCH_DEV
+#
+# Usage example:
+#   _require_scratch_sysfs_dev_attr error/fail_at_unmount
+_require_scratch_sysfs_dev_attr()
 {
-	_has_fs_sysfs "$@" && return
-
-	local attr=$1
-	local dname=$(_short_dev $TEST_DEV)
-
-	_notrun "This test requires /sys/fs/${FSTYP}/${dname}/${attr}"
+	_require_fs_sysfs_dev_attr $SCRATCH_DEV "$1"
 }
 
 # Generic test for specific filesystem feature.
