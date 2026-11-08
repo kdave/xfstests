@@ -3105,6 +3105,10 @@ _require_xfs_io_command()
 			opts+=" -d"
 			pwrite_opts+="-V 1 -b $write_size"
 		fi
+		# -U (RWF_DONTCACHE) only works with vectored I/O writes
+		if [ "$param" == "-U" ]; then
+			pwrite_opts+="-V 1 -b $write_size"
+		fi
 		if [ "$param" == "-A" ]; then
 			opts+=" -d"
 			# try to write the minimum supported atomic write size
@@ -3121,9 +3125,14 @@ _require_xfs_io_command()
 		param_checked="$pwrite_opts $param"
 		;;
 	"pread")
+		# -U (RWF_DONTCACHE) only works with vectored I/O reads
+		local pread_opts=" "
+		if [ "$param" == "-U" ]; then
+			pread_opts+="-V 1 -b 4k"
+		fi
 		testio=`$XFS_IO_PROG -f -c "pwrite 0 4k" \
-			-c "pread $param 0 4k" $testfile 2>&1`
-		param_checked="$param"
+			-c "pread $pread_opts $param 0 4k" $testfile 2>&1`
+		param_checked="$pread_opts $param"
 		;;
 	"scrub"|"repair")
 		test -z "$param" && param="probe"
