@@ -1,0 +1,77 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Tal Zussman.  All Rights Reserved.
+#
+# FS QA Test No. 811
+#
+# Check that RWF_DONTCACHE I/O drops its folios from the page cache: a
+# dontcache write once its writeback completes, and a dontcache read once the
+# read completes. Plain buffered I/O on the same file has to leave them cached.
+#
+. ./common/preamble
+_begin_fstest auto quick rw
+
+_require_scratch
+_require_xfs_io_command "pwrite" "-U"
+_require_xfs_io_command "pread" "-U"
+_require_xfs_io_command "mincore"
+_exclude_scratch_mount_option "dax"
+
+_scratch_mkfs > $seqres.full 2>&1
+_scratch_mount
+
+size=$((1024 * 1024))
+file=$SCRATCH_MNT/file
+pagesize=$(_get_page_size)
+
+# Count the bytes of the file that are in the page cache.
+cached_bytes()
+{
+	local pages
+
+	pages=$($XFS_IO_PROG -c "mmap -r 0 $size" -c "mincore" $file | \
+		awk '{ n += $4 } END { print n + 0 }')
+	echo $((pages * pagesize))
+}
+
+# Report how many bytes are cached, after waiting up to $1 seconds for the
+# cache to empty. Dontcache writeback can drop folios just after fsync returns.
+report_cached()
+{
+	local delay=${1:-0}
+	local i
+
+	for ((i = 0; i < delay * 10; i++)); do
+		[ "$(cached_bytes)" -eq 0 ] && break
+		sleep 0.1
+	done
+	echo "$(cached_bytes) of $size bytes cached"
+}
+
+echo "plain write"
+$XFS_IO_PROG -f -c "pwrite -q 0 $size" -c fsync $file
+report_cached 1
+
+echo "dontcache write to a new file"
+rm -f $file
+$XFS_IO_PROG -f -c "pwrite -q -U -V 1 -b $size 0 $size" -c fsync $file
+report_cached 5
+
+# Start each of the remaining cases from an empty page cache.
+echo "dontcache overwrite"
+_scratch_cycle_mount
+$XFS_IO_PROG -c "pwrite -q -U -V 1 -b $size 0 $size" -c fsync $file
+report_cached 5
+
+echo "dontcache read"
+_scratch_cycle_mount
+$XFS_IO_PROG -c "pread -q -U -V 1 -b $size 0 $size" $file
+report_cached 5
+
+echo "plain read"
+_scratch_cycle_mount
+$XFS_IO_PROG -c "pread -q 0 $size" $file
+report_cached 1
+
+_scratch_unmount
+_exit 0
